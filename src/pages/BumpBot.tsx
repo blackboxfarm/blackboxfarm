@@ -10,6 +10,8 @@ import { Link } from "react-router-dom";
 import { useLocalSecrets } from "@/hooks/useLocalSecrets";
 import { useWalletPool } from "@/hooks/useWalletPool";
 import { Connection, PublicKey } from "@solana/web3.js";
+import { supabase } from "@/integrations/supabase/client";
+import { toast } from "@/components/ui/sonner";
 
 const JUP_PRICE = async (id: string): Promise<number | null> => {
   try {
@@ -65,6 +67,10 @@ const BumpBot = () => {
   const [tokenUi, setTokenUi] = useState<number | null>(null);
   const [solUsd, setSolUsd] = useState<number | null>(null);
   const [tokenUsd, setTokenUsd] = useState<number | null>(null);
+  const [usdToBuy, setUsdToBuy] = useState<string>("25");
+  const [slippageBps, setSlippageBps] = useState<number>(100);
+  const [swapping, setSwapping] = useState(false);
+  const ownerSecret = useMemo(() => poolWallets[0]?.secretBase58 ?? "", [poolWallets]);
 
   const refresh = useCallback(async () => {
     if (!conn || !displayPubkey) return;
@@ -102,6 +108,58 @@ const BumpBot = () => {
       setLoading(false);
     }
   }, [conn, displayPubkey, tokenMint]);
+
+  // Swap actions
+  const invokeSwap = useCallback(async (body: any) => {
+    if (!ownerSecret) {
+      toast.error("No wallet secret found. Add a wallet in Wallet Pool.");
+      return { error: "no-owner" } as const;
+    }
+    try {
+      const headers: Record<string, string> = {};
+      if (secrets?.functionToken) headers["x-function-token"] = secrets.functionToken;
+      const { data, error } = await supabase.functions.invoke("raydium-swap", {
+        body: { confirmPolicy: "processed", slippageBps, ownerSecret, ...body },
+        headers,
+      });
+      if (error) {
+        toast.error(error.message || "Swap failed");
+        return { error } as const;
+      }
+      return { data } as const;
+    } catch (e: any) {
+      toast.error(String(e?.message || e) || "Swap error");
+      return { error: e } as const;
+    }
+  }, [ownerSecret, secrets?.functionToken, slippageBps]);
+
+  const onBuy = useCallback(async () => {
+    const mint = tokenMint.trim();
+    const usd = Number(usdToBuy);
+    if (!mint) return toast.error("Enter a token mint first");
+    if (!Number.isFinite(usd) || usd <= 0) return toast.error("Enter a valid USD amount");
+    setSwapping(true);
+    const result = await invokeSwap({ side: "buy", tokenMint: mint, usdcAmount: usd });
+    setSwapping(false);
+    if ((result as any).data?.signatures?.length) {
+      const sig = (result as any).data.signatures[0];
+      toast.success(`Buy sent: ${sig.slice(0, 8)}…`);
+      void refresh();
+    }
+  }, [tokenMint, usdToBuy, invokeSwap, refresh]);
+
+  const onSellAll = useCallback(async () => {
+    const mint = tokenMint.trim();
+    if (!mint) return toast.error("Enter a token mint first");
+    setSwapping(true);
+    const result = await invokeSwap({ side: "sell", tokenMint: mint, sellAll: true });
+    setSwapping(false);
+    if ((result as any).data?.signatures?.length) {
+      const sig = (result as any).data.signatures[0];
+      toast.success(`Sell sent: ${sig.slice(0, 8)}…`);
+      void refresh();
+    }
+  }, [tokenMint, invokeSwap, refresh]);
 
   // 5s polling when running
   useEffect(() => {
@@ -176,6 +234,33 @@ const BumpBot = () => {
               </div>
 
               {running && <div className="text-xs text-muted-foreground">Auto-refreshing every 5s{loading ? "…" : ""}</div>}
+            </CardContent>
+          </Card>
+        </section>
+
+        <section className="mb-10">
+          <Card className="max-w-4xl mx-auto">
+            <CardHeader>
+              <CardTitle>Trade Actions — Buy/Sell</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-6">
+              <div className="grid sm:grid-cols-3 gap-4">
+                <div className="space-y-2 sm:col-span-1">
+                  <Label>USD to buy</Label>
+                  <Input type="number" min="1" step="1" value={usdToBuy} onChange={(e) => setUsdToBuy(e.target.value)} />
+                </div>
+                <div className="space-y-2 sm:col-span-1">
+                  <Label>Slippage (bps)</Label>
+                  <Input type="number" min="10" step="10" value={slippageBps} onChange={(e) => setSlippageBps(Math.max(1, Number(e.target.value || 0)))} />
+                </div>
+                <div className="flex items-end gap-2 sm:col-span-1">
+                  <Button onClick={onBuy} disabled={swapping || !tokenMint || !ownerSecret}>Buy</Button>
+                  <Button variant="secondary" onClick={onSellAll} disabled={swapping || !tokenMint || !ownerSecret}>Sell All</Button>
+                </div>
+              </div>
+              <div className="text-xs text-muted-foreground">
+                Uses your first Wallet Pool wallet {displayPubkey ? `(${displayPubkey.slice(0,4)}…${displayPubkey.slice(-4)})` : "(none)"}.
+              </div>
             </CardContent>
           </Card>
         </section>
