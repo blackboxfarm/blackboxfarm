@@ -22,6 +22,9 @@ export type RunnerConfig = {
   dailyCapUsd: number; // maximum buys per day
   slippageBps: number; // for future on-chain
   quoteAsset: 'SOL' | 'USDC';
+  // Spike-aware trailing settings
+  trailingDropPct: number; // sell when price falls this % from peak after TP is reached
+  slowdownConfirmTicks: number; // consecutive non-increasing ticks required to confirm slowdown
 };
 
 function format(n: number, d = 4) {
@@ -139,6 +142,8 @@ export default function LiveRunner() {
     dailyCapUsd: 300,
     slippageBps: 1500,
     quoteAsset: 'SOL',
+    trailingDropPct: 1.5,
+    slowdownConfirmTicks: 2,
   });
 
   const [running, setRunning] = React.useState(false);
@@ -146,7 +151,7 @@ export default function LiveRunner() {
   const [price, setPrice] = React.useState<number | null>(null);
   const [manualPrice, setManualPrice] = React.useState<string>("");
   const [trailingHigh, setTrailingHigh] = React.useState<number | null>(null);
-  const [position, setPosition] = React.useState<{ entry: number } | null>(null);
+  const [position, setPosition] = React.useState<{ entry: number; high: number } | null>(null);
   const [lastSellTs, setLastSellTs] = React.useState<number | null>(null);
   const [daily, setDaily] = React.useState<{ key: string; buyUsd: number }>({ key: todayKey(), buyUsd: 0 });
 
@@ -161,6 +166,8 @@ export default function LiveRunner() {
   const log = React.useCallback((text: string) => {
     setActivity((a) => [{ time: Date.now(), text }, ...a].slice(0, 50));
   }, []);
+  const prevPriceRef = React.useRef<number | null>(null);
+  const decelCountRef = React.useRef<number>(0);
   // reset daily counters when date changes
   React.useEffect(() => {
     const key = todayKey();
@@ -421,6 +428,14 @@ export default function LiveRunner() {
     const pNow = effectivePrice;
     if (!pNow || !Number.isFinite(pNow)) return;
 
+    // update deceleration tracker
+    const prev = prevPriceRef.current;
+    if (prev !== null) {
+      if (pNow <= prev) decelCountRef.current += 1;
+      else decelCountRef.current = 0;
+    }
+    prevPriceRef.current = pNow;
+
     setTrailingHigh((prev) => (prev === null ? pNow : Math.max(prev, pNow)));
     const high = trailingHigh === null ? pNow : Math.max(trailingHigh, pNow);
 
@@ -430,7 +445,8 @@ export default function LiveRunner() {
         setStatus(`BUY @ $${format(pNow, 6)} (dip ${cfg.dipPct}%)`);
         const ok = await execSwap('buy');
         if (ok) {
-          setPosition({ entry: pNow });
+          setPosition({ entry: pNow, high: pNow });
+          try { localStorage.setItem(`posEntry:${cfg.tokenMint}`, String(pNow)); } catch {}
           setDaily((d) => ({ ...d, buyUsd: d.buyUsd + cfg.tradeSizeUsd }));
           const tpPrice = pNow * (1 + cfg.takeProfitPct / 100);
           const expectedProfit = cfg.tradeSizeUsd * (cfg.takeProfitPct / 100);
@@ -442,38 +458,57 @@ export default function LiveRunner() {
       return;
     }
 
-    // In position: TP/SL handling
+    // In position: Spike-aware trailing TP/SL handling
     const entry = position.entry;
-    const tp = entry * (1 + cfg.takeProfitPct / 100);
+    const tpGate = entry * (1 + cfg.takeProfitPct / 100);
     const sl = entry * (1 - cfg.stopLossPct / 100);
 
-    if (pNow >= tp) {
-      setStatus(`SELL TP @ $${format(pNow, 6)} (+${cfg.takeProfitPct}%)`);
-      const ok = await execSwap('sell');
-      if (ok) {
-        setPosition(null);
-        setLastSellTs(Date.now());
-        toast({ title: 'Take profit', description: `Sold at $${format(pNow, 6)} (target ${cfg.takeProfitPct}%)` });
-        const nextBuy = high * (1 - cfg.dipPct / 100);
-        log(`Sold at $${format(pNow, 6)} (TP +${cfg.takeProfitPct}%). Waiting for price dip to $${format(nextBuy, 6)} to buy back.`);
-      }
-      return;
+    // Update per-position peak
+    const posHigh = Math.max(position.high, pNow);
+    if (posHigh !== position.high) {
+      setPosition((prev) => (prev ? { ...prev, high: posHigh } : prev));
     }
 
+    // First, hard stop-loss (safety)
     if (pNow <= sl) {
       setStatus(`SELL SL @ $${format(pNow, 6)} (−${cfg.stopLossPct}%)`);
       const ok = await execSwap('sell');
       if (ok) {
         setPosition(null);
         setLastSellTs(Date.now());
+        try { localStorage.removeItem(`posEntry:${cfg.tokenMint}`); } catch {}
         toast({ title: 'Stop loss', description: `Sold at $${format(pNow, 6)} (stop ${cfg.stopLossPct}%)` });
-        const nextBuy = high * (1 - cfg.dipPct / 100);
+        const nextBuy = (trailingHigh === null ? pNow : trailingHigh) * (1 - cfg.dipPct / 100);
         log(`Sold at $${format(pNow, 6)} (SL −${cfg.stopLossPct}%). Waiting for price dip to $${format(nextBuy, 6)} to buy back.`);
       }
       return;
     }
 
-    setStatus(`Holding — entry $${format(entry, 6)} • now $${format(pNow, 6)} • TP $${format(tp, 6)} • SL $${format(sl, 6)}`);
+    // Trailing take-profit: only sell after profit gate reached AND slowdown + trail drop from peak
+    const armed = pNow >= tpGate;
+    const trailTriggered = pNow <= posHigh * (1 - cfg.trailingDropPct / 100);
+    const slowed = decelCountRef.current >= cfg.slowdownConfirmTicks;
+
+    if (armed && trailTriggered && slowed) {
+      setStatus(`SELL TRAIL @ $${format(pNow, 6)} (peak $${format(posHigh, 6)}, drop ${cfg.trailingDropPct}%)`);
+      const ok = await execSwap('sell');
+      if (ok) {
+        setPosition(null);
+        setLastSellTs(Date.now());
+        try { localStorage.removeItem(`posEntry:${cfg.tokenMint}`); } catch {}
+        toast({ title: 'Take profit (trailing)', description: `Sold at $${format(pNow, 6)} • peak $${format(posHigh, 6)}` });
+        const nextBuy = (trailingHigh === null ? pNow : trailingHigh) * (1 - cfg.dipPct / 100);
+        log(`Sold at $${format(pNow, 6)} (trailing after peak $${format(posHigh, 6)}). Waiting for dip to $${format(nextBuy, 6)}.`);
+      }
+      return;
+    }
+
+    if (armed) {
+      setStatus(`Armed — now $${format(pNow, 6)} • peak $${format(posHigh, 6)} • trail ${cfg.trailingDropPct}%`);
+      return;
+    }
+
+    setStatus(`Holding — entry $${format(entry, 6)} • now $${format(pNow, 6)} • TP gate $${format(tpGate, 6)} • SL $${format(sl, 6)}`);
   }, [executing, cfg, canBuy, effectivePrice, manualPrice, position, trailingHigh, execSwap]);
 
   useInterval(() => {
@@ -497,6 +532,17 @@ export default function LiveRunner() {
       }
       // Prime balances on start
       await Promise.all([loadWallet(), loadHoldings()]);
+      // Adopt existing holdings on restart
+      try {
+        if (!position && holding?.uiAmount && holding.uiAmount > 0 && (p ?? null)) {
+          const saved = localStorage.getItem(`posEntry:${cfg.tokenMint}`);
+          const entry = saved ? Number(saved) : p!;
+          if (Number.isFinite(entry) && entry > 0) {
+            setPosition({ entry, high: p! });
+            log(`Adopted existing holding @ ~$${format(entry, 6)} • armed TP ≥ $${format(entry * (1 + cfg.takeProfitPct/100), 6)}`);
+          }
+        }
+      } catch {}
       // Kick the first tick after priming
       void tick();
     })();
@@ -570,6 +616,17 @@ export default function LiveRunner() {
                     <SelectItem value="USDC">USDC</SelectItem>
                   </SelectContent>
                 </Select>
+              </div>
+            </div>
+
+            <div className="grid md:grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label>Spike Trail Drop %</Label>
+                <Input type="number" value={cfg.trailingDropPct} onChange={(e) => setCfg({ ...cfg, trailingDropPct: Number(e.target.value) })} />
+              </div>
+              <div className="space-y-2">
+                <Label>Slowdown confirm ticks</Label>
+                <Input type="number" value={cfg.slowdownConfirmTicks} onChange={(e) => setCfg({ ...cfg, slowdownConfirmTicks: Number(e.target.value) })} />
               </div>
             </div>
 
@@ -691,6 +748,7 @@ export default function LiveRunner() {
             setPosition(null);
             setLastSellTs(null);
             setStatus("reset");
+            try { localStorage.removeItem(`posEntry:${cfg.tokenMint}`); } catch {}
           }}
         >
           Reset state
