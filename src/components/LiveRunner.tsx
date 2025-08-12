@@ -752,10 +752,19 @@ export default function LiveRunner() {
 
     // Otherwise, holding/watching
     if (positions.length > 0) {
-      const desc = positions.map((l, i) => `#${i + 1} @ $${format(l.entry, 6)}`).join(' ');
+      const desc = positions
+        .map((l, i) => {
+          const sl = l.entry * (1 - cfg.stopLossPct / 100);
+          const armed = pNow >= l.entry * (1 + Number(cfg.trailArmPct ?? 5) / 100);
+          const high = Math.max(l.high, pNow);
+          const trailTrig = high * (1 - cfg.trailingDropPct / 100);
+          return `#${i + 1} @ $${format(l.entry, 6)}${armed ? ` • sell trigger ~$${format(trailTrig, 6)} (after slowdown)` : ` • arm at +${cfg.trailArmPct}%` } • SL ~$${format(sl, 6)}`;
+        })
+        .join('  ');
       setStatus(`Holding — ${desc}`);
     } else {
-      setStatus(`Watching — price $${format(pNow, 6)} • anchorLow $${format(anchorLow, 6)}`);
+      const nextBuy = anchorLow * (1 - effDipPct / 100);
+      setStatus(`Watching — price $${format(pNow, 6)} • anchorLow $${format(anchorLow, 6)} • targetBuy ~$${format(nextBuy, 6)}`);
     }
   }, [executing, manualPrice, cfg, effectivePrice, positions, canBuy, execSwap, pickNextOwner]);
 
