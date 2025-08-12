@@ -3,6 +3,7 @@ import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@/componen
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Switch } from "@/components/ui/switch";
 import { toast } from "@/hooks/use-toast";
 import { useLocalSecrets } from "@/hooks/useLocalSecrets";
 import { supabase } from "@/integrations/supabase/client";
@@ -25,6 +26,15 @@ export type RunnerConfig = {
   // Spike-aware trailing settings
   trailingDropPct: number; // sell when price falls this % from peak after TP is reached
   slowdownConfirmTicks: number; // consecutive non-increasing ticks required to confirm slowdown
+
+  // Adaptive trails (ROC-based)
+  adaptiveTrails?: boolean;
+  rocWindowSec?: number; // window for ROC calculation
+  upSensitivityBpsPerPct?: number; // add to TP per +1% ROC (in bps)
+  maxUpBiasBps?: number; // cap for TP bias (bps)
+  downSensitivityBpsPerPct?: number; // add to Dip per −1% ROC (in bps)
+  maxDownBiasBps?: number; // cap for Dip bias (bps)
+
   // Execution
   confirmPolicy: 'confirmed' | 'processed' | 'none';
   feeOverrideMicroLamports?: number; // 0/empty = auto
@@ -147,6 +157,14 @@ export default function LiveRunner() {
     quoteAsset: 'SOL',
     trailingDropPct: 1.5,
     slowdownConfirmTicks: 2,
+    // Adaptive defaults
+    adaptiveTrails: true,
+    rocWindowSec: 30,
+    upSensitivityBpsPerPct: 50,
+    maxUpBiasBps: 300,
+    downSensitivityBpsPerPct: 50,
+    maxDownBiasBps: 300,
+    // Execution
     confirmPolicy: 'processed',
     feeOverrideMicroLamports: 0,
   });
@@ -173,6 +191,8 @@ export default function LiveRunner() {
   }, []);
   const prevPriceRef = React.useRef<number | null>(null);
   const decelCountRef = React.useRef<number>(0);
+  const priceWindowRef = React.useRef<{ t: number; p: number }[]>([]);
+  const [rocPct, setRocPct] = React.useState<number | null>(null);
   // reset daily counters when date changes
   React.useEffect(() => {
     const key = todayKey();
@@ -478,6 +498,33 @@ export default function LiveRunner() {
     const pNow = effectivePrice;
     if (!pNow || !Number.isFinite(pNow)) return;
 
+    // Maintain ROC window
+    const nowTs = Date.now();
+    const winSec = Number(cfg.rocWindowSec ?? 30);
+    const arr = priceWindowRef.current;
+    arr.push({ t: nowTs, p: pNow });
+    while (arr.length > 0 && nowTs - arr[0].t > winSec * 1000) arr.shift();
+    let windowRoc: number | null = null;
+    if (arr.length >= 2) {
+      const base = arr[0].p;
+      if (Number.isFinite(base) && base > 0) {
+        windowRoc = ((pNow - base) / base) * 100;
+      }
+    }
+    setRocPct(windowRoc);
+
+    // Compute adaptive thresholds
+    const upSens = Number(cfg.upSensitivityBpsPerPct ?? 0);
+    const downSens = Number(cfg.downSensitivityBpsPerPct ?? 0);
+    const upCap = Number(cfg.maxUpBiasBps ?? 0);
+    const downCap = Number(cfg.maxDownBiasBps ?? 0);
+
+    const tpBiasBps = cfg.adaptiveTrails && windowRoc !== null && windowRoc > 0 ? Math.min(upCap, windowRoc * upSens) : 0;
+    const dipBiasBps = cfg.adaptiveTrails && windowRoc !== null && windowRoc < 0 ? Math.min(downCap, -windowRoc * downSens) : 0;
+
+    const effTPPct = cfg.takeProfitPct + tpBiasBps / 100;
+    const effDipPct = cfg.dipPct + dipBiasBps / 100;
+
     // update deceleration tracker
     const prev = prevPriceRef.current;
     if (prev !== null) {
@@ -490,17 +537,17 @@ export default function LiveRunner() {
     const high = trailingHigh === null ? pNow : Math.max(trailingHigh, pNow);
 
     if (!position) {
-      // Entry condition: dip from trailing high
-      if (canBuy && pNow <= high * (1 - cfg.dipPct / 100)) {
-        setStatus(`BUY @ $${format(pNow, 6)} (dip ${cfg.dipPct}%)`);
+      // Entry condition: dip from trailing high (adaptive if enabled)
+      if (canBuy && pNow <= high * (1 - effDipPct / 100)) {
+        setStatus(`BUY @ $${format(pNow, 6)} (dip ${format(effDipPct, 2)}%)`);
         const ok = await execSwap('buy');
         if (ok) {
           setPosition({ entry: pNow, high: pNow });
           try { localStorage.setItem(`posEntry:${cfg.tokenMint}`, String(pNow)); } catch {}
           setDaily((d) => ({ ...d, buyUsd: d.buyUsd + cfg.tradeSizeUsd }));
-          const tpPrice = pNow * (1 + cfg.takeProfitPct / 100);
-          const expectedProfit = cfg.tradeSizeUsd * (cfg.takeProfitPct / 100);
-          log(`Bought $${format(cfg.tradeSizeUsd, 2)} at $${format(pNow, 6)} — waiting to sell at $${format(tpPrice, 6)} (+${cfg.takeProfitPct}%, ~+$${format(expectedProfit, 2)})`);
+          const tpPrice = pNow * (1 + effTPPct / 100);
+          const expectedProfit = cfg.tradeSizeUsd * (effTPPct / 100);
+          log(`Bought $${format(cfg.tradeSizeUsd, 2)} at $${format(pNow, 6)} — waiting to sell at $${format(tpPrice, 6)} (+${format(effTPPct, 2)}%, ~+$${format(expectedProfit, 2)})`);
         }
       } else {
         setStatus(`Watching — price $${format(pNow, 6)} • high $${format(high, 6)}`);
@@ -510,7 +557,7 @@ export default function LiveRunner() {
 
     // In position: Spike-aware trailing TP/SL handling
     const entry = position.entry;
-    const tpGate = entry * (1 + cfg.takeProfitPct / 100);
+    const tpGate = entry * (1 + effTPPct / 100);
     const sl = entry * (1 - cfg.stopLossPct / 100);
 
     // Update per-position peak
@@ -528,7 +575,7 @@ export default function LiveRunner() {
         setLastSellTs(Date.now());
         try { localStorage.removeItem(`posEntry:${cfg.tokenMint}`); } catch {}
         toast({ title: 'Stop loss', description: `Sold at $${format(pNow, 6)} (stop ${cfg.stopLossPct}%)` });
-        const nextBuy = (trailingHigh === null ? pNow : trailingHigh) * (1 - cfg.dipPct / 100);
+        const nextBuy = (trailingHigh === null ? pNow : trailingHigh) * (1 - effDipPct / 100);
         log(`Sold at $${format(pNow, 6)} (SL −${cfg.stopLossPct}%). Waiting for price dip to $${format(nextBuy, 6)} to buy back.`);
       }
       return;
@@ -547,7 +594,7 @@ export default function LiveRunner() {
         setLastSellTs(Date.now());
         try { localStorage.removeItem(`posEntry:${cfg.tokenMint}`); } catch {}
         toast({ title: 'Take profit (trailing)', description: `Sold at $${format(pNow, 6)} • peak $${format(posHigh, 6)}` });
-        const nextBuy = (trailingHigh === null ? pNow : trailingHigh) * (1 - cfg.dipPct / 100);
+        const nextBuy = (trailingHigh === null ? pNow : trailingHigh) * (1 - effDipPct / 100);
         log(`Sold at $${format(pNow, 6)} (trailing after peak $${format(posHigh, 6)}). Waiting for dip to $${format(nextBuy, 6)}.`);
       }
       return;
@@ -577,8 +624,11 @@ export default function LiveRunner() {
       if (p !== null) {
         setPrice(p);
         setTrailingHigh((prev) => (prev === null ? p : Math.max(prev, p)));
-        const nextBuy = p * (1 - cfg.dipPct / 100);
-        log(`Watching — current $${format(p, 6)}. Will buy on dip to $${format(nextBuy, 6)} (−${cfg.dipPct}%).`);
+        const windowRoc = rocPct ?? null;
+        const dipBiasBps = cfg.adaptiveTrails && windowRoc !== null && windowRoc < 0 ? Math.min(cfg.maxDownBiasBps ?? 0, -windowRoc * (cfg.downSensitivityBpsPerPct ?? 0)) : 0;
+        const effDip = cfg.dipPct + dipBiasBps / 100;
+        const nextBuy = p * (1 - effDip / 100);
+        log(`Watching — current $${format(p, 6)}. Will buy on dip to $${format(nextBuy, 6)} (−${format(effDip, 2)}%).`);
       }
       // Prime balances on start
       await Promise.all([loadWallet(), loadHoldings()]);
@@ -589,7 +639,10 @@ export default function LiveRunner() {
           const entry = saved ? Number(saved) : p!;
           if (Number.isFinite(entry) && entry > 0) {
             setPosition({ entry, high: p! });
-            log(`Adopted existing holding @ ~$${format(entry, 6)} • armed TP ≥ $${format(entry * (1 + cfg.takeProfitPct/100), 6)}`);
+            const windowRoc = rocPct ?? null;
+            const tpBiasBps = cfg.adaptiveTrails && windowRoc !== null && windowRoc > 0 ? Math.min(cfg.maxUpBiasBps ?? 0, windowRoc * (cfg.upSensitivityBpsPerPct ?? 0)) : 0;
+            const effTP = cfg.takeProfitPct + tpBiasBps / 100;
+            log(`Adopted existing holding @ ~$${format(entry, 6)} • armed TP ≥ $${format(entry * (1 + effTP/100), 6)}`);
           }
         }
       } catch {}
@@ -695,8 +748,38 @@ export default function LiveRunner() {
               </div>
             </div>
 
+            <div className="grid md:grid-cols-6 gap-4">
+              <div className="space-y-2">
+                <Label>Adaptive Trails</Label>
+                <div className="flex items-center gap-2">
+                  <Switch checked={!!cfg.adaptiveTrails} onCheckedChange={(v) => setCfg({ ...cfg, adaptiveTrails: v })} />
+                  <span className="text-xs text-muted-foreground">{cfg.adaptiveTrails ? 'On' : 'Off'}</span>
+                </div>
+              </div>
+              <div className="space-y-2">
+                <Label>ROC window (s)</Label>
+                <Input type="number" value={Number(cfg.rocWindowSec ?? 30)} onChange={(e) => setCfg({ ...cfg, rocWindowSec: Number(e.target.value) })} />
+              </div>
+              <div className="space-y-2">
+                <Label>Up sensitivity (bps per +1%)</Label>
+                <Input type="number" value={Number(cfg.upSensitivityBpsPerPct ?? 0)} onChange={(e) => setCfg({ ...cfg, upSensitivityBpsPerPct: Number(e.target.value) })} />
+              </div>
+              <div className="space-y-2">
+                <Label>Up cap (bps)</Label>
+                <Input type="number" value={Number(cfg.maxUpBiasBps ?? 0)} onChange={(e) => setCfg({ ...cfg, maxUpBiasBps: Number(e.target.value) })} />
+              </div>
+              <div className="space-y-2">
+                <Label>Down sensitivity (bps per −1%)</Label>
+                <Input type="number" value={Number(cfg.downSensitivityBpsPerPct ?? 0)} onChange={(e) => setCfg({ ...cfg, downSensitivityBpsPerPct: Number(e.target.value) })} />
+              </div>
+              <div className="space-y-2">
+                <Label>Down cap (bps)</Label>
+                <Input type="number" value={Number(cfg.maxDownBiasBps ?? 0)} onChange={(e) => setCfg({ ...cfg, maxDownBiasBps: Number(e.target.value) })} />
+              </div>
+            </div>
+
             <div className="rounded-lg border p-3 text-sm text-muted-foreground">
-              Status: {status} | Price: ${format(effectivePrice ?? NaN, 6)} | Trailing High: ${format(trailingHigh ?? NaN, 6)} | Position: {position ? `IN @ $${format(position.entry, 6)}` : "none"} | Daily buys: ${format(daily.buyUsd, 2)} / ${format(cfg.dailyCapUsd, 2)}
+              Status: {status} | Price: ${format(effectivePrice ?? NaN, 6)} | Trailing High: ${format(trailingHigh ?? NaN, 6)} | Position: {position ? `IN @ $${format(position.entry, 6)}` : "none"} | Daily buys: ${format(daily.buyUsd, 2)} / ${format(cfg.dailyCapUsd, 2)} | ROC: {rocPct !== null ? `${format(rocPct, 2)}%` : '—'}
             </div>
             {!ready && (
               <p className="text-xs text-muted-foreground">Note: Secrets not set — on-chain execution remains disabled; this panel simulates signals only.</p>
