@@ -188,9 +188,24 @@ serve(async (req) => {
     }
 
     const txJson = await txRes.json();
-    const txList: { transaction: string }[] = (txJson?.data ?? txJson?.transactions ?? []).map((d: any) => ({ transaction: d.transaction ?? d }))
+    let txPayloads: any[] = [];
+    if (Array.isArray(txJson?.data)) txPayloads = txJson.data;
+    else if (txJson?.data?.transaction) txPayloads = [txJson.data.transaction];
+    else if (typeof txJson?.data === "string") txPayloads = [txJson.data];
+    else if (Array.isArray(txJson?.transactions)) txPayloads = txJson.transactions;
+    else if (txJson?.transaction) txPayloads = [txJson.transaction];
 
-    if (!Array.isArray(txList) || txList.length === 0) return bad("No transactions returned from Raydium", 502);
+    const txList: { transaction: string }[] = txPayloads.map((d: any) => ({ transaction: (d?.transaction ?? d) }));
+
+    if (!Array.isArray(txList) || txList.length === 0) {
+      try {
+        console.error("raydium-swap empty tx list", {
+          keys: Object.keys(txJson || {}),
+          preview: typeof txJson === "object" ? JSON.stringify(txJson).slice(0, 200) : String(txJson).slice(0, 200),
+        });
+      } catch {}
+      return bad("No transactions returned from Raydium", 502);
+    }
 
     const sigs: string[] = [];
 
