@@ -384,20 +384,24 @@ serve(async (req) => {
             tx.sign(owner);
             let sig = await connection.sendRawTransaction(tx.serialize(), { skipPreflight: true, maxRetries: 2 });
             try {
-              await connection.confirmTransaction({ blockhash, lastValidBlockHeight, signature: sig }, "confirmed");
-            } catch (e) {
-              // Retry once on expired blockhash
-              const msg = String((e as Error)?.message || e);
-              if (msg.includes("expired") || msg.includes("block height exceeded")) {
-                const fresh = await connection.getLatestBlockhash("confirmed");
-                tx.recentBlockhash = fresh.blockhash;
-                tx.sign(owner);
-                sig = await connection.sendRawTransaction(tx.serialize(), { skipPreflight: true, maxRetries: 2 });
-                await connection.confirmTransaction({ blockhash: fresh.blockhash, lastValidBlockHeight: fresh.lastValidBlockHeight, signature: sig }, "confirmed");
-              } else {
-                throw e;
-              }
+            if (confirmPolicy !== "none") {
+              await connection.confirmTransaction({ blockhash, lastValidBlockHeight, signature: sig }, desiredCommitment as any);
             }
+          } catch (e) {
+            // Retry once on expired blockhash
+            const msg = String((e as Error)?.message || e);
+            if (msg.includes("expired") || msg.includes("block height exceeded")) {
+              const fresh = await connection.getLatestBlockhash("confirmed");
+              tx.recentBlockhash = fresh.blockhash;
+              tx.sign(owner);
+              sig = await connection.sendRawTransaction(tx.serialize(), { skipPreflight: true, maxRetries: 2 });
+              if (confirmPolicy !== "none") {
+                await connection.confirmTransaction({ blockhash: fresh.blockhash, lastValidBlockHeight: fresh.lastValidBlockHeight, signature: sig }, desiredCommitment as any);
+              }
+            } else {
+              throw e;
+            }
+          }
             sigs.push(sig);
           }
         } else {
@@ -411,7 +415,9 @@ serve(async (req) => {
             vtx.sign([owner]);
             let sig = await connection.sendTransaction(vtx, { skipPreflight: true, maxRetries: 2 });
             try {
-              await connection.confirmTransaction({ blockhash: fresh.blockhash, lastValidBlockHeight: fresh.lastValidBlockHeight, signature: sig }, "confirmed");
+              if (confirmPolicy !== "none") {
+                await connection.confirmTransaction({ blockhash: fresh.blockhash, lastValidBlockHeight: fresh.lastValidBlockHeight, signature: sig }, desiredCommitment as any);
+              }
             } catch (e) {
               const msg = String((e as Error)?.message || e);
               if (msg.includes("expired") || msg.includes("block height exceeded")) {
@@ -419,7 +425,9 @@ serve(async (req) => {
                 (vtx as any).message.recentBlockhash = newer.blockhash;
                 vtx.sign([owner]);
                 sig = await connection.sendTransaction(vtx, { skipPreflight: true, maxRetries: 2 });
-                await connection.confirmTransaction({ blockhash: newer.blockhash, lastValidBlockHeight: newer.lastValidBlockHeight, signature: sig }, "confirmed");
+                if (confirmPolicy !== "none") {
+                  await connection.confirmTransaction({ blockhash: newer.blockhash, lastValidBlockHeight: newer.lastValidBlockHeight, signature: sig }, desiredCommitment as any);
+                }
               } else {
                 throw e;
               }
@@ -552,7 +560,9 @@ serve(async (req) => {
         vtx.sign([owner]);
         let sig = await connection.sendTransaction(vtx, { skipPreflight: true, maxRetries: 2 });
         try {
-          await connection.confirmTransaction({ blockhash: fresh.blockhash, lastValidBlockHeight: fresh.lastValidBlockHeight, signature: sig }, "confirmed");
+          if (confirmPolicy !== "none") {
+            await connection.confirmTransaction({ blockhash: fresh.blockhash, lastValidBlockHeight: fresh.lastValidBlockHeight, signature: sig }, desiredCommitment as any);
+          }
         } catch (e) {
           const msg = String((e as Error)?.message || e);
           if (msg.includes("expired") || msg.includes("block height exceeded")) {
@@ -560,7 +570,9 @@ serve(async (req) => {
             (vtx as any).message.recentBlockhash = newer.blockhash;
             vtx.sign([owner]);
             sig = await connection.sendTransaction(vtx, { skipPreflight: true, maxRetries: 2 });
-            await connection.confirmTransaction({ blockhash: newer.blockhash, lastValidBlockHeight: newer.lastValidBlockHeight, signature: sig }, "confirmed");
+            if (confirmPolicy !== "none") {
+              await connection.confirmTransaction({ blockhash: newer.blockhash, lastValidBlockHeight: newer.lastValidBlockHeight, signature: sig }, desiredCommitment as any);
+            }
           } else {
             throw e;
           }
@@ -578,7 +590,9 @@ serve(async (req) => {
         tx.sign(owner);
         let sig = await connection.sendRawTransaction(tx.serialize(), { skipPreflight: true, maxRetries: 2 });
         try {
-          await connection.confirmTransaction({ blockhash: fresh.blockhash, lastValidBlockHeight: fresh.lastValidBlockHeight, signature: sig }, "confirmed");
+          if (confirmPolicy !== "none") {
+            await connection.confirmTransaction({ blockhash: fresh.blockhash, lastValidBlockHeight: fresh.lastValidBlockHeight, signature: sig }, desiredCommitment as any);
+          }
         } catch (e) {
           const msg = String((e as Error)?.message || e);
           if (msg.includes("expired") || msg.includes("block height exceeded")) {
@@ -586,7 +600,9 @@ serve(async (req) => {
             tx.recentBlockhash = newer.blockhash;
             tx.sign(owner);
             sig = await connection.sendRawTransaction(tx.serialize(), { skipPreflight: true, maxRetries: 2 });
-            await connection.confirmTransaction({ blockhash: newer.blockhash, lastValidBlockHeight: newer.lastValidBlockHeight, signature: sig }, "confirmed");
+            if (confirmPolicy !== "none") {
+              await connection.confirmTransaction({ blockhash: newer.blockhash, lastValidBlockHeight: newer.lastValidBlockHeight, signature: sig }, desiredCommitment as any);
+            }
           } else {
             throw e;
           }
