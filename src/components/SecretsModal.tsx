@@ -13,12 +13,14 @@ const SecretsModal: React.FC = () => {
   const [open, setOpen] = React.useState(false);
   const [rpcUrl, setRpcUrl] = React.useState(secrets?.rpcUrl ?? "");
   const [pk, setPk] = React.useState(secrets?.tradingPrivateKey ?? "");
+  const [fnToken, setFnToken] = React.useState(secrets?.functionToken ?? "");
 
   React.useEffect(() => {
     if (open) {
       // refresh values from storage when opening
       setRpcUrl(secrets?.rpcUrl ?? "");
       setPk(secrets?.tradingPrivateKey ?? "");
+      setFnToken(secrets?.functionToken ?? "");
     }
   }, [open, secrets]);
 
@@ -34,7 +36,7 @@ const SecretsModal: React.FC = () => {
       toast({ title: "Invalid RPC URL", description: "Provide a valid HTTPS RPC endpoint." });
       return;
     }
-    update({ rpcUrl: rpcUrl.trim(), tradingPrivateKey: pk.trim() });
+    update({ rpcUrl: rpcUrl.trim(), tradingPrivateKey: pk.trim(), functionToken: fnToken.trim() || undefined });
     toast({ title: "Secrets saved", description: "Stored locally in your browser only." });
     setOpen(false);
   };
@@ -66,6 +68,10 @@ const SecretsModal: React.FC = () => {
           <div className={fieldClass}>
             <Label htmlFor="pk">Private Key (base58 or JSON array)</Label>
             <Input id="pk" placeholder="Base58 or [1,2,3,...]" value={pk} onChange={(e) => setPk(e.target.value)} />
+          </div>
+          <div className={fieldClass}>
+            <Label htmlFor="ft">Function Token (optional, must match Supabase secret)</Label>
+            <Input id="ft" placeholder="Leave empty if not set server-side" value={fnToken} onChange={(e) => setFnToken(e.target.value)} />
           </div>
           <div className="flex items-center gap-2">
             <Button onClick={handleSave}>Save</Button>

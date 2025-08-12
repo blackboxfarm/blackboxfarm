@@ -76,22 +76,59 @@ serve(async (req) => {
       if (headerToken !== fnToken) return bad("Unauthorized", 401);
     }
 
+    const body = await req.json();
     const {
-      inputMint,
-      outputMint,
-      amount,
+      inputMint: _inputMint,
+      outputMint: _outputMint,
+      amount: _amount,
       slippageBps = 100, // 1%
       txVersion = "V0",
       wrapSol = false,
       unwrapSol = false,
-    } = await req.json();
-
-    if (!inputMint || !outputMint || !amount) return bad("Missing inputMint, outputMint, amount");
+      // high-level params (optional)
+      side,
+      tokenMint,
+      usdcAmount,
+      sellAll,
+    } = body;
 
     const rpcUrl = getEnv("SOLANA_RPC_URL");
     const ownerSecret = getEnv("TRADER_PRIVATE_KEY");
     const owner = parseKeypair(ownerSecret);
     const connection = new Connection(rpcUrl, { commitment: "confirmed" });
+
+    const USDC_MINT = "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v";
+
+    // Resolve low-level params
+    let inputMint = _inputMint as string | undefined;
+    let outputMint = _outputMint as string | undefined;
+    let amount = _amount as number | string | undefined;
+
+    if (side && tokenMint) {
+      if (side === "buy") {
+        inputMint = USDC_MINT;
+        outputMint = tokenMint;
+        const usd = Number(usdcAmount ?? 0);
+        if (!Number.isFinite(usd) || usd <= 0) return bad("Invalid usdcAmount for buy");
+        amount = Math.floor(usd * 1_000_000); // USDC has 6 decimals
+      } else if (side === "sell") {
+        inputMint = tokenMint;
+        outputMint = USDC_MINT;
+        if (sellAll) {
+          const ata = await getAssociatedTokenAddress(new PublicKey(tokenMint), owner.publicKey);
+          const bal = await connection.getTokenAccountBalance(ata).catch(() => null);
+          const raw = bal?.value?.amount ? Number(bal.value.amount) : 0;
+          if (!Number.isFinite(raw) || raw <= 0) return bad("No token balance to sell");
+          amount = Math.floor(raw);
+        } else {
+          if (amount == null) return bad("Provide amount when not sellAll");
+        }
+      } else {
+        return bad("Invalid side; use 'buy' or 'sell'");
+      }
+    }
+
+    if (!inputMint || !outputMint || amount == null) return bad("Missing inputMint, outputMint, amount");
 
     // Get ATAs when not SOL
     const isInputSol = isSolMint(String(inputMint));

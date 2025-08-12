@@ -3,6 +3,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 export type Secrets = {
   rpcUrl: string;
   tradingPrivateKey: string; // base58 or JSON array
+  functionToken?: string; // optional header for protected edge functions
 };
 
 const STORAGE_KEY = "bumpbot.secrets";

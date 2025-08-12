@@ -5,7 +5,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { toast } from "@/hooks/use-toast";
 import { useLocalSecrets } from "@/hooks/useLocalSecrets";
-
+import { supabase } from "@/integrations/supabase/client";
 export type RunnerConfig = {
   tokenMint: string;
   tradeSizeUsd: number;
@@ -50,7 +50,7 @@ function useInterval(callback: () => void, delay: number | null) {
 const todayKey = () => new Date().toISOString().slice(0, 10);
 
 export default function LiveRunner() {
-  const { ready } = useLocalSecrets();
+  const { ready, secrets } = useLocalSecrets();
 
   const [cfg, setCfg] = React.useState<RunnerConfig>({
     tokenMint: "FTggXu7nYowpXjScSw7BZjtZDXywLNjK88CGhydDGgMS",
@@ -73,6 +73,10 @@ export default function LiveRunner() {
   const [lastSellTs, setLastSellTs] = React.useState<number | null>(null);
   const [daily, setDaily] = React.useState<{ key: string; buyUsd: number }>({ key: todayKey(), buyUsd: 0 });
 
+  type Trade = { id: string; time: number; side: 'buy'|'sell'; status: 'pending'|'confirmed'|'error'; signatures?: string[]; error?: string };
+  const [trades, setTrades] = React.useState<Trade[]>([]);
+  const [executing, setExecuting] = React.useState(false);
+
   // reset daily counters when date changes
   React.useEffect(() => {
     const key = todayKey();
@@ -92,7 +96,45 @@ export default function LiveRunner() {
     return !position; // only one position at a time
   }, [effectivePrice, daily, cfg, lastSellTs, position]);
 
+  const execSwap = React.useCallback(async (side: 'buy' | 'sell') => {
+    if (executing) return false;
+    setExecuting(true);
+    const id = crypto.randomUUID();
+    const newTrade: Trade = { id, time: Date.now(), side, status: 'pending' };
+    setTrades((t) => [newTrade, ...t].slice(0, 25));
+    try {
+      const body = side === 'buy'
+        ? { side: 'buy', tokenMint: cfg.tokenMint, usdcAmount: cfg.tradeSizeUsd, slippageBps: cfg.slippageBps }
+        : { side: 'sell', tokenMint: cfg.tokenMint, sellAll: true, slippageBps: cfg.slippageBps };
+
+      const { data, error } = await supabase.functions.invoke('raydium-swap', {
+        body,
+        headers: secrets?.functionToken ? { 'x-function-token': secrets.functionToken } : undefined,
+      });
+      if (error) throw error;
+      const sigs: string[] = data?.signatures ?? [];
+      setTrades((arr) => arr.map((x) => (x.id === id ? { ...x, status: 'confirmed', signatures: sigs } : x)));
+      if (sigs.length) {
+        toast({ title: `${side.toUpperCase()} executed`, description: `Confirmed tx: ${sigs[0].slice(0, 8)}…` });
+      } else {
+        toast({ title: `${side.toUpperCase()} executed`, description: `No signature returned` });
+      }
+      return true;
+    } catch (e: any) {
+      const msg = e?.message ?? String(e);
+      setTrades((arr) => arr.map((x) => (x.id === id ? { ...x, status: 'error', error: msg } : x)));
+      toast({ title: 'Swap failed', description: msg });
+      return false;
+    } finally {
+      setExecuting(false);
+    }
+  }, [executing, cfg.tokenMint, cfg.tradeSizeUsd, cfg.slippageBps, supabase]);
+
   const tick = React.useCallback(async () => {
+    if (executing) {
+      setStatus('executing…');
+      return;
+    }
     // refresh price when manual not set
     if (!manualPrice) {
       const p = await fetchJupPriceUSD(cfg.tokenMint);
@@ -108,10 +150,12 @@ export default function LiveRunner() {
     if (!position) {
       // Entry condition: dip from trailing high
       if (canBuy && pNow <= high * (1 - cfg.dipPct / 100)) {
-        setPosition({ entry: pNow });
-        setDaily((d) => ({ ...d, buyUsd: d.buyUsd + cfg.tradeSizeUsd }));
         setStatus(`BUY @ $${format(pNow, 6)} (dip ${cfg.dipPct}%)`);
-        toast({ title: "Buy signal", description: `Buy $${cfg.tradeSizeUsd} at $${format(pNow, 6)}` });
+        const ok = await execSwap('buy');
+        if (ok) {
+          setPosition({ entry: pNow });
+          setDaily((d) => ({ ...d, buyUsd: d.buyUsd + cfg.tradeSizeUsd }));
+        }
       } else {
         setStatus(`Watching — price $${format(pNow, 6)} • high $${format(high, 6)}`);
       }
@@ -124,23 +168,29 @@ export default function LiveRunner() {
     const sl = entry * (1 - cfg.stopLossPct / 100);
 
     if (pNow >= tp) {
-      setPosition(null);
-      setLastSellTs(Date.now());
       setStatus(`SELL TP @ $${format(pNow, 6)} (+${cfg.takeProfitPct}%)`);
-      toast({ title: "Take profit", description: `Sold at $${format(pNow, 6)} (target ${cfg.takeProfitPct}%)` });
+      const ok = await execSwap('sell');
+      if (ok) {
+        setPosition(null);
+        setLastSellTs(Date.now());
+        toast({ title: 'Take profit', description: `Sold at $${format(pNow, 6)} (target ${cfg.takeProfitPct}%)` });
+      }
       return;
     }
 
     if (pNow <= sl) {
-      setPosition(null);
-      setLastSellTs(Date.now());
       setStatus(`SELL SL @ $${format(pNow, 6)} (−${cfg.stopLossPct}%)`);
-      toast({ title: "Stop loss", description: `Sold at $${format(pNow, 6)} (stop ${cfg.stopLossPct}%)` });
+      const ok = await execSwap('sell');
+      if (ok) {
+        setPosition(null);
+        setLastSellTs(Date.now());
+        toast({ title: 'Stop loss', description: `Sold at $${format(pNow, 6)} (stop ${cfg.stopLossPct}%)` });
+      }
       return;
     }
 
     setStatus(`Holding — entry $${format(entry, 6)} • now $${format(pNow, 6)} • TP $${format(tp, 6)} • SL $${format(sl, 6)}`);
-  }, [cfg, canBuy, effectivePrice, manualPrice, position, trailingHigh]);
+  }, [executing, cfg, canBuy, effectivePrice, manualPrice, position, trailingHigh, execSwap]);
 
   useInterval(() => {
     if (running) void tick();
@@ -162,7 +212,7 @@ export default function LiveRunner() {
   return (
     <Card className="max-w-4xl mx-auto mt-8">
       <CardHeader>
-        <CardTitle>Live Strategy Runner (Simulated)</CardTitle>
+        <CardTitle>Live Strategy Runner (Raydium)</CardTitle>
       </CardHeader>
       <CardContent className="space-y-4">
         <div className="grid md:grid-cols-3 gap-4">
@@ -217,8 +267,30 @@ export default function LiveRunner() {
         <div className="rounded-lg border p-3 text-sm text-muted-foreground">
           Status: {status} | Price: ${format(effectivePrice ?? NaN, 6)} | Trailing High: ${format(trailingHigh ?? NaN, 6)} | Position: {position ? `IN @ $${format(position.entry, 6)}` : "none"} | Daily buys: ${format(daily.buyUsd, 2)} / ${format(cfg.dailyCapUsd, 2)}
         </div>
-        {!ready && (
-          <p className="text-xs text-muted-foreground">Note: Secrets not set — on-chain execution remains disabled; this panel simulates signals only.</p>
+        {trades.length > 0 && (
+          <div className="rounded-lg border p-3 text-sm">
+            <div className="font-medium mb-2">Recent trades</div>
+            <ul className="space-y-1 max-h-56 overflow-auto">
+              {trades.map((t) => (
+                <li key={t.id} className="flex items-center justify-between gap-2">
+                  <span className="text-muted-foreground">
+                    {new Date(t.time).toLocaleTimeString()} • {t.side.toUpperCase()} • {t.status}
+                  </span>
+                  {t.signatures?.[0] && (
+                    <a
+                      className="underline"
+                      href={`https://solscan.io/tx/${t.signatures[0]}`}
+                      target="_blank"
+                      rel="noreferrer noopener"
+                    >
+                      View tx
+                    </a>
+                  )}
+                  {t.error && <span className="text-destructive">{t.error}</span>}
+                </li>
+              ))}
+            </ul>
+          </div>
         )}
       </CardContent>
       <CardFooter className="flex gap-2">
