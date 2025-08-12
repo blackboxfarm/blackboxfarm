@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import VolumeSimulator from "@/components/VolumeSimulator";
 import SecretsModal from "@/components/SecretsModal";
 import WalletPoolManager from "@/components/WalletPoolManager";
@@ -8,8 +8,8 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
 import { Link } from "react-router-dom";
 import { useLocalSecrets } from "@/hooks/useLocalSecrets";
-import { Connection, Keypair, PublicKey } from "@solana/web3.js";
-import bs58 from "bs58";
+import { useWalletPool } from "@/hooks/useWalletPool";
+import { Connection, PublicKey } from "@solana/web3.js";
 
 const JUP_PRICE = async (id: string): Promise<number | null> => {
   try {
@@ -22,17 +22,6 @@ const JUP_PRICE = async (id: string): Promise<number | null> => {
   } catch {}
   return null;
 };
-
-function parseKeypair(secret: string): Keypair {
-  const s = secret.trim();
-  if (s.startsWith("[")) {
-    const arr = JSON.parse(s);
-    return Keypair.fromSecretKey(new Uint8Array(arr));
-  } else {
-    const u8 = bs58.decode(s);
-    return Keypair.fromSecretKey(u8.length === 64 ? u8 : Keypair.fromSeed(u8).secretKey);
-  }
-}
 
 const BumpBot = () => {
   // SEO meta
@@ -57,24 +46,18 @@ const BumpBot = () => {
     canonical.setAttribute("href", `${window.location.origin}/bb`);
   }, []);
 
+  // RPC connection (from local Secrets)
   const { secrets } = useLocalSecrets();
   const [conn, setConn] = useState<Connection | null>(null);
-  const [owner, setOwner] = useState<{ kp: Keypair; pubkey: PublicKey } | null>(null);
-
   useEffect(() => {
     if (secrets?.rpcUrl) setConn(new Connection(secrets.rpcUrl, { commitment: "confirmed" }));
   }, [secrets?.rpcUrl]);
 
-  useEffect(() => {
-    if (!secrets?.tradingPrivateKey) { setOwner(null); return; }
-    try {
-      const kp = parseKeypair(secrets.tradingPrivateKey);
-      setOwner({ kp, pubkey: kp.publicKey });
-    } catch {
-      setOwner(null);
-    }
-  }, [secrets?.tradingPrivateKey]);
+  // Use FIRST wallet from Wallet Pool (generated/custom) for balances
+  const { wallets: poolWallets } = useWalletPool();
+  const displayPubkey = useMemo(() => poolWallets[0]?.pubkey ?? "", [poolWallets]);
 
+  // Live balances state
   const [tokenMint, setTokenMint] = useState<string>("");
   const [running, setRunning] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -83,14 +66,13 @@ const BumpBot = () => {
   const [solUsd, setSolUsd] = useState<number | null>(null);
   const [tokenUsd, setTokenUsd] = useState<number | null>(null);
 
-  const pubkeyStr = useMemo(() => owner?.pubkey?.toBase58() ?? "", [owner]);
-
   const refresh = useCallback(async () => {
-    if (!conn || !owner?.pubkey) return;
+    if (!conn || !displayPubkey) return;
     setLoading(true);
     try {
+      const ownerPk = new PublicKey(displayPubkey);
       const [lam, solPrice] = await Promise.all([
-        conn.getBalance(owner.pubkey),
+        conn.getBalance(ownerPk),
         JUP_PRICE("SOL"),
       ]);
       setSol(lam / 1_000_000_000);
@@ -102,7 +84,7 @@ const BumpBot = () => {
 
       if (mintKey) {
         const [parsed, tPrice] = await Promise.all([
-          conn.getParsedTokenAccountsByOwner(owner.pubkey, { mint: mintKey }),
+          conn.getParsedTokenAccountsByOwner(ownerPk, { mint: mintKey }),
           JUP_PRICE(mintKey.toBase58()),
         ]);
         const totalUi = parsed.value.reduce((sum, acc: any) => {
@@ -119,7 +101,7 @@ const BumpBot = () => {
     finally {
       setLoading(false);
     }
-  }, [conn, owner?.pubkey, tokenMint]);
+  }, [conn, displayPubkey, tokenMint]);
 
   // 5s polling when running
   useEffect(() => {
@@ -165,26 +147,26 @@ const BumpBot = () => {
                   <Input placeholder="Token mint address" value={tokenMint} onChange={(e) => setTokenMint(e.target.value.trim())} />
                 </div>
                 <div className="flex items-end gap-2">
-                  <Button onClick={() => setRunning(true)} disabled={running || !conn || !owner}>Start</Button>
+                  <Button onClick={() => setRunning(true)} disabled={running || !conn || !displayPubkey}>Start</Button>
                   <Button variant="secondary" onClick={() => setRunning(false)} disabled={!running}>Stop</Button>
                 </div>
               </div>
 
               <div className="space-y-2">
                 <div className="text-sm text-muted-foreground">Wallet</div>
-                <div className="text-sm break-all">{pubkeyStr || "No wallet — set Secrets"}</div>
+                <div className="text-sm break-all">{displayPubkey || "No wallet — use Wallet Pool to generate one"}</div>
               </div>
 
               <div className="grid sm:grid-cols-3 gap-4 text-sm">
                 <div className="rounded-md border p-3">
                   <div className="font-medium">SOL balance</div>
-                  <div className="text-muted-foreground">{sol !== null ? sol.toFixed(6) : "…"} SOL{solUsd ? ` • ~$${(sol! * solUsd).toFixed(2)}` : ""}</div>
+                  <div className="text-muted-foreground">{sol !== null ? sol.toFixed(6) : "…"} SOL{solUsd && sol !== null ? ` • ~$${(sol * solUsd).toFixed(2)}` : ""}</div>
                 </div>
                 <div className="rounded-md border p-3">
                   <div className="font-medium">Token balance</div>
                   <div className="text-muted-foreground">
                     {tokenMint ? (tokenUi !== null ? tokenUi.toFixed(6) : "…") : "—"}
-                    {tokenMint && tokenUsd ? ` • ~$${((tokenUi ?? 0) * tokenUsd).toFixed(2)}` : ""}
+                    {tokenMint && tokenUsd && tokenUi !== null ? ` • ~$${(tokenUi * tokenUsd).toFixed(2)}` : ""}
                   </div>
                 </div>
                 <div className="rounded-md border p-3">
