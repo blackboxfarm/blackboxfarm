@@ -129,7 +129,7 @@ export default function LiveRunner() {
   const { ready, secrets } = useLocalSecrets();
 
   const [cfg, setCfg] = React.useState<RunnerConfig>({
-    tokenMint: "6JYrshW3jjXSGDLmrhLK7kpNevNGREjtuoXAtY5AFd9C",
+    tokenMint: "FTggXu7nYowpXjScSw7BZjtZDXywLNjK88CGhydDGgMS",
     tradeSizeUsd: 15,
     intervalSec: 5,
     dipPct: 7,
