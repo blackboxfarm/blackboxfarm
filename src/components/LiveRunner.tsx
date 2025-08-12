@@ -426,7 +426,7 @@ export default function LiveRunner() {
       }
 
       try {
-        const timeoutMs = 12000;
+        const timeoutMs = 15000;
         const timeout = new Promise<never>((_, reject) => setTimeout(() => reject(new Error('invoke timeout')), timeoutMs));
         const invoke = supabase.functions
           .invoke('raydium-swap', { body, headers: { ...(secrets?.functionToken ? { 'x-function-token': secrets.functionToken } : {}), ...(opts?.ownerSecret ? { 'x-owner-secret': opts.ownerSecret } : {}) } })
