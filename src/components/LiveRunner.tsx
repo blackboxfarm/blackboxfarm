@@ -215,90 +215,100 @@ export default function LiveRunner() {
         <CardTitle>Live Strategy Runner (Raydium)</CardTitle>
       </CardHeader>
       <CardContent className="space-y-4">
-        <div className="grid md:grid-cols-3 gap-4">
-          <div className="space-y-2">
-            <Label>Token Mint</Label>
-            <Input value={cfg.tokenMint} onChange={(e) => setCfg({ ...cfg, tokenMint: e.target.value.trim() })} />
-          </div>
-          <div className="space-y-2">
-            <Label>Trade Size (USD)</Label>
-            <Input type="number" value={cfg.tradeSizeUsd} onChange={(e) => setCfg({ ...cfg, tradeSizeUsd: Number(e.target.value) })} />
-          </div>
-          <div className="space-y-2">
-            <Label>Interval (s)</Label>
-            <Input type="number" value={cfg.intervalSec} onChange={(e) => setCfg({ ...cfg, intervalSec: Number(e.target.value) })} />
-          </div>
-        </div>
+        <div className="grid md:grid-cols-3 gap-6">
+          <div className="md:col-span-2 space-y-4">
+            <div className="grid md:grid-cols-3 gap-4">
+              <div className="space-y-2">
+                <Label>Token Mint</Label>
+                <Input value={cfg.tokenMint} onChange={(e) => setCfg({ ...cfg, tokenMint: e.target.value.trim() })} />
+              </div>
+              <div className="space-y-2">
+                <Label>Trade Size (USD)</Label>
+                <Input type="number" value={cfg.tradeSizeUsd} onChange={(e) => setCfg({ ...cfg, tradeSizeUsd: Number(e.target.value) })} />
+              </div>
+              <div className="space-y-2">
+                <Label>Interval (s)</Label>
+                <Input type="number" value={cfg.intervalSec} onChange={(e) => setCfg({ ...cfg, intervalSec: Number(e.target.value) })} />
+              </div>
+            </div>
 
-        <div className="grid md:grid-cols-4 gap-4">
-          <div className="space-y-2">
-            <Label>Dip %</Label>
-            <Input type="number" value={cfg.dipPct} onChange={(e) => setCfg({ ...cfg, dipPct: Number(e.target.value) })} />
-          </div>
-          <div className="space-y-2">
-            <Label>Take Profit %</Label>
-            <Input type="number" value={cfg.takeProfitPct} onChange={(e) => setCfg({ ...cfg, takeProfitPct: Number(e.target.value) })} />
-          </div>
-          <div className="space-y-2">
-            <Label>Stop Loss %</Label>
-            <Input type="number" value={cfg.stopLossPct} onChange={(e) => setCfg({ ...cfg, stopLossPct: Number(e.target.value) })} />
-          </div>
-          <div className="space-y-2">
-            <Label>Cooldown (s)</Label>
-            <Input type="number" value={cfg.cooldownSec} onChange={(e) => setCfg({ ...cfg, cooldownSec: Number(e.target.value) })} />
-          </div>
-        </div>
+            <div className="grid md:grid-cols-4 gap-4">
+              <div className="space-y-2">
+                <Label>Dip %</Label>
+                <Input type="number" value={cfg.dipPct} onChange={(e) => setCfg({ ...cfg, dipPct: Number(e.target.value) })} />
+              </div>
+              <div className="space-y-2">
+                <Label>Take Profit %</Label>
+                <Input type="number" value={cfg.takeProfitPct} onChange={(e) => setCfg({ ...cfg, takeProfitPct: Number(e.target.value) })} />
+              </div>
+              <div className="space-y-2">
+                <Label>Stop Loss %</Label>
+                <Input type="number" value={cfg.stopLossPct} onChange={(e) => setCfg({ ...cfg, stopLossPct: Number(e.target.value) })} />
+              </div>
+              <div className="space-y-2">
+                <Label>Cooldown (s)</Label>
+                <Input type="number" value={cfg.cooldownSec} onChange={(e) => setCfg({ ...cfg, cooldownSec: Number(e.target.value) })} />
+              </div>
+            </div>
 
-        <div className="grid md:grid-cols-3 gap-4">
-          <div className="space-y-2">
-            <Label>Daily Cap (USD)</Label>
-            <Input type="number" value={cfg.dailyCapUsd} onChange={(e) => setCfg({ ...cfg, dailyCapUsd: Number(e.target.value) })} />
-          </div>
-          <div className="space-y-2">
-            <Label>Slippage (bps)</Label>
-            <Input type="number" value={cfg.slippageBps} onChange={(e) => setCfg({ ...cfg, slippageBps: Number(e.target.value) })} />
-          </div>
-          <div className="space-y-2">
-            <Label>Manual Price Override (USD)</Label>
-            <Input placeholder="leave empty to auto" value={manualPrice} onChange={(e) => setManualPrice(e.target.value)} />
-          </div>
-        </div>
+            <div className="grid md:grid-cols-3 gap-4">
+              <div className="space-y-2">
+                <Label>Daily Cap (USD)</Label>
+                <Input type="number" value={cfg.dailyCapUsd} onChange={(e) => setCfg({ ...cfg, dailyCapUsd: Number(e.target.value) })} />
+              </div>
+              <div className="space-y-2">
+                <Label>Slippage (bps)</Label>
+                <Input type="number" value={cfg.slippageBps} onChange={(e) => setCfg({ ...cfg, slippageBps: Number(e.target.value) })} />
+              </div>
+              <div className="space-y-2">
+                <Label>Manual Price Override (USD)</Label>
+                <Input placeholder="leave empty to auto" value={manualPrice} onChange={(e) => setManualPrice(e.target.value)} />
+              </div>
+            </div>
 
-        <div className="rounded-lg border p-3 text-sm text-muted-foreground">
-          Status: {status} | Price: ${format(effectivePrice ?? NaN, 6)} | Trailing High: ${format(trailingHigh ?? NaN, 6)} | Position: {position ? `IN @ $${format(position.entry, 6)}` : "none"} | Daily buys: ${format(daily.buyUsd, 2)} / ${format(cfg.dailyCapUsd, 2)}
-        </div>
-        {trades.length > 0 && (
-          <div className="rounded-lg border p-3 text-sm">
-            <div className="font-medium mb-2">Recent trades</div>
-            <ul className="space-y-1 max-h-56 overflow-auto">
-              {trades.map((t) => (
-                <li key={t.id} className="flex items-center justify-between gap-2">
-                  <span className="text-muted-foreground">
-                    {new Date(t.time).toLocaleTimeString()} • {t.side.toUpperCase()} • {t.status}
-                  </span>
-                  {t.signatures?.[0] && (
-                    <a
-                      className="underline"
-                      href={`https://solscan.io/tx/${t.signatures[0]}`}
-                      target="_blank"
-                      rel="noreferrer noopener"
-                    >
-                      View tx
-                    </a>
-                  )}
-                  {t.error && <span className="text-destructive">{t.error}</span>}
-                </li>
-              ))}
-            </ul>
+            <div className="rounded-lg border p-3 text-sm text-muted-foreground">
+              Status: {status} | Price: ${format(effectivePrice ?? NaN, 6)} | Trailing High: ${format(trailingHigh ?? NaN, 6)} | Position: {position ? `IN @ $${format(position.entry, 6)}` : "none"} | Daily buys: ${format(daily.buyUsd, 2)} / ${format(cfg.dailyCapUsd, 2)}
+            </div>
+            {!ready && (
+              <p className="text-xs text-muted-foreground">Note: Secrets not set — on-chain execution remains disabled; this panel simulates signals only.</p>
+            )}
           </div>
-        )}
+
+          <aside className="space-y-2">
+            <div className="rounded-lg border p-3 text-sm">
+              <div className="font-medium mb-2">Recent trades</div>
+              <ul className="space-y-1 max-h-72 overflow-auto">
+                {trades.map((t) => (
+                  <li key={t.id} className="flex items-center justify-between gap-2">
+                    <span className="text-muted-foreground">
+                      {new Date(t.time).toLocaleTimeString()} • {t.side.toUpperCase()} • {t.status}
+                    </span>
+                    {t.signatures?.[0] && (
+                      <a
+                        className="underline"
+                        href={`https://solscan.io/tx/${t.signatures[0]}`}
+                        target="_blank"
+                        rel="noreferrer noopener"
+                      >
+                        View tx
+                      </a>
+                    )}
+                    {t.error && <span className="text-destructive">{t.error}</span>}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          </aside>
+        </div>
       </CardContent>
-      <CardFooter className="flex gap-2">
+      <CardFooter className="flex flex-wrap gap-2">
         {running ? (
-          <Button variant="secondary" onClick={stop}>Stop</Button>
+          <Button variant="secondary" onClick={stop} disabled={executing}>Stop</Button>
         ) : (
-          <Button onClick={start}>Start</Button>
+          <Button onClick={start} disabled={executing}>Start</Button>
         )}
+        <Button onClick={() => void execSwap('buy')} disabled={executing}>Buy now</Button>
+        <Button variant="outline" onClick={() => void execSwap('sell')} disabled={executing}>Sell now</Button>
         <Button
           variant="secondary"
           onClick={() => {
