@@ -3,6 +3,7 @@
 import React, { useEffect } from "react";
 import VolumeSimulator from "@/components/VolumeSimulator";
 import SecretsModal from "@/components/SecretsModal";
+import LiveRunner from "@/components/LiveRunner";
 
 const Index = () => {
   useEffect(() => {
@@ -29,6 +30,7 @@ const Index = () => {
       </header>
       <main className="container mx-auto px-4 pb-12">
         <VolumeSimulator />
+        <LiveRunner />
       </main>
     </div>
   );
