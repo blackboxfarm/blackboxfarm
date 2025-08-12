@@ -63,6 +63,7 @@ async function fetchJupPriceUSD(mint: string): Promise<number | null> {
 }
 
 const WSOL_MINT = "So11111111111111111111111111111111111111112";
+const USDC_MINT = "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v";
 
 async function fetchSolUsd(): Promise<number | null> {
   try {
@@ -310,6 +311,68 @@ export default function LiveRunner() {
     }
   }, [executing, cfg.tokenMint, cfg.tradeSizeUsd, cfg.slippageBps, cfg.quoteAsset, supabase, loadWallet, loadHoldings]);
 
+  const convertUsdcToSol = React.useCallback(async () => {
+    if (executing) return;
+    setExecuting(true);
+    try {
+      // Get USDC balance (raw) via wallet function
+      let raw = 0;
+      try {
+        const res = await fetch(`${SB_PROJECT_URL}/functions/v1/trader-wallet?tokenMint=${encodeURIComponent(USDC_MINT)}` , {
+          headers: {
+            apikey: SB_ANON_KEY,
+            Authorization: `Bearer ${SB_ANON_KEY}`,
+            ...(secrets?.functionToken ? { 'x-function-token': secrets.functionToken } : {}),
+          },
+        });
+        if (res.ok) {
+          const j = await res.json();
+          raw = Number(j?.tokenBalanceRaw ?? 0);
+        }
+      } catch {}
+      if (!Number.isFinite(raw) || raw <= 0) {
+        toast({ title: 'No USDC to convert', description: 'USDC balance is zero.' });
+        return;
+      }
+
+      const body = { inputMint: USDC_MINT, outputMint: WSOL_MINT, amount: Math.floor(raw), slippageBps: cfg.slippageBps, unwrapSol: true } as const;
+
+      try {
+        const { data, error } = await supabase.functions.invoke('raydium-swap', {
+          body,
+          headers: secrets?.functionToken ? { 'x-function-token': secrets.functionToken } : undefined,
+        });
+        if (error) throw error;
+        const sigs: string[] = data?.signatures ?? [];
+        toast({ title: 'Converted USDC to SOL', description: sigs[0] ? `Tx: ${sigs[0].slice(0,8)}…` : 'Success' });
+      } catch (firstErr: any) {
+        const res = await fetch(`${SB_PROJECT_URL}/functions/v1/raydium-swap`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            apikey: SB_ANON_KEY,
+            Authorization: `Bearer ${SB_ANON_KEY}`,
+            ...(secrets?.functionToken ? { 'x-function-token': secrets.functionToken } : {}),
+          },
+          body: JSON.stringify(body),
+        });
+        if (!res.ok) {
+          const t = await res.text();
+          throw new Error(`HTTP ${res.status}: ${t}`);
+        }
+        const data = await res.json();
+        const sigs: string[] = data?.signatures ?? [];
+        toast({ title: 'Converted USDC to SOL', description: sigs[0] ? `Tx: ${sigs[0].slice(0,8)}…` : 'Success' });
+      }
+
+      await loadWallet();
+    } catch (e: any) {
+      toast({ title: 'Conversion failed', description: e?.message ?? String(e) });
+    } finally {
+      setExecuting(false);
+    }
+  }, [executing, cfg.slippageBps, supabase, secrets?.functionToken, loadWallet]);
+
   const tick = React.useCallback(async () => {
     if (executing) {
       setStatus('executing…');
@@ -499,9 +562,12 @@ export default function LiveRunner() {
                     </div>
                   </div>
                   <div>Balance: {Number.isFinite(wallet.sol) ? `${wallet.sol.toFixed(4)} SOL` : '—'}</div>
-                  <Button size="sm" variant="outline" onClick={() => void loadWallet()} disabled={walletLoading}>
-                    {walletLoading ? 'Refreshing…' : 'Refresh'}
-                  </Button>
+                  <div className="flex items-center gap-2">
+                    <Button size="sm" variant="outline" onClick={() => void loadWallet()} disabled={walletLoading}>
+                      {walletLoading ? 'Refreshing…' : 'Refresh'}
+                    </Button>
+                    <Button size="sm" onClick={() => void convertUsdcToSol()} disabled={executing}>Convert USDC→SOL</Button>
+                  </div>
                 </div>
               ) : (
                 <div className="flex items-center justify-between">
