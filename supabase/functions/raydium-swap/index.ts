@@ -12,6 +12,7 @@ function getAssociatedTokenAddress(mint: PublicKey, owner: PublicKey): PublicKey
   return addr;
 }
 const NATIVE_MINT = new PublicKey("So11111111111111111111111111111111111111112");
+const USDC_MINT = "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v"; // USDC (mainnet)
 import bs58 from "npm:bs58@5.0.0";
 
 const corsHeaders = {
