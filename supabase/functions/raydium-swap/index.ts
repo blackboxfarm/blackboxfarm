@@ -189,7 +189,7 @@ serve(async (req) => {
     const owner = parseKeypair(bodyOwnerSecret || envOwnerSecret);
     const connection = new Connection(rpcUrl, { commitment: "confirmed" });
 
-    const confirmPolicy = String(_confirmPolicy ?? "confirmed").toLowerCase();
+    const confirmPolicy = String(_confirmPolicy ?? "processed").toLowerCase();
     const desiredCommitment = confirmPolicy === "processed" ? "processed" : "confirmed";
 
     // Prepare mode: pre-create ATAs to speed up first swap
@@ -230,9 +230,14 @@ serve(async (req) => {
           tx.feePayer = owner.publicKey;
           tx.sign(owner);
           const sig = await connection.sendRawTransaction(tx.serialize(), { skipPreflight: true, maxRetries: 2 });
-          if (confirmPolicy !== "none") {
-            await connection.confirmTransaction({ blockhash, lastValidBlockHeight, signature: sig }, desiredCommitment as any);
-          }
+            if (confirmPolicy !== "none") {
+              if (confirmPolicy === "processed") {
+                await connection.confirmTransaction({ blockhash, lastValidBlockHeight, signature: sig }, "processed" as any);
+                try { (EdgeRuntime as any)?.waitUntil?.(connection.confirmTransaction({ blockhash, lastValidBlockHeight, signature: sig }, "confirmed" as any).catch((e: any) => console.error("prepare bg confirm err", e))); } catch (_) {}
+              } else {
+                await connection.confirmTransaction({ blockhash, lastValidBlockHeight, signature: sig }, "confirmed" as any);
+              }
+            }
           return ok({ prepared: true, signatures: [sig], created });
         }
         return ok({ prepared: true, signatures: [], created });
@@ -360,6 +365,8 @@ serve(async (req) => {
     if (!Number.isFinite(computeUnitPriceMicroLamports) || computeUnitPriceMicroLamports <= 0) {
       computeUnitPriceMicroLamports = await getPriorityFeeMicroLamports(connection);
     }
+    // Clamp to 5k–50k µLamports to control cost and reduce expiry risk
+    computeUnitPriceMicroLamports = Math.min(Math.max(computeUnitPriceMicroLamports, 5_000), 50_000);
 
     // Jupiter fallback if Raydium compute failed at compute stage
     if (needJupiter) {
@@ -386,7 +393,12 @@ serve(async (req) => {
             let sig = await connection.sendRawTransaction(tx.serialize(), { skipPreflight: true, maxRetries: 2 });
             try {
             if (confirmPolicy !== "none") {
-              await connection.confirmTransaction({ blockhash, lastValidBlockHeight, signature: sig }, desiredCommitment as any);
+              if (confirmPolicy === "processed") {
+                await connection.confirmTransaction({ blockhash, lastValidBlockHeight, signature: sig }, "processed" as any);
+                try { (EdgeRuntime as any)?.waitUntil?.(connection.confirmTransaction({ blockhash, lastValidBlockHeight, signature: sig }, "confirmed" as any).catch((e: any) => console.error("bg confirm err", e))); } catch (_) {}
+              } else {
+                await connection.confirmTransaction({ blockhash, lastValidBlockHeight, signature: sig }, "confirmed" as any);
+              }
             }
           } catch (e) {
             // Retry once on expired blockhash
@@ -397,7 +409,12 @@ serve(async (req) => {
               tx.sign(owner);
               sig = await connection.sendRawTransaction(tx.serialize(), { skipPreflight: true, maxRetries: 2 });
               if (confirmPolicy !== "none") {
-                await connection.confirmTransaction({ blockhash: fresh.blockhash, lastValidBlockHeight: fresh.lastValidBlockHeight, signature: sig }, desiredCommitment as any);
+                if (confirmPolicy === "processed") {
+                  await connection.confirmTransaction({ blockhash: fresh.blockhash, lastValidBlockHeight: fresh.lastValidBlockHeight, signature: sig }, "processed" as any);
+                  try { (EdgeRuntime as any)?.waitUntil?.(connection.confirmTransaction({ blockhash: fresh.blockhash, lastValidBlockHeight: fresh.lastValidBlockHeight, signature: sig }, "confirmed" as any).catch((e: any) => console.error("bg confirm err", e))); } catch (_) {}
+                } else {
+                  await connection.confirmTransaction({ blockhash: fresh.blockhash, lastValidBlockHeight: fresh.lastValidBlockHeight, signature: sig }, "confirmed" as any);
+                }
               }
             } else {
               throw e;
@@ -417,7 +434,12 @@ serve(async (req) => {
             let sig = await connection.sendTransaction(vtx, { skipPreflight: true, maxRetries: 2 });
             try {
               if (confirmPolicy !== "none") {
-                await connection.confirmTransaction({ blockhash: fresh.blockhash, lastValidBlockHeight: fresh.lastValidBlockHeight, signature: sig }, desiredCommitment as any);
+                if (confirmPolicy === "processed") {
+                  await connection.confirmTransaction({ blockhash: fresh.blockhash, lastValidBlockHeight: fresh.lastValidBlockHeight, signature: sig }, "processed" as any);
+                  try { (EdgeRuntime as any)?.waitUntil?.(connection.confirmTransaction({ blockhash: fresh.blockhash, lastValidBlockHeight: fresh.lastValidBlockHeight, signature: sig }, "confirmed" as any).catch((e: any) => console.error("bg confirm err", e))); } catch (_) {}
+                } else {
+                  await connection.confirmTransaction({ blockhash: fresh.blockhash, lastValidBlockHeight: fresh.lastValidBlockHeight, signature: sig }, "confirmed" as any);
+                }
               }
             } catch (e) {
               const msg = String((e as Error)?.message || e);
@@ -427,7 +449,12 @@ serve(async (req) => {
                 vtx.sign([owner]);
                 sig = await connection.sendTransaction(vtx, { skipPreflight: true, maxRetries: 2 });
                 if (confirmPolicy !== "none") {
-                  await connection.confirmTransaction({ blockhash: newer.blockhash, lastValidBlockHeight: newer.lastValidBlockHeight, signature: sig }, desiredCommitment as any);
+                  if (confirmPolicy === "processed") {
+                    await connection.confirmTransaction({ blockhash: newer.blockhash, lastValidBlockHeight: newer.lastValidBlockHeight, signature: sig }, "processed" as any);
+                    try { (EdgeRuntime as any)?.waitUntil?.(connection.confirmTransaction({ blockhash: newer.blockhash, lastValidBlockHeight: newer.lastValidBlockHeight, signature: sig }, "confirmed" as any).catch((e: any) => console.error("bg confirm err", e))); } catch (_) {}
+                  } else {
+                    await connection.confirmTransaction({ blockhash: newer.blockhash, lastValidBlockHeight: newer.lastValidBlockHeight, signature: sig }, "confirmed" as any);
+                  }
                 }
               } else {
                 throw e;
@@ -562,7 +589,12 @@ serve(async (req) => {
         let sig = await connection.sendTransaction(vtx, { skipPreflight: true, maxRetries: 2 });
         try {
           if (confirmPolicy !== "none") {
-            await connection.confirmTransaction({ blockhash: fresh.blockhash, lastValidBlockHeight: fresh.lastValidBlockHeight, signature: sig }, desiredCommitment as any);
+            if (confirmPolicy === "processed") {
+              await connection.confirmTransaction({ blockhash: fresh.blockhash, lastValidBlockHeight: fresh.lastValidBlockHeight, signature: sig }, "processed" as any);
+              try { (EdgeRuntime as any)?.waitUntil?.(connection.confirmTransaction({ blockhash: fresh.blockhash, lastValidBlockHeight: fresh.lastValidBlockHeight, signature: sig }, "confirmed" as any).catch((e: any) => console.error("bg confirm err", e))); } catch (_) {}
+            } else {
+              await connection.confirmTransaction({ blockhash: fresh.blockhash, lastValidBlockHeight: fresh.lastValidBlockHeight, signature: sig }, "confirmed" as any);
+            }
           }
         } catch (e) {
           const msg = String((e as Error)?.message || e);
@@ -572,7 +604,12 @@ serve(async (req) => {
             vtx.sign([owner]);
             sig = await connection.sendTransaction(vtx, { skipPreflight: true, maxRetries: 2 });
             if (confirmPolicy !== "none") {
-              await connection.confirmTransaction({ blockhash: newer.blockhash, lastValidBlockHeight: newer.lastValidBlockHeight, signature: sig }, desiredCommitment as any);
+              if (confirmPolicy === "processed") {
+                await connection.confirmTransaction({ blockhash: newer.blockhash, lastValidBlockHeight: newer.lastValidBlockHeight, signature: sig }, "processed" as any);
+                try { (EdgeRuntime as any)?.waitUntil?.(connection.confirmTransaction({ blockhash: newer.blockhash, lastValidBlockHeight: newer.lastValidBlockHeight, signature: sig }, "confirmed" as any).catch((e: any) => console.error("bg confirm err", e))); } catch (_) {}
+              } else {
+                await connection.confirmTransaction({ blockhash: newer.blockhash, lastValidBlockHeight: newer.lastValidBlockHeight, signature: sig }, "confirmed" as any);
+              }
             }
           } else {
             throw e;
@@ -592,7 +629,12 @@ serve(async (req) => {
         let sig = await connection.sendRawTransaction(tx.serialize(), { skipPreflight: true, maxRetries: 2 });
         try {
           if (confirmPolicy !== "none") {
-            await connection.confirmTransaction({ blockhash: fresh.blockhash, lastValidBlockHeight: fresh.lastValidBlockHeight, signature: sig }, desiredCommitment as any);
+            if (confirmPolicy === "processed") {
+              await connection.confirmTransaction({ blockhash: fresh.blockhash, lastValidBlockHeight: fresh.lastValidBlockHeight, signature: sig }, "processed" as any);
+              try { (EdgeRuntime as any)?.waitUntil?.(connection.confirmTransaction({ blockhash: fresh.blockhash, lastValidBlockHeight: fresh.lastValidBlockHeight, signature: sig }, "confirmed" as any).catch((e: any) => console.error("bg confirm err", e))); } catch (_) {}
+            } else {
+              await connection.confirmTransaction({ blockhash: fresh.blockhash, lastValidBlockHeight: fresh.lastValidBlockHeight, signature: sig }, "confirmed" as any);
+            }
           }
         } catch (e) {
           const msg = String((e as Error)?.message || e);
@@ -602,7 +644,12 @@ serve(async (req) => {
             tx.sign(owner);
             sig = await connection.sendRawTransaction(tx.serialize(), { skipPreflight: true, maxRetries: 2 });
             if (confirmPolicy !== "none") {
-              await connection.confirmTransaction({ blockhash: newer.blockhash, lastValidBlockHeight: newer.lastValidBlockHeight, signature: sig }, desiredCommitment as any);
+              if (confirmPolicy === "processed") {
+                await connection.confirmTransaction({ blockhash: newer.blockhash, lastValidBlockHeight: newer.lastValidBlockHeight, signature: sig }, "processed" as any);
+                try { (EdgeRuntime as any)?.waitUntil?.(connection.confirmTransaction({ blockhash: newer.blockhash, lastValidBlockHeight: newer.lastValidBlockHeight, signature: sig }, "confirmed" as any).catch((e: any) => console.error("bg confirm err", e))); } catch (_) {}
+              } else {
+                await connection.confirmTransaction({ blockhash: newer.blockhash, lastValidBlockHeight: newer.lastValidBlockHeight, signature: sig }, "confirmed" as any);
+              }
             }
           } else {
             throw e;
