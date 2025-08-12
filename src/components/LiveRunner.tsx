@@ -27,22 +27,37 @@ function format(n: number, d = 4) {
 }
 
 async function fetchJupPriceUSD(mint: string): Promise<number | null> {
+  // 1) DexScreener (client-friendly)
   try {
-    const res = await fetch(`${SB_PROJECT_URL}/functions/v1/raydium-quote?priceMint=${encodeURIComponent(mint)}`, {
-      headers: {
-        'apikey': SB_ANON_KEY,
-        'Authorization': `Bearer ${SB_ANON_KEY}`,
-      },
+    const r = await fetch(`https://api.dexscreener.com/latest/dex/tokens/${encodeURIComponent(mint)}`, { cache: 'no-store' });
+    if (r.ok) {
+      const j = await r.json();
+      const p = Number(j?.pairs?.[0]?.priceUsd);
+      if (Number.isFinite(p) && p > 0) return p;
+    }
+  } catch {}
+  // 2) Our edge proxy (works even when browser can’t reach price sources)
+  try {
+    const r2 = await fetch(`${SB_PROJECT_URL}/functions/v1/raydium-quote?priceMint=${encodeURIComponent(mint)}`, {
+      headers: { apikey: SB_ANON_KEY, Authorization: `Bearer ${SB_ANON_KEY}` },
       cache: 'no-store',
     });
-    if (!res.ok) return null;
-    const j = await res.json();
-    const p = j?.priceUSD;
-    if (typeof p === 'number' && isFinite(p) && p > 0) return p;
-    return null;
-  } catch {
-    return null;
-  }
+    if (r2.ok) {
+      const j2 = await r2.json();
+      const p2 = Number(j2?.priceUSD);
+      if (Number.isFinite(p2) && p2 > 0) return p2;
+    }
+  } catch {}
+  // 3) Jupiter fallback (best-effort)
+  try {
+    const r3 = await fetch(`https://price.jup.ag/v6/price?ids=${encodeURIComponent(mint)}&vsToken=USDC`, { cache: 'no-store' });
+    if (r3.ok) {
+      const j3 = await r3.json();
+      const p3 = Number(j3?.data?.[mint]?.price);
+      if (Number.isFinite(p3) && p3 > 0) return p3;
+    }
+  } catch {}
+  return null;
 }
 
 function useInterval(callback: () => void, delay: number | null) {
