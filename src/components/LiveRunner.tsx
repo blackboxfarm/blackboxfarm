@@ -147,9 +147,7 @@ export default function LiveRunner() {
         }
         return true;
       } catch (firstErr: any) {
-        // Fallback: direct fetch to Edge Function URL (handles occasional supabase-js invoke transport issues)
-        const needFallback = /Failed to send a request to the Edge Function/i.test(firstErr?.message || "");
-        if (!needFallback) throw firstErr;
+        // Fallback: direct fetch to Edge Function URL for any error from supabase.invoke
         try {
           const res = await fetch(`${SB_PROJECT_URL}/functions/v1/raydium-swap`, {
             method: 'POST',
