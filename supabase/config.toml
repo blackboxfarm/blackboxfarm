@@ -1,1 +1,7 @@
 project_id = "apxauapuusmgwbbzjgfl"
+
+[functions.raydium-quote]
+verify_jwt = false
+
+[functions.raydium-swap]
+verify_jwt = false
