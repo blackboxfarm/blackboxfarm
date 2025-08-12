@@ -218,6 +218,8 @@ export default function LiveRunner() {
         }
         await loadWallet();
         await loadHoldings();
+        const freshPrice = await fetchJupPriceUSD(cfg.tokenMint);
+        if (freshPrice !== null) setPrice(freshPrice);
         return true;
       } catch (firstErr: any) {
         // Fallback: direct fetch to Edge Function URL for any error from supabase.invoke
@@ -242,6 +244,8 @@ export default function LiveRunner() {
           toast({ title: `${side.toUpperCase()} executed`, description: sigs[0] ? `Confirmed tx: ${sigs[0].slice(0, 8)}…` : 'No signature returned' });
           await loadWallet();
           await loadHoldings();
+          const freshPrice = await fetchJupPriceUSD(cfg.tokenMint);
+          if (freshPrice !== null) setPrice(freshPrice);
           return true;
         } catch (e2: any) {
           const msg = e2?.message ?? String(e2);
@@ -286,7 +290,8 @@ export default function LiveRunner() {
           setPosition({ entry: pNow });
           setDaily((d) => ({ ...d, buyUsd: d.buyUsd + cfg.tradeSizeUsd }));
           const tpPrice = pNow * (1 + cfg.takeProfitPct / 100);
-          log(`Bought $${format(cfg.tradeSizeUsd, 2)} at $${format(pNow, 6)} — waiting to sell at $${format(tpPrice, 6)} (+${cfg.takeProfitPct}%)`);
+          const expectedProfit = cfg.tradeSizeUsd * (cfg.takeProfitPct / 100);
+          log(`Bought $${format(cfg.tradeSizeUsd, 2)} at $${format(pNow, 6)} — waiting to sell at $${format(tpPrice, 6)} (+${cfg.takeProfitPct}%, ~+$${format(expectedProfit, 2)})`);
         }
       } else {
         setStatus(`Watching — price $${format(pNow, 6)} • high $${format(high, 6)}`);
@@ -338,11 +343,20 @@ export default function LiveRunner() {
     }
     setRunning(true);
     setStatus("running");
-    if (price) {
-      const nextBuy = price * (1 - cfg.dipPct / 100);
-      log(`Watching — current $${format(price, 6)}. Will buy on dip to $${format(nextBuy, 6)} (−${cfg.dipPct}%).`);
-    }
-    void tick();
+    // Immediately fetch fresh price and announce dip target
+    (async () => {
+      const p = await fetchJupPriceUSD(cfg.tokenMint);
+      if (p !== null) {
+        setPrice(p);
+        setTrailingHigh((prev) => (prev === null ? p : Math.max(prev, p)));
+        const nextBuy = p * (1 - cfg.dipPct / 100);
+        log(`Watching — current $${format(p, 6)}. Will buy on dip to $${format(nextBuy, 6)} (−${cfg.dipPct}%).`);
+      }
+      // Prime balances on start
+      await Promise.all([loadWallet(), loadHoldings()]);
+      // Kick the first tick after priming
+      void tick();
+    })();
   };
   const stop = () => {
     setRunning(false);
