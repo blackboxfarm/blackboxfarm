@@ -253,11 +253,15 @@ export default function LiveRunner() {
     return () => { cancelled = true; };
   }, [poolWallets.map((w) => w.pubkey).join(','), secrets?.functionToken]);
   const pickNextOwner = React.useCallback(() => {
+    // Prefer the locally set Secrets wallet
+    if (secrets?.tradingPrivateKey) {
+      return { secret: secrets.tradingPrivateKey, pubkey: wallet?.address ?? '', sol: wallet?.sol ?? 0 };
+    }
     if (!funded.length) return null;
     const idx = rrRef.current % funded.length;
     rrRef.current = (rrRef.current + 1) % funded.length;
     return funded[idx];
-  }, [funded]);
+  }, [funded, secrets?.tradingPrivateKey, wallet?.address, wallet?.sol]);
 
   const loadWallet = React.useCallback(async (ownerSecret?: string) => {
     setWalletLoading(true);
@@ -284,8 +288,8 @@ export default function LiveRunner() {
   }, [secrets?.functionToken]);
 
   React.useEffect(() => {
-    void loadWallet();
-  }, [loadWallet]);
+    void loadWallet(secrets?.tradingPrivateKey);
+  }, [loadWallet, secrets?.tradingPrivateKey]);
 
   const loadHoldings = React.useCallback(async (ownerSecret?: string) => {
     if (!cfg.tokenMint) return;
@@ -313,8 +317,8 @@ export default function LiveRunner() {
   }, [cfg.tokenMint, secrets?.functionToken]);
 
   React.useEffect(() => {
-    void loadHoldings();
-  }, [loadHoldings]);
+    void loadHoldings(secrets?.tradingPrivateKey);
+  }, [loadHoldings, secrets?.tradingPrivateKey]);
   const effectivePrice = React.useMemo(() => {
     const m = Number(manualPrice);
     if (Number.isFinite(m) && m > 0) return m;
@@ -813,7 +817,7 @@ export default function LiveRunner() {
         log(`Watching — current $${format(p, 6)}. Will buy on dip to ~$${format(nextBuy, 6)} (−${format(effDip, 2)}%).`);
       }
       // Prime balances on start
-      await Promise.all([loadWallet(), loadHoldings()]);
+      await Promise.all([loadWallet(secrets?.tradingPrivateKey), loadHoldings(secrets?.tradingPrivateKey)]);
       // Adopt existing holdings on restart
       try {
         if (positions.length === 0 && holding?.uiAmount && holding.uiAmount > 0 && (p ?? null)) {
@@ -822,7 +826,7 @@ export default function LiveRunner() {
           if (Number.isFinite(entry) && entry > 0) {
             const qtyRaw = Number(holding.amountRaw ?? 0);
             const qtyUi = Number(holding.uiAmount ?? 0);
-            setPositions([{ id: crypto.randomUUID(), entry, high: p!, qtyRaw, qtyUi, entryTs: Date.now(), ownerPubkey: wallet?.address ?? '', ownerSecret: '' }]);
+            setPositions([{ id: crypto.randomUUID(), entry, high: p!, qtyRaw, qtyUi, entryTs: Date.now(), ownerPubkey: wallet?.address ?? '', ownerSecret: secrets?.tradingPrivateKey ?? '' }]);
             log(`Adopted existing holding ~${format(qtyUi, 4)} @ ~$${format(entry, 6)} — trailing armed at +${cfg.trailArmPct}%`);
           }
         }
