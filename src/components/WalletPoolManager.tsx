@@ -4,7 +4,6 @@ import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Slider } from "@/components/ui/slider";
-import { Switch } from "@/components/ui/switch";
 import { useWalletPool } from "@/hooks/useWalletPool";
 import { useLocalSecrets } from "@/hooks/useLocalSecrets";
 import { Connection, Keypair, PublicKey } from "@solana/web3.js";
@@ -17,9 +16,7 @@ export default function WalletPoolManager() {
   const { secrets } = useLocalSecrets();
   const [conn, setConn] = useState<Connection | null>(null);
   const [balances, setBalances] = useState<Record<string, number>>({});
-const [overrideAddr, setOverrideAddr] = useState<string>("");
-const [refreshTick, setRefreshTick] = useState(0);
-const [autoRefresh, setAutoRefresh] = useState(false);
+  const [overrideAddr, setOverrideAddr] = useState<string>("");
 
   useEffect(() => {
     if (secrets?.rpcUrl) setConn(new Connection(secrets.rpcUrl, { commitment: "confirmed" }));
@@ -27,27 +24,21 @@ const [autoRefresh, setAutoRefresh] = useState(false);
 
   const pubkeys = useMemo(() => wallets.map((w) => w.pubkey), [wallets]);
 
-useEffect(() => {
-  let cancelled = false;
-  if (!conn || wallets.length === 0) return;
-  (async () => {
-    const entries: Record<string, number> = {};
-    for (const w of wallets) {
-      try {
-        const lam = await conn.getBalance(new PublicKey(w.pubkey));
-        if (!cancelled) entries[w.pubkey] = lam / 1_000_000_000;
-      } catch {}
-    }
-    if (!cancelled) setBalances(entries);
-  })();
-  return () => { cancelled = true; };
-}, [conn, pubkeys.join(","), refreshTick]);
-
-useEffect(() => {
-  if (!autoRefresh) return;
-  const id = setInterval(() => setRefreshTick((t) => t + 1), 5000);
-  return () => clearInterval(id);
-}, [autoRefresh]);
+  useEffect(() => {
+    let cancelled = false;
+    if (!conn || wallets.length === 0) return;
+    (async () => {
+      const entries: Record<string, number> = {};
+      for (const w of wallets) {
+        try {
+          const lam = await conn.getBalance(new PublicKey(w.pubkey));
+          if (!cancelled) entries[w.pubkey] = lam / 1_000_000_000;
+        } catch {}
+      }
+      if (!cancelled) setBalances(entries);
+    })();
+    return () => { cancelled = true; };
+  }, [conn, pubkeys.join(",")]);
 
   const handleImport = (raw: string) => {
     const list = raw.split(/\n|,|;|\s+/).map((s) => s.trim()).filter(Boolean);
@@ -123,16 +114,7 @@ useEffect(() => {
         </div>
 
         <div className="space-y-2">
-          <div className="flex items-center justify-between">
-            <Label>Wallets</Label>
-            <div className="flex items-center gap-3">
-              <div className="flex items-center gap-2">
-                <Switch checked={autoRefresh} onCheckedChange={setAutoRefresh} id="auto-refresh" />
-                <Label htmlFor="auto-refresh" className="text-sm text-muted-foreground">Auto</Label>
-              </div>
-              <Button size="sm" variant="outline" onClick={() => setRefreshTick((t) => t + 1)}>Refresh</Button>
-            </div>
-          </div>
+          <Label>Wallets</Label>
           <div className="space-y-2">
             {wallets.map((w, i) => (
               <div key={w.pubkey} className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 rounded-md border p-3">

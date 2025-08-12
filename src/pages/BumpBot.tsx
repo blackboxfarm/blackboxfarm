@@ -2,7 +2,6 @@ import React, { useEffect } from "react";
 import VolumeSimulator from "@/components/VolumeSimulator";
 import SecretsModal from "@/components/SecretsModal";
 import WalletPoolManager from "@/components/WalletPoolManager";
-import LiveRunner from "@/components/LiveRunner";
 import { Button } from "@/components/ui/button";
 import { Link } from "react-router-dom";
 
@@ -50,13 +49,6 @@ const BumpBot = () => {
         </section>
         <section className="mb-10">
           <VolumeSimulator />
-        </section>
-        <section className="mb-10">
-          <div className="mb-4">
-            <h2 className="text-xl font-semibold tracking-tight">Live Strategy Runner</h2>
-            <p className="text-muted-foreground text-sm">Enter token mint, Start/Stop, and watch balances update.</p>
-          </div>
-          <LiveRunner />
         </section>
       </main>
     </div>
