@@ -29,6 +29,60 @@ async function getJson<T>(req: Request): Promise<T | null> {
   }
 }
 
+// Normalize common SOL aliases to the canonical wSOL mint
+function normalizeMint(mint: string) {
+  const t = mint.trim();
+  if (t.toLowerCase() === "sol" || t.toLowerCase() === "wsol") {
+    return "So11111111111111111111111111111111111111112";
+  }
+  return t;
+}
+
+async function getPriceUSDFromJup(id: string): Promise<number | null> {
+  try {
+    const url = `https://price.jup.ag/v6/price?ids=${encodeURIComponent(id)}&vsToken=USDC`;
+    const r = await fetch(url);
+    if (!r.ok) return null;
+    const j = await r.json();
+    const p = j?.data?.[id]?.price;
+    if (typeof p === "number" && isFinite(p) && p > 0) return p;
+    return null;
+  } catch (e) {
+    console.log("Jupiter price fetch failed, falling back", e);
+    return null;
+  }
+}
+
+async function getPriceUSDFromDexScreener(mint: string): Promise<number | null> {
+  try {
+    const id = normalizeMint(mint);
+    const r = await fetch(`https://api.dexscreener.com/latest/dex/tokens/${encodeURIComponent(id)}`);
+    if (!r.ok) return null;
+    const j = await r.json();
+    const pairs = Array.isArray(j?.pairs) ? j.pairs : [];
+    if (!pairs.length) return null;
+    // Choose the pair with the highest USD liquidity
+    let best = pairs[0];
+    for (const p of pairs) {
+      if ((p?.liquidity?.usd ?? 0) > (best?.liquidity?.usd ?? 0)) best = p;
+    }
+    const priceUsd = Number(best?.priceUsd);
+    if (Number.isFinite(priceUsd) && priceUsd > 0) return priceUsd;
+    return null;
+  } catch (e) {
+    console.log("DexScreener price fetch failed", e);
+    return null;
+  }
+}
+
+async function getPriceUSD(mint: string): Promise<number | null> {
+  // Try Jupiter first
+  const fromJup = await getPriceUSDFromJup(mint);
+  if (fromJup != null) return fromJup;
+  // Fallback to DexScreener
+  return await getPriceUSDFromDexScreener(mint);
+}
+
 serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
 
@@ -49,12 +103,9 @@ serve(async (req) => {
     // Server-side price proxy (avoids CORS/network issues in browser)
     const priceMint = url.searchParams.get("priceMint");
     if (priceMint) {
-      const r = await fetch(`https://price.jup.ag/v6/price?ids=${encodeURIComponent(priceMint)}&vsToken=USDC`);
-      if (!r.ok) return bad(`Price fetch failed: ${r.status}`, 502);
-      const j = await r.json();
-      const p = j?.data?.[priceMint]?.price;
-      if (typeof p !== 'number' || !isFinite(p) || p <= 0) return bad("Invalid price data", 502);
-      return ok({ priceUSD: p });
+      const price = await getPriceUSD(priceMint);
+      if (price == null) return bad("Price fetch failed (all sources)", 502);
+      return ok({ priceUSD: price });
     }
 
     const body = (await getJson<any>(req)) ?? {};
