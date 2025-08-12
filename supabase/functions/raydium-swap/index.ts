@@ -162,12 +162,17 @@ serve(async (req) => {
       return bad(`Raydium compute failed: ${computeRes.status} ${t}`, 502);
     }
     const swapResponse = await computeRes.json();
+    if (swapResponse?.success === false) {
+      try { console.error("raydium-swap compute error", swapResponse); } catch {}
+      return bad(`Raydium compute error: ${swapResponse?.msg ?? "unknown"}`, 502);
+    }
 
     // Priority fee
-    const computeUnitPriceMicroLamports = String(await getPriorityFeeMicroLamports(connection));
+    const computeUnitPriceMicroLamports = await getPriorityFeeMicroLamports(connection);
 
     // Build transactions (first try)
     let signVersion = txVersion as string;
+    let lastBuilderErrorMessage: string | undefined;
     const txRes = await fetch(`${SWAP_HOST}/transaction/swap-base-in`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -189,6 +194,10 @@ serve(async (req) => {
     }
 
     const txJson = await txRes.json();
+    if (txJson && txJson.success === false && txJson.msg) {
+      try { console.error("raydium-swap builder error", txJson); } catch {}
+      lastBuilderErrorMessage = txJson.msg;
+    }
     let txPayloads: any[] = [];
     if (Array.isArray(txJson?.data)) txPayloads = txJson.data;
     else if (txJson?.data?.transaction) txPayloads = [txJson.data.transaction];
@@ -221,6 +230,10 @@ serve(async (req) => {
           });
           if (txRes2.ok) {
             const txJson2 = await txRes2.json();
+            if (txJson2 && txJson2.success === false && txJson2.msg) {
+              try { console.error("raydium-swap builder error (LEGACY)", txJson2); } catch {}
+              lastBuilderErrorMessage = txJson2.msg;
+            }
             let txPayloads2: any[] = [];
             if (Array.isArray(txJson2?.data)) txPayloads2 = txJson2.data;
             else if (txJson2?.data?.transaction) txPayloads2 = [txJson2.data.transaction];
@@ -241,9 +254,10 @@ serve(async (req) => {
           console.error("raydium-swap empty tx list", {
             keys: Object.keys(txJson || {}),
             preview: typeof txJson === "object" ? JSON.stringify(txJson).slice(0, 200) : String(txJson).slice(0, 200),
+            lastBuilderErrorMessage,
           });
         } catch {}
-        return bad("No transactions returned from Raydium", 502);
+        return bad(`No transactions returned from Raydium${lastBuilderErrorMessage ? `: ${lastBuilderErrorMessage}` : ""}`, 502);
       }
     }
 
