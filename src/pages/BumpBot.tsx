@@ -1,5 +1,6 @@
 import React, { useEffect } from "react";
 import VolumeSimulator from "@/components/VolumeSimulator";
+import SecretsModal from "@/components/SecretsModal";
 
 const BumpBot = () => {
   useEffect(() => {
@@ -26,8 +27,13 @@ const BumpBot = () => {
   return (
     <div className="min-h-screen bg-background">
       <header className="container mx-auto px-4 py-8">
-        <h1 className="text-3xl font-bold tracking-tight">Bump Bot — Solana Volume Simulator</h1>
-        <p className="text-muted-foreground mt-2">Find a balanced period, price, and frequency before running anything on-chain.</p>
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <h1 className="text-3xl font-bold tracking-tight">Bump Bot — Solana Volume Simulator</h1>
+            <p className="text-muted-foreground mt-2">Find a balanced period, price, and frequency before running anything on-chain.</p>
+          </div>
+          <SecretsModal />
+        </div>
       </header>
       <main className="container mx-auto px-4 pb-12">
         <VolumeSimulator />
