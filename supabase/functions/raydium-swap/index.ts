@@ -318,20 +318,53 @@ serve(async (req) => {
           for (const b64 of j.txs) {
             const u8 = b64ToU8(b64);
             const tx = Transaction.from(u8 as any);
-            tx.sign(owner);
-            const sig = await connection.sendRawTransaction(tx.serialize(), { skipPreflight: true, maxRetries: 3 });
+            // Refresh blockhash BEFORE signing, then confirm using the same pair
             const { blockhash, lastValidBlockHeight } = await connection.getLatestBlockhash("confirmed");
-            await connection.confirmTransaction({ blockhash, lastValidBlockHeight, signature: sig }, "confirmed");
+            tx.recentBlockhash = blockhash;
+            if (!tx.feePayer) tx.feePayer = owner.publicKey;
+            tx.sign(owner);
+            let sig = await connection.sendRawTransaction(tx.serialize(), { skipPreflight: true, maxRetries: 2 });
+            try {
+              await connection.confirmTransaction({ blockhash, lastValidBlockHeight, signature: sig }, "confirmed");
+            } catch (e) {
+              // Retry once on expired blockhash
+              const msg = String((e as Error)?.message || e);
+              if (msg.includes("expired") || msg.includes("block height exceeded")) {
+                const fresh = await connection.getLatestBlockhash("confirmed");
+                tx.recentBlockhash = fresh.blockhash;
+                tx.sign(owner);
+                sig = await connection.sendRawTransaction(tx.serialize(), { skipPreflight: true, maxRetries: 2 });
+                await connection.confirmTransaction({ blockhash: fresh.blockhash, lastValidBlockHeight: fresh.lastValidBlockHeight, signature: sig }, "confirmed");
+              } else {
+                throw e;
+              }
+            }
             sigs.push(sig);
           }
         } else {
           for (const b64 of j.txs) {
             const u8 = b64ToU8(b64);
             const vtx = VersionedTransaction.deserialize(u8);
+            // Refresh blockhash BEFORE signing, then confirm using the same pair
+            const fresh = await connection.getLatestBlockhash("confirmed");
+            // @ts-ignore - message is mutable in this context
+            (vtx as any).message.recentBlockhash = fresh.blockhash;
             vtx.sign([owner]);
-            const sig = await connection.sendTransaction(vtx, { skipPreflight: true, maxRetries: 3 });
-            const { blockhash, lastValidBlockHeight } = await connection.getLatestBlockhash("confirmed");
-            await connection.confirmTransaction({ blockhash, lastValidBlockHeight, signature: sig }, "confirmed");
+            let sig = await connection.sendTransaction(vtx, { skipPreflight: true, maxRetries: 2 });
+            try {
+              await connection.confirmTransaction({ blockhash: fresh.blockhash, lastValidBlockHeight: fresh.lastValidBlockHeight, signature: sig }, "confirmed");
+            } catch (e) {
+              const msg = String((e as Error)?.message || e);
+              if (msg.includes("expired") || msg.includes("block height exceeded")) {
+                const newer = await connection.getLatestBlockhash("confirmed");
+                (vtx as any).message.recentBlockhash = newer.blockhash;
+                vtx.sign([owner]);
+                sig = await connection.sendTransaction(vtx, { skipPreflight: true, maxRetries: 2 });
+                await connection.confirmTransaction({ blockhash: newer.blockhash, lastValidBlockHeight: newer.lastValidBlockHeight, signature: sig }, "confirmed");
+              } else {
+                throw e;
+              }
+            }
             sigs.push(sig);
           }
         }
@@ -438,20 +471,52 @@ serve(async (req) => {
       for (const item of txList) {
         const u8 = b64ToU8(item.transaction);
         const vtx = VersionedTransaction.deserialize(u8);
+        // Fresh blockhash before signing
+        const fresh = await connection.getLatestBlockhash("confirmed");
+        // @ts-ignore
+        (vtx as any).message.recentBlockhash = fresh.blockhash;
         vtx.sign([owner]);
-        const sig = await connection.sendTransaction(vtx, { skipPreflight: true, maxRetries: 3 });
-        const { blockhash, lastValidBlockHeight } = await connection.getLatestBlockhash("confirmed");
-        await connection.confirmTransaction({ blockhash, lastValidBlockHeight, signature: sig }, "confirmed");
+        let sig = await connection.sendTransaction(vtx, { skipPreflight: true, maxRetries: 2 });
+        try {
+          await connection.confirmTransaction({ blockhash: fresh.blockhash, lastValidBlockHeight: fresh.lastValidBlockHeight, signature: sig }, "confirmed");
+        } catch (e) {
+          const msg = String((e as Error)?.message || e);
+          if (msg.includes("expired") || msg.includes("block height exceeded")) {
+            const newer = await connection.getLatestBlockhash("confirmed");
+            (vtx as any).message.recentBlockhash = newer.blockhash;
+            vtx.sign([owner]);
+            sig = await connection.sendTransaction(vtx, { skipPreflight: true, maxRetries: 2 });
+            await connection.confirmTransaction({ blockhash: newer.blockhash, lastValidBlockHeight: newer.lastValidBlockHeight, signature: sig }, "confirmed");
+          } else {
+            throw e;
+          }
+        }
         sigs.push(sig);
       }
     } else {
       for (const item of txList) {
         const u8 = b64ToU8(item.transaction);
         const tx = Transaction.from(u8 as any);
+        // Fresh blockhash before signing
+        const fresh = await connection.getLatestBlockhash("confirmed");
+        tx.recentBlockhash = fresh.blockhash;
+        if (!tx.feePayer) tx.feePayer = owner.publicKey;
         tx.sign(owner);
-        const sig = await connection.sendRawTransaction(tx.serialize(), { skipPreflight: true, maxRetries: 3 });
-        const { blockhash, lastValidBlockHeight } = await connection.getLatestBlockhash("confirmed");
-        await connection.confirmTransaction({ blockhash, lastValidBlockHeight, signature: sig }, "confirmed");
+        let sig = await connection.sendRawTransaction(tx.serialize(), { skipPreflight: true, maxRetries: 2 });
+        try {
+          await connection.confirmTransaction({ blockhash: fresh.blockhash, lastValidBlockHeight: fresh.lastValidBlockHeight, signature: sig }, "confirmed");
+        } catch (e) {
+          const msg = String((e as Error)?.message || e);
+          if (msg.includes("expired") || msg.includes("block height exceeded")) {
+            const newer = await connection.getLatestBlockhash("confirmed");
+            tx.recentBlockhash = newer.blockhash;
+            tx.sign(owner);
+            sig = await connection.sendRawTransaction(tx.serialize(), { skipPreflight: true, maxRetries: 2 });
+            await connection.confirmTransaction({ blockhash: newer.blockhash, lastValidBlockHeight: newer.lastValidBlockHeight, signature: sig }, "confirmed");
+          } else {
+            throw e;
+          }
+        }
         sigs.push(sig);
       }
     }
