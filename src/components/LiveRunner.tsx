@@ -66,32 +66,45 @@ const WSOL_MINT = "So11111111111111111111111111111111111111112";
 const USDC_MINT = "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v";
 
 async function fetchSolUsd(): Promise<number | null> {
-  // 1) Supabase edge proxy first (avoids browser network/CORS issues)
-  try {
-    const { data, error } = await supabase.functions.invoke('raydium-quote?priceMint=SOL');
-    if (!error) {
-      const p = Number((data as any)?.priceUSD);
-      if (Number.isFinite(p) && p > 0) return p;
-    }
-  } catch {}
-  // 2) Direct call to the edge function as fallback
-  try {
-    const r2 = await fetch(`${SB_PROJECT_URL}/functions/v1/raydium-quote?priceMint=SOL`, {
-      headers: { apikey: SB_ANON_KEY, Authorization: `Bearer ${SB_ANON_KEY}` },
-      cache: 'no-store',
-    });
-    if (r2.ok) {
-      const j2 = await r2.json();
-      const p2 = Number(j2?.priceUSD);
-      if (Number.isFinite(p2) && p2 > 0) return p2;
-    }
-  } catch {}
-  // 3) Jupiter direct (best-effort)
+  const tryEdge = async (id: string) => {
+    try {
+      const r = await fetch(`${SB_PROJECT_URL}/functions/v1/raydium-quote?priceMint=${encodeURIComponent(id)}`, {
+        headers: { apikey: SB_ANON_KEY, Authorization: `Bearer ${SB_ANON_KEY}` },
+        cache: 'no-store',
+      });
+      if (r.ok) {
+        const j = await r.json();
+        const p = Number(j?.priceUSD);
+        if (Number.isFinite(p) && p > 0) return p;
+      }
+    } catch {}
+    return null;
+  };
+
+  // Prefer WSOL mint to avoid symbol ambiguity
+  const p1 = await tryEdge(WSOL_MINT);
+  if (p1) return p1;
+
+  const p2 = await tryEdge('SOL');
+  if (p2) return p2;
+
+  const p3 = await tryEdge('wSOL');
+  if (p3) return p3;
+
+  // Jupiter direct (best-effort)
   try {
     const r = await fetch('https://price.jup.ag/v6/price?ids=SOL', { cache: 'no-store' });
     if (r.ok) {
       const j = await r.json();
       const p = Number(j?.data?.SOL?.price ?? j?.data?.wSOL?.price ?? j?.SOL?.price);
+      if (Number.isFinite(p) && p > 0) return p;
+    }
+  } catch {}
+  try {
+    const r = await fetch(`https://price.jup.ag/v6/price?ids=${encodeURIComponent(WSOL_MINT)}`, { cache: 'no-store' });
+    if (r.ok) {
+      const j = await r.json();
+      const p = Number(j?.data?.[WSOL_MINT]?.price);
       if (Number.isFinite(p) && p > 0) return p;
     }
   } catch {}
