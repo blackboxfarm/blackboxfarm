@@ -1084,6 +1084,8 @@ export default function LiveRunner() {
               if (pNow && qtyRaw > 0 && qtyUi > 0) {
                 setPositions((lots) => [...lots, { id: crypto.randomUUID(), entry: pNow, high: pNow, qtyRaw, qtyUi, entryTs: Date.now(), ownerPubkey: owner.pubkey, ownerSecret: owner.secret }]);
                 setDaily((d) => ({ ...d, buyUsd: d.buyUsd + cfg.tradeSizeUsd }));
+                const tpPrice = pNow * (1 + cfg.takeProfitPct / 100);
+                log(`Bought (manual) $${format(cfg.tradeSizeUsd, 2)} at $${format(pNow, 6)} — tracking TP $${format(tpPrice, 6)} • owner ${owner.pubkey ? owner.pubkey.slice(0,4)+'…'+owner.pubkey.slice(-4) : '—'}`);
               }
             }
           }} disabled={executing}>Buy now</Button>
