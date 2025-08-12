@@ -327,17 +327,18 @@ export default function LiveRunner() {
     return positions.length < allowed;
   }, [effectivePrice, daily, cfg, lastSellTs, positions.length]);
 
-  const execSwap = React.useCallback(async (side: 'buy' | 'sell', opts?: { sellAmountRaw?: number; sellQtyUi?: number; buyUsd?: number }) => {
+  const execSwap = React.useCallback(async (side: 'buy' | 'sell', opts?: { sellAmountRaw?: number; sellQtyUi?: number; buyUsd?: number; ownerSecret?: string }) => {
     if (executing) return { ok: false } as const;
     setExecuting(true);
     const id = crypto.randomUUID();
     const newTrade: Trade = { id, time: Date.now(), side, status: 'pending' };
     setTrades((t) => [newTrade, ...t].slice(0, 25));
 
+    const ownerHeaders = opts?.ownerSecret ? { 'x-owner-secret': opts.ownerSecret } : {};
     const getRawBalance = async (): Promise<{ raw: number; decimals: number } | null> => {
       try {
         const res = await fetch(`${SB_PROJECT_URL}/functions/v1/trader-wallet?tokenMint=${encodeURIComponent(cfg.tokenMint)}` , {
-          headers: { apikey: SB_ANON_KEY, Authorization: `Bearer ${SB_ANON_KEY}`, ...(secrets?.functionToken ? { 'x-function-token': secrets.functionToken } : {}) },
+          headers: { apikey: SB_ANON_KEY, Authorization: `Bearer ${SB_ANON_KEY}`, ...(secrets?.functionToken ? { 'x-function-token': secrets.functionToken } : {}), ...ownerHeaders },
         });
         if (res.ok) {
           const j = await res.json();
@@ -399,7 +400,7 @@ export default function LiveRunner() {
             let raw = 0;
             try {
               const res = await fetch(`${SB_PROJECT_URL}/functions/v1/trader-wallet?tokenMint=${encodeURIComponent(cfg.tokenMint)}`, {
-                headers: { apikey: SB_ANON_KEY, Authorization: `Bearer ${SB_ANON_KEY}`, ...(secrets?.functionToken ? { 'x-function-token': secrets.functionToken } : {}) },
+                headers: { apikey: SB_ANON_KEY, Authorization: `Bearer ${SB_ANON_KEY}`, ...(secrets?.functionToken ? { 'x-function-token': secrets.functionToken } : {}), ...ownerHeaders },
               });
               if (res.ok) {
                 const j = await res.json();
@@ -422,14 +423,14 @@ export default function LiveRunner() {
         const timeoutMs = 12000;
         const timeout = new Promise<never>((_, reject) => setTimeout(() => reject(new Error('invoke timeout')), timeoutMs));
         const invoke = supabase.functions
-          .invoke('raydium-swap', { body, headers: secrets?.functionToken ? { 'x-function-token': secrets.functionToken } : undefined })
+          .invoke('raydium-swap', { body, headers: { ...(secrets?.functionToken ? { 'x-function-token': secrets.functionToken } : {}), ...(opts?.ownerSecret ? { 'x-owner-secret': opts.ownerSecret } : {}) } })
           .then(({ data, error }) => { if (error) throw error; return data as any; });
         const data: any = await Promise.race([invoke, timeout]);
         const sigs: string[] = data?.signatures ?? [];
         setTrades((arr) => arr.map((x) => (x.id === id ? { ...x, status: 'confirmed', signatures: sigs } : x)));
         toast({ title: `${side.toUpperCase()} executed`, description: sigs[0] ? `Confirmed tx: ${sigs[0].slice(0, 8)}…` : 'Success' });
-        await loadWallet();
-        await loadHoldings();
+        await loadWallet(opts?.ownerSecret);
+        await loadHoldings(opts?.ownerSecret);
         const freshPrice = await fetchJupPriceUSD(cfg.tokenMint);
         if (freshPrice !== null) setPrice(freshPrice);
 
@@ -457,7 +458,7 @@ export default function LiveRunner() {
         try {
           const res = await fetch(`${SB_PROJECT_URL}/functions/v1/raydium-swap`, {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json', apikey: SB_ANON_KEY, Authorization: `Bearer ${SB_ANON_KEY}`, ...(secrets?.functionToken ? { 'x-function-token': secrets.functionToken } : {}) },
+            headers: { 'Content-Type': 'application/json', apikey: SB_ANON_KEY, Authorization: `Bearer ${SB_ANON_KEY}`, ...(secrets?.functionToken ? { 'x-function-token': secrets.functionToken } : {}), ...(opts?.ownerSecret ? { 'x-owner-secret': opts.ownerSecret } : {}) },
             body: JSON.stringify(body),
           });
           if (!res.ok) {
@@ -468,8 +469,8 @@ export default function LiveRunner() {
           const sigs: string[] = data?.signatures ?? [];
           setTrades((arr) => arr.map((x) => (x.id === id ? { ...x, status: 'confirmed', signatures: sigs } : x)));
           toast({ title: `${side.toUpperCase()} executed`, description: sigs[0] ? `Confirmed tx: ${sigs[0].slice(0, 8)}…` : 'Success' });
-          await loadWallet();
-          await loadHoldings();
+          await loadWallet(opts?.ownerSecret);
+          await loadHoldings(opts?.ownerSecret);
           const freshPrice = await fetchJupPriceUSD(cfg.tokenMint);
           if (freshPrice !== null) setPrice(freshPrice);
           let qtyDeltaRaw = 0;
@@ -682,7 +683,7 @@ export default function LiveRunner() {
       if (sellIdx !== null && sellReason) {
         const lot = positions[sellIdx]!;
         setStatus(`SELL ${sellReason} @ $${format(pNow, 6)} (peak $${format(Math.max(lot.high, pNow), 6)})`);
-        const res = await execSwap('sell', { sellAmountRaw: lot.qtyRaw, sellQtyUi: lot.qtyUi });
+        const res = await execSwap('sell', { sellAmountRaw: lot.qtyRaw, sellQtyUi: lot.qtyUi, ownerSecret: lot.ownerSecret });
         if (res.ok) {
           setPositions((lots) => lots.filter((_, i) => i !== sellIdx));
           setLastSellTs(Date.now());
@@ -704,12 +705,14 @@ export default function LiveRunner() {
           if (canBuy) {
             const buyUsd = Number(cfg.secondLotTradeSizeUsd ?? cfg.tradeSizeUsd);
             setStatus(`BUY (big dip) @ $${format(pNow, 6)} (−${cfg.bigDipFloorDropPct}%)`);
-            const res = await execSwap('buy', { buyUsd });
+            const owner = pickNextOwner();
+            if (!owner) { toast({ title: 'No funded wallets', description: 'Fund at least one pool wallet.' }); return; }
+            const res = await execSwap('buy', { buyUsd, ownerSecret: owner.secret });
             if (res.ok) {
               const qtyUi = Number(res.qtyUiDelta ?? 0);
               const qtyRaw = Number(res.qtyRawDelta ?? 0);
               if (qtyRaw > 0 && qtyUi > 0) {
-                setPositions((lots) => [...lots, { id: crypto.randomUUID(), entry: pNow, high: pNow, qtyRaw, qtyUi, entryTs: nowTs }]);
+                setPositions((lots) => [...lots, { id: crypto.randomUUID(), entry: pNow, high: pNow, qtyRaw, qtyUi, entryTs: nowTs, ownerPubkey: owner.pubkey, ownerSecret: owner.secret }]);
                 setDaily((d) => ({ ...d, buyUsd: d.buyUsd + buyUsd }));
                 const tpPrice = pNow * (1 + cfg.takeProfitPct / 100);
                 log(`Bought (Lot #${positions.length + 1}) $${format(buyUsd, 2)} at $${format(pNow, 6)} — tracking TP $${format(tpPrice, 6)}`);
@@ -730,12 +733,14 @@ export default function LiveRunner() {
       const target = anchorLow * (1 - effDipPct / 100);
       if (pNow <= target) {
         setStatus(`BUY @ $${format(pNow, 6)} (anchor dip ${format(effDipPct, 2)}%)`);
-        const res = await execSwap('buy');
+        const owner = pickNextOwner();
+        if (!owner) { toast({ title: 'No funded wallets', description: 'Fund at least one pool wallet.' }); return; }
+        const res = await execSwap('buy', { ownerSecret: owner.secret });
         if (res.ok) {
           const qtyUi = Number(res.qtyUiDelta ?? 0);
           const qtyRaw = Number(res.qtyRawDelta ?? 0);
           if (qtyRaw > 0 && qtyUi > 0) {
-            setPositions((lots) => [...lots, { id: crypto.randomUUID(), entry: pNow, high: pNow, qtyRaw, qtyUi, entryTs: nowTs }]);
+            setPositions((lots) => [...lots, { id: crypto.randomUUID(), entry: pNow, high: pNow, qtyRaw, qtyUi, entryTs: nowTs, ownerPubkey: owner.pubkey, ownerSecret: owner.secret }]);
             setDaily((d) => ({ ...d, buyUsd: d.buyUsd + cfg.tradeSizeUsd }));
             const tpPrice = pNow * (1 + cfg.takeProfitPct / 100);
             log(`Bought (Lot #${positions.length + 1}) $${format(cfg.tradeSizeUsd, 2)} at $${format(pNow, 6)} — tracking TP $${format(tpPrice, 6)}`);
@@ -752,7 +757,7 @@ export default function LiveRunner() {
     } else {
       setStatus(`Watching — price $${format(pNow, 6)} • anchorLow $${format(anchorLow, 6)}`);
     }
-  }, [executing, manualPrice, cfg, effectivePrice, positions, canBuy, execSwap]);
+  }, [executing, manualPrice, cfg, effectivePrice, positions, canBuy, execSwap, pickNextOwner]);
 
   useInterval(() => {
     if (running) void tick();
@@ -786,7 +791,7 @@ export default function LiveRunner() {
           if (Number.isFinite(entry) && entry > 0) {
             const qtyRaw = Number(holding.amountRaw ?? 0);
             const qtyUi = Number(holding.uiAmount ?? 0);
-            setPositions([{ id: crypto.randomUUID(), entry, high: p!, qtyRaw, qtyUi, entryTs: Date.now() }]);
+            setPositions([{ id: crypto.randomUUID(), entry, high: p!, qtyRaw, qtyUi, entryTs: Date.now(), ownerPubkey: wallet?.address ?? '', ownerSecret: '' }]);
             log(`Adopted existing holding ~${format(qtyUi, 4)} @ ~$${format(entry, 6)} — trailing armed at +${cfg.trailArmPct}%`);
           }
         }
@@ -1034,18 +1039,28 @@ export default function LiveRunner() {
           <Button onClick={start} disabled={executing}>Start</Button>
         )}
           <Button onClick={async () => {
-            const res = await execSwap('buy');
+            const owner = pickNextOwner();
+            if (!owner) { toast({ title: 'No funded wallets', description: 'Fund at least one pool wallet.' }); return; }
+            const res = await execSwap('buy', { ownerSecret: owner.secret });
             if (res.ok) {
               const pNow = effectivePrice ?? price ?? null;
               const qtyUi = Number(res.qtyUiDelta ?? 0);
               const qtyRaw = Number(res.qtyRawDelta ?? 0);
               if (pNow && qtyRaw > 0 && qtyUi > 0) {
-                setPositions((lots) => [...lots, { id: crypto.randomUUID(), entry: pNow, high: pNow, qtyRaw, qtyUi, entryTs: Date.now() }]);
+                setPositions((lots) => [...lots, { id: crypto.randomUUID(), entry: pNow, high: pNow, qtyRaw, qtyUi, entryTs: Date.now(), ownerPubkey: owner.pubkey, ownerSecret: owner.secret }]);
                 setDaily((d) => ({ ...d, buyUsd: d.buyUsd + cfg.tradeSizeUsd }));
               }
             }
           }} disabled={executing}>Buy now</Button>
-          <Button variant="outline" onClick={() => void execSwap('sell')} disabled={executing}>Sell now</Button>
+          <Button variant="outline" onClick={async () => {
+            if (positions.length === 0) { toast({ title: 'No positions', description: 'Nothing to sell.' }); return; }
+            const lot = positions[0]!;
+            const res = await execSwap('sell', { sellAmountRaw: lot.qtyRaw, sellQtyUi: lot.qtyUi, ownerSecret: lot.ownerSecret });
+            if (res.ok) {
+              setPositions((lots) => lots.slice(1));
+              setLastSellTs(Date.now());
+            }
+          }} disabled={executing}>Sell now</Button>
           <Button
             variant="secondary"
             onClick={() => {
