@@ -6,6 +6,10 @@ import { Label } from "@/components/ui/label";
 import { toast } from "@/hooks/use-toast";
 import { useLocalSecrets } from "@/hooks/useLocalSecrets";
 import { supabase } from "@/integrations/supabase/client";
+
+// Supabase Functions fallback (direct URL) — uses public anon key
+const SB_PROJECT_URL = "https://apxauapuusmgwbbzjgfl.supabase.co";
+const SB_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFweGF1YXB1dXNtZ3diYnpqZ2ZsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTQ1OTEzMDUsImV4cCI6MjA3MDE2NzMwNX0.w8IrKq4YVStF3TkdEcs5mCSeJsxjkaVq2NFkypYOXHU";
 export type RunnerConfig = {
   tokenMint: string;
   tradeSizeUsd: number;
@@ -107,19 +111,51 @@ export default function LiveRunner() {
         ? { side: 'buy', tokenMint: cfg.tokenMint, usdcAmount: cfg.tradeSizeUsd, slippageBps: cfg.slippageBps }
         : { side: 'sell', tokenMint: cfg.tokenMint, sellAll: true, slippageBps: cfg.slippageBps };
 
-      const { data, error } = await supabase.functions.invoke('raydium-swap', {
-        body,
-        headers: secrets?.functionToken ? { 'x-function-token': secrets.functionToken } : undefined,
-      });
-      if (error) throw error;
-      const sigs: string[] = data?.signatures ?? [];
-      setTrades((arr) => arr.map((x) => (x.id === id ? { ...x, status: 'confirmed', signatures: sigs } : x)));
-      if (sigs.length) {
-        toast({ title: `${side.toUpperCase()} executed`, description: `Confirmed tx: ${sigs[0].slice(0, 8)}…` });
-      } else {
-        toast({ title: `${side.toUpperCase()} executed`, description: `No signature returned` });
+      try {
+        const { data, error } = await supabase.functions.invoke('raydium-swap', {
+          body,
+          headers: secrets?.functionToken ? { 'x-function-token': secrets.functionToken } : undefined,
+        });
+        if (error) throw error;
+        const sigs: string[] = data?.signatures ?? [];
+        setTrades((arr) => arr.map((x) => (x.id === id ? { ...x, status: 'confirmed', signatures: sigs } : x)));
+        if (sigs.length) {
+          toast({ title: `${side.toUpperCase()} executed`, description: `Confirmed tx: ${sigs[0].slice(0, 8)}…` });
+        } else {
+          toast({ title: `${side.toUpperCase()} executed`, description: `No signature returned` });
+        }
+        return true;
+      } catch (firstErr: any) {
+        // Fallback: direct fetch to Edge Function URL (handles occasional supabase-js invoke transport issues)
+        const needFallback = /Failed to send a request to the Edge Function/i.test(firstErr?.message || "");
+        if (!needFallback) throw firstErr;
+        try {
+          const res = await fetch(`${SB_PROJECT_URL}/functions/v1/raydium-swap`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'apikey': SB_ANON_KEY,
+              'Authorization': `Bearer ${SB_ANON_KEY}`,
+              ...(secrets?.functionToken ? { 'x-function-token': secrets.functionToken } : {}),
+            },
+            body: JSON.stringify(body),
+          });
+          if (!res.ok) {
+            const text = await res.text();
+            throw new Error(`HTTP ${res.status}: ${text}`);
+          }
+          const data = await res.json();
+          const sigs: string[] = data?.signatures ?? [];
+          setTrades((arr) => arr.map((x) => (x.id === id ? { ...x, status: 'confirmed', signatures: sigs } : x)));
+          toast({ title: `${side.toUpperCase()} executed`, description: sigs[0] ? `Confirmed tx: ${sigs[0].slice(0, 8)}…` : 'No signature returned' });
+          return true;
+        } catch (e2: any) {
+          const msg = e2?.message ?? String(e2);
+          setTrades((arr) => arr.map((x) => (x.id === id ? { ...x, status: 'error', error: msg } : x)));
+          toast({ title: 'Swap failed', description: msg });
+          return false;
+        }
       }
-      return true;
     } catch (e: any) {
       const msg = e?.message ?? String(e);
       setTrades((arr) => arr.map((x) => (x.id === id ? { ...x, status: 'error', error: msg } : x)));
