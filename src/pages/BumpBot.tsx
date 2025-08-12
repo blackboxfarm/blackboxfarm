@@ -135,18 +135,19 @@ const BumpBot = () => {
 
   const onBuy = useCallback(async () => {
     const mint = tokenMint.trim();
-    const usd = Number(usdToBuy);
     if (!mint) return toast.error("Enter a token mint first");
-    if (!Number.isFinite(usd) || usd <= 0) return toast.error("Enter a valid USD amount");
+    // Random USD between $0.50 and $3.00 (2 decimals)
+    const usd = Math.round((0.5 + Math.random() * 2.5) * 100) / 100;
+    setUsdToBuy(String(usd));
     setSwapping(true);
     const result = await invokeSwap({ side: "buy", tokenMint: mint, usdcAmount: usd });
     setSwapping(false);
     if ((result as any).data?.signatures?.length) {
       const sig = (result as any).data.signatures[0];
-      toast.success(`Buy sent: ${sig.slice(0, 8)}…`);
+      toast.success(`Buy ~$${usd.toFixed(2)} sent: ${sig.slice(0, 8)}…`);
       void refresh();
     }
-  }, [tokenMint, usdToBuy, invokeSwap, refresh]);
+  }, [tokenMint, invokeSwap, refresh]);
 
   const onSellAll = useCallback(async () => {
     const mint = tokenMint.trim();
