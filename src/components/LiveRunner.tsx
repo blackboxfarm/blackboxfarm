@@ -28,11 +28,17 @@ function format(n: number, d = 4) {
 
 async function fetchJupPriceUSD(mint: string): Promise<number | null> {
   try {
-    const url = `https://price.jup.ag/v6/price?ids=${encodeURIComponent(mint)}&vsToken=USDC`;
-    const r = await fetch(url, { cache: "no-store" });
-    const j = await r.json();
-    const p = j?.data?.[mint]?.price;
-    if (typeof p === "number" && isFinite(p) && p > 0) return p;
+    const res = await fetch(`${SB_PROJECT_URL}/functions/v1/raydium-quote?priceMint=${encodeURIComponent(mint)}`, {
+      headers: {
+        'apikey': SB_ANON_KEY,
+        'Authorization': `Bearer ${SB_ANON_KEY}`,
+      },
+      cache: 'no-store',
+    });
+    if (!res.ok) return null;
+    const j = await res.json();
+    const p = j?.priceUSD;
+    if (typeof p === 'number' && isFinite(p) && p > 0) return p;
     return null;
   } catch {
     return null;

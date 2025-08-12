@@ -36,6 +36,22 @@ serve(async (req) => {
     const url = new URL(req.url);
     const isGet = req.method === "GET";
 
+    // Simple health check
+    if (url.searchParams.get("ping")) {
+      return ok({ ok: true });
+    }
+
+    // Server-side price proxy (avoids CORS/network issues in browser)
+    const priceMint = url.searchParams.get("priceMint");
+    if (priceMint) {
+      const r = await fetch(`https://price.jup.ag/v6/price?ids=${encodeURIComponent(priceMint)}&vsToken=USDC`);
+      if (!r.ok) return bad(`Price fetch failed: ${r.status}`, 502);
+      const j = await r.json();
+      const p = j?.data?.[priceMint]?.price;
+      if (typeof p !== 'number' || !isFinite(p) || p <= 0) return bad("Invalid price data", 502);
+      return ok({ priceUSD: p });
+    }
+
     const body = (await getJson<any>(req)) ?? {};
     const inputMint = (isGet ? url.searchParams.get("inputMint") : body.inputMint) as string | null;
     const outputMint = (isGet ? url.searchParams.get("outputMint") : body.outputMint) as string | null;
