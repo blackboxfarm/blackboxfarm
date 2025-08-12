@@ -45,11 +45,18 @@ function isSolMint(m: string) {
 
 function parseKeypair(secret: string): Keypair {
   try {
-    if (secret.trim().startsWith("[")) {
-      const arr = JSON.parse(secret) as number[];
-      return Keypair.fromSecretKey(new Uint8Array(arr));
+    const s = secret.trim();
+    if (s.startsWith("[")) {
+      const arr = JSON.parse(s) as number[];
+      const u8 = new Uint8Array(arr);
+      if (u8.length === 64) return Keypair.fromSecretKey(u8);
+      if (u8.length === 32) return Keypair.fromSeed(u8);
+      throw new Error(`bad secret key size: ${u8.length} bytes (expected 32 or 64)`);
     }
-    return Keypair.fromSecretKey(bs58.decode(secret.trim()));
+    const decoded = bs58.decode(s);
+    if (decoded.length === 64) return Keypair.fromSecretKey(decoded);
+    if (decoded.length === 32) return Keypair.fromSeed(decoded);
+    throw new Error(`bad secret key size: ${decoded.length} bytes (expected 32 or 64)`);
   } catch (e) {
     throw new Error(`Failed to parse TRADER_PRIVATE_KEY: ${(e as Error).message}`);
   }
