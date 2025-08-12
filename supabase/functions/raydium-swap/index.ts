@@ -461,7 +461,22 @@ serve(async (req) => {
             lastBuilderErrorMessage,
           });
         } catch {}
-        return bad(`No transactions returned from Raydium${lastBuilderErrorMessage ? `: ${lastBuilderErrorMessage}` : ""}`, 502);
+        // Fallback to Jupiter when Raydium builder returns no transactions
+        const j = await tryJupiterSwap({
+          inputMint: String(inputMint),
+          outputMint: String(outputMint),
+          amount: amount as any,
+          slippageBps: Number(slippageBps),
+          userPublicKey: owner.publicKey.toBase58(),
+          computeUnitPriceMicroLamports,
+          asLegacy: String(txVersion).toUpperCase() === "LEGACY",
+        });
+        if ("txs" in j) {
+          txList = j.txs.map((b64) => ({ transaction: b64 }));
+          signVersion = String(txVersion).toUpperCase() === "LEGACY" ? "LEGACY" : "V0";
+        } else {
+          return bad(`No transactions returned from Raydium${lastBuilderErrorMessage ? `: ${lastBuilderErrorMessage}` : ""}; Jupiter fallback: ${j.error}`, 502);
+        }
       }
     }
 
