@@ -282,7 +282,27 @@ export default function LiveRunner() {
     const id = crypto.randomUUID();
     const newTrade: Trade = { id, time: Date.now(), side, status: 'pending' };
     setTrades((t) => [newTrade, ...t].slice(0, 25));
+
+    // Pre-trade status + advisory
     try {
+      if (side === 'sell') {
+        const pNow = (effectivePrice ?? price) ?? null;
+        const entry = position?.entry ?? null;
+        const qty = holding?.uiAmount ?? null;
+        if (pNow && entry && qty) {
+          const roi = ((pNow / entry) - 1) * 100;
+          const pnlUsd = qty * (pNow - entry);
+          setStatus(`Selling — qty ${format(qty, 4)} @ $${format(pNow, 6)} • entry $${format(entry, 6)} • ROI ${format(roi, 2)}% • PnL $${format(pnlUsd, 2)}`);
+          log(`Selling… ${format(qty, 4)} tokens at $${format(pNow, 6)} (entry $${format(entry, 6)}, ROI ${format(roi, 2)}%, ≈ $${format(pnlUsd, 2)})`);
+        } else {
+          setStatus('Selling… submitting swap');
+          log('Selling… submitting swap');
+        }
+      } else {
+        const pNow = (effectivePrice ?? price) ?? null;
+        if (pNow) setStatus(`Buying — target ~$${format(pNow, 6)} for ~$${format(cfg.tradeSizeUsd, 2)}`);
+      }
+
       let body: any;
       if (cfg.quoteAsset === 'USDC') {
         body = side === 'buy'
@@ -339,6 +359,17 @@ export default function LiveRunner() {
         await loadHoldings();
         const freshPrice = await fetchJupPriceUSD(cfg.tokenMint);
         if (freshPrice !== null) setPrice(freshPrice);
+        // Post-trade PnL summary for sells
+        if (side === 'sell') {
+          const p = (freshPrice ?? effectivePrice ?? price) ?? null;
+          const entry = position?.entry ?? null;
+          const qty = holding?.uiAmount ?? null;
+          if (p && entry && qty) {
+            const roi = ((p / entry) - 1) * 100;
+            const pnlUsd = qty * (p - entry);
+            toast({ title: 'Sell summary', description: `~${format(qty, 4)} @ $${format(p, 6)} • ROI ${format(roi, 2)}% • PnL $${format(pnlUsd, 2)}` });
+          }
+        }
         return true;
       } catch (firstErr: any) {
         // Fallback: direct fetch to Edge Function URL for any error from supabase.invoke
@@ -365,6 +396,16 @@ export default function LiveRunner() {
           await loadHoldings();
           const freshPrice = await fetchJupPriceUSD(cfg.tokenMint);
           if (freshPrice !== null) setPrice(freshPrice);
+          if (side === 'sell') {
+            const p = (freshPrice ?? effectivePrice ?? price) ?? null;
+            const entry = position?.entry ?? null;
+            const qty = holding?.uiAmount ?? null;
+            if (p && entry && qty) {
+              const roi = ((p / entry) - 1) * 100;
+              const pnlUsd = qty * (p - entry);
+              toast({ title: 'Sell summary', description: `~${format(qty, 4)} @ $${format(p, 6)} • ROI ${format(roi, 2)}% • PnL $${format(pnlUsd, 2)}` });
+            }
+          }
           return true;
         } catch (e2: any) {
           const msg = e2?.message ?? String(e2);
