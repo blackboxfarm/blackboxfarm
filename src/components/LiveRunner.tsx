@@ -343,11 +343,21 @@ export default function LiveRunner() {
       }
 
       try {
-        const { data, error } = await supabase.functions.invoke('raydium-swap', {
-          body,
-          headers: secrets?.functionToken ? { 'x-function-token': secrets.functionToken } : undefined,
-        });
-        if (error) throw error;
+        // Add a hard timeout so we don’t get stuck with a pending trade and disabled buttons
+        const timeoutMs = 12000;
+        const timeout = new Promise<never>((_, reject) =>
+          setTimeout(() => reject(new Error('invoke timeout')), timeoutMs)
+        );
+        const invoke = supabase.functions
+          .invoke('raydium-swap', {
+            body,
+            headers: secrets?.functionToken ? { 'x-function-token': secrets.functionToken } : undefined,
+          })
+          .then(({ data, error }) => {
+            if (error) throw error;
+            return data as any;
+          });
+        const data: any = await Promise.race([invoke, timeout]);
         const sigs: string[] = data?.signatures ?? [];
         setTrades((arr) => arr.map((x) => (x.id === id ? { ...x, status: 'confirmed', signatures: sigs } : x)));
         if (sigs.length) {
@@ -373,6 +383,9 @@ export default function LiveRunner() {
         return true;
       } catch (firstErr: any) {
         // Fallback: direct fetch to Edge Function URL for any error from supabase.invoke
+        log((firstErr?.message || String(firstErr)).includes('timeout')
+          ? 'Swap invoke timed out — using direct endpoint…'
+          : `Swap invoke failed: ${firstErr?.message || String(firstErr)} — trying direct endpoint…`);
         try {
           const res = await fetch(`${SB_PROJECT_URL}/functions/v1/raydium-swap`, {
             method: 'POST',
