@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import VolumeSimulator from "@/components/VolumeSimulator";
 import SecretsModal from "@/components/SecretsModal";
 import WalletPoolManager from "@/components/WalletPoolManager";
@@ -71,6 +71,9 @@ const BumpBot = () => {
   const [slippageBps, setSlippageBps] = useState<number>(100);
   const [swapping, setSwapping] = useState(false);
   const ownerSecret = useMemo(() => poolWallets[0]?.secretBase58 ?? "", [poolWallets]);
+  const [autoTrading, setAutoTrading] = useState(false);
+  const autoTimer = useRef<number | null>(null);
+  const autoActive = useRef(false);
 
   const refresh = useCallback(async () => {
     if (!conn || !displayPubkey) return;
@@ -162,6 +165,46 @@ const BumpBot = () => {
     }
   }, [tokenMint, invokeSwap, refresh]);
 
+  // Auto-trade loop (buy random $0.50–$3, sell after 48–59s)
+  const startAuto = useCallback(async () => {
+    if (!tokenMint.trim()) return toast.error("Enter a token mint first");
+    if (!ownerSecret) return toast.error("No wallet secret found");
+    if (autoActive.current) return;
+    autoActive.current = true;
+    setAutoTrading(true);
+    await onBuy();
+    if (!autoActive.current) return;
+    if (autoTimer.current) { clearTimeout(autoTimer.current); autoTimer.current = null; }
+    autoTimer.current = window.setTimeout(async () => {
+      if (!autoActive.current) return;
+      await onSellAll();
+      if (!autoActive.current) return;
+      await onBuy();
+      if (!autoActive.current) return;
+      const next = 48000 + Math.floor(Math.random() * 11000);
+      if (autoTimer.current) { clearTimeout(autoTimer.current); autoTimer.current = null; }
+      autoTimer.current = window.setTimeout(async function loop() {
+        if (!autoActive.current) return;
+        await onSellAll();
+        if (!autoActive.current) return;
+        await onBuy();
+        if (!autoActive.current) return;
+        const delay = 48000 + Math.floor(Math.random() * 11000);
+        if (autoTimer.current) { clearTimeout(autoTimer.current); autoTimer.current = null; }
+        autoTimer.current = window.setTimeout(loop, delay);
+      }, next);
+    }, 48000);
+    if (!running) setRunning(true);
+  }, [tokenMint, ownerSecret, onBuy, onSellAll, running]);
+
+  const stopAuto = useCallback(() => {
+    autoActive.current = false;
+    setAutoTrading(false);
+    if (autoTimer.current) { clearTimeout(autoTimer.current); autoTimer.current = null; }
+  }, []);
+
+  useEffect(() => () => { if (autoTimer.current) clearTimeout(autoTimer.current); autoActive.current = false; }, []);
+
   // 5s polling when running
   useEffect(() => {
     if (!running) return;
@@ -248,7 +291,7 @@ const BumpBot = () => {
               <div className="grid sm:grid-cols-3 gap-4">
                 <div className="space-y-2 sm:col-span-1">
                   <Label>USD to buy</Label>
-                  <Input type="number" min="1" step="1" value={usdToBuy} onChange={(e) => setUsdToBuy(e.target.value)} />
+                  <Input type="number" min="0.5" step="0.01" value={usdToBuy} onChange={(e) => setUsdToBuy(e.target.value)} />
                 </div>
                 <div className="space-y-2 sm:col-span-1">
                   <Label>Slippage (bps)</Label>
@@ -257,6 +300,11 @@ const BumpBot = () => {
                 <div className="flex items-end gap-2 sm:col-span-1">
                   <Button onClick={onBuy} disabled={swapping || !tokenMint || !ownerSecret}>Buy</Button>
                   <Button variant="secondary" onClick={onSellAll} disabled={swapping || !tokenMint || !ownerSecret}>Sell All</Button>
+                </div>
+                <div className="flex items-end gap-2 sm:col-span-3">
+                  <Button variant="outline" onClick={startAuto} disabled={autoTrading || swapping || !tokenMint || !ownerSecret}>Start Auto</Button>
+                  <Button variant="ghost" onClick={stopAuto} disabled={!autoTrading}>Stop Auto</Button>
+                  <span className="text-xs text-muted-foreground">Cycle: buy random $0.50–$3, sell after 48–59s.</span>
                 </div>
               </div>
               <div className="text-xs text-muted-foreground">
