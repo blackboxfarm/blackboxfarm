@@ -161,11 +161,11 @@ export default function LiveRunner() {
     tokenMint: "FTggXu7nYowpXjScSw7BZjtZDXywLNjK88CGhydDGgMS",
     tradeSizeUsd: 20,
     intervalSec: 3,
-    anchorWindowSec: 120,
-    dipPct: 1.2,
+    anchorWindowSec: 60,
+    dipPct: 1.0,
     takeProfitPct: 10,
     stopLossPct: 35,
-    cooldownSec: 30,
+    cooldownSec: 15,
     dailyCapUsd: 300,
     slippageBps: 1500,
     quoteAsset: 'SOL',
@@ -177,7 +177,7 @@ export default function LiveRunner() {
     rocWindowSec: 30,
     upSensitivityBpsPerPct: 50,
     maxUpBiasBps: 300,
-    downSensitivityBpsPerPct: 50,
+    downSensitivityBpsPerPct: 0,
     maxDownBiasBps: 300,
     // Position mgmt
     separateLots: true,
@@ -215,6 +215,8 @@ export default function LiveRunner() {
   const decelCountRef = React.useRef<number>(0);
   const priceWindowRef = React.useRef<{ t: number; p: number }[]>([]);
   const bigDipTimerRef = React.useRef<number | null>(null);
+  const buyArmRef = React.useRef<{ min: number; armedAt: number } | null>(null);
+  const bounceConfirmPct = 0.2; // +0.2% bounce confirm for entries
   const [rocPct, setRocPct] = React.useState<number | null>(null);
   // reset daily counters when date changes
   React.useEffect(() => {
@@ -648,6 +650,8 @@ export default function LiveRunner() {
     const anchorCut = nowTs - Number(cfg.anchorWindowSec ?? 120) * 1000;
     const anchorSlice = arr.filter((x) => x.t >= anchorCut);
     const anchorLow = anchorSlice.reduce((m, x) => (m == null || x.p < m ? x.p : m), null as number | null) ?? pNow;
+    const anchorSlicePrev = anchorSlice.length > 1 ? anchorSlice.slice(0, -1) : anchorSlice;
+    const prevAnchorLow = anchorSlicePrev.reduce((m, x) => (m == null || x.p < m ? x.p : m), null as number | null) ?? anchorLow;
 
     // Slowdown count
     const prev = prevPriceRef.current;
@@ -687,7 +691,7 @@ export default function LiveRunner() {
         if (res.ok) {
           setPositions((lots) => lots.filter((_, i) => i !== sellIdx));
           setLastSellTs(Date.now());
-          const nextBuy = anchorLow * (1 - effDipPct / 100);
+          const nextBuy = prevAnchorLow * (1 - effDipPct / 100);
           log(`Sold lot#${sellIdx + 1} at $${format(pNow, 6)}. Watching dip to $${format(nextBuy, 6)}.`);
         }
         return;
@@ -727,26 +731,43 @@ export default function LiveRunner() {
       }
     }
 
-    // ENTRY: Anchor dip
+    // ENTRY: Anchor dip with previous-window low + bounce confirm
     const allowed = cfg.separateLots ? (cfg.maxConcurrentLots ?? 1) : 1;
     if (positions.length < allowed && canBuy) {
-      const target = anchorLow * (1 - effDipPct / 100);
+      const target = prevAnchorLow * (1 - effDipPct / 100);
+
+      // Arm when piercing the target; track lowest seen while armed
       if (pNow <= target) {
-        setStatus(`BUY @ $${format(pNow, 6)} (anchor dip ${format(effDipPct, 2)}%)`);
-        const owner = pickNextOwner();
-        if (!owner) { toast({ title: 'No funded wallets', description: 'Fund at least one pool wallet.' }); return; }
-        const res = await execSwap('buy', { ownerSecret: owner.secret });
-        if (res.ok) {
-          const qtyUi = Number(res.qtyUiDelta ?? 0);
-          const qtyRaw = Number(res.qtyRawDelta ?? 0);
-          if (qtyRaw > 0 && qtyUi > 0) {
-            setPositions((lots) => [...lots, { id: crypto.randomUUID(), entry: pNow, high: pNow, qtyRaw, qtyUi, entryTs: nowTs, ownerPubkey: owner.pubkey, ownerSecret: owner.secret }]);
-            setDaily((d) => ({ ...d, buyUsd: d.buyUsd + cfg.tradeSizeUsd }));
-            const tpPrice = pNow * (1 + cfg.takeProfitPct / 100);
-            log(`Bought (Lot #${positions.length + 1}) $${format(cfg.tradeSizeUsd, 2)} at $${format(pNow, 6)} — tracking TP $${format(tpPrice, 6)}`);
-          }
+        if (buyArmRef.current) {
+          if (pNow < buyArmRef.current.min) buyArmRef.current = { ...buyArmRef.current, min: pNow };
+        } else {
+          buyArmRef.current = { min: pNow, armedAt: nowTs };
+          log(`Entry armed at ~$${format(target, 6)} — waiting for +${bounceConfirmPct}% bounce`);
         }
-        return;
+      }
+
+      // Bounce confirm
+      if (buyArmRef.current) {
+        const min = buyArmRef.current.min;
+        const bounceTrigger = min * (1 + bounceConfirmPct / 100);
+        if (pNow >= bounceTrigger) {
+          setStatus(`BUY (bounce) @ $${format(pNow, 6)} (min $${format(min, 6)})`);
+          const owner = pickNextOwner();
+          if (!owner) { toast({ title: 'No funded wallets', description: 'Fund at least one pool wallet.' }); return; }
+          const res = await execSwap('buy', { ownerSecret: owner.secret });
+          if (res.ok) {
+            const qtyUi = Number(res.qtyUiDelta ?? 0);
+            const qtyRaw = Number(res.qtyRawDelta ?? 0);
+            if (qtyRaw > 0 && qtyUi > 0) {
+              setPositions((lots) => [...lots, { id: crypto.randomUUID(), entry: pNow, high: pNow, qtyRaw, qtyUi, entryTs: nowTs, ownerPubkey: owner.pubkey, ownerSecret: owner.secret }]);
+              setDaily((d) => ({ ...d, buyUsd: d.buyUsd + cfg.tradeSizeUsd }));
+              const tpPrice = pNow * (1 + cfg.takeProfitPct / 100);
+              log(`Bought (bounce) $${format(cfg.tradeSizeUsd, 2)} at $${format(pNow, 6)} — tracking TP $${format(tpPrice, 6)}`);
+            }
+          }
+          buyArmRef.current = null;
+          return;
+        }
       }
     }
 
@@ -763,8 +784,9 @@ export default function LiveRunner() {
         .join('  ');
       setStatus(`Holding — ${desc}`);
     } else {
-      const nextBuy = anchorLow * (1 - effDipPct / 100);
-      setStatus(`Watching — price $${format(pNow, 6)} • anchorLow $${format(anchorLow, 6)} • targetBuy ~$${format(nextBuy, 6)}`);
+      const target = prevAnchorLow * (1 - effDipPct / 100);
+      const bounceInfo = buyArmRef.current ? ` • bounce≥ ~$${format(buyArmRef.current.min * (1 + bounceConfirmPct / 100), 6)}` : '';
+      setStatus(`Watching — price $${format(pNow, 6)} • anchorLow $${format(prevAnchorLow, 6)} • targetBuy ~$${format(target, 6)}${bounceInfo}`);
     }
   }, [executing, manualPrice, cfg, effectivePrice, positions, canBuy, execSwap, pickNextOwner]);
 
@@ -1077,6 +1099,7 @@ export default function LiveRunner() {
               setPositions([]);
               setLastSellTs(null);
               setStatus("reset");
+              buyArmRef.current = null;
               try { localStorage.removeItem(`posEntry:${cfg.tokenMint}`); } catch {}
             }}
           >
