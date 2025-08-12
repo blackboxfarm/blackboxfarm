@@ -109,21 +109,23 @@ async function tryJupiterSwap(params: {
       return { error: `Jupiter quote failed: ${qRes.status} ${t}` };
     }
     const qJson = await qRes.json();
-    const route = Array.isArray(qJson?.data) ? qJson.data[0] : undefined;
-    if (!route) return { error: `Jupiter quote returned no routes` };
+    // v6 sometimes returns { data: [route] }, sometimes a single object
+    const quoteResponse = Array.isArray(qJson?.data) ? qJson.data[0] : qJson;
+    if (!quoteResponse || (!quoteResponse.inAmount && !quoteResponse.routePlan)) {
+      return { error: `Jupiter quote returned no routes` };
+    }
 
     const sRes = await fetch("https://quote-api.jup.ag/v6/swap", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        quoteResponse: route,
+        quoteResponse,
         userPublicKey,
         wrapAndUnwrapSol: true,
         computeUnitPriceMicroLamports,
         asLegacyTransaction: asLegacy,
         useTokenLedger: false,
         dynamicComputeUnitLimit: true,
-        prioritizationFeeLamports: undefined,
       }),
     });
     if (!sRes.ok) {
