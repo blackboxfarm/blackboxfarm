@@ -1,6 +1,6 @@
 import "https://deno.land/x/xhr@0.1.0/mod.ts";
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import { Connection, PublicKey, VersionedTransaction, Transaction, Keypair } from "npm:@solana/web3.js@1.95.3";
+import { Connection, PublicKey, VersionedTransaction, Transaction, Keypair, SystemProgram, TransactionInstruction } from "npm:@solana/web3.js@1.95.3";
 // Lightweight ATA helper (avoid @solana/spl-token dependency)
 const TOKEN_PROGRAM_ID = new PublicKey("TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA");
 const ASSOCIATED_TOKEN_PROGRAM_ID = new PublicKey("ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL");
@@ -175,6 +175,12 @@ serve(async (req) => {
       tokenMint,
       usdcAmount,
       sellAll,
+      // fast mode and fee override
+      confirmPolicy: _confirmPolicy,
+      computeUnitPriceMicroLamports: _feeOverride,
+      priorityFeeMicroLamports: _altFeeOverride,
+      action,
+      preCreateWSOL,
     } = body;
 
     const rpcUrl = getEnv("SOLANA_RPC_URL");
@@ -182,7 +188,57 @@ serve(async (req) => {
     const owner = parseKeypair(ownerSecret);
     const connection = new Connection(rpcUrl, { commitment: "confirmed" });
 
-    const USDC_MINT = "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v";
+    const confirmPolicy = String(_confirmPolicy ?? "confirmed").toLowerCase();
+    const desiredCommitment = confirmPolicy === "processed" ? "processed" : "confirmed";
+
+    // Prepare mode: pre-create ATAs to speed up first swap
+    if (action === "prepare") {
+      try {
+        const instrs: TransactionInstruction[] = [];
+        const created: Record<string, boolean> = {};
+        const mints: string[] = [];
+        if (tokenMint) mints.push(String(tokenMint));
+        if (preCreateWSOL) mints.push(NATIVE_MINT.toBase58());
+        for (const m of mints) {
+          try {
+            const mintPk = new PublicKey(m);
+            const ata = getAssociatedTokenAddress(mintPk, owner.publicKey);
+            const info = await connection.getAccountInfo(ata);
+            if (!info) {
+              const keys = [
+                { pubkey: owner.publicKey, isSigner: true, isWritable: true },
+                { pubkey: ata, isSigner: false, isWritable: true },
+                { pubkey: owner.publicKey, isSigner: false, isWritable: false },
+                { pubkey: mintPk, isSigner: false, isWritable: false },
+                { pubkey: SystemProgram.programId, isSigner: false, isWritable: false },
+                { pubkey: TOKEN_PROGRAM_ID, isSigner: false, isWritable: false },
+              ];
+              instrs.push(new TransactionInstruction({ programId: ASSOCIATED_TOKEN_PROGRAM_ID, keys, data: new Uint8Array() }));
+              created[m] = true;
+            } else {
+              created[m] = false;
+            }
+          } catch (e) {
+            created[m] = false;
+          }
+        }
+        if (instrs.length) {
+          const tx = new Transaction().add(...instrs);
+          const { blockhash, lastValidBlockHeight } = await connection.getLatestBlockhash("confirmed");
+          tx.recentBlockhash = blockhash;
+          tx.feePayer = owner.publicKey;
+          tx.sign(owner);
+          const sig = await connection.sendRawTransaction(tx.serialize(), { skipPreflight: true, maxRetries: 2 });
+          if (confirmPolicy !== "none") {
+            await connection.confirmTransaction({ blockhash, lastValidBlockHeight, signature: sig }, desiredCommitment as any);
+          }
+          return ok({ prepared: true, signatures: [sig], created });
+        }
+        return ok({ prepared: true, signatures: [], created });
+      } catch (e) {
+        return bad(`Prepare failed: ${(e as Error).message}`, 500);
+      }
+    }
 
     // Resolve low-level params
     let inputMint = _inputMint as string | undefined;
@@ -298,8 +354,11 @@ serve(async (req) => {
       }
     }
 
-    // Priority fee
-    const computeUnitPriceMicroLamports = await getPriorityFeeMicroLamports(connection);
+    // Priority fee (allow override)
+    let computeUnitPriceMicroLamports = Number(_feeOverride ?? _altFeeOverride ?? 0);
+    if (!Number.isFinite(computeUnitPriceMicroLamports) || computeUnitPriceMicroLamports <= 0) {
+      computeUnitPriceMicroLamports = await getPriorityFeeMicroLamports(connection);
+    }
 
     // Jupiter fallback if Raydium compute failed at compute stage
     if (needJupiter) {

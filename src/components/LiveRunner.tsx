@@ -25,6 +25,9 @@ export type RunnerConfig = {
   // Spike-aware trailing settings
   trailingDropPct: number; // sell when price falls this % from peak after TP is reached
   slowdownConfirmTicks: number; // consecutive non-increasing ticks required to confirm slowdown
+  // Execution
+  confirmPolicy: 'confirmed' | 'processed' | 'none';
+  feeOverrideMicroLamports?: number; // 0/empty = auto
 };
 
 function format(n: number, d = 4) {
@@ -134,7 +137,7 @@ export default function LiveRunner() {
   const [cfg, setCfg] = React.useState<RunnerConfig>({
     tokenMint: "FTggXu7nYowpXjScSw7BZjtZDXywLNjK88CGhydDGgMS",
     tradeSizeUsd: 18,
-    intervalSec: 5,
+    intervalSec: 3,
     dipPct: 7,
     takeProfitPct: 12,
     stopLossPct: 1000,
@@ -144,6 +147,8 @@ export default function LiveRunner() {
     quoteAsset: 'SOL',
     trailingDropPct: 1.5,
     slowdownConfirmTicks: 2,
+    confirmPolicy: 'processed',
+    feeOverrideMicroLamports: 0,
   });
 
   const [running, setRunning] = React.useState(false);
@@ -269,7 +274,7 @@ export default function LiveRunner() {
           if (!solUsd || !Number.isFinite(solUsd) || solUsd <= 0) throw new Error('Failed to fetch SOL price');
           const lamports = Math.floor((cfg.tradeSizeUsd / solUsd) * 1_000_000_000 * 0.98);
           if (!Number.isFinite(lamports) || lamports <= 0) throw new Error('Computed lamports invalid');
-          body = { inputMint: WSOL_MINT, outputMint: cfg.tokenMint, amount: lamports, slippageBps: cfg.slippageBps, wrapSol: true };
+          body = { inputMint: WSOL_MINT, outputMint: cfg.tokenMint, amount: lamports, slippageBps: cfg.slippageBps, wrapSol: true } as any;
         } else {
           // Query fresh token balance to sell
           let raw = 0;
@@ -287,8 +292,14 @@ export default function LiveRunner() {
             }
           } catch {}
           if (!Number.isFinite(raw) || raw <= 0) throw new Error('No token balance to sell');
-          body = { inputMint: cfg.tokenMint, outputMint: WSOL_MINT, amount: Math.floor(raw), slippageBps: cfg.slippageBps, unwrapSol: true };
+          body = { inputMint: cfg.tokenMint, outputMint: WSOL_MINT, amount: Math.floor(raw), slippageBps: cfg.slippageBps, unwrapSol: true } as any;
         }
+      }
+
+      // Fast mode + fee override
+      (body as any).confirmPolicy = cfg.confirmPolicy;
+      if (cfg.feeOverrideMicroLamports && cfg.feeOverrideMicroLamports > 0) {
+        (body as any).computeUnitPriceMicroLamports = cfg.feeOverrideMicroLamports;
       }
 
       try {
@@ -315,9 +326,9 @@ export default function LiveRunner() {
           const res = await fetch(`${SB_PROJECT_URL}/functions/v1/raydium-swap`, {
             method: 'POST',
             headers: {
-              'Content-Type': 'application/json',
-              'apikey': SB_ANON_KEY,
-              'Authorization': `Bearer ${SB_ANON_KEY}`,
+            'Content-Type': 'application/json',
+            'apikey': SB_ANON_KEY,
+            'Authorization': `Bearer ${SB_ANON_KEY}`,
               ...(secrets?.functionToken ? { 'x-function-token': secrets.functionToken } : {}),
             },
             body: JSON.stringify(body),
@@ -413,6 +424,45 @@ export default function LiveRunner() {
       setExecuting(false);
     }
   }, [executing, cfg.slippageBps, supabase, secrets?.functionToken, loadWallet]);
+
+  const handlePrepare = React.useCallback(async () => {
+    if (executing) return;
+    setExecuting(true);
+    try {
+      const body: any = { action: 'prepare', tokenMint: cfg.tokenMint, preCreateWSOL: true, confirmPolicy: cfg.confirmPolicy };
+      try {
+        const { data, error } = await supabase.functions.invoke('raydium-swap', {
+          body,
+          headers: secrets?.functionToken ? { 'x-function-token': secrets.functionToken } : undefined,
+        });
+        if (error) throw error;
+        const sigs: string[] = data?.signatures ?? [];
+        toast({ title: 'Prepared accounts', description: sigs[0] ? `Tx: ${sigs[0].slice(0,8)}…` : 'No tx needed' });
+      } catch {
+        const res = await fetch(`${SB_PROJECT_URL}/functions/v1/raydium-swap`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            apikey: SB_ANON_KEY,
+            Authorization: `Bearer ${SB_ANON_KEY}`,
+            ...(secrets?.functionToken ? { 'x-function-token': secrets.functionToken } : {}),
+          },
+          body: JSON.stringify(body),
+        });
+        if (!res.ok) {
+          const t = await res.text();
+          throw new Error(`HTTP ${res.status}: ${t}`);
+        }
+        const data = await res.json();
+        const sigs: string[] = data?.signatures ?? [];
+        toast({ title: 'Prepared accounts', description: sigs[0] ? `Tx: ${sigs[0].slice(0,8)}…` : 'No tx needed' });
+      }
+    } catch (e: any) {
+      toast({ title: 'Prepare failed', description: e?.message ?? String(e) });
+    } finally {
+      setExecuting(false);
+    }
+  }, [executing, cfg.tokenMint, cfg.confirmPolicy, supabase, secrets?.functionToken]);
 
   const tick = React.useCallback(async () => {
     if (executing) {
@@ -613,13 +663,13 @@ export default function LiveRunner() {
                   <SelectTrigger><SelectValue placeholder="Select" /></SelectTrigger>
                   <SelectContent>
                     <SelectItem value="SOL">SOL</SelectItem>
-                    <SelectItem value="USDC">USDC</SelectItem>
+                  <SelectItem value="USDC">USDC</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
             </div>
 
-            <div className="grid md:grid-cols-2 gap-4">
+            <div className="grid md:grid-cols-4 gap-4">
               <div className="space-y-2">
                 <Label>Spike Trail Drop %</Label>
                 <Input type="number" value={cfg.trailingDropPct} onChange={(e) => setCfg({ ...cfg, trailingDropPct: Number(e.target.value) })} />
@@ -627,6 +677,21 @@ export default function LiveRunner() {
               <div className="space-y-2">
                 <Label>Slowdown confirm ticks</Label>
                 <Input type="number" value={cfg.slowdownConfirmTicks} onChange={(e) => setCfg({ ...cfg, slowdownConfirmTicks: Number(e.target.value) })} />
+              </div>
+              <div className="space-y-2">
+                <Label>Fast Mode</Label>
+                <Select value={cfg.confirmPolicy} onValueChange={(v) => setCfg({ ...cfg, confirmPolicy: v as any })}>
+                  <SelectTrigger><SelectValue placeholder="Select" /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="confirmed">Confirmed (safer)</SelectItem>
+                    <SelectItem value="processed">Processed (faster)</SelectItem>
+                    <SelectItem value="none">Send-only (fastest)</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <Label>Priority fee override (microLamports)</Label>
+                <Input type="number" placeholder="auto" value={Number(cfg.feeOverrideMicroLamports ?? 0)} onChange={(e) => setCfg({ ...cfg, feeOverrideMicroLamports: Number(e.target.value) })} />
               </div>
             </div>
 
@@ -658,6 +723,7 @@ export default function LiveRunner() {
                       {walletLoading ? 'Refreshing…' : 'Refresh'}
                     </Button>
                     <Button size="sm" onClick={() => void convertUsdcToSol()} disabled={executing}>Convert USDC→SOL</Button>
+                    <Button size="sm" variant="secondary" onClick={() => void handlePrepare()} disabled={executing}>Prepare</Button>
                   </div>
                 </div>
               ) : (
