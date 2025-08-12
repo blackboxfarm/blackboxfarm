@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import bs58 from "bs58";
+import { Keypair } from "@solana/web3.js";
 
 export type StoredWallet = {
   secretBase58: string; // base58-encoded 64-byte secret key
@@ -29,11 +30,10 @@ function write(v: WalletPoolState) {
 }
 
 function genKeypair(): StoredWallet {
-  // Lazy import to keep bundle small where unused
-  const { Keypair } = require("@solana/web3.js");
   const kp = Keypair.generate();
   return { secretBase58: bs58.encode(kp.secretKey), pubkey: kp.publicKey.toBase58() };
 }
+
 
 export function useWalletPool() {
   const [state, setState] = useState<WalletPoolState>(() =>
@@ -65,7 +65,6 @@ export function useWalletPool() {
       const s = String(sec || "").trim();
       if (!s) continue;
       try {
-        const { Keypair, PublicKey } = require("@solana/web3.js");
         let kp;
         if (s.startsWith("[")) {
           const arr = JSON.parse(s);
@@ -74,6 +73,7 @@ export function useWalletPool() {
           const u8 = bs58.decode(s);
           kp = Keypair.fromSecretKey(u8.length === 64 ? u8 : Keypair.fromSeed(u8).secretKey);
         }
+
         sanitized.push({ secretBase58: bs58.encode(kp.secretKey), pubkey: kp.publicKey.toBase58() });
       } catch {}
     }
