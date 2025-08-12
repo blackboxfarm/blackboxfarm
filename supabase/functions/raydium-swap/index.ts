@@ -1,7 +1,17 @@
 import "https://deno.land/x/xhr@0.1.0/mod.ts";
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { Connection, PublicKey, VersionedTransaction, Transaction, Keypair } from "npm:@solana/web3.js@1.95.3";
-import { getAssociatedTokenAddress, NATIVE_MINT } from "npm:@solana/spl-token@0.4.6";
+// Lightweight ATA helper (avoid @solana/spl-token dependency)
+const TOKEN_PROGRAM_ID = new PublicKey("TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA");
+const ASSOCIATED_TOKEN_PROGRAM_ID = new PublicKey("ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL");
+function getAssociatedTokenAddress(mint: PublicKey, owner: PublicKey): PublicKey {
+  const [addr] = PublicKey.findProgramAddressSync(
+    [owner.toBuffer(), TOKEN_PROGRAM_ID.toBuffer(), mint.toBuffer()],
+    ASSOCIATED_TOKEN_PROGRAM_ID
+  );
+  return addr;
+}
+const NATIVE_MINT = new PublicKey("So11111111111111111111111111111111111111112");
 import bs58 from "npm:bs58@5.0.0";
 
 const corsHeaders = {

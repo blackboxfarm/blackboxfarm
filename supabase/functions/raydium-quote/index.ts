@@ -41,6 +41,11 @@ serve(async (req) => {
       return ok({ ok: true });
     }
 
+    if (url.searchParams.get("probe") === "ray") {
+      const r = await fetch(SWAP_HOST);
+      return ok({ status: r.status });
+    }
+
     // Server-side price proxy (avoids CORS/network issues in browser)
     const priceMint = url.searchParams.get("priceMint");
     if (priceMint) {
