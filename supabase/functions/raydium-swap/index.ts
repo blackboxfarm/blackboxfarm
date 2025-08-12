@@ -91,6 +91,54 @@ async function fetchSolUsdPrice(): Promise<number> {
   return 0;
 }
 
+async function tryJupiterSwap(params: {
+  inputMint: string;
+  outputMint: string;
+  amount: number | string;
+  slippageBps: number;
+  userPublicKey: string;
+  computeUnitPriceMicroLamports: number;
+  asLegacy: boolean;
+}): Promise<{ txs: string[] } | { error: string }> {
+  try {
+    const { inputMint, outputMint, amount, slippageBps, userPublicKey, computeUnitPriceMicroLamports, asLegacy } = params;
+    const qUrl = `https://quote-api.jup.ag/v6/quote?inputMint=${inputMint}&outputMint=${outputMint}&amount=${amount}&slippageBps=${slippageBps}&swapMode=ExactIn`;
+    const qRes = await fetch(qUrl);
+    if (!qRes.ok) {
+      const t = await qRes.text();
+      return { error: `Jupiter quote failed: ${qRes.status} ${t}` };
+    }
+    const qJson = await qRes.json();
+    const route = Array.isArray(qJson?.data) ? qJson.data[0] : undefined;
+    if (!route) return { error: `Jupiter quote returned no routes` };
+
+    const sRes = await fetch("https://quote-api.jup.ag/v6/swap", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        quoteResponse: route,
+        userPublicKey,
+        wrapAndUnwrapSol: true,
+        computeUnitPriceMicroLamports,
+        asLegacyTransaction: asLegacy,
+        useTokenLedger: false,
+        dynamicComputeUnitLimit: true,
+        prioritizationFeeLamports: undefined,
+      }),
+    });
+    if (!sRes.ok) {
+      const t = await sRes.text();
+      return { error: `Jupiter swap build failed: ${sRes.status} ${t}` };
+    }
+    const sJson = await sRes.json();
+    const tx = sJson?.swapTransaction || sJson?.data?.swapTransaction;
+    if (typeof tx !== "string") return { error: `Jupiter swap build returned no transaction` };
+    return { txs: [tx] };
+  } catch (e) {
+    return { error: `Jupiter error: ${(e as Error).message}` };
+  }
+}
+
 serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
   if (req.method !== "POST") return bad("Use POST", 405);
@@ -164,17 +212,19 @@ serve(async (req) => {
     let inputAccount = isInputSol ? undefined : (await getAssociatedTokenAddress(new PublicKey(inputMint), owner.publicKey)).toBase58();
     let outputAccount = isOutputSol ? undefined : (await getAssociatedTokenAddress(new PublicKey(outputMint), owner.publicKey)).toBase58();
 
-    // Compute route
-      // Compute route (with SOL fallback for buys if USDC route lacks liquidity)
-      let usedFallbackToSOL = false;
-      let swapResponse: any;
-      {
-        const computeUrl = `${SWAP_HOST}/compute/swap-base-in?inputMint=${inputMint}&outputMint=${outputMint}&amount=${amount}&slippageBps=${slippageBps}&txVersion=${txVersion}`;
-        const computeRes = await fetch(computeUrl);
-        if (!computeRes.ok) {
-          const t = await computeRes.text();
-          return bad(`Raydium compute failed: ${computeRes.status} ${t}`, 502);
-        }
+    // Compute route (with SOL fallback for buys if USDC route lacks liquidity)
+    let usedFallbackToSOL = false;
+    let swapResponse: any;
+    let needJupiter = false;
+    let jupReason: string | undefined;
+    {
+      const computeUrl = `${SWAP_HOST}/compute/swap-base-in?inputMint=${inputMint}&outputMint=${outputMint}&amount=${amount}&slippageBps=${slippageBps}&txVersion=${txVersion}`;
+      const computeRes = await fetch(computeUrl);
+      if (!computeRes.ok) {
+        const t = await computeRes.text();
+        needJupiter = true;
+        jupReason = `Raydium compute failed: ${computeRes.status} ${t}`;
+      } else {
         const tmp = await computeRes.json();
         if (tmp?.success === false) {
           try { console.error("raydium-swap compute error", tmp); } catch {}
@@ -198,40 +248,88 @@ serve(async (req) => {
             }
 
             if (!Number.isFinite(lamports) || lamports <= 0) {
-              return bad(`Not enough SOL balance to perform SOL-route buy for ${owner.publicKey.toBase58()}`, 502);
+              needJupiter = true;
+              jupReason = `Not enough SOL balance to perform SOL-route buy for ${owner.publicKey.toBase58()}`;
+            } else {
+              inputMint = NATIVE_MINT.toBase58();
+              outputMint = tokenMint;
+              amount = lamports;
+              isInputSol = true;
+              isOutputSol = isSolMint(String(outputMint));
+              // Recompute output account for token; input account is native SOL
+              inputAccount = undefined;
+              const outAta = await getAssociatedTokenAddress(new PublicKey(outputMint), owner.publicKey);
+              outputAccount = outAta.toBase58();
+              const computeUrl2 = `${SWAP_HOST}/compute/swap-base-in?inputMint=${inputMint}&outputMint=${outputMint}&amount=${amount}&slippageBps=${slippageBps}&txVersion=${txVersion}`;
+              const computeRes2 = await fetch(computeUrl2);
+              if (!computeRes2.ok) {
+                const t2 = await computeRes2.text();
+                needJupiter = true;
+                jupReason = `Raydium compute failed (SOL fallback): ${computeRes2.status} ${t2}`;
+              } else {
+                const solResp = await computeRes2.json();
+                if (solResp?.success === false) {
+                  try { console.error("raydium-swap compute error (SOL fallback)", solResp); } catch {}
+                  needJupiter = true;
+                  jupReason = `Raydium compute error (SOL fallback): ${solResp?.msg ?? "unknown"}`;
+                } else {
+                  swapResponse = solResp;
+                  usedFallbackToSOL = true;
+                }
+              }
             }
-            inputMint = NATIVE_MINT.toBase58();
-            outputMint = tokenMint;
-            amount = lamports;
-            isInputSol = true;
-            isOutputSol = isSolMint(String(outputMint));
-            // Recompute output account for token; input account is native SOL
-            inputAccount = undefined;
-            const outAta = await getAssociatedTokenAddress(new PublicKey(outputMint), owner.publicKey);
-            outputAccount = outAta.toBase58();
-            const computeUrl2 = `${SWAP_HOST}/compute/swap-base-in?inputMint=${inputMint}&outputMint=${outputMint}&amount=${amount}&slippageBps=${slippageBps}&txVersion=${txVersion}`;
-            const computeRes2 = await fetch(computeUrl2);
-            if (!computeRes2.ok) {
-              const t2 = await computeRes2.text();
-              return bad(`Raydium compute failed (SOL fallback): ${computeRes2.status} ${t2}`, 502);
-            }
-            const solResp = await computeRes2.json();
-            if (solResp?.success === false) {
-              try { console.error("raydium-swap compute error (SOL fallback)", solResp); } catch {}
-              return bad(`Raydium compute error (SOL fallback): ${solResp?.msg ?? "unknown"}`, 502);
-            }
-            swapResponse = solResp;
-            usedFallbackToSOL = true;
           } else {
-            return bad(`Raydium compute error: ${tmp?.msg ?? "unknown"}`, 502);
+            needJupiter = true;
+            jupReason = `Raydium compute error: ${tmp?.msg ?? "unknown"}`;
           }
         } else {
           swapResponse = tmp;
         }
       }
+    }
 
     // Priority fee
     const computeUnitPriceMicroLamports = await getPriorityFeeMicroLamports(connection);
+
+    // Jupiter fallback if Raydium compute failed at compute stage
+    if (needJupiter) {
+      const j = await tryJupiterSwap({
+        inputMint: String(inputMint),
+        outputMint: String(outputMint),
+        amount: amount as any,
+        slippageBps: Number(slippageBps),
+        userPublicKey: owner.publicKey.toBase58(),
+        computeUnitPriceMicroLamports,
+        asLegacy: String(txVersion).toUpperCase() === "LEGACY",
+      });
+      if ("txs" in j) {
+        const sigs: string[] = [];
+        if (String(txVersion).toUpperCase() === "LEGACY") {
+          for (const b64 of j.txs) {
+            const buf = Buffer.from(b64, "base64");
+            const tx = Transaction.from(buf);
+            tx.sign(owner);
+            const sig = await connection.sendRawTransaction(tx.serialize(), { skipPreflight: true, maxRetries: 3 });
+            const { blockhash, lastValidBlockHeight } = await connection.getLatestBlockhash("confirmed");
+            await connection.confirmTransaction({ blockhash, lastValidBlockHeight, signature: sig }, "confirmed");
+            sigs.push(sig);
+          }
+        } else {
+          for (const b64 of j.txs) {
+            const buf = Buffer.from(b64, "base64");
+            const vtx = VersionedTransaction.deserialize(buf);
+            vtx.sign([owner]);
+            const sig = await connection.sendTransaction(vtx, { skipPreflight: true, maxRetries: 3 });
+            const { blockhash, lastValidBlockHeight } = await connection.getLatestBlockhash("confirmed");
+            await connection.confirmTransaction({ blockhash, lastValidBlockHeight, signature: sig }, "confirmed");
+            sigs.push(sig);
+          }
+        }
+        return ok({ signatures: sigs });
+      } else {
+        return bad(`${jupReason ?? "Raydium compute failed"}; Jupiter fallback: ${j.error}`, 502);
+      }
+    }
 
     // Build transactions (first try)
     let signVersion = txVersion as string;
