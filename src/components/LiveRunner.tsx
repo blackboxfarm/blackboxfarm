@@ -131,10 +131,10 @@ export default function LiveRunner() {
   const [cfg, setCfg] = React.useState<RunnerConfig>({
     tokenMint: "6JYrshW3jjXSGDLmrhLK7kpNevNGREjtuoXAtY5AFd9C",
     tradeSizeUsd: 15,
-    intervalSec: 60,
+    intervalSec: 5,
     dipPct: 7,
     takeProfitPct: 12,
-    stopLossPct: 18,
+    stopLossPct: 1000,
     cooldownSec: 120,
     dailyCapUsd: 300,
     slippageBps: 1500,
@@ -144,7 +144,7 @@ export default function LiveRunner() {
   const [running, setRunning] = React.useState(false);
   const [status, setStatus] = React.useState<string>("idle");
   const [price, setPrice] = React.useState<number | null>(null);
-  const [manualPrice, setManualPrice] = React.useState<string>("");
+  const [manualPrice, setManualPrice] = React.useState<string>("18");
   const [trailingHigh, setTrailingHigh] = React.useState<number | null>(null);
   const [position, setPosition] = React.useState<{ entry: number } | null>(null);
   const [lastSellTs, setLastSellTs] = React.useState<number | null>(null);
