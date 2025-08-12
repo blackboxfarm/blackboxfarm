@@ -104,6 +104,11 @@ export default function LiveRunner() {
   const [wallet, setWallet] = React.useState<{ address: string; sol: number } | null>(null);
   const [walletLoading, setWalletLoading] = React.useState(false);
 
+  const [holding, setHolding] = React.useState<{ mint: string; amountRaw: string; decimals: number; uiAmount: number } | null>(null);
+  const [activity, setActivity] = React.useState<{ time: number; text: string }[]>([]);
+  const log = React.useCallback((text: string) => {
+    setActivity((a) => [{ time: Date.now(), text }, ...a].slice(0, 50));
+  }, []);
   // reset daily counters when date changes
   React.useEffect(() => {
     const key = todayKey();
@@ -147,6 +152,33 @@ export default function LiveRunner() {
     void loadWallet();
   }, [loadWallet]);
 
+  const loadHoldings = React.useCallback(async () => {
+    if (!cfg.tokenMint) return;
+    try {
+      const res = await fetch(`${SB_PROJECT_URL}/functions/v1/trader-wallet?tokenMint=${encodeURIComponent(cfg.tokenMint)}` , {
+        headers: {
+          apikey: SB_ANON_KEY,
+          Authorization: `Bearer ${SB_ANON_KEY}`,
+          ...(secrets?.functionToken ? { 'x-function-token': secrets.functionToken } : {}),
+        },
+      });
+      if (res.ok) {
+        const j = await res.json();
+        const dec = Number(j?.tokenDecimals);
+        const raw = String(j?.tokenBalanceRaw ?? "0");
+        const ui = Number(j?.tokenUiAmount ?? (Number(raw) / Math.pow(10, Number.isFinite(dec) ? dec : 0)));
+        if (j?.tokenMint) {
+          setHolding({ mint: j.tokenMint, amountRaw: raw, decimals: Number.isFinite(dec) ? dec : 0, uiAmount: Number.isFinite(ui) ? ui : 0 });
+        } else {
+          setHolding(null);
+        }
+      }
+    } catch {}
+  }, [cfg.tokenMint, secrets?.functionToken]);
+
+  React.useEffect(() => {
+    void loadHoldings();
+  }, [loadHoldings]);
   const effectivePrice = React.useMemo(() => {
     const m = Number(manualPrice);
     if (Number.isFinite(m) && m > 0) return m;
@@ -184,6 +216,8 @@ export default function LiveRunner() {
         } else {
           toast({ title: `${side.toUpperCase()} executed`, description: `No signature returned` });
         }
+        await loadWallet();
+        await loadHoldings();
         return true;
       } catch (firstErr: any) {
         // Fallback: direct fetch to Edge Function URL for any error from supabase.invoke
@@ -206,6 +240,8 @@ export default function LiveRunner() {
           const sigs: string[] = data?.signatures ?? [];
           setTrades((arr) => arr.map((x) => (x.id === id ? { ...x, status: 'confirmed', signatures: sigs } : x)));
           toast({ title: `${side.toUpperCase()} executed`, description: sigs[0] ? `Confirmed tx: ${sigs[0].slice(0, 8)}…` : 'No signature returned' });
+          await loadWallet();
+          await loadHoldings();
           return true;
         } catch (e2: any) {
           const msg = e2?.message ?? String(e2);
@@ -222,7 +258,7 @@ export default function LiveRunner() {
     } finally {
       setExecuting(false);
     }
-  }, [executing, cfg.tokenMint, cfg.tradeSizeUsd, cfg.slippageBps, supabase]);
+  }, [executing, cfg.tokenMint, cfg.tradeSizeUsd, cfg.slippageBps, supabase, loadWallet, loadHoldings]);
 
   const tick = React.useCallback(async () => {
     if (executing) {
@@ -249,6 +285,8 @@ export default function LiveRunner() {
         if (ok) {
           setPosition({ entry: pNow });
           setDaily((d) => ({ ...d, buyUsd: d.buyUsd + cfg.tradeSizeUsd }));
+          const tpPrice = pNow * (1 + cfg.takeProfitPct / 100);
+          log(`Bought $${format(cfg.tradeSizeUsd, 2)} at $${format(pNow, 6)} — waiting to sell at $${format(tpPrice, 6)} (+${cfg.takeProfitPct}%)`);
         }
       } else {
         setStatus(`Watching — price $${format(pNow, 6)} • high $${format(high, 6)}`);
@@ -268,6 +306,8 @@ export default function LiveRunner() {
         setPosition(null);
         setLastSellTs(Date.now());
         toast({ title: 'Take profit', description: `Sold at $${format(pNow, 6)} (target ${cfg.takeProfitPct}%)` });
+        const nextBuy = high * (1 - cfg.dipPct / 100);
+        log(`Sold at $${format(pNow, 6)} (TP +${cfg.takeProfitPct}%). Waiting for price dip to $${format(nextBuy, 6)} to buy back.`);
       }
       return;
     }
@@ -279,6 +319,8 @@ export default function LiveRunner() {
         setPosition(null);
         setLastSellTs(Date.now());
         toast({ title: 'Stop loss', description: `Sold at $${format(pNow, 6)} (stop ${cfg.stopLossPct}%)` });
+        const nextBuy = high * (1 - cfg.dipPct / 100);
+        log(`Sold at $${format(pNow, 6)} (SL −${cfg.stopLossPct}%). Waiting for price dip to $${format(nextBuy, 6)} to buy back.`);
       }
       return;
     }
@@ -296,6 +338,10 @@ export default function LiveRunner() {
     }
     setRunning(true);
     setStatus("running");
+    if (price) {
+      const nextBuy = price * (1 - cfg.dipPct / 100);
+      log(`Watching — current $${format(price, 6)}. Will buy on dip to $${format(nextBuy, 6)} (−${cfg.dipPct}%).`);
+    }
     void tick();
   };
   const stop = () => {
@@ -395,6 +441,43 @@ export default function LiveRunner() {
                   </Button>
                 </div>
               )}
+            </div>
+
+            <div className="rounded-lg border p-3 text-sm">
+              <div className="font-medium mb-2">Holdings</div>
+              {holding ? (
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <span className="text-muted-foreground">Token</span>
+                    <span title={cfg.tokenMint}>{cfg.tokenMint.slice(0,4)}…{cfg.tokenMint.slice(-4)}</span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-muted-foreground">Amount</span>
+                    <span>{holding.uiAmount.toFixed(6)}</span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-muted-foreground">Value</span>
+                    <span>{Number.isFinite(effectivePrice ?? NaN) ? `$${(holding.uiAmount * (effectivePrice || 0)).toFixed(2)}` : '—'}</span>
+                  </div>
+                  <Button size="sm" variant="outline" onClick={() => void loadHoldings()}>Refresh</Button>
+                </div>
+              ) : (
+                <div className="flex items-center justify-between">
+                  <span className="text-muted-foreground">No balance</span>
+                  <Button size="sm" variant="outline" onClick={() => void loadHoldings()}>Load</Button>
+                </div>
+              )}
+            </div>
+
+            <div className="rounded-lg border p-3 text-sm">
+              <div className="font-medium mb-2">Activity</div>
+              <ul className="space-y-1 max-h-48 overflow-auto">
+                {activity.map((a, idx) => (
+                  <li key={idx} className="text-muted-foreground">
+                    {new Date(a.time).toLocaleTimeString()} • {a.text}
+                  </li>
+                ))}
+              </ul>
             </div>
 
             <div className="rounded-lg border p-3 text-sm">

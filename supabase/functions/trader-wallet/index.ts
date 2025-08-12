@@ -3,6 +3,16 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { Connection, Keypair, PublicKey } from "npm:@solana/web3.js@1.95.3";
 import bs58 from "npm:bs58@5.0.0";
 
+// Lightweight ATA helper
+const TOKEN_PROGRAM_ID = new PublicKey("TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA");
+const ASSOCIATED_TOKEN_PROGRAM_ID = new PublicKey("ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL");
+function getAssociatedTokenAddress(mint: PublicKey, owner: PublicKey): PublicKey {
+  const [addr] = PublicKey.findProgramAddressSync(
+    [owner.toBuffer(), TOKEN_PROGRAM_ID.toBuffer(), mint.toBuffer()],
+    ASSOCIATED_TOKEN_PROGRAM_ID
+  );
+  return addr;
+}
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-function-token",
@@ -61,10 +71,36 @@ serve(async (req) => {
     const connection = new Connection(rpcUrl, { commitment: "confirmed" });
     const lamports = await connection.getBalance(pub).catch(() => 0);
 
+    // Optional token balance query
+    const url = new URL(req.url);
+    const tokenMint = url.searchParams.get("tokenMint");
+    let tokenInfo: Record<string, unknown> = {};
+    if (tokenMint) {
+      try {
+        const mintPk = new PublicKey(tokenMint);
+        const ata = getAssociatedTokenAddress(mintPk, pub);
+        const bal = await connection.getTokenAccountBalance(ata).catch(() => null);
+        if (bal?.value) {
+          tokenInfo = {
+            tokenMint,
+            tokenAccount: ata.toBase58(),
+            tokenBalanceRaw: bal.value.amount,
+            tokenDecimals: bal.value.decimals,
+            tokenUiAmount: Number(bal.value.uiAmountString ?? bal.value.uiAmount ?? 0),
+          };
+        } else {
+          tokenInfo = { tokenMint, tokenAccount: ata.toBase58(), tokenBalanceRaw: "0", tokenDecimals: 0, tokenUiAmount: 0 };
+        }
+      } catch (err) {
+        tokenInfo = { tokenMint, tokenError: String((err as Error)?.message || err) };
+      }
+    }
+
     return ok({
       publicKey: pub.toBase58(),
       solBalanceLamports: lamports,
       solBalance: lamports / 1_000_000_000,
+      ...tokenInfo,
     });
   } catch (e) {
     console.error("trader-wallet error", e);
