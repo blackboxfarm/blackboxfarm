@@ -166,7 +166,8 @@ serve(async (req) => {
     // Priority fee
     const computeUnitPriceMicroLamports = String(await getPriorityFeeMicroLamports(connection));
 
-    // Build transactions
+    // Build transactions (first try)
+    let signVersion = txVersion as string;
     const txRes = await fetch(`${SWAP_HOST}/transaction/swap-base-in`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -195,21 +196,60 @@ serve(async (req) => {
     else if (Array.isArray(txJson?.transactions)) txPayloads = txJson.transactions;
     else if (txJson?.transaction) txPayloads = [txJson.transaction];
 
-    const txList: { transaction: string }[] = txPayloads.map((d: any) => ({ transaction: (d?.transaction ?? d) }));
+    let txList: { transaction: string }[] = txPayloads.map((d: any) => ({ transaction: (d?.transaction ?? d) }));
 
     if (!Array.isArray(txList) || txList.length === 0) {
+      // Try LEGACY as a fallback
       try {
-        console.error("raydium-swap empty tx list", {
-          keys: Object.keys(txJson || {}),
-          preview: typeof txJson === "object" ? JSON.stringify(txJson).slice(0, 200) : String(txJson).slice(0, 200),
-        });
+        const computeUrl2 = `${SWAP_HOST}/compute/swap-base-in?inputMint=${inputMint}&outputMint=${outputMint}&amount=${amount}&slippageBps=${slippageBps}&txVersion=LEGACY`;
+        const computeRes2 = await fetch(computeUrl2);
+        if (computeRes2.ok) {
+          const swapResponse2 = await computeRes2.json();
+          const txRes2 = await fetch(`${SWAP_HOST}/transaction/swap-base-in`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              computeUnitPriceMicroLamports,
+              swapResponse: swapResponse2,
+              txVersion: "LEGACY",
+              wallet: owner.publicKey.toBase58(),
+              wrapSol: Boolean(wrapSol && isInputSol),
+              unwrapSol: Boolean(unwrapSol && isOutputSol),
+              inputAccount,
+              outputAccount,
+            }),
+          });
+          if (txRes2.ok) {
+            const txJson2 = await txRes2.json();
+            let txPayloads2: any[] = [];
+            if (Array.isArray(txJson2?.data)) txPayloads2 = txJson2.data;
+            else if (txJson2?.data?.transaction) txPayloads2 = [txJson2.data.transaction];
+            else if (typeof txJson2?.data === "string") txPayloads2 = [txJson2.data];
+            else if (Array.isArray(txJson2?.transactions)) txPayloads2 = txJson2.transactions;
+            else if (txJson2?.transaction) txPayloads2 = [txJson2.transaction];
+            const tmpList = txPayloads2.map((d: any) => ({ transaction: (d?.transaction ?? d) }));
+            if (Array.isArray(tmpList) && tmpList.length > 0) {
+              txList = tmpList;
+              signVersion = "LEGACY";
+            }
+          }
+        }
       } catch {}
-      return bad("No transactions returned from Raydium", 502);
+
+      if (!Array.isArray(txList) || txList.length === 0) {
+        try {
+          console.error("raydium-swap empty tx list", {
+            keys: Object.keys(txJson || {}),
+            preview: typeof txJson === "object" ? JSON.stringify(txJson).slice(0, 200) : String(txJson).slice(0, 200),
+          });
+        } catch {}
+        return bad("No transactions returned from Raydium", 502);
+      }
     }
 
     const sigs: string[] = [];
 
-    if (txVersion === "V0") {
+    if (signVersion === "V0") {
       for (const item of txList) {
         const buf = Buffer.from(item.transaction, "base64");
         const vtx = VersionedTransaction.deserialize(buf);
