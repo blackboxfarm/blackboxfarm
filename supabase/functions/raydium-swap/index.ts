@@ -81,6 +81,16 @@ async function getPriorityFeeMicroLamports(connection: Connection): Promise<numb
   return 5000; // fallback
 }
 
+async function fetchSolUsdPrice(): Promise<number> {
+  try {
+    const r = await fetch("https://price.jup.ag/v6/price?ids=SOL");
+    const j = await r.json();
+    const p = Number(j?.data?.SOL?.price ?? j?.data?.wSOL?.price ?? j?.SOL?.price);
+    if (Number.isFinite(p) && p > 0) return p;
+  } catch (_) {}
+  return 0;
+}
+
 serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
   if (req.method !== "POST") return bad("Use POST", 405);
@@ -148,24 +158,70 @@ serve(async (req) => {
     if (!inputMint || !outputMint || amount == null) return bad("Missing inputMint, outputMint, amount");
 
     // Get ATAs when not SOL
-    const isInputSol = isSolMint(String(inputMint));
-    const isOutputSol = isSolMint(String(outputMint));
+    let isInputSol = isSolMint(String(inputMint));
+    let isOutputSol = isSolMint(String(outputMint));
 
-    const inputAccount = isInputSol ? undefined : (await getAssociatedTokenAddress(new PublicKey(inputMint), owner.publicKey)).toBase58();
-    const outputAccount = isOutputSol ? undefined : (await getAssociatedTokenAddress(new PublicKey(outputMint), owner.publicKey)).toBase58();
+    let inputAccount = isInputSol ? undefined : (await getAssociatedTokenAddress(new PublicKey(inputMint), owner.publicKey)).toBase58();
+    let outputAccount = isOutputSol ? undefined : (await getAssociatedTokenAddress(new PublicKey(outputMint), owner.publicKey)).toBase58();
 
     // Compute route
-    const computeUrl = `${SWAP_HOST}/compute/swap-base-in?inputMint=${inputMint}&outputMint=${outputMint}&amount=${amount}&slippageBps=${slippageBps}&txVersion=${txVersion}`;
-    const computeRes = await fetch(computeUrl);
-    if (!computeRes.ok) {
-      const t = await computeRes.text();
-      return bad(`Raydium compute failed: ${computeRes.status} ${t}`, 502);
-    }
-    const swapResponse = await computeRes.json();
-    if (swapResponse?.success === false) {
-      try { console.error("raydium-swap compute error", swapResponse); } catch {}
-      return bad(`Raydium compute error: ${swapResponse?.msg ?? "unknown"}`, 502);
-    }
+      // Compute route (with SOL fallback for buys if USDC route lacks liquidity)
+      let usedFallbackToSOL = false;
+      let swapResponse: any;
+      {
+        const computeUrl = `${SWAP_HOST}/compute/swap-base-in?inputMint=${inputMint}&outputMint=${outputMint}&amount=${amount}&slippageBps=${slippageBps}&txVersion=${txVersion}`;
+        const computeRes = await fetch(computeUrl);
+        if (!computeRes.ok) {
+          const t = await computeRes.text();
+          return bad(`Raydium compute failed: ${computeRes.status} ${t}`, 502);
+        }
+        const tmp = await computeRes.json();
+        if (tmp?.success === false) {
+          try { console.error("raydium-swap compute error", tmp); } catch {}
+          const msg = String(tmp?.msg ?? "");
+          if (msg.includes("INSUFFICIENT_LIQUIDITY") && side === "buy" && tokenMint && usdcAmount != null) {
+            const usd = Number(usdcAmount ?? 0);
+            const solPrice = await fetchSolUsdPrice();
+            let lamports = 0;
+            if (solPrice > 0 && Number.isFinite(usd) && usd > 0) {
+              lamports = Math.floor((usd / solPrice) * 1_000_000_000);
+            }
+            const solBal = await connection.getBalance(owner.publicKey).catch(() => 0);
+            if (solBal > 0 && lamports > solBal) {
+              lamports = Math.floor(solBal * 0.95);
+            }
+            if (!Number.isFinite(lamports) || lamports <= 0) {
+              return bad("INSUFFICIENT_LIQUIDITY for USDC route and no SOL budget available", 502);
+            }
+            inputMint = NATIVE_MINT.toBase58();
+            outputMint = tokenMint;
+            amount = lamports;
+            isInputSol = true;
+            isOutputSol = isSolMint(String(outputMint));
+            // Recompute output account for token; input account is native SOL
+            inputAccount = undefined;
+            const outAta = await getAssociatedTokenAddress(new PublicKey(outputMint), owner.publicKey);
+            outputAccount = outAta.toBase58();
+            const computeUrl2 = `${SWAP_HOST}/compute/swap-base-in?inputMint=${inputMint}&outputMint=${outputMint}&amount=${amount}&slippageBps=${slippageBps}&txVersion=${txVersion}`;
+            const computeRes2 = await fetch(computeUrl2);
+            if (!computeRes2.ok) {
+              const t2 = await computeRes2.text();
+              return bad(`Raydium compute failed (SOL fallback): ${computeRes2.status} ${t2}`, 502);
+            }
+            const solResp = await computeRes2.json();
+            if (solResp?.success === false) {
+              try { console.error("raydium-swap compute error (SOL fallback)", solResp); } catch {}
+              return bad(`Raydium compute error (SOL fallback): ${solResp?.msg ?? "unknown"}`, 502);
+            }
+            swapResponse = solResp;
+            usedFallbackToSOL = true;
+          } else {
+            return bad(`Raydium compute error: ${tmp?.msg ?? "unknown"}`, 502);
+          }
+        } else {
+          swapResponse = tmp;
+        }
+      }
 
     // Priority fee
     const computeUnitPriceMicroLamports = await getPriorityFeeMicroLamports(connection);
@@ -181,7 +237,7 @@ serve(async (req) => {
         swapResponse,
         txVersion,
         wallet: owner.publicKey.toBase58(),
-        wrapSol: Boolean(wrapSol && isInputSol),
+        wrapSol: Boolean((wrapSol || usedFallbackToSOL) && isInputSol),
         unwrapSol: Boolean(unwrapSol && isOutputSol),
         inputAccount,
         outputAccount,
@@ -222,7 +278,7 @@ serve(async (req) => {
               swapResponse: swapResponse2,
               txVersion: "LEGACY",
               wallet: owner.publicKey.toBase58(),
-              wrapSol: Boolean(wrapSol && isInputSol),
+              wrapSol: Boolean((wrapSol || usedFallbackToSOL) && isInputSol),
               unwrapSol: Boolean(unwrapSol && isOutputSol),
               inputAccount,
               outputAccount,
