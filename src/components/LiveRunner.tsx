@@ -16,15 +16,20 @@ export type RunnerConfig = {
   tokenMint: string;
   tradeSizeUsd: number;
   intervalSec: number;
-  dipPct: number; // e.g. 7 => 7%
-  takeProfitPct: number; // e.g. 12
-  stopLossPct: number; // e.g. 18
+
+  // Anchor/plateau logic
+  anchorWindowSec: number; // rolling window for anchor low (seconds)
+  dipPct: number; // dip below anchor low to buy (e.g., 1.2 => 1.2%)
+  takeProfitPct: number; // legacy TP target (used for UI; trailing uses trailArmPct)
+  stopLossPct: number; // hard stop per lot
   cooldownSec: number; // cooldown after a sell
   dailyCapUsd: number; // maximum buys per day
   slippageBps: number; // for future on-chain
   quoteAsset: 'SOL' | 'USDC';
-  // Spike-aware trailing settings
-  trailingDropPct: number; // sell when price falls this % from peak after TP is reached
+
+  // Trailing/exit
+  trailArmPct: number; // arm trailing after this profit
+  trailingDropPct: number; // sell when price falls this % from peak after arming
   slowdownConfirmTicks: number; // consecutive non-increasing ticks required to confirm slowdown
 
   // Adaptive trails (ROC-based)
@@ -34,6 +39,13 @@ export type RunnerConfig = {
   maxUpBiasBps?: number; // cap for TP bias (bps)
   downSensitivityBpsPerPct?: number; // add to Dip per −1% ROC (in bps)
   maxDownBiasBps?: number; // cap for Dip bias (bps)
+
+  // Position management
+  separateLots: boolean; // allow multiple concurrent lots
+  maxConcurrentLots: number; // e.g., 2
+  bigDipFloorDropPct: number; // open Lot #2 if price <= entry1 − this %
+  bigDipHoldMinutes: number; // require staying below floor for this many minutes
+  secondLotTradeSizeUsd?: number; // optional override for lot #2 size
 
   // Execution
   confirmPolicy: 'confirmed' | 'processed' | 'none';
@@ -146,16 +158,18 @@ export default function LiveRunner() {
 
   const [cfg, setCfg] = React.useState<RunnerConfig>({
     tokenMint: "FTggXu7nYowpXjScSw7BZjtZDXywLNjK88CGhydDGgMS",
-    tradeSizeUsd: 18,
+    tradeSizeUsd: 20,
     intervalSec: 3,
-    dipPct: 7,
-    takeProfitPct: 12,
-    stopLossPct: 1000,
-    cooldownSec: 120,
+    anchorWindowSec: 120,
+    dipPct: 1.2,
+    takeProfitPct: 10,
+    stopLossPct: 35,
+    cooldownSec: 30,
     dailyCapUsd: 300,
     slippageBps: 1500,
     quoteAsset: 'SOL',
-    trailingDropPct: 1.5,
+    trailArmPct: 5,
+    trailingDropPct: 3,
     slowdownConfirmTicks: 2,
     // Adaptive defaults
     adaptiveTrails: true,
@@ -164,6 +178,12 @@ export default function LiveRunner() {
     maxUpBiasBps: 300,
     downSensitivityBpsPerPct: 50,
     maxDownBiasBps: 300,
+    // Position mgmt
+    separateLots: true,
+    maxConcurrentLots: 2,
+    bigDipFloorDropPct: 25,
+    bigDipHoldMinutes: 6,
+    secondLotTradeSizeUsd: 20,
     // Execution
     confirmPolicy: 'processed',
     feeOverrideMicroLamports: 0,
@@ -173,8 +193,9 @@ export default function LiveRunner() {
   const [status, setStatus] = React.useState<string>("idle");
   const [price, setPrice] = React.useState<number | null>(null);
   const [manualPrice, setManualPrice] = React.useState<string>("");
+  type Lot = { id: string; entry: number; high: number; qtyRaw: number; qtyUi: number; entryTs: number };
+  const [positions, setPositions] = React.useState<Lot[]>([]);
   const [trailingHigh, setTrailingHigh] = React.useState<number | null>(null);
-  const [position, setPosition] = React.useState<{ entry: number; high: number } | null>(null);
   const [lastSellTs, setLastSellTs] = React.useState<number | null>(null);
   const [daily, setDaily] = React.useState<{ key: string; buyUsd: number }>({ key: todayKey(), buyUsd: 0 });
 
@@ -192,6 +213,7 @@ export default function LiveRunner() {
   const prevPriceRef = React.useRef<number | null>(null);
   const decelCountRef = React.useRef<number>(0);
   const priceWindowRef = React.useRef<{ t: number; p: number }[]>([]);
+  const bigDipTimerRef = React.useRef<number | null>(null);
   const [rocPct, setRocPct] = React.useState<number | null>(null);
   // reset daily counters when date changes
   React.useEffect(() => {
@@ -273,66 +295,92 @@ export default function LiveRunner() {
     if (!effectivePrice) return false;
     if (daily.buyUsd + cfg.tradeSizeUsd > cfg.dailyCapUsd) return false;
     if (lastSellTs && Date.now() - lastSellTs < cfg.cooldownSec * 1000) return false;
-    return !position; // only one position at a time
-  }, [effectivePrice, daily, cfg, lastSellTs, position]);
+    const allowed = cfg.separateLots ? (cfg.maxConcurrentLots ?? 1) : 1;
+    return positions.length < allowed;
+  }, [effectivePrice, daily, cfg, lastSellTs, positions.length]);
 
-  const execSwap = React.useCallback(async (side: 'buy' | 'sell') => {
-    if (executing) return false;
+  const execSwap = React.useCallback(async (side: 'buy' | 'sell', opts?: { sellAmountRaw?: number; sellQtyUi?: number; buyUsd?: number }) => {
+    if (executing) return { ok: false } as const;
     setExecuting(true);
     const id = crypto.randomUUID();
     const newTrade: Trade = { id, time: Date.now(), side, status: 'pending' };
     setTrades((t) => [newTrade, ...t].slice(0, 25));
 
-    // Pre-trade status + advisory
+    const getRawBalance = async (): Promise<{ raw: number; decimals: number } | null> => {
+      try {
+        const res = await fetch(`${SB_PROJECT_URL}/functions/v1/trader-wallet?tokenMint=${encodeURIComponent(cfg.tokenMint)}` , {
+          headers: { apikey: SB_ANON_KEY, Authorization: `Bearer ${SB_ANON_KEY}`, ...(secrets?.functionToken ? { 'x-function-token': secrets.functionToken } : {}) },
+        });
+        if (res.ok) {
+          const j = await res.json();
+          return { raw: Number(j?.tokenBalanceRaw ?? 0), decimals: Number(j?.tokenDecimals ?? 0) };
+        }
+      } catch {}
+      return null;
+    };
+
     try {
+      // Pre-trade status + advisory
       if (side === 'sell') {
         const pNow = (effectivePrice ?? price) ?? null;
-        const entry = position?.entry ?? null;
-        const qty = holding?.uiAmount ?? null;
-        if (pNow && entry && qty) {
-          const roi = ((pNow / entry) - 1) * 100;
-          const pnlUsd = qty * (pNow - entry);
-          setStatus(`Selling — qty ${format(qty, 4)} @ $${format(pNow, 6)} • entry $${format(entry, 6)} • ROI ${format(roi, 2)}% • PnL $${format(pnlUsd, 2)}`);
-          log(`Selling… ${format(qty, 4)} tokens at $${format(pNow, 6)} (entry $${format(entry, 6)}, ROI ${format(roi, 2)}%, ≈ $${format(pnlUsd, 2)})`);
+        const qty = opts?.sellQtyUi ?? holding?.uiAmount ?? null;
+        const entry = positions[0]?.entry ?? null; // first lot (for rough ROI in log)
+        if (pNow && qty) {
+          const roi = entry ? ((pNow / entry) - 1) * 100 : NaN;
+          const pnlUsd = entry ? qty * (pNow - entry) : NaN;
+          setStatus(`Selling — qty ${format(qty, 4)} @ $${format(pNow, 6)}${Number.isFinite(roi) ? ` • ROI ${format(roi, 2)}%` : ''}${Number.isFinite(pnlUsd) ? ` • PnL $${format(pnlUsd, 2)}` : ''}`);
+          log(`Selling… ${format(qty, 4)} tokens at $${format(pNow, 6)}${Number.isFinite(roi) ? ` (ROI ${format(roi, 2)}%)` : ''}`);
         } else {
           setStatus('Selling… submitting swap');
           log('Selling… submitting swap');
         }
       } else {
         const pNow = (effectivePrice ?? price) ?? null;
-        if (pNow) setStatus(`Buying — target ~$${format(pNow, 6)} for ~$${format(cfg.tradeSizeUsd, 2)}`);
+        const usd = Number(opts?.buyUsd ?? cfg.tradeSizeUsd);
+        if (pNow) setStatus(`Buying — target ~$${format(pNow, 6)} for ~$${format(usd, 2)}`);
       }
+
+      let preBal: { raw: number; decimals: number } | null = null;
+      if (side === 'buy') preBal = await getRawBalance();
 
       let body: any;
       if (cfg.quoteAsset === 'USDC') {
-        body = side === 'buy'
-          ? { side: 'buy', tokenMint: cfg.tokenMint, usdcAmount: cfg.tradeSizeUsd, slippageBps: cfg.slippageBps }
-          : { side: 'sell', tokenMint: cfg.tokenMint, sellAll: true, slippageBps: cfg.slippageBps };
+        if (side === 'buy') {
+          const usd = Math.round(Number(opts?.buyUsd ?? cfg.tradeSizeUsd));
+          body = { side: 'buy', tokenMint: cfg.tokenMint, usdcAmount: usd, slippageBps: cfg.slippageBps };
+        } else {
+          if (opts?.sellAmountRaw && opts.sellAmountRaw > 0) {
+            body = { side: 'sell', tokenMint: cfg.tokenMint, amount: Math.floor(opts.sellAmountRaw), slippageBps: cfg.slippageBps };
+          } else {
+            body = { side: 'sell', tokenMint: cfg.tokenMint, sellAll: true, slippageBps: cfg.slippageBps };
+          }
+        }
       } else {
         if (side === 'buy') {
           const solUsd = await fetchSolUsd();
           if (!solUsd || !Number.isFinite(solUsd) || solUsd <= 0) throw new Error('Failed to fetch SOL price');
-          const lamports = Math.floor((cfg.tradeSizeUsd / solUsd) * 1_000_000_000 * 0.98);
+          const buyUsd = Number(opts?.buyUsd ?? cfg.tradeSizeUsd);
+          const lamports = Math.floor((buyUsd / solUsd) * 1_000_000_000 * 0.98);
           if (!Number.isFinite(lamports) || lamports <= 0) throw new Error('Computed lamports invalid');
           body = { inputMint: WSOL_MINT, outputMint: cfg.tokenMint, amount: lamports, slippageBps: cfg.slippageBps, wrapSol: true } as any;
         } else {
-          // Query fresh token balance to sell
-          let raw = 0;
-          try {
-            const res = await fetch(`${SB_PROJECT_URL}/functions/v1/trader-wallet?tokenMint=${encodeURIComponent(cfg.tokenMint)}`, {
-              headers: {
-                apikey: SB_ANON_KEY,
-                Authorization: `Bearer ${SB_ANON_KEY}`,
-                ...(secrets?.functionToken ? { 'x-function-token': secrets.functionToken } : {}),
-              },
-            });
-            if (res.ok) {
-              const j = await res.json();
-              raw = Number(j?.tokenBalanceRaw ?? 0);
-            }
-          } catch {}
-          if (!Number.isFinite(raw) || raw <= 0) throw new Error('No token balance to sell');
-          body = { inputMint: cfg.tokenMint, outputMint: WSOL_MINT, amount: Math.floor(raw), slippageBps: cfg.slippageBps, unwrapSol: true } as any;
+          if (opts?.sellAmountRaw && opts.sellAmountRaw > 0) {
+            body = { inputMint: cfg.tokenMint, outputMint: WSOL_MINT, amount: Math.floor(opts.sellAmountRaw), slippageBps: cfg.slippageBps, unwrapSol: true } as any;
+          } else {
+            // sell all
+            let raw = 0;
+            try {
+              const res = await fetch(`${SB_PROJECT_URL}/functions/v1/trader-wallet?tokenMint=${encodeURIComponent(cfg.tokenMint)}`, {
+                headers: { apikey: SB_ANON_KEY, Authorization: `Bearer ${SB_ANON_KEY}`, ...(secrets?.functionToken ? { 'x-function-token': secrets.functionToken } : {}) },
+              });
+              if (res.ok) {
+                const j = await res.json();
+                raw = Number(j?.tokenBalanceRaw ?? 0);
+              }
+            } catch {}
+            if (!Number.isFinite(raw) || raw <= 0) throw new Error('No token balance to sell');
+            body = { inputMint: cfg.tokenMint, outputMint: WSOL_MINT, amount: Math.floor(raw), slippageBps: cfg.slippageBps, unwrapSol: true } as any;
+          }
         }
       }
 
@@ -343,58 +391,45 @@ export default function LiveRunner() {
       }
 
       try {
-        // Add a hard timeout so we don’t get stuck with a pending trade and disabled buttons
         const timeoutMs = 12000;
-        const timeout = new Promise<never>((_, reject) =>
-          setTimeout(() => reject(new Error('invoke timeout')), timeoutMs)
-        );
+        const timeout = new Promise<never>((_, reject) => setTimeout(() => reject(new Error('invoke timeout')), timeoutMs));
         const invoke = supabase.functions
-          .invoke('raydium-swap', {
-            body,
-            headers: secrets?.functionToken ? { 'x-function-token': secrets.functionToken } : undefined,
-          })
-          .then(({ data, error }) => {
-            if (error) throw error;
-            return data as any;
-          });
+          .invoke('raydium-swap', { body, headers: secrets?.functionToken ? { 'x-function-token': secrets.functionToken } : undefined })
+          .then(({ data, error }) => { if (error) throw error; return data as any; });
         const data: any = await Promise.race([invoke, timeout]);
         const sigs: string[] = data?.signatures ?? [];
         setTrades((arr) => arr.map((x) => (x.id === id ? { ...x, status: 'confirmed', signatures: sigs } : x)));
-        if (sigs.length) {
-          toast({ title: `${side.toUpperCase()} executed`, description: `Confirmed tx: ${sigs[0].slice(0, 8)}…` });
-        } else {
-          toast({ title: `${side.toUpperCase()} executed`, description: `No signature returned` });
-        }
+        toast({ title: `${side.toUpperCase()} executed`, description: sigs[0] ? `Confirmed tx: ${sigs[0].slice(0, 8)}…` : 'Success' });
         await loadWallet();
         await loadHoldings();
         const freshPrice = await fetchJupPriceUSD(cfg.tokenMint);
         if (freshPrice !== null) setPrice(freshPrice);
+
+        let qtyDeltaRaw = 0;
+        let qtyDeltaUi = 0;
+        if (side === 'buy') {
+          const post = await getRawBalance();
+          if (preBal && post) {
+            qtyDeltaRaw = Math.max(0, post.raw - preBal.raw);
+            const dec = post.decimals || holding?.decimals || 0;
+            qtyDeltaUi = qtyDeltaRaw / Math.pow(10, dec);
+          }
+        }
         // Post-trade PnL summary for sells
         if (side === 'sell') {
           const p = (freshPrice ?? effectivePrice ?? price) ?? null;
-          const entry = position?.entry ?? null;
-          const qty = holding?.uiAmount ?? null;
-          if (p && entry && qty) {
-            const roi = ((p / entry) - 1) * 100;
-            const pnlUsd = qty * (p - entry);
-            toast({ title: 'Sell summary', description: `~${format(qty, 4)} @ $${format(p, 6)} • ROI ${format(roi, 2)}% • PnL $${format(pnlUsd, 2)}` });
+          const qty = opts?.sellQtyUi ?? holding?.uiAmount ?? null;
+          if (p && qty) {
+            toast({ title: 'Sell summary', description: `~${format(qty, 4)} @ $${format(p, 6)}` });
           }
         }
-        return true;
+        return { ok: true, qtyRawDelta: qtyDeltaRaw, qtyUiDelta: qtyDeltaUi } as const;
       } catch (firstErr: any) {
-        // Fallback: direct fetch to Edge Function URL for any error from supabase.invoke
-        log((firstErr?.message || String(firstErr)).includes('timeout')
-          ? 'Swap invoke timed out — using direct endpoint…'
-          : `Swap invoke failed: ${firstErr?.message || String(firstErr)} — trying direct endpoint…`);
+        log((firstErr?.message || String(firstErr)).includes('timeout') ? 'Swap invoke timed out — using direct endpoint…' : `Swap invoke failed: ${firstErr?.message || String(firstErr)} — trying direct endpoint…`);
         try {
           const res = await fetch(`${SB_PROJECT_URL}/functions/v1/raydium-swap`, {
             method: 'POST',
-            headers: {
-            'Content-Type': 'application/json',
-            'apikey': SB_ANON_KEY,
-            'Authorization': `Bearer ${SB_ANON_KEY}`,
-              ...(secrets?.functionToken ? { 'x-function-token': secrets.functionToken } : {}),
-            },
+            headers: { 'Content-Type': 'application/json', apikey: SB_ANON_KEY, Authorization: `Bearer ${SB_ANON_KEY}`, ...(secrets?.functionToken ? { 'x-function-token': secrets.functionToken } : {}) },
             body: JSON.stringify(body),
           });
           if (!res.ok) {
@@ -404,38 +439,45 @@ export default function LiveRunner() {
           const data = await res.json();
           const sigs: string[] = data?.signatures ?? [];
           setTrades((arr) => arr.map((x) => (x.id === id ? { ...x, status: 'confirmed', signatures: sigs } : x)));
-          toast({ title: `${side.toUpperCase()} executed`, description: sigs[0] ? `Confirmed tx: ${sigs[0].slice(0, 8)}…` : 'No signature returned' });
+          toast({ title: `${side.toUpperCase()} executed`, description: sigs[0] ? `Confirmed tx: ${sigs[0].slice(0, 8)}…` : 'Success' });
           await loadWallet();
           await loadHoldings();
           const freshPrice = await fetchJupPriceUSD(cfg.tokenMint);
           if (freshPrice !== null) setPrice(freshPrice);
-          if (side === 'sell') {
-            const p = (freshPrice ?? effectivePrice ?? price) ?? null;
-            const entry = position?.entry ?? null;
-            const qty = holding?.uiAmount ?? null;
-            if (p && entry && qty) {
-              const roi = ((p / entry) - 1) * 100;
-              const pnlUsd = qty * (p - entry);
-              toast({ title: 'Sell summary', description: `~${format(qty, 4)} @ $${format(p, 6)} • ROI ${format(roi, 2)}% • PnL $${format(pnlUsd, 2)}` });
+          let qtyDeltaRaw = 0;
+          let qtyDeltaUi = 0;
+          if (side === 'buy') {
+            const post = await getRawBalance();
+            if (preBal && post) {
+              qtyDeltaRaw = Math.max(0, post.raw - preBal.raw);
+              const dec = post.decimals || holding?.decimals || 0;
+              qtyDeltaUi = qtyDeltaRaw / Math.pow(10, dec);
             }
           }
-          return true;
+          if (side === 'sell') {
+            const p = (freshPrice ?? effectivePrice ?? price) ?? null;
+            const qty = opts?.sellQtyUi ?? holding?.uiAmount ?? null;
+            if (p && qty) {
+              toast({ title: 'Sell summary', description: `~${format(qty, 4)} @ $${format(p, 6)}` });
+            }
+          }
+          return { ok: true, qtyRawDelta: qtyDeltaRaw, qtyUiDelta: qtyDeltaUi } as const;
         } catch (e2: any) {
           const msg = e2?.message ?? String(e2);
           setTrades((arr) => arr.map((x) => (x.id === id ? { ...x, status: 'error', error: msg } : x)));
           toast({ title: 'Swap failed', description: msg });
-          return false;
+          return { ok: false } as const;
         }
       }
     } catch (e: any) {
       const msg = e?.message ?? String(e);
       setTrades((arr) => arr.map((x) => (x.id === id ? { ...x, status: 'error', error: msg } : x)));
       toast({ title: 'Swap failed', description: msg });
-      return false;
+      return { ok: false } as const;
     } finally {
       setExecuting(false);
     }
-  }, [executing, cfg.tokenMint, cfg.tradeSizeUsd, cfg.slippageBps, cfg.quoteAsset, supabase, loadWallet, loadHoldings]);
+  }, [executing, cfg.tokenMint, cfg.tradeSizeUsd, cfg.slippageBps, cfg.quoteAsset, cfg.confirmPolicy, cfg.feeOverrideMicroLamports, supabase, loadWallet, loadHoldings, holding?.decimals, secrets?.functionToken, effectivePrice, price]);
 
   const convertUsdcToSol = React.useCallback(async () => {
     if (executing) return;
@@ -539,10 +581,8 @@ export default function LiveRunner() {
   }, [executing, cfg.tokenMint, cfg.confirmPolicy, supabase, secrets?.functionToken]);
 
   const tick = React.useCallback(async () => {
-    if (executing) {
-      setStatus('executing…');
-      return;
-    }
+    if (executing) { setStatus('executing…'); return; }
+
     // refresh price when manual not set
     if (!manualPrice) {
       const p = await fetchJupPriceUSD(cfg.tokenMint);
@@ -552,115 +592,139 @@ export default function LiveRunner() {
     const pNow = effectivePrice;
     if (!pNow || !Number.isFinite(pNow)) return;
 
-    // Maintain ROC window
+    // Maintain price window for both ROC and Anchor
     const nowTs = Date.now();
-    const winSec = Number(cfg.rocWindowSec ?? 30);
+    const maxWin = Math.max(Number(cfg.rocWindowSec ?? 30), Number(cfg.anchorWindowSec ?? 120));
     const arr = priceWindowRef.current;
     arr.push({ t: nowTs, p: pNow });
-    while (arr.length > 0 && nowTs - arr[0].t > winSec * 1000) arr.shift();
+    while (arr.length > 0 && nowTs - arr[0].t > maxWin * 1000) arr.shift();
+
+    // ROC over configured window
     let windowRoc: number | null = null;
-    if (arr.length >= 2) {
-      const base = arr[0].p;
-      if (Number.isFinite(base) && base > 0) {
-        windowRoc = ((pNow - base) / base) * 100;
-      }
+    {
+      const winSec = Number(cfg.rocWindowSec ?? 30);
+      const baseIdx = arr.findIndex((x) => nowTs - x.t <= winSec * 1000);
+      const start = baseIdx >= 0 ? arr[baseIdx] : arr[0];
+      if (start && start.p > 0) windowRoc = ((pNow - start.p) / start.p) * 100;
     }
     setRocPct(windowRoc);
 
-    // Compute adaptive thresholds
-    const upSens = Number(cfg.upSensitivityBpsPerPct ?? 0);
+    // Adaptive dip bias (optional)
     const downSens = Number(cfg.downSensitivityBpsPerPct ?? 0);
-    const upCap = Number(cfg.maxUpBiasBps ?? 0);
     const downCap = Number(cfg.maxDownBiasBps ?? 0);
-
-    const tpBiasBps = cfg.adaptiveTrails && windowRoc !== null && windowRoc > 0 ? Math.min(upCap, windowRoc * upSens) : 0;
     const dipBiasBps = cfg.adaptiveTrails && windowRoc !== null && windowRoc < 0 ? Math.min(downCap, -windowRoc * downSens) : 0;
-
-    const effTPPct = cfg.takeProfitPct + tpBiasBps / 100;
     const effDipPct = cfg.dipPct + dipBiasBps / 100;
 
-    // update deceleration tracker
+    // Compute Anchor Low over anchorWindowSec
+    const anchorCut = nowTs - Number(cfg.anchorWindowSec ?? 120) * 1000;
+    const anchorSlice = arr.filter((x) => x.t >= anchorCut);
+    const anchorLow = anchorSlice.reduce((m, x) => (m == null || x.p < m ? x.p : m), null as number | null) ?? pNow;
+
+    // Slowdown count
     const prev = prevPriceRef.current;
     if (prev !== null) {
-      if (pNow <= prev) decelCountRef.current += 1;
-      else decelCountRef.current = 0;
+      if (pNow <= prev) decelCountRef.current += 1; else decelCountRef.current = 0;
     }
     prevPriceRef.current = pNow;
 
+    // Update trailing high (for display only)
     setTrailingHigh((prev) => (prev === null ? pNow : Math.max(prev, pNow)));
-    const high = trailingHigh === null ? pNow : Math.max(trailingHigh, pNow);
 
-    if (!position) {
-      // Entry condition: dip from trailing high (adaptive if enabled)
-      if (canBuy && pNow <= high * (1 - effDipPct / 100)) {
-        setStatus(`BUY @ $${format(pNow, 6)} (dip ${format(effDipPct, 2)}%)`);
-        const ok = await execSwap('buy');
-        if (ok) {
-          setPosition({ entry: pNow, high: pNow });
-          try { localStorage.setItem(`posEntry:${cfg.tokenMint}`, String(pNow)); } catch {}
-          setDaily((d) => ({ ...d, buyUsd: d.buyUsd + cfg.tradeSizeUsd }));
-          const tpPrice = pNow * (1 + effTPPct / 100);
-          const expectedProfit = cfg.tradeSizeUsd * (effTPPct / 100);
-          log(`Bought $${format(cfg.tradeSizeUsd, 2)} at $${format(pNow, 6)} — waiting to sell at $${format(tpPrice, 6)} (+${format(effTPPct, 2)}%, ~+$${format(expectedProfit, 2)})`);
+    // SELL checks per-lot (prioritize SL over trailing)
+    if (positions.length > 0) {
+      // Determine which lot to sell, if any
+      let sellIdx: number | null = null;
+      let sellReason: 'SL' | 'TRAIL' | null = null;
+
+      positions.forEach((lot, idx) => {
+        if (sellIdx !== null) return; // already picked
+        const sl = lot.entry * (1 - cfg.stopLossPct / 100);
+        const armed = pNow >= lot.entry * (1 + Number(cfg.trailArmPct ?? 5) / 100);
+        const lotHigh = Math.max(lot.high, pNow);
+        if (pNow <= sl) { sellIdx = idx; sellReason = 'SL'; return; }
+        if (armed) {
+          const slowed = decelCountRef.current >= cfg.slowdownConfirmTicks;
+          if (slowed && pNow <= lotHigh * (1 - cfg.trailingDropPct / 100)) { sellIdx = idx; sellReason = 'TRAIL'; return; }
+        }
+      });
+
+      // Update highs
+      setPositions((prevLots) => prevLots.map((l) => ({ ...l, high: Math.max(l.high, pNow) })));
+
+      if (sellIdx !== null && sellReason) {
+        const lot = positions[sellIdx]!;
+        setStatus(`SELL ${sellReason} @ $${format(pNow, 6)} (peak $${format(Math.max(lot.high, pNow), 6)})`);
+        const res = await execSwap('sell', { sellAmountRaw: lot.qtyRaw, sellQtyUi: lot.qtyUi });
+        if (res.ok) {
+          setPositions((lots) => lots.filter((_, i) => i !== sellIdx));
+          setLastSellTs(Date.now());
+          const nextBuy = anchorLow * (1 - effDipPct / 100);
+          log(`Sold lot#${sellIdx + 1} at $${format(pNow, 6)}. Watching dip to $${format(nextBuy, 6)}.`);
+        }
+        return;
+      }
+    }
+
+    // BIG DIP second-lot logic
+    if (cfg.separateLots && positions.length === 1) {
+      const first = positions[0]!;
+      const floor = first.entry * (1 - cfg.bigDipFloorDropPct / 100);
+      if (pNow <= floor) {
+        if (bigDipTimerRef.current == null) bigDipTimerRef.current = nowTs;
+        const heldMs = nowTs - (bigDipTimerRef.current ?? nowTs);
+        if (heldMs >= Number(cfg.bigDipHoldMinutes ?? 6) * 60_000) {
+          if (canBuy) {
+            const buyUsd = Number(cfg.secondLotTradeSizeUsd ?? cfg.tradeSizeUsd);
+            setStatus(`BUY (big dip) @ $${format(pNow, 6)} (−${cfg.bigDipFloorDropPct}%)`);
+            const res = await execSwap('buy', { buyUsd });
+            if (res.ok) {
+              const qtyUi = Number(res.qtyUiDelta ?? 0);
+              const qtyRaw = Number(res.qtyRawDelta ?? 0);
+              if (qtyRaw > 0 && qtyUi > 0) {
+                setPositions((lots) => [...lots, { id: crypto.randomUUID(), entry: pNow, high: pNow, qtyRaw, qtyUi, entryTs: nowTs }]);
+                setDaily((d) => ({ ...d, buyUsd: d.buyUsd + buyUsd }));
+                const tpPrice = pNow * (1 + cfg.takeProfitPct / 100);
+                log(`Bought (Lot #${positions.length + 1}) $${format(buyUsd, 2)} at $${format(pNow, 6)} — tracking TP $${format(tpPrice, 6)}`);
+              }
+            }
+            bigDipTimerRef.current = null;
+            return;
+          }
         }
       } else {
-        setStatus(`Watching — price $${format(pNow, 6)} • high $${format(high, 6)}`);
+        bigDipTimerRef.current = null;
       }
-      return;
     }
 
-    // In position: Spike-aware trailing TP/SL handling
-    const entry = position.entry;
-    const tpGate = entry * (1 + effTPPct / 100);
-    const sl = entry * (1 - cfg.stopLossPct / 100);
-
-    // Update per-position peak
-    const posHigh = Math.max(position.high, pNow);
-    if (posHigh !== position.high) {
-      setPosition((prev) => (prev ? { ...prev, high: posHigh } : prev));
-    }
-
-    // First, hard stop-loss (safety)
-    if (pNow <= sl) {
-      setStatus(`SELL SL @ $${format(pNow, 6)} (−${cfg.stopLossPct}%)`);
-      const ok = await execSwap('sell');
-      if (ok) {
-        setPosition(null);
-        setLastSellTs(Date.now());
-        try { localStorage.removeItem(`posEntry:${cfg.tokenMint}`); } catch {}
-        toast({ title: 'Stop loss', description: `Sold at $${format(pNow, 6)} (stop ${cfg.stopLossPct}%)` });
-        const nextBuy = (trailingHigh === null ? pNow : trailingHigh) * (1 - effDipPct / 100);
-        log(`Sold at $${format(pNow, 6)} (SL −${cfg.stopLossPct}%). Waiting for price dip to $${format(nextBuy, 6)} to buy back.`);
+    // ENTRY: Anchor dip
+    const allowed = cfg.separateLots ? (cfg.maxConcurrentLots ?? 1) : 1;
+    if (positions.length < allowed && canBuy) {
+      const target = anchorLow * (1 - effDipPct / 100);
+      if (pNow <= target) {
+        setStatus(`BUY @ $${format(pNow, 6)} (anchor dip ${format(effDipPct, 2)}%)`);
+        const res = await execSwap('buy');
+        if (res.ok) {
+          const qtyUi = Number(res.qtyUiDelta ?? 0);
+          const qtyRaw = Number(res.qtyRawDelta ?? 0);
+          if (qtyRaw > 0 && qtyUi > 0) {
+            setPositions((lots) => [...lots, { id: crypto.randomUUID(), entry: pNow, high: pNow, qtyRaw, qtyUi, entryTs: nowTs }]);
+            setDaily((d) => ({ ...d, buyUsd: d.buyUsd + cfg.tradeSizeUsd }));
+            const tpPrice = pNow * (1 + cfg.takeProfitPct / 100);
+            log(`Bought (Lot #${positions.length + 1}) $${format(cfg.tradeSizeUsd, 2)} at $${format(pNow, 6)} — tracking TP $${format(tpPrice, 6)}`);
+          }
+        }
+        return;
       }
-      return;
     }
 
-    // Trailing take-profit: only sell after profit gate reached AND slowdown + trail drop from peak
-    const armed = pNow >= tpGate;
-    const trailTriggered = pNow <= posHigh * (1 - cfg.trailingDropPct / 100);
-    const slowed = decelCountRef.current >= cfg.slowdownConfirmTicks;
-
-    if (armed && trailTriggered && slowed) {
-      setStatus(`SELL TRAIL @ $${format(pNow, 6)} (peak $${format(posHigh, 6)}, drop ${cfg.trailingDropPct}%)`);
-      const ok = await execSwap('sell');
-      if (ok) {
-        setPosition(null);
-        setLastSellTs(Date.now());
-        try { localStorage.removeItem(`posEntry:${cfg.tokenMint}`); } catch {}
-        toast({ title: 'Take profit (trailing)', description: `Sold at $${format(pNow, 6)} • peak $${format(posHigh, 6)}` });
-        const nextBuy = (trailingHigh === null ? pNow : trailingHigh) * (1 - effDipPct / 100);
-        log(`Sold at $${format(pNow, 6)} (trailing after peak $${format(posHigh, 6)}). Waiting for dip to $${format(nextBuy, 6)}.`);
-      }
-      return;
+    // Otherwise, holding/watching
+    if (positions.length > 0) {
+      const desc = positions.map((l, i) => `#${i + 1} @ $${format(l.entry, 6)}`).join(' ');
+      setStatus(`Holding — ${desc}`);
+    } else {
+      setStatus(`Watching — price $${format(pNow, 6)} • anchorLow $${format(anchorLow, 6)}`);
     }
-
-    if (armed) {
-      setStatus(`Armed — now $${format(pNow, 6)} • peak $${format(posHigh, 6)} • trail ${cfg.trailingDropPct}%`);
-      return;
-    }
-
-    setStatus(`Holding — entry $${format(entry, 6)} • now $${format(pNow, 6)} • TP gate $${format(tpGate, 6)} • SL $${format(sl, 6)}`);
-  }, [executing, cfg, canBuy, effectivePrice, manualPrice, position, trailingHigh, execSwap]);
+  }, [executing, manualPrice, cfg, effectivePrice, positions, canBuy, execSwap]);
 
   useInterval(() => {
     if (running) void tick();
@@ -682,21 +746,20 @@ export default function LiveRunner() {
         const dipBiasBps = cfg.adaptiveTrails && windowRoc !== null && windowRoc < 0 ? Math.min(cfg.maxDownBiasBps ?? 0, -windowRoc * (cfg.downSensitivityBpsPerPct ?? 0)) : 0;
         const effDip = cfg.dipPct + dipBiasBps / 100;
         const nextBuy = p * (1 - effDip / 100);
-        log(`Watching — current $${format(p, 6)}. Will buy on dip to $${format(nextBuy, 6)} (−${format(effDip, 2)}%).`);
+        log(`Watching — current $${format(p, 6)}. Will buy on dip to ~$${format(nextBuy, 6)} (−${format(effDip, 2)}%).`);
       }
       // Prime balances on start
       await Promise.all([loadWallet(), loadHoldings()]);
       // Adopt existing holdings on restart
       try {
-        if (!position && holding?.uiAmount && holding.uiAmount > 0 && (p ?? null)) {
+        if (positions.length === 0 && holding?.uiAmount && holding.uiAmount > 0 && (p ?? null)) {
           const saved = localStorage.getItem(`posEntry:${cfg.tokenMint}`);
           const entry = saved ? Number(saved) : p!;
           if (Number.isFinite(entry) && entry > 0) {
-            setPosition({ entry, high: p! });
-            const windowRoc = rocPct ?? null;
-            const tpBiasBps = cfg.adaptiveTrails && windowRoc !== null && windowRoc > 0 ? Math.min(cfg.maxUpBiasBps ?? 0, windowRoc * (cfg.upSensitivityBpsPerPct ?? 0)) : 0;
-            const effTP = cfg.takeProfitPct + tpBiasBps / 100;
-            log(`Adopted existing holding @ ~$${format(entry, 6)} • armed TP ≥ $${format(entry * (1 + effTP/100), 6)}`);
+            const qtyRaw = Number(holding.amountRaw ?? 0);
+            const qtyUi = Number(holding.uiAmount ?? 0);
+            setPositions([{ id: crypto.randomUUID(), entry, high: p!, qtyRaw, qtyUi, entryTs: Date.now() }]);
+            log(`Adopted existing holding ~${format(qtyUi, 4)} @ ~$${format(entry, 6)} — trailing armed at +${cfg.trailArmPct}%`);
           }
         }
       } catch {}
@@ -833,7 +896,7 @@ export default function LiveRunner() {
             </div>
 
             <div className="rounded-lg border p-3 text-sm text-muted-foreground">
-              Status: {status} | Price: ${format(effectivePrice ?? NaN, 6)} | Trailing High: ${format(trailingHigh ?? NaN, 6)} | Position: {position ? `IN @ $${format(position.entry, 6)}` : "none"} | Daily buys: ${format(daily.buyUsd, 2)} / ${format(cfg.dailyCapUsd, 2)} | ROC: {rocPct !== null ? `${format(rocPct, 2)}%` : '—'}
+              Status: {status} | Price: ${format(effectivePrice ?? NaN, 6)} | Lots: {positions.length > 0 ? positions.map((l, i) => `#${i+1}@$${format(l.entry, 6)}`).join(' ') : 'none'} | Daily buys: ${format(daily.buyUsd, 2)} / ${format(cfg.dailyCapUsd, 2)} | ROC: {rocPct !== null ? `${format(rocPct, 2)}%` : '—'}
             </div>
             {!ready && (
               <p className="text-xs text-muted-foreground">Note: Secrets not set — on-chain execution remains disabled; this panel simulates signals only.</p>
@@ -942,20 +1005,31 @@ export default function LiveRunner() {
         ) : (
           <Button onClick={start} disabled={executing}>Start</Button>
         )}
-        <Button onClick={() => void execSwap('buy')} disabled={executing}>Buy now</Button>
-        <Button variant="outline" onClick={() => void execSwap('sell')} disabled={executing}>Sell now</Button>
-        <Button
-          variant="secondary"
-          onClick={() => {
-            setTrailingHigh(null);
-            setPosition(null);
-            setLastSellTs(null);
-            setStatus("reset");
-            try { localStorage.removeItem(`posEntry:${cfg.tokenMint}`); } catch {}
-          }}
-        >
-          Reset state
-        </Button>
+          <Button onClick={async () => {
+            const res = await execSwap('buy');
+            if (res.ok) {
+              const pNow = effectivePrice ?? price ?? null;
+              const qtyUi = Number(res.qtyUiDelta ?? 0);
+              const qtyRaw = Number(res.qtyRawDelta ?? 0);
+              if (pNow && qtyRaw > 0 && qtyUi > 0) {
+                setPositions((lots) => [...lots, { id: crypto.randomUUID(), entry: pNow, high: pNow, qtyRaw, qtyUi, entryTs: Date.now() }]);
+                setDaily((d) => ({ ...d, buyUsd: d.buyUsd + cfg.tradeSizeUsd }));
+              }
+            }
+          }} disabled={executing}>Buy now</Button>
+          <Button variant="outline" onClick={() => void execSwap('sell')} disabled={executing}>Sell now</Button>
+          <Button
+            variant="secondary"
+            onClick={() => {
+              setTrailingHigh(null);
+              setPositions([]);
+              setLastSellTs(null);
+              setStatus("reset");
+              try { localStorage.removeItem(`posEntry:${cfg.tokenMint}`); } catch {}
+            }}
+          >
+            Reset state
+          </Button>
       </CardFooter>
     </Card>
   );
