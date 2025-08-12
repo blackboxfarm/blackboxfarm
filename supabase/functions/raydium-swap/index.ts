@@ -182,16 +182,23 @@ serve(async (req) => {
           if (msg.includes("INSUFFICIENT_LIQUIDITY") && side === "buy" && tokenMint && usdcAmount != null) {
             const usd = Number(usdcAmount ?? 0);
             const solPrice = await fetchSolUsdPrice();
-            let lamports = 0;
-            if (solPrice > 0 && Number.isFinite(usd) && usd > 0) {
-              lamports = Math.floor((usd / solPrice) * 1_000_000_000);
+            const approxPrice = solPrice > 0 ? solPrice : 200; // conservative default if price feed hiccups
+            let wantedLamports = Math.floor((usd / approxPrice) * 1_000_000_000);
+
+            // Reserve a small amount for fees when spending SOL directly
+            const feeReserveLamports = 10_000_000; // 0.01 SOL
+
+            let solBal: number | null = null;
+            try { solBal = await connection.getBalance(owner.publicKey); } catch { solBal = null; }
+
+            let lamports = wantedLamports;
+            if (solBal !== null) {
+              const spendable = Math.max(0, solBal - feeReserveLamports);
+              lamports = Math.min(wantedLamports, spendable);
             }
-            const solBal = await connection.getBalance(owner.publicKey).catch(() => 0);
-            if (solBal > 0 && lamports > solBal) {
-              lamports = Math.floor(solBal * 0.95);
-            }
+
             if (!Number.isFinite(lamports) || lamports <= 0) {
-              return bad("INSUFFICIENT_LIQUIDITY for USDC route and no SOL budget available", 502);
+              return bad(`Not enough SOL balance to perform SOL-route buy for ${owner.publicKey.toBase58()}`, 502);
             }
             inputMint = NATIVE_MINT.toBase58();
             outputMint = tokenMint;
