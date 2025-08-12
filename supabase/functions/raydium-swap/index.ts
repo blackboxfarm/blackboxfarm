@@ -91,6 +91,14 @@ async function fetchSolUsdPrice(): Promise<number> {
   return 0;
 }
 
+function b64ToU8(b64: string): Uint8Array {
+  const bin = atob(b64);
+  const len = bin.length;
+  const bytes = new Uint8Array(len);
+  for (let i = 0; i < len; i++) bytes[i] = bin.charCodeAt(i);
+  return bytes;
+}
+
 async function tryJupiterSwap(params: {
   inputMint: string;
   outputMint: string;
@@ -308,8 +316,8 @@ serve(async (req) => {
         const sigs: string[] = [];
         if (String(txVersion).toUpperCase() === "LEGACY") {
           for (const b64 of j.txs) {
-            const buf = Buffer.from(b64, "base64");
-            const tx = Transaction.from(buf);
+            const u8 = b64ToU8(b64);
+            const tx = Transaction.from(u8 as any);
             tx.sign(owner);
             const sig = await connection.sendRawTransaction(tx.serialize(), { skipPreflight: true, maxRetries: 3 });
             const { blockhash, lastValidBlockHeight } = await connection.getLatestBlockhash("confirmed");
@@ -318,8 +326,8 @@ serve(async (req) => {
           }
         } else {
           for (const b64 of j.txs) {
-            const buf = Buffer.from(b64, "base64");
-            const vtx = VersionedTransaction.deserialize(buf);
+            const u8 = b64ToU8(b64);
+            const vtx = VersionedTransaction.deserialize(u8);
             vtx.sign([owner]);
             const sig = await connection.sendTransaction(vtx, { skipPreflight: true, maxRetries: 3 });
             const { blockhash, lastValidBlockHeight } = await connection.getLatestBlockhash("confirmed");
@@ -428,8 +436,8 @@ serve(async (req) => {
 
     if (signVersion === "V0") {
       for (const item of txList) {
-        const buf = Buffer.from(item.transaction, "base64");
-        const vtx = VersionedTransaction.deserialize(buf);
+        const u8 = b64ToU8(item.transaction);
+        const vtx = VersionedTransaction.deserialize(u8);
         vtx.sign([owner]);
         const sig = await connection.sendTransaction(vtx, { skipPreflight: true, maxRetries: 3 });
         const { blockhash, lastValidBlockHeight } = await connection.getLatestBlockhash("confirmed");
@@ -438,8 +446,8 @@ serve(async (req) => {
       }
     } else {
       for (const item of txList) {
-        const buf = Buffer.from(item.transaction, "base64");
-        const tx = Transaction.from(buf);
+        const u8 = b64ToU8(item.transaction);
+        const tx = Transaction.from(u8 as any);
         tx.sign(owner);
         const sig = await connection.sendRawTransaction(tx.serialize(), { skipPreflight: true, maxRetries: 3 });
         const { blockhash, lastValidBlockHeight } = await connection.getLatestBlockhash("confirmed");
