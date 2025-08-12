@@ -8,6 +8,7 @@ import { toast } from "@/hooks/use-toast";
 import { useLocalSecrets } from "@/hooks/useLocalSecrets";
 import { supabase } from "@/integrations/supabase/client";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { useWalletPool } from "@/hooks/useWalletPool";
 
 // Supabase Functions fallback (direct URL) — uses public anon key
 const SB_PROJECT_URL = "https://apxauapuusmgwbbzjgfl.supabase.co";
@@ -193,7 +194,7 @@ export default function LiveRunner() {
   const [status, setStatus] = React.useState<string>("idle");
   const [price, setPrice] = React.useState<number | null>(null);
   const [manualPrice, setManualPrice] = React.useState<string>("");
-  type Lot = { id: string; entry: number; high: number; qtyRaw: number; qtyUi: number; entryTs: number };
+  type Lot = { id: string; entry: number; high: number; qtyRaw: number; qtyUi: number; entryTs: number; ownerPubkey: string; ownerSecret: string };
   const [positions, setPositions] = React.useState<Lot[]>([]);
   const [trailingHigh, setTrailingHigh] = React.useState<number | null>(null);
   const [lastSellTs, setLastSellTs] = React.useState<number | null>(null);
@@ -221,35 +222,61 @@ export default function LiveRunner() {
     setDaily((d) => (d.key === key ? d : { key, buyUsd: 0 }));
   }, [running]);
 
-  const loadWallet = React.useCallback(async () => {
+  const { wallets: poolWallets } = useWalletPool();
+  const rrRef = React.useRef<number>(0);
+  const [funded, setFunded] = React.useState<{ secret: string; pubkey: string; sol: number }[]>([]);
+  React.useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      if (!poolWallets.length) { if (!cancelled) setFunded([]); return; }
+      const results = await Promise.all(poolWallets.map(async (w) => {
+        try {
+          const r = await fetch(`${SB_PROJECT_URL}/functions/v1/trader-wallet`, {
+            headers: {
+              apikey: SB_ANON_KEY,
+              Authorization: `Bearer ${SB_ANON_KEY}`,
+              ...(secrets?.functionToken ? { 'x-function-token': secrets.functionToken } : {}),
+              'x-owner-secret': w.secretBase58,
+            },
+          });
+          if (!r.ok) return null;
+          const j = await r.json();
+          const sol = Number(j?.solBalance ?? 0);
+          return { secret: w.secretBase58, pubkey: w.pubkey, sol };
+        } catch { return null; }
+      }));
+      const items = results.filter((x): x is { secret: string; pubkey: string; sol: number } => !!x).filter((x) => x.sol > 0.0005);
+      if (!cancelled) setFunded(items);
+    })();
+    return () => { cancelled = true; };
+  }, [poolWallets.map((w) => w.pubkey).join(','), secrets?.functionToken]);
+  const pickNextOwner = React.useCallback(() => {
+    if (!funded.length) return null;
+    const idx = rrRef.current % funded.length;
+    rrRef.current = (rrRef.current + 1) % funded.length;
+    return funded[idx];
+  }, [funded]);
+
+  const loadWallet = React.useCallback(async (ownerSecret?: string) => {
     setWalletLoading(true);
     try {
-      const { data, error } = await supabase.functions.invoke('trader-wallet', {
-        headers: secrets?.functionToken ? { 'x-function-token': secrets.functionToken } : undefined,
+      const res = await fetch(`${SB_PROJECT_URL}/functions/v1/trader-wallet`, {
+        headers: {
+          apikey: SB_ANON_KEY,
+          Authorization: `Bearer ${SB_ANON_KEY}`,
+          ...(secrets?.functionToken ? { 'x-function-token': secrets.functionToken } : {}),
+          ...(ownerSecret ? { 'x-owner-secret': ownerSecret } : {}),
+        },
       });
-      if (error) throw error;
-      const addr = data?.publicKey as string | undefined;
-      const sol = Number(data?.solBalance);
-      if (addr && Number.isFinite(sol)) setWallet({ address: addr, sol });
-      else if (addr) setWallet({ address: addr, sol: NaN });
-    } catch (_) {
-      try {
-        const res = await fetch(`${SB_PROJECT_URL}/functions/v1/trader-wallet`, {
-          headers: {
-            apikey: SB_ANON_KEY,
-            Authorization: `Bearer ${SB_ANON_KEY}`,
-            ...(secrets?.functionToken ? { 'x-function-token': secrets.functionToken } : {}),
-          },
-        });
-        if (res.ok) {
-          const j = await res.json();
-          const addr = j?.publicKey as string | undefined;
-          const sol = Number(j?.solBalance);
-          if (addr && Number.isFinite(sol)) setWallet({ address: addr, sol });
-          else if (addr) setWallet({ address: addr, sol: NaN });
-        }
-      } catch {}
-    } finally {
+      if (res.ok) {
+        const j = await res.json();
+        const addr = j?.publicKey as string | undefined;
+        const sol = Number(j?.solBalance);
+        if (addr && Number.isFinite(sol)) setWallet({ address: addr, sol });
+        else if (addr) setWallet({ address: addr, sol: NaN });
+      }
+    } catch {}
+    finally {
       setWalletLoading(false);
     }
   }, [secrets?.functionToken]);
@@ -258,7 +285,7 @@ export default function LiveRunner() {
     void loadWallet();
   }, [loadWallet]);
 
-  const loadHoldings = React.useCallback(async () => {
+  const loadHoldings = React.useCallback(async (ownerSecret?: string) => {
     if (!cfg.tokenMint) return;
     try {
       const res = await fetch(`${SB_PROJECT_URL}/functions/v1/trader-wallet?tokenMint=${encodeURIComponent(cfg.tokenMint)}` , {
@@ -266,6 +293,7 @@ export default function LiveRunner() {
           apikey: SB_ANON_KEY,
           Authorization: `Bearer ${SB_ANON_KEY}`,
           ...(secrets?.functionToken ? { 'x-function-token': secrets.functionToken } : {}),
+          ...(ownerSecret ? { 'x-owner-secret': ownerSecret } : {}),
         },
       });
       if (res.ok) {
