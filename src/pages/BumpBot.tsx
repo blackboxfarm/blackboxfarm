@@ -143,7 +143,7 @@ const BumpBot = () => {
     const usd = Math.round((0.5 + Math.random() * 2.5) * 100) / 100;
     setUsdToBuy(String(usd));
     setSwapping(true);
-    const result = await invokeSwap({ side: "buy", tokenMint: mint, usdcAmount: usd });
+    const result = await invokeSwap({ side: "buy", tokenMint: mint, usdcAmount: usd, buyWithSol: true });
     setSwapping(false);
     if ((result as any).data?.signatures?.length) {
       const sig = (result as any).data.signatures[0];

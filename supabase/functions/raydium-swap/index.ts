@@ -254,11 +254,32 @@ serve(async (req) => {
 
     if (side && tokenMint) {
       if (side === "buy") {
-        inputMint = USDC_MINT;
-        outputMint = tokenMint;
-        const usd = Number(usdcAmount ?? 0);
-        if (!Number.isFinite(usd) || usd <= 0) return bad("Invalid usdcAmount for buy");
-        amount = Math.floor(usd * 1_000_000); // USDC has 6 decimals
+        const buyWithSol = Boolean(body?.buyWithSol);
+        if (buyWithSol) {
+          const usd = Number(usdcAmount ?? 0);
+          if (!Number.isFinite(usd) || usd <= 0) return bad("Invalid usdcAmount for buy");
+          const solPrice = await fetchSolUsdPrice();
+          const approxPrice = solPrice > 0 ? solPrice : 200;
+          let wantedLamports = Math.floor((usd / approxPrice) * 1_000_000_000);
+          const feeReserveLamports = 10_000_000; // 0.01 SOL
+          let solBal: number | null = null;
+          try { solBal = await connection.getBalance(owner.publicKey); } catch { solBal = null; }
+          let lamports = wantedLamports;
+          if (solBal !== null) {
+            const spendable = Math.max(0, solBal - feeReserveLamports);
+            lamports = Math.min(wantedLamports, spendable);
+          }
+          if (!Number.isFinite(lamports) || lamports <= 0) return bad("Not enough SOL balance to buy with SOL");
+          inputMint = NATIVE_MINT.toBase58();
+          outputMint = tokenMint;
+          amount = lamports;
+        } else {
+          inputMint = USDC_MINT;
+          outputMint = tokenMint;
+          const usd = Number(usdcAmount ?? 0);
+          if (!Number.isFinite(usd) || usd <= 0) return bad("Invalid usdcAmount for buy");
+          amount = Math.floor(usd * 1_000_000); // USDC has 6 decimals
+        }
       } else if (side === "sell") {
         inputMint = tokenMint;
         outputMint = USDC_MINT;
