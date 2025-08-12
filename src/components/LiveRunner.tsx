@@ -6,6 +6,7 @@ import { Label } from "@/components/ui/label";
 import { toast } from "@/hooks/use-toast";
 import { useLocalSecrets } from "@/hooks/useLocalSecrets";
 import { supabase } from "@/integrations/supabase/client";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
 // Supabase Functions fallback (direct URL) — uses public anon key
 const SB_PROJECT_URL = "https://apxauapuusmgwbbzjgfl.supabase.co";
@@ -20,6 +21,7 @@ export type RunnerConfig = {
   cooldownSec: number; // cooldown after a sell
   dailyCapUsd: number; // maximum buys per day
   slippageBps: number; // for future on-chain
+  quoteAsset: 'SOL' | 'USDC';
 };
 
 function format(n: number, d = 4) {
@@ -60,6 +62,20 @@ async function fetchJupPriceUSD(mint: string): Promise<number | null> {
   return null;
 }
 
+const WSOL_MINT = "So11111111111111111111111111111111111111112";
+
+async function fetchSolUsd(): Promise<number | null> {
+  try {
+    const r = await fetch("https://price.jup.ag/v6/price?ids=SOL", { cache: 'no-store' });
+    if (r.ok) {
+      const j = await r.json();
+      const p = Number(j?.data?.SOL?.price ?? j?.data?.wSOL?.price ?? j?.SOL?.price);
+      if (Number.isFinite(p) && p > 0) return p;
+    }
+  } catch {}
+  return null;
+}
+
 function useInterval(callback: () => void, delay: number | null) {
   const savedRef = React.useRef(callback);
   React.useEffect(() => {
@@ -87,6 +103,7 @@ export default function LiveRunner() {
     cooldownSec: 120,
     dailyCapUsd: 300,
     slippageBps: 1500,
+    quoteAsset: 'SOL',
   });
 
   const [running, setRunning] = React.useState(false);
@@ -199,9 +216,38 @@ export default function LiveRunner() {
     const newTrade: Trade = { id, time: Date.now(), side, status: 'pending' };
     setTrades((t) => [newTrade, ...t].slice(0, 25));
     try {
-      const body = side === 'buy'
-        ? { side: 'buy', tokenMint: cfg.tokenMint, usdcAmount: cfg.tradeSizeUsd, slippageBps: cfg.slippageBps }
-        : { side: 'sell', tokenMint: cfg.tokenMint, sellAll: true, slippageBps: cfg.slippageBps };
+      let body: any;
+      if (cfg.quoteAsset === 'USDC') {
+        body = side === 'buy'
+          ? { side: 'buy', tokenMint: cfg.tokenMint, usdcAmount: cfg.tradeSizeUsd, slippageBps: cfg.slippageBps }
+          : { side: 'sell', tokenMint: cfg.tokenMint, sellAll: true, slippageBps: cfg.slippageBps };
+      } else {
+        if (side === 'buy') {
+          const solUsd = await fetchSolUsd();
+          if (!solUsd || !Number.isFinite(solUsd) || solUsd <= 0) throw new Error('Failed to fetch SOL price');
+          const lamports = Math.floor((cfg.tradeSizeUsd / solUsd) * 1_000_000_000 * 0.98);
+          if (!Number.isFinite(lamports) || lamports <= 0) throw new Error('Computed lamports invalid');
+          body = { inputMint: WSOL_MINT, outputMint: cfg.tokenMint, amount: lamports, slippageBps: cfg.slippageBps, wrapSol: true };
+        } else {
+          // Query fresh token balance to sell
+          let raw = 0;
+          try {
+            const res = await fetch(`${SB_PROJECT_URL}/functions/v1/trader-wallet?tokenMint=${encodeURIComponent(cfg.tokenMint)}`, {
+              headers: {
+                apikey: SB_ANON_KEY,
+                Authorization: `Bearer ${SB_ANON_KEY}`,
+                ...(secrets?.functionToken ? { 'x-function-token': secrets.functionToken } : {}),
+              },
+            });
+            if (res.ok) {
+              const j = await res.json();
+              raw = Number(j?.tokenBalanceRaw ?? 0);
+            }
+          } catch {}
+          if (!Number.isFinite(raw) || raw <= 0) throw new Error('No token balance to sell');
+          body = { inputMint: cfg.tokenMint, outputMint: WSOL_MINT, amount: Math.floor(raw), slippageBps: cfg.slippageBps, unwrapSol: true };
+        }
+      }
 
       try {
         const { data, error } = await supabase.functions.invoke('raydium-swap', {
@@ -262,7 +308,7 @@ export default function LiveRunner() {
     } finally {
       setExecuting(false);
     }
-  }, [executing, cfg.tokenMint, cfg.tradeSizeUsd, cfg.slippageBps, supabase, loadWallet, loadHoldings]);
+  }, [executing, cfg.tokenMint, cfg.tradeSizeUsd, cfg.slippageBps, cfg.quoteAsset, supabase, loadWallet, loadHoldings]);
 
   const tick = React.useCallback(async () => {
     if (executing) {
@@ -405,7 +451,7 @@ export default function LiveRunner() {
               </div>
             </div>
 
-            <div className="grid md:grid-cols-3 gap-4">
+            <div className="grid md:grid-cols-4 gap-4">
               <div className="space-y-2">
                 <Label>Daily Cap (USD)</Label>
                 <Input type="number" value={cfg.dailyCapUsd} onChange={(e) => setCfg({ ...cfg, dailyCapUsd: Number(e.target.value) })} />
@@ -417,6 +463,16 @@ export default function LiveRunner() {
               <div className="space-y-2">
                 <Label>Manual Price Override (USD)</Label>
                 <Input placeholder="leave empty to auto" value={manualPrice} onChange={(e) => setManualPrice(e.target.value)} />
+              </div>
+              <div className="space-y-2">
+                <Label>Quote Asset</Label>
+                <Select value={cfg.quoteAsset} onValueChange={(v) => setCfg({ ...cfg, quoteAsset: v as 'SOL' | 'USDC' })}>
+                  <SelectTrigger><SelectValue placeholder="Select" /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="SOL">SOL</SelectItem>
+                    <SelectItem value="USDC">USDC</SelectItem>
+                  </SelectContent>
+                </Select>
               </div>
             </div>
 
