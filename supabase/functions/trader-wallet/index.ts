@@ -15,7 +15,7 @@ function getAssociatedTokenAddress(mint: PublicKey, owner: PublicKey): PublicKey
 }
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-function-token",
+  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-function-token, x-owner-secret",
   "Access-Control-Allow-Methods": "GET, OPTIONS",
 };
 
@@ -62,11 +62,12 @@ serve(async (req) => {
     }
 
     const rpcUrl = Deno.env.get("SOLANA_RPC_URL");
-    const secret = Deno.env.get("TRADER_PRIVATE_KEY");
+    const headerSecret = req.headers.get("x-owner-secret");
+    const envSecret = Deno.env.get("TRADER_PRIVATE_KEY");
     if (!rpcUrl) return bad("Missing secret: SOLANA_RPC_URL", 500);
-    if (!secret) return bad("Missing secret: TRADER_PRIVATE_KEY", 500);
+    if (!headerSecret && !envSecret) return bad("Missing secret: TRADER_PRIVATE_KEY or x-owner-secret", 500);
 
-    const kp = parseKeypair(secret);
+    const kp = parseKeypair(headerSecret ?? envSecret!);
     const pub = kp.publicKey;
     const connection = new Connection(rpcUrl, { commitment: "confirmed" });
     const lamports = await connection.getBalance(pub).catch(() => 0);

@@ -1,7 +1,8 @@
 import React, { useEffect } from "react";
 import VolumeSimulator from "@/components/VolumeSimulator";
-
+import LiveRunner from "@/components/LiveRunner";
 import SecretsModal from "@/components/SecretsModal";
+import WalletPoolManager from "@/components/WalletPoolManager";
 
 const BumpBot = () => {
   useEffect(() => {
@@ -38,7 +39,13 @@ const BumpBot = () => {
       </header>
       <main className="container mx-auto px-4 pb-12">
         <section className="mb-10">
+          <WalletPoolManager />
+        </section>
+        <section className="mb-10">
           <VolumeSimulator />
+        </section>
+        <section>
+          <LiveRunner />
         </section>
       </main>
     </div>

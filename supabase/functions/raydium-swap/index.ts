@@ -16,7 +16,7 @@ import bs58 from "npm:bs58@5.0.0";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-function-token",
+  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-function-token, x-owner-secret",
   "Access-Control-Allow-Methods": "POST, OPTIONS",
 };
 
@@ -184,8 +184,9 @@ serve(async (req) => {
     } = body;
 
     const rpcUrl = getEnv("SOLANA_RPC_URL");
-    const ownerSecret = getEnv("TRADER_PRIVATE_KEY");
-    const owner = parseKeypair(ownerSecret);
+    const bodyOwnerSecret = (body?.ownerSecret ? String(body.ownerSecret) : null);
+    const envOwnerSecret = getEnv("TRADER_PRIVATE_KEY");
+    const owner = parseKeypair(bodyOwnerSecret || envOwnerSecret);
     const connection = new Connection(rpcUrl, { commitment: "confirmed" });
 
     const confirmPolicy = String(_confirmPolicy ?? "confirmed").toLowerCase();
