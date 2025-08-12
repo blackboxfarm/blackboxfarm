@@ -1,8 +1,9 @@
 import React, { useEffect } from "react";
 import VolumeSimulator from "@/components/VolumeSimulator";
-import LiveRunner from "@/components/LiveRunner";
 import SecretsModal from "@/components/SecretsModal";
 import WalletPoolManager from "@/components/WalletPoolManager";
+import { Button } from "@/components/ui/button";
+import { Link } from "react-router-dom";
 
 const BumpBot = () => {
   useEffect(() => {
@@ -34,7 +35,12 @@ const BumpBot = () => {
             <h1 className="text-3xl font-bold tracking-tight">Bump Bot — Solana Volume Simulator</h1>
             <p className="text-muted-foreground mt-2">Find a balanced period, price, and frequency before running anything on-chain.</p>
           </div>
-          <SecretsModal />
+          <div className="flex items-center gap-2">
+            <Link to="/" aria-label="Open Live Runner">
+              <Button>Open Live Runner</Button>
+            </Link>
+            <SecretsModal />
+          </div>
         </div>
       </header>
       <main className="container mx-auto px-4 pb-12">
@@ -43,9 +49,6 @@ const BumpBot = () => {
         </section>
         <section className="mb-10">
           <VolumeSimulator />
-        </section>
-        <section>
-          <LiveRunner />
         </section>
       </main>
     </div>
