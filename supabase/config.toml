@@ -5,3 +5,7 @@ verify_jwt = false
 
 [functions.raydium-swap]
 verify_jwt = false
+
+[functions.trader-wallet]
+verify_jwt = false
+

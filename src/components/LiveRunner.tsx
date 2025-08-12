@@ -101,12 +101,51 @@ export default function LiveRunner() {
   type Trade = { id: string; time: number; side: 'buy'|'sell'; status: 'pending'|'confirmed'|'error'; signatures?: string[]; error?: string };
   const [trades, setTrades] = React.useState<Trade[]>([]);
   const [executing, setExecuting] = React.useState(false);
+  const [wallet, setWallet] = React.useState<{ address: string; sol: number } | null>(null);
+  const [walletLoading, setWalletLoading] = React.useState(false);
 
   // reset daily counters when date changes
   React.useEffect(() => {
     const key = todayKey();
     setDaily((d) => (d.key === key ? d : { key, buyUsd: 0 }));
   }, [running]);
+
+  const loadWallet = React.useCallback(async () => {
+    setWalletLoading(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('trader-wallet', {
+        headers: secrets?.functionToken ? { 'x-function-token': secrets.functionToken } : undefined,
+      });
+      if (error) throw error;
+      const addr = data?.publicKey as string | undefined;
+      const sol = Number(data?.solBalance);
+      if (addr && Number.isFinite(sol)) setWallet({ address: addr, sol });
+      else if (addr) setWallet({ address: addr, sol: NaN });
+    } catch (_) {
+      try {
+        const res = await fetch(`${SB_PROJECT_URL}/functions/v1/trader-wallet`, {
+          headers: {
+            apikey: SB_ANON_KEY,
+            Authorization: `Bearer ${SB_ANON_KEY}`,
+            ...(secrets?.functionToken ? { 'x-function-token': secrets.functionToken } : {}),
+          },
+        });
+        if (res.ok) {
+          const j = await res.json();
+          const addr = j?.publicKey as string | undefined;
+          const sol = Number(j?.solBalance);
+          if (addr && Number.isFinite(sol)) setWallet({ address: addr, sol });
+          else if (addr) setWallet({ address: addr, sol: NaN });
+        }
+      } catch {}
+    } finally {
+      setWalletLoading(false);
+    }
+  }, [secrets?.functionToken]);
+
+  React.useEffect(() => {
+    void loadWallet();
+  }, [loadWallet]);
 
   const effectivePrice = React.useMemo(() => {
     const m = Number(manualPrice);
@@ -330,6 +369,34 @@ export default function LiveRunner() {
           </div>
 
           <aside className="space-y-2">
+            <div className="rounded-lg border p-3 text-sm">
+              <div className="font-medium mb-2">Trading wallet</div>
+              {wallet ? (
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="truncate" title={wallet.address}>
+                      {wallet.address.slice(0, 4)}…{wallet.address.slice(-4)}
+                    </span>
+                    <div className="flex items-center gap-2">
+                      <Button size="sm" variant="secondary" onClick={() => navigator.clipboard.writeText(wallet.address)}>Copy</Button>
+                      <a className="underline text-sm" href={`https://solscan.io/account/${wallet.address}`} target="_blank" rel="noreferrer noopener">View</a>
+                    </div>
+                  </div>
+                  <div>Balance: {Number.isFinite(wallet.sol) ? `${wallet.sol.toFixed(4)} SOL` : '—'}</div>
+                  <Button size="sm" variant="outline" onClick={() => void loadWallet()} disabled={walletLoading}>
+                    {walletLoading ? 'Refreshing…' : 'Refresh'}
+                  </Button>
+                </div>
+              ) : (
+                <div className="flex items-center justify-between">
+                  <span className="text-muted-foreground">Not loaded</span>
+                  <Button size="sm" variant="outline" onClick={() => void loadWallet()} disabled={walletLoading}>
+                    {walletLoading ? 'Refreshing…' : 'Load'}
+                  </Button>
+                </div>
+              )}
+            </div>
+
             <div className="rounded-lg border p-3 text-sm">
               <div className="font-medium mb-2">Recent trades</div>
               <ul className="space-y-1 max-h-72 overflow-auto">
