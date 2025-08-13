@@ -181,7 +181,7 @@ const BumpBot = () => {
       if (!autoActive.current) return;
       await onBuy();
       if (!autoActive.current) return;
-      const next = 48000 + Math.floor(Math.random() * 11000);
+      const next = 180000;
       if (autoTimer.current) { clearTimeout(autoTimer.current); autoTimer.current = null; }
       autoTimer.current = window.setTimeout(async function loop() {
         if (!autoActive.current) return;
@@ -189,11 +189,11 @@ const BumpBot = () => {
         if (!autoActive.current) return;
         await onBuy();
         if (!autoActive.current) return;
-        const delay = 48000 + Math.floor(Math.random() * 11000);
+        const delay = 180000;
         if (autoTimer.current) { clearTimeout(autoTimer.current); autoTimer.current = null; }
         autoTimer.current = window.setTimeout(loop, delay);
       }, next);
-    }, 48000);
+    }, 180000);
     if (!running) setRunning(true);
   }, [tokenMint, ownerSecret, onBuy, onSellAll, running]);
 
@@ -304,7 +304,7 @@ const BumpBot = () => {
                 <div className="flex items-end gap-2 sm:col-span-3">
                   <Button variant="outline" onClick={startAuto} disabled={autoTrading || swapping || !tokenMint || !ownerSecret}>Start Auto</Button>
                   <Button variant="ghost" onClick={stopAuto} disabled={!autoTrading}>Stop Auto</Button>
-                  <span className="text-xs text-muted-foreground">Cycle: buy random $0.50–$3, sell after 48–59s.</span>
+                  <span className="text-xs text-muted-foreground">Cycle: buy random $0.50–$3, sell every 3 minutes.</span>
                 </div>
               </div>
               <div className="text-xs text-muted-foreground">
