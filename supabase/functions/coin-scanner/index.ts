@@ -43,35 +43,92 @@ async function fetchTokenData(mint: string): Promise<any> {
   }
 }
 
-// Fetch top 200 trending tokens using working DexScreener endpoints
+// Fetch top 200 trending tokens using Birdeye API
 async function fetchTrendingTokens(): Promise<any[]> {
   try {
-    console.log('🔍 Fetching tokens from DexScreener...')
+    console.log('🔍 Fetching trending tokens from Birdeye API...')
     
-    // Use the search endpoint which definitely works
-    const response = await fetch('https://api.dexscreener.com/latest/dex/search/?q=&chainId=solana&rankBy=volume&order=desc')
+    // Get trending tokens from Birdeye (much better Solana data)
+    const response = await fetch('https://public-api.birdeye.so/defi/tokenlist?sort_by=v24hUSD&sort_type=desc&offset=0&limit=200', {
+      headers: {
+        'X-API-KEY': 'your-api-key-here', // Birdeye might need API key
+      }
+    })
+    
+    if (!response.ok) {
+      console.log('❌ Birdeye API failed, trying without API key...')
+      // Try without API key (some endpoints are public)
+      const publicResponse = await fetch('https://public-api.birdeye.so/defi/tokenlist?sort_by=v24hUSD&sort_type=desc&offset=0&limit=200')
+      const publicData = await publicResponse.json()
+      
+      if (publicData.success && publicData.data?.tokens) {
+        console.log(`📊 Found ${publicData.data.tokens.length} tokens from Birdeye (public)`)
+        return publicData.data.tokens.map(convertBirdeyeToken)
+      }
+      
+      throw new Error('Birdeye API failed')
+    }
+    
     const data = await response.json()
+    console.log('📊 Birdeye API response structure:', Object.keys(data))
     
-    console.log('📊 DexScreener API response structure:', Object.keys(data))
-    
-    if (!data.pairs || !Array.isArray(data.pairs)) {
-      console.log('❌ No pairs data in response:', data)
-      return []
+    if (data.success && data.data?.tokens) {
+      const tokens = data.data.tokens
+      console.log(`📊 Found ${tokens.length} tokens from Birdeye`)
+      
+      // Log first token structure for debugging
+      if (tokens.length > 0) {
+        console.log('🔍 Sample Birdeye token structure:', JSON.stringify(tokens[0], null, 2))
+      }
+      
+      // Convert Birdeye format to our expected format
+      return tokens.map(convertBirdeyeToken)
     }
     
-    const tokens = data.pairs.slice(0, 200) // Get top 200 by volume
-    console.log(`📊 Found ${tokens.length} tokens with volume data`)
-    
-    // Log first token structure for debugging
-    if (tokens.length > 0) {
-      console.log('🔍 Sample token structure:', JSON.stringify(tokens[0], null, 2))
-    }
-    
-    return tokens
+    throw new Error('Invalid Birdeye response')
     
   } catch (error) {
-    console.error('❌ Error fetching tokens:', error)
-    return []
+    console.error('❌ Birdeye API failed, falling back to DexScreener:', error)
+    
+    // Fallback to DexScreener
+    try {
+      const fallbackResponse = await fetch('https://api.dexscreener.com/latest/dex/search/?q=&chainId=solana&rankBy=volume&order=desc')
+      const fallbackData = await fallbackResponse.json()
+      const tokens = fallbackData.pairs || []
+      console.log(`📊 DexScreener fallback: Found ${tokens.length} tokens`)
+      return tokens.slice(0, 200)
+    } catch (fallbackError) {
+      console.error('❌ All APIs failed:', fallbackError)
+      return []
+    }
+  }
+}
+
+// Convert Birdeye token format to our expected format
+function convertBirdeyeToken(birdeyeToken: any): any {
+  return {
+    baseToken: {
+      address: birdeyeToken.address,
+      symbol: birdeyeToken.symbol,
+      name: birdeyeToken.name
+    },
+    quoteToken: {
+      address: 'So11111111111111111111111111111111111111112', // SOL
+      symbol: 'SOL'
+    },
+    priceUsd: birdeyeToken.price || 0,
+    marketCap: birdeyeToken.mc || 0,
+    volume: {
+      h24: birdeyeToken.v24hUSD || 0
+    },
+    liquidity: {
+      usd: birdeyeToken.liquidity || 0
+    },
+    priceChange: {
+      h24: birdeyeToken.price24hChangePercent || 0
+    },
+    chainId: 'solana',
+    dexId: 'birdeye'
   }
 }
 
