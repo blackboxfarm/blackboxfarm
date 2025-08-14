@@ -9,3 +9,9 @@ verify_jwt = false
 [functions.trader-wallet]
 verify_jwt = false
 
+[functions.coin-scanner]
+verify_jwt = false
+
+[functions.trading-monitor]
+verify_jwt = false
+
