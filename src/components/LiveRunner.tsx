@@ -227,14 +227,50 @@ export default function LiveRunner() {
     setActivity((a) => [{ time: Date.now(), text: text.replace(/\$TOKEN/g, tokenTicker) }, ...a].slice(0, 50));
   }, [tokenInfo?.symbol, cfg.tokenMint]);
 
-  // Enhanced volatility assessment (1 minute window)
-  const assessTokenVolatility = React.useCallback(async (mint: string): Promise<{ score: number; message: string }> => {
+  // Fetch historical price data for spike detection
+  const fetchHistoricalPrices = React.useCallback(async (mint: string): Promise<Array<{ timestamp: number; price: number }>> => {
     try {
-      log("📊 Assessing token volatility for 1 minute...");
+      // Try to get 1-hour historical data from DexScreener
+      const response = await fetch(`https://api.dexscreener.com/latest/dex/tokens/${mint}`, { cache: 'no-store' });
+      if (response.ok) {
+        const data = await response.json();
+        const pair = data?.pairs?.[0];
+        
+        if (pair?.priceChange?.h1) {
+          const currentPrice = Number(pair.priceUsd);
+          const h1Change = Number(pair.priceChange.h1);
+          
+          // Estimate historical prices (simplified approach)
+          const historical: Array<{ timestamp: number; price: number }> = [];
+          const now = Date.now();
+          
+          for (let i = 0; i < 60; i++) {
+            const timeAgo = now - (i * 60000); // 1 minute intervals
+            const estimatedPrice = currentPrice * (1 - (h1Change / 100) * (i / 60));
+            historical.push({ timestamp: timeAgo, price: estimatedPrice });
+          }
+          
+          return historical.reverse(); // Oldest first
+        }
+      }
+    } catch (error) {
+      log(`⚠️ Could not fetch historical data: ${error}`);
+    }
+    return [];
+  }, [log]);
+
+  // Enhanced volatility assessment with spike detection
+  const assessTokenVolatility = React.useCallback(async (mint: string): Promise<{ score: number; message: string; spikeWarning?: boolean }> => {
+    try {
+      log("📊 Assessing token volatility and spike patterns...");
+      
+      // Get historical data first
+      const historicalData = await fetchHistoricalPrices(mint);
+      
+      // Collect real-time price data for 1 minute (every 2 seconds)
       const prices: number[] = [];
       const startTime = Date.now();
       
-      // Collect price data for 1 minute (every 2 seconds)
       while (Date.now() - startTime < 60000) {
         const currentPrice = await fetchJupPriceUSD(mint);
         if (currentPrice) prices.push(currentPrice);
@@ -258,10 +294,27 @@ export default function LiveRunner() {
       const secondAvg = secondHalf.reduce((a, b) => a + b) / secondHalf.length;
       const trendPct = ((secondAvg - firstAvg) / firstAvg) * 100;
       
+      // Spike detection using historical data
+      let spikeWarning = false;
+      if (historicalData.length > 30) {
+        const currentPrice = prices[prices.length - 1];
+        const historicalAvg = historicalData.slice(-30).reduce((sum, item) => sum + item.price, 0) / 30;
+        const spikeThreshold = 15; // 15% above historical average
+        
+        if (currentPrice > historicalAvg * (1 + spikeThreshold / 100)) {
+          spikeWarning = true;
+          log(`🚨 SPIKE WARNING: Current price ${currentPrice.toFixed(6)} is ${((currentPrice/historicalAvg - 1) * 100).toFixed(1)}% above recent average`);
+        }
+      }
+      
       let score = 50; // Base score
       let message = "";
       
-      if (volatilityPct > 3) {
+      // Adjust score based on spike warning
+      if (spikeWarning) {
+        score -= 40;
+        message = "⚠️ Token appears to be on a spike - RISKY entry point";
+      } else if (volatilityPct > 3) {
         score += 30;
         message = `High volatility (${volatilityPct.toFixed(1)}%) - Good for trading`;
       } else if (volatilityPct > 1.5) {
@@ -277,13 +330,17 @@ export default function LiveRunner() {
         message += `, ${trendPct > 0 ? 'upward' : 'downward'} trend (${Math.abs(trendPct).toFixed(1)}%)`;
       }
       
-      log(`📊 Volatility assessment complete: ${message}`);
-      return { score: Math.max(0, Math.min(100, score)), message };
+      log(`📊 Assessment complete: ${message}`);
+      return { 
+        score: Math.max(0, Math.min(100, score)), 
+        message,
+        spikeWarning 
+      };
     } catch (error) {
       log(`❌ Volatility assessment failed: ${error}`);
       return { score: 50, message: "Assessment failed, using default parameters" };
     }
-  }, [log]);
+  }, [log, fetchHistoricalPrices]);
 
   // Check wallet holdings to determine start mode
   const checkWalletHoldings = React.useCallback(async (): Promise<'buying' | 'selling'> => {
@@ -1086,10 +1143,23 @@ export default function LiveRunner() {
     const detectedMode = await checkWalletHoldings();
     setStartMode(detectedMode);
     
-    // 2. Assess token volatility (1 minute)
-    log("📊 Assessing token volatility...");
+    // 2. Assess token volatility and check for spikes (1 minute)
+    log("📊 Assessing token volatility and spike patterns...");
     const assessment = await assessTokenVolatility(cfg.tokenMint);
     setVolatilityAssessment(assessment);
+    
+    // 2a. Enhanced spike detection - block trading if dangerous spike detected
+    if (assessment.spikeWarning) {
+      setStatus("⚠️ SPIKE DETECTED - Entry blocked");
+      setRunning(false);
+      toast({ 
+        title: "🚨 Spike Warning - Trading Blocked", 
+        description: "Token appears to be at peak of a spike. Wait for price to settle before starting.",
+        variant: "destructive" 
+      });
+      log(`🚨 Trading blocked: ${assessment.message}`);
+      return;
+    }
     
     // 3. If we're in buying mode and scanner is enabled, scan for better tokens
     if (detectedMode === 'buying' && coinScannerEnabled) {
