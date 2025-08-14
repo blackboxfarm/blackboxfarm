@@ -149,14 +149,44 @@ function parseTokenRowsByClass(html: string): any[] {
         const rankMatch = rowHtml.match(/#?(\d+)/)
         const rank = rankMatch ? parseInt(rankMatch[1]) : index + 1
         
-        // Extract token symbol (look for /SOL pattern)
-        const symbolMatch = rowHtml.match(/([A-Z0-9]{1,20})\s*\/\s*SOL/i)
-        const symbol = symbolMatch ? symbolMatch[1] : `TOKEN${rank}`
+        // Extract token symbol and name from data attributes or text content
+        // Look for data-symbol or text patterns like "SYMBOL / SOL" or just "SYMBOL"
+        let symbol = `TOKEN${rank}`
+        let name = `Token ${rank}`
         
-        // Extract token name (usually appears before the symbol)
-        const namePattern = new RegExp(`([^<>]+?)\\s*${symbol}\\s*`, 'i')
-        const nameMatch = rowHtml.match(namePattern)
-        const name = nameMatch ? nameMatch[1].trim() : `${symbol} Token`
+        // Try multiple patterns to find symbol
+        const patterns = [
+          /data-symbol="([^"]+)"/i,
+          /([A-Z0-9]{2,10})\s*\/\s*SOL/i,
+          /"symbol":\s*"([^"]+)"/i,
+          />([A-Z0-9]{2,10})<\/[^>]*>\s*<[^>]*>SOL/i,
+          />([A-Z0-9]{2,10})\s*\/\s*SOL/i
+        ]
+        
+        for (const pattern of patterns) {
+          const match = rowHtml.match(pattern)
+          if (match && match[1] && match[1].length <= 10) {
+            symbol = match[1].toUpperCase()
+            break
+          }
+        }
+        
+        // Try to find name patterns
+        const namePatterns = [
+          /data-name="([^"]+)"/i,
+          /"name":\s*"([^"]+)"/i,
+          /title="([^"]+)"/i,
+          new RegExp(`>([^<>]{3,30})\\s*<[^>]*>\\s*${symbol}`, 'i'),
+          new RegExp(`([^<>]{3,30})\\s*${symbol}\\s*\/\\s*SOL`, 'i')
+        ]
+        
+        for (const pattern of namePatterns) {
+          const match = rowHtml.match(pattern)
+          if (match && match[1] && match[1].trim().length > 2 && match[1].trim().length < 50) {
+            name = match[1].trim()
+            break
+          }
+        }
         
         // Extract price (look for $ followed by decimal number)
         const priceMatch = rowHtml.match(/\$([0-9]+\.?[0-9]+(?:K|M|B)?)/i)
