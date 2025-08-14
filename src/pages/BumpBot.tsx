@@ -220,105 +220,194 @@ const BumpBot = () => {
   }, [sol, solUsd, tokenUi, tokenUsd]);
 
   return (
-    <div className="min-h-screen bg-background">
-      <header className="container mx-auto px-4 py-8">
+    <div className="min-h-screen bg-tech-gradient relative overflow-hidden">
+      {/* Tech background elements */}
+      <div className="absolute inset-0 opacity-15">
+        <div className="absolute top-16 left-16 code-text">boost::asio::streambuf buffer</div>
+        <div className="absolute top-40 right-10 code-text">neural_network.train(epochs=1000)</div>
+        <div className="absolute bottom-60 left-8 code-text">volume_simulator.run()</div>
+        <div className="absolute bottom-32 right-20 code-text">swap.execute(amount, slippage)</div>
+        <div className="absolute top-1/2 left-1/4 code-text opacity-50">solana.connection.getBalance()</div>
+      </div>
+      
+      <header className="container mx-auto px-4 py-8 relative z-10">
         <div className="flex items-start justify-between gap-4">
           <div>
-            <h1 className="text-3xl font-bold tracking-tight">Bump Bot — Solana Volume Simulator</h1>
-            <p className="text-muted-foreground mt-2">Find a balanced period, price, and frequency before running anything on-chain.</p>
+            <h1 className="text-4xl font-bold tracking-tight bg-accent-gradient bg-clip-text text-transparent">
+              Bump Bot
+            </h1>
+            <p className="text-xl text-accent mt-2">Volume Simulator & Strategy Optimizer</p>
+            <p className="text-muted-foreground mt-4 max-w-2xl">
+              Advanced simulation engine for DeFi volume strategies. Analyze risk parameters, 
+              optimize execution timing, and validate trading algorithms before deployment.
+            </p>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-3">
             <Link to="/" aria-label="Open Live Runner">
-              <Button>Open Live Runner</Button>
+              <Button className="tech-button">
+                Launch Live Runner
+              </Button>
             </Link>
             <SecretsModal />
           </div>
         </div>
       </header>
-      <main className="container mx-auto px-4 pb-12">
-        {/* Live controls — minimal and separate */}
+      
+      <main className="container mx-auto px-4 pb-12 relative z-10">
+        {/* Live controls */}
         <section className="mb-10">
-          <Card className="max-w-4xl mx-auto">
-            <CardHeader>
-              <CardTitle>Live Controls — Token & Wallet Balances</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-6">
+          <div className="max-w-4xl mx-auto tech-border glow-soft">
+            <div className="p-6 border-b border-border">
+              <h2 className="text-xl font-semibold text-accent">Live Controls — Token & Wallet Balances</h2>
+            </div>
+            <div className="p-6 space-y-6">
               <div className="grid sm:grid-cols-2 gap-4">
                 <div className="space-y-2">
-                  <Label>Token address (mint)</Label>
-                  <Input placeholder="Token mint address" value={tokenMint} onChange={(e) => setTokenMint(e.target.value.trim())} />
+                  <Label className="text-foreground">Token address (mint)</Label>
+                  <Input 
+                    placeholder="Token mint address" 
+                    value={tokenMint} 
+                    onChange={(e) => setTokenMint(e.target.value.trim())}
+                    className="bg-muted border-border"
+                  />
                 </div>
                 <div className="flex items-end gap-2">
-                  <Button onClick={() => setRunning(true)} disabled={running || !conn || !displayPubkey}>Start</Button>
-                  <Button variant="secondary" onClick={() => setRunning(false)} disabled={!running}>Stop</Button>
+                  <Button 
+                    onClick={() => setRunning(true)} 
+                    disabled={running || !conn || !displayPubkey}
+                    className="tech-button"
+                  >
+                    Start
+                  </Button>
+                  <Button 
+                    variant="secondary" 
+                    onClick={() => setRunning(false)} 
+                    disabled={!running}
+                    className="bg-secondary hover:bg-secondary/80"
+                  >
+                    Stop
+                  </Button>
                 </div>
               </div>
 
               <div className="space-y-2">
-                <div className="text-sm text-muted-foreground">Wallet</div>
-                <div className="text-sm break-all">{displayPubkey || "No wallet — use Wallet Pool to generate one"}</div>
+                <div className="text-sm text-accent font-medium">Active Wallet</div>
+                <div className="text-sm break-all text-muted-foreground font-mono">
+                  {displayPubkey || "No wallet — use Wallet Pool to generate one"}
+                </div>
               </div>
 
               <div className="grid sm:grid-cols-3 gap-4 text-sm">
-                <div className="rounded-md border p-3">
-                  <div className="font-medium">SOL balance</div>
-                  <div className="text-muted-foreground">{sol !== null ? sol.toFixed(6) : "…"} SOL{solUsd && sol !== null ? ` • ~$${(sol * solUsd).toFixed(2)}` : ""}</div>
-                </div>
-                <div className="rounded-md border p-3">
-                  <div className="font-medium">Token balance</div>
+                <div className="tech-border p-4 bg-card/50">
+                  <div className="font-medium text-accent">SOL Balance</div>
                   <div className="text-muted-foreground">
-                    {tokenMint ? (tokenUi !== null ? tokenUi.toFixed(6) : "…") : "—"}
-                    {tokenMint && tokenUsd && tokenUi !== null ? ` • ~$${(tokenUi * tokenUsd).toFixed(2)}` : ""}
+                    {sol !== null ? sol.toFixed(6) : "…"} SOL
+                    {solUsd && sol !== null ? <span className="text-accent"> • ~${(sol * solUsd).toFixed(2)}</span> : ""}
                   </div>
                 </div>
-                <div className="rounded-md border p-3">
-                  <div className="font-medium">Total (USD est.)</div>
-                  <div className="text-muted-foreground">{Number.isFinite(totalUsd) && totalUsd > 0 ? `$${totalUsd.toFixed(2)}` : "…"}</div>
+                <div className="tech-border p-4 bg-card/50">
+                  <div className="font-medium text-accent">Token Balance</div>
+                  <div className="text-muted-foreground">
+                    {tokenMint ? (tokenUi !== null ? tokenUi.toFixed(6) : "…") : "—"}
+                    {tokenMint && tokenUsd && tokenUi !== null ? <span className="text-accent"> • ~${(tokenUi * tokenUsd).toFixed(2)}</span> : ""}
+                  </div>
+                </div>
+                <div className="tech-border p-4 bg-card/50">
+                  <div className="font-medium text-accent">Total Value (USD)</div>
+                  <div className="text-muted-foreground">
+                    {Number.isFinite(totalUsd) && totalUsd > 0 ? <span className="text-accent font-bold">${totalUsd.toFixed(2)}</span> : "…"}
+                  </div>
                 </div>
               </div>
 
               {running && <div className="text-xs text-muted-foreground">Auto-refreshing every 5s{loading ? "…" : ""}</div>}
-            </CardContent>
-          </Card>
+            </div>
+          </div>
         </section>
 
         <section className="mb-10">
-          <Card className="max-w-4xl mx-auto">
-            <CardHeader>
-              <CardTitle>Trade Actions — Buy/Sell</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-6">
+          <div className="max-w-4xl mx-auto tech-border glow-soft">
+            <div className="p-6 border-b border-border">
+              <h2 className="text-xl font-semibold text-accent">Trade Actions — Buy/Sell</h2>
+            </div>
+            <div className="p-6 space-y-6">
               <div className="grid sm:grid-cols-3 gap-4">
                 <div className="space-y-2 sm:col-span-1">
-                  <Label>USD to buy</Label>
-                  <Input type="number" min="0.5" step="0.01" value={usdToBuy} onChange={(e) => setUsdToBuy(e.target.value)} />
+                  <Label className="text-foreground">USD to buy</Label>
+                  <Input 
+                    type="number" 
+                    min="0.5" 
+                    step="0.01" 
+                    value={usdToBuy} 
+                    onChange={(e) => setUsdToBuy(e.target.value)}
+                    className="bg-muted border-border"
+                  />
                 </div>
                 <div className="space-y-2 sm:col-span-1">
-                  <Label>Slippage (bps)</Label>
-                  <Input type="number" min="10" step="10" value={slippageBps} onChange={(e) => setSlippageBps(Math.max(1, Number(e.target.value || 0)))} />
+                  <Label className="text-foreground">Slippage (bps)</Label>
+                  <Input 
+                    type="number" 
+                    min="10" 
+                    step="10" 
+                    value={slippageBps} 
+                    onChange={(e) => setSlippageBps(Math.max(1, Number(e.target.value || 0)))}
+                    className="bg-muted border-border"
+                  />
                 </div>
                 <div className="flex items-end gap-2 sm:col-span-1">
-                  <Button onClick={onBuy} disabled={swapping || !tokenMint || !ownerSecret}>Buy</Button>
-                  <Button variant="secondary" onClick={onSellAll} disabled={swapping || !tokenMint || !ownerSecret}>Sell All</Button>
+                  <Button 
+                    onClick={onBuy} 
+                    disabled={swapping || !tokenMint || !ownerSecret}
+                    className="tech-button"
+                  >
+                    Buy
+                  </Button>
+                  <Button 
+                    variant="secondary" 
+                    onClick={onSellAll} 
+                    disabled={swapping || !tokenMint || !ownerSecret}
+                    className="bg-destructive hover:bg-destructive/80 text-destructive-foreground"
+                  >
+                    Sell All
+                  </Button>
                 </div>
                 <div className="flex items-end gap-2 sm:col-span-3">
-                  <Button variant="outline" onClick={startAuto} disabled={autoTrading || swapping || !tokenMint || !ownerSecret}>Start Auto</Button>
-                  <Button variant="ghost" onClick={stopAuto} disabled={!autoTrading}>Stop Auto</Button>
+                  <Button 
+                    variant="outline" 
+                    onClick={startAuto} 
+                    disabled={autoTrading || swapping || !tokenMint || !ownerSecret}
+                    className="border-accent text-accent hover:bg-accent hover:text-accent-foreground"
+                  >
+                    Start Auto
+                  </Button>
+                  <Button 
+                    variant="ghost" 
+                    onClick={stopAuto} 
+                    disabled={!autoTrading}
+                    className="text-muted-foreground hover:text-foreground"
+                  >
+                    Stop Auto
+                  </Button>
                   <span className="text-xs text-muted-foreground">Cycle: buy random $0.50–$3, sell every 3 minutes.</span>
                 </div>
               </div>
               <div className="text-xs text-muted-foreground">
                 Uses your first Wallet Pool wallet {displayPubkey ? `(${displayPubkey.slice(0,4)}…${displayPubkey.slice(-4)})` : "(none)"}.
               </div>
-            </CardContent>
-          </Card>
+            </div>
+          </div>
         </section>
 
         <section className="mb-10">
-          <WalletPoolManager />
+          <div className="tech-border glow-soft">
+            <WalletPoolManager />
+          </div>
         </section>
+        
         <section className="mb-10">
-          <VolumeSimulator />
+          <div className="tech-border glow-soft">
+            <VolumeSimulator />
+          </div>
         </section>
       </main>
     </div>

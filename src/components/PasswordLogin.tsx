@@ -41,18 +41,28 @@ export const PasswordLogin = ({ onAuthenticate }: PasswordLoginProps) => {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-background">
-      <Card className="w-full max-w-md">
-        <CardHeader className="space-y-1 text-center">
-          <div className="flex justify-center mb-2">
-            <Lock className="h-12 w-12 text-primary" />
+    <div className="min-h-screen bg-tech-gradient flex items-center justify-center relative overflow-hidden">
+      {/* Tech background elements */}
+      <div className="absolute inset-0 opacity-20">
+        <div className="absolute top-20 left-20 code-text">auth.verify(credentials)</div>
+        <div className="absolute top-40 right-32 code-text">security.encrypt(password)</div>
+        <div className="absolute bottom-40 left-32 code-text">session.create(user_id)</div>
+        <div className="absolute bottom-20 right-20 code-text">access.granted = true</div>
+      </div>
+      
+      <div className="relative z-10 w-full max-w-md tech-border glow-effect">
+        <div className="p-8 space-y-6 text-center">
+          <div className="flex justify-center mb-4">
+            <div className="p-4 rounded-full bg-accent/20 glow-soft">
+              <Lock className="h-8 w-8 text-accent" />
+            </div>
           </div>
-          <CardTitle className="text-2xl">Access Required</CardTitle>
-          <CardDescription>
-            Enter the access password to continue
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
+          <div>
+            <h1 className="text-2xl font-bold text-accent">System Access Required</h1>
+            <p className="text-muted-foreground mt-2">
+              Enter your security credentials to access the trading platform
+            </p>
+          </div>
           <form onSubmit={handleSubmit} className="space-y-4">
             <div className="space-y-2">
               <Input
@@ -62,18 +72,19 @@ export const PasswordLogin = ({ onAuthenticate }: PasswordLoginProps) => {
                 onChange={(e) => setPassword(e.target.value)}
                 disabled={isLoading}
                 autoFocus
+                className="bg-muted border-border text-center tracking-wider"
               />
             </div>
             <Button 
               type="submit" 
-              className="w-full" 
+              className="w-full tech-button" 
               disabled={isLoading || !password.trim()}
             >
-              {isLoading ? "Authenticating..." : "Access App"}
+              {isLoading ? "Authenticating..." : "Access System"}
             </Button>
           </form>
-        </CardContent>
-      </Card>
+        </div>
+      </div>
     </div>
   );
 };
