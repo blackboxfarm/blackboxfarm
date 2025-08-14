@@ -15,3 +15,6 @@ verify_jwt = false
 [functions.trading-monitor]
 verify_jwt = false
 
+[functions.session-manager]
+verify_jwt = true
+
