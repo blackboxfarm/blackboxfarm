@@ -43,64 +43,43 @@ async function fetchTokenData(mint: string): Promise<any> {
   }
 }
 
-// Fetch top 200 trending tokens using Birdeye API
+// Fetch top 200 trending tokens using proper DexScreener endpoint
 async function fetchTrendingTokens(): Promise<any[]> {
   try {
-    console.log('🔍 Fetching trending tokens from Birdeye API...')
+    console.log('🔍 Fetching tokens from DexScreener trending endpoint...')
     
-    // Get trending tokens from Birdeye (much better Solana data)
-    const response = await fetch('https://public-api.birdeye.so/defi/tokenlist?sort_by=v24hUSD&sort_type=desc&offset=0&limit=200', {
-      headers: {
-        'X-API-KEY': 'your-api-key-here', // Birdeye might need API key
-      }
-    })
-    
-    if (!response.ok) {
-      console.log('❌ Birdeye API failed, trying without API key...')
-      // Try without API key (some endpoints are public)
-      const publicResponse = await fetch('https://public-api.birdeye.so/defi/tokenlist?sort_by=v24hUSD&sort_type=desc&offset=0&limit=200')
-      const publicData = await publicResponse.json()
-      
-      if (publicData.success && publicData.data?.tokens) {
-        console.log(`📊 Found ${publicData.data.tokens.length} tokens from Birdeye (public)`)
-        return publicData.data.tokens.map(convertBirdeyeToken)
-      }
-      
-      throw new Error('Birdeye API failed')
-    }
-    
+    // Use DexScreener's trending endpoint which actually works
+    const response = await fetch('https://api.dexscreener.com/latest/dex/tokens/trending?chainId=solana')
     const data = await response.json()
-    console.log('📊 Birdeye API response structure:', Object.keys(data))
     
-    if (data.success && data.data?.tokens) {
-      const tokens = data.data.tokens
-      console.log(`📊 Found ${tokens.length} tokens from Birdeye`)
+    console.log('📊 DexScreener trending API response:', Object.keys(data))
+    
+    if (data && Array.isArray(data)) {
+      console.log(`📊 Found ${data.length} trending tokens`)
       
-      // Log first token structure for debugging
-      if (tokens.length > 0) {
-        console.log('🔍 Sample Birdeye token structure:', JSON.stringify(tokens[0], null, 2))
+      // Log sample token for debugging
+      if (data.length > 0) {
+        console.log('🔍 Sample trending token structure:', JSON.stringify(data[0], null, 2))
       }
       
-      // Convert Birdeye format to our expected format
-      return tokens.map(convertBirdeyeToken)
+      return data.slice(0, 200)
     }
     
-    throw new Error('Invalid Birdeye response')
+    // Fallback to pairs search if trending doesn't work
+    console.log('📊 Trending endpoint failed, trying pairs search...')
+    const fallbackResponse = await fetch('https://api.dexscreener.com/latest/dex/search/?q=SOL&chainId=solana')
+    const fallbackData = await fallbackResponse.json()
+    
+    if (fallbackData?.pairs && Array.isArray(fallbackData.pairs)) {
+      console.log(`📊 Found ${fallbackData.pairs.length} pairs from search`)
+      return fallbackData.pairs.slice(0, 200)
+    }
+    
+    return []
     
   } catch (error) {
-    console.error('❌ Birdeye API failed, falling back to DexScreener:', error)
-    
-    // Fallback to DexScreener
-    try {
-      const fallbackResponse = await fetch('https://api.dexscreener.com/latest/dex/search/?q=&chainId=solana&rankBy=volume&order=desc')
-      const fallbackData = await fallbackResponse.json()
-      const tokens = fallbackData.pairs || []
-      console.log(`📊 DexScreener fallback: Found ${tokens.length} tokens`)
-      return tokens.slice(0, 200)
-    } catch (fallbackError) {
-      console.error('❌ All APIs failed:', fallbackError)
-      return []
-    }
+    console.error('❌ Error fetching tokens:', error)
+    return []
   }
 }
 
