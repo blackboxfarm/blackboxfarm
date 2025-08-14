@@ -408,7 +408,7 @@ export default function LiveRunner() {
     return { dipPct, takeProfitPct, slippageBps };
   }, [log]);
 
-  // Auto-scan and select best token
+  // Enhanced auto-scan with spike detection for all candidates
   const scanAndSelectBestToken = React.useCallback(async (): Promise<boolean> => {
     try {
       // Check if we have existing holdings - don't switch tokens if we do
@@ -424,10 +424,10 @@ export default function LiveRunner() {
       }
 
       setAutoScanning(true);
-      log("🔍 Auto-scanning for best token...");
+      log("🔍 Auto-scanning for best token with spike analysis...");
       
       const { data, error } = await supabase.functions.invoke('coin-scanner', {
-        body: { minScore: 70, limit: 10 }
+        body: { minScore: 70, limit: 20 } // Get more candidates for spike filtering
       });
       
       if (error) {
@@ -436,22 +436,86 @@ export default function LiveRunner() {
       }
       
       if (data?.success && data?.qualifiedTokens?.length > 0) {
-        const bestToken = data.qualifiedTokens[0]; // First token is already sorted by best score
+        log(`📊 Found ${data.qualifiedTokens.length} qualified tokens, analyzing for spike risks...`);
+        
+        // Analyze each token for spikes using DexScreener data
+        const safeTokens = [];
+        
+        for (const token of data.qualifiedTokens.slice(0, 10)) { // Check top 10
+          try {
+            // Get current price data for spike detection
+            const response = await fetch(`https://api.dexscreener.com/latest/dex/tokens/${token.mint}`, { cache: 'no-store' });
+            if (response.ok) {
+              const dexData = await response.json();
+              const pair = dexData?.pairs?.[0];
+              
+              if (pair) {
+                const currentPrice = Number(pair.priceUsd);
+                const h1Change = Number(pair.priceChange?.h1 || 0);
+                const h6Change = Number(pair.priceChange?.h6 || 0);
+                const h24Change = Number(pair.priceChange?.h24 || 0);
+                
+                // Enhanced spike detection criteria
+                let spikeRisk = false;
+                let riskReason = "";
+                
+                // Check for recent sharp upward moves that indicate spike peaks
+                if (h1Change > 20) {
+                  spikeRisk = true;
+                  riskReason = `1h spike +${h1Change.toFixed(1)}%`;
+                } else if (h6Change > 35 && h1Change > 5) {
+                  spikeRisk = true;
+                  riskReason = `6h spike +${h6Change.toFixed(1)}% (still rising)`;
+                } else if (h24Change > 50 && h6Change > 15) {
+                  spikeRisk = true;
+                  riskReason = `24h spike +${h24Change.toFixed(1)}% (recent acceleration)`;
+                }
+                
+                if (!spikeRisk) {
+                  safeTokens.push({
+                    ...token,
+                    currentPrice,
+                    priceChanges: { h1: h1Change, h6: h6Change, h24: h24Change },
+                    spikeAnalysis: `Safe: h1:${h1Change.toFixed(1)}% h6:${h6Change.toFixed(1)}% h24:${h24Change.toFixed(1)}%`
+                  });
+                  log(`✅ ${token.symbol}: Safe entry - ${token.symbol} (score: ${token.totalScore?.toFixed(0) || 'N/A'})`);
+                } else {
+                  log(`🚨 ${token.symbol}: SPIKE RISK - ${riskReason} - SKIPPED`);
+                }
+              }
+            }
+            
+            // Rate limiting
+            await new Promise(resolve => setTimeout(resolve, 200));
+          } catch (err) {
+            log(`⚠️ Could not analyze ${token.symbol} for spikes: ${err}`);
+            // Include token anyway if we can't analyze (better than blocking all)
+            safeTokens.push(token);
+          }
+        }
+        
+        if (safeTokens.length === 0) {
+          log(`❌ No safe tokens found - all candidates show spike risks`);
+          return false;
+        }
+        
+        // Select best safe token (already sorted by score)
+        const bestSafeToken = safeTokens[0];
         
         // Don't switch if it's the same token we already have
-        if (bestToken.mint === cfg.tokenMint) {
-          log(`✅ Best token is current token ${bestToken.symbol} - no switch needed`);
+        if (bestSafeToken.mint === cfg.tokenMint) {
+          log(`✅ Best safe token is current token ${bestSafeToken.symbol} - no switch needed`);
           return true;
         }
         
-        log(`✅ Found ${data.qualifiedTokens.length} tokens, selecting best: ${bestToken.symbol} (score: ${bestToken.totalScore.toFixed(0)})`);
+        log(`🎯 Selected best SAFE token: ${bestSafeToken.symbol} (score: ${bestSafeToken.totalScore?.toFixed(0) || 'N/A'}) - ${bestSafeToken.spikeAnalysis || 'spike-safe'}`);
         
         // Auto-adjust parameters based on token characteristics
-        const adjustedParams = adjustParametersForToken(bestToken);
+        const adjustedParams = adjustParametersForToken(bestSafeToken);
         
         setCfg(prev => ({ 
           ...prev, 
-          tokenMint: bestToken.mint,
+          tokenMint: bestSafeToken.mint,
           dipPct: adjustedParams.dipPct,
           takeProfitPct: adjustedParams.takeProfitPct,
           slippageBps: adjustedParams.slippageBps
@@ -459,12 +523,12 @@ export default function LiveRunner() {
         
         // Update token info
         setTokenInfo({
-          name: bestToken.name,
-          symbol: bestToken.symbol,
-          price: bestToken.currentPrice
+          name: bestSafeToken.name,
+          symbol: bestSafeToken.symbol,
+          price: bestSafeToken.currentPrice || bestSafeToken.currentPrice
         });
         
-        log(`🎯 Switched to ${bestToken.symbol} with optimized parameters`);
+        log(`🔄 Switched to ${bestSafeToken.symbol} with spike-safe entry and optimized parameters`);
         return true;
       } else {
         log("❌ No qualified tokens found in scan");
