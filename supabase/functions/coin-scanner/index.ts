@@ -378,15 +378,28 @@ serve(async (req) => {
     
     // Evaluate each token
     const evaluations: TokenMetrics[] = []
+    let rejectionReasons: { [key: string]: number } = {}
     
     for (const tokenData of trendingTokens) {
-      if (excludeMints.includes(tokenData.baseToken?.address)) continue
+      if (excludeMints.includes(tokenData.baseToken?.address)) {
+        console.log(`⏭️ Skipping ${tokenData.baseToken?.symbol} - in exclude list`)
+        continue
+      }
       
       const evaluation = await evaluateToken(tokenData)
       if (evaluation && evaluation.totalScore >= minScore) {
         evaluations.push(evaluation)
+        console.log(`✅ ${evaluation.symbol} QUALIFIED with score ${evaluation.totalScore.toFixed(1)}`)
+      } else if (evaluation) {
+        console.log(`❌ ${evaluation.symbol} rejected: Score ${evaluation.totalScore.toFixed(1)} below minimum ${minScore}`)
+        rejectionReasons['Low Score'] = (rejectionReasons['Low Score'] || 0) + 1
       }
     }
+    
+    console.log('\n📊 SCAN SUMMARY:')
+    console.log(`   Scanned: ${trendingTokens.length} tokens`)
+    console.log(`   Qualified: ${evaluations.length} tokens`)
+    console.log(`   Rejection reasons:`, rejectionReasons)
     
     // Sort by score and limit results
     const topTokens = evaluations
