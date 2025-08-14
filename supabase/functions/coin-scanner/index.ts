@@ -146,7 +146,10 @@ async function analyzeNewsSentiment(symbol: string): Promise<number> {
 
 // Evaluate a single token against all criteria
 async function evaluateToken(tokenData: any, currentTokenPrices?: number[]): Promise<TokenMetrics | null> {
-  if (!tokenData || !tokenData.baseToken) return null
+  if (!tokenData || !tokenData.baseToken) {
+    console.log('❌ Token rejected: Missing token data')
+    return null
+  }
   
   const mint = tokenData.baseToken.address
   const symbol = tokenData.baseToken.symbol
@@ -156,33 +159,71 @@ async function evaluateToken(tokenData: any, currentTokenPrices?: number[]): Pro
   const volume24h = parseFloat(tokenData.volume?.h24) || 0
   const liquidityUsd = parseFloat(tokenData.liquidity?.usd) || 0
   
+  console.log(`\n📊 Evaluating ${symbol} (${mint.slice(0,8)}...)`)
+  console.log(`   Market Cap: $${marketCap.toLocaleString()} [REAL DATA from DexScreener]`)
+  console.log(`   24h Volume: $${volume24h.toLocaleString()} [REAL DATA from DexScreener]`)
+  console.log(`   Liquidity: $${liquidityUsd.toLocaleString()} [REAL DATA from DexScreener]`)
+  console.log(`   Price: $${priceUsd} [REAL DATA from DexScreener]`)
+  
   // Check basic thresholds first (temporarily relaxed for testing)
-  if (marketCap < 1_000_000 || marketCap > 100_000_000) return null // Relaxed: 1M-100M
-  if (liquidityUsd < 50_000) return null // Relaxed: 50K minimum
-  if (volume24h < 100_000) return null // Relaxed: 100K minimum
+  if (marketCap < 1_000_000 || marketCap > 100_000_000) {
+    console.log(`❌ ${symbol} rejected: Market cap ${marketCap.toLocaleString()} outside range 1M-100M`)
+    return null
+  }
+  if (liquidityUsd < 50_000) {
+    console.log(`❌ ${symbol} rejected: Liquidity ${liquidityUsd.toLocaleString()} below 50K minimum`)
+    return null
+  }
+  if (volume24h < 100_000) {
+    console.log(`❌ ${symbol} rejected: Volume ${volume24h.toLocaleString()} below 100K minimum`)
+    return null
+  }
+  
+  console.log(`✅ ${symbol} passed basic thresholds`)
   
   // Check liquidity lock (skip for now since it's blocking everything)
+  console.log(`   Liquidity Lock: SKIPPED [Would check RugCheck API - currently mock=true]`)
   const liquidityLocked = true // await checkLiquidityLock(mint)
   if (!liquidityLocked) return null
   
-  // Get additional metrics (mock data for now - would integrate with more APIs)
-  const holderCount = Math.floor(Math.random() * 5000) + 500 // Mock data (relaxed)
-  const ageHours = Math.floor(Math.random() * 8760) + 24 // Mock: 1 day to 1 year old (relaxed)
-  const spread = Math.random() * 0.015 // Mock: 0-1.5% spread (relaxed)
+  // Get additional metrics (THESE ARE MOCK DATA - NEED REAL APIS)
+  const holderCount = Math.floor(Math.random() * 5000) + 500 // MOCK DATA
+  const ageHours = Math.floor(Math.random() * 8760) + 24 // MOCK DATA
+  const spread = Math.random() * 0.015 // MOCK DATA
   
-  if (holderCount < 500) return null // Relaxed: 500 holders minimum
-  if (spread > 0.015) return null // Relaxed: 1.5% spread maximum
+  console.log(`   Holder Count: ${holderCount.toLocaleString()} [MOCK DATA - need Solscan/Helius API]`)
+  console.log(`   Age: ${ageHours}h [MOCK DATA - need blockchain creation time]`)
+  console.log(`   Spread: ${(spread*100).toFixed(3)}% [MOCK DATA - need orderbook data]`)
   
-  // Mock price history for volatility calculation
+  if (holderCount < 500) {
+    console.log(`❌ ${symbol} rejected: Holder count ${holderCount} below 500 minimum`)
+    return null
+  }
+  if (spread > 0.015) {
+    console.log(`❌ ${symbol} rejected: Spread ${(spread*100).toFixed(3)}% above 1.5% maximum`)
+    return null
+  }
+  
+  // Mock price history for volatility calculation (MOCK DATA)
   const priceHistory = Array.from({length: 24}, (_, i) => 
     priceUsd * (1 + (Math.random() - 0.5) * 0.3)
   )
   
   const volatility24h = calculateVolatility(priceHistory)
-  if (volatility24h < 10 || volatility24h > 20) return null
+  console.log(`   Volatility: ${volatility24h.toFixed(2)}% [MOCK DATA - need real price history]`)
+  
+  if (volatility24h < 10 || volatility24h > 20) {
+    console.log(`❌ ${symbol} rejected: Volatility ${volatility24h.toFixed(2)}% outside 10-20% range`)
+    return null
+  }
   
   const swingCount = countSwings(priceHistory)
-  if (swingCount < 5) return null // Need multiple swings per day
+  console.log(`   Swing Count: ${swingCount} [MOCK DATA - need real price patterns]`)
+  
+  if (swingCount < 5) {
+    console.log(`❌ ${symbol} rejected: Only ${swingCount} swings, need minimum 5`)
+    return null
+  }
   
   // Calculate advanced metrics
   const volumeProfile = calculateVolumeProfile([]) // Would use real volume data
