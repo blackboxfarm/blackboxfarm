@@ -206,6 +206,7 @@ export default function LiveRunner() {
   const [executing, setExecuting] = React.useState(false);
   const [wallet, setWallet] = React.useState<{ address: string; sol: number } | null>(null);
   const [walletLoading, setWalletLoading] = React.useState(false);
+  const [allTokens, setAllTokens] = React.useState<Array<{ mint: string; symbol?: string; name?: string; decimals: number; uiAmount: number; price?: number }>>([]);
 
   const [holding, setHolding] = React.useState<{ mint: string; amountRaw: string; decimals: number; uiAmount: number } | null>(null);
   const [activity, setActivity] = React.useState<{ time: number; text: string }[]>([]);
@@ -657,6 +658,7 @@ export default function LiveRunner() {
         const addr = j?.publicKey as string | undefined;
         const sol = Number(j?.solBalance);
         if (addr && Number.isFinite(sol)) setWallet({ address: addr, sol });
+        
         else if (addr) setWallet({ address: addr, sol: NaN });
       }
     } catch {}
@@ -664,6 +666,7 @@ export default function LiveRunner() {
       setWalletLoading(false);
     }
   }, [secrets?.functionToken]);
+
 
   React.useEffect(() => {
     void loadWallet(secrets?.tradingPrivateKey);
@@ -697,11 +700,98 @@ export default function LiveRunner() {
   React.useEffect(() => {
     void loadHoldings(secrets?.tradingPrivateKey);
   }, [loadHoldings, secrets?.tradingPrivateKey]);
+
   const effectivePrice = React.useMemo(() => {
     const m = Number(manualPrice);
     if (Number.isFinite(m) && m > 0) return m;
     return price;
   }, [manualPrice, price]);
+
+  // Load all tokens in wallet
+  const loadAllTokens = React.useCallback(async (ownerSecret?: string) => {
+    if (!wallet?.address) return;
+    
+    try {
+      const tokens: Array<{ mint: string; symbol?: string; name?: string; decimals: number; uiAmount: number; price?: number }> = [];
+      
+      // Add SOL
+      if (wallet.sol > 0) {
+        tokens.push({
+          mint: 'So11111111111111111111111111111111111111112',
+          symbol: 'SOL',
+          name: 'Solana',
+          decimals: 9,
+          uiAmount: wallet.sol,
+          price: 250 // Rough SOL price estimate
+        });
+      }
+      
+      // Check USDC
+      try {
+        const usdcRes = await fetch(`${SB_PROJECT_URL}/functions/v1/trader-wallet?tokenMint=${encodeURIComponent('EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v')}`, {
+          headers: {
+            apikey: SB_ANON_KEY,
+            Authorization: `Bearer ${SB_ANON_KEY}`,
+            ...(secrets?.functionToken ? { 'x-function-token': secrets.functionToken } : {}),
+            ...(ownerSecret ? { 'x-owner-secret': ownerSecret } : {}),
+          },
+        });
+        if (usdcRes.ok) {
+          const usdcData = await usdcRes.json();
+          if (usdcData.tokenUiAmount > 0) {
+            tokens.push({
+              mint: 'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v',
+              symbol: 'USDC',
+              name: 'USD Coin',
+              decimals: usdcData.tokenDecimals || 6,
+              uiAmount: usdcData.tokenUiAmount,
+              price: 1 // USDC is $1
+            });
+          }
+        }
+      } catch {}
+      
+      // Check current tracking token if it's different
+      if (cfg.tokenMint && 
+          cfg.tokenMint !== 'So11111111111111111111111111111111111111112' && 
+          cfg.tokenMint !== 'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v') {
+        try {
+          const tokenRes = await fetch(`${SB_PROJECT_URL}/functions/v1/trader-wallet?tokenMint=${encodeURIComponent(cfg.tokenMint)}`, {
+            headers: {
+              apikey: SB_ANON_KEY,
+              Authorization: `Bearer ${SB_ANON_KEY}`,
+              ...(secrets?.functionToken ? { 'x-function-token': secrets.functionToken } : {}),
+              ...(ownerSecret ? { 'x-owner-secret': ownerSecret } : {}),
+            },
+          });
+          if (tokenRes.ok) {
+            const tokenData = await tokenRes.json();
+            if (tokenData.tokenUiAmount > 0) {
+              tokens.push({
+                mint: cfg.tokenMint,
+                symbol: tokenInfo?.symbol || `${cfg.tokenMint.slice(0,4)}…${cfg.tokenMint.slice(-4)}`,
+                name: tokenInfo?.name,
+                decimals: tokenData.tokenDecimals || 9,
+                uiAmount: tokenData.tokenUiAmount,
+                price: effectivePrice
+              });
+            }
+          }
+        } catch {}
+      }
+      
+      setAllTokens(tokens);
+    } catch (error) {
+      console.error('Failed to load all tokens:', error);
+    }
+  }, [wallet?.address, cfg.tokenMint, tokenInfo, effectivePrice, secrets?.functionToken]);
+
+  // Load all tokens when wallet changes
+  React.useEffect(() => {
+    if (wallet?.address) {
+      void loadAllTokens(secrets?.tradingPrivateKey);
+    }
+  }, [wallet?.address, loadAllTokens, secrets?.tradingPrivateKey]);
 
   const canBuy = React.useMemo(() => {
     if (!effectivePrice) return false;
@@ -1489,12 +1579,38 @@ export default function LiveRunner() {
                       <a className="underline text-sm" href={`https://solscan.io/account/${wallet.address}`} target="_blank" rel="noreferrer noopener">View</a>
                     </div>
                   </div>
-                  <div>Balance: {Number.isFinite(wallet.sol) ? `${wallet.sol.toFixed(4)} SOL` : '—'}</div>
+                  {/* Show all tokens */}
+                  <div className="space-y-2">
+                    {allTokens.length > 0 ? (
+                      allTokens.map((token) => (
+                        <div key={token.mint} className="flex items-center justify-between text-sm">
+                          <span className="font-medium">{token.symbol}</span>
+                          <div className="text-right">
+                            <div>{token.uiAmount.toFixed(token.symbol === 'SOL' ? 4 : token.symbol === 'USDC' ? 2 : 6)}</div>
+                            {token.price && (
+                              <div className="text-xs text-muted-foreground">
+                                ${(token.uiAmount * token.price).toFixed(2)}
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      ))
+                    ) : (
+                      <div>Balance: {Number.isFinite(wallet.sol) ? `${wallet.sol.toFixed(4)} SOL` : '—'}</div>
+                    )}
+                  </div>
                   <div className="flex items-center gap-2">
-                    <Button size="sm" variant="outline" onClick={() => void loadWallet()} disabled={walletLoading}>
+                    <Button size="sm" variant="outline" onClick={async () => {
+                      await loadWallet();
+                      await loadAllTokens();
+                    }} disabled={walletLoading}>
                       {walletLoading ? 'Refreshing…' : 'Refresh'}
                     </Button>
+                  </div>
+                  <div className="flex items-center gap-2">
                     <Button size="sm" onClick={() => void convertUsdcToSol()} disabled={executing}>Convert USDC→SOL</Button>
+                  </div>
+                  <div className="flex items-center gap-2">
                     <Button size="sm" variant="secondary" onClick={() => void handlePrepare()} disabled={executing}>Prepare</Button>
                   </div>
                 </div>
