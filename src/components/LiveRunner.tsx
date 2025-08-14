@@ -211,9 +211,12 @@ export default function LiveRunner() {
   const [activity, setActivity] = React.useState<{ time: number; text: string }[]>([]);
   const [coinScannerEnabled, setCoinScannerEnabled] = React.useState(true); // Enable by default
   const [autoScanning, setAutoScanning] = React.useState(false);
+  const [tokenInfo, setTokenInfo] = React.useState<{ name?: string; symbol?: string; price?: number } | null>(null);
+  
   const log = React.useCallback((text: string) => {
-    setActivity((a) => [{ time: Date.now(), text }, ...a].slice(0, 50));
-  }, []);
+    const tokenTicker = tokenInfo?.symbol || cfg.tokenMint.slice(0, 4) + '…' + cfg.tokenMint.slice(-4);
+    setActivity((a) => [{ time: Date.now(), text: text.replace(/\$TOKEN/g, tokenTicker) }, ...a].slice(0, 50));
+  }, [tokenInfo?.symbol, cfg.tokenMint]);
 
   // Auto-adjust trading parameters based on token characteristics
   const adjustParametersForToken = React.useCallback((token: any) => {
@@ -306,6 +309,13 @@ export default function LiveRunner() {
           slippageBps: adjustedParams.slippageBps
         }));
         
+        // Update token info
+        setTokenInfo({
+          name: bestToken.name,
+          symbol: bestToken.symbol,
+          price: bestToken.currentPrice
+        });
+        
         log(`🎯 Switched to ${bestToken.symbol} with optimized parameters`);
         return true;
       } else {
@@ -320,6 +330,37 @@ export default function LiveRunner() {
     }
   }, [log, adjustParametersForToken, holding, positions, cfg.tokenMint]);
 
+  // Fetch token info when mint changes
+  React.useEffect(() => {
+    const fetchTokenInfo = async () => {
+      try {
+        // Try DexScreener first for token metadata
+        const response = await fetch(`https://api.dexscreener.com/latest/dex/tokens/${cfg.tokenMint}`, { cache: 'no-store' });
+        if (response.ok) {
+          const data = await response.json();
+          const pair = data?.pairs?.[0];
+          if (pair) {
+            setTokenInfo({
+              name: pair.baseToken?.name || 'Unknown Token',
+              symbol: pair.baseToken?.symbol || cfg.tokenMint.slice(0, 6),
+              price: Number(pair.priceUsd) || null
+            });
+            return;
+          }
+        }
+      } catch {}
+      
+      // Fallback to truncated mint as symbol
+      setTokenInfo({
+        name: 'Unknown Token',
+        symbol: cfg.tokenMint.slice(0, 6),
+        price: null
+      });
+    };
+    
+    fetchTokenInfo();
+  }, [cfg.tokenMint]);
+
   // Handle token suggestions from coin scanner
   const handleTokenSuggestion = React.useCallback((token: any) => {
     const currentScore = 75; // Placeholder - would calculate current token's score
@@ -327,6 +368,11 @@ export default function LiveRunner() {
       log(`Scanner suggests better token: ${token.symbol} (score: ${token.totalScore.toFixed(0)})`);
       if (confirm(`Switch to ${token.symbol} (${token.name})? Scanner score: ${token.totalScore.toFixed(0)} vs current: ${currentScore}`)) {
         setCfg(prev => ({ ...prev, tokenMint: token.mint }));
+        setTokenInfo({
+          name: token.name,
+          symbol: token.symbol,
+          price: token.currentPrice
+        });
         log(`Switched to ${token.symbol} (${token.mint})`);
       }
     }
@@ -974,7 +1020,18 @@ export default function LiveRunner() {
   return (
     <Card className="max-w-4xl mx-auto mt-8">
       <CardHeader>
-        <CardTitle>Live Strategy Runner (Raydium)</CardTitle>
+        <div className="flex items-center justify-between">
+          <CardTitle>Live Strategy Runner (Raydium)</CardTitle>
+          {tokenInfo && (
+            <div className="text-right">
+              <div className="font-semibold">{tokenInfo.symbol}</div>
+              <div className="text-sm text-muted-foreground">{tokenInfo.name}</div>
+              <div className="text-sm font-medium">
+                ${tokenInfo.price ? format(tokenInfo.price, 6) : (effectivePrice ? format(effectivePrice, 6) : '—')}
+              </div>
+            </div>
+          )}
+        </div>
       </CardHeader>
       <CardContent className="space-y-4">
         <div className="grid md:grid-cols-3 gap-6">
@@ -1094,8 +1151,29 @@ export default function LiveRunner() {
               </div>
             </div>
 
-            <div className="rounded-lg border p-3 text-sm text-muted-foreground">
-              Status: {status} | Price: ${format(effectivePrice ?? NaN, 6)} | Lots: {positions.length > 0 ? positions.map((l, i) => `#${i+1}@$${format(l.entry, 6)}`).join(' ') : 'none'} | Daily buys: ${format(daily.buyUsd, 2)} / ${format(cfg.dailyCapUsd, 2)} | ROC: {rocPct !== null ? `${format(rocPct, 2)}%` : '—'}
+            <div className="rounded-lg border p-3 text-sm space-y-1">
+              <div className="flex items-center justify-between">
+                <span className="font-medium">Status:</span>
+                <span className={status === 'watching' ? 'text-green-600' : status === 'stopped' ? 'text-red-600' : 'text-yellow-600'}>
+                  {status} {tokenInfo?.symbol && `• ${tokenInfo.symbol}`}
+                </span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="font-medium">Price:</span>
+                <span>${format(effectivePrice ?? NaN, 6)}</span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="font-medium">Positions:</span>
+                <span>{positions.length > 0 ? positions.map((l, i) => `#${i+1}@$${format(l.entry, 6)}`).join(' ') : 'none'}</span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="font-medium">Daily buys:</span>
+                <span>${format(daily.buyUsd, 2)} / ${format(cfg.dailyCapUsd, 2)}</span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="font-medium">ROC:</span>
+                <span>{rocPct !== null ? `${format(rocPct, 2)}%` : '—'}</span>
+              </div>
             </div>
             {!ready && (
               <p className="text-xs text-muted-foreground">Note: Secrets not set — on-chain execution remains disabled; this panel simulates signals only.</p>
@@ -1136,12 +1214,14 @@ export default function LiveRunner() {
             </div>
 
             <div className="rounded-lg border p-3 text-sm">
-              <div className="font-medium mb-2">Holdings</div>
+              <div className="font-medium mb-2">Holdings {tokenInfo?.symbol && `(${tokenInfo.symbol})`}</div>
               {holding ? (
                 <div className="space-y-2">
                   <div className="flex items-center justify-between">
                     <span className="text-muted-foreground">Token</span>
-                    <span title={cfg.tokenMint}>{cfg.tokenMint.slice(0,4)}…{cfg.tokenMint.slice(-4)}</span>
+                    <span title={cfg.tokenMint}>
+                      {tokenInfo?.symbol || `${cfg.tokenMint.slice(0,4)}…${cfg.tokenMint.slice(-4)}`}
+                    </span>
                   </div>
                   <div className="flex items-center justify-between">
                     <span className="text-muted-foreground">Amount</span>
@@ -1162,7 +1242,7 @@ export default function LiveRunner() {
             </div>
 
             <div className="rounded-lg border p-3 text-sm">
-              <div className="font-medium mb-2">Activity</div>
+              <div className="font-medium mb-2">Activity {tokenInfo?.symbol && `(${tokenInfo.symbol})`}</div>
               <ul className="space-y-1 max-h-48 overflow-auto">
                 {activity.map((a, idx) => (
                   <li key={idx} className="text-muted-foreground">
@@ -1173,12 +1253,12 @@ export default function LiveRunner() {
             </div>
 
             <div className="rounded-lg border p-3 text-sm">
-              <div className="font-medium mb-2">Recent trades</div>
+              <div className="font-medium mb-2">Recent trades {tokenInfo?.symbol && `(${tokenInfo.symbol})`}</div>
               <ul className="space-y-1 max-h-72 overflow-auto">
                 {trades.map((t) => (
                   <li key={t.id} className="flex items-center justify-between gap-2">
                     <span className="text-muted-foreground">
-                      {new Date(t.time).toLocaleTimeString()} • {t.side.toUpperCase()} • {t.status}
+                      {new Date(t.time).toLocaleTimeString()} • {t.side.toUpperCase()} {tokenInfo?.symbol || 'TOKEN'} • {t.status}
                     </span>
                     {t.signatures?.[0] && (
                       <a
