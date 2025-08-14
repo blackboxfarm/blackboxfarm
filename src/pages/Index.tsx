@@ -2,6 +2,7 @@
 
 import React, { useEffect } from "react";
 import SecretsModal from "@/components/SecretsModal";
+import ScrapedDataViewer from "@/components/ScrapedDataViewer";
 import LiveRunner from "@/components/LiveRunner";
 import { Button } from "@/components/ui/button";
 import { Link } from "react-router-dom";
@@ -46,7 +47,8 @@ const Index = () => {
           </div>
         </div>
       </header>
-      <main className="container mx-auto px-4 pb-12">
+      <main className="container mx-auto px-4 pb-12 space-y-8">
+        <ScrapedDataViewer />
         <LiveRunner />
       </main>
     </div>
