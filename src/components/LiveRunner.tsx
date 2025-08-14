@@ -209,11 +209,53 @@ export default function LiveRunner() {
 
   const [holding, setHolding] = React.useState<{ mint: string; amountRaw: string; decimals: number; uiAmount: number } | null>(null);
   const [activity, setActivity] = React.useState<{ time: number; text: string }[]>([]);
-  const [coinScannerEnabled, setCoinScannerEnabled] = React.useState(false);
+  const [coinScannerEnabled, setCoinScannerEnabled] = React.useState(true); // Enable by default
   const [autoScanning, setAutoScanning] = React.useState(false);
   const log = React.useCallback((text: string) => {
     setActivity((a) => [{ time: Date.now(), text }, ...a].slice(0, 50));
   }, []);
+
+  // Auto-adjust trading parameters based on token characteristics
+  const adjustParametersForToken = React.useCallback((token: any) => {
+    // Calculate volatility indicators
+    const priceChange24h = Math.abs(parseFloat(token.priceChange24h || "0"));
+    const volume24h = parseFloat(token.volume24h || "0");
+    const marketCap = parseFloat(token.marketCap || "0");
+    const liquidity = parseFloat(token.liquidity || "0");
+    
+    // Volatility-based adjustments
+    let dipPct = 1.0;
+    let takeProfitPct = 10;
+    
+    if (priceChange24h > 30) {
+      // High volatility - increase thresholds
+      dipPct = 2.5;
+      takeProfitPct = 15;
+      log(`📊 High volatility detected (${priceChange24h.toFixed(1)}%), using dip: ${dipPct}%, profit: ${takeProfitPct}%`);
+    } else if (priceChange24h > 15) {
+      // Medium volatility
+      dipPct = 1.5;
+      takeProfitPct = 12;
+      log(`📊 Medium volatility detected (${priceChange24h.toFixed(1)}%), using dip: ${dipPct}%, profit: ${takeProfitPct}%`);
+    } else if (priceChange24h < 5) {
+      // Low volatility - tighter thresholds
+      dipPct = 0.8;
+      takeProfitPct = 8;
+      log(`📊 Low volatility detected (${priceChange24h.toFixed(1)}%), using dip: ${dipPct}%, profit: ${takeProfitPct}%`);
+    }
+
+    // Liquidity-based adjustments (lower liquidity = higher slippage tolerance)
+    let slippageBps = 1500;
+    if (liquidity < 50000) {
+      slippageBps = 2500;
+      log(`💧 Low liquidity detected ($${(liquidity/1000).toFixed(0)}K), increased slippage to ${slippageBps} bps`);
+    } else if (liquidity > 500000) {
+      slippageBps = 1000;
+      log(`💧 High liquidity detected ($${(liquidity/1000).toFixed(0)}K), reduced slippage to ${slippageBps} bps`);
+    }
+
+    return { dipPct, takeProfitPct, slippageBps };
+  }, [log]);
 
   // Auto-scan and select best token
   const scanAndSelectBestToken = React.useCallback(async (): Promise<boolean> => {
@@ -233,8 +275,19 @@ export default function LiveRunner() {
       if (data?.success && data?.qualifiedTokens?.length > 0) {
         const bestToken = data.qualifiedTokens[0]; // First token is already sorted by best score
         log(`✅ Found ${data.qualifiedTokens.length} tokens, selecting best: ${bestToken.symbol} (score: ${bestToken.totalScore.toFixed(0)})`);
-        setCfg(prev => ({ ...prev, tokenMint: bestToken.mint }));
-        log(`🎯 Auto-selected ${bestToken.symbol} (${bestToken.mint})`);
+        
+        // Auto-adjust parameters based on token characteristics
+        const adjustedParams = adjustParametersForToken(bestToken);
+        
+        setCfg(prev => ({ 
+          ...prev, 
+          tokenMint: bestToken.mint,
+          dipPct: adjustedParams.dipPct,
+          takeProfitPct: adjustedParams.takeProfitPct,
+          slippageBps: adjustedParams.slippageBps
+        }));
+        
+        log(`🎯 Auto-selected ${bestToken.symbol} with optimized parameters`);
         return true;
       } else {
         log("❌ No qualified tokens found in scan");
@@ -246,7 +299,7 @@ export default function LiveRunner() {
     } finally {
       setAutoScanning(false);
     }
-  }, [log]);
+  }, [log, adjustParametersForToken]);
 
   // Handle token suggestions from coin scanner
   const handleTokenSuggestion = React.useCallback((token: any) => {
