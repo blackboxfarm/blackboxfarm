@@ -68,7 +68,7 @@ async function fetchJupPriceUSD(mint: string): Promise<number | null> {
       if (Number.isFinite(p) && p > 0) return p;
     }
   } catch {}
-  // 2) Our edge proxy (works even when browser can’t reach price sources)
+  // 2) Our edge proxy (works even when browser can't reach price sources)
   try {
     const r2 = await fetch(`${SB_PROJECT_URL}/functions/v1/raydium-quote?priceMint=${encodeURIComponent(mint)}`, {
       headers: { apikey: SB_ANON_KEY, Authorization: `Bearer ${SB_ANON_KEY}` },
@@ -213,10 +213,101 @@ export default function LiveRunner() {
   const [autoScanning, setAutoScanning] = React.useState(false);
   const [tokenInfo, setTokenInfo] = React.useState<{ name?: string; symbol?: string; price?: number } | null>(null);
   
+  // New state for enhanced features
+  const [volatilityAssessment, setVolatilityAssessment] = React.useState<{ score: number; message: string } | null>(null);
+  const [startMode, setStartMode] = React.useState<'buying' | 'selling'>('buying');
+  const [sessionStartTime, setSessionStartTime] = React.useState<number | null>(null);
+  const [exitConditions, setExitConditions] = React.useState<{ timeBasedExit: boolean; minProfitForTimeExit: number }>({ 
+    timeBasedExit: false, 
+    minProfitForTimeExit: 1 
+  });
+  
   const log = React.useCallback((text: string) => {
     const tokenTicker = tokenInfo?.symbol || cfg.tokenMint.slice(0, 4) + '…' + cfg.tokenMint.slice(-4);
     setActivity((a) => [{ time: Date.now(), text: text.replace(/\$TOKEN/g, tokenTicker) }, ...a].slice(0, 50));
   }, [tokenInfo?.symbol, cfg.tokenMint]);
+
+  // Enhanced volatility assessment (1 minute window)
+  const assessTokenVolatility = React.useCallback(async (mint: string): Promise<{ score: number; message: string }> => {
+    try {
+      log("📊 Assessing token volatility for 1 minute...");
+      const prices: number[] = [];
+      const startTime = Date.now();
+      
+      // Collect price data for 1 minute (every 2 seconds)
+      while (Date.now() - startTime < 60000) {
+        const currentPrice = await fetchJupPriceUSD(mint);
+        if (currentPrice) prices.push(currentPrice);
+        await new Promise(resolve => setTimeout(resolve, 2000));
+      }
+      
+      if (prices.length < 5) {
+        return { score: 0, message: "Insufficient price data for assessment" };
+      }
+      
+      // Calculate volatility metrics
+      const minPrice = Math.min(...prices);
+      const maxPrice = Math.max(...prices);
+      const avgPrice = prices.reduce((a, b) => a + b) / prices.length;
+      const volatilityPct = ((maxPrice - minPrice) / avgPrice) * 100;
+      
+      // Calculate trend direction
+      const firstHalf = prices.slice(0, Math.floor(prices.length / 2));
+      const secondHalf = prices.slice(Math.floor(prices.length / 2));
+      const firstAvg = firstHalf.reduce((a, b) => a + b) / firstHalf.length;
+      const secondAvg = secondHalf.reduce((a, b) => a + b) / secondHalf.length;
+      const trendPct = ((secondAvg - firstAvg) / firstAvg) * 100;
+      
+      let score = 50; // Base score
+      let message = "";
+      
+      if (volatilityPct > 3) {
+        score += 30;
+        message = `High volatility (${volatilityPct.toFixed(1)}%) - Good for trading`;
+      } else if (volatilityPct > 1.5) {
+        score += 15;
+        message = `Medium volatility (${volatilityPct.toFixed(1)}%) - Moderate trading potential`;
+      } else {
+        score -= 20;
+        message = `Low volatility (${volatilityPct.toFixed(1)}%) - Limited movement detected`;
+      }
+      
+      if (Math.abs(trendPct) > 2) {
+        score += 10;
+        message += `, ${trendPct > 0 ? 'upward' : 'downward'} trend (${Math.abs(trendPct).toFixed(1)}%)`;
+      }
+      
+      log(`📊 Volatility assessment complete: ${message}`);
+      return { score: Math.max(0, Math.min(100, score)), message };
+    } catch (error) {
+      log(`❌ Volatility assessment failed: ${error}`);
+      return { score: 50, message: "Assessment failed, using default parameters" };
+    }
+  }, [log]);
+
+  // Check wallet holdings to determine start mode
+  const checkWalletHoldings = React.useCallback(async (): Promise<'buying' | 'selling'> => {
+    try {
+      // Check if we have holdings of the target token
+      if (holding && holding.mint === cfg.tokenMint && holding.uiAmount > 0) {
+        log(`💰 Found existing holdings: ${holding.uiAmount.toFixed(6)} tokens - Starting in SELLING mode`);
+        return 'selling';
+      }
+      
+      // Check positions array for existing lots
+      const existingLots = positions.filter(lot => lot.qtyUi > 0);
+      if (existingLots.length > 0) {
+        log(`📈 Found ${existingLots.length} existing position(s) - Starting in SELLING mode`);
+        return 'selling';
+      }
+      
+      log(`🛒 No existing holdings found - Starting in BUYING mode`);
+      return 'buying';
+    } catch (error) {
+      log(`⚠️ Error checking holdings, defaulting to BUYING mode: ${error}`);
+      return 'buying';
+    }
+  }, [holding, positions, cfg.tokenMint, log]);
 
   // Auto-adjust trading parameters based on token characteristics
   const adjustParametersForToken = React.useCallback((token: any) => {
@@ -837,17 +928,34 @@ export default function LiveRunner() {
     if (positions.length > 0) {
       // Determine which lot to sell, if any
       let sellIdx: number | null = null;
-      let sellReason: 'SL' | 'TRAIL' | null = null;
+      let sellReason: 'SL' | 'TRAIL' | 'TIME' | null = null;
 
       positions.forEach((lot, idx) => {
         if (sellIdx !== null) return; // already picked
         const sl = lot.entry * (1 - cfg.stopLossPct / 100);
         const armed = pNow >= lot.entry * (1 + Number(cfg.trailArmPct ?? 5) / 100);
         const lotHigh = Math.max(lot.high, pNow);
+        
+        // Stop loss check
         if (pNow <= sl) { sellIdx = idx; sellReason = 'SL'; return; }
+        
+        // Trailing stop check
         if (armed) {
           const slowed = decelCountRef.current >= cfg.slowdownConfirmTicks;
           if (slowed && pNow <= lotHigh * (1 - cfg.trailingDropPct / 100)) { sellIdx = idx; sellReason = 'TRAIL'; return; }
+        }
+        
+        // Time-based exit check (only if profitable and enabled)
+        if (exitConditions.timeBasedExit && sessionStartTime) {
+          const sessionMinutes = (nowTs - sessionStartTime) / 60000;
+          const profitPct = ((pNow / lot.entry) - 1) * 100;
+          
+          // Exit after 30 minutes if above minimum profit threshold
+          if (sessionMinutes > 30 && profitPct >= exitConditions.minProfitForTimeExit) {
+            sellIdx = idx; 
+            sellReason = 'TIME'; 
+            return;
+          }
         }
       });
 
@@ -862,7 +970,7 @@ export default function LiveRunner() {
           setPositions((lots) => lots.filter((_, i) => i !== sellIdx));
           setLastSellTs(Date.now());
           const nextBuy = prevAnchorLow * (1 - effDipPct / 100);
-          log(`Sold lot#${sellIdx + 1} at $${format(pNow, 6)}. Watching dip to $${format(nextBuy, 6)}.`);
+          log(`Sold lot#${sellIdx + 1} at $${format(pNow, 6)} (${sellReason}). Watching dip to $${format(nextBuy, 6)}.`);
         }
         return;
       }
@@ -958,7 +1066,7 @@ export default function LiveRunner() {
       const bounceInfo = buyArmRef.current ? ` • bounce≥ ~$${format(buyArmRef.current.min * (1 + bounceConfirmPct / 100), 6)}` : '';
       setStatus(`Watching — price $${format(pNow, 6)} • anchorLow $${format(prevAnchorLow, 6)} • targetBuy ~$${format(target, 6)}${bounceInfo}`);
     }
-  }, [executing, manualPrice, cfg, effectivePrice, positions, canBuy, execSwap, pickNextOwner]);
+  }, [executing, manualPrice, cfg, effectivePrice, positions, canBuy, execSwap, pickNextOwner, exitConditions, sessionStartTime]);
 
   useInterval(() => {
     if (running) void tick();
@@ -969,18 +1077,35 @@ export default function LiveRunner() {
       toast({ title: "Secrets required", description: "Set Secrets (RPC + Private Key) to enable future on-chain execution." });
     }
     
-    // First scan for best token
+    setSessionStartTime(Date.now());
+    setStatus("initializing");
     log("🚀 Starting trading bot...");
-    const scanSuccess = await scanAndSelectBestToken();
     
-    if (scanSuccess) {
-      log("✅ Auto-selected best token, starting trading");
-    } else {
-      log("⚠️ Starting with current token (scan failed)");
+    // 1. Check wallet holdings to determine start mode
+    log("🔍 Checking wallet holdings...");
+    const detectedMode = await checkWalletHoldings();
+    setStartMode(detectedMode);
+    
+    // 2. Assess token volatility (1 minute)
+    log("📊 Assessing token volatility...");
+    const assessment = await assessTokenVolatility(cfg.tokenMint);
+    setVolatilityAssessment(assessment);
+    
+    // 3. If we're in buying mode and scanner is enabled, scan for better tokens
+    if (detectedMode === 'buying' && coinScannerEnabled) {
+      log("🔍 Auto-scanning for qualified tokens...");
+      const scanSuccess = await scanAndSelectBestToken();
+      
+      if (scanSuccess) {
+        log("✅ Auto-selected best token, starting trading");
+      } else {
+        log("⚠️ Starting with current token (scan failed)");
+      }
     }
     
+    log(`🎯 Start Mode: ${detectedMode.toUpperCase()} | Volatility: ${assessment.message}`);
     setRunning(true);
-    setStatus("running");
+    setStatus(`${detectedMode} mode - monitoring`);
     // Immediately fetch fresh price and announce dip target
     (async () => {
       const p = await fetchJupPriceUSD(cfg.tokenMint);
@@ -1151,6 +1276,30 @@ export default function LiveRunner() {
               </div>
             </div>
 
+            {/* Enhanced Exit Conditions */}
+            <div className="rounded-lg border p-3 space-y-3">
+              <h3 className="font-medium">Exit Conditions</h3>
+              <div className="flex items-center gap-4">
+                <div className="flex items-center gap-2">
+                  <Switch 
+                    checked={exitConditions.timeBasedExit} 
+                    onCheckedChange={(v) => setExitConditions({...exitConditions, timeBasedExit: v})} 
+                  />
+                  <span className="text-sm">Time-based exit (only if profitable)</span>
+                </div>
+                <div className="space-y-1">
+                  <Label className="text-xs">Min profit for time exit (%)</Label>
+                  <Input 
+                    type="number" 
+                    step="0.1" 
+                    className="w-20" 
+                    value={exitConditions.minProfitForTimeExit} 
+                    onChange={(e) => setExitConditions({...exitConditions, minProfitForTimeExit: Number(e.target.value)})} 
+                  />
+                </div>
+              </div>
+            </div>
+
             <div className="rounded-lg border p-3 text-sm space-y-1">
               <div className="flex items-center justify-between">
                 <span className="font-medium">Status:</span>
@@ -1158,6 +1307,18 @@ export default function LiveRunner() {
                   {status} {tokenInfo?.symbol && `• ${tokenInfo.symbol}`}
                 </span>
               </div>
+              {volatilityAssessment && (
+                <div className="flex items-center justify-between">
+                  <span className="font-medium">Volatility:</span>
+                  <span className="text-blue-600">{volatilityAssessment.score}/100</span>
+                </div>
+              )}
+              {sessionStartTime && (
+                <div className="flex items-center justify-between">
+                  <span className="font-medium">Runtime:</span>
+                  <span className="text-muted-foreground">{Math.floor((Date.now() - sessionStartTime) / 60000)}m</span>
+                </div>
+              )}
               <div className="flex items-center justify-between">
                 <span className="font-medium">Price:</span>
                 <span>${format(effectivePrice ?? NaN, 6)}</span>
@@ -1330,19 +1491,19 @@ export default function LiveRunner() {
           >
             {coinScannerEnabled ? 'Hide' : 'Show'} Scanner
           </Button>
-      </CardFooter>
+        </CardFooter>
 
-      {/* Coin Scanner */}
-      {coinScannerEnabled && (
-        <div className="mt-4">
-          <CoinScanner
-            currentToken={cfg.tokenMint}
-            onTokenSuggestion={handleTokenSuggestion}
-            autoScanEnabled={running}
-            scanInterval={300000} // 5 minutes
-          />
-        </div>
-      )}
-    </Card>
+        {/* Coin Scanner */}
+        {coinScannerEnabled && (
+          <div className="p-4 border-t">
+            <CoinScanner
+              currentToken={cfg.tokenMint}
+              onTokenSuggestion={handleTokenSuggestion}
+              autoScanEnabled={running}
+              scanInterval={300000} // 5 minutes
+            />
+          </div>
+        )}
+      </Card>
   );
 }
