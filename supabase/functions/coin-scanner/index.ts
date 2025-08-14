@@ -43,56 +43,35 @@ async function fetchTokenData(mint: string): Promise<any> {
   }
 }
 
-// Fetch top 200 trending tokens with all data in one request
+// Fetch top 200 trending tokens using working DexScreener endpoints
 async function fetchTrendingTokens(): Promise<any[]> {
   try {
-    console.log('🔍 Fetching top 200 trending tokens with full data...')
+    console.log('🔍 Fetching tokens from DexScreener...')
     
-    // Get top trending Solana tokens with all metadata
-    const response = await fetch('https://api.dexscreener.com/latest/dex/tokens/trending?chainId=solana&limit=200')
+    // Use the search endpoint which definitely works
+    const response = await fetch('https://api.dexscreener.com/latest/dex/search/?q=&chainId=solana&rankBy=volume&order=desc')
     const data = await response.json()
     
-    if (!data || !Array.isArray(data)) {
-      console.log('❌ No trending data received, falling back to search')
-      // Fallback to search if trending endpoint fails
-      const fallbackResponse = await fetch('https://api.dexscreener.com/latest/dex/search/?q=&chainId=solana&rankBy=volume&order=desc&limit=200')
-      const fallbackData = await fallbackResponse.json()
-      const tokens = fallbackData.pairs || []
-      console.log(`📊 Fallback: Found ${tokens.length} tokens via search`)
-      return tokens
-    }
+    console.log('📊 DexScreener API response structure:', Object.keys(data))
     
-    console.log(`📊 Found ${data.length} trending tokens with full data`)
-    
-    // For trending endpoint, each item might be a token object, let's check structure
-    // and convert to pairs format if needed
-    const tokens = data.map(token => {
-      // If it's already in pairs format, return as-is
-      if (token.baseToken && token.quoteToken) {
-        return token
-      }
-      // If it's a token object, we need to fetch pair data
-      // For now, return what we have and handle in evaluation
-      return token
-    })
-    
-    return tokens.slice(0, 200)
-    
-  } catch (error) {
-    console.error('❌ Error fetching trending tokens:', error)
-    console.log('🔄 Attempting fallback to general search...')
-    
-    try {
-      // Final fallback
-      const fallbackResponse = await fetch('https://api.dexscreener.com/latest/dex/search/?q=&chainId=solana&limit=200')
-      const fallbackData = await fallbackResponse.json()
-      const tokens = fallbackData.pairs || []
-      console.log(`📊 Final fallback: Found ${tokens.length} tokens`)
-      return tokens
-    } catch (fallbackError) {
-      console.error('❌ All token fetching methods failed:', fallbackError)
+    if (!data.pairs || !Array.isArray(data.pairs)) {
+      console.log('❌ No pairs data in response:', data)
       return []
     }
+    
+    const tokens = data.pairs.slice(0, 200) // Get top 200 by volume
+    console.log(`📊 Found ${tokens.length} tokens with volume data`)
+    
+    // Log first token structure for debugging
+    if (tokens.length > 0) {
+      console.log('🔍 Sample token structure:', JSON.stringify(tokens[0], null, 2))
+    }
+    
+    return tokens
+    
+  } catch (error) {
+    console.error('❌ Error fetching tokens:', error)
+    return []
   }
 }
 
