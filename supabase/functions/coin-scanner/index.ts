@@ -594,7 +594,20 @@ serve(async (req) => {
         success: true, 
         tokens: topTokens,
         scannedCount: allTokens.length,
-        qualifiedCount: evaluations.length
+        qualifiedCount: evaluations.length,
+        // Add all raw tokens for debugging
+        allTokens: allTokens.map(token => ({
+          mint: token.baseToken?.address || 'N/A',
+          symbol: token.baseToken?.symbol || 'N/A',
+          name: token.baseToken?.name || 'N/A',
+          marketCap: parseFloat(token.marketCap) || 0,
+          volume24h: parseFloat(token.volume?.h24) || 0,
+          liquidityUsd: parseFloat(token.liquidity?.usd) || 0,
+          priceUsd: parseFloat(token.priceUsd) || 0,
+          priceChange24h: parseFloat(token.priceChange?.h24) || 0,
+          chainId: token.chainId || 'solana',
+          dexId: token.dexId || 'N/A'
+        }))
       }),
       { 
         headers: { 

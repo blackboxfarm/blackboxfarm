@@ -33,6 +33,7 @@ interface ScanResult {
   tokens: TokenMetrics[]
   scannedCount: number
   qualifiedCount: number
+  allTokens?: any[] // Raw tokens from API for debugging
   error?: string
 }
 
@@ -55,6 +56,7 @@ export default function CoinScanner({
   const [maxResults, setMaxResults] = useState([10])
   const [lastScan, setLastScan] = useState<Date | null>(null)
   const [scanResults, setScanResults] = useState<TokenMetrics[]>([])
+  const [allTokens, setAllTokens] = useState<any[]>([]) // Store raw API data
   const [scanStats, setScanStats] = useState({ scanned: 0, qualified: 0 })
   const [autoScanTimer, setAutoScanTimer] = useState<NodeJS.Timeout | null>(null)
 
@@ -79,6 +81,7 @@ export default function CoinScanner({
       
       if (result.success) {
         setScanResults(result.tokens)
+        setAllTokens(result.allTokens || []) // Store raw API data
         setScanStats({
           scanned: result.scannedCount,
           qualified: result.qualifiedCount
@@ -235,6 +238,47 @@ export default function CoinScanner({
             <span>Scanned: {scanStats.scanned} tokens</span>
             <span>Qualified: {scanStats.qualified} tokens</span>
             <span>Pass Rate: {((scanStats.qualified / scanStats.scanned) * 100).toFixed(1)}%</span>
+          </div>
+        )}
+
+        <Separator />
+
+        {/* Raw API Data Table */}
+        {allTokens.length > 0 && (
+          <div className="space-y-3">
+            <h4 className="font-medium">Raw API Data - All {allTokens.length} Tokens</h4>
+            <div className="max-h-80 overflow-auto border rounded-lg">
+              <table className="w-full text-sm">
+                <thead className="bg-muted sticky top-0">
+                  <tr>
+                    <th className="text-left p-2 border-b w-20">Symbol</th>
+                    <th className="text-left p-2 border-b">Name</th>
+                    <th className="text-right p-2 border-b w-24">Market Cap</th>
+                    <th className="text-right p-2 border-b w-24">Volume 24h</th>
+                    <th className="text-right p-2 border-b w-24">Liquidity</th>
+                    <th className="text-right p-2 border-b w-20">Price</th>
+                    <th className="text-right p-2 border-b w-20">24h %</th>
+                    <th className="text-left p-2 border-b w-16">DEX</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {allTokens.map((token: any, index: number) => (
+                    <tr key={token.mint || index} className="hover:bg-muted/50">
+                      <td className="p-2 border-b font-mono text-xs">{token.symbol}</td>
+                      <td className="p-2 border-b max-w-32 truncate" title={token.name}>{token.name}</td>
+                      <td className="p-2 border-b text-right">{formatNumber(token.marketCap)}</td>
+                      <td className="p-2 border-b text-right">{formatNumber(token.volume24h)}</td>
+                      <td className="p-2 border-b text-right">{formatNumber(token.liquidityUsd)}</td>
+                      <td className="p-2 border-b text-right text-xs">${token.priceUsd.toFixed(6)}</td>
+                      <td className={`p-2 border-b text-right text-xs ${token.priceChange24h >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                        {token.priceChange24h > 0 ? '+' : ''}{token.priceChange24h.toFixed(1)}%
+                      </td>
+                      <td className="p-2 border-b text-xs">{token.dexId}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           </div>
         )}
 
