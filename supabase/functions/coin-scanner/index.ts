@@ -265,28 +265,29 @@ async function evaluateToken(tokenData: any, currentTokenPrices?: number[]): Pro
   console.log(`   Liquidity: $${liquidityUsd.toLocaleString()} [REAL DATA from DexScreener]`)
   console.log(`   Price: $${priceUsd} [REAL DATA from DexScreener]`)
   
-  // Check basic thresholds first (temporarily relaxed for testing)
-  if (marketCap < 1_000_000 || marketCap > 100_000_000) {
-    console.log(`❌ ${symbol} rejected: Market cap ${marketCap.toLocaleString()} outside range 1M-100M`)
+  // Check basic thresholds first (temporarily relaxed for debugging)
+  if (marketCap < 100_000 || marketCap > 500_000_000) {
+    console.log(`❌ ${symbol} rejected: Market cap ${marketCap.toLocaleString()} outside range 100K-500M`)
     return null
   }
-  if (liquidityUsd < 50_000) {
-    console.log(`❌ ${symbol} rejected: Liquidity ${liquidityUsd.toLocaleString()} below 50K minimum`)
+  if (liquidityUsd < 10_000) {
+    console.log(`❌ ${symbol} rejected: Liquidity ${liquidityUsd.toLocaleString()} below 10K minimum`)
     return null
   }
-  if (volume24h < 100_000) {
-    console.log(`❌ ${symbol} rejected: Volume ${volume24h.toLocaleString()} below 100K minimum`)
+  if (volume24h < 10_000) {
+    console.log(`❌ ${symbol} rejected: Volume ${volume24h.toLocaleString()} below 10K minimum`)
     return null
   }
   
   console.log(`✅ ${symbol} passed basic thresholds`)
   
-  // Check liquidity lock with RugCheck API
-  const liquidityLocked = await checkLiquidityLock(mint)
-  if (!liquidityLocked) {
-    console.log(`❌ ${symbol} rejected: Liquidity not locked`)
-    return null
-  }
+  // Skip liquidity lock check for now to see what passes
+  console.log(`   Liquidity Lock: SKIPPED [Testing - would check RugCheck API]`)
+  // const liquidityLocked = await checkLiquidityLock(mint)
+  // if (!liquidityLocked) {
+  //   console.log(`❌ ${symbol} rejected: Liquidity not locked`)
+  //   return null
+  // }
   
   // Get real holder count from Helius
   const holderCount = await getTokenHolderCount(mint)
