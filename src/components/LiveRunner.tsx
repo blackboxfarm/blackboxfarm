@@ -210,9 +210,43 @@ export default function LiveRunner() {
   const [holding, setHolding] = React.useState<{ mint: string; amountRaw: string; decimals: number; uiAmount: number } | null>(null);
   const [activity, setActivity] = React.useState<{ time: number; text: string }[]>([]);
   const [coinScannerEnabled, setCoinScannerEnabled] = React.useState(false);
+  const [autoScanning, setAutoScanning] = React.useState(false);
   const log = React.useCallback((text: string) => {
     setActivity((a) => [{ time: Date.now(), text }, ...a].slice(0, 50));
   }, []);
+
+  // Auto-scan and select best token
+  const scanAndSelectBestToken = React.useCallback(async (): Promise<boolean> => {
+    try {
+      setAutoScanning(true);
+      log("🔍 Auto-scanning for best token...");
+      
+      const { data, error } = await supabase.functions.invoke('coin-scanner', {
+        body: { minScore: 70, limit: 10 }
+      });
+      
+      if (error) {
+        log(`❌ Scan failed: ${error.message}`);
+        return false;
+      }
+      
+      if (data?.success && data?.qualifiedTokens?.length > 0) {
+        const bestToken = data.qualifiedTokens[0]; // First token is already sorted by best score
+        log(`✅ Found ${data.qualifiedTokens.length} tokens, selecting best: ${bestToken.symbol} (score: ${bestToken.totalScore.toFixed(0)})`);
+        setCfg(prev => ({ ...prev, tokenMint: bestToken.mint }));
+        log(`🎯 Auto-selected ${bestToken.symbol} (${bestToken.mint})`);
+        return true;
+      } else {
+        log("❌ No qualified tokens found in scan");
+        return false;
+      }
+    } catch (err) {
+      log(`❌ Scan error: ${err}`);
+      return false;
+    } finally {
+      setAutoScanning(false);
+    }
+  }, [log]);
 
   // Handle token suggestions from coin scanner
   const handleTokenSuggestion = React.useCallback((token: any) => {
@@ -812,10 +846,21 @@ export default function LiveRunner() {
     if (running) void tick();
   }, running ? cfg.intervalSec * 1000 : null);
 
-  const start = () => {
+  const start = async () => {
     if (!ready) {
       toast({ title: "Secrets required", description: "Set Secrets (RPC + Private Key) to enable future on-chain execution." });
     }
+    
+    // First scan for best token
+    log("🚀 Starting trading bot...");
+    const scanSuccess = await scanAndSelectBestToken();
+    
+    if (scanSuccess) {
+      log("✅ Auto-selected best token, starting trading");
+    } else {
+      log("⚠️ Starting with current token (scan failed)");
+    }
+    
     setRunning(true);
     setStatus("running");
     // Immediately fetch fresh price and announce dip target
@@ -1085,7 +1130,9 @@ export default function LiveRunner() {
         {running ? (
           <Button variant="secondary" onClick={stop} disabled={executing}>Stop</Button>
         ) : (
-          <Button onClick={start} disabled={executing}>Start</Button>
+          <Button onClick={start} disabled={executing || autoScanning}>
+            {autoScanning ? "Scanning..." : "Start"}
+          </Button>
         )}
           <Button onClick={async () => {
             const owner = pickNextOwner();
