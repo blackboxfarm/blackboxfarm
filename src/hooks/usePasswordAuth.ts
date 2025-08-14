@@ -16,18 +16,22 @@ export const usePasswordAuth = () => {
 
   const authenticate = async (password: string): Promise<boolean> => {
     try {
-      const { data, error } = await supabase
-        .from('access_passwords')
-        .select('password_hash')
-        .eq('password_hash', password)
-        .eq('is_active', true)
-        .single();
+      // Use the secure function instead of direct database access
+      const { data, error } = await supabase.rpc('verify_access_password', { 
+        input_password: password 
+      });
 
-      if (!error && data) {
+      if (error) {
+        console.error('Authentication error:', error);
+        return false;
+      }
+
+      if (data === true) {
         setIsAuthenticated(true);
         localStorage.setItem('passwordAuth', 'true');
         return true;
       }
+
       return false;
     } catch (error) {
       console.error('Authentication error:', error);
