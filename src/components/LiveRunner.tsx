@@ -9,6 +9,7 @@ import { useLocalSecrets } from "@/hooks/useLocalSecrets";
 import { supabase } from "@/integrations/supabase/client";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useWalletPool } from "@/hooks/useWalletPool";
+import CoinScanner from "./CoinScanner";
 
 // Supabase Functions fallback (direct URL) — uses public anon key
 const SB_PROJECT_URL = "https://apxauapuusmgwbbzjgfl.supabase.co";
@@ -208,9 +209,22 @@ export default function LiveRunner() {
 
   const [holding, setHolding] = React.useState<{ mint: string; amountRaw: string; decimals: number; uiAmount: number } | null>(null);
   const [activity, setActivity] = React.useState<{ time: number; text: string }[]>([]);
+  const [coinScannerEnabled, setCoinScannerEnabled] = React.useState(false);
   const log = React.useCallback((text: string) => {
     setActivity((a) => [{ time: Date.now(), text }, ...a].slice(0, 50));
   }, []);
+
+  // Handle token suggestions from coin scanner
+  const handleTokenSuggestion = React.useCallback((token: any) => {
+    const currentScore = 75; // Placeholder - would calculate current token's score
+    if (token.totalScore > currentScore + 10) {
+      log(`Scanner suggests better token: ${token.symbol} (score: ${token.totalScore.toFixed(0)})`);
+      if (confirm(`Switch to ${token.symbol} (${token.name})? Scanner score: ${token.totalScore.toFixed(0)} vs current: ${currentScore}`)) {
+        setCfg(prev => ({ ...prev, tokenMint: token.mint }));
+        log(`Switched to ${token.symbol} (${token.mint})`);
+      }
+    }
+  }, [log]);
   const prevPriceRef = React.useRef<number | null>(null);
   const decelCountRef = React.useRef<number>(0);
   const priceWindowRef = React.useRef<{ t: number; p: number }[]>([]);
@@ -1111,7 +1125,25 @@ export default function LiveRunner() {
           >
             Reset state
           </Button>
+          <Button
+            variant="outline"
+            onClick={() => setCoinScannerEnabled(!coinScannerEnabled)}
+          >
+            {coinScannerEnabled ? 'Hide' : 'Show'} Scanner
+          </Button>
       </CardFooter>
+
+      {/* Coin Scanner */}
+      {coinScannerEnabled && (
+        <div className="mt-4">
+          <CoinScanner
+            currentToken={cfg.tokenMint}
+            onTokenSuggestion={handleTokenSuggestion}
+            autoScanEnabled={running}
+            scanInterval={300000} // 5 minutes
+          />
+        </div>
+      )}
     </Card>
   );
 }
