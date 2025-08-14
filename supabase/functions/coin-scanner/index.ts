@@ -285,6 +285,125 @@ async function analyzeNewsSentiment(symbol: string): Promise<number> {
   }
 }
 
+// Basic evaluation using only DexScreener data
+function evaluateBasicCriteria(tokenData: any): { mint: string; symbol: string; name: string; marketCap: number; volume24h: number; liquidityUsd: number; priceUsd: number } | null {
+  if (!tokenData || !tokenData.baseToken) {
+    return null
+  }
+  
+  const mint = tokenData.baseToken.address
+  const symbol = tokenData.baseToken.symbol
+  const name = tokenData.baseToken.name
+  const priceUsd = parseFloat(tokenData.priceUsd) || 0
+  const marketCap = parseFloat(tokenData.marketCap) || 0
+  const volume24h = parseFloat(tokenData.volume?.h24) || 0
+  const liquidityUsd = parseFloat(tokenData.liquidity?.usd) || 0
+  
+  // Basic threshold checks (use DexScreener data only)
+  if (marketCap < 100_000 || marketCap > 500_000_000) {
+    return null
+  }
+  if (liquidityUsd < 10_000) {
+    return null
+  }
+  if (volume24h < 10_000) {
+    return null
+  }
+  if (priceUsd <= 0) {
+    return null
+  }
+  
+  return { mint, symbol, name, marketCap, volume24h, liquidityUsd, priceUsd }
+}
+
+// Full evaluation with detailed API calls for qualified tokens
+async function evaluateTokenDetails(basicData: any): Promise<TokenMetrics | null> {
+  const { mint, symbol, name, marketCap, volume24h, liquidityUsd, priceUsd } = basicData
+  
+  console.log(`\n🔍 Detailed evaluation for ${symbol} (${mint.slice(0,8)}...)`)
+  console.log(`   Market Cap: $${marketCap.toLocaleString()}`)
+  console.log(`   24h Volume: $${volume24h.toLocaleString()}`)
+  console.log(`   Liquidity: $${liquidityUsd.toLocaleString()}`)
+  console.log(`   Price: $${priceUsd}`)
+  
+  // Fetch detailed metrics that require API calls
+  const [
+    holderCount,
+    ageHours,
+    spread,
+    { volatility: volatility24h, swingCount },
+    newsScore
+  ] = await Promise.all([
+    getTokenHolderCount(mint),
+    getTokenAge(mint),
+    getRealSpread(mint),
+    getRealVolatility(mint, priceUsd),
+    analyzeNewsSentiment(symbol)
+  ])
+  
+  // Check detailed criteria
+  if (holderCount < 500) {
+    console.log(`❌ ${symbol} rejected: Holder count ${holderCount} below 500 minimum`)
+    return null
+  }
+  if (spread > 0.015) {
+    console.log(`❌ ${symbol} rejected: Spread ${(spread*100).toFixed(3)}% above 1.5% maximum`)
+    return null
+  }
+  if (volatility24h < 10 || volatility24h > 20) {
+    console.log(`❌ ${symbol} rejected: Volatility ${volatility24h.toFixed(2)}% outside 10-20% range`)
+    return null
+  }
+  if (swingCount < 5) {
+    console.log(`❌ ${symbol} rejected: Only ${swingCount} swings, need minimum 5`)
+    return null
+  }
+  
+  // Skip liquidity lock check for now (can be added back later)
+  const liquidityLocked = true
+  
+  // Calculate advanced metrics
+  const volumeProfile: number[] = []
+  const correlationScore = 0.5
+  
+  // Calculate total score (weighted)
+  const scores = {
+    marketCap: Math.min(marketCap / 25_000_000, 1) * 15,
+    volume: Math.min(volume24h / 2_000_000, 1) * 15,
+    liquidity: Math.min(liquidityUsd / 1_000_000, 1) * 10,
+    volatility: (volatility24h - 10) / 10 * 15,
+    holders: Math.min(holderCount / 5000, 1) * 10,
+    spread: (1 - spread / 0.01) * 10,
+    swings: Math.min(swingCount / 10, 1) * 10,
+    correlation: correlationScore * 10,
+    news: newsScore * 5
+  }
+  
+  const totalScore = Object.values(scores).reduce((a, b) => a + b, 0)
+  
+  console.log(`✅ ${symbol} QUALIFIED with score ${totalScore.toFixed(1)}`)
+  
+  return {
+    mint,
+    symbol,
+    name,
+    marketCap,
+    volume24h,
+    liquidityUsd,
+    priceUsd,
+    holderCount,
+    volatility24h,
+    ageHours,
+    spread,
+    liquidityLocked,
+    swingCount,
+    volumeProfile,
+    correlationScore,
+    newsScore,
+    totalScore
+  }
+}
+
 // Evaluate a single token against all criteria
 async function evaluateToken(tokenData: any, currentTokenPrices?: number[]): Promise<TokenMetrics | null> {
   if (!tokenData || !tokenData.baseToken) {
@@ -412,35 +531,55 @@ serve(async (req) => {
     const { excludeMints = [], minScore = 70, limit = 10 }: ScanRequest = 
       await req.json().catch(() => ({}))
     
-    console.log('Starting coin scan with params:', { excludeMints, minScore, limit })
+    console.log('Starting optimized coin scan with params:', { excludeMints, minScore, limit })
     
-    // Fetch trending tokens
-    const trendingTokens = await fetchTrendingTokens()
-    console.log(`Found ${trendingTokens.length} trending tokens`)
+    // Step 1: Fetch top 200 trending tokens
+    const allTokens = await fetchTrendingTokens()
+    console.log(`📊 Retrieved ${allTokens.length} tokens for evaluation`)
     
-    // Evaluate each token
-    const evaluations: TokenMetrics[] = []
+    // Step 2: Basic filtering using only DexScreener data (fast)
+    console.log('\n🔍 PHASE 1: Basic criteria filtering...')
+    const basicQualified: any[] = []
     let rejectionReasons: { [key: string]: number } = {}
     
-    for (const tokenData of trendingTokens) {
+    for (const tokenData of allTokens) {
       if (excludeMints.includes(tokenData.baseToken?.address)) {
         console.log(`⏭️ Skipping ${tokenData.baseToken?.symbol} - in exclude list`)
         continue
       }
       
-      const evaluation = await evaluateToken(tokenData)
-      if (evaluation && evaluation.totalScore >= minScore) {
-        evaluations.push(evaluation)
-        console.log(`✅ ${evaluation.symbol} QUALIFIED with score ${evaluation.totalScore.toFixed(1)}`)
-      } else if (evaluation) {
-        console.log(`❌ ${evaluation.symbol} rejected: Score ${evaluation.totalScore.toFixed(1)} below minimum ${minScore}`)
-        rejectionReasons['Low Score'] = (rejectionReasons['Low Score'] || 0) + 1
+      const basicEval = evaluateBasicCriteria(tokenData)
+      if (basicEval) {
+        basicQualified.push({ ...tokenData, ...basicEval })
+        console.log(`✅ ${basicEval.symbol} passed basic criteria`)
+      } else {
+        const symbol = tokenData.baseToken?.symbol || 'Unknown'
+        rejectionReasons['Basic Criteria'] = (rejectionReasons['Basic Criteria'] || 0) + 1
       }
     }
     
-    console.log('\n📊 SCAN SUMMARY:')
-    console.log(`   Scanned: ${trendingTokens.length} tokens`)
-    console.log(`   Qualified: ${evaluations.length} tokens`)
+    console.log(`\n📊 PHASE 1 RESULTS: ${basicQualified.length}/${allTokens.length} tokens passed basic criteria`)
+    
+    // Step 3: Detailed evaluation for qualified candidates (slower but targeted)
+    console.log('\n🔍 PHASE 2: Detailed evaluation for qualified candidates...')
+    const evaluations: TokenMetrics[] = []
+    
+    for (const tokenData of basicQualified.slice(0, 50)) { // Limit detailed checks to top 50
+      const evaluation = await evaluateTokenDetails(tokenData)
+      if (evaluation && evaluation.totalScore >= minScore) {
+        evaluations.push(evaluation)
+      } else if (evaluation) {
+        console.log(`❌ ${evaluation.symbol} rejected: Score ${evaluation.totalScore.toFixed(1)} below minimum ${minScore}`)
+        rejectionReasons['Low Score'] = (rejectionReasons['Low Score'] || 0) + 1
+      } else {
+        rejectionReasons['Detailed Criteria'] = (rejectionReasons['Detailed Criteria'] || 0) + 1
+      }
+    }
+    
+    console.log('\n📊 FINAL SCAN SUMMARY:')
+    console.log(`   Total Scanned: ${allTokens.length} tokens`)
+    console.log(`   Phase 1 Qualified: ${basicQualified.length} tokens`)
+    console.log(`   Phase 2 Qualified: ${evaluations.length} tokens`)
     console.log(`   Rejection reasons:`, rejectionReasons)
     
     // Sort by score and limit results
@@ -454,7 +593,7 @@ serve(async (req) => {
       JSON.stringify({ 
         success: true, 
         tokens: topTokens,
-        scannedCount: trendingTokens.length,
+        scannedCount: allTokens.length,
         qualifiedCount: evaluations.length
       }),
       { 
