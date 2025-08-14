@@ -43,12 +43,35 @@ async function fetchTokenData(mint: string): Promise<any> {
   }
 }
 
-// Fetch trending tokens from DexScreener
+// Fetch trending tokens from multiple DexScreener endpoints
 async function fetchTrendingTokens(): Promise<any[]> {
   try {
-    const response = await fetch('https://api.dexscreener.com/latest/dex/search/?q=SOL')
-    const data = await response.json()
-    return data.pairs?.slice(0, 100) || []
+    console.log('🔍 Fetching tokens from multiple sources...')
+    
+    // Get trending tokens (new/hot pairs)
+    const trendingResponse = await fetch('https://api.dexscreener.com/latest/dex/tokens/trending')
+    const trendingData = await trendingResponse.json()
+    console.log(`Found ${trendingData.length || 0} trending tokens`)
+    
+    // Get tokens sorted by volume (active trading)
+    const searchResponse = await fetch('https://api.dexscreener.com/latest/dex/search/?q=solana&rankBy=volume&order=desc')
+    const searchData = await searchResponse.json()
+    console.log(`Found ${searchData.pairs?.length || 0} volume-sorted pairs`)
+    
+    // Combine and deduplicate
+    const allTokens = [
+      ...(trendingData || []),
+      ...(searchData.pairs?.slice(0, 50) || [])
+    ]
+    
+    // Remove duplicates by baseToken address
+    const uniqueTokens = allTokens.filter((token, index, self) => 
+      index === self.findIndex(t => t.baseToken?.address === token.baseToken?.address)
+    )
+    
+    console.log(`Total unique tokens to evaluate: ${uniqueTokens.length}`)
+    return uniqueTokens.slice(0, 100) // Limit to 100 for performance
+    
   } catch (error) {
     console.error('Error fetching trending tokens:', error)
     return []
