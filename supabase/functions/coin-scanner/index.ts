@@ -216,11 +216,32 @@ async function getRealVolatility(mint: string, priceUsd: number): Promise<{ vola
   }
 }
 
-// Basic news sentiment analysis (placeholder - would integrate with news APIs)
+// Real news sentiment analysis using LunarCrush API
 async function analyzeNewsSentiment(symbol: string): Promise<number> {
-  // This would integrate with news APIs like NewsAPI, CryptoNews, etc.
-  // For now, return neutral score
-  return 0.5
+  try {
+    const apiKey = Deno.env.get('LUNARCRUSH_API_KEY')
+    if (!apiKey) {
+      console.log('❌ No LUNARCRUSH_API_KEY found, using neutral score')
+      return 0.5
+    }
+
+    const response = await fetch(`https://api.lunarcrush.com/v2?data=assets&key=${apiKey}&symbol=${symbol}`)
+    const data = await response.json()
+    
+    if (data.data && data.data.length > 0) {
+      const asset = data.data[0]
+      // LunarCrush sentiment score is 1-5, normalize to 0-1
+      const sentimentScore = (asset.sentiment || 3) / 5 // Default to neutral if no sentiment
+      console.log(`   News Sentiment: ${sentimentScore.toFixed(2)} [REAL DATA from LunarCrush]`)
+      return sentimentScore
+    }
+    
+    throw new Error('No data found for symbol')
+  } catch (error) {
+    console.log(`❌ Failed to get news sentiment for ${symbol}:`, error.message)
+    console.log(`   News Sentiment: 0.50 [MOCK DATA - LunarCrush failed]`)
+    return 0.5 // Neutral fallback
+  }
 }
 
 // Evaluate a single token against all criteria
