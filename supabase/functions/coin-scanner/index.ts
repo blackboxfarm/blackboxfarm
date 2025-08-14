@@ -43,73 +43,94 @@ async function fetchTokenData(mint: string): Promise<any> {
   }
 }
 
-// Fetch top 200 trending tokens using proper DexScreener endpoint
+// Scrape dexscreener.com directly for trending tokens
 async function fetchTrendingTokens(): Promise<any[]> {
   try {
-    console.log('🔍 Fetching tokens from DexScreener trending endpoint...')
+    console.log('🔍 Scraping dexscreener.com trending page...')
     
-    // Use DexScreener's trending endpoint which actually works
-    const response = await fetch('https://api.dexscreener.com/latest/dex/tokens/trending?chainId=solana')
-    const data = await response.json()
+    const response = await fetch('https://dexscreener.com')
+    const html = await response.text()
     
-    console.log('📊 DexScreener trending API response:', Object.keys(data))
+    console.log('📊 Got HTML content, length:', html.length)
     
-    if (data && Array.isArray(data)) {
-      console.log(`📊 Found ${data.length} trending tokens`)
-      
-      // Log sample token for debugging
-      if (data.length > 0) {
-        console.log('🔍 Sample trending token structure:', JSON.stringify(data[0], null, 2))
-      }
-      
-      return data.slice(0, 200)
+    // Parse the HTML to extract token data
+    const tokens = parseTokensFromHTML(html)
+    
+    console.log(`📊 Extracted ${tokens.length} tokens from dexscreener.com`)
+    
+    if (tokens.length > 0) {
+      console.log('🔍 Sample scraped token:', JSON.stringify(tokens[0], null, 2))
     }
     
-    // Fallback to pairs search if trending doesn't work
-    console.log('📊 Trending endpoint failed, trying pairs search...')
-    const fallbackResponse = await fetch('https://api.dexscreener.com/latest/dex/search/?q=SOL&chainId=solana')
-    const fallbackData = await fallbackResponse.json()
-    
-    if (fallbackData?.pairs && Array.isArray(fallbackData.pairs)) {
-      console.log(`📊 Found ${fallbackData.pairs.length} pairs from search`)
-      return fallbackData.pairs.slice(0, 200)
-    }
-    
-    return []
+    return tokens.slice(0, 200)
     
   } catch (error) {
-    console.error('❌ Error fetching tokens:', error)
+    console.error('❌ Error scraping dexscreener.com:', error)
     return []
   }
 }
 
-// Convert Birdeye token format to our expected format
-function convertBirdeyeToken(birdeyeToken: any): any {
-  return {
-    baseToken: {
-      address: birdeyeToken.address,
-      symbol: birdeyeToken.symbol,
-      name: birdeyeToken.name
-    },
-    quoteToken: {
-      address: 'So11111111111111111111111111111111111111112', // SOL
-      symbol: 'SOL'
-    },
-    priceUsd: birdeyeToken.price || 0,
-    marketCap: birdeyeToken.mc || 0,
-    volume: {
-      h24: birdeyeToken.v24hUSD || 0
-    },
-    liquidity: {
-      usd: birdeyeToken.liquidity || 0
-    },
-    priceChange: {
-      h24: birdeyeToken.price24hChangePercent || 0
-    },
-    chainId: 'solana',
-    dexId: 'birdeye'
+// Parse tokens from dexscreener HTML
+function parseTokensFromHTML(html: string): any[] {
+  const tokens: any[] = []
+  
+  try {
+    // Look for token entries in the HTML
+    // Each token row contains: symbol, price, volume, liquidity, mcap, etc.
+    const tokenPattern = /href="\/solana\/([^"]+)"[^>]*>.*?<img[^>]*src="([^"]*)"[^>]*>.*?([A-Z0-9]+)\/SOL.*?\$([0-9.]+(?:K|M|B)?).*?\$([0-9.]+(?:K|M|B)?)/gs
+    
+    let match
+    let index = 1
+    
+    while ((match = tokenPattern.exec(html)) !== null && index <= 200) {
+      const [, poolId, imageUrl, symbol, volume, mcap] = match
+      
+      tokens.push({
+        baseToken: {
+          address: poolId.split('-')[0] || poolId,
+          symbol: symbol,
+          name: symbol
+        },
+        quoteToken: {
+          address: 'So11111111111111111111111111111111111111112',
+          symbol: 'SOL'
+        },
+        pairAddress: poolId,
+        chainId: 'solana',
+        dexId: 'raydium',
+        url: `https://dexscreener.com/solana/${poolId}`,
+        volume: {
+          h24: parseVolume(volume)
+        },
+        marketCap: parseVolume(mcap),
+        priceUsd: '0',
+        liquidity: { usd: 0 },
+        priceChange: { h24: 0 }
+      })
+      
+      index++
+    }
+    
+  } catch (error) {
+    console.error('❌ Error parsing HTML:', error)
   }
+  
+  return tokens
 }
+
+// Convert volume strings like "11.1M" to numbers
+function parseVolume(volumeStr: string): number {
+  if (!volumeStr) return 0
+  
+  const num = parseFloat(volumeStr.replace(/[^0-9.]/g, ''))
+  
+  if (volumeStr.includes('B')) return num * 1_000_000_000
+  if (volumeStr.includes('M')) return num * 1_000_000
+  if (volumeStr.includes('K')) return num * 1_000
+  
+  return num
+}
+
 
 // Check if liquidity is locked via RugCheck API
 async function checkLiquidityLock(mint: string): Promise<boolean> {
