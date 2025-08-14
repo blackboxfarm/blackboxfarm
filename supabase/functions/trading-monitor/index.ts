@@ -1,5 +1,6 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.54.0';
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
+import { SecureStorage } from '../_shared/encryption.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -160,7 +161,7 @@ const executeEmergencySell = async (session: TradingSession, position: Position)
         feeOverrideMicroLamports: session.config.feeOverrideMicroLamports
       },
       headers: {
-        'x-owner-secret': position.owner_secret,
+        'x-owner-secret': await SecureStorage.decryptWalletSecret(position.owner_secret),
         'x-function-token': Deno.env.get('FUNCTION_TOKEN')
       }
     });

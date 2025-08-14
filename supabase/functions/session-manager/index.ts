@@ -1,5 +1,6 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.54.0';
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
+import { SecureStorage } from '../_shared/encryption.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -65,14 +66,16 @@ serve(async (req) => {
           });
         }
 
-        // Insert wallet pool
+        // Insert wallet pool with encrypted secrets
         if (walletPool && walletPool.length > 0) {
-          const walletInserts = walletPool.map((wallet: any) => ({
-            session_id: session.id,
-            pubkey: wallet.pubkey,
-            secret_key: wallet.secret, // In production, encrypt this
-            sol_balance: wallet.balance
-          }));
+          const walletInserts = await Promise.all(
+            walletPool.map(async (wallet: any) => ({
+              session_id: session.id,
+              pubkey: wallet.pubkey,
+              secret_key: await SecureStorage.encryptWalletSecret(wallet.secret),
+              sol_balance: wallet.balance
+            }))
+          );
 
           await supabase.from('wallet_pools').insert(walletInserts);
         }
