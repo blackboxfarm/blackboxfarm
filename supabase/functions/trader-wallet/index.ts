@@ -1,6 +1,7 @@
 import "https://deno.land/x/xhr@0.1.0/mod.ts";
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { Connection, Keypair, PublicKey } from "npm:@solana/web3.js@1.95.3";
+import { SecureStorage } from '../_shared/encryption.ts';
 import bs58 from "npm:bs58@5.0.0";
 
 // Lightweight ATA helper
@@ -67,7 +68,17 @@ serve(async (req) => {
     if (!rpcUrl) return bad("Missing secret: SOLANA_RPC_URL", 500);
     if (!headerSecret && !envSecret) return bad("Missing secret: TRADER_PRIVATE_KEY or x-owner-secret", 500);
 
-    const kp = parseKeypair(headerSecret ?? envSecret!);
+    // Decrypt if it's from header (encrypted from database)
+    let secretToUse = envSecret!;
+    if (headerSecret) {
+      try {
+        secretToUse = await SecureStorage.decryptWalletSecret(headerSecret);
+      } catch (error) {
+        return bad(`Failed to decrypt wallet secret: ${error.message}`, 400);
+      }
+    }
+
+    const kp = parseKeypair(secretToUse);
     const pub = kp.publicKey;
     const connection = new Connection(rpcUrl, { commitment: "confirmed" });
     const lamports = await connection.getBalance(pub).catch(() => 0);
