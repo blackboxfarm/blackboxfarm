@@ -260,6 +260,18 @@ export default function LiveRunner() {
   // Auto-scan and select best token
   const scanAndSelectBestToken = React.useCallback(async (): Promise<boolean> => {
     try {
+      // Check if we have existing holdings - don't switch tokens if we do
+      if (holding && holding.uiAmount > 0) {
+        log(`⚠️ Cannot switch tokens while holding ${holding.uiAmount.toFixed(6)} tokens. Wait for sale to complete.`);
+        return false;
+      }
+
+      // Check if we have open positions - don't switch tokens if we do
+      if (positions.length > 0) {
+        log(`⚠️ Cannot switch tokens while ${positions.length} position(s) are open. Wait for positions to close.`);
+        return false;
+      }
+
       setAutoScanning(true);
       log("🔍 Auto-scanning for best token...");
       
@@ -274,6 +286,13 @@ export default function LiveRunner() {
       
       if (data?.success && data?.qualifiedTokens?.length > 0) {
         const bestToken = data.qualifiedTokens[0]; // First token is already sorted by best score
+        
+        // Don't switch if it's the same token we already have
+        if (bestToken.mint === cfg.tokenMint) {
+          log(`✅ Best token is current token ${bestToken.symbol} - no switch needed`);
+          return true;
+        }
+        
         log(`✅ Found ${data.qualifiedTokens.length} tokens, selecting best: ${bestToken.symbol} (score: ${bestToken.totalScore.toFixed(0)})`);
         
         // Auto-adjust parameters based on token characteristics
@@ -287,7 +306,7 @@ export default function LiveRunner() {
           slippageBps: adjustedParams.slippageBps
         }));
         
-        log(`🎯 Auto-selected ${bestToken.symbol} with optimized parameters`);
+        log(`🎯 Switched to ${bestToken.symbol} with optimized parameters`);
         return true;
       } else {
         log("❌ No qualified tokens found in scan");
@@ -299,7 +318,7 @@ export default function LiveRunner() {
     } finally {
       setAutoScanning(false);
     }
-  }, [log, adjustParametersForToken]);
+  }, [log, adjustParametersForToken, holding, positions, cfg.tokenMint]);
 
   // Handle token suggestions from coin scanner
   const handleTokenSuggestion = React.useCallback((token: any) => {
