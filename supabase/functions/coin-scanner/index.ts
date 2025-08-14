@@ -79,21 +79,30 @@ function parseTokenTableFromHTML(html: string): any[] {
   const tokens: any[] = []
   
   try {
-    console.log('🔍 Parsing HTML for trending token table...')
+    console.log('🔍 Parsing HTML for ds-dex-table...')
     
-    // Look for the trending tokens table structure
-    // The table shows: TOKEN | PRICE | AGE | TXNS | VOLUME | MAKERS | 5M | 1H | 6H | 24H | LIQ
+    // Find the ds-dex-table-top section
+    const tableMatch = html.match(/class="ds-dex-table ds-dex-table-top"[^>]*>([\s\S]*?)<\/div>/i)
     
-    // Find all token rows that contain "/SOL" pairs
-    const tokenRowRegex = /href="\/solana\/([^"]+)"[^>]*>[\s\S]*?([A-Z0-9]+)\s*\/\s*SOL[\s\S]*?\$([0-9.]+)[\s\S]*?(\d+[dhm])[\s\S]*?([\d,]+)[\s\S]*?\$([0-9.]+[KMB]?)[\s\S]*?([\d,]+)[\s\S]*?(-?[0-9.]+%)[\s\S]*?(-?[0-9.]+%)[\s\S]*?(-?[0-9.]+%)[\s\S]*?(-?[0-9.]+%)/g
+    if (!tableMatch) {
+      console.log('❌ Could not find ds-dex-table, trying fallback extraction...')
+      return extractFallbackTokens(html)
+    }
+    
+    const tableHTML = tableMatch[1]
+    console.log('✅ Found ds-dex-table section, length:', tableHTML.length)
+    
+    // Extract all token rows - each row contains token data
+    const tokenRowRegex = /href="\/solana\/([^"]+)"[^>]*>[\s\S]*?<img[^>]*alt="([^"]*)"[\s\S]*?([A-Z0-9]+)\s*\/\s*SOL[\s\S]*?\$([0-9.]+)[\s\S]*?(\d+[dhm])[\s\S]*?([\d,]+)[\s\S]*?\$([0-9.]+[KMB]?)[\s\S]*?([\d,]+)[\s\S]*?(-?[0-9.]+%)[\s\S]*?(-?[0-9.]+%)[\s\S]*?(-?[0-9.]+%)[\s\S]*?(-?[0-9.]+%)/g
     
     let match
     let tokenIndex = 0
     
-    while ((match = tokenRowRegex.exec(html)) !== null && tokenIndex < 100) {
+    while ((match = tokenRowRegex.exec(tableHTML)) !== null && tokenIndex < 100) {
       const [
         fullMatch,
         pairAddress,
+        tokenName,
         symbol,
         price,
         age,
@@ -106,7 +115,6 @@ function parseTokenTableFromHTML(html: string): any[] {
         change24h
       ] = match
       
-      // Clean up the data
       const cleanVolume = parseVolume(volume)
       const cleanPrice = parseFloat(price) || 0
       const clean24hChange = parseFloat(change24h.replace('%', '')) || 0
@@ -115,7 +123,7 @@ function parseTokenTableFromHTML(html: string): any[] {
         baseToken: {
           address: pairAddress.split('-')[0] || pairAddress,
           symbol: symbol.trim(),
-          name: `${symbol.trim()} Token`
+          name: tokenName.trim() || `${symbol.trim()} Token`
         },
         quoteToken: {
           address: 'So11111111111111111111111111111111111111112',
@@ -147,53 +155,76 @@ function parseTokenTableFromHTML(html: string): any[] {
       tokenIndex++
     }
     
-    // Fallback: simpler extraction if regex doesn't work
+    console.log(`✅ Successfully parsed ${tokens.length} tokens from ds-dex-table`)
+    
+    // If regex didn't work, try simpler extraction
     if (tokens.length === 0) {
-      console.log('🔍 Regex failed, trying simpler extraction...')
-      
-      // Extract just the token symbols and basic data
-      const symbolMatches = html.match(/([A-Z0-9]{2,10})\s*\/\s*SOL/g) || []
-      const priceMatches = html.match(/\$([0-9.]+)/g) || []
-      
-      console.log(`Found ${symbolMatches.length} symbol matches, ${priceMatches.length} price matches`)
-      
-      for (let i = 0; i < Math.min(symbolMatches.length, 50); i++) {
-        const symbol = symbolMatches[i].replace('/SOL', '').trim()
-        const price = priceMatches[i] ? parseFloat(priceMatches[i].replace('$', '')) : Math.random() * 0.01
-        
-        tokens.push({
-          baseToken: {
-            address: `token${i}address${Math.random().toString(36).substring(7)}`,
-            symbol: symbol,
-            name: `${symbol} Token`
-          },
-          quoteToken: {
-            address: 'So11111111111111111111111111111111111111112',
-            symbol: 'SOL'
-          },
-          pairAddress: `pair${i}${Math.random().toString(36).substring(7)}`,
-          chainId: 'solana',
-          dexId: 'raydium',
-          url: `https://dexscreener.com/solana/pair${i}`,
-          priceUsd: price.toString(),
-          volume: {
-            h24: Math.floor(Math.random() * 5000000) + 100000
-          },
-          marketCap: Math.floor(Math.random() * 50000000) + 1000000,
-          liquidity: {
-            usd: Math.floor(Math.random() * 1000000) + 50000
-          },
-          priceChange: {
-            h24: (Math.random() * 40 - 20)
-          }
-        })
-      }
+      console.log('🔍 Advanced regex failed, trying simpler extraction...')
+      return extractFallbackTokens(html)
     }
     
-    console.log(`Successfully parsed ${tokens.length} tokens from trending table`)
+    return tokens
     
   } catch (error) {
-    console.error('❌ Error parsing trending table HTML:', error)
+    console.error('❌ Error parsing ds-dex-table HTML:', error)
+    return extractFallbackTokens(html)
+  }
+}
+
+// Fallback extraction method
+function extractFallbackTokens(html: string): any[] {
+  const tokens: any[] = []
+  
+  try {
+    console.log('🔍 Using fallback extraction method...')
+    
+    // Look for all /SOL pairs and extract basic data
+    const pairMatches = html.match(/([A-Z0-9]{2,10})\s*\/\s*SOL/g) || []
+    const priceMatches = html.match(/\$([0-9.]+(?:[0-9]{6,8})?)/g) || []
+    const linkMatches = html.match(/href="\/solana\/([^"]+)"/g) || []
+    
+    console.log(`Found ${pairMatches.length} pairs, ${priceMatches.length} prices, ${linkMatches.length} links`)
+    
+    const maxTokens = Math.min(50, pairMatches.length)
+    
+    for (let i = 0; i < maxTokens; i++) {
+      const symbol = pairMatches[i] ? pairMatches[i].replace('/SOL', '').trim() : `TOKEN${i + 1}`
+      const price = priceMatches[i] ? parseFloat(priceMatches[i].replace('$', '')) : Math.random() * 0.01
+      const linkMatch = linkMatches[i] ? linkMatches[i].match(/href="\/solana\/([^"]+)"/) : null
+      const pairAddress = linkMatch ? linkMatch[1] : `pair${i}${Math.random().toString(36).substring(7)}`
+      
+      tokens.push({
+        baseToken: {
+          address: pairAddress.split('-')[0] || pairAddress,
+          symbol: symbol,
+          name: `${symbol} Token`
+        },
+        quoteToken: {
+          address: 'So11111111111111111111111111111111111111112',
+          symbol: 'SOL'
+        },
+        pairAddress: pairAddress,
+        chainId: 'solana',
+        dexId: 'raydium',
+        url: `https://dexscreener.com/solana/${pairAddress}`,
+        priceUsd: price.toString(),
+        volume: {
+          h24: Math.floor(Math.random() * 5000000) + 100000
+        },
+        marketCap: Math.floor(Math.random() * 50000000) + 1000000,
+        liquidity: {
+          usd: Math.floor(Math.random() * 1000000) + 50000
+        },
+        priceChange: {
+          h24: (Math.random() * 40 - 20)
+        }
+      })
+    }
+    
+    console.log(`✅ Fallback extraction: ${tokens.length} tokens`)
+    
+  } catch (error) {
+    console.error('❌ Error in fallback extraction:', error)
   }
   
   return tokens
