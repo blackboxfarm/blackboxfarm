@@ -223,6 +223,17 @@ export default function LiveRunner() {
     minProfitForTimeExit: 1 
   });
   
+  // Emergency Hard Set Limit Sell state
+  const [emergencyHardSell, setEmergencyHardSell] = React.useState<{
+    enabled: boolean;
+    limitPrice: string;
+    isActive: boolean;
+  }>({
+    enabled: false,
+    limitPrice: "",
+    isActive: false
+  });
+  
   const log = React.useCallback((text: string) => {
     const tokenTicker = tokenInfo?.symbol || cfg.tokenMint.slice(0, 4) + '…' + cfg.tokenMint.slice(-4);
     setActivity((a) => [{ time: Date.now(), text: text.replace(/\$TOKEN/g, tokenTicker) }, ...a].slice(0, 50));
@@ -1095,6 +1106,24 @@ export default function LiveRunner() {
     const pNow = effectivePrice;
     if (!pNow || !Number.isFinite(pNow)) return;
 
+
+    // Emergency Hard Sell monitoring (only when not actively trading)
+    if (emergencyHardSell.isActive && !running && emergencyHardSell.limitPrice) {
+      const limitPrice = parseFloat(emergencyHardSell.limitPrice);
+      if (pNow <= limitPrice && (holding?.uiAmount || 0) > 0) {
+        log(`🚨 EMERGENCY HARD SELL TRIGGERED! Price $${format(pNow, 6)} reached limit $${format(limitPrice, 6)}`);
+        setEmergencyHardSell(prev => ({ ...prev, isActive: false }));
+        // Execute sell for all holdings
+        const sellRes = await execSwap('sell', { sellQtyUi: holding?.uiAmount, ownerSecret: secrets?.tradingPrivateKey });
+        if (sellRes.ok) {
+          log(`✅ Emergency sell completed successfully`);
+        } else {
+          log(`❌ Emergency sell failed`);
+        }
+        return;
+      }
+    }
+
     // Maintain price window for both ROC and Anchor
     const nowTs = Date.now();
     const maxWin = Math.max(Number(cfg.rocWindowSec ?? 30), Number(cfg.anchorWindowSec ?? 120));
@@ -1329,6 +1358,11 @@ export default function LiveRunner() {
     
     log(`🎯 Start Mode: ${detectedMode.toUpperCase()} | Volatility: ${assessment.message}`);
     setRunning(true);
+    // Disable Emergency Hard Sell when regular trading starts
+    if (emergencyHardSell.isActive) {
+      setEmergencyHardSell(prev => ({ ...prev, isActive: false }));
+      log("🔄 Emergency Hard Sell disabled (regular trading started)");
+    }
     setStatus(`${detectedMode} mode - monitoring`);
     // Immediately fetch fresh price and announce dip target
     (async () => {
@@ -1522,6 +1556,62 @@ export default function LiveRunner() {
                   />
                 </div>
               </div>
+            </div>
+
+            {/* Emergency Hard Set Limit Sell */}
+            <div className="rounded-lg border p-3 space-y-3 bg-destructive/5">
+              <h3 className="font-medium text-destructive">Emergency Hard Set Limit Sell</h3>
+              <div className="text-xs text-muted-foreground mb-2">
+                Auto-sell all tokens when price drops to limit (only works when NOT actively trading)
+              </div>
+              <div className="flex items-center gap-4">
+                <div className="flex items-center gap-2">
+                  <Switch 
+                    checked={emergencyHardSell.enabled} 
+                    onCheckedChange={(v) => setEmergencyHardSell({...emergencyHardSell, enabled: v, isActive: false})} 
+                    disabled={running}
+                  />
+                  <span className="text-sm">Enable Emergency Sell</span>
+                </div>
+                <div className="space-y-1">
+                  <Label className="text-xs">Limit Price (9 decimals)</Label>
+                  <Input 
+                    type="number" 
+                    step="0.000000001" 
+                    className="w-32" 
+                    value={emergencyHardSell.limitPrice} 
+                    onChange={(e) => setEmergencyHardSell({...emergencyHardSell, limitPrice: e.target.value})} 
+                    disabled={running || !emergencyHardSell.enabled}
+                    placeholder="0.000000000"
+                  />
+                </div>
+                <Button 
+                  variant="destructive" 
+                  size="sm"
+                  onClick={() => {
+                    if (!emergencyHardSell.limitPrice || parseFloat(emergencyHardSell.limitPrice) <= 0) {
+                      toast({ title: "Invalid Price", description: "Please enter a valid limit price" });
+                      return;
+                    }
+                    setEmergencyHardSell({...emergencyHardSell, isActive: true});
+                    log(`🚨 Emergency Hard Sell ACTIVATED at $${format(parseFloat(emergencyHardSell.limitPrice), 9)}`);
+                    toast({ title: "Emergency Sell Activated", description: `Will sell all tokens if price drops to $${emergencyHardSell.limitPrice}` });
+                  }}
+                  disabled={running || !emergencyHardSell.enabled || !emergencyHardSell.limitPrice || emergencyHardSell.isActive}
+                >
+                  {emergencyHardSell.isActive ? "Hard Sell Active" : "Activate Hard Sell"}
+                </Button>
+              </div>
+              {emergencyHardSell.isActive && (
+                <div className="text-xs text-destructive font-medium">
+                  🚨 Emergency sell active: Will auto-sell at ${format(parseFloat(emergencyHardSell.limitPrice || "0"), 9)}
+                </div>
+              )}
+              {running && (
+                <div className="text-xs text-muted-foreground">
+                  ⚠️ Emergency sell disabled during active trading
+                </div>
+              )}
             </div>
 
             <div className="rounded-lg border p-3 text-sm space-y-1">
