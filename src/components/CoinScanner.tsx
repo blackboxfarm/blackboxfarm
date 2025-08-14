@@ -263,17 +263,17 @@ export default function CoinScanner({
                 </thead>
                 <tbody>
                   {allTokens.map((token: any, index: number) => (
-                    <tr key={token.mint || index} className="hover:bg-muted/50">
-                      <td className="p-2 border-b font-mono text-xs">{token.symbol}</td>
-                      <td className="p-2 border-b max-w-32 truncate" title={token.name}>{token.name}</td>
-                      <td className="p-2 border-b text-right">{formatNumber(token.marketCap)}</td>
-                      <td className="p-2 border-b text-right">{formatNumber(token.volume24h)}</td>
-                      <td className="p-2 border-b text-right">{formatNumber(token.liquidityUsd)}</td>
-                      <td className="p-2 border-b text-right text-xs">${token.priceUsd.toFixed(6)}</td>
-                      <td className={`p-2 border-b text-right text-xs ${token.priceChange24h >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                        {token.priceChange24h > 0 ? '+' : ''}{token.priceChange24h.toFixed(1)}%
+                    <tr key={token.pairAddress || token.baseToken?.address || index} className="hover:bg-muted/50">
+                      <td className="p-2 border-b font-mono text-xs">{token.baseToken?.symbol || 'N/A'}</td>
+                      <td className="p-2 border-b max-w-32 truncate" title={token.baseToken?.name}>{token.baseToken?.name || 'N/A'}</td>
+                      <td className="p-2 border-b text-right">{formatNumber(token.marketCap || 0)}</td>
+                      <td className="p-2 border-b text-right">{formatNumber(token.volume?.h24 || 0)}</td>
+                      <td className="p-2 border-b text-right">{formatNumber(token.liquidity?.usd || 0)}</td>
+                      <td className="p-2 border-b text-right text-xs">${(typeof token.priceUsd === 'string' ? parseFloat(token.priceUsd) : token.priceUsd || 0).toFixed(6)}</td>
+                      <td className={`p-2 border-b text-right text-xs ${(token.priceChange?.h24 || 0) >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                        {(token.priceChange?.h24 || 0) > 0 ? '+' : ''}{(token.priceChange?.h24 || 0).toFixed(1)}%
                       </td>
-                      <td className="p-2 border-b text-xs">{token.dexId}</td>
+                      <td className="p-2 border-b text-xs">{token.dexId || 'N/A'}</td>
                     </tr>
                   ))}
                 </tbody>
