@@ -38,6 +38,325 @@ export type Database = {
         }
         Relationships: []
       }
+      activity_logs: {
+        Row: {
+          id: string
+          log_level: string | null
+          message: string
+          metadata: Json | null
+          session_id: string | null
+          timestamp: string | null
+        }
+        Insert: {
+          id?: string
+          log_level?: string | null
+          message: string
+          metadata?: Json | null
+          session_id?: string | null
+          timestamp?: string | null
+        }
+        Update: {
+          id?: string
+          log_level?: string | null
+          message?: string
+          metadata?: Json | null
+          session_id?: string | null
+          timestamp?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "activity_logs_session_id_fkey"
+            columns: ["session_id"]
+            isOneToOne: false
+            referencedRelation: "trading_sessions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      emergency_sells: {
+        Row: {
+          created_at: string | null
+          id: string
+          is_active: boolean | null
+          limit_price: number
+          session_id: string | null
+        }
+        Insert: {
+          created_at?: string | null
+          id?: string
+          is_active?: boolean | null
+          limit_price: number
+          session_id?: string | null
+        }
+        Update: {
+          created_at?: string | null
+          id?: string
+          is_active?: boolean | null
+          limit_price?: number
+          session_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "emergency_sells_session_id_fkey"
+            columns: ["session_id"]
+            isOneToOne: false
+            referencedRelation: "trading_sessions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      token_watchlist: {
+        Row: {
+          current_price: number | null
+          id: string
+          is_monitored: boolean | null
+          last_price_check: string | null
+          metadata: Json | null
+          name: string | null
+          session_id: string | null
+          symbol: string | null
+          token_mint: string
+          volatility_score: number | null
+        }
+        Insert: {
+          current_price?: number | null
+          id?: string
+          is_monitored?: boolean | null
+          last_price_check?: string | null
+          metadata?: Json | null
+          name?: string | null
+          session_id?: string | null
+          symbol?: string | null
+          token_mint: string
+          volatility_score?: number | null
+        }
+        Update: {
+          current_price?: number | null
+          id?: string
+          is_monitored?: boolean | null
+          last_price_check?: string | null
+          metadata?: Json | null
+          name?: string | null
+          session_id?: string | null
+          symbol?: string | null
+          token_mint?: string
+          volatility_score?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "token_watchlist_session_id_fkey"
+            columns: ["session_id"]
+            isOneToOne: false
+            referencedRelation: "trading_sessions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      trade_history: {
+        Row: {
+          error_message: string | null
+          executed_at: string | null
+          id: string
+          owner_pubkey: string
+          position_id: string | null
+          price_usd: number
+          quantity_ui: number
+          session_id: string | null
+          signatures: string[] | null
+          status: string | null
+          token_mint: string
+          trade_type: string
+          usd_amount: number
+        }
+        Insert: {
+          error_message?: string | null
+          executed_at?: string | null
+          id?: string
+          owner_pubkey: string
+          position_id?: string | null
+          price_usd: number
+          quantity_ui: number
+          session_id?: string | null
+          signatures?: string[] | null
+          status?: string | null
+          token_mint: string
+          trade_type: string
+          usd_amount: number
+        }
+        Update: {
+          error_message?: string | null
+          executed_at?: string | null
+          id?: string
+          owner_pubkey?: string
+          position_id?: string | null
+          price_usd?: number
+          quantity_ui?: number
+          session_id?: string | null
+          signatures?: string[] | null
+          status?: string | null
+          token_mint?: string
+          trade_type?: string
+          usd_amount?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "trade_history_position_id_fkey"
+            columns: ["position_id"]
+            isOneToOne: false
+            referencedRelation: "trading_positions"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "trade_history_session_id_fkey"
+            columns: ["session_id"]
+            isOneToOne: false
+            referencedRelation: "trading_sessions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      trading_positions: {
+        Row: {
+          created_at: string | null
+          entry_price: number
+          entry_timestamp: string
+          high_price: number
+          id: string
+          lot_id: string
+          owner_pubkey: string
+          owner_secret: string
+          quantity_raw: number
+          quantity_ui: number
+          session_id: string | null
+          status: string | null
+          updated_at: string | null
+        }
+        Insert: {
+          created_at?: string | null
+          entry_price: number
+          entry_timestamp: string
+          high_price: number
+          id?: string
+          lot_id: string
+          owner_pubkey: string
+          owner_secret: string
+          quantity_raw: number
+          quantity_ui: number
+          session_id?: string | null
+          status?: string | null
+          updated_at?: string | null
+        }
+        Update: {
+          created_at?: string | null
+          entry_price?: number
+          entry_timestamp?: string
+          high_price?: number
+          id?: string
+          lot_id?: string
+          owner_pubkey?: string
+          owner_secret?: string
+          quantity_raw?: number
+          quantity_ui?: number
+          session_id?: string | null
+          status?: string | null
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "trading_positions_session_id_fkey"
+            columns: ["session_id"]
+            isOneToOne: false
+            referencedRelation: "trading_sessions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      trading_sessions: {
+        Row: {
+          config: Json
+          created_at: string | null
+          daily_buy_usd: number | null
+          daily_key: string | null
+          id: string
+          is_active: boolean
+          last_activity: string | null
+          session_start_time: string | null
+          start_mode: string | null
+          token_mint: string
+          updated_at: string | null
+          user_id: string | null
+        }
+        Insert: {
+          config: Json
+          created_at?: string | null
+          daily_buy_usd?: number | null
+          daily_key?: string | null
+          id?: string
+          is_active?: boolean
+          last_activity?: string | null
+          session_start_time?: string | null
+          start_mode?: string | null
+          token_mint: string
+          updated_at?: string | null
+          user_id?: string | null
+        }
+        Update: {
+          config?: Json
+          created_at?: string | null
+          daily_buy_usd?: number | null
+          daily_key?: string | null
+          id?: string
+          is_active?: boolean
+          last_activity?: string | null
+          session_start_time?: string | null
+          start_mode?: string | null
+          token_mint?: string
+          updated_at?: string | null
+          user_id?: string | null
+        }
+        Relationships: []
+      }
+      wallet_pools: {
+        Row: {
+          created_at: string | null
+          id: string
+          is_active: boolean | null
+          last_balance_check: string | null
+          pubkey: string
+          secret_key: string
+          session_id: string | null
+          sol_balance: number | null
+        }
+        Insert: {
+          created_at?: string | null
+          id?: string
+          is_active?: boolean | null
+          last_balance_check?: string | null
+          pubkey: string
+          secret_key: string
+          session_id?: string | null
+          sol_balance?: number | null
+        }
+        Update: {
+          created_at?: string | null
+          id?: string
+          is_active?: boolean | null
+          last_balance_check?: string | null
+          pubkey?: string
+          secret_key?: string
+          session_id?: string | null
+          sol_balance?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "wallet_pools_session_id_fkey"
+            columns: ["session_id"]
+            isOneToOne: false
+            referencedRelation: "trading_sessions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Views: {
       [_ in never]: never
