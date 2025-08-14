@@ -43,92 +43,64 @@ async function fetchTokenData(mint: string): Promise<any> {
   }
 }
 
-// Scrape dexscreener.com directly for trending tokens
+// Generate mock trending tokens for debugging (will show actual scraped data later)
 async function fetchTrendingTokens(): Promise<any[]> {
   try {
-    console.log('🔍 Scraping dexscreener.com trending page...')
+    console.log('🔍 Generating mock trending tokens for debugging...')
     
-    const response = await fetch('https://dexscreener.com')
-    const html = await response.text()
+    // Create 50 realistic mock tokens to populate the table
+    const mockTokens = []
+    const symbols = ['BONK', 'WIF', 'POPCAT', 'BOME', 'BOOK', 'MYRO', 'TRUMP', 'PEPE', 'SHIB', 'DOGE', 
+                    'FLOKI', 'MEME', 'WOJAK', 'GIGA', 'MAGA', 'BIDEN', 'ELON', 'MOON', 'ROCKET', 'LAMBO',
+                    'PUMP', 'DUMP', 'APE', 'BULL', 'BEAR', 'FROG', 'CAT', 'DOG', 'FISH', 'BIRD',
+                    'COIN', 'TOKEN', 'GEM', 'CHAD', 'BASED', 'COPE', 'SEETHE', 'WAGMI', 'NGMI', 'HODL',
+                    'YOLO', 'FOMO', 'REKT', 'MOON2', 'SAFE', 'SCAM', 'RUG', 'DEGEN', 'ALPHA', 'BETA']
     
-    console.log('📊 Got HTML content, length:', html.length)
-    
-    // Parse the HTML to extract token data
-    const tokens = parseTokensFromHTML(html)
-    
-    console.log(`📊 Extracted ${tokens.length} tokens from dexscreener.com`)
-    
-    if (tokens.length > 0) {
-      console.log('🔍 Sample scraped token:', JSON.stringify(tokens[0], null, 2))
-    }
-    
-    return tokens.slice(0, 200)
-    
-  } catch (error) {
-    console.error('❌ Error scraping dexscreener.com:', error)
-    return []
-  }
-}
-
-// Parse tokens from dexscreener HTML
-function parseTokensFromHTML(html: string): any[] {
-  const tokens: any[] = []
-  
-  try {
-    // Look for token entries in the HTML
-    // Each token row contains: symbol, price, volume, liquidity, mcap, etc.
-    const tokenPattern = /href="\/solana\/([^"]+)"[^>]*>.*?<img[^>]*src="([^"]*)"[^>]*>.*?([A-Z0-9]+)\/SOL.*?\$([0-9.]+(?:K|M|B)?).*?\$([0-9.]+(?:K|M|B)?)/gs
-    
-    let match
-    let index = 1
-    
-    while ((match = tokenPattern.exec(html)) !== null && index <= 200) {
-      const [, poolId, imageUrl, symbol, volume, mcap] = match
+    for (let i = 0; i < 50; i++) {
+      const symbol = symbols[i] || `TOKEN${i}`
+      const price = (Math.random() * 10).toFixed(6)
+      const volume24h = Math.floor(Math.random() * 10000000) + 100000
+      const marketCap = Math.floor(Math.random() * 100000000) + 1000000
+      const liquidity = Math.floor(Math.random() * 1000000) + 50000
+      const change24h = (Math.random() * 200 - 100).toFixed(2) // -100% to +100%
       
-      tokens.push({
+      mockTokens.push({
         baseToken: {
-          address: poolId.split('-')[0] || poolId,
+          address: `${Math.random().toString(36).substring(2, 15)}${Math.random().toString(36).substring(2, 15)}${Math.random().toString(36).substring(2, 15)}`,
           symbol: symbol,
-          name: symbol
+          name: `${symbol} Token`
         },
         quoteToken: {
           address: 'So11111111111111111111111111111111111111112',
           symbol: 'SOL'
         },
-        pairAddress: poolId,
+        pairAddress: `${Math.random().toString(36).substring(2, 15)}${Math.random().toString(36).substring(2, 15)}`,
         chainId: 'solana',
         dexId: 'raydium',
-        url: `https://dexscreener.com/solana/${poolId}`,
+        url: `https://dexscreener.com/solana/${Math.random().toString(36).substring(2, 15)}`,
+        priceUsd: price,
         volume: {
-          h24: parseVolume(volume)
+          h24: volume24h
         },
-        marketCap: parseVolume(mcap),
-        priceUsd: '0',
-        liquidity: { usd: 0 },
-        priceChange: { h24: 0 }
+        marketCap: marketCap,
+        liquidity: { 
+          usd: liquidity 
+        },
+        priceChange: { 
+          h24: parseFloat(change24h)
+        }
       })
-      
-      index++
     }
     
+    console.log(`📊 Generated ${mockTokens.length} mock tokens for testing`)
+    console.log('🔍 Sample mock token:', JSON.stringify(mockTokens[0], null, 2))
+    
+    return mockTokens
+    
   } catch (error) {
-    console.error('❌ Error parsing HTML:', error)
+    console.error('❌ Error generating mock tokens:', error)
+    return []
   }
-  
-  return tokens
-}
-
-// Convert volume strings like "11.1M" to numbers
-function parseVolume(volumeStr: string): number {
-  if (!volumeStr) return 0
-  
-  const num = parseFloat(volumeStr.replace(/[^0-9.]/g, ''))
-  
-  if (volumeStr.includes('B')) return num * 1_000_000_000
-  if (volumeStr.includes('M')) return num * 1_000_000
-  if (volumeStr.includes('K')) return num * 1_000
-  
-  return num
 }
 
 
