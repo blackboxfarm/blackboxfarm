@@ -150,9 +150,10 @@ export default function FantasyTrading() {
       return;
     }
 
-    const currentPrice = await fetchTokenPrice(token.mint);
-    if (!currentPrice) {
-      toast.error("Could not fetch current token price");
+    // Use the price already provided by the scanner
+    const currentPrice = token.priceUsd;
+    if (!currentPrice || currentPrice <= 0) {
+      toast.error("Invalid token price");
       return;
     }
 
