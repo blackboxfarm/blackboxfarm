@@ -237,13 +237,6 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
-            foreignKeyName: "trade_history_position_id_fkey"
-            columns: ["position_id"]
-            isOneToOne: false
-            referencedRelation: "trading_positions_decrypted"
-            referencedColumns: ["id"]
-          },
-          {
             foreignKeyName: "trade_history_session_id_fkey"
             columns: ["session_id"]
             isOneToOne: false
@@ -396,62 +389,7 @@ export type Database = {
       }
     }
     Views: {
-      trading_positions_decrypted: {
-        Row: {
-          created_at: string | null
-          entry_price: number | null
-          entry_timestamp: string | null
-          high_price: number | null
-          id: string | null
-          lot_id: string | null
-          owner_pubkey: string | null
-          owner_secret: string | null
-          quantity_raw: number | null
-          quantity_ui: number | null
-          session_id: string | null
-          status: string | null
-          updated_at: string | null
-        }
-        Insert: {
-          created_at?: string | null
-          entry_price?: number | null
-          entry_timestamp?: string | null
-          high_price?: number | null
-          id?: string | null
-          lot_id?: string | null
-          owner_pubkey?: string | null
-          owner_secret?: never
-          quantity_raw?: number | null
-          quantity_ui?: number | null
-          session_id?: string | null
-          status?: string | null
-          updated_at?: string | null
-        }
-        Update: {
-          created_at?: string | null
-          entry_price?: number | null
-          entry_timestamp?: string | null
-          high_price?: number | null
-          id?: string | null
-          lot_id?: string | null
-          owner_pubkey?: string | null
-          owner_secret?: never
-          quantity_raw?: number | null
-          quantity_ui?: number | null
-          session_id?: string | null
-          status?: string | null
-          updated_at?: string | null
-        }
-        Relationships: [
-          {
-            foreignKeyName: "trading_positions_session_id_fkey"
-            columns: ["session_id"]
-            isOneToOne: false
-            referencedRelation: "trading_sessions"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
+      [_ in never]: never
     }
     Functions: {
       decrypt_owner_secret: {

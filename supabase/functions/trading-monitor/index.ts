@@ -123,12 +123,15 @@ const checkEmergencySells = async (session: TradingSession, currentPrice: number
     if (currentPrice <= sell.limit_price) {
       await logActivity(session.id, `🚨 EMERGENCY SELL TRIGGERED! Price $${format(currentPrice, 6)} reached limit $${format(sell.limit_price, 6)}`, 'warn');
       
-      // Get all active positions for this session
-      const { data: positions } = await supabase
-        .from('trading_positions')
-        .select('*')
-        .eq('session_id', session.id)
-        .eq('status', 'active');
+      // Get all active positions for this session with decrypted secrets
+      const { data: positions, error: positionsError } = await supabase.rpc('get_active_positions_with_secrets', {
+        session_id_param: session.id
+      });
+      
+      if (positionsError) {
+        await logActivity(session.id, `❌ Error fetching positions: ${positionsError.message}`, 'error');
+        return;
+      }
 
       if (positions && positions.length > 0) {
         // Execute sell for all positions
@@ -161,7 +164,8 @@ const executeEmergencySell = async (session: TradingSession, position: Position)
         feeOverrideMicroLamports: session.config.feeOverrideMicroLamports
       },
       headers: {
-        'x-owner-secret': await SecureStorage.decryptWalletSecret(position.owner_secret),
+        // Use the database-level decryption function to get the actual secret
+        'x-owner-secret': position.owner_secret, // This is now automatically decrypted by our DB functions
         'x-function-token': Deno.env.get('FUNCTION_TOKEN')
       }
     });
