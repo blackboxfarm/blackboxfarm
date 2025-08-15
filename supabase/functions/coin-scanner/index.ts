@@ -116,70 +116,114 @@ serve(async (req) => {
   }
 })
 
-// Fantasy mode: Generate realistic token data for testing
+// Fetch live trending tokens from DexScreener API
 async function fetchTrendingTokens(): Promise<any[]> {
   try {
-    console.log('🎭 Fantasy mode: Generating realistic token data...')
+    console.log('🔍 Fetching live trending tokens from DexScreener API...')
     
-    // Generate 50 realistic fantasy tokens under $0.005
-    const fantasyTokens = []
-    const symbols = ['MOON', 'DOGE2', 'SHIB2', 'PEPE2', 'BONK2', 'WIF2', 'POPCAT', 'MEW', 'BRETT', 'BOOK', 
-                     'GOAT', 'PNUT', 'ACT', 'FWOG', 'CHILLGUY', 'ZEREBRO', 'LUCE', 'PEANUT', 'MOODENG', 'GIGA',
-                     'RIFTY', 'SPX', 'MICHI', 'PONKE', 'MYRO', 'BOME', 'SLERF', 'SMOG', 'ALEX', 'TRUMP',
-                     'CHAOS', 'FIRE', 'ROCKET', 'DIAMOND', 'LASER', 'THUNDER', 'STORM', 'NINJA', 'VIKING', 'GHOST',
-                     'CYBER', 'NEON', 'FLUX', 'WAVE', 'PULSE', 'SPARK', 'BLAZE', 'FROST', 'VOID', 'NOVA']
+    // Use DexScreener's public API to get trending Solana tokens
+    const response = await fetch('https://api.dexscreener.com/latest/dex/tokens/trending/solana?page=1&limit=50', {
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        'Accept': 'application/json'
+      }
+    })
     
-    for (let i = 0; i < 50; i++) {
-      const symbol = symbols[i] || `TOK${i}`
-      const price = Math.random() * 0.004 + 0.0001 // Between $0.0001 and $0.0049
-      const volume = Math.floor(Math.random() * 5000000) + 50000 // $50K to $5M volume
-      const change24h = (Math.random() - 0.5) * 200 // -100% to +100%
-      const age = ['1h', '2h', '3h', '6h', '12h', '1d', '2d'][Math.floor(Math.random() * 7)]
+    if (!response.ok) {
+      console.log('❌ API response not ok, trying pairs endpoint instead...')
+      // Fallback to pairs endpoint
+      const pairsResponse = await fetch('https://api.dexscreener.com/latest/dex/search?q=SOL', {
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+          'Accept': 'application/json'
+        }
+      })
       
-      // Generate realistic pair address
-      const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz123456789'
-      let pairAddress = ''
-      for (let j = 0; j < 44; j++) {
-        pairAddress += chars.charAt(Math.floor(Math.random() * chars.length))
+      if (!pairsResponse.ok) {
+        throw new Error(`API request failed: ${pairsResponse.status}`)
       }
       
-      fantasyTokens.push({
-        rank: i + 1,
-        baseToken: {
-          address: pairAddress.substring(0, 32), // First 32 chars as token address
-          symbol: symbol,
-          name: `${symbol} Fantasy Token`
-        },
-        quoteToken: {
-          address: 'So11111111111111111111111111111111111111112',
-          symbol: 'SOL'
-        },
-        pairAddress: pairAddress,
-        chainId: 'solana',
-        dexId: 'raydium',
-        url: `https://dexscreener.com/solana/${pairAddress}`,
-        priceUsd: price.toString(),
-        volume: {
-          h24: volume
-        },
-        marketCap: volume * (2 + Math.random() * 8), // 2-10x volume
-        liquidity: {
-          usd: volume * (0.1 + Math.random() * 0.3) // 10-40% of volume
-        },
-        priceChange: {
-          h24: change24h
-        },
-        age: age
-      })
+      const pairsData = await pairsResponse.json()
+      console.log(`📊 Retrieved ${pairsData.pairs?.length || 0} pairs from search endpoint`)
+      
+      if (!pairsData.pairs || pairsData.pairs.length === 0) {
+        console.log('❌ No pairs found in search results')
+        return []
+      }
+      
+      // Filter for Solana pairs and map to our format
+      const solanaPairs = pairsData.pairs
+        .filter((pair: any) => pair.chainId === 'solana')
+        .slice(0, 50) // Limit to 50
+        .map((pair: any, index: number) => ({
+          rank: index + 1,
+          baseToken: pair.baseToken,
+          quoteToken: pair.quoteToken,
+          pairAddress: pair.pairAddress,
+          chainId: pair.chainId,
+          dexId: pair.dexId,
+          url: pair.url,
+          priceUsd: pair.priceUsd,
+          volume: pair.volume,
+          marketCap: pair.marketCap || 0,
+          liquidity: pair.liquidity,
+          priceChange: pair.priceChange,
+          age: calculateAge(pair.pairCreatedAt)
+        }))
+      
+      return solanaPairs
     }
     
-    console.log(`🎭 Generated ${fantasyTokens.length} fantasy tokens`)
-    return fantasyTokens
+    const data = await response.json()
+    console.log(`📊 Retrieved ${data.length || 0} trending tokens from API`)
+    
+    if (!data || data.length === 0) {
+      console.log('❌ No trending tokens found')
+      return []
+    }
+    
+    // Map API response to our expected format
+    const tokens = data.slice(0, 50).map((token: any, index: number) => ({
+      rank: index + 1,
+      baseToken: token.baseToken,
+      quoteToken: token.quoteToken,
+      pairAddress: token.pairAddress,
+      chainId: token.chainId,
+      dexId: token.dexId,
+      url: token.url,
+      priceUsd: token.priceUsd,
+      volume: token.volume,
+      marketCap: token.marketCap || 0,
+      liquidity: token.liquidity,
+      priceChange: token.priceChange,
+      age: calculateAge(token.pairCreatedAt)
+    }))
+    
+    if (tokens.length > 0) {
+      console.log('🔍 Sample token:', JSON.stringify(tokens[0], null, 2))
+    }
+    
+    return tokens
     
   } catch (error) {
-    console.error('❌ Error generating fantasy tokens:', error)
+    console.error('❌ Error fetching live tokens:', error)
+    console.log('🚫 Returning empty array - no live data available')
     return []
   }
+}
+
+// Helper function to calculate age from timestamp
+function calculateAge(timestamp: number): string {
+  if (!timestamp) return 'unknown'
+  
+  const now = Date.now()
+  const diff = now - timestamp
+  const hours = Math.floor(diff / (1000 * 60 * 60))
+  const days = Math.floor(hours / 24)
+  
+  if (days > 0) return `${days}d`
+  if (hours > 0) return `${hours}h`
+  return '1h'
 }
 
 // Parse tokens by targeting ds-dex-table-row-badge-pair-no class
