@@ -256,18 +256,18 @@ function parseTokenRowsByClass(html: string): any[] {
 function generateRealisticTestTokens(): any[] {
   console.log('📊 Generating realistic test tokens based on current trending tokens...')
   
-  // Extract real token data from the scraped markdown patterns I can see
+  // Extract real token data with actual Solana mint addresses
   const realTrendingTokens = [
-    { symbol: 'STUPID', name: 'STUPID INU', price: 0.004500, volume: 11100000, mcap: 4500000, change: 73.50 },
-    { symbol: 'PHI', name: 'PhiProtocol.ai', price: 0.002553, volume: 1000000, mcap: 2500000, change: -0.36 },
-    { symbol: 'RFB', name: 'Romanian Final Boss', price: 0.0002068, volume: 963000, mcap: 191000, change: 145 },
-    { symbol: 'LAMBO', name: 'lambo', price: 0.0005754, volume: 5800000, mcap: 575000, change: 475 },
-    { symbol: 'one', name: 'one', price: 233720, volume: 854000, mcap: 20000000, change: 1402 },
-    { symbol: 'BONK', name: 'Bonk', price: 0.000035, volume: 15000000, mcap: 2800000, change: 12.5 },
-    { symbol: 'WIF', name: 'dogwifhat', price: 1.85, volume: 45000000, mcap: 1850000000, change: 8.3 },
-    { symbol: 'POPCAT', name: 'Popcat', price: 0.65, volume: 28000000, mcap: 650000000, change: -5.2 },
-    { symbol: 'BOME', name: 'BOOK OF MEME', price: 0.008, volume: 12000000, mcap: 8000000, change: 15.7 },
-    { symbol: 'MYRO', name: 'Myro', price: 0.12, volume: 8500000, mcap: 120000000, change: -3.4 }
+    { symbol: 'BONK', name: 'Bonk', mint: 'DezXAZ8z7PnrnRJjz3wXBoRgixCa6xjnB7YaB1pPB263', price: 0.000035, volume: 15000000, mcap: 2800000, change: 12.5 },
+    { symbol: 'WIF', name: 'dogwifhat', mint: 'EKpQGSJtjMFqKZ9KQanSqYXRcF8fBopzLHYxdM65zcjm', price: 1.85, volume: 45000000, mcap: 1850000000, change: 8.3 },
+    { symbol: 'POPCAT', name: 'Popcat', mint: '7GCihgDB8fe6KNjn2MYtkzZcRjQy3t9GHdC8uHYmW2hr', price: 0.65, volume: 28000000, mcap: 650000000, change: -5.2 },
+    { symbol: 'BOME', name: 'BOOK OF MEME', mint: 'ukHH6c7mMyiWCf1b9pnWe25TSpkDDt3H5pQZgZ74J82', price: 0.008, volume: 12000000, mcap: 8000000, change: 15.7 },
+    { symbol: 'MYRO', name: 'Myro', mint: 'HhJpBhRRn4g56VsyLuT8DL5Bv31HkXqsrahTTUCZeZg4', price: 0.12, volume: 8500000, mcap: 120000000, change: -3.4 },
+    { symbol: 'MEW', name: 'cat in a dogs world', mint: 'MEW1gQWJ3nEXg2qgERiKu7FAFj79PHvQVREQUzScPP5', price: 0.0085, volume: 3200000, mcap: 850000000, change: 25.7 },
+    { symbol: 'FWOG', name: 'FWOG', mint: 'A8C3xuqscfmyLrte3VmTqrAq8kgMASius9AFNANwpump', price: 0.32, volume: 2800000, mcap: 320000000, change: -8.4 },
+    { symbol: 'PNUT', name: 'Peanut the Squirrel', mint: '2qEHjDLDLbuBgRYvsxhc5D6uDWAivNFZGan56P1tpump', price: 1.45, volume: 8900000, mcap: 1450000000, change: 15.3 },
+    { symbol: 'GOAT', name: 'Goatseus Maximus', mint: 'CzLSujWBLFsSjncfkh59rUFqvafWcY5tzedWJSuypump', price: 0.78, volume: 5600000, mcap: 780000000, change: -3.2 },
+    { symbol: 'CHILLGUY', name: 'Just a chill guy', mint: 'Df6yfrKC8kZE3KNkrHERKzAetSxbrWeniQfyJY4Jpump', price: 0.42, volume: 4100000, mcap: 420000000, change: 18.9 }
   ]
   
   const tokens = []
@@ -277,7 +277,7 @@ function generateRealisticTestTokens(): any[] {
     tokens.push({
       rank: index + 1,
       baseToken: {
-        address: `${Math.random().toString(36).substring(2, 15)}${Math.random().toString(36).substring(2, 15)}`,
+        address: tokenData.mint,
         symbol: tokenData.symbol,
         name: tokenData.name
       },
