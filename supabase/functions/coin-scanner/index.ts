@@ -116,42 +116,68 @@ serve(async (req) => {
   }
 })
 
-// Scrape dexscreener.com directly targeting ds-dex-table-row-badge-pair-no class
+// Fantasy mode: Generate realistic token data for testing
 async function fetchTrendingTokens(): Promise<any[]> {
   try {
-    console.log('🔍 Scraping dexscreener.com targeting ds-dex-table-row-badge-pair-no...')
+    console.log('🎭 Fantasy mode: Generating realistic token data...')
     
-    const response = await fetch('https://dexscreener.com', {
-      headers: {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
-        'Accept-Language': 'en-US,en;q=0.5',
-        'Accept-Encoding': 'gzip, deflate, br',
-        'Cache-Control': 'no-cache',
-        'Pragma': 'no-cache'
+    // Generate 50 realistic fantasy tokens under $0.005
+    const fantasyTokens = []
+    const symbols = ['MOON', 'DOGE2', 'SHIB2', 'PEPE2', 'BONK2', 'WIF2', 'POPCAT', 'MEW', 'BRETT', 'BOOK', 
+                     'GOAT', 'PNUT', 'ACT', 'FWOG', 'CHILLGUY', 'ZEREBRO', 'LUCE', 'PEANUT', 'MOODENG', 'GIGA',
+                     'RIFTY', 'SPX', 'MICHI', 'PONKE', 'MYRO', 'BOME', 'SLERF', 'SMOG', 'ALEX', 'TRUMP',
+                     'CHAOS', 'FIRE', 'ROCKET', 'DIAMOND', 'LASER', 'THUNDER', 'STORM', 'NINJA', 'VIKING', 'GHOST',
+                     'CYBER', 'NEON', 'FLUX', 'WAVE', 'PULSE', 'SPARK', 'BLAZE', 'FROST', 'VOID', 'NOVA']
+    
+    for (let i = 0; i < 50; i++) {
+      const symbol = symbols[i] || `TOK${i}`
+      const price = Math.random() * 0.004 + 0.0001 // Between $0.0001 and $0.0049
+      const volume = Math.floor(Math.random() * 5000000) + 50000 // $50K to $5M volume
+      const change24h = (Math.random() - 0.5) * 200 // -100% to +100%
+      const age = ['1h', '2h', '3h', '6h', '12h', '1d', '2d'][Math.floor(Math.random() * 7)]
+      
+      // Generate realistic pair address
+      const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz123456789'
+      let pairAddress = ''
+      for (let j = 0; j < 44; j++) {
+        pairAddress += chars.charAt(Math.floor(Math.random() * chars.length))
       }
-    })
-    const html = await response.text()
-    
-    console.log('📊 Got HTML content, length:', html.length)
-    console.log('🔍 First 500 chars of HTML:', html.substring(0, 500))
-    
-    // Parse using the specific row class
-    const tokens = parseTokenRowsByClass(html)
-    
-    console.log(`📊 Extracted ${tokens.length} tokens using ds-dex-table-row-badge-pair-no class`)
-    
-    if (tokens.length > 0) {
-      console.log('🔍 Sample extracted token:', JSON.stringify(tokens[0], null, 2))
-    } else {
-      console.log('❌ No tokens extracted from scraping - returning empty array (no fallback for live trading)')
+      
+      fantasyTokens.push({
+        rank: i + 1,
+        baseToken: {
+          address: pairAddress.substring(0, 32), // First 32 chars as token address
+          symbol: symbol,
+          name: `${symbol} Fantasy Token`
+        },
+        quoteToken: {
+          address: 'So11111111111111111111111111111111111111112',
+          symbol: 'SOL'
+        },
+        pairAddress: pairAddress,
+        chainId: 'solana',
+        dexId: 'raydium',
+        url: `https://dexscreener.com/solana/${pairAddress}`,
+        priceUsd: price.toString(),
+        volume: {
+          h24: volume
+        },
+        marketCap: volume * (2 + Math.random() * 8), // 2-10x volume
+        liquidity: {
+          usd: volume * (0.1 + Math.random() * 0.3) // 10-40% of volume
+        },
+        priceChange: {
+          h24: change24h
+        },
+        age: age
+      })
     }
     
-    return tokens
+    console.log(`🎭 Generated ${fantasyTokens.length} fantasy tokens`)
+    return fantasyTokens
     
   } catch (error) {
-    console.error('❌ Error scraping dexscreener.com:', error)
-    console.log('🚫 Returning empty array - no fallback data for live trading')
+    console.error('❌ Error generating fantasy tokens:', error)
     return []
   }
 }
