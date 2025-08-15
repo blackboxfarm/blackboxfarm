@@ -6,6 +6,7 @@ import LiveRunner from "@/components/LiveRunner";
 import ServerSideTradingControl from "@/components/ServerSideTradingControl";
 import VolumeSimulator from "@/components/VolumeSimulator";
 import WalletPoolManager from "@/components/WalletPoolManager";
+import FantasyTrading from "@/components/FantasyTrading";
 import SecretsModal from "@/components/SecretsModal";
 import { PasswordLogin } from "@/components/PasswordLogin";
 import { usePasswordAuth } from "@/hooks/usePasswordAuth";
@@ -140,12 +141,15 @@ export default function Index() {
         </div>
 
         <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
-          <TabsList className="grid w-full grid-cols-4 tech-border">
+          <TabsList className="grid w-full grid-cols-5 tech-border">
             <TabsTrigger value="server-control" className="text-xs">
               🤖 Server Control
             </TabsTrigger>
             <TabsTrigger value="live-runner" className="text-xs">
               🖥️ Browser Mode
+            </TabsTrigger>
+            <TabsTrigger value="fantasy" className="text-xs">
+              🎮 Fantasy
             </TabsTrigger>
             <TabsTrigger value="volume-sim" className="text-xs">
               📊 Volume Sim
@@ -174,6 +178,10 @@ export default function Index() {
                 <LiveRunner />
               </CardContent>
             </Card>
+          </TabsContent>
+
+          <TabsContent value="fantasy">
+            <FantasyTrading />
           </TabsContent>
 
           <TabsContent value="volume-sim">
