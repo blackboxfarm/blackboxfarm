@@ -222,10 +222,10 @@ const processTradingSession = async (session: TradingSession) => {
     // Check emergency sells first
     await checkEmergencySells(session, currentPrice);
 
-    // Get current positions
+    // Get current positions (we don't need decrypted secrets for monitoring)
     const { data: positions } = await supabase
       .from('trading_positions')
-      .select('*')
+      .select('id, session_id, lot_id, entry_price, high_price, quantity_raw, quantity_ui, entry_timestamp, owner_pubkey, status, created_at, updated_at')
       .eq('session_id', session.id)
       .eq('status', 'active');
 

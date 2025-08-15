@@ -400,6 +400,24 @@ export type Database = {
         Args: { input_secret: string }
         Returns: string
       }
+      get_active_positions_with_secrets: {
+        Args: { session_id_param: string }
+        Returns: {
+          created_at: string
+          entry_price: number
+          entry_timestamp: string
+          high_price: number
+          id: string
+          lot_id: string
+          owner_pubkey: string
+          owner_secret: string
+          quantity_raw: number
+          quantity_ui: number
+          session_id: string
+          status: string
+          updated_at: string
+        }[]
+      }
       verify_access_password: {
         Args: { input_password: string }
         Returns: boolean
