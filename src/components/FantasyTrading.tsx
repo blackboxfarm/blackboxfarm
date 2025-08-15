@@ -59,6 +59,8 @@ export default function FantasyTrading() {
   
   const [isScanning, setIsScanning] = useState(false);
   const [selectedToken, setSelectedToken] = useState<any>(null);
+  const [isUpdatingPrices, setIsUpdatingPrices] = useState(false);
+  const [lastUpdate, setLastUpdate] = useState<Date | null>(null);
 
   // Load wallet from localStorage
   useEffect(() => {
@@ -104,38 +106,47 @@ export default function FantasyTrading() {
   const updatePositions = useCallback(async () => {
     if (wallet.positions.length === 0) return;
 
-    const updatedPositions = await Promise.all(
-      wallet.positions.map(async (position) => {
-        const currentPrice = await fetchTokenPrice(position.tokenMint);
-        if (currentPrice) {
-          const usdValue = position.quantity * currentPrice;
-          const profit = usdValue - (position.quantity * position.entryPrice);
-          const profitPercent = ((currentPrice - position.entryPrice) / position.entryPrice) * 100;
-          
-          return {
-            ...position,
-            currentPrice,
-            usdValue,
-            profit,
-            profitPercent
-          };
-        }
-        return position;
-      })
-    );
+    setIsUpdatingPrices(true);
+    try {
+      const updatedPositions = await Promise.all(
+        wallet.positions.map(async (position) => {
+          const currentPrice = await fetchTokenPrice(position.tokenMint);
+          if (currentPrice) {
+            const usdValue = position.quantity * currentPrice;
+            const profit = usdValue - (position.quantity * position.entryPrice);
+            const profitPercent = ((currentPrice - position.entryPrice) / position.entryPrice) * 100;
+            
+            return {
+              ...position,
+              currentPrice,
+              usdValue,
+              profit,
+              profitPercent
+            };
+          }
+          return position;
+        })
+      );
 
-    const totalPositionValue = updatedPositions.reduce((sum, pos) => sum + pos.usdValue, 0);
-    const totalValue = wallet.cash + totalPositionValue;
-    const totalProfit = totalValue - INITIAL_BALANCE;
-    const totalProfitPercent = ((totalValue - INITIAL_BALANCE) / INITIAL_BALANCE) * 100;
+      const totalPositionValue = updatedPositions.reduce((sum, pos) => sum + pos.usdValue, 0);
+      const totalValue = wallet.cash + totalPositionValue;
+      const totalProfit = totalValue - INITIAL_BALANCE;
+      const totalProfitPercent = ((totalValue - INITIAL_BALANCE) / INITIAL_BALANCE) * 100;
 
-    setWallet(prev => ({
-      ...prev,
-      positions: updatedPositions,
-      totalValue,
-      totalProfit,
-      totalProfitPercent
-    }));
+      setWallet(prev => ({
+        ...prev,
+        positions: updatedPositions,
+        totalValue,
+        totalProfit,
+        totalProfitPercent
+      }));
+      
+      setLastUpdate(new Date());
+    } catch (error) {
+      console.error('Failed to update positions:', error);
+    } finally {
+      setIsUpdatingPrices(false);
+    }
   }, [wallet.positions, wallet.cash, fetchTokenPrice]);
 
   // Update prices every 30 seconds
@@ -336,12 +347,21 @@ export default function FantasyTrading() {
           </div>
 
           <div className="flex gap-4 mb-6">
-            <Button onClick={() => updatePositions()}>
-              Refresh Prices
+            <Button 
+              onClick={() => updatePositions()}
+              disabled={isUpdatingPrices}
+            >
+              {isUpdatingPrices ? 'Updating...' : 'Refresh Prices'}
             </Button>
             <Button variant="outline" onClick={resetWallet}>
               Reset Wallet
             </Button>
+            {lastUpdate && (
+              <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                <span>Last update: {lastUpdate.toLocaleTimeString()}</span>
+                <div className={`w-2 h-2 rounded-full ${isUpdatingPrices ? 'bg-yellow-500 animate-pulse' : 'bg-green-500'}`} />
+              </div>
+            )}
           </div>
         </CardContent>
       </Card>
