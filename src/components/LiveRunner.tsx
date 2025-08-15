@@ -160,7 +160,7 @@ export default function LiveRunner() {
 
   const [cfg, setCfg] = React.useState<RunnerConfig>({
     tokenMint: "FTggXu7nYowpXjScSw7BZjtZDXywLNjK88CGhydDGgMS",
-    tradeSizeUsd: 20,
+    tradeSizeUsd: 100,
     intervalSec: 3,
     anchorWindowSec: 60,
     dipPct: 1.0,
@@ -232,6 +232,26 @@ export default function LiveRunner() {
     enabled: false,
     limitPrice: "",
     isActive: false
+  });
+  
+  // Fantasy mode state
+  const [fantasyMode, setFantasyMode] = React.useState(false);
+  const [fantasyWallet, setFantasyWallet] = React.useState({
+    cash: 300,
+    positions: [] as Array<{
+      tokenMint: string;
+      tokenSymbol: string;
+      quantity: number;
+      entryPrice: number;
+      currentPrice: number;
+      usdValue: number;
+      profit: number;
+      profitPercent: number;
+      entryTime: number;
+    }>,
+    totalValue: 300,
+    totalProfit: 0,
+    totalProfitPercent: 0,
   });
   
   const log = React.useCallback((text: string) => {
@@ -597,10 +617,20 @@ export default function LiveRunner() {
           symbol: token.symbol,
           price: token.currentPrice
         });
+        
+        // Clear fantasy positions when switching tokens
+        if (fantasyMode) {
+          setFantasyWallet(prev => ({
+            ...prev,
+            positions: [],
+          }));
+          log("🔄 Fantasy positions cleared for new token");
+        }
+        
         log(`Switched to ${token.symbol} (${token.mint})`);
       }
     }
-  }, [log]);
+  }, [fantasyMode, log]);
   const prevPriceRef = React.useRef<number | null>(null);
   const decelCountRef = React.useRef<number>(0);
   const priceWindowRef = React.useRef<{ t: number; p: number }[]>([]);
@@ -814,6 +844,81 @@ export default function LiveRunner() {
 
   const execSwap = React.useCallback(async (side: 'buy' | 'sell', opts?: { sellAmountRaw?: number; sellQtyUi?: number; buyUsd?: number; ownerSecret?: string }) => {
     if (executing) return { ok: false } as const;
+    
+    // Fantasy mode handling
+    if (fantasyMode) {
+      log(`🎮 Fantasy ${side.toUpperCase()} execution`);
+      const tradeId = `fantasy-${side}-${Date.now()}`;
+      setTrades(prev => [{ id: tradeId, time: Date.now(), side, status: 'confirmed' }, ...prev.slice(0, 24)]);
+      
+      const currentPrice = effectivePrice || price;
+      if (!currentPrice) {
+        log("❌ No current price for fantasy trade");
+        return { ok: false } as const;
+      }
+      
+      if (side === 'buy') {
+        const tradeSize = opts?.buyUsd || cfg.tradeSizeUsd;
+        const quantity = tradeSize / currentPrice;
+        
+        if (fantasyWallet.cash >= tradeSize) {
+          const newPosition = {
+            tokenMint: cfg.tokenMint,
+            tokenSymbol: tokenInfo?.symbol || 'Unknown',
+            quantity,
+            entryPrice: currentPrice,
+            currentPrice,
+            usdValue: tradeSize,
+            profit: 0,
+            profitPercent: 0,
+            entryTime: Date.now(),
+          };
+          
+          setFantasyWallet(prev => ({
+            ...prev,
+            cash: prev.cash - tradeSize,
+            positions: [...prev.positions, newPosition],
+            totalValue: prev.totalValue, // No change in total value on entry
+          }));
+          
+          log(`✅ Fantasy BUY: ${format(quantity, 6)} tokens @ $${format(currentPrice, 6)} for $${format(tradeSize, 2)}`);
+        } else {
+          log(`❌ Insufficient fantasy cash: $${format(fantasyWallet.cash, 2)} < $${format(tradeSize, 2)}`);
+          return { ok: false } as const;
+        }
+      } else {
+        // Sell logic
+        const positionToSell = fantasyWallet.positions.find(p => p.tokenMint === cfg.tokenMint);
+        if (positionToSell) {
+          const saleValue = positionToSell.quantity * currentPrice;
+          
+          setFantasyWallet(prev => {
+            const updatedPositions = prev.positions.filter(p => p.tokenMint !== cfg.tokenMint);
+            const newCash = prev.cash + saleValue;
+            const newTotalValue = newCash + updatedPositions.reduce((sum, p) => sum + p.usdValue, 0);
+            
+            return {
+              ...prev,
+              cash: newCash,
+              positions: updatedPositions,
+              totalValue: newTotalValue,
+              totalProfit: newTotalValue - 300,
+              totalProfitPercent: ((newTotalValue - 300) / 300) * 100,
+            };
+          });
+          
+          const profit = saleValue - (positionToSell.quantity * positionToSell.entryPrice);
+          const profitPercent = ((currentPrice - positionToSell.entryPrice) / positionToSell.entryPrice) * 100;
+          
+          log(`✅ Fantasy SELL: ${format(positionToSell.quantity, 6)} tokens @ $${format(currentPrice, 6)} for $${format(saleValue, 2)} (${profitPercent > 0 ? '+' : ''}${format(profitPercent, 2)}%)`);
+        } else {
+          log("❌ No fantasy position to sell");
+          return { ok: false } as const;
+        }
+      }
+      return { ok: true } as const;
+    }
+    
     setExecuting(true);
     const id = crypto.randomUUID();
     const newTrade: Trade = { id, time: Date.now(), side, status: 'pending' };
@@ -1101,6 +1206,39 @@ export default function LiveRunner() {
     if (!manualPrice) {
       const p = await fetchJupPriceUSD(cfg.tokenMint);
       setPrice(p);
+    }
+    
+    // Update fantasy wallet positions with current prices
+    if (fantasyMode && fantasyWallet.positions.length > 0) {
+      const currentPrice = effectivePrice || price;
+      if (currentPrice) {
+        setFantasyWallet(prev => {
+          const updatedPositions = prev.positions.map(position => {
+            const usdValue = position.quantity * currentPrice;
+            const profit = usdValue - (position.quantity * position.entryPrice);
+            const profitPercent = ((currentPrice - position.entryPrice) / position.entryPrice) * 100;
+            
+            return {
+              ...position,
+              currentPrice,
+              usdValue,
+              profit,
+              profitPercent,
+            };
+          });
+          
+          const totalPositionValue = updatedPositions.reduce((sum, pos) => sum + pos.usdValue, 0);
+          const newTotalValue = prev.cash + totalPositionValue;
+          
+          return {
+            ...prev,
+            positions: updatedPositions,
+            totalValue: newTotalValue,
+            totalProfit: newTotalValue - 300,
+            totalProfitPercent: ((newTotalValue - 300) / 300) * 100,
+          };
+        });
+      }
     }
 
     const pNow = effectivePrice;
@@ -1404,7 +1542,28 @@ export default function LiveRunner() {
     <Card className="max-w-4xl mx-auto mt-8">
       <CardHeader>
         <div className="flex items-center justify-between">
-          <CardTitle>Live Strategy Runner (Raydium)</CardTitle>
+          <CardTitle className="flex items-center gap-3">
+            Live Strategy Runner (Raydium)
+            <div className="flex items-center gap-2">
+              <Switch
+                checked={fantasyMode}
+                onCheckedChange={(checked) => {
+                  setFantasyMode(checked);
+                  if (checked) {
+                    setCfg(prev => ({ ...prev, tradeSizeUsd: 100 }));
+                    log("🎮 Fantasy Mode ENABLED - $300 starting funds, $100 trade size");
+                  } else {
+                    setCfg(prev => ({ ...prev, tradeSizeUsd: 20 }));
+                    log("💰 Live Mode ENABLED - Real trading");
+                  }
+                }}
+                disabled={running}
+              />
+              <span className={`text-sm font-medium ${fantasyMode ? 'text-blue-600' : 'text-green-600'}`}>
+                {fantasyMode ? '🎮 Fantasy' : '💰 Live'}
+              </span>
+            </div>
+          </CardTitle>
           {tokenInfo && (
             <div className="text-right">
               <div className="font-semibold">{tokenInfo.symbol}</div>
@@ -1657,8 +1816,45 @@ export default function LiveRunner() {
 
           <aside className="space-y-2">
             <div className="rounded-lg border p-3 text-sm">
-              <div className="font-medium mb-2">Trading wallet</div>
-              {wallet ? (
+              <div className="font-medium mb-2">
+                {fantasyMode ? 'Fantasy Wallet' : 'Trading wallet'}
+              </div>
+              {fantasyMode ? (
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <span className="text-muted-foreground">Cash</span>
+                    <span className="font-medium">${format(fantasyWallet.cash, 2)}</span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-muted-foreground">Positions Value</span>
+                    <span className="font-medium">${format(fantasyWallet.positions.reduce((sum, p) => sum + p.usdValue, 0), 2)}</span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-muted-foreground">Total Value</span>
+                    <span className="font-medium">${format(fantasyWallet.totalValue, 2)}</span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-muted-foreground">Total P&L</span>
+                    <span className={`font-medium ${fantasyWallet.totalProfit >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                      {fantasyWallet.totalProfit >= 0 ? '+' : ''}${format(fantasyWallet.totalProfit, 2)} ({fantasyWallet.totalProfitPercent >= 0 ? '+' : ''}{format(fantasyWallet.totalProfitPercent, 2)}%)
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Button size="sm" variant="outline" onClick={() => {
+                      setFantasyWallet({
+                        cash: 300,
+                        positions: [],
+                        totalValue: 300,
+                        totalProfit: 0,
+                        totalProfitPercent: 0,
+                      });
+                      log("🔄 Fantasy wallet reset to $300");
+                    }}>
+                      Reset Wallet
+                    </Button>
+                  </div>
+                </div>
+              ) : wallet ? (
                 <div className="space-y-2">
                   <div className="flex items-center justify-between gap-2">
                     <span className="truncate" title={wallet.address}>
@@ -1715,8 +1911,50 @@ export default function LiveRunner() {
             </div>
 
             <div className="rounded-lg border p-3 text-sm">
-              <div className="font-medium mb-2">Holdings {tokenInfo?.symbol && `(${tokenInfo.symbol})`}</div>
-              {holding ? (
+              <div className="font-medium mb-2">
+                {fantasyMode ? 'Fantasy Holdings' : 'Holdings'} {tokenInfo?.symbol && `(${tokenInfo.symbol})`}
+              </div>
+              {fantasyMode ? (
+                fantasyWallet.positions.length > 0 ? (
+                  <div className="space-y-2">
+                    {fantasyWallet.positions.map((position, index) => (
+                      <div key={index} className="space-y-2">
+                        <div className="flex items-center justify-between">
+                          <span className="text-muted-foreground">Token</span>
+                          <span>{position.tokenSymbol}</span>
+                        </div>
+                        <div className="flex items-center justify-between">
+                          <span className="text-muted-foreground">Quantity</span>
+                          <span>{format(position.quantity, 6)}</span>
+                        </div>
+                        <div className="flex items-center justify-between">
+                          <span className="text-muted-foreground">Entry Price</span>
+                          <span>${format(position.entryPrice, 6)}</span>
+                        </div>
+                        <div className="flex items-center justify-between">
+                          <span className="text-muted-foreground">Current Price</span>
+                          <span>${format(effectivePrice || position.currentPrice, 6)}</span>
+                        </div>
+                        <div className="flex items-center justify-between">
+                          <span className="text-muted-foreground">Current Value</span>
+                          <span>${format(position.quantity * (effectivePrice || position.currentPrice), 2)}</span>
+                        </div>
+                        <div className="flex items-center justify-between">
+                          <span className="text-muted-foreground">P&L</span>
+                          <span className={`${((effectivePrice || position.currentPrice) - position.entryPrice) >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                            {((effectivePrice || position.currentPrice) - position.entryPrice) >= 0 ? '+' : ''}
+                            ${format(position.quantity * ((effectivePrice || position.currentPrice) - position.entryPrice), 2)} 
+                            ({((effectivePrice || position.currentPrice) - position.entryPrice) >= 0 ? '+' : ''}
+                            {format((((effectivePrice || position.currentPrice) - position.entryPrice) / position.entryPrice) * 100, 2)}%)
+                          </span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="text-muted-foreground">No positions</div>
+                )
+              ) : holding ? (
                 <div className="space-y-2">
                   <div className="flex items-center justify-between">
                     <span className="text-muted-foreground">Token</span>
