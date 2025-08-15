@@ -356,9 +356,17 @@ export default function FantasyTrading() {
         <CardContent>
           <CoinScanner 
             onTokenSuggestion={(token) => {
+              console.log('Fantasy mode - Token selected:', token);
               setSelectedToken(token);
               if (wallet.cash >= TRADE_AMOUNT) {
-                buyToken(token);
+                // Convert the scanner format to our expected format
+                const fantasyToken = {
+                  mint: token.mint,
+                  symbol: token.symbol,
+                  name: token.name,
+                  priceUsd: token.priceUsd
+                };
+                buyToken(fantasyToken);
               } else {
                 toast.error("Insufficient cash for trade");
               }
