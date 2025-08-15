@@ -137,13 +137,16 @@ async function fetchTrendingTokens(): Promise<any[]> {
     
     if (tokens.length > 0) {
       console.log('🔍 Sample extracted token:', JSON.stringify(tokens[0], null, 2))
+    } else {
+      console.log('❌ No tokens extracted from scraping - returning empty array (no fallback for live trading)')
     }
     
-    return tokens.length > 0 ? tokens : generateRealisticTestTokens()
+    return tokens
     
   } catch (error) {
     console.error('❌ Error scraping dexscreener.com:', error)
-    return generateRealisticTestTokens()
+    console.log('🚫 Returning empty array - no fallback data for live trading')
+    return []
   }
 }
 
@@ -273,96 +276,8 @@ function parseTokenRowsByClass(html: string): any[] {
   return tokens
 }
 
-// Generate realistic test tokens based on actual DexScreener trending tokens
-function generateRealisticTestTokens(): any[] {
-  console.log('📊 Generating realistic test tokens based on current trending tokens...')
-  
-  // Extract real token data with actual Solana mint addresses - focus on low-priced tokens under $0.005
-  const realTrendingTokens = [
-    { symbol: 'BONK', name: 'Bonk', mint: 'DezXAZ8z7PnrnRJjz3wXBoRgixCa6xjnB7YaB1pPB263', price: 0.000035, volume: 15000000, mcap: 2800000, change: 12.5 },
-    { symbol: 'BOME', name: 'BOOK OF MEME', mint: 'ukHH6c7mMyiWCf1b9pnWe25TSpkDDt3H5pQZgZ74J82', price: 0.008, volume: 12000000, mcap: 8000000, change: 15.7 },
-    { symbol: 'SHIB', name: 'Shiba Inu', mint: 'CiKu4eHsVrc1eueVQeHn7qhXTcVu95gSQmBpX4utjL9z', price: 0.000024, volume: 8200000, mcap: 14000000, change: 8.2 },
-    { symbol: 'FLOKI', name: 'FLOKI', mint: 'FLokiNVo3kqrJp7S6c9ZqZCfEi2RNNKLqhd3h9ZX5GHP', price: 0.00018, volume: 3400000, mcap: 1700000, change: -2.1 },
-    { symbol: 'PEPE2', name: 'Pepe 2.0', mint: 'PEPE2vVo3kqrJp7S6c9ZqZCfEi2RNNKLqhd3h9ZX5GHP', price: 0.0000089, volume: 5100000, mcap: 890000, change: 45.2 },
-    { symbol: 'WOJAK', name: 'Wojak', mint: 'WOJAKvVo3kqrJp7S6c9ZqZCfEi2RNNKLqhd3h9ZX5GHP', price: 0.00034, volume: 2800000, mcap: 340000, change: -12.4 },
-    { symbol: 'DEGEN', name: 'DEGEN', mint: 'DEGENvVo3kqrJp7S6c9ZqZCfEi2RNNKLqhd3h9ZX5GHP', price: 0.00076, volume: 4200000, mcap: 760000, change: 28.7 },
-    { symbol: 'MAGA', name: 'MAGA Coin', mint: 'MAGAvVo3kqrJp7S6c9ZqZCfEi2RNNKLqhd3h9ZX5GHP', price: 0.0019, volume: 6700000, mcap: 1900000, change: 15.3 },
-    { symbol: 'TRUMP', name: 'Trump Coin', mint: 'TRUMPvVo3kqrJp7S6c9ZqZCfEi2RNNKLqhd3h9ZX5GHP', price: 0.0041, volume: 8900000, mcap: 4100000, change: -8.9 },
-    { symbol: 'MOON', name: 'Moon Token', mint: 'MOONvVo3kqrJp7S6c9ZqZCfEi2RNNKLqhd3h9ZX5GHP', price: 0.00087, volume: 3600000, mcap: 870000, change: 92.5 }
-  ]
-  
-  const tokens = []
-  
-  // Add the real trending tokens first with proper data structure
-  realTrendingTokens.forEach((tokenData, index) => {
-    tokens.push({
-      rank: index + 1,
-      baseToken: {
-        address: tokenData.mint,
-        symbol: tokenData.symbol,
-        name: tokenData.name
-      },
-      quoteToken: {
-        address: 'So11111111111111111111111111111111111111112',
-        symbol: 'SOL'
-      },
-      pairAddress: `${Math.random().toString(36).substring(2, 15)}${Math.random().toString(36).substring(2, 15)}`,
-      chainId: 'solana',
-      dexId: 'raydium',
-      url: `https://dexscreener.com/solana/${Math.random().toString(36).substring(2, 15)}`,
-      priceUsd: tokenData.price.toString(),
-      volume: {
-        h24: tokenData.volume
-      },
-      marketCap: tokenData.mcap,
-      liquidity: {
-        usd: tokenData.volume * 0.1
-      },
-      priceChange: {
-        h24: tokenData.change
-      },
-      age: '2d'
-    })
-  })
-  
-  // Add more tokens to reach 50 total
-  const moreSymbols = ['TRUMP', 'MAGA', 'WOJAK', 'GIGA', 'CHAD', 'DEGEN', 'MOON', 'ROCKET', 'APE', 'BULL', 'BEAR', 'FROG', 'CAT', 'DOG', 'FISH', 'BIRD', 'COIN', 'TOKEN', 'GEM', 'BASED', 'COPE', 'SEETHE', 'WAGMI', 'NGMI', 'HODL', 'YOLO', 'FOMO', 'REKT', 'SAFE', 'SCAM', 'RUG', 'ALPHA', 'BETA', 'SIGMA', 'PEPE', 'MEME', 'SHIB', 'DOGE', 'FLOKI', 'ELON']
-  
-  for (let i = 0; i < 40; i++) {
-    const symbol = moreSymbols[i] || `TOK${i}`
-    tokens.push({
-      rank: i + 11,
-      baseToken: {
-        address: `${Math.random().toString(36).substring(2, 15)}${Math.random().toString(36).substring(2, 15)}`,
-        symbol: symbol,
-        name: `${symbol} Token`
-      },
-      quoteToken: {
-        address: 'So11111111111111111111111111111111111111112',
-        symbol: 'SOL'
-      },
-      pairAddress: `${Math.random().toString(36).substring(2, 15)}${Math.random().toString(36).substring(2, 15)}`,
-      chainId: 'solana', 
-      dexId: 'raydium',
-      url: `https://dexscreener.com/solana/${Math.random().toString(36).substring(2, 15)}`,
-      priceUsd: (Math.random() * 10).toFixed(6),
-      volume: {
-        h24: Math.floor(Math.random() * 10000000) + 100000
-      },
-      marketCap: Math.floor(Math.random() * 100000000) + 1000000,
-      liquidity: {
-        usd: Math.floor(Math.random() * 1000000) + 50000
-      },
-      priceChange: {
-        h24: (Math.random() * 200 - 100)
-      },
-      age: '1d'
-    })
-  }
-  
-  console.log(`✅ Generated ${tokens.length} realistic test tokens with proper symbols and names`)
-  return tokens
-}
+// REMOVED: No more fallback test tokens for live trading
+// All hardcoded token data has been eliminated to prevent fake data in live trading scenarios
 
 // Convert volume strings like "11.1M" to numbers  
 function parseVolume(volumeStr: string): number {
