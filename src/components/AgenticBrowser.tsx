@@ -5,7 +5,7 @@ import { Card } from '@/components/ui/card';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Badge } from '@/components/ui/badge';
-import { Trash2, Plus, Play, Eye } from 'lucide-react';
+import { Trash2, Plus, Play, Eye, Copy } from 'lucide-react';
 import { useToast } from '@/components/ui/use-toast';
 import { supabase } from '@/integrations/supabase/client';
 
@@ -328,7 +328,7 @@ export const AgenticBrowser = () => {
                               className="h-6 w-6 p-0"
                               title="Copy HTML to clipboard"
                             >
-                              📋
+                              <Copy className="h-3 w-3" />
                             </Button>
                           )}
                         </div>
