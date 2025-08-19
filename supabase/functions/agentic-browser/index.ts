@@ -20,7 +20,9 @@ interface BrowseRequest {
 }
 
 serve(async (req) => {
+  console.log('=== Agentic Browser Function Started ===');
   console.log('Function called with method:', req.method);
+  console.log('Request headers:', Object.fromEntries(req.headers.entries()));
   
   // Handle CORS preflight requests
   if (req.method === 'OPTIONS') {
