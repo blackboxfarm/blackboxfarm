@@ -164,12 +164,32 @@ serve(async (req) => {
                 
                 console.log('🎯 Challenge result:', completionResult);
                 
-                if (completionResult !== 'timeout') {
-                  console.log('✅ Challenge completed successfully!');
+                // Verify we actually got past the challenge
+                const currentTitle = await page.title();
+                const currentUrl = page.url();
+                const stillOnChallenge = currentTitle.includes('Just a moment') || currentUrl.includes('cdn-cgi/challenge');
+                
+                if (completionResult !== 'timeout' && !stillOnChallenge) {
+                  console.log('✅ Challenge completed successfully - redirected to destination!');
+                  challengeType = 'completed_and_redirected';
                   // Short stabilization wait
                   await new Promise(resolve => setTimeout(resolve, 2000));
                 } else {
-                  console.log('⚠️ Challenge timeout, proceeding anyway');
+                  console.log('❌ Challenge failed - still on challenge page');
+                  challengeDetected = true; // Keep this true since we detected it
+                  challengeType = stillOnChallenge ? 'failed_timeout' : 'failed_verification';
+                  
+                  // Return failure immediately for failed challenges
+                  return {
+                    success: false,
+                    error: 'Cloudflare challenge failed - still on challenge page',
+                    html: await page.content(),
+                    finalUrl: currentUrl,
+                    finalTitle: currentTitle,
+                    challengeDetected: true,
+                    challengeType,
+                    screenshot: null
+                  };
                 }
               } else {
                 console.log('ℹ️ No challenge detected');
