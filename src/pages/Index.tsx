@@ -6,6 +6,7 @@ import LiveRunner from "@/components/LiveRunner";
 import ServerSideTradingControl from "@/components/ServerSideTradingControl";
 import VolumeSimulator from "@/components/VolumeSimulator";
 import WalletPoolManager from "@/components/WalletPoolManager";
+import { AgenticBrowser } from "@/components/AgenticBrowser";
 
 import SecretsModal from "@/components/SecretsModal";
 import { PasswordLogin } from "@/components/PasswordLogin";
@@ -141,7 +142,7 @@ export default function Index() {
         </div>
 
         <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
-          <TabsList className="grid w-full grid-cols-4 tech-border">
+          <TabsList className="grid w-full grid-cols-5 tech-border">
             <TabsTrigger value="server-control" className="text-xs">
               🤖 Server Control
             </TabsTrigger>
@@ -153,6 +154,9 @@ export default function Index() {
             </TabsTrigger>
             <TabsTrigger value="wallet-pool" className="text-xs">
               💰 Wallet Pool
+            </TabsTrigger>
+            <TabsTrigger value="agentic-browser" className="text-xs">
+              🌐 Web Agent
             </TabsTrigger>
           </TabsList>
 
@@ -184,6 +188,23 @@ export default function Index() {
 
           <TabsContent value="wallet-pool">
             <WalletPoolManager />
+          </TabsContent>
+
+          <TabsContent value="agentic-browser">
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  🌐 Agentic Web Browser
+                  <Badge variant="outline">Automation</Badge>
+                </CardTitle>
+                <p className="text-sm text-muted-foreground">
+                  Automate web interactions - click buttons, fill forms, take screenshots on any website
+                </p>
+              </CardHeader>
+              <CardContent>
+                <AgenticBrowser />
+              </CardContent>
+            </Card>
           </TabsContent>
         </Tabs>
       </div>

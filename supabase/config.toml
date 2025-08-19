@@ -18,3 +18,6 @@ verify_jwt = false
 [functions.session-manager]
 verify_jwt = true
 
+[functions.agentic-browser]
+verify_jwt = false
+
