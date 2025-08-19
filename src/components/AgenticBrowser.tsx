@@ -82,6 +82,13 @@ export const AgenticBrowser = () => {
     setResults(null);
 
     try {
+      console.log('Calling agentic-browser function with:', {
+        url,
+        actions: actions.map(({ id, ...action }) => action),
+        headless: true,
+        timeout: 60000
+      });
+
       const { data, error } = await supabase.functions.invoke('agentic-browser', {
         body: {
           url,
@@ -91,7 +98,12 @@ export const AgenticBrowser = () => {
         }
       });
 
-      if (error) throw error;
+      console.log('Function response:', { data, error });
+
+      if (error) {
+        console.error('Supabase function error:', error);
+        throw error;
+      }
 
       setResults(data);
       
