@@ -114,83 +114,152 @@ serve(async (req) => {
         const functionUrl = `https://production-sfo.browserless.io/function?token=${browserlessApiKey}`;
         console.log('Function URL:', functionUrl.replace(browserlessApiKey, 'REDACTED'));
         
-        // Simplified, robust challenge handler
+        // Enhanced challenge handler with better stealth and patience
         const challengeScript = `
           export default async ({ page, context }) => {
-            console.log('🚀 Starting challenge handler');
+            console.log('🚀 Starting enhanced challenge handler');
             
             try {
-              // Navigate to page
-              await page.goto('${url}', { waitUntil: 'domcontentloaded', timeout: 30000 });
-              console.log('✅ Page loaded');
+              // Set realistic user agent and viewport
+              await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36');
+              await page.setViewportSize({ width: 1920, height: 1080 });
               
-              // Wait for initial load
-              await new Promise(resolve => setTimeout(resolve, 3000));
+              // Navigate to page with network idle wait
+              console.log('🔗 Navigating to:', '${url}');
+              await page.goto('${url}', { 
+                waitUntil: 'networkidle', 
+                timeout: 60000 
+              });
+              console.log('✅ Page loaded, checking for challenge...');
               
-              // Check for challenge
+              // Initial wait for page to stabilize
+              await new Promise(resolve => setTimeout(resolve, 5000));
+              
+              let finalResult = {
+                success: false,
+                message: 'Challenge processing started',
+                html: '',
+                finalUrl: page.url(),
+                finalTitle: '',
+                challengeDetected: false,
+                challengeType: 'none',
+                screenshot: null
+              };
+              
+              // Check for Cloudflare challenge indicators
+              const pageContent = await page.content();
               const pageTitle = await page.title();
-              let challengeDetected = pageTitle.includes('Just a moment');
+              
+              const challengeIndicators = [
+                pageTitle.includes('Just a moment'),
+                pageTitle.includes('Please wait'),
+                pageContent.includes('Checking your browser'),
+                pageContent.includes('DDoS protection'),
+                pageContent.includes('cf-browser-verification'),
+                pageContent.includes('challenge-platform')
+              ];
+              
+              const challengeDetected = challengeIndicators.some(indicator => indicator);
+              finalResult.challengeDetected = challengeDetected;
               
               if (challengeDetected) {
-                console.log('🎯 Challenge detected - waiting for completion...');
+                console.log('🛡️ Cloudflare challenge detected - initiating patient wait...');
+                finalResult.challengeType = 'detected';
                 
-                // Wait patiently for challenge to complete
-                for (let i = 0; i < 20; i++) { // 40 seconds total
+                // Extended wait with multiple check methods - up to 90 seconds
+                for (let attempt = 0; attempt < 45; attempt++) {
                   await new Promise(resolve => setTimeout(resolve, 2000));
                   
+                  // Multiple success indicators
                   const currentTitle = await page.title();
-                  if (!currentTitle.includes('Just a moment')) {
-                    console.log('✅ Challenge completed!');
-                    challengeDetected = false;
+                  const currentUrl = page.url();
+                  const currentContent = await page.content();
+                  
+                  // Check if challenge is complete
+                  const successIndicators = [
+                    !currentTitle.includes('Just a moment'),
+                    !currentTitle.includes('Please wait'),
+                    !currentContent.includes('Checking your browser'),
+                    currentContent.includes('dexscreener') && currentContent.length > 50000, // Real content loaded
+                    currentUrl !== '${url}' || currentContent.includes('chart-container') // Page redirected or has real content
+                  ];
+                  
+                  const challengeComplete = successIndicators.filter(Boolean).length >= 3;
+                  
+                  if (challengeComplete) {
+                    console.log(\`✅ Challenge completed successfully after \${attempt * 2} seconds!\`);
+                    finalResult.success = true;
+                    finalResult.message = 'Challenge completed successfully';
+                    finalResult.challengeType = 'completed';
                     break;
                   }
-                  console.log(\`⏳ Waiting... (\${i+1}/20)\`);
+                  
+                  if (attempt % 5 === 0) {
+                    console.log(\`⏳ Still waiting for challenge completion... (\${attempt * 2}/90s)\`);
+                  }
                 }
+              } else {
+                console.log('✅ No challenge detected, page loaded successfully');
+                finalResult.success = true;
+                finalResult.message = 'Page loaded without challenge';
               }
-
+              
               // Handle wait actions
               const waitActions = ${JSON.stringify(actions.filter(a => a.type === 'wait'))};
               for (const waitAction of waitActions) {
-                const delay = Math.min(waitAction.delay || 1000, 5000);
+                const delay = Math.min(waitAction.delay || 1000, 10000);
                 await new Promise(resolve => setTimeout(resolve, delay));
               }
               
               // Take screenshot if needed
-              let screenshot = null;
               if (${hasScreenshotAction}) {
                 try {
-                  screenshot = await page.screenshot({ 
+                  finalResult.screenshot = await page.screenshot({ 
                     type: 'png', 
                     encoding: 'base64',
-                    fullPage: false 
+                    fullPage: false,
+                    clip: { x: 0, y: 0, width: 1920, height: 1080 }
                   });
-                  console.log('✅ Screenshot captured');
+                  console.log('📸 Screenshot captured successfully');
                 } catch (e) {
                   console.log('❌ Screenshot failed:', e.message);
                 }
               }
               
-              const finalTitle = await page.title();
-              const stillHasChallenge = finalTitle.includes('Just a moment');
+              // Final page state
+              finalResult.html = await page.content();
+              finalResult.finalUrl = page.url();
+              finalResult.finalTitle = await page.title();
               
-              return {
-                success: !stillHasChallenge,
-                message: stillHasChallenge ? 'Challenge still present' : 'Completed successfully',
-                html: await page.content(),
-                finalUrl: page.url(),
-                finalTitle,
-                challengeDetected: true,
-                challengeType: stillHasChallenge ? 'timeout' : 'completed',
-                screenshot: screenshot
-              };
+              // Final success check
+              if (!finalResult.success && finalResult.challengeDetected) {
+                const stillChallenged = finalResult.finalTitle.includes('Just a moment');
+                if (!stillChallenged) {
+                  finalResult.success = true;
+                  finalResult.message = 'Challenge completed (final check)';
+                  finalResult.challengeType = 'completed';
+                }
+              }
+              
+              console.log('🎯 Final result:', {
+                success: finalResult.success,
+                challengeDetected: finalResult.challengeDetected,
+                challengeType: finalResult.challengeType,
+                finalTitle: finalResult.finalTitle,
+                finalUrl: finalResult.finalUrl
+              });
+              
+              return finalResult;
               
             } catch (error) {
-              console.error('❌ Error:', error);
+              console.error('❌ Challenge handler error:', error);
               return {
                 success: false,
                 error: error.message,
-                finalUrl: page.url(),
-                finalTitle: await page.title().catch(() => 'Error')
+                finalUrl: page.url().catch(() => '${url}'),
+                finalTitle: await page.title().catch(() => 'Error'),
+                challengeDetected: true,
+                challengeType: 'error'
               };
             }
           };
