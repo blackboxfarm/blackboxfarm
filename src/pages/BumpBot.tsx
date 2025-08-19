@@ -281,15 +281,14 @@ const BumpBot = () => {
                   <Button 
                     onClick={() => setRunning(true)} 
                     disabled={running || !conn || !displayPubkey}
-                    className="tech-button"
+                    className="bg-primary text-primary-foreground hover:bg-primary/90"
                   >
-                    Start
+                    Load Live Data
                   </Button>
                   <Button 
                     variant="secondary" 
                     onClick={() => setRunning(false)} 
                     disabled={!running}
-                    className="bg-secondary hover:bg-secondary/80"
                   >
                     Stop
                   </Button>
