@@ -144,7 +144,7 @@ export default function VolumeSimulator() {
                 <input
                   id="pairmode"
                   type="checkbox"
-                  className="h-4 w-4"
+                  className="h-4 w-4 rounded border-border bg-input text-primary accent-primary"
                   checked={pairMode}
                   onChange={(e) => setPairMode(e.target.checked)}
                 />
