@@ -114,10 +114,10 @@ serve(async (req) => {
         const functionUrl = `https://production-sfo.browserless.io/function?token=${browserlessApiKey}`;
         console.log('Function URL:', functionUrl.replace(browserlessApiKey, 'REDACTED'));
         
-        // Create a sophisticated script to handle Cloudflare challenges
+        // Create a sophisticated script to handle Cloudflare challenges and subsequent actions
         const challengeScript = `
           export default async ({ page, context }) => {
-            console.log('🚀 Starting Cloudflare challenge handler');
+            console.log('🚀 Starting Cloudflare challenge handler with actions: ${JSON.stringify(actions.map(a => a.type))}');
             
             try {
               // Navigate to the page
@@ -166,102 +166,124 @@ serve(async (req) => {
               
               if (!challengeDetected) {
                 console.log('ℹ️ No Cloudflare challenge detected, proceeding normally');
-                return {
-                  success: true,
-                  message: 'No challenge detected',
-                  html: await page.content(),
-                  finalUrl: page.url()
-                };
-              }
-              
-              // Wait longer for challenge to fully load and scripts to execute
-              console.log('⏳ Waiting for challenge scripts to load and execute...');
-              await new Promise(resolve => setTimeout(resolve, 8000));
-              
-              // Try multiple challenge handling approaches
-              console.log('🎯 Attempting to handle Cloudflare challenge...');
-              
-              try {
-                // Approach 1: Look for and interact with turnstile iframe
-                console.log('🔍 Looking for Turnstile iframe...');
+              } else {
+                // Wait longer for challenge to fully load and scripts to execute
+                console.log('⏳ Waiting for challenge scripts to load and execute...');
+                await new Promise(resolve => setTimeout(resolve, 8000));
+                
+                // Try multiple challenge handling approaches
+                console.log('🎯 Attempting to handle Cloudflare challenge...');
+                
                 try {
-                  await page.waitForSelector('iframe[src*="challenges.cloudflare.com"]', { timeout: 15000 });
-                  const iframe = await page.$('iframe[src*="challenges.cloudflare.com"]');
-                  if (iframe) {
-                    console.log('✅ Found Turnstile iframe, attempting to click');
-                    await iframe.click();
-                    await new Promise(resolve => setTimeout(resolve, 2000));
-                  }
-                } catch (iframeError) {
-                  console.log('⚠️ No iframe found or could not click:', iframeError.message);
-                }
-                
-                // Approach 2: Look for turnstile widget container and click it
-                console.log('🔍 Looking for Turnstile widget container...');
-                const turnstileSelectors = [
-                  '.cf-turnstile',
-                  '[data-sitekey]',
-                  'div[id*="turnstile"]',
-                  'div[class*="turnstile"]'
-                ];
-                
-                for (const selector of turnstileSelectors) {
+                  // Approach 1: Look for and interact with turnstile iframe
+                  console.log('🔍 Looking for Turnstile iframe...');
                   try {
-                    const element = await page.$(selector);
-                    if (element) {
-                      console.log('✅ Found Turnstile widget:', selector);
-                      await element.click();
+                    await page.waitForSelector('iframe[src*="challenges.cloudflare.com"]', { timeout: 15000 });
+                    const iframe = await page.$('iframe[src*="challenges.cloudflare.com"]');
+                    if (iframe) {
+                      console.log('✅ Found Turnstile iframe, attempting to click');
+                      await iframe.click();
                       await new Promise(resolve => setTimeout(resolve, 2000));
-                      break;
                     }
-                  } catch (e) {
-                    console.log('⚠️ Could not interact with', selector, ':', e.message);
+                  } catch (iframeError) {
+                    console.log('⚠️ No iframe found or could not click:', iframeError.message);
                   }
+                  
+                  // Approach 2: Look for turnstile widget container and click it
+                  console.log('🔍 Looking for Turnstile widget container...');
+                  const turnstileSelectors = [
+                    '.cf-turnstile',
+                    '[data-sitekey]',
+                    'div[id*="turnstile"]',
+                    'div[class*="turnstile"]'
+                  ];
+                  
+                  for (const selector of turnstileSelectors) {
+                    try {
+                      const element = await page.$(selector);
+                      if (element) {
+                        console.log('✅ Found Turnstile widget:', selector);
+                        await element.click();
+                        await new Promise(resolve => setTimeout(resolve, 2000));
+                        break;
+                      }
+                    } catch (e) {
+                      console.log('⚠️ Could not interact with', selector, ':', e.message);
+                    }
+                  }
+                  
+                  // Approach 3: Wait for automatic challenge completion and redirect
+                  console.log('⏳ Waiting for automatic challenge completion and redirect...');
+                  const completionResult = await Promise.race([
+                    // Wait for success message to appear
+                    page.waitForSelector('#challenge-success-text', { visible: true, timeout: 45000 }).then(() => 'success_message'),
+                    // Wait for response token to be filled
+                    page.waitForFunction(
+                      () => {
+                        const token = document.querySelector('[name="cf-turnstile-response"]')?.value;
+                        return token && token.length > 0;
+                      },
+                      { timeout: 45000 }
+                    ).then(() => 'token_filled'),
+                    // Wait for navigation away from challenge page (auto-redirect)
+                    page.waitForNavigation({ waitUntil: 'networkidle0', timeout: 45000 }).then(() => 'navigation'),
+                    // Wait for page title change (redirect happened)
+                    page.waitForFunction(
+                      () => !document.title.includes('Just a moment'),
+                      { timeout: 45000 }
+                    ).then(() => 'title_change')
+                  ]).catch(() => 'timeout');
+                  
+                  console.log('🎯 Challenge completion result:', completionResult);
+                  
+                  if (completionResult !== 'timeout') {
+                    console.log('✅ Challenge appears to be completed successfully!');
+                    // Wait a bit more for any final processing and page stabilization
+                    await new Promise(resolve => setTimeout(resolve, 5000));
+                  } else {
+                    console.log('⚠️ Challenge completion timeout - may still be processing');
+                  }
+                  
+                } catch (challengeError) {
+                  console.log('⚠️ Error during challenge handling:', challengeError.message);
                 }
-                
-                // Approach 3: Wait for automatic challenge completion
-                console.log('⏳ Waiting for automatic challenge completion...');
-                const completionResult = await Promise.race([
-                  // Wait for success message to appear
-                  page.waitForSelector('#challenge-success-text', { visible: true, timeout: 30000 }).then(() => 'success_message'),
-                  // Wait for response token to be filled
-                  page.waitForFunction(
-                    () => {
-                      const token = document.querySelector('[name="cf-turnstile-response"]')?.value;
-                      return token && token.length > 0;
-                    },
-                    { timeout: 30000 }
-                  ).then(() => 'token_filled'),
-                  // Wait for navigation away from challenge page
-                  page.waitForNavigation({ waitUntil: 'networkidle0', timeout: 30000 }).then(() => 'navigation'),
-                  // Wait for page title change
-                  page.waitForFunction(
-                    () => !document.title.includes('Just a moment'),
-                    { timeout: 30000 }
-                  ).then(() => 'title_change')
-                ]).catch(() => 'timeout');
-                
-                console.log('🎯 Challenge completion result:', completionResult);
-                
-                if (completionResult !== 'timeout') {
-                  console.log('✅ Challenge appears to be completed successfully!');
-                  // Wait a bit more for any final processing
-                  await new Promise(resolve => setTimeout(resolve, 3000));
-                } else {
-                  console.log('⚠️ Challenge completion timeout - may still be processing');
+              }
+
+              // After challenge is handled, process remaining actions
+              let screenshot = null;
+              const hasScreenshot = ${hasScreenshotAction};
+              
+              if (hasScreenshot) {
+                console.log('📸 Taking screenshot of final page after challenge completion...');
+                try {
+                  screenshot = await page.screenshot({ 
+                    type: 'png', 
+                    encoding: 'base64',
+                    fullPage: false 
+                  });
+                  console.log('✅ Screenshot captured successfully');
+                } catch (screenshotError) {
+                  console.log('❌ Screenshot failed:', screenshotError.message);
                 }
-                
-              } catch (challengeError) {
-                console.log('⚠️ Error during challenge handling:', challengeError.message);
+              }
+
+              // Handle wait actions
+              const waitActions = ${JSON.stringify(actions.filter(a => a.type === 'wait'))};
+              for (const waitAction of waitActions) {
+                const delay = waitAction.delay || 1000;
+                console.log('⏳ Wait action: sleeping for', delay, 'ms');
+                await new Promise(resolve => setTimeout(resolve, delay));
               }
               
               return {
                 success: true,
-                message: 'Challenge handling completed',
+                message: 'Challenge handling and actions completed',
                 html: await page.content(),
                 finalUrl: page.url(),
-                challengeDetected: true,
-                challengeType
+                finalTitle: await page.title(),
+                challengeDetected,
+                challengeType,
+                screenshot: screenshot
               };
               
             } catch (error) {
@@ -270,7 +292,8 @@ serve(async (req) => {
                 success: false,
                 error: error.message,
                 html: await page.content().catch(() => ''),
-                finalUrl: page.url()
+                finalUrl: page.url(),
+                finalTitle: await page.title().catch(() => 'Error')
               };
             }
           };
@@ -338,11 +361,12 @@ serve(async (req) => {
               success: true,
               delay: action.delay || 1000
             });
-          } else if (action.type === 'scrape') {
+          } else if (action.type === 'screenshot') {
             results.push({
-              action: 'scrape',
-              success: true,
-              html: functionResult.html || ''
+              action: 'screenshot',
+              success: functionResult.screenshot ? true : false,
+              screenshot: functionResult.screenshot ? `data:image/png;base64,${functionResult.screenshot}` : null,
+              message: functionResult.screenshot ? 'Screenshot captured after challenge completion' : 'Screenshot failed'
             });
           }
         });
@@ -350,12 +374,12 @@ serve(async (req) => {
         result = {
           success: functionResult.success,
           finalUrl: functionResult.finalUrl || url,
-          finalTitle: 'Cloudflare challenge handling completed',
+          finalTitle: functionResult.finalTitle || 'Cloudflare challenge handling completed',
           results,
           totalActions: actions.length
         };
 
-      } else if (hasScrapeAction) {
+      } else if (hasScrapeAction && !hasCloudflareChallenge) {
         console.log('📄 SCRAPE ACTION DETECTED - Using content endpoint to get HTML');
         const contentUrl = `https://production-sfo.browserless.io/content?token=${browserlessApiKey}`;
         console.log('Content URL:', contentUrl.replace(browserlessApiKey, 'REDACTED'));
