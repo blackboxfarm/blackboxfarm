@@ -217,18 +217,26 @@ serve(async (req) => {
       }
     }`;
 
+    console.log('Generated automation script:', automationScript);
     console.log('Sending request to browserless API...');
     
     let response;
     try {
-      response = await fetch(browserlessUrl, {
+      // Try the /content endpoint instead of /function
+      const contentUrl = `https://production-sfo.browserless.io/content?token=${browserlessApiKey}`;
+      console.log('Using content URL:', contentUrl.replace(browserlessApiKey, 'REDACTED'));
+      
+      response = await fetch(contentUrl, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          code: automationScript,
-          context: {}
+          url: url,
+          gotoOptions: {
+            waitUntil: 'networkidle0',
+            timeout: timeout
+          }
         })
       });
     } catch (fetchError) {
