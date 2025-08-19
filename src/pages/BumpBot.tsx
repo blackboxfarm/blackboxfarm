@@ -87,6 +87,13 @@ const BumpBot = () => {
   const [bumpBotDelaySec, setBumpBotDelaySec] = useState(3);
   const [bumpBotBuyCount, setBumpBotBuyCount] = useState(60);
   const [bumpBotCurrentCount, setBumpBotCurrentCount] = useState(0);
+  const [bumpBotTransactions, setBumpBotTransactions] = useState<Array<{
+    id: string;
+    type: 'buy' | 'sell';
+    amount: string;
+    signature: string;
+    timestamp: Date;
+  }>>([]);
   const bumpBotTimer = useRef<number | null>(null);
   const bumpBotRunning = useRef(false);
 
@@ -190,6 +197,20 @@ const BumpBot = () => {
     setBumpBotActive(true);
     setBumpBotCurrentCount(0);
     
+    const addTransaction = (type: 'buy' | 'sell', amount: string, signature: string) => {
+      setBumpBotTransactions(prev => {
+        const newTransaction = {
+          id: Math.random().toString(36).substr(2, 9),
+          type,
+          amount,
+          signature,
+          timestamp: new Date()
+        };
+        const updated = [newTransaction, ...prev];
+        return updated.slice(0, 100); // Keep only last 100 transactions
+      });
+    };
+    
     const doBuy = async () => {
       if (!bumpBotRunning.current) return;
       
@@ -200,6 +221,8 @@ const BumpBot = () => {
       
       if ((result as any).data?.signatures?.length) {
         const sig = (result as any).data.signatures[0];
+        addTransaction('buy', `$${usdAmount.toFixed(2)}`, sig);
+        
         setBumpBotCurrentCount(prev => {
           const newCount = prev + 1;
           toast.success(`BumpBot Buy ${newCount}/${bumpBotBuyCount} - $${usdAmount.toFixed(2)} - ${sig.slice(0, 8)}…`);
@@ -215,6 +238,7 @@ const BumpBot = () => {
               
               if ((sellResult as any).data?.signatures?.length) {
                 const sellSig = (sellResult as any).data.signatures[0];
+                addTransaction('sell', 'ALL', sellSig);
                 toast.success(`BumpBot Sell All - Cycle complete - ${sellSig.slice(0, 8)}…`);
                 setBumpBotCurrentCount(0); // Reset counter for next cycle
               }
@@ -463,59 +487,112 @@ const BumpBot = () => {
 
               {/* BumpBot Controls */}
               <div className="border-t border-border pt-6">
-                <h3 className="text-lg font-medium text-accent mb-4">BumpBot Configuration</h3>
-                <div className="grid sm:grid-cols-2 gap-4 mb-4">
-                  <div className="space-y-2">
-                    <Label className="text-foreground">Delay between buys (seconds)</Label>
-                    <div className="flex items-center gap-3">
-                      <input
-                        type="range"
-                        min="1"
-                        max="60"
-                        step="1"
-                        value={bumpBotDelaySec}
-                        onChange={(e) => setBumpBotDelaySec(Number(e.target.value))}
-                        className="flex-1 h-2 rounded-lg appearance-none cursor-pointer bg-muted"
-                      />
-                      <span className="text-sm text-muted-foreground w-12 text-right">{bumpBotDelaySec}s</span>
+                <div className="grid md:grid-cols-2 gap-6">
+                  {/* Left Column - Controls */}
+                  <div className="space-y-4">
+                    <h3 className="text-lg font-medium text-accent">BumpBot Configuration</h3>
+                    
+                    <div className="space-y-4">
+                      <div className="space-y-2">
+                        <Label className="text-foreground">Delay between buys (seconds)</Label>
+                        <div className="flex items-center gap-3">
+                          <input
+                            type="range"
+                            min="1"
+                            max="60"
+                            step="1"
+                            value={bumpBotDelaySec}
+                            onChange={(e) => setBumpBotDelaySec(Number(e.target.value))}
+                            className="flex-1 h-2 rounded-lg appearance-none cursor-pointer bg-muted"
+                          />
+                          <span className="text-sm text-muted-foreground w-12 text-right">{bumpBotDelaySec}s</span>
+                        </div>
+                      </div>
+                      
+                      <div className="space-y-2">
+                        <Label className="text-foreground">Number of buys before selling</Label>
+                        <Input 
+                          type="number" 
+                          min="1" 
+                          step="1" 
+                          value={bumpBotBuyCount} 
+                          onChange={(e) => setBumpBotBuyCount(Math.max(1, Number(e.target.value || 1)))}
+                        />
+                      </div>
+                    </div>
+
+                    {bumpBotActive && (
+                      <div className="text-sm text-accent">
+                        BumpBot Active: {bumpBotCurrentCount}/{bumpBotBuyCount} buys completed
+                      </div>
+                    )}
+                    
+                    <div className="flex items-end gap-2">
+                      <Button 
+                        variant="default" 
+                        onClick={startBumpBot} 
+                        disabled={bumpBotActive || swapping || !tokenMint || !ownerSecret}
+                        className="bg-primary text-primary-foreground hover:bg-primary/90"
+                      >
+                        Start BumpBot
+                      </Button>
+                      <Button 
+                        variant="ghost" 
+                        onClick={stopBumpBot} 
+                        disabled={!bumpBotActive}
+                        className="text-muted-foreground hover:text-foreground"
+                      >
+                        Stop BumpBot
+                      </Button>
+                    </div>
+                    
+                    <div className="text-xs text-muted-foreground bg-muted/20 p-3 rounded">
+                      <strong>Config:</strong> Buy ${parseFloat(usdToBuy) || 0.01} every {bumpBotDelaySec}s, sell all after {bumpBotBuyCount} buys, then repeat cycle
                     </div>
                   </div>
-                  <div className="space-y-2">
-                    <Label className="text-foreground">Number of buys before selling</Label>
-                    <Input 
-                      type="number" 
-                      min="1" 
-                      step="1" 
-                      value={bumpBotBuyCount} 
-                      onChange={(e) => setBumpBotBuyCount(Math.max(1, Number(e.target.value || 1)))}
-                    />
+
+                  {/* Right Column - Transaction History */}
+                  <div className="space-y-4">
+                    <h3 className="text-lg font-medium text-accent">Transactions</h3>
+                    
+                    <div className="border border-border rounded-lg p-4 bg-card/20">
+                      <div className="max-h-80 overflow-y-auto space-y-2">
+                        {bumpBotTransactions.length === 0 ? (
+                          <div className="text-center text-muted-foreground py-8">
+                            No transactions yet. Start BumpBot to see history.
+                          </div>
+                        ) : (
+                          bumpBotTransactions.slice(0, 25).map((tx) => (
+                            <div key={tx.id} className="flex items-center justify-between py-2 px-3 rounded bg-muted/10 border border-muted/20">
+                              <div className="flex items-center gap-3">
+                                <div className={`w-2 h-2 rounded-full ${tx.type === 'buy' ? 'bg-green-500' : 'bg-red-500'}`} />
+                                <div className="text-sm">
+                                  <span className={`font-medium ${tx.type === 'buy' ? 'text-green-400' : 'text-red-400'}`}>
+                                    {tx.type.toUpperCase()}
+                                  </span>
+                                  <span className="text-muted-foreground ml-2">{tx.amount}</span>
+                                </div>
+                              </div>
+                              <div className="flex flex-col items-end text-xs">
+                                <span className="text-muted-foreground font-mono">
+                                  {tx.signature.slice(0, 6)}...{tx.signature.slice(-4)}
+                                </span>
+                                <span className="text-muted-foreground">
+                                  {tx.timestamp.toLocaleTimeString()}
+                                </span>
+                              </div>
+                            </div>
+                          ))
+                        )}
+                      </div>
+                      
+                      {bumpBotTransactions.length > 0 && (
+                        <div className="mt-3 pt-3 border-t border-border text-xs text-muted-foreground">
+                          Showing {Math.min(bumpBotTransactions.length, 25)} of {bumpBotTransactions.length} transactions
+                        </div>
+                      )}
+                    </div>
                   </div>
-                </div>
-                {bumpBotActive && (
-                  <div className="text-sm text-accent mb-4">
-                    BumpBot Active: {bumpBotCurrentCount}/{bumpBotBuyCount} buys completed
-                  </div>
-                )}
-                <div className="flex items-end gap-2">
-                  <Button 
-                    variant="default" 
-                    onClick={startBumpBot} 
-                    disabled={bumpBotActive || swapping || !tokenMint || !ownerSecret}
-                    className="bg-primary text-primary-foreground hover:bg-primary/90"
-                  >
-                    Start BumpBot
-                  </Button>
-                  <Button 
-                    variant="ghost" 
-                    onClick={stopBumpBot} 
-                    disabled={!bumpBotActive}
-                    className="text-muted-foreground hover:text-foreground"
-                  >
-                    Stop BumpBot
-                  </Button>
-                  <span className="text-xs text-muted-foreground">
-                    Buy ${parseFloat(usdToBuy) || 0.01} every {bumpBotDelaySec}s, sell after {bumpBotBuyCount} buys
-                  </span>
                 </div>
               </div>
 
