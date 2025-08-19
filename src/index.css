@@ -154,4 +154,14 @@ All colors MUST be HSL.
     transform: translateY(-2px);
     box-shadow: var(--glow-cyan);
   }
+
+  /* Force input styling */
+  input[type="text"], input[type="number"], input[type="password"], textarea, select {
+    background: hsl(var(--input)) !important;
+    color: hsl(var(--input-foreground)) !important;
+  }
+  
+  input[type="text"]::placeholder, input[type="number"]::placeholder, input[type="password"]::placeholder, textarea::placeholder {
+    color: hsl(var(--input-foreground) / 0.6) !important;
+  }
 }
