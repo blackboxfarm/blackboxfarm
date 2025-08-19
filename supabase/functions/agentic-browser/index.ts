@@ -70,158 +70,168 @@ serve(async (req) => {
       );
     }
 
-    console.log(`Starting REAL agentic browsing for URL: ${url} with ${actions.length} actions`);
+    console.log(`Starting browser automation for URL: ${url} with ${actions.length} actions`);
 
-    // Import Puppeteer for Deno - using different approach
-    console.log('Importing Puppeteer...');
-    const { default: puppeteer } = await import("https://deno.land/x/puppeteer@16.2.0/mod.ts");
-    console.log('Puppeteer imported successfully');
+    // Use browserless.io API for browser automation
+    const browserlessApiKey = Deno.env.get('BROWSERLESS_API_KEY');
+    if (!browserlessApiKey) {
+      console.error('BROWSERLESS_API_KEY not found');
+      throw new Error('Browser automation service not configured');
+    }
 
-    // Launch browser with more permissive settings
-    console.log('Launching browser...');
-    const browser = await puppeteer.launch({
-      headless: true,
-      args: [
-        '--no-sandbox',
-        '--disable-setuid-sandbox',
-        '--disable-dev-shm-usage',
-        '--disable-accelerated-2d-canvas',
-        '--no-first-run',
-        '--no-zygote',
-        '--disable-gpu',
-        '--disable-web-security',
-        '--disable-extensions',
-        '--disable-background-timer-throttling',
-        '--disable-backgrounding-occluded-windows',
-        '--disable-renderer-backgrounding'
-      ]
-    });
-    console.log('Browser launched successfully');
-
-    const page = await browser.newPage();
+    const browserlessUrl = `https://chrome.browserless.io/function?token=${browserlessApiKey}`;
     
-    // Set viewport and user agent
-    await page.setViewport({ width: 1280, height: 720 });
-    await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36');
-
-    const results: any[] = [];
-
-    try {
-      // Navigate to the URL
-      console.log(`Navigating to: ${url}`);
-      await page.goto(url, { waitUntil: 'networkidle0', timeout });
-      console.log('Navigation completed');
-      
-      results.push({
-        action: 'navigate',
-        success: true,
-        url: page.url(),
-        title: await page.title()
-      });
-
-      // Execute actions sequentially
-      for (const [index, action] of actions.entries()) {
-        console.log(`Executing action ${index + 1}: ${action.type}`);
+    // Create the automation script
+    const automationScript = `
+      async ({ page }) => {
+        const results = [];
         
         try {
-          switch (action.type) {
-            case 'click':
-              if (action.selector) {
-                console.log(`Waiting for selector: ${action.selector}`);
-                await page.waitForSelector(action.selector, { timeout: 10000 });
-                console.log(`Clicking selector: ${action.selector}`);
-                await page.click(action.selector);
-                results.push({
-                  action: 'click',
-                  selector: action.selector,
-                  success: true
-                });
-                console.log(`Click completed for: ${action.selector}`);
-              }
-              break;
-
-            case 'input':
-              if (action.selector && action.value) {
-                console.log(`Inputting text to: ${action.selector}`);
-                await page.waitForSelector(action.selector, { timeout: 10000 });
-                await page.focus(action.selector);
-                await page.keyboard.type(action.value);
-                results.push({
-                  action: 'input',
-                  selector: action.selector,
-                  value: action.value,
-                  success: true
-                });
-                console.log(`Input completed for: ${action.selector}`);
-              }
-              break;
-
-            case 'wait':
-              const delay = action.delay || 1000;
-              console.log(`Waiting for ${delay}ms`);
-              await new Promise(resolve => setTimeout(resolve, delay));
-              results.push({
-                action: 'wait',
-                delay,
-                success: true
-              });
-              console.log(`Wait completed`);
-              break;
-
-            case 'screenshot':
-              console.log('Taking screenshot...');
-              const screenshot = await page.screenshot({ 
-                type: 'png',
-                fullPage: false,
-                encoding: 'base64'
-              });
-              results.push({
-                action: 'screenshot',
-                success: true,
-                screenshot: `data:image/png;base64,${screenshot}`
-              });
-              console.log('Screenshot taken successfully');
-              break;
-          }
-
-          // Small delay between actions
-          await new Promise(resolve => setTimeout(resolve, 500));
-
-        } catch (actionError) {
-          console.error(`Error in action ${index + 1}:`, actionError);
+          console.log('Navigating to ${url}...');
+          await page.goto('${url}', { waitUntil: 'networkidle0', timeout: ${timeout} });
+          
           results.push({
-            action: action.type,
-            selector: action.selector,
-            success: false,
-            error: actionError.message
+            action: 'navigate',
+            success: true,
+            url: page.url(),
+            title: await page.title()
           });
+
+          ${actions.map((action, index) => {
+            switch (action.type) {
+              case 'click':
+                return `
+                  try {
+                    console.log('Clicking ${action.selector}...');
+                    await page.waitForSelector('${action.selector}', { timeout: 10000 });
+                    await page.click('${action.selector}');
+                    results.push({
+                      action: 'click',
+                      selector: '${action.selector}',
+                      success: true
+                    });
+                  } catch (error) {
+                    results.push({
+                      action: 'click',
+                      selector: '${action.selector}',
+                      success: false,
+                      error: error.message
+                    });
+                  }
+                `;
+              case 'input':
+                return `
+                  try {
+                    console.log('Inputting to ${action.selector}...');
+                    await page.waitForSelector('${action.selector}', { timeout: 10000 });
+                    await page.focus('${action.selector}');
+                    await page.keyboard.type('${action.value}');
+                    results.push({
+                      action: 'input',
+                      selector: '${action.selector}',
+                      value: '${action.value}',
+                      success: true
+                    });
+                  } catch (error) {
+                    results.push({
+                      action: 'input',
+                      selector: '${action.selector}',
+                      success: false,
+                      error: error.message
+                    });
+                  }
+                `;
+              case 'wait':
+                return `
+                  try {
+                    console.log('Waiting ${action.delay || 1000}ms...');
+                    await new Promise(resolve => setTimeout(resolve, ${action.delay || 1000}));
+                    results.push({
+                      action: 'wait',
+                      delay: ${action.delay || 1000},
+                      success: true
+                    });
+                  } catch (error) {
+                    results.push({
+                      action: 'wait',
+                      success: false,
+                      error: error.message
+                    });
+                  }
+                `;
+              case 'screenshot':
+                return `
+                  try {
+                    console.log('Taking screenshot...');
+                    const screenshot = await page.screenshot({ 
+                      type: 'png',
+                      fullPage: false,
+                      encoding: 'base64'
+                    });
+                    results.push({
+                      action: 'screenshot',
+                      success: true,
+                      screenshot: \`data:image/png;base64,\${screenshot}\`
+                    });
+                  } catch (error) {
+                    results.push({
+                      action: 'screenshot',
+                      success: false,
+                      error: error.message
+                    });
+                  }
+                `;
+              default:
+                return '';
+            }
+          }).join('\n          await new Promise(resolve => setTimeout(resolve, 500));\n')}
+
+          return {
+            success: true,
+            finalUrl: page.url(),
+            finalTitle: await page.title(),
+            results,
+            totalActions: ${actions.length}
+          };
+        } catch (error) {
+          console.error('Automation error:', error);
+          return {
+            success: false,
+            error: error.message,
+            results
+          };
         }
       }
+    `;
 
-      // Get final page state
-      const finalUrl = page.url();
-      const finalTitle = await page.title();
-      
-      console.log('Agentic browsing completed successfully');
+    console.log('Sending request to browserless API...');
+    
+    const response = await fetch(browserlessUrl, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        code: automationScript,
+        context: {}
+      })
+    });
 
-      return new Response(
-        JSON.stringify({
-          success: true,
-          finalUrl,
-          finalTitle,
-          results,
-          totalActions: actions.length
-        }),
-        { 
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
-        }
-      );
-
-    } finally {
-      console.log('Closing browser...');
-      await browser.close();
-      console.log('Browser closed');
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error('Browserless API error:', response.status, errorText);
+      throw new Error(`Browser automation failed: ${response.status} ${errorText}`);
     }
+
+    const result = await response.json();
+    console.log('Browser automation completed');
+    
+    return new Response(
+      JSON.stringify(result),
+      { 
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+      }
+    );
 
   } catch (error) {
     console.error('Error in agentic browser:', error);
