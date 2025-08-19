@@ -125,7 +125,7 @@ serve(async (req) => {
               await page.goto('${url}', { waitUntil: 'domcontentloaded', timeout: ${timeout} });
               
               // Wait a bit for initial page load
-              await page.waitForTimeout(3000);
+              await new Promise(resolve => setTimeout(resolve, 3000));
               
               // Check for Cloudflare challenge indicators
               const pageTitle = await page.title();
@@ -176,7 +176,7 @@ serve(async (req) => {
               
               // Wait longer for challenge to fully load and scripts to execute
               console.log('⏳ Waiting for challenge scripts to load and execute...');
-              await page.waitForTimeout(8000);
+              await new Promise(resolve => setTimeout(resolve, 8000));
               
               // Try multiple challenge handling approaches
               console.log('🎯 Attempting to handle Cloudflare challenge...');
@@ -190,7 +190,7 @@ serve(async (req) => {
                   if (iframe) {
                     console.log('✅ Found Turnstile iframe, attempting to click');
                     await iframe.click();
-                    await page.waitForTimeout(2000);
+                    await new Promise(resolve => setTimeout(resolve, 2000));
                   }
                 } catch (iframeError) {
                   console.log('⚠️ No iframe found or could not click:', iframeError.message);
@@ -211,7 +211,7 @@ serve(async (req) => {
                     if (element) {
                       console.log('✅ Found Turnstile widget:', selector);
                       await element.click();
-                      await page.waitForTimeout(2000);
+                      await new Promise(resolve => setTimeout(resolve, 2000));
                       break;
                     }
                   } catch (e) {
@@ -246,7 +246,7 @@ serve(async (req) => {
                 if (completionResult !== 'timeout') {
                   console.log('✅ Challenge appears to be completed successfully!');
                   // Wait a bit more for any final processing
-                  await page.waitForTimeout(3000);
+                  await new Promise(resolve => setTimeout(resolve, 3000));
                 } else {
                   console.log('⚠️ Challenge completion timeout - may still be processing');
                 }
