@@ -128,23 +128,38 @@ serve(async (req) => {
               await page.waitForTimeout(3000);
               
               // Check for Cloudflare challenge indicators
+              const pageTitle = await page.title();
+              const pageContent = await page.content();
+              
+              let challengeDetected = false;
+              let challengeType = 'unknown';
+              
+              // Primary detection: Look for Cloudflare challenge page indicators
+              if (pageTitle.includes('Just a moment') || 
+                  pageContent.includes('cdn-cgi/challenge-platform') ||
+                  pageContent.includes('challenges.cloudflare.com') ||
+                  pageContent.includes('Verify you are human')) {
+                challengeDetected = true;
+                challengeType = 'cloudflare_challenge_page';
+                console.log('✅ Cloudflare challenge page detected via page content analysis');
+              }
+              
+              // Secondary detection: Look for specific challenge elements
               const challengeSelectors = [
                 'iframe[src*="challenges.cloudflare.com"]',
                 '[name="cf-turnstile-response"]',
                 '#challenge-success-text',
                 '.cf-turnstile',
-                '[data-sitekey]'
+                '[data-sitekey]',
+                'script[src*="cdn-cgi/challenge-platform"]'
               ];
-              
-              let challengeDetected = false;
-              let challengeType = null;
               
               for (const selector of challengeSelectors) {
                 const element = await page.$(selector);
                 if (element) {
                   challengeDetected = true;
                   challengeType = selector;
-                  console.log('✅ Cloudflare challenge detected:', selector);
+                  console.log('✅ Cloudflare challenge element detected:', selector);
                   break;
                 }
               }
@@ -159,50 +174,85 @@ serve(async (req) => {
                 };
               }
               
-              // Wait for challenge to fully load
-              console.log('⏳ Waiting for challenge to fully load...');
-              await page.waitForTimeout(5000);
+              // Wait longer for challenge to fully load and scripts to execute
+              console.log('⏳ Waiting for challenge scripts to load and execute...');
+              await page.waitForTimeout(8000);
               
-              // Try to handle the challenge
-              if (challengeType.includes('iframe')) {
-                console.log('🎯 Handling iframe-based challenge');
+              // Try multiple challenge handling approaches
+              console.log('🎯 Attempting to handle Cloudflare challenge...');
+              
+              try {
+                // Approach 1: Look for and interact with turnstile iframe
+                console.log('🔍 Looking for Turnstile iframe...');
                 try {
-                  // Wait for iframe to be ready
-                  await page.waitForSelector('iframe[src*="challenges.cloudflare.com"]', { timeout: 10000 });
-                  
-                  // Try to click the iframe area (sometimes this triggers the challenge)
+                  await page.waitForSelector('iframe[src*="challenges.cloudflare.com"]', { timeout: 15000 });
                   const iframe = await page.$('iframe[src*="challenges.cloudflare.com"]');
                   if (iframe) {
+                    console.log('✅ Found Turnstile iframe, attempting to click');
                     await iframe.click();
-                    console.log('✅ Clicked on Cloudflare iframe');
+                    await page.waitForTimeout(2000);
                   }
-                } catch (e) {
-                  console.log('⚠️ Could not interact with iframe:', e.message);
+                } catch (iframeError) {
+                  console.log('⚠️ No iframe found or could not click:', iframeError.message);
                 }
-              }
-              
-              // Wait for challenge completion indicators
-              console.log('⏳ Waiting for challenge completion...');
-              try {
-                await Promise.race([
-                  // Wait for success message
-                  page.waitForSelector('#challenge-success-text', { timeout: 20000 }).then(() => 'success'),
+                
+                // Approach 2: Look for turnstile widget container and click it
+                console.log('🔍 Looking for Turnstile widget container...');
+                const turnstileSelectors = [
+                  '.cf-turnstile',
+                  '[data-sitekey]',
+                  'div[id*="turnstile"]',
+                  'div[class*="turnstile"]'
+                ];
+                
+                for (const selector of turnstileSelectors) {
+                  try {
+                    const element = await page.$(selector);
+                    if (element) {
+                      console.log('✅ Found Turnstile widget:', selector);
+                      await element.click();
+                      await page.waitForTimeout(2000);
+                      break;
+                    }
+                  } catch (e) {
+                    console.log('⚠️ Could not interact with', selector, ':', e.message);
+                  }
+                }
+                
+                // Approach 3: Wait for automatic challenge completion
+                console.log('⏳ Waiting for automatic challenge completion...');
+                const completionResult = await Promise.race([
+                  // Wait for success message to appear
+                  page.waitForSelector('#challenge-success-text', { visible: true, timeout: 30000 }).then(() => 'success_message'),
                   // Wait for response token to be filled
                   page.waitForFunction(
-                    () => document.querySelector('[name="cf-turnstile-response"]')?.value?.length > 0,
-                    { timeout: 20000 }
-                  ).then(() => 'token'),
-                  // Wait for redirect/navigation
-                  page.waitForNavigation({ timeout: 20000 }).then(() => 'navigation')
-                ]);
+                    () => {
+                      const token = document.querySelector('[name="cf-turnstile-response"]')?.value;
+                      return token && token.length > 0;
+                    },
+                    { timeout: 30000 }
+                  ).then(() => 'token_filled'),
+                  // Wait for navigation away from challenge page
+                  page.waitForNavigation({ waitUntil: 'networkidle0', timeout: 30000 }).then(() => 'navigation'),
+                  // Wait for page title change
+                  page.waitForFunction(
+                    () => !document.title.includes('Just a moment'),
+                    { timeout: 30000 }
+                  ).then(() => 'title_change')
+                ]).catch(() => 'timeout');
                 
-                console.log('✅ Challenge appears to be completed!');
+                console.log('🎯 Challenge completion result:', completionResult);
                 
-                // Wait a bit more for any final redirects
-                await page.waitForTimeout(3000);
+                if (completionResult !== 'timeout') {
+                  console.log('✅ Challenge appears to be completed successfully!');
+                  // Wait a bit more for any final processing
+                  await page.waitForTimeout(3000);
+                } else {
+                  console.log('⚠️ Challenge completion timeout - may still be processing');
+                }
                 
-              } catch (waitError) {
-                console.log('⚠️ Challenge completion timeout, proceeding anyway:', waitError.message);
+              } catch (challengeError) {
+                console.log('⚠️ Error during challenge handling:', challengeError.message);
               }
               
               return {
