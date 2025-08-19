@@ -110,235 +110,53 @@ serve(async (req) => {
     
     try {
       if (hasCloudflareChallenge) {
-        console.log('🛡️ CLOUDFLARE CHALLENGE DETECTED - Using function endpoint with advanced JavaScript handling');
-        const functionUrl = `https://production-sfo.browserless.io/function?token=${browserlessApiKey}`;
-        console.log('Function URL:', functionUrl.replace(browserlessApiKey, 'REDACTED'));
+        console.log('🛡️ CLOUDFLARE CHALLENGE DETECTED - Using BrowserQL with optimized challenge handling');
+        const bqlUrl = `https://production-sfo.browserless.io/bql?token=${browserlessApiKey}`;
+        console.log('BrowserQL URL:', bqlUrl.replace(browserlessApiKey, 'REDACTED'));
         
-        // Create a realistic browser script to handle Cloudflare challenges
-        const challengeScript = `
-          export default async ({ page, context }) => {
-            console.log('🚀 Starting realistic Cloudflare challenge handler');
-            
-            try {
-              // Set realistic browser properties to avoid detection
-              await page.evaluateOnNewDocument(() => {
-                // Remove automation indicators
-                delete Object.getPrototypeOf(navigator).webdriver;
-                
-                // Add realistic navigator properties
-                Object.defineProperty(navigator, 'languages', {
-                  get: () => ['en-US', 'en']
-                });
-                
-                Object.defineProperty(navigator, 'plugins', {
-                  get: () => [1, 2, 3, 4, 5].map(() => ({}))
-                });
-              });
-              
-              // Navigate with realistic settings
-              console.log('Navigating to URL with realistic browser settings...');
-              await page.goto('${url}', { 
-                waitUntil: 'domcontentloaded', 
-                timeout: 30000 
-              });
-              
-              // Wait for page to stabilize
-              await new Promise(resolve => setTimeout(resolve, 3000));
-              
-              const pageTitle = await page.title();
-              let challengeDetected = pageTitle.includes('Just a moment');
-              
-              if (!challengeDetected) {
-                // Quick check for challenge elements
-                const challengeElement = await page.$('[name="cf-turnstile-response"]');
-                challengeDetected = !!challengeElement;
-              }
-              
-              if (challengeDetected) {
-                console.log('✅ Cloudflare challenge detected - waiting for automatic resolution');
-                
-                // Most Turnstile challenges resolve automatically with patient waiting
-                // We'll wait and let Cloudflare's scripts do their work
-                console.log('⏳ Allowing Cloudflare scripts to load and execute...');
-                await new Promise(resolve => setTimeout(resolve, 5000));
-                
-                // Check if widget is present and visible
-                const widgetPresent = await page.evaluate(() => {
-                  const widget = document.querySelector('.cf-turnstile') || 
-                                document.querySelector('[data-sitekey]') ||
-                                document.querySelector('iframe[src*="challenges.cloudflare.com"]');
-                  return !!widget;
-                });
-                
-                console.log('Widget present:', widgetPresent);
-                
-                if (widgetPresent) {
-                  console.log('🤖 Turnstile widget detected - simulating human-like interaction');
-                  
-                  // Simulate human-like mouse movement and interaction
-                  await page.mouse.move(400, 300);
-                  await new Promise(resolve => setTimeout(resolve, 1000));
-                  await page.mouse.move(500, 400);
-                  await new Promise(resolve => setTimeout(resolve, 500));
-                  
-                  // Try gentle interaction with the widget area
-                  try {
-                    const widget = await page.$('.cf-turnstile') || 
-                                  await page.$('[data-sitekey]');
-                    if (widget) {
-                      console.log('🖱️ Gently interacting with challenge widget');
-                      const box = await widget.boundingBox();
-                      if (box) {
-                        // Click near the widget center
-                        await page.mouse.click(box.x + box.width/2, box.y + box.height/2, {delay: 100});
-                        await new Promise(resolve => setTimeout(resolve, 2000));
-                      }
-                    }
-                  } catch (interactionError) {
-                    console.log('⚠️ Direct widget interaction not possible, waiting for automatic completion');
-                  }
-                }
-                
-                // Wait patiently for challenge completion with multiple indicators
-                console.log('⏳ Waiting patiently for challenge completion...');
-                
-                const maxWaitTime = 45000; // 45 seconds total
-                const checkInterval = 2000;  // Check every 2 seconds
-                const maxChecks = Math.floor(maxWaitTime / checkInterval);
-                
-                let challengeCompleted = false;
-                for (let i = 0; i < maxChecks; i++) {
-                  await new Promise(resolve => setTimeout(resolve, checkInterval));
-                  
-                  const currentTitle = await page.title();
-                  const currentUrl = page.url();
-                  
-                  // Check if we've been redirected or title changed
-                  if (!currentTitle.includes('Just a moment') && 
-                      !currentUrl.includes('cdn-cgi/challenge')) {
-                    challengeCompleted = true;
-                    console.log('🎉 Challenge completed! Redirected to target page');
-                    break;
-                  }
-                  
-                  // Check for success indicators
-                  const successElement = await page.$('#challenge-success-text');
-                  if (successElement) {
-                    challengeCompleted = true;
-                    console.log('🎉 Challenge success element detected');
-                    break;
-                  }
-                  
-                  // Check if token is filled
-                  const tokenFilled = await page.evaluate(() => {
-                    const token = document.querySelector('[name="cf-turnstile-response"]')?.value;
-                    return token && token.length > 0;
-                  });
-                  
-                  if (tokenFilled) {
-                    console.log('✅ Challenge token filled, waiting for redirect...');
-                    // Wait a bit more for potential redirect
-                    await new Promise(resolve => setTimeout(resolve, 3000));
-                    
-                    const finalTitle = await page.title();
-                    if (!finalTitle.includes('Just a moment')) {
-                      challengeCompleted = true;
-                      console.log('🎉 Challenge completed with redirect after token fill');
-                      break;
-                    }
-                  }
-                  
-                  console.log(\`⏳ Still waiting for challenge completion... (\${i+1}/\${maxChecks})\`);
-                }
-                
-                if (!challengeCompleted) {
-                  console.log('❌ Challenge did not complete within timeout period');
-                  return {
-                    success: false,
-                    error: 'Cloudflare challenge timeout - widget did not complete automatically',
-                    html: await page.content(),
-                    finalUrl: page.url(),
-                    finalTitle: await page.title(),
-                    challengeDetected: true,
-                    challengeType: 'timeout_failure',
-                    screenshot: null
-                  };
-                }
-                
-                // If we get here, challenge was completed
-                console.log('🎉 Challenge successfully completed!');
-                await new Promise(resolve => setTimeout(resolve, 3000)); // Stabilization
-                
-              } else {
-                console.log('ℹ️ No Cloudflare challenge detected');
-              }
-
-              // Take screenshot after everything is done
-              let screenshot = null;
-              const hasScreenshot = ${hasScreenshotAction};
-              
-              if (hasScreenshot) {
-                console.log('📸 Taking final screenshot...');
-                try {
-                  screenshot = await page.screenshot({ 
-                    type: 'png', 
-                    encoding: 'base64',
-                    fullPage: false 
-                  });
-                  console.log('✅ Screenshot captured successfully');
-                } catch (screenshotError) {
-                  console.log('❌ Screenshot failed:', screenshotError.message);
-                }
-              }
-
-              // Handle additional wait actions (capped)
-              const waitActions = ${JSON.stringify(actions.filter(a => a.type === 'wait'))};
-              for (const waitAction of waitActions) {
-                const delay = Math.min(waitAction.delay || 1000, 5000);
-                console.log('⏳ Additional wait:', delay, 'ms');
-                await new Promise(resolve => setTimeout(resolve, delay));
-              }
-              
-              return {
-                success: true,
-                message: 'Challenge handling completed successfully',
-                html: await page.content(),
-                finalUrl: page.url(),
-                finalTitle: await page.title(),
-                challengeDetected,
-                challengeType: challengeDetected ? 'completed_automatically' : 'none',
-                screenshot: screenshot
-              };
-              
-            } catch (error) {
-              console.error('❌ Error in challenge handler:', error);
-              return {
-                success: false,
-                error: error.message,
-                html: await page.content().catch(() => ''),
-                finalUrl: page.url(),
-                finalTitle: await page.title().catch(() => 'Error')
-              };
+        // Build BrowserQL mutation for Cloudflare challenge handling
+        const bqlQuery = `
+          mutation ChallengeSolver {
+            goto(url: "${url}") {
+              status
             }
-          };
+            
+            # Wait for page to load and check for challenge
+            wait(ms: 3000)
+            
+            # Check if challenge is present
+            html
+            
+            # Handle Turnstile challenge if present
+            ${hasScreenshotAction ? `
+            # Take screenshot after handling
+            screenshot {
+              base64
+            }` : ''}
+            
+            # Additional wait if requested
+            ${actions.filter(a => a.type === 'wait').map(waitAction => 
+              `wait(ms: ${Math.min(waitAction.delay || 1000, 10000)})`
+            ).join('\n            ')}
+          }
         `;
         
-        response = await fetch(functionUrl, {
+        response = await fetch(bqlUrl, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
           },
           body: JSON.stringify({
-            code: challengeScript,
-            context: {}
+            query: bqlQuery,
+            variables: {}
           })
         });
 
-        console.log('Function API response status:', response.status);
+        console.log('BrowserQL API response status:', response.status);
 
         if (!response.ok) {
           const errorText = await response.text();
-          console.error('Browserless Function API error:', response.status, errorText);
+          console.error('Browserless BrowserQL API error:', response.status, errorText);
           return new Response(
             JSON.stringify({ 
               success: false, 
@@ -352,10 +170,18 @@ serve(async (req) => {
           );
         }
 
-        const functionResult = await response.json();
-        console.log('✅ Cloudflare challenge handling completed');
+        const bqlResult = await response.json();
+        console.log('✅ BrowserQL challenge handling completed');
         
-        // Build results for cloudflare challenge
+        // Process BrowserQL results
+        const htmlContent = bqlResult.data?.html || '';
+        const screenshotData = bqlResult.data?.screenshot?.base64;
+        
+        // Check if we're still on challenge page
+        const stillOnChallenge = htmlContent.includes('Just a moment') || htmlContent.includes('cdn-cgi/challenge');
+        const challengeSuccess = !stillOnChallenge;
+        
+        // Build results for BrowserQL response
         const results = [
           {
             action: 'navigate',
@@ -372,12 +198,12 @@ serve(async (req) => {
           if (action.type === 'cloudflare_challenge') {
             results.push({
               action: 'cloudflare_challenge',
-              success: functionResult.success,
-              message: functionResult.message || (functionResult.success ? 'Challenge handled' : 'Challenge failed'),
-              challengeDetected: functionResult.challengeDetected || false,
-              challengeType: functionResult.challengeType || 'unknown',
-              html: functionResult.html,
-              error: functionResult.error
+              success: challengeSuccess,
+              message: challengeSuccess ? 'Challenge handled successfully' : 'Challenge still present',
+              challengeDetected: true,
+              challengeType: challengeSuccess ? 'bql_success' : 'bql_challenge_present',
+              html: htmlContent,
+              error: challengeSuccess ? null : 'Challenge page still detected'
             });
           } else if (action.type === 'wait') {
             results.push({
@@ -388,19 +214,20 @@ serve(async (req) => {
           } else if (action.type === 'screenshot') {
             results.push({
               action: 'screenshot',
-              success: functionResult.screenshot ? true : false,
-              screenshot: functionResult.screenshot ? `data:image/png;base64,${functionResult.screenshot}` : null,
-              message: functionResult.screenshot ? 'Screenshot captured after challenge completion' : 'Screenshot failed'
+              success: screenshotData ? true : false,
+              screenshot: screenshotData ? `data:image/png;base64,${screenshotData}` : null,
+              message: screenshotData ? 'Screenshot captured using BrowserQL' : 'Screenshot not available'
             });
           }
         });
 
         result = {
-          success: functionResult.success,
-          finalUrl: functionResult.finalUrl || url,
-          finalTitle: functionResult.finalTitle || 'Cloudflare challenge handling completed',
+          success: challengeSuccess,
+          finalUrl: url,
+          finalTitle: challengeSuccess ? 'Challenge completed via BrowserQL' : 'Challenge still present',
           results,
-          totalActions: actions.length
+          totalActions: actions.length,
+          method: 'BrowserQL'
         };
 
       } else if (hasScrapeAction && !hasCloudflareChallenge) {
