@@ -96,128 +96,126 @@ serve(async (req) => {
     const browserlessUrl = `https://production-sfo.browserless.io/function?token=${browserlessApiKey}`;
     console.log('Using browserless URL:', browserlessUrl.replace(browserlessApiKey, 'REDACTED'));
     
-    // Create the automation script
-    const automationScript = `
-      async ({ page }) => {
-        const results = [];
-        
-        try {
-          console.log('Navigating to ${url}...');
-          await page.goto('${url}', { waitUntil: 'networkidle0', timeout: ${timeout} });
-          
-          results.push({
-            action: 'navigate',
-            success: true,
-            url: page.url(),
-            title: await page.title()
-          });
-
-          ${actions.map((action, index) => {
-            switch (action.type) {
-              case 'click':
-                return `
-                  try {
-                    console.log('Clicking ${action.selector}...');
-                    await page.waitForSelector('${action.selector}', { timeout: 10000 });
-                    await page.click('${action.selector}');
-                    results.push({
-                      action: 'click',
-                      selector: '${action.selector}',
-                      success: true
-                    });
-                  } catch (error) {
-                    results.push({
-                      action: 'click',
-                      selector: '${action.selector}',
-                      success: false,
-                      error: error.message
-                    });
-                  }
-                `;
-              case 'input':
-                return `
-                  try {
-                    console.log('Inputting to ${action.selector}...');
-                    await page.waitForSelector('${action.selector}', { timeout: 10000 });
-                    await page.focus('${action.selector}');
-                    await page.keyboard.type('${action.value}');
-                    results.push({
-                      action: 'input',
-                      selector: '${action.selector}',
-                      value: '${action.value}',
-                      success: true
-                    });
-                  } catch (error) {
-                    results.push({
-                      action: 'input',
-                      selector: '${action.selector}',
-                      success: false,
-                      error: error.message
-                    });
-                  }
-                `;
-              case 'wait':
-                return `
-                  try {
-                    console.log('Waiting ${action.delay || 1000}ms...');
-                    await new Promise(resolve => setTimeout(resolve, ${action.delay || 1000}));
-                    results.push({
-                      action: 'wait',
-                      delay: ${action.delay || 1000},
-                      success: true
-                    });
-                  } catch (error) {
-                    results.push({
-                      action: 'wait',
-                      success: false,
-                      error: error.message
-                    });
-                  }
-                `;
-              case 'screenshot':
-                return `
-                  try {
-                    console.log('Taking screenshot...');
-                    const screenshot = await page.screenshot({ 
-                      type: 'png',
-                      fullPage: false,
-                      encoding: 'base64'
-                    });
-                    results.push({
-                      action: 'screenshot',
-                      success: true,
-                      screenshot: \`data:image/png;base64,\${screenshot}\`
-                    });
-                  } catch (error) {
-                    results.push({
-                      action: 'screenshot',
-                      success: false,
-                      error: error.message
-                    });
-                  }
-                `;
-              default:
-                return '';
-            }
-          }).join('\n          await new Promise(resolve => setTimeout(resolve, 500));\n')}
-
-          return {
-            success: true,
-            finalUrl: page.url(),
-            finalTitle: await page.title(),
-            results,
-            totalActions: ${actions.length}
-          };
-        } catch (error) {
-          console.error('Automation error:', error);
-          return {
-            success: false,
-            error: error.message,
-            results
-          };
-        }
+    // Create the automation script with proper escaping
+    const generateActionCode = (action) => {
+      switch (action.type) {
+        case 'click':
+          return `
+          try {
+            console.log('Clicking ${action.selector || 'element'}...');
+            ${action.selector ? `await page.waitForSelector('${action.selector.replace(/'/g, "\\'")}', { timeout: 10000 });
+            await page.click('${action.selector.replace(/'/g, "\\'")}');` : '// No selector provided for click'}
+            results.push({
+              action: 'click',
+              selector: '${action.selector?.replace(/'/g, "\\'") || ''}',
+              success: true
+            });
+          } catch (error) {
+            results.push({
+              action: 'click',
+              selector: '${action.selector?.replace(/'/g, "\\'") || ''}',
+              success: false,
+              error: error.message
+            });
+          }`;
+        case 'input':
+          return `
+          try {
+            console.log('Inputting to ${action.selector || 'element'}...');
+            ${action.selector ? `await page.waitForSelector('${action.selector.replace(/'/g, "\\'")}', { timeout: 10000 });
+            await page.focus('${action.selector.replace(/'/g, "\\'")}');` : '// No selector provided for input'}
+            ${action.value ? `await page.keyboard.type('${action.value.replace(/'/g, "\\'")}');` : '// No value provided'}
+            results.push({
+              action: 'input',
+              selector: '${action.selector?.replace(/'/g, "\\'") || ''}',
+              value: '${action.value?.replace(/'/g, "\\'") || ''}',
+              success: true
+            });
+          } catch (error) {
+            results.push({
+              action: 'input',
+              selector: '${action.selector?.replace(/'/g, "\\'") || ''}',
+              success: false,
+              error: error.message
+            });
+          }`;
+        case 'wait':
+          return `
+          try {
+            console.log('Waiting ${action.delay || 1000}ms...');
+            await new Promise(resolve => setTimeout(resolve, ${action.delay || 1000}));
+            results.push({
+              action: 'wait',
+              delay: ${action.delay || 1000},
+              success: true
+            });
+          } catch (error) {
+            results.push({
+              action: 'wait',
+              success: false,
+              error: error.message
+            });
+          }`;
+        case 'screenshot':
+          return `
+          try {
+            console.log('Taking screenshot...');
+            const screenshot = await page.screenshot({ 
+              type: 'png',
+              fullPage: false,
+              encoding: 'base64'
+            });
+            results.push({
+              action: 'screenshot',
+              success: true,
+              screenshot: 'data:image/png;base64,' + screenshot
+            });
+          } catch (error) {
+            results.push({
+              action: 'screenshot',
+              success: false,
+              error: error.message
+            });
+          }`;
+        default:
+          return '';
       }
-    `;
+    };
+
+    const actionsCode = actions.map(generateActionCode).join('\n          await new Promise(resolve => setTimeout(resolve, 500));\n');
+    
+    const automationScript = `async ({ page }) => {
+      const results = [];
+      
+      try {
+        console.log('Navigating to ${url}...');
+        await page.goto('${url}', { waitUntil: 'networkidle0', timeout: ${timeout} });
+        
+        results.push({
+          action: 'navigate',
+          success: true,
+          url: page.url(),
+          title: await page.title()
+        });
+
+        ${actionsCode}
+
+        return {
+          success: true,
+          finalUrl: page.url(),
+          finalTitle: await page.title(),
+          results,
+          totalActions: ${actions.length}
+        };
+      } catch (error) {
+        console.error('Automation error:', error);
+        return {
+          success: false,
+          error: error.message,
+          results
+        };
+      }
+    }`;
 
     console.log('Sending request to browserless API...');
     
