@@ -34,8 +34,8 @@ All colors MUST be HSL.
     --destructive-foreground: 180 100% 90%;
 
     --border: 220 25% 20%;
-    --input: 220 25% 12%;
-    --input-foreground: 180 20% 70%;
+    --input: 45 15% 95%;
+    --input-foreground: 0 0% 40%;
     --ring: 180 100% 50%;
 
     --radius: 0.75rem;
@@ -85,8 +85,8 @@ All colors MUST be HSL.
     --destructive-foreground: 180 100% 90%;
 
     --border: 220 25% 20%;
-    --input: 220 25% 12%;
-    --input-foreground: 180 20% 70%;
+    --input: 45 15% 95%;
+    --input-foreground: 0 0% 40%;
     --ring: 180 100% 50%;
     
     --sidebar-background: 220 25% 6%;
