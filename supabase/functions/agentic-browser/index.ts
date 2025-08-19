@@ -74,12 +74,25 @@ serve(async (req) => {
 
     // Use browserless.io API for browser automation
     const browserlessApiKey = Deno.env.get('BROWSERLESS_API_KEY');
+    console.log('Browserless API key found:', !!browserlessApiKey);
+    
     if (!browserlessApiKey) {
       console.error('BROWSERLESS_API_KEY not found');
-      throw new Error('Browser automation service not configured');
+      return new Response(
+        JSON.stringify({ 
+          success: false, 
+          error: 'Browser automation service not configured - missing BROWSERLESS_API_KEY',
+          details: 'Please add your Browserless API key to Supabase secrets'
+        }),
+        { 
+          status: 400, 
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        }
+      );
     }
 
     const browserlessUrl = `https://chrome.browserless.io/function?token=${browserlessApiKey}`;
+    console.log('Using browserless URL:', browserlessUrl.replace(browserlessApiKey, 'REDACTED'));
     
     // Create the automation script
     const automationScript = `
@@ -206,25 +219,69 @@ serve(async (req) => {
 
     console.log('Sending request to browserless API...');
     
-    const response = await fetch(browserlessUrl, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        code: automationScript,
-        context: {}
-      })
-    });
+    let response;
+    try {
+      response = await fetch(browserlessUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          code: automationScript,
+          context: {}
+        })
+      });
+    } catch (fetchError) {
+      console.error('Failed to connect to browserless API:', fetchError);
+      return new Response(
+        JSON.stringify({ 
+          success: false, 
+          error: 'Failed to connect to browser automation service',
+          details: fetchError.message
+        }),
+        { 
+          status: 500, 
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        }
+      );
+    }
+
+    console.log('Browserless API response status:', response.status);
 
     if (!response.ok) {
       const errorText = await response.text();
       console.error('Browserless API error:', response.status, errorText);
-      throw new Error(`Browser automation failed: ${response.status} ${errorText}`);
+      return new Response(
+        JSON.stringify({ 
+          success: false, 
+          error: `Browser automation service error: ${response.status}`,
+          details: errorText
+        }),
+        { 
+          status: 400, 
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        }
+      );
     }
 
-    const result = await response.json();
-    console.log('Browser automation completed');
+    let result;
+    try {
+      result = await response.json();
+      console.log('Browser automation completed successfully');
+    } catch (jsonError) {
+      console.error('Failed to parse browserless response:', jsonError);
+      return new Response(
+        JSON.stringify({ 
+          success: false, 
+          error: 'Invalid response from browser automation service',
+          details: jsonError.message
+        }),
+        { 
+          status: 500, 
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        }
+      );
+    }
     
     return new Response(
       JSON.stringify(result),
