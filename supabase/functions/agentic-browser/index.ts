@@ -102,6 +102,7 @@ serve(async (req) => {
     try {
       if (hasScrapeAction) {
         // Use content endpoint to get HTML
+        console.log('Scrape action detected, using content endpoint');
         const contentUrl = `https://production-sfo.browserless.io/content?token=${browserlessApiKey}`;
         console.log('Using content URL for scraping:', contentUrl.replace(browserlessApiKey, 'REDACTED'));
         
