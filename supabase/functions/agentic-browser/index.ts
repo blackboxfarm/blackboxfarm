@@ -72,6 +72,7 @@ serve(async (req) => {
     }
 
     console.log(`Starting browser automation for URL: ${url} with ${actions.length} actions`);
+    console.log('Actions requested:', actions.map(a => a.type).join(', '));
 
     // Use browserless.io API for browser automation
     const browserlessApiKey = Deno.env.get('BROWSERLESS_API_KEY');
@@ -96,15 +97,20 @@ serve(async (req) => {
     const hasScrapeAction = actions.some(action => action.type === 'scrape');
     const hasScreenshotAction = actions.some(action => action.type === 'screenshot');
     
+    console.log('Action analysis:', { 
+      hasScrapeAction, 
+      hasScreenshotAction,
+      actionTypes: actions.map(a => a.type)
+    });
+    
     let response;
     let result;
     
     try {
       if (hasScrapeAction) {
-        // Use content endpoint to get HTML
-        console.log('Scrape action detected, using content endpoint');
+        console.log('📄 SCRAPE ACTION DETECTED - Using content endpoint to get HTML');
         const contentUrl = `https://production-sfo.browserless.io/content?token=${browserlessApiKey}`;
-        console.log('Using content URL for scraping:', contentUrl.replace(browserlessApiKey, 'REDACTED'));
+        console.log('Content URL:', contentUrl.replace(browserlessApiKey, 'REDACTED'));
         
         response = await fetch(contentUrl, {
           method: 'POST',
@@ -120,9 +126,11 @@ serve(async (req) => {
           })
         });
 
+        console.log('Content API response status:', response.status);
+
         if (!response.ok) {
           const errorText = await response.text();
-          console.error('Browserless API error:', response.status, errorText);
+          console.error('Browserless Content API error:', response.status, errorText);
           return new Response(
             JSON.stringify({ 
               success: false, 
@@ -137,9 +145,9 @@ serve(async (req) => {
         }
 
         const htmlContent = await response.text();
-        console.log('HTML content retrieved, length:', htmlContent.length);
+        console.log('✅ HTML content retrieved successfully, length:', htmlContent.length);
         
-        // Build results for scrape actions
+        // Build results for all actions
         const results = [
           {
             action: 'navigate',
@@ -149,19 +157,21 @@ serve(async (req) => {
           }
         ];
 
-        // Add results for each action
+        // Process each action in order
         actions.forEach(action => {
-          if (action.type === 'scrape') {
-            results.push({
-              action: 'scrape',
-              success: true,
-              html: htmlContent
-            });
-          } else if (action.type === 'wait') {
+          console.log('Processing action:', action.type);
+          
+          if (action.type === 'wait') {
             results.push({
               action: 'wait',
               success: true,
               delay: action.delay || 1000
+            });
+          } else if (action.type === 'scrape') {
+            results.push({
+              action: 'scrape',
+              success: true,
+              html: htmlContent
             });
           }
         });
@@ -169,15 +179,15 @@ serve(async (req) => {
         result = {
           success: true,
           finalUrl: url,
-          finalTitle: 'Scraping completed',
+          finalTitle: 'HTML scraping completed',
           results,
           totalActions: actions.length
         };
 
       } else if (hasScreenshotAction) {
-        // Use screenshot endpoint
+        console.log('📸 SCREENSHOT ACTION DETECTED - Using screenshot endpoint');
         const screenshotUrl = `https://production-sfo.browserless.io/screenshot?token=${browserlessApiKey}`;
-        console.log('Using screenshot URL:', screenshotUrl.replace(browserlessApiKey, 'REDACTED'));
+        console.log('Screenshot URL:', screenshotUrl.replace(browserlessApiKey, 'REDACTED'));
         
         response = await fetch(screenshotUrl, {
           method: 'POST',
@@ -198,9 +208,11 @@ serve(async (req) => {
           })
         });
 
+        console.log('Screenshot API response status:', response.status);
+
         if (!response.ok) {
           const errorText = await response.text();
-          console.error('Browserless API error:', response.status, errorText);
+          console.error('Browserless Screenshot API error:', response.status, errorText);
           return new Response(
             JSON.stringify({ 
               success: false, 
@@ -215,7 +227,7 @@ serve(async (req) => {
         }
 
         const screenshotBase64 = await response.text();
-        console.log('Screenshot completed successfully');
+        console.log('✅ Screenshot completed successfully');
         
         // Build results for screenshot actions
         const results = [
@@ -227,19 +239,21 @@ serve(async (req) => {
           }
         ];
 
-        // Add results for each action
+        // Process each action in order
         actions.forEach(action => {
-          if (action.type === 'screenshot') {
-            results.push({
-              action: 'screenshot',
-              success: true,
-              screenshot: `data:image/png;base64,${screenshotBase64}`
-            });
-          } else if (action.type === 'wait') {
+          console.log('Processing action:', action.type);
+          
+          if (action.type === 'wait') {
             results.push({
               action: 'wait',
               success: true,
               delay: action.delay || 1000
+            });
+          } else if (action.type === 'screenshot') {
+            results.push({
+              action: 'screenshot',
+              success: true,
+              screenshot: `data:image/png;base64,${screenshotBase64}`
             });
           }
         });
@@ -251,8 +265,9 @@ serve(async (req) => {
           results,
           totalActions: actions.length
         };
+        
       } else {
-        // Just navigation for other action types
+        console.log('🌐 NO SPECIAL ACTIONS - Basic navigation only');
         result = {
           success: true,
           finalUrl: url,
@@ -283,6 +298,8 @@ serve(async (req) => {
         }
       );
     }
+    
+    console.log('✅ Returning successful result with', result.results.length, 'action results');
     
     return new Response(
       JSON.stringify(result),
