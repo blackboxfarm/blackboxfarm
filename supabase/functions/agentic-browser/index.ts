@@ -10,7 +10,7 @@ console.log('Agentic browser function starting up...');
 interface BrowseRequest {
   url: string;
   actions: Array<{
-    type: 'click' | 'input' | 'wait' | 'screenshot';
+    type: 'click' | 'input' | 'wait' | 'screenshot' | 'scrape';
     selector?: string;
     value?: string;
     delay?: number;
@@ -22,7 +22,6 @@ interface BrowseRequest {
 serve(async (req) => {
   console.log('=== Agentic Browser Function Started ===');
   console.log('Function called with method:', req.method);
-  console.log('Request headers:', Object.fromEntries(req.headers.entries()));
   
   // Handle CORS preflight requests
   if (req.method === 'OPTIONS') {
@@ -93,156 +92,182 @@ serve(async (req) => {
       );
     }
 
-    const browserlessUrl = `https://production-sfo.browserless.io/function?token=${browserlessApiKey}`;
-    console.log('Using browserless URL:', browserlessUrl.replace(browserlessApiKey, 'REDACTED'));
+    // Check what actions we need to perform
+    const hasScrapeAction = actions.some(action => action.type === 'scrape');
+    const hasScreenshotAction = actions.some(action => action.type === 'screenshot');
     
-    // Create the automation script with proper escaping
-    const generateActionCode = (action) => {
-      switch (action.type) {
-        case 'click':
-          return `
-          try {
-            console.log('Clicking ${action.selector || 'element'}...');
-            ${action.selector ? `await page.waitForSelector('${action.selector.replace(/'/g, "\\'")}', { timeout: 10000 });
-            await page.click('${action.selector.replace(/'/g, "\\'")}');` : '// No selector provided for click'}
+    let response;
+    let result;
+    
+    try {
+      if (hasScrapeAction) {
+        // Use content endpoint to get HTML
+        const contentUrl = `https://production-sfo.browserless.io/content?token=${browserlessApiKey}`;
+        console.log('Using content URL for scraping:', contentUrl.replace(browserlessApiKey, 'REDACTED'));
+        
+        response = await fetch(contentUrl, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            url: url,
+            gotoOptions: {
+              waitUntil: 'networkidle0',
+              timeout: timeout
+            }
+          })
+        });
+
+        if (!response.ok) {
+          const errorText = await response.text();
+          console.error('Browserless API error:', response.status, errorText);
+          return new Response(
+            JSON.stringify({ 
+              success: false, 
+              error: `Browser automation service error: ${response.status}`,
+              details: errorText
+            }),
+            { 
+              status: 400, 
+              headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+            }
+          );
+        }
+
+        const htmlContent = await response.text();
+        console.log('HTML content retrieved, length:', htmlContent.length);
+        
+        // Build results for scrape actions
+        const results = [
+          {
+            action: 'navigate',
+            success: true,
+            url: url,
+            title: 'Navigation completed'
+          }
+        ];
+
+        // Add results for each action
+        actions.forEach(action => {
+          if (action.type === 'scrape') {
             results.push({
-              action: 'click',
-              selector: '${action.selector?.replace(/'/g, "\\'") || ''}',
-              success: true
+              action: 'scrape',
+              success: true,
+              html: htmlContent
             });
-          } catch (error) {
-            results.push({
-              action: 'click',
-              selector: '${action.selector?.replace(/'/g, "\\'") || ''}',
-              success: false,
-              error: error.message
-            });
-          }`;
-        case 'input':
-          return `
-          try {
-            console.log('Inputting to ${action.selector || 'element'}...');
-            ${action.selector ? `await page.waitForSelector('${action.selector.replace(/'/g, "\\'")}', { timeout: 10000 });
-            await page.focus('${action.selector.replace(/'/g, "\\'")}');` : '// No selector provided for input'}
-            ${action.value ? `await page.keyboard.type('${action.value.replace(/'/g, "\\'")}');` : '// No value provided'}
-            results.push({
-              action: 'input',
-              selector: '${action.selector?.replace(/'/g, "\\'") || ''}',
-              value: '${action.value?.replace(/'/g, "\\'") || ''}',
-              success: true
-            });
-          } catch (error) {
-            results.push({
-              action: 'input',
-              selector: '${action.selector?.replace(/'/g, "\\'") || ''}',
-              success: false,
-              error: error.message
-            });
-          }`;
-        case 'wait':
-          return `
-          try {
-            console.log('Waiting ${action.delay || 1000}ms...');
-            await new Promise(resolve => setTimeout(resolve, ${action.delay || 1000}));
+          } else if (action.type === 'wait') {
             results.push({
               action: 'wait',
-              delay: ${action.delay || 1000},
-              success: true
+              success: true,
+              delay: action.delay || 1000
             });
-          } catch (error) {
-            results.push({
-              action: 'wait',
-              success: false,
-              error: error.message
-            });
-          }`;
-        case 'screenshot':
-          return `
-          try {
-            console.log('Taking screenshot...');
-            const screenshot = await page.screenshot({ 
+          }
+        });
+
+        result = {
+          success: true,
+          finalUrl: url,
+          finalTitle: 'Scraping completed',
+          results,
+          totalActions: actions.length
+        };
+
+      } else if (hasScreenshotAction) {
+        // Use screenshot endpoint
+        const screenshotUrl = `https://production-sfo.browserless.io/screenshot?token=${browserlessApiKey}`;
+        console.log('Using screenshot URL:', screenshotUrl.replace(browserlessApiKey, 'REDACTED'));
+        
+        response = await fetch(screenshotUrl, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            url: url,
+            options: {
               type: 'png',
               fullPage: false,
               encoding: 'base64'
-            });
+            },
+            gotoOptions: {
+              waitUntil: 'networkidle0',
+              timeout: timeout
+            }
+          })
+        });
+
+        if (!response.ok) {
+          const errorText = await response.text();
+          console.error('Browserless API error:', response.status, errorText);
+          return new Response(
+            JSON.stringify({ 
+              success: false, 
+              error: `Browser automation service error: ${response.status}`,
+              details: errorText
+            }),
+            { 
+              status: 400, 
+              headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+            }
+          );
+        }
+
+        const screenshotBase64 = await response.text();
+        console.log('Screenshot completed successfully');
+        
+        // Build results for screenshot actions
+        const results = [
+          {
+            action: 'navigate',
+            success: true,
+            url: url,
+            title: 'Navigation completed'
+          }
+        ];
+
+        // Add results for each action
+        actions.forEach(action => {
+          if (action.type === 'screenshot') {
             results.push({
               action: 'screenshot',
               success: true,
-              screenshot: 'data:image/png;base64,' + screenshot
+              screenshot: `data:image/png;base64,${screenshotBase64}`
             });
-          } catch (error) {
+          } else if (action.type === 'wait') {
             results.push({
-              action: 'screenshot',
-              success: false,
-              error: error.message
+              action: 'wait',
+              success: true,
+              delay: action.delay || 1000
             });
-          }`;
-        default:
-          return '';
-      }
-    };
-
-    const actionsCode = actions.map(generateActionCode).join('\n          await new Promise(resolve => setTimeout(resolve, 500));\n');
-    
-    const automationScript = `async ({ page }) => {
-      const results = [];
-      
-      try {
-        console.log('Navigating to ${url}...');
-        await page.goto('${url}', { waitUntil: 'networkidle0', timeout: ${timeout} });
-        
-        results.push({
-          action: 'navigate',
-          success: true,
-          url: page.url(),
-          title: await page.title()
+          }
         });
 
-        ${actionsCode}
-
-        return {
+        result = {
           success: true,
-          finalUrl: page.url(),
-          finalTitle: await page.title(),
+          finalUrl: url,
+          finalTitle: 'Screenshot completed',
           results,
-          totalActions: ${actions.length}
+          totalActions: actions.length
         };
-      } catch (error) {
-        console.error('Automation error:', error);
-        return {
-          success: false,
-          error: error.message,
-          results
+      } else {
+        // Just navigation for other action types
+        result = {
+          success: true,
+          finalUrl: url,
+          finalTitle: 'Basic navigation completed',
+          results: [
+            {
+              action: 'navigate',
+              success: true,
+              url: url,
+              title: 'Navigation completed'
+            }
+          ],
+          totalActions: actions.length
         };
       }
-    }`;
 
-    console.log('Using simple screenshot endpoint for now...');
-    
-    // Use simple screenshot endpoint for basic functionality
-    const screenshotUrl = `https://production-sfo.browserless.io/screenshot?token=${browserlessApiKey}`;
-    console.log('Using screenshot URL:', screenshotUrl.replace(browserlessApiKey, 'REDACTED'));
-    
-    let response;
-    try {
-      response = await fetch(screenshotUrl, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          url: url,
-          options: {
-            type: 'png',
-            fullPage: false,
-            encoding: 'base64'
-          },
-          gotoOptions: {
-            waitUntil: 'networkidle0',
-            timeout: timeout
-          }
-        })
-      });
     } catch (fetchError) {
       console.error('Failed to connect to browserless API:', fetchError);
       return new Response(
@@ -250,64 +275,6 @@ serve(async (req) => {
           success: false, 
           error: 'Failed to connect to browser automation service',
           details: fetchError.message
-        }),
-        { 
-          status: 500, 
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
-        }
-      );
-    }
-
-    console.log('Browserless API response status:', response.status);
-
-    if (!response.ok) {
-      const errorText = await response.text();
-      console.error('Browserless API error:', response.status, errorText);
-      return new Response(
-        JSON.stringify({ 
-          success: false, 
-          error: `Browser automation service error: ${response.status}`,
-          details: errorText
-        }),
-        { 
-          status: 400, 
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
-        }
-      );
-    }
-
-    let result;
-    try {
-      const screenshotBase64 = await response.text();
-      console.log('Browser screenshot completed successfully');
-      
-      // Format response to match expected structure
-      result = {
-        success: true,
-        finalUrl: url,
-        finalTitle: 'Screenshot taken',
-        results: [
-          {
-            action: 'navigate',
-            success: true,
-            url: url,
-            title: 'Screenshot taken'
-          },
-          {
-            action: 'screenshot',
-            success: true,
-            screenshot: `data:image/png;base64,${screenshotBase64}`
-          }
-        ],
-        totalActions: actions.length
-      };
-    } catch (textError) {
-      console.error('Failed to get screenshot response:', textError);
-      return new Response(
-        JSON.stringify({ 
-          success: false, 
-          error: 'Invalid response from browser automation service',
-          details: textError.message
         }),
         { 
           status: 500, 

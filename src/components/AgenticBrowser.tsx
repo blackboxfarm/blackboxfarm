@@ -11,7 +11,7 @@ import { supabase } from '@/integrations/supabase/client';
 
 interface BrowserAction {
   id: string;
-  type: 'click' | 'input' | 'wait' | 'screenshot';
+  type: 'click' | 'input' | 'wait' | 'screenshot' | 'scrape';
   selector?: string;
   value?: string;
   delay?: number;
@@ -26,6 +26,7 @@ interface BrowseResult {
     success: boolean;
     error?: string;
     screenshot?: string;
+    html?: string;
   }>;
   error?: string;
 }
@@ -134,6 +135,7 @@ export const AgenticBrowser = () => {
 
   const getActionBadgeColor = (success: boolean, actionType: string) => {
     if (actionType === 'navigate') return 'bg-blue-500';
+    if (actionType === 'scrape') return 'bg-purple-500';
     return success ? 'bg-green-500' : 'bg-red-500';
   };
 
@@ -159,7 +161,7 @@ export const AgenticBrowser = () => {
         </div>
 
         {/* Actions */}
-        <div className="space-y-4">
+        <div className="space-y-2">
           <div className="flex items-center justify-between">
             <Label>Actions Sequence</Label>
             <Button onClick={addAction} variant="outline" size="sm">
@@ -169,26 +171,26 @@ export const AgenticBrowser = () => {
           </div>
 
           {actions.length === 0 && (
-            <div className="text-center py-8 text-muted-foreground">
+            <div className="text-center py-4 text-muted-foreground">
               No actions defined. Click "Add Action" to start building your automation sequence.
             </div>
           )}
 
           {actions.map((action, index) => (
-            <Card key={action.id} className="p-4 space-y-3">
+            <Card key={action.id} className="p-3 space-y-2">
               <div className="flex items-center justify-between">
                 <Badge variant="outline">Step {index + 1}</Badge>
                 <Button
                   onClick={() => removeAction(action.id)}
                   variant="ghost"
                   size="sm"
-                  className="text-destructive hover:text-destructive"
+                  className="text-destructive hover:text-destructive h-6 w-6 p-0"
                 >
-                  <Trash2 className="h-4 w-4" />
+                  <Trash2 className="h-3 w-3" />
                 </Button>
               </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
                 {/* Action Type */}
                 <div className="space-y-1">
                   <Label className="text-xs">Action Type</Label>
@@ -196,10 +198,11 @@ export const AgenticBrowser = () => {
                     value={action.type} 
                     onValueChange={(value) => updateAction(action.id, 'type', value)}
                   >
-                    <SelectTrigger>
+                    <SelectTrigger className="h-8">
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
+                      <SelectItem value="scrape">Scrape HTML</SelectItem>
                       <SelectItem value="click">Click Element</SelectItem>
                       <SelectItem value="input">Type Text</SelectItem>
                       <SelectItem value="wait">Wait/Delay</SelectItem>
@@ -213,6 +216,7 @@ export const AgenticBrowser = () => {
                   <div className="space-y-1">
                     <Label className="text-xs">CSS Selector</Label>
                     <Input
+                      className="h-8"
                       value={action.selector || ''}
                       onChange={(e) => updateAction(action.id, 'selector', e.target.value)}
                       placeholder="button, #id, .class, etc."
@@ -225,6 +229,7 @@ export const AgenticBrowser = () => {
                   <div className="space-y-1">
                     <Label className="text-xs">Text to Type</Label>
                     <Input
+                      className="h-8"
                       value={action.value || ''}
                       onChange={(e) => updateAction(action.id, 'value', e.target.value)}
                       placeholder="Text to input"
@@ -237,6 +242,7 @@ export const AgenticBrowser = () => {
                   <div className="space-y-1">
                     <Label className="text-xs">Delay (ms)</Label>
                     <Input
+                      className="h-8"
                       type="number"
                       value={action.delay || 1000}
                       onChange={(e) => updateAction(action.id, 'delay', parseInt(e.target.value))}
@@ -282,28 +288,50 @@ export const AgenticBrowser = () => {
               {results.results && (
                 <div className="space-y-2">
                   <Label>Action Results</Label>
-                  <div className="space-y-2 max-h-64 overflow-y-auto">
+                  <div className="space-y-1 max-h-64 overflow-y-auto">
                     {results.results.map((result, index) => (
-                      <div key={index} className="flex items-center justify-between p-2 bg-muted rounded">
-                        <div className="flex items-center gap-2">
+                      <div key={index} className="flex items-center justify-between p-2 bg-muted rounded text-xs">
+                        <div className="flex items-center gap-2 flex-1 min-w-0">
                           <Badge 
-                            className={`${getActionBadgeColor(result.success, result.action)} text-white`}
+                            className={`${getActionBadgeColor(result.success, result.action)} text-white text-xs`}
                           >
                             {result.action}
                           </Badge>
-                          <span className="text-sm">
+                          <span className="truncate">
                             {result.success ? 'Success' : `Failed: ${result.error}`}
                           </span>
+                          {result.html && (
+                            <span className="text-muted-foreground ml-2">
+                              (HTML: {result.html.length} chars)
+                            </span>
+                          )}
                         </div>
-                        {result.screenshot && (
-                          <Button
-                            onClick={() => setSelectedScreenshot(result.screenshot!)}
-                            variant="ghost"
-                            size="sm"
-                          >
-                            <Eye className="h-4 w-4" />
-                          </Button>
-                        )}
+                        <div className="flex gap-1 ml-2">
+                          {result.screenshot && (
+                            <Button
+                              onClick={() => setSelectedScreenshot(result.screenshot!)}
+                              variant="ghost"
+                              size="sm"
+                              className="h-6 w-6 p-0"
+                            >
+                              <Eye className="h-3 w-3" />
+                            </Button>
+                          )}
+                          {result.html && (
+                            <Button
+                              onClick={() => {
+                                navigator.clipboard.writeText(result.html!);
+                                toast({ title: "HTML copied to clipboard" });
+                              }}
+                              variant="ghost"
+                              size="sm"
+                              className="h-6 w-6 p-0"
+                              title="Copy HTML to clipboard"
+                            >
+                              📋
+                            </Button>
+                          )}
+                        </div>
                       </div>
                     ))}
                   </div>
