@@ -72,7 +72,7 @@ export const PasswordLogin = ({ onAuthenticate }: PasswordLoginProps) => {
                 onChange={(e) => setPassword(e.target.value)}
                 disabled={isLoading}
                 autoFocus
-                className="bg-muted border-border text-center tracking-wider"
+                className="text-center tracking-wider"
               />
             </div>
             <Button 

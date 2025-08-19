@@ -275,7 +275,6 @@ const BumpBot = () => {
                     placeholder="Token mint address" 
                     value={tokenMint} 
                     onChange={(e) => setTokenMint(e.target.value.trim())}
-                    className="bg-muted border-border"
                   />
                 </div>
                 <div className="flex items-end gap-2">
@@ -347,7 +346,6 @@ const BumpBot = () => {
                     step="0.01" 
                     value={usdToBuy} 
                     onChange={(e) => setUsdToBuy(e.target.value)}
-                    className="bg-muted border-border"
                   />
                 </div>
                 <div className="space-y-2 sm:col-span-1">
@@ -358,7 +356,6 @@ const BumpBot = () => {
                     step="10" 
                     value={slippageBps} 
                     onChange={(e) => setSlippageBps(Math.max(1, Number(e.target.value || 0)))}
-                    className="bg-muted border-border"
                   />
                 </div>
                 <div className="flex items-end gap-2 sm:col-span-1">
