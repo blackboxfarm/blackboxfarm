@@ -82,6 +82,14 @@ const BumpBot = () => {
   const autoTimer = useRef<number | null>(null);
   const autoActive = useRef(false);
 
+  // New BumpBot state
+  const [bumpBotActive, setBumpBotActive] = useState(false);
+  const [bumpBotDelaySec, setBumpBotDelaySec] = useState(3);
+  const [bumpBotBuyCount, setBumpBotBuyCount] = useState(60);
+  const [bumpBotCurrentCount, setBumpBotCurrentCount] = useState(0);
+  const bumpBotTimer = useRef<number | null>(null);
+  const bumpBotRunning = useRef(false);
+
   const refresh = useCallback(async () => {
     if (!conn || !displayPubkey) return;
     setLoading(true);
@@ -172,7 +180,79 @@ const BumpBot = () => {
     }
   }, [tokenMint, invokeSwap, refresh]);
 
-  // Auto-trade loop (buy random $0.50–$3, sell after 48–59s)
+  // BumpBot logic - buys fixed amount at regular intervals, sells after N buys
+  const startBumpBot = useCallback(async () => {
+    if (!tokenMint.trim()) return toast.error("Enter a token mint first");
+    if (!ownerSecret) return toast.error("No wallet secret found");
+    if (bumpBotRunning.current) return;
+    
+    bumpBotRunning.current = true;
+    setBumpBotActive(true);
+    setBumpBotCurrentCount(0);
+    
+    const doBuy = async () => {
+      if (!bumpBotRunning.current) return;
+      
+      const usdAmount = parseFloat(usdToBuy) || 0.01;
+      setSwapping(true);
+      const result = await invokeSwap({ side: "buy", tokenMint: tokenMint.trim(), usdcAmount: usdAmount, buyWithSol: true });
+      setSwapping(false);
+      
+      if ((result as any).data?.signatures?.length) {
+        const sig = (result as any).data.signatures[0];
+        setBumpBotCurrentCount(prev => {
+          const newCount = prev + 1;
+          toast.success(`BumpBot Buy ${newCount}/${bumpBotBuyCount} - $${usdAmount.toFixed(2)} - ${sig.slice(0, 8)}…`);
+          
+          // Check if we need to sell after this buy
+          if (newCount >= bumpBotBuyCount) {
+            setTimeout(async () => {
+              if (!bumpBotRunning.current) return;
+              
+              setSwapping(true);
+              const sellResult = await invokeSwap({ side: "sell", tokenMint: tokenMint.trim(), sellAll: true });
+              setSwapping(false);
+              
+              if ((sellResult as any).data?.signatures?.length) {
+                const sellSig = (sellResult as any).data.signatures[0];
+                toast.success(`BumpBot Sell All - Cycle complete - ${sellSig.slice(0, 8)}…`);
+                setBumpBotCurrentCount(0); // Reset counter for next cycle
+              }
+              
+              void refresh();
+            }, 1000); // Small delay before selling
+          }
+          
+          return newCount;
+        });
+        void refresh();
+      }
+    };
+    
+    // Start the buying loop
+    const buyLoop = () => {
+      if (!bumpBotRunning.current) return;
+      
+      doBuy();
+      
+      bumpBotTimer.current = window.setTimeout(buyLoop, bumpBotDelaySec * 1000);
+    };
+    
+    buyLoop(); // Start immediately
+    if (!running) setRunning(true);
+  }, [tokenMint, ownerSecret, usdToBuy, bumpBotDelaySec, bumpBotBuyCount, invokeSwap, refresh, running]);
+
+  const stopBumpBot = useCallback(() => {
+    bumpBotRunning.current = false;
+    setBumpBotActive(false);
+    setBumpBotCurrentCount(0);
+    if (bumpBotTimer.current) { 
+      clearTimeout(bumpBotTimer.current); 
+      bumpBotTimer.current = null; 
+    }
+  }, []);
+
+  // Auto-trade loop (buy random $0.50–$3, sell after 3 minutes)
   const startAuto = useCallback(async () => {
     if (!tokenMint.trim()) return toast.error("Enter a token mint first");
     if (!ownerSecret) return toast.error("No wallet secret found");
@@ -210,7 +290,12 @@ const BumpBot = () => {
     if (autoTimer.current) { clearTimeout(autoTimer.current); autoTimer.current = null; }
   }, []);
 
-  useEffect(() => () => { if (autoTimer.current) clearTimeout(autoTimer.current); autoActive.current = false; }, []);
+  useEffect(() => () => { 
+    if (autoTimer.current) clearTimeout(autoTimer.current); 
+    if (bumpBotTimer.current) clearTimeout(bumpBotTimer.current);
+    autoActive.current = false; 
+    bumpBotRunning.current = false;
+  }, []);
 
   // 5s polling when running
   useEffect(() => {
@@ -374,7 +459,70 @@ const BumpBot = () => {
                     Sell All
                   </Button>
                 </div>
-                <div className="flex items-end gap-2 sm:col-span-3">
+              </div>
+
+              {/* BumpBot Controls */}
+              <div className="border-t border-border pt-6">
+                <h3 className="text-lg font-medium text-accent mb-4">BumpBot Configuration</h3>
+                <div className="grid sm:grid-cols-2 gap-4 mb-4">
+                  <div className="space-y-2">
+                    <Label className="text-foreground">Delay between buys (seconds)</Label>
+                    <div className="flex items-center gap-3">
+                      <input
+                        type="range"
+                        min="1"
+                        max="60"
+                        step="1"
+                        value={bumpBotDelaySec}
+                        onChange={(e) => setBumpBotDelaySec(Number(e.target.value))}
+                        className="flex-1 h-2 rounded-lg appearance-none cursor-pointer bg-muted"
+                      />
+                      <span className="text-sm text-muted-foreground w-12 text-right">{bumpBotDelaySec}s</span>
+                    </div>
+                  </div>
+                  <div className="space-y-2">
+                    <Label className="text-foreground">Number of buys before selling</Label>
+                    <Input 
+                      type="number" 
+                      min="1" 
+                      step="1" 
+                      value={bumpBotBuyCount} 
+                      onChange={(e) => setBumpBotBuyCount(Math.max(1, Number(e.target.value || 1)))}
+                    />
+                  </div>
+                </div>
+                {bumpBotActive && (
+                  <div className="text-sm text-accent mb-4">
+                    BumpBot Active: {bumpBotCurrentCount}/{bumpBotBuyCount} buys completed
+                  </div>
+                )}
+                <div className="flex items-end gap-2">
+                  <Button 
+                    variant="default" 
+                    onClick={startBumpBot} 
+                    disabled={bumpBotActive || swapping || !tokenMint || !ownerSecret}
+                    className="bg-primary text-primary-foreground hover:bg-primary/90"
+                  >
+                    Start BumpBot
+                  </Button>
+                  <Button 
+                    variant="ghost" 
+                    onClick={stopBumpBot} 
+                    disabled={!bumpBotActive}
+                    className="text-muted-foreground hover:text-foreground"
+                  >
+                    Stop BumpBot
+                  </Button>
+                  <span className="text-xs text-muted-foreground">
+                    Buy ${parseFloat(usdToBuy) || 0.01} every {bumpBotDelaySec}s, sell after {bumpBotBuyCount} buys
+                  </span>
+                </div>
+              </div>
+
+              {/* Auto Trading Controls */}
+              <div className="border-t border-border pt-6">
+                <h3 className="text-lg font-medium text-accent mb-4">Auto Trading (Random Amounts)</h3>
+                <div className="flex items-end gap-2">
                   <Button 
                     variant="outline" 
                     onClick={startAuto} 
@@ -391,7 +539,7 @@ const BumpBot = () => {
                   >
                     Stop Auto
                   </Button>
-                  <span className="text-xs text-muted-foreground">Cycle: buy random $0.50–$3, sell every 3 minutes.</span>
+                  <span className="text-xs text-muted-foreground">Random $0.50–$3 buys, sell every 3 minutes</span>
                 </div>
               </div>
               <div className="text-xs text-muted-foreground">
