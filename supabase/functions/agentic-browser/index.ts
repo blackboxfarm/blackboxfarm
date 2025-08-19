@@ -93,7 +93,7 @@ serve(async (req) => {
       );
     }
 
-    const browserlessUrl = `https://chrome.browserless.io/function?token=${browserlessApiKey}`;
+    const browserlessUrl = `https://production-sfo.browserless.io/function?token=${browserlessApiKey}`;
     console.log('Using browserless URL:', browserlessUrl.replace(browserlessApiKey, 'REDACTED'));
     
     // Create the automation script
