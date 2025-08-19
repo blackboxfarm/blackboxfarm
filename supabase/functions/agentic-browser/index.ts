@@ -120,9 +120,14 @@ serve(async (req) => {
             console.log('🚀 Starting enhanced challenge handler');
             
             try {
-              // Set realistic user agent and viewport
+              // Set realistic user agent
               await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36');
-              await page.setViewportSize({ width: 1920, height: 1080 });
+              
+              // Set viewport through evaluate since setViewportSize isn't available in Browserless
+              await page.evaluate(() => {
+                Object.defineProperty(window, 'innerWidth', { writable: true, configurable: true, value: 1920 });
+                Object.defineProperty(window, 'innerHeight', { writable: true, configurable: true, value: 1080 });
+              });
               
               // Navigate to page with network idle wait
               console.log('🔗 Navigating to: ${url}');
