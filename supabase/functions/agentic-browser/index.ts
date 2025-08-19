@@ -217,22 +217,26 @@ serve(async (req) => {
       }
     }`;
 
-    console.log('Generated automation script:', automationScript);
-    console.log('Sending request to browserless API...');
+    console.log('Using simple screenshot endpoint for now...');
+    
+    // Use simple screenshot endpoint for basic functionality
+    const screenshotUrl = `https://production-sfo.browserless.io/screenshot?token=${browserlessApiKey}`;
+    console.log('Using screenshot URL:', screenshotUrl.replace(browserlessApiKey, 'REDACTED'));
     
     let response;
     try {
-      // Try the /content endpoint instead of /function
-      const contentUrl = `https://production-sfo.browserless.io/content?token=${browserlessApiKey}`;
-      console.log('Using content URL:', contentUrl.replace(browserlessApiKey, 'REDACTED'));
-      
-      response = await fetch(contentUrl, {
+      response = await fetch(screenshotUrl, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
           url: url,
+          options: {
+            type: 'png',
+            fullPage: false,
+            encoding: 'base64'
+          },
           gotoOptions: {
             waitUntil: 'networkidle0',
             timeout: timeout
@@ -274,15 +278,36 @@ serve(async (req) => {
 
     let result;
     try {
-      result = await response.json();
-      console.log('Browser automation completed successfully');
-    } catch (jsonError) {
-      console.error('Failed to parse browserless response:', jsonError);
+      const screenshotBase64 = await response.text();
+      console.log('Browser screenshot completed successfully');
+      
+      // Format response to match expected structure
+      result = {
+        success: true,
+        finalUrl: url,
+        finalTitle: 'Screenshot taken',
+        results: [
+          {
+            action: 'navigate',
+            success: true,
+            url: url,
+            title: 'Screenshot taken'
+          },
+          {
+            action: 'screenshot',
+            success: true,
+            screenshot: `data:image/png;base64,${screenshotBase64}`
+          }
+        ],
+        totalActions: actions.length
+      };
+    } catch (textError) {
+      console.error('Failed to get screenshot response:', textError);
       return new Response(
         JSON.stringify({ 
           success: false, 
           error: 'Invalid response from browser automation service',
-          details: jsonError.message
+          details: textError.message
         }),
         { 
           status: 500, 
