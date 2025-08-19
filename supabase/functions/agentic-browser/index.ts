@@ -256,7 +256,7 @@ serve(async (req) => {
               return {
                 success: false,
                 error: error.message,
-                finalUrl: page.url().catch(() => '${url}'),
+                finalUrl: page.url(),
                 finalTitle: await page.title().catch(() => 'Error'),
                 challengeDetected: true,
                 challengeType: 'error'
