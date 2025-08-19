@@ -56,8 +56,15 @@ const BumpBot = () => {
   }, [secrets?.rpcUrl]);
 
   // Use FIRST wallet from Wallet Pool (generated/custom) for balances
-  const { wallets: poolWallets } = useWalletPool();
+  const { wallets: poolWallets, importCustomSecrets } = useWalletPool();
   const displayPubkey = useMemo(() => poolWallets[0]?.pubkey ?? "", [poolWallets]);
+
+  // Auto-import trading private key from secrets into wallet pool if it exists and isn't already imported
+  useEffect(() => {
+    if (secrets?.tradingPrivateKey && poolWallets.length === 0) {
+      importCustomSecrets([secrets.tradingPrivateKey]);
+    }
+  }, [secrets?.tradingPrivateKey, poolWallets.length, importCustomSecrets]);
 
   // Live balances state
   const [tokenMint, setTokenMint] = useState<string>("");
