@@ -11,7 +11,7 @@ import { supabase } from '@/integrations/supabase/client';
 
 interface BrowserAction {
   id: string;
-  type: 'click' | 'input' | 'wait' | 'screenshot' | 'scrape';
+  type: 'click' | 'input' | 'wait' | 'screenshot' | 'scrape' | 'cloudflare_challenge';
   selector?: string;
   value?: string;
   delay?: number;
@@ -202,6 +202,7 @@ export const AgenticBrowser = () => {
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
+                      <SelectItem value="cloudflare_challenge">Solve Cloudflare Challenge</SelectItem>
                       <SelectItem value="scrape">Scrape HTML</SelectItem>
                       <SelectItem value="click">Click Element</SelectItem>
                       <SelectItem value="input">Type Text</SelectItem>
@@ -210,6 +211,16 @@ export const AgenticBrowser = () => {
                     </SelectContent>
                   </Select>
                 </div>
+
+                {/* Cloudflare Challenge Info */}
+                {action.type === 'cloudflare_challenge' && (
+                  <div className="col-span-2 space-y-1">
+                    <Label className="text-xs">Challenge Handler</Label>
+                    <div className="text-xs text-muted-foreground p-2 bg-muted rounded">
+                      Automatically detects and handles Cloudflare Turnstile challenges by waiting for iframe or success indicators
+                    </div>
+                  </div>
+                )}
 
                 {/* Selector (for click and input) */}
                 {(action.type === 'click' || action.type === 'input') && (
