@@ -114,7 +114,7 @@ serve(async (req) => {
         const functionUrl = `https://production-sfo.browserless.io/function?token=${browserlessApiKey}`;
         console.log('Function URL:', functionUrl.replace(browserlessApiKey, 'REDACTED'));
         
-        // Enhanced challenge handler with better stealth and patience
+        // Enhanced challenge handler with proper string escaping
         const challengeScript = `
           export default async ({ page, context }) => {
             console.log('🚀 Starting enhanced challenge handler');
@@ -125,7 +125,7 @@ serve(async (req) => {
               await page.setViewportSize({ width: 1920, height: 1080 });
               
               // Navigate to page with network idle wait
-              console.log('🔗 Navigating to:', '${url}');
+              console.log('🔗 Navigating to: ${url}');
               await page.goto('${url}', { 
                 waitUntil: 'networkidle', 
                 timeout: 60000 
@@ -180,14 +180,14 @@ serve(async (req) => {
                     !currentTitle.includes('Just a moment'),
                     !currentTitle.includes('Please wait'),
                     !currentContent.includes('Checking your browser'),
-                    currentContent.includes('dexscreener') && currentContent.length > 50000, // Real content loaded
-                    currentUrl !== '${url}' || currentContent.includes('chart-container') // Page redirected or has real content
+                    currentContent.includes('dexscreener') && currentContent.length > 50000,
+                    currentUrl !== '${url}' || currentContent.includes('chart-container')
                   ];
                   
                   const challengeComplete = successIndicators.filter(Boolean).length >= 3;
                   
                   if (challengeComplete) {
-                    console.log(\`✅ Challenge completed successfully after \${attempt * 2} seconds!\`);
+                    console.log('✅ Challenge completed successfully after ' + (attempt * 2) + ' seconds!');
                     finalResult.success = true;
                     finalResult.message = 'Challenge completed successfully';
                     finalResult.challengeType = 'completed';
@@ -195,7 +195,7 @@ serve(async (req) => {
                   }
                   
                   if (attempt % 5 === 0) {
-                    console.log(\`⏳ Still waiting for challenge completion... (\${attempt * 2}/90s)\`);
+                    console.log('⏳ Still waiting for challenge completion... (' + (attempt * 2) + '/90s)');
                   }
                 }
               } else {
@@ -222,7 +222,7 @@ serve(async (req) => {
                   });
                   console.log('📸 Screenshot captured successfully');
                 } catch (e) {
-                  console.log('❌ Screenshot failed:', e.message);
+                  console.log('❌ Screenshot failed: ' + e.message);
                 }
               }
               
@@ -241,13 +241,13 @@ serve(async (req) => {
                 }
               }
               
-              console.log('🎯 Final result:', {
+              console.log('🎯 Final result:', JSON.stringify({
                 success: finalResult.success,
                 challengeDetected: finalResult.challengeDetected,
                 challengeType: finalResult.challengeType,
                 finalTitle: finalResult.finalTitle,
                 finalUrl: finalResult.finalUrl
-              });
+              }));
               
               return finalResult;
               
