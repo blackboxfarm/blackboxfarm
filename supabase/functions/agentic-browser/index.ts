@@ -110,53 +110,106 @@ serve(async (req) => {
     
     try {
       if (hasCloudflareChallenge) {
-        console.log('🛡️ CLOUDFLARE CHALLENGE DETECTED - Using BrowserQL with optimized challenge handling');
-        const bqlUrl = `https://production-sfo.browserless.io/bql?token=${browserlessApiKey}`;
-        console.log('BrowserQL URL:', bqlUrl.replace(browserlessApiKey, 'REDACTED'));
+        console.log('🛡️ CLOUDFLARE CHALLENGE DETECTED - Using optimized Function endpoint');
+        const functionUrl = `https://production-sfo.browserless.io/function?token=${browserlessApiKey}`;
+        console.log('Function URL:', functionUrl.replace(browserlessApiKey, 'REDACTED'));
         
-        // Build BrowserQL mutation for Cloudflare challenge handling
-        const bqlQuery = `
-          mutation ChallengeSolver {
-            goto(url: "${url}") {
-              status
+        // Simplified, robust challenge handler
+        const challengeScript = `
+          export default async ({ page, context }) => {
+            console.log('🚀 Starting challenge handler');
+            
+            try {
+              // Navigate to page
+              await page.goto('${url}', { waitUntil: 'domcontentloaded', timeout: 30000 });
+              console.log('✅ Page loaded');
+              
+              // Wait for initial load
+              await new Promise(resolve => setTimeout(resolve, 3000));
+              
+              // Check for challenge
+              const pageTitle = await page.title();
+              let challengeDetected = pageTitle.includes('Just a moment');
+              
+              if (challengeDetected) {
+                console.log('🎯 Challenge detected - waiting for completion...');
+                
+                // Wait patiently for challenge to complete
+                for (let i = 0; i < 20; i++) { // 40 seconds total
+                  await new Promise(resolve => setTimeout(resolve, 2000));
+                  
+                  const currentTitle = await page.title();
+                  if (!currentTitle.includes('Just a moment')) {
+                    console.log('✅ Challenge completed!');
+                    challengeDetected = false;
+                    break;
+                  }
+                  console.log(\`⏳ Waiting... (\${i+1}/20)\`);
+                }
+              }
+
+              // Handle wait actions
+              const waitActions = ${JSON.stringify(actions.filter(a => a.type === 'wait'))};
+              for (const waitAction of waitActions) {
+                const delay = Math.min(waitAction.delay || 1000, 5000);
+                await new Promise(resolve => setTimeout(resolve, delay));
+              }
+              
+              // Take screenshot if needed
+              let screenshot = null;
+              if (${hasScreenshotAction}) {
+                try {
+                  screenshot = await page.screenshot({ 
+                    type: 'png', 
+                    encoding: 'base64',
+                    fullPage: false 
+                  });
+                  console.log('✅ Screenshot captured');
+                } catch (e) {
+                  console.log('❌ Screenshot failed:', e.message);
+                }
+              }
+              
+              const finalTitle = await page.title();
+              const stillHasChallenge = finalTitle.includes('Just a moment');
+              
+              return {
+                success: !stillHasChallenge,
+                message: stillHasChallenge ? 'Challenge still present' : 'Completed successfully',
+                html: await page.content(),
+                finalUrl: page.url(),
+                finalTitle,
+                challengeDetected: true,
+                challengeType: stillHasChallenge ? 'timeout' : 'completed',
+                screenshot: screenshot
+              };
+              
+            } catch (error) {
+              console.error('❌ Error:', error);
+              return {
+                success: false,
+                error: error.message,
+                finalUrl: page.url(),
+                finalTitle: await page.title().catch(() => 'Error')
+              };
             }
-            
-            # Wait for page to load and check for challenge
-            wait(ms: 3000)
-            
-            # Check if challenge is present
-            html
-            
-            # Handle Turnstile challenge if present
-            ${hasScreenshotAction ? `
-            # Take screenshot after handling
-            screenshot {
-              base64
-            }` : ''}
-            
-            # Additional wait if requested
-            ${actions.filter(a => a.type === 'wait').map(waitAction => 
-              `wait(ms: ${Math.min(waitAction.delay || 1000, 10000)})`
-            ).join('\n            ')}
-          }
+          };
         `;
         
-        response = await fetch(bqlUrl, {
+        response = await fetch(functionUrl, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
           },
           body: JSON.stringify({
-            query: bqlQuery,
-            variables: {}
+            code: challengeScript,
+            context: {}
           })
         });
 
-        console.log('BrowserQL API response status:', response.status);
-
         if (!response.ok) {
           const errorText = await response.text();
-          console.error('Browserless BrowserQL API error:', response.status, errorText);
+          console.error('Browserless Function API error:', response.status, errorText);
           return new Response(
             JSON.stringify({ 
               success: false, 
@@ -170,18 +223,10 @@ serve(async (req) => {
           );
         }
 
-        const bqlResult = await response.json();
-        console.log('✅ BrowserQL challenge handling completed');
+        const functionResult = await response.json();
+        console.log('Function result:', functionResult.success);
         
-        // Process BrowserQL results
-        const htmlContent = bqlResult.data?.html || '';
-        const screenshotData = bqlResult.data?.screenshot?.base64;
-        
-        // Check if we're still on challenge page
-        const stillOnChallenge = htmlContent.includes('Just a moment') || htmlContent.includes('cdn-cgi/challenge');
-        const challengeSuccess = !stillOnChallenge;
-        
-        // Build results for BrowserQL response
+        // Build results
         const results = [
           {
             action: 'navigate',
@@ -191,19 +236,16 @@ serve(async (req) => {
           }
         ];
 
-        // Process each action in order
         actions.forEach(action => {
-          console.log('Processing action:', action.type);
-          
           if (action.type === 'cloudflare_challenge') {
             results.push({
               action: 'cloudflare_challenge',
-              success: challengeSuccess,
-              message: challengeSuccess ? 'Challenge handled successfully' : 'Challenge still present',
-              challengeDetected: true,
-              challengeType: challengeSuccess ? 'bql_success' : 'bql_challenge_present',
-              html: htmlContent,
-              error: challengeSuccess ? null : 'Challenge page still detected'
+              success: functionResult.success,
+              message: functionResult.message || 'Challenge processing completed',
+              challengeDetected: functionResult.challengeDetected || false,
+              challengeType: functionResult.challengeType || 'unknown',
+              html: functionResult.html,
+              error: functionResult.error
             });
           } else if (action.type === 'wait') {
             results.push({
@@ -214,20 +256,19 @@ serve(async (req) => {
           } else if (action.type === 'screenshot') {
             results.push({
               action: 'screenshot',
-              success: screenshotData ? true : false,
-              screenshot: screenshotData ? `data:image/png;base64,${screenshotData}` : null,
-              message: screenshotData ? 'Screenshot captured using BrowserQL' : 'Screenshot not available'
+              success: functionResult.screenshot ? true : false,
+              screenshot: functionResult.screenshot ? `data:image/png;base64,${functionResult.screenshot}` : null,
+              message: functionResult.screenshot ? 'Screenshot captured' : 'Screenshot failed'
             });
           }
         });
 
         result = {
-          success: challengeSuccess,
-          finalUrl: url,
-          finalTitle: challengeSuccess ? 'Challenge completed via BrowserQL' : 'Challenge still present',
+          success: functionResult.success,
+          finalUrl: functionResult.finalUrl || url,
+          finalTitle: functionResult.finalTitle || 'Processing completed',
           results,
-          totalActions: actions.length,
-          method: 'BrowserQL'
+          totalActions: actions.length
         };
 
       } else if (hasScrapeAction && !hasCloudflareChallenge) {
