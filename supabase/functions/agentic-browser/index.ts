@@ -129,10 +129,10 @@ serve(async (req) => {
                 Object.defineProperty(window, 'innerHeight', { writable: true, configurable: true, value: 1080 });
               });
               
-              // Navigate to page with network idle wait
-              console.log('🔗 Navigating to: ${url}');
-              await page.goto('${url}', { 
-                waitUntil: 'networkidle', 
+              // Navigate to page with load wait
+              console.log(`🔗 Navigating to: ${url}`);
+              await page.goto(url, { 
+                waitUntil: 'load', 
                 timeout: 60000 
               });
               console.log('✅ Page loaded, checking for challenge...');
