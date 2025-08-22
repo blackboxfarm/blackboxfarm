@@ -7,7 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
 import { Link } from "react-router-dom";
-import { useLocalSecrets } from "@/hooks/useLocalSecrets";
+import { useUserSecrets } from "@/hooks/useUserSecrets";
 import { useWalletPool } from "@/hooks/useWalletPool";
 import { Connection, PublicKey, Keypair } from "@solana/web3.js";
 import bs58 from "bs58";
@@ -50,7 +50,7 @@ const BumpBot = () => {
   }, []);
 
   // RPC connection (from local Secrets)
-  const { secrets } = useLocalSecrets();
+  const { secrets } = useUserSecrets();
   const [conn, setConn] = useState<Connection | null>(null);
   useEffect(() => {
     if (secrets?.rpcUrl) setConn(new Connection(secrets.rpcUrl, { commitment: "confirmed" }));
@@ -87,7 +87,7 @@ const BumpBot = () => {
   }, [secrets?.tradingPrivateKey, poolWallets.length, importCustomSecrets]);
 
   // Live balances state
-  const [tokenMint, setTokenMint] = useState<string>("");
+  const [tokenMint, setTokenMint] = useState<string>(secrets?.tokenMint ?? "");
   const [running, setRunning] = useState(false);
   const [loading, setLoading] = useState(false);
   const [sol, setSol] = useState<number | null>(null);
@@ -101,6 +101,13 @@ const BumpBot = () => {
   const [autoTrading, setAutoTrading] = useState(false);
   const autoTimer = useRef<number | null>(null);
   const autoActive = useRef(false);
+
+  // Update tokenMint when secrets change
+  useEffect(() => {
+    if (secrets?.tokenMint && !tokenMint) {
+      setTokenMint(secrets.tokenMint);
+    }
+  }, [secrets?.tokenMint, tokenMint]);
 
   // New BumpBot state
   const [bumpBotActive, setBumpBotActive] = useState(false);
