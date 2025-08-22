@@ -3,13 +3,13 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, Di
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { useLocalSecrets } from "@/hooks/useLocalSecrets";
+import { useUserSecrets } from "@/hooks/useUserSecrets";
 import { toast } from "@/hooks/use-toast";
 
 const fieldClass = "space-y-2";
 
 const SecretsModal: React.FC = () => {
-  const { secrets, ready, update, reset } = useLocalSecrets();
+  const { secrets, ready, update, reset, isLoading } = useUserSecrets();
   const [open, setOpen] = React.useState(false);
   const [rpcUrl, setRpcUrl] = React.useState(secrets?.rpcUrl ?? "");
   const [pk, setPk] = React.useState(secrets?.tradingPrivateKey ?? "");
@@ -24,7 +24,7 @@ const SecretsModal: React.FC = () => {
     }
   }, [open, secrets]);
 
-  const handleSave = () => {
+  const handleSave = async () => {
     if (!rpcUrl || !pk) {
       toast({ title: "Missing values", description: "Enter both RPC URL and private key." });
       return;
@@ -36,16 +36,26 @@ const SecretsModal: React.FC = () => {
       toast({ title: "Invalid RPC URL", description: "Provide a valid HTTPS RPC endpoint." });
       return;
     }
-    update({ rpcUrl: rpcUrl.trim(), tradingPrivateKey: pk.trim(), functionToken: fnToken.trim() || undefined });
-    toast({ title: "Secrets saved", description: "Stored locally in your browser only." });
-    setOpen(false);
+    
+    try {
+      await update({ rpcUrl: rpcUrl.trim(), tradingPrivateKey: pk.trim(), functionToken: fnToken.trim() || undefined });
+      toast({ title: "Secrets saved", description: "Saved to database successfully." });
+      setOpen(false);
+    } catch (error) {
+      toast({ title: "Save failed", description: "Could not save secrets to database." });
+    }
   };
 
-  const handleClear = () => {
-    reset();
-    toast({ title: "Secrets cleared", description: "Local secrets were removed from this browser." });
-    setRpcUrl("");
-    setPk("");
+  const handleClear = async () => {
+    try {
+      await reset();
+      toast({ title: "Secrets cleared", description: "Secrets were removed from database." });
+      setRpcUrl("");
+      setPk("");
+      setFnToken("");
+    } catch (error) {
+      toast({ title: "Clear failed", description: "Could not clear secrets from database." });
+    }
   };
 
   return (
@@ -55,9 +65,9 @@ const SecretsModal: React.FC = () => {
       </DialogTrigger>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>Trading Secrets (Local)</DialogTitle>
+          <DialogTitle>Trading Secrets</DialogTitle>
           <DialogDescription>
-            These values are stored only in your browser via localStorage. They are not uploaded.
+            These values are encrypted and stored securely in the database.
           </DialogDescription>
         </DialogHeader>
         <div className="grid gap-4">

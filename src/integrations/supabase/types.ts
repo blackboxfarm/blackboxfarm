@@ -346,6 +346,36 @@ export type Database = {
         }
         Relationships: []
       }
+      user_secrets: {
+        Row: {
+          created_at: string
+          function_token: string | null
+          id: string
+          rpc_url: string
+          trading_private_key: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          function_token?: string | null
+          id?: string
+          rpc_url: string
+          trading_private_key: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          function_token?: string | null
+          id?: string
+          rpc_url?: string
+          trading_private_key?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       wallet_pools: {
         Row: {
           created_at: string | null
