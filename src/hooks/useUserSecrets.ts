@@ -25,8 +25,20 @@ export function useUserSecrets() {
         return;
       }
 
-      // Load from localStorage for now since we're using password auth
-      const storedSecrets = localStorage.getItem('tradingSecrets');
+      // Load from localStorage - check both old and new keys for migration
+      let storedSecrets = localStorage.getItem('tradingSecrets');
+      
+      // If no new secrets, check for old localSecrets format
+      if (!storedSecrets) {
+        const oldSecrets = localStorage.getItem('localSecrets');
+        if (oldSecrets) {
+          // Migrate old data to new format
+          localStorage.setItem('tradingSecrets', oldSecrets);
+          localStorage.removeItem('localSecrets');
+          storedSecrets = oldSecrets;
+        }
+      }
+      
       if (storedSecrets) {
         const parsedSecrets = JSON.parse(storedSecrets);
         setSecrets(parsedSecrets);
