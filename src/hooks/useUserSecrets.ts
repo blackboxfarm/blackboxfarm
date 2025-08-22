@@ -5,6 +5,7 @@ export type Secrets = {
   rpcUrl: string;
   tradingPrivateKey: string;
   functionToken?: string;
+  tokenMint?: string;
 };
 
 export function useUserSecrets() {

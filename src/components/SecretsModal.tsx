@@ -14,6 +14,7 @@ const SecretsModal: React.FC = () => {
   const [rpcUrl, setRpcUrl] = React.useState(secrets?.rpcUrl ?? "");
   const [pk, setPk] = React.useState(secrets?.tradingPrivateKey ?? "");
   const [fnToken, setFnToken] = React.useState(secrets?.functionToken ?? "");
+  const [tokenMint, setTokenMint] = React.useState(secrets?.tokenMint ?? "");
 
   React.useEffect(() => {
     if (open) {
@@ -21,6 +22,7 @@ const SecretsModal: React.FC = () => {
       setRpcUrl(secrets?.rpcUrl ?? "");
       setPk(secrets?.tradingPrivateKey ?? "");
       setFnToken(secrets?.functionToken ?? "");
+      setTokenMint(secrets?.tokenMint ?? "");
     }
   }, [open, secrets]);
 
@@ -38,8 +40,8 @@ const SecretsModal: React.FC = () => {
     }
     
     try {
-      await update({ rpcUrl: rpcUrl.trim(), tradingPrivateKey: pk.trim(), functionToken: fnToken.trim() || undefined });
-      toast({ title: "Secrets saved", description: "Saved to database successfully." });
+      await update({ rpcUrl: rpcUrl.trim(), tradingPrivateKey: pk.trim(), functionToken: fnToken.trim() || undefined, tokenMint: tokenMint.trim() || undefined });
+      toast({ title: "Secrets saved", description: "Saved to localStorage successfully." });
       setOpen(false);
     } catch (error) {
       toast({ title: "Save failed", description: "Could not save secrets to database." });
@@ -49,10 +51,11 @@ const SecretsModal: React.FC = () => {
   const handleClear = async () => {
     try {
       await reset();
-      toast({ title: "Secrets cleared", description: "Secrets were removed from database." });
+      toast({ title: "Secrets cleared", description: "Secrets were removed from localStorage." });
       setRpcUrl("");
       setPk("");
       setFnToken("");
+      setTokenMint("");
     } catch (error) {
       toast({ title: "Clear failed", description: "Could not clear secrets from database." });
     }
@@ -82,6 +85,10 @@ const SecretsModal: React.FC = () => {
           <div className={fieldClass}>
             <Label htmlFor="ft">Function Token (optional, must match Supabase secret)</Label>
             <Input id="ft" placeholder="Leave empty if not set server-side" value={fnToken} onChange={(e) => setFnToken(e.target.value)} />
+          </div>
+          <div className={fieldClass}>
+            <Label htmlFor="tm">Token Address (mint)</Label>
+            <Input id="tm" placeholder="Token mint address for trading" value={tokenMint} onChange={(e) => setTokenMint(e.target.value)} />
           </div>
           <div className="flex items-center gap-2">
             <Button onClick={handleSave}>Save</Button>
