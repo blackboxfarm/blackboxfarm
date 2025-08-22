@@ -38,9 +38,11 @@ function genKeypair(): StoredWallet {
 // Database operations
 async function saveWalletToDatabase(wallet: StoredWallet) {
   try {
+    const { data: { user } } = await supabase.auth.getUser();
     await supabase.from('wallet_pools').insert({
       secret_key: wallet.secretBase58, // Will be encrypted by the database trigger
       pubkey: wallet.pubkey,
+      user_id: user?.id,
       is_active: true
     });
   } catch (error) {
