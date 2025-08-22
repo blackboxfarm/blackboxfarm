@@ -9,7 +9,8 @@ import { Label } from "@/components/ui/label";
 import { Link } from "react-router-dom";
 import { useLocalSecrets } from "@/hooks/useLocalSecrets";
 import { useWalletPool } from "@/hooks/useWalletPool";
-import { Connection, PublicKey } from "@solana/web3.js";
+import { Connection, PublicKey, Keypair } from "@solana/web3.js";
+import bs58 from "bs58";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "@/components/ui/sonner";
 
@@ -55,9 +56,28 @@ const BumpBot = () => {
     if (secrets?.rpcUrl) setConn(new Connection(secrets.rpcUrl, { commitment: "confirmed" }));
   }, [secrets?.rpcUrl]);
 
-  // Use FIRST wallet from Wallet Pool (generated/custom) for balances
+  // Use trading private key from secrets as primary, fall back to pool wallets
   const { wallets: poolWallets, importCustomSecrets } = useWalletPool();
-  const displayPubkey = useMemo(() => poolWallets[0]?.pubkey ?? "", [poolWallets]);
+  
+  // Display pubkey: prioritize secrets trading key, fall back to first pool wallet
+  const displayPubkey = useMemo(() => {
+    if (secrets?.tradingPrivateKey) {
+      try {
+        // Derive pubkey from the trading private key in secrets
+        let keyData;
+        if (secrets.tradingPrivateKey.startsWith('[')) {
+          keyData = new Uint8Array(JSON.parse(secrets.tradingPrivateKey));
+        } else {
+          keyData = bs58.decode(secrets.tradingPrivateKey);
+        }
+        const keypair = Keypair.fromSecretKey(keyData);
+        return keypair.publicKey.toBase58();
+      } catch {
+        // Fall back to pool if secrets key is invalid
+      }
+    }
+    return poolWallets[0]?.pubkey ?? "";
+  }, [secrets?.tradingPrivateKey, poolWallets]);
 
   // Auto-import trading private key from secrets into wallet pool if it exists and isn't already imported
   useEffect(() => {
@@ -77,7 +97,7 @@ const BumpBot = () => {
   const [usdToBuy, setUsdToBuy] = useState<string>("25");
   const [slippageBps, setSlippageBps] = useState<number>(100);
   const [swapping, setSwapping] = useState(false);
-  const ownerSecret = useMemo(() => poolWallets[0]?.secretBase58 ?? "", [poolWallets]);
+  const ownerSecret = useMemo(() => secrets?.tradingPrivateKey || poolWallets[0]?.secretBase58 || "", [secrets?.tradingPrivateKey, poolWallets]);
   const [autoTrading, setAutoTrading] = useState(false);
   const autoTimer = useRef<number | null>(null);
   const autoActive = useRef(false);
