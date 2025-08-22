@@ -12,39 +12,29 @@ export function useUserSecrets() {
   const [isLoading, setIsLoading] = useState(true);
   const [ready, setReady] = useState(false);
 
-  // Load secrets from database
+  // Load secrets from localStorage for password-based auth
   const loadSecrets = useCallback(async () => {
     try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) {
+      // Check if user is authenticated via password auth
+      const authStatus = localStorage.getItem('passwordAuth');
+      if (authStatus !== 'true') {
         setSecrets(null);
         setReady(false);
         setIsLoading(false);
         return;
       }
 
-      const { data, error } = await supabase
-        .from('user_secrets')
-        .select('rpc_url, trading_private_key, function_token')
-        .eq('user_id', user.id)
-        .maybeSingle();
-
-      if (error) {
-        console.error('Error loading secrets:', error);
-        setSecrets(null);
-        setReady(false);
-      } else if (data) {
-        const loadedSecrets: Secrets = {
-          rpcUrl: data.rpc_url,
-          tradingPrivateKey: data.trading_private_key,
-          functionToken: data.function_token || undefined
-        };
-        setSecrets(loadedSecrets);
+      // Load from localStorage for now since we're using password auth
+      const storedSecrets = localStorage.getItem('tradingSecrets');
+      if (storedSecrets) {
+        const parsedSecrets = JSON.parse(storedSecrets);
+        setSecrets(parsedSecrets);
         setReady(true);
       } else {
         setSecrets(null);
         setReady(false);
       }
+
     } catch (error) {
       console.error('Error loading secrets:', error);
       setSecrets(null);
@@ -54,27 +44,17 @@ export function useUserSecrets() {
     }
   }, []);
 
-  // Save secrets to database
+  // Save secrets to localStorage for password-based auth
   const update = useCallback(async (newSecrets: Secrets) => {
     try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) {
+      // Check if user is authenticated via password auth
+      const authStatus = localStorage.getItem('passwordAuth');
+      if (authStatus !== 'true') {
         throw new Error('User not authenticated');
       }
 
-      const { error } = await supabase
-        .from('user_secrets')
-        .upsert({
-          user_id: user.id,
-          rpc_url: newSecrets.rpcUrl,
-          trading_private_key: newSecrets.tradingPrivateKey,
-          function_token: newSecrets.functionToken || null
-        });
-
-      if (error) {
-        throw error;
-      }
-
+      // Save to localStorage
+      localStorage.setItem('tradingSecrets', JSON.stringify(newSecrets));
       setSecrets(newSecrets);
       setReady(true);
     } catch (error) {
@@ -83,23 +63,17 @@ export function useUserSecrets() {
     }
   }, []);
 
-  // Clear secrets from database
+  // Clear secrets from localStorage
   const reset = useCallback(async () => {
     try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) {
+      // Check if user is authenticated via password auth
+      const authStatus = localStorage.getItem('passwordAuth');
+      if (authStatus !== 'true') {
         throw new Error('User not authenticated');
       }
 
-      const { error } = await supabase
-        .from('user_secrets')
-        .delete()
-        .eq('user_id', user.id);
-
-      if (error) {
-        throw error;
-      }
-
+      // Remove from localStorage
+      localStorage.removeItem('tradingSecrets');
       setSecrets(null);
       setReady(false);
     } catch (error) {
@@ -112,11 +86,13 @@ export function useUserSecrets() {
   useEffect(() => {
     loadSecrets();
 
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(() => {
+    // Listen for localStorage changes (auth status)
+    const handleStorageChange = () => {
       loadSecrets();
-    });
+    };
 
-    return () => subscription.unsubscribe();
+    window.addEventListener('storage', handleStorageChange);
+    return () => window.removeEventListener('storage', handleStorageChange);
   }, [loadSecrets]);
 
   return { secrets, ready, update, reset, isLoading } as const;
