@@ -52,10 +52,13 @@ async function saveWalletToDatabase(wallet: StoredWallet) {
 
 async function loadWalletsFromDatabase(): Promise<StoredWallet[]> {
   try {
-    const { data, error } = await supabase
-      .from('wallet_pools')
-      .select('secret_key, pubkey')
-      .eq('is_active', true);
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return [];
+
+    // Use the secure decryption function to load wallet secrets
+    const { data, error } = await supabase.rpc('get_wallet_pool_secrets_decrypted', {
+      user_id_param: user.id
+    });
     
     if (error) throw error;
     
