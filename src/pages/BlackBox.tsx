@@ -4,6 +4,8 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { BlackBoxAuth } from "@/components/blackbox/BlackBoxAuth";
 import { CampaignDashboard } from "@/components/blackbox/CampaignDashboard";
 import { FeeCalculator } from "@/components/blackbox/FeeCalculator";
+import { AuthButton } from "@/components/auth/AuthButton";
+import { RequireAuth } from "@/components/RequireAuth";
 import VolumeSimulator from "@/components/VolumeSimulator";
 
 export default function BlackBox() {
@@ -13,13 +15,18 @@ export default function BlackBox() {
     <div className="min-h-screen bg-background">
       <div className="container mx-auto py-6 space-y-8">
         {/* Header */}
-        <div className="text-center space-y-4">
-          <h1 className="text-4xl font-bold bg-gradient-to-r from-primary to-primary/70 bg-clip-text text-transparent">
-            BlackBox BumpBot
-          </h1>
-          <p className="text-xl text-muted-foreground max-w-2xl mx-auto">
-            Professional-grade Solana volume generation. 15% cheaper than competitors with bulletproof security.
-          </p>
+        <div className="flex justify-between items-start">
+          <div className="text-center flex-1 space-y-4">
+            <h1 className="text-4xl font-bold bg-gradient-to-r from-primary to-primary/70 bg-clip-text text-transparent">
+              BlackBox BumpBot
+            </h1>
+            <p className="text-xl text-muted-foreground max-w-2xl mx-auto">
+              Professional-grade Solana volume generation. 15% cheaper than competitors with bulletproof security.
+            </p>
+          </div>
+          <div className="flex-shrink-0">
+            <AuthButton />
+          </div>
         </div>
 
         {/* Main Navigation */}
@@ -32,7 +39,9 @@ export default function BlackBox() {
           </TabsList>
 
           <TabsContent value="dashboard" className="space-y-6">
-            <CampaignDashboard />
+            <RequireAuth>
+              <CampaignDashboard />
+            </RequireAuth>
           </TabsContent>
 
           <TabsContent value="simulator" className="space-y-6">
@@ -51,7 +60,9 @@ export default function BlackBox() {
           </TabsContent>
 
           <TabsContent value="account" className="space-y-6">
-            <BlackBoxAuth />
+            <RequireAuth>
+              <BlackBoxAuth />
+            </RequireAuth>
           </TabsContent>
         </Tabs>
 
