@@ -132,11 +132,14 @@ export default function Index() {
           <div className="tech-border p-4 mt-4 bg-gradient-to-r from-primary/10 to-accent/10">
             <div className="text-center">
               <Badge className="mb-2 bg-gradient-to-r from-primary to-accent text-primary-foreground">
-                🚀 NEW: Server-Side Trading
+                🚀 NEW: BlackBox BumpBot
               </Badge>
               <p className="text-sm text-muted-foreground">
-                Your trading bot now runs 24/7 on Supabase servers - no browser required!
+                Professional volume generation platform - 15% cheaper than competitors!
               </p>
+              <a href="/blackbox" className="inline-block mt-2 px-4 py-2 bg-primary text-primary-foreground rounded-md hover:bg-primary/90 transition-colors">
+                Launch BlackBox →
+              </a>
             </div>
           </div>
         </div>

@@ -73,6 +73,199 @@ export type Database = {
           },
         ]
       }
+      blackbox_campaigns: {
+        Row: {
+          created_at: string | null
+          id: string
+          is_active: boolean | null
+          nickname: string
+          token_address: string
+          updated_at: string | null
+          user_id: string | null
+        }
+        Insert: {
+          created_at?: string | null
+          id?: string
+          is_active?: boolean | null
+          nickname: string
+          token_address: string
+          updated_at?: string | null
+          user_id?: string | null
+        }
+        Update: {
+          created_at?: string | null
+          id?: string
+          is_active?: boolean | null
+          nickname?: string
+          token_address?: string
+          updated_at?: string | null
+          user_id?: string | null
+        }
+        Relationships: []
+      }
+      blackbox_command_codes: {
+        Row: {
+          config: Json
+          created_at: string | null
+          id: string
+          is_active: boolean | null
+          name: string
+          updated_at: string | null
+          wallet_id: string | null
+        }
+        Insert: {
+          config: Json
+          created_at?: string | null
+          id?: string
+          is_active?: boolean | null
+          name: string
+          updated_at?: string | null
+          wallet_id?: string | null
+        }
+        Update: {
+          config?: Json
+          created_at?: string | null
+          id?: string
+          is_active?: boolean | null
+          name?: string
+          updated_at?: string | null
+          wallet_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "blackbox_command_codes_wallet_id_fkey"
+            columns: ["wallet_id"]
+            isOneToOne: false
+            referencedRelation: "blackbox_wallets"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      blackbox_transactions: {
+        Row: {
+          amount_sol: number
+          command_code_id: string | null
+          executed_at: string | null
+          gas_fee: number
+          id: string
+          service_fee: number
+          signature: string | null
+          status: string | null
+          transaction_type: string
+          wallet_id: string | null
+        }
+        Insert: {
+          amount_sol: number
+          command_code_id?: string | null
+          executed_at?: string | null
+          gas_fee: number
+          id?: string
+          service_fee: number
+          signature?: string | null
+          status?: string | null
+          transaction_type: string
+          wallet_id?: string | null
+        }
+        Update: {
+          amount_sol?: number
+          command_code_id?: string | null
+          executed_at?: string | null
+          gas_fee?: number
+          id?: string
+          service_fee?: number
+          signature?: string | null
+          status?: string | null
+          transaction_type?: string
+          wallet_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "blackbox_transactions_command_code_id_fkey"
+            columns: ["command_code_id"]
+            isOneToOne: false
+            referencedRelation: "blackbox_command_codes"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "blackbox_transactions_wallet_id_fkey"
+            columns: ["wallet_id"]
+            isOneToOne: false
+            referencedRelation: "blackbox_wallets"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      blackbox_users: {
+        Row: {
+          created_at: string | null
+          id: string
+          phone_number: string | null
+          two_factor_enabled: boolean | null
+          two_factor_secret: string | null
+          updated_at: string | null
+          user_id: string | null
+        }
+        Insert: {
+          created_at?: string | null
+          id?: string
+          phone_number?: string | null
+          two_factor_enabled?: boolean | null
+          two_factor_secret?: string | null
+          updated_at?: string | null
+          user_id?: string | null
+        }
+        Update: {
+          created_at?: string | null
+          id?: string
+          phone_number?: string | null
+          two_factor_enabled?: boolean | null
+          two_factor_secret?: string | null
+          updated_at?: string | null
+          user_id?: string | null
+        }
+        Relationships: []
+      }
+      blackbox_wallets: {
+        Row: {
+          campaign_id: string | null
+          created_at: string | null
+          id: string
+          is_active: boolean | null
+          pubkey: string
+          secret_key_encrypted: string
+          sol_balance: number | null
+          updated_at: string | null
+        }
+        Insert: {
+          campaign_id?: string | null
+          created_at?: string | null
+          id?: string
+          is_active?: boolean | null
+          pubkey: string
+          secret_key_encrypted: string
+          sol_balance?: number | null
+          updated_at?: string | null
+        }
+        Update: {
+          campaign_id?: string | null
+          created_at?: string | null
+          id?: string
+          is_active?: boolean | null
+          pubkey?: string
+          secret_key_encrypted?: string
+          sol_balance?: number | null
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "blackbox_wallets_campaign_id_fkey"
+            columns: ["campaign_id"]
+            isOneToOne: false
+            referencedRelation: "blackbox_campaigns"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       emergency_sells: {
         Row: {
           created_at: string | null
