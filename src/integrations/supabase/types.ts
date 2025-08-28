@@ -622,7 +622,23 @@ export type Database = {
         Args: { encrypted_secret: string }
         Returns: string
       }
+      decrypt_user_secret: {
+        Args: { encrypted_secret: string }
+        Returns: string
+      }
+      decrypt_wallet_secret: {
+        Args: { encrypted_secret: string }
+        Returns: string
+      }
       encrypt_owner_secret: {
+        Args: { input_secret: string }
+        Returns: string
+      }
+      encrypt_user_secret: {
+        Args: { input_secret: string }
+        Returns: string
+      }
+      encrypt_wallet_secret: {
         Args: { input_secret: string }
         Returns: string
       }
@@ -642,6 +658,32 @@ export type Database = {
           session_id: string
           status: string
           updated_at: string
+        }[]
+      }
+      get_user_secrets_decrypted: {
+        Args: { user_id_param: string }
+        Returns: {
+          created_at: string
+          function_token: string
+          id: string
+          rpc_url: string
+          trading_private_key: string
+          updated_at: string
+          user_id: string
+        }[]
+      }
+      get_wallet_pool_secrets_decrypted: {
+        Args: { user_id_param: string }
+        Returns: {
+          created_at: string
+          id: string
+          is_active: boolean
+          last_balance_check: string
+          pubkey: string
+          secret_key: string
+          session_id: string
+          sol_balance: number
+          user_id: string
         }[]
       }
       verify_access_password: {

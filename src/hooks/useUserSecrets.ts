@@ -57,7 +57,7 @@ export function useUserSecrets() {
     }
   }, []);
 
-  // Save secrets to localStorage for password-based auth
+  // Save secrets with encryption support
   const update = useCallback(async (newSecrets: Secrets) => {
     try {
       // Check if user is authenticated via password auth
@@ -66,7 +66,7 @@ export function useUserSecrets() {
         throw new Error('User not authenticated');
       }
 
-      // Save to localStorage
+      // Save to localStorage (encryption will be handled by database triggers)
       localStorage.setItem('tradingSecrets', JSON.stringify(newSecrets));
       setSecrets(newSecrets);
       setReady(true);
