@@ -130,8 +130,8 @@ serve(async (req) => {
               });
               
               // Navigate to page with load wait
-              console.log(`🔗 Navigating to: ${url}`);
-              await page.goto(url, { 
+              console.log('🔗 Navigating to: ${url}');
+              await page.goto('${url}', { 
                 waitUntil: 'load', 
                 timeout: 60000 
               });
@@ -344,7 +344,6 @@ serve(async (req) => {
           results,
           totalActions: actions.length
         };
-
       } else if (hasScrapeAction && !hasCloudflareChallenge) {
         console.log('📄 SCRAPE ACTION DETECTED - Using content endpoint to get HTML');
         const contentUrl = `https://production-sfo.browserless.io/content?token=${browserlessApiKey}`;
@@ -421,7 +420,6 @@ serve(async (req) => {
           results,
           totalActions: actions.length
         };
-
       } else if (hasScreenshotAction) {
         console.log('📸 SCREENSHOT ACTION DETECTED - Using screenshot endpoint');
         const screenshotUrl = `https://production-sfo.browserless.io/screenshot?token=${browserlessApiKey}`;
@@ -477,10 +475,7 @@ serve(async (req) => {
           }
         ];
 
-        // Process each action in order
         actions.forEach(action => {
-          console.log('Processing action:', action.type);
-          
           if (action.type === 'wait') {
             results.push({
               action: 'wait',
@@ -491,7 +486,8 @@ serve(async (req) => {
             results.push({
               action: 'screenshot',
               success: true,
-              screenshot: `data:image/png;base64,${screenshotBase64}`
+              screenshot: `data:image/png;base64,${screenshotBase64}`,
+              message: 'Screenshot captured successfully'
             });
           }
         });
@@ -503,31 +499,23 @@ serve(async (req) => {
           results,
           totalActions: actions.length
         };
-        
       } else {
-        console.log('🌐 NO SPECIAL ACTIONS - Basic navigation only');
+        // No specific action type detected, return error
         result = {
-          success: true,
+          success: false,
+          error: 'No supported action types detected',
           finalUrl: url,
-          finalTitle: 'Basic navigation completed',
-          results: [
-            {
-              action: 'navigate',
-              success: true,
-              url: url,
-              title: 'Navigation completed'
-            }
-          ],
-          totalActions: actions.length
+          finalTitle: 'Error',
+          results: [],
+          totalActions: 0
         };
       }
-
     } catch (fetchError) {
-      console.error('Failed to connect to browserless API:', fetchError);
+      console.error('Error during browser operation:', fetchError);
       return new Response(
         JSON.stringify({ 
           success: false, 
-          error: 'Failed to connect to browser automation service',
+          error: 'Browser automation failed',
           details: fetchError.message
         }),
         { 
