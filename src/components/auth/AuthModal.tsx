@@ -7,6 +7,8 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useAuth } from '@/hooks/useAuth';
 import { useToast } from '@/hooks/use-toast';
 import { Loader2, Mail, Lock } from 'lucide-react';
+import { PasswordResetModal } from './PasswordResetModal';
+import { EmailVerificationModal } from './EmailVerificationModal';
 
 interface AuthModalProps {
   isOpen: boolean;
@@ -20,6 +22,9 @@ export const AuthModal = ({ isOpen, onClose, defaultTab = 'signin' }: AuthModalP
   const [confirmPassword, setConfirmPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [activeTab, setActiveTab] = useState(defaultTab);
+  const [showPasswordReset, setShowPasswordReset] = useState(false);
+  const [showEmailVerification, setShowEmailVerification] = useState(false);
+  const [verificationEmail, setVerificationEmail] = useState('');
   
   const { signIn, signUp } = useAuth();
   const { toast } = useToast();
@@ -68,11 +73,12 @@ export const AuthModal = ({ isOpen, onClose, defaultTab = 'signin' }: AuthModalP
         variant: "destructive"
       });
     } else {
+      setVerificationEmail(email);
+      setShowEmailVerification(true);
       toast({
         title: "Account Created!",
         description: "Please check your email to verify your account."
       });
-      onClose();
     }
     setLoading(false);
   };
@@ -87,6 +93,10 @@ export const AuthModal = ({ isOpen, onClose, defaultTab = 'signin' }: AuthModalP
   const handleClose = () => {
     resetForm();
     onClose();
+  };
+
+  const handleForgotPassword = () => {
+    setShowPasswordReset(true);
   };
 
   return (
@@ -151,6 +161,16 @@ export const AuthModal = ({ isOpen, onClose, defaultTab = 'signin' }: AuthModalP
                 ) : (
                   'Sign In'
                 )}
+              </Button>
+
+              <Button 
+                type="button"
+                variant="ghost"
+                size="sm"
+                onClick={handleForgotPassword}
+                className="w-full text-muted-foreground hover:text-primary"
+              >
+                Forgot your password?
               </Button>
             </form>
           </TabsContent>
@@ -223,6 +243,17 @@ export const AuthModal = ({ isOpen, onClose, defaultTab = 'signin' }: AuthModalP
             </form>
           </TabsContent>
         </Tabs>
+
+        <PasswordResetModal 
+          isOpen={showPasswordReset}
+          onClose={() => setShowPasswordReset(false)}
+        />
+
+        <EmailVerificationModal 
+          isOpen={showEmailVerification}
+          onClose={() => setShowEmailVerification(false)}
+          email={verificationEmail}
+        />
       </DialogContent>
     </Dialog>
   );
