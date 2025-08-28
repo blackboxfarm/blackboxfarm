@@ -660,6 +660,18 @@ export type Database = {
           updated_at: string
         }[]
       }
+      get_blackbox_user_decrypted: {
+        Args: { user_id_param: string }
+        Returns: {
+          created_at: string
+          id: string
+          phone_number: string
+          two_factor_enabled: boolean
+          two_factor_secret: string
+          updated_at: string
+          user_id: string
+        }[]
+      }
       get_user_secrets_decrypted: {
         Args: { user_id_param: string }
         Returns: {
