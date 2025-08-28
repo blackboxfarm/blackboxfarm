@@ -17,7 +17,8 @@ const App = () => (
       <Sonner />
       <BrowserRouter>
         <Routes>
-          <Route path="/" element={<Index />} />
+          <Route path="/" element={<BlackBox />} />
+          <Route path="/admin" element={<Index />} />
           <Route path="/bb" element={<BumpBot />} />
           <Route path="/blackbox" element={<BlackBox />} />
           {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
