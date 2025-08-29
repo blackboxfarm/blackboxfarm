@@ -409,6 +409,72 @@ export type Database = {
         }
         Relationships: []
       }
+      platform_config: {
+        Row: {
+          config_key: string
+          config_value: Json
+          created_at: string | null
+          description: string | null
+          id: string
+          is_active: boolean | null
+        }
+        Insert: {
+          config_key: string
+          config_value: Json
+          created_at?: string | null
+          description?: string | null
+          id?: string
+          is_active?: boolean | null
+        }
+        Update: {
+          config_key?: string
+          config_value?: Json
+          created_at?: string | null
+          description?: string | null
+          id?: string
+          is_active?: boolean | null
+        }
+        Relationships: []
+      }
+      pricing_tiers: {
+        Row: {
+          base_fee_sol: number
+          created_at: string | null
+          features: Json | null
+          id: string
+          is_active: boolean | null
+          max_trades_per_hour: number | null
+          max_wallets_per_campaign: number | null
+          per_trade_fee_sol: number
+          service_markup_percent: number
+          tier_name: string
+        }
+        Insert: {
+          base_fee_sol: number
+          created_at?: string | null
+          features?: Json | null
+          id?: string
+          is_active?: boolean | null
+          max_trades_per_hour?: number | null
+          max_wallets_per_campaign?: number | null
+          per_trade_fee_sol: number
+          service_markup_percent?: number
+          tier_name: string
+        }
+        Update: {
+          base_fee_sol?: number
+          created_at?: string | null
+          features?: Json | null
+          id?: string
+          is_active?: boolean | null
+          max_trades_per_hour?: number | null
+          max_wallets_per_campaign?: number | null
+          per_trade_fee_sol?: number
+          service_markup_percent?: number
+          tier_name?: string
+        }
+        Relationships: []
+      }
       profiles: {
         Row: {
           avatar_url: string | null
@@ -489,6 +555,53 @@ export type Database = {
           updated_at?: string | null
         }
         Relationships: []
+      }
+      revenue_transactions: {
+        Row: {
+          amount_sol: number
+          amount_usd: number | null
+          collected_at: string | null
+          id: string
+          platform_wallet: string | null
+          revenue_type: string
+          sol_price_at_time: number | null
+          status: string | null
+          transaction_id: string | null
+          user_id: string | null
+        }
+        Insert: {
+          amount_sol: number
+          amount_usd?: number | null
+          collected_at?: string | null
+          id?: string
+          platform_wallet?: string | null
+          revenue_type: string
+          sol_price_at_time?: number | null
+          status?: string | null
+          transaction_id?: string | null
+          user_id?: string | null
+        }
+        Update: {
+          amount_sol?: number
+          amount_usd?: number | null
+          collected_at?: string | null
+          id?: string
+          platform_wallet?: string | null
+          revenue_type?: string
+          sol_price_at_time?: number | null
+          status?: string | null
+          transaction_id?: string | null
+          user_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "revenue_transactions_transaction_id_fkey"
+            columns: ["transaction_id"]
+            isOneToOne: false
+            referencedRelation: "blackbox_transactions"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       security_audit_log: {
         Row: {
@@ -791,6 +904,53 @@ export type Database = {
         }
         Relationships: []
       }
+      user_subscriptions: {
+        Row: {
+          auto_renew: boolean | null
+          created_at: string | null
+          expires_at: string | null
+          id: string
+          is_active: boolean | null
+          pricing_tier_id: string | null
+          starts_at: string
+          trades_used: number | null
+          updated_at: string | null
+          user_id: string | null
+        }
+        Insert: {
+          auto_renew?: boolean | null
+          created_at?: string | null
+          expires_at?: string | null
+          id?: string
+          is_active?: boolean | null
+          pricing_tier_id?: string | null
+          starts_at?: string
+          trades_used?: number | null
+          updated_at?: string | null
+          user_id?: string | null
+        }
+        Update: {
+          auto_renew?: boolean | null
+          created_at?: string | null
+          expires_at?: string | null
+          id?: string
+          is_active?: boolean | null
+          pricing_tier_id?: string | null
+          starts_at?: string
+          trades_used?: number | null
+          updated_at?: string | null
+          user_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "user_subscriptions_pricing_tier_id_fkey"
+            columns: ["pricing_tier_id"]
+            isOneToOne: false
+            referencedRelation: "pricing_tiers"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       wallet_pools: {
         Row: {
           created_at: string | null
@@ -929,6 +1089,17 @@ export type Database = {
           trading_private_key: string
           updated_at: string
           user_id: string
+        }[]
+      }
+      get_user_subscription: {
+        Args: { user_id_param: string }
+        Returns: {
+          expires_at: string
+          id: string
+          is_active: boolean
+          max_trades_per_hour: number
+          tier_name: string
+          trades_used: number
         }[]
       }
       get_wallet_pool_secrets_decrypted: {
