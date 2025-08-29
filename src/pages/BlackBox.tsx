@@ -10,6 +10,7 @@ import VolumeSimulator from "@/components/VolumeSimulator";
 import { FarmBanner } from "@/components/FarmBanner";
 import { SecurityDashboard } from "@/components/security/SecurityDashboard";
 import { NotificationCenter } from "@/components/NotificationCenter";
+import { AnalyticsDashboard } from "@/components/AnalyticsDashboard";
 
 export default function BlackBox() {
   const [activeTab, setActiveTab] = useState("dashboard");
@@ -40,11 +41,12 @@ export default function BlackBox() {
 
         {/* Main Navigation */}
         <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-          <TabsList className="grid w-full grid-cols-5">
+          <TabsList className="grid w-full grid-cols-6">
             <TabsTrigger value="security">Security</TabsTrigger>
             <TabsTrigger value="dashboard">Dashboard</TabsTrigger>
             <TabsTrigger value="simulator">Simulator</TabsTrigger>
             <TabsTrigger value="fees">Fee Calculator</TabsTrigger>
+            <TabsTrigger value="analytics">Analytics</TabsTrigger>
             <TabsTrigger value="account">Account</TabsTrigger>
           </TabsList>
 
@@ -71,6 +73,10 @@ export default function BlackBox() {
 
           <TabsContent value="fees" className="space-y-6">
             <FeeCalculator />
+          </TabsContent>
+
+          <TabsContent value="analytics" className="space-y-6">
+            <AnalyticsDashboard />
           </TabsContent>
 
           <TabsContent value="account" className="space-y-6">

@@ -10,6 +10,8 @@ import { supabase } from "@/integrations/supabase/client";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useWalletPool } from "@/hooks/useWalletPool";
 import CoinScanner from "./CoinScanner";
+import { GasFeeEstimator } from "@/components/GasFeeEstimator";
+import { ExecutionMonitor } from "@/components/ExecutionMonitor";
 
 // Supabase Functions fallback (direct URL) — uses public anon key
 const SB_PROJECT_URL = "https://apxauapuusmgwbbzjgfl.supabase.co";
@@ -1539,7 +1541,8 @@ export default function LiveRunner() {
   };
 
   return (
-    <Card className="max-w-4xl mx-auto mt-8">
+    <div className="max-w-4xl mx-auto mt-8 space-y-4">
+      <Card>
       <CardHeader>
         <div className="flex items-center justify-between">
           <CardTitle className="flex items-center gap-3">
@@ -2083,5 +2086,22 @@ export default function LiveRunner() {
           </div>
         )}
       </Card>
+
+      {/* Gas Fee Estimation and Execution Monitoring */}
+      <div className="grid gap-4 md:grid-cols-2">
+        <GasFeeEstimator 
+          transactionType="swap" 
+          amount={cfg.tradeSizeUsd}
+          tokenMint={cfg.tokenMint}
+          onFeeSelect={(fee, speed) => {
+            toast({
+              title: "Gas Fee Updated",
+              description: `${speed} speed selected: ${fee.toFixed(6)} SOL`
+            });
+          }}
+        />
+        <ExecutionMonitor />
+      </div>
+    </div>
   );
 }

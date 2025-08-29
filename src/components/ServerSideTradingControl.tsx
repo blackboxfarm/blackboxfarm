@@ -10,6 +10,9 @@ import { toast } from '@/hooks/use-toast';
 import { useLocalSecrets } from '@/hooks/useLocalSecrets';
 import { useWalletPool } from '@/hooks/useWalletPool';
 import { supabase } from '@/integrations/supabase/client';
+import { GasFeeEstimator } from '@/components/GasFeeEstimator';
+import { ExecutionMonitor } from '@/components/ExecutionMonitor';
+import { AnalyticsDashboard } from '@/components/AnalyticsDashboard';
 // Note: Will integrate with LiveRunner component later
 // import LiveRunner from './LiveRunner';
 // import type { RunnerConfig } from './LiveRunner';
@@ -372,6 +375,22 @@ export default function ServerSideTradingControl() {
             </div>
           </CardContent>
         </Card>
+      )}
+
+      {/* Gas Fee & Execution Monitoring */}
+      {hasActiveSessions && (
+        <div className="grid gap-4 md:grid-cols-2">
+          <GasFeeEstimator 
+            transactionType="swap" 
+            onFeeSelect={(fee, speed) => {
+              toast({
+                title: "Fee Selected",
+                description: `${speed} speed: ${fee.toFixed(6)} SOL`
+              });
+            }}
+          />
+          <ExecutionMonitor sessionId={sessions.find(s => s.is_active)?.id} />
+        </div>
       )}
 
       {/* Recent Activity */}

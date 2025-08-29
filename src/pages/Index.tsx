@@ -7,6 +7,7 @@ import ServerSideTradingControl from "@/components/ServerSideTradingControl";
 import VolumeSimulator from "@/components/VolumeSimulator";
 import WalletPoolManager from "@/components/WalletPoolManager";
 import { AgenticBrowser } from "@/components/AgenticBrowser";
+import { AnalyticsDashboard } from "@/components/AnalyticsDashboard";
 
 import SecretsModal from "@/components/SecretsModal";
 import { PasswordLogin } from "@/components/PasswordLogin";
@@ -145,7 +146,7 @@ export default function Index() {
         </div>
 
         <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
-          <TabsList className="grid w-full grid-cols-5 tech-border">
+          <TabsList className="grid w-full grid-cols-6 tech-border">
             <TabsTrigger value="server-control" className="text-xs">
               🤖 Server Control
             </TabsTrigger>
@@ -160,6 +161,9 @@ export default function Index() {
             </TabsTrigger>
             <TabsTrigger value="agentic-browser" className="text-xs">
               🌐 Web Agent
+            </TabsTrigger>
+            <TabsTrigger value="analytics" className="text-xs">
+              📊 Analytics
             </TabsTrigger>
           </TabsList>
 
@@ -208,6 +212,10 @@ export default function Index() {
                 <AgenticBrowser />
               </CardContent>
             </Card>
+          </TabsContent>
+
+          <TabsContent value="analytics">
+            <AnalyticsDashboard />
           </TabsContent>
         </Tabs>
       </div>
