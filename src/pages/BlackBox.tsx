@@ -32,7 +32,7 @@ export default function BlackBox() {
               BlackBox Farm
             </h1>
             <p className="text-lg md:text-xl text-muted-foreground max-w-2xl mx-auto md:mx-0">
-              Putting the needle in the Haystack
+              Putting the needle in the Haystack - Bumps for the whole Fam!
             </p>
             <div className="flex justify-center md:hidden space-x-3">
               <AuthButton />
