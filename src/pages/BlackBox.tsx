@@ -21,10 +21,10 @@ export default function BlackBox() {
         <div className="flex justify-between items-start">
           <div className="text-center flex-1 space-y-4">
             <h1 className="text-4xl font-bold bg-gradient-to-r from-primary to-primary/70 bg-clip-text text-transparent">
-              BlackBox BumpBot
+              BlackBox Farm
             </h1>
             <p className="text-xl text-muted-foreground max-w-2xl mx-auto">
-              Professional-grade Solana volume generation. 15% cheaper than competitors with bulletproof security.
+              Putting the needle in the Haystack
             </p>
           </div>
           <div className="flex-shrink-0">
