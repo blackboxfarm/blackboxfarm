@@ -1,12 +1,12 @@
 export const FarmBanner = () => {
   return (
-    <div className="w-full h-32 bg-background border-b border-border overflow-hidden">
+    <div className="w-full h-24 md:h-48 bg-background border-b border-border overflow-hidden">
       <svg 
         width="100%" 
         height="100%" 
         viewBox="0 0 1200 200" 
-        className="w-full h-full md:w-full md:h-full"
-        preserveAspectRatio="xMinYMid meet"
+        className="w-full h-full"
+        preserveAspectRatio="xMidYMid slice"
       >
         {/* Background hills */}
         <path 
