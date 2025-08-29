@@ -27,9 +27,9 @@ export function FeeCalculator() {
     const totalFees = baseFee + totalGasFees + totalServiceFees;
     
     // Competitor comparison (estimated)
-    const smithiiEquivalent = totalTrades * 0.0025 + (totalVolume * 0.002);
-    const bumpiEquivalent = totalTrades * 0.003 + (totalVolume * 0.0015);
-    const competitorAvg = (smithiiEquivalent + bumpiEquivalent) / 2;
+    const competitorAEquivalent = totalTrades * 0.0025 + (totalVolume * 0.002);
+    const competitorBEquivalent = totalTrades * 0.003 + (totalVolume * 0.0015);
+    const competitorAvg = (competitorAEquivalent + competitorBEquivalent) / 2;
     const savings = competitorAvg - totalFees;
     const savingsPercent = (savings / competitorAvg) * 100;
 
@@ -42,8 +42,8 @@ export function FeeCalculator() {
       baseFee,
       totalCostUSD: totalFees * solPrice,
       volumeUSD: totalVolume * solPrice,
-      smithiiEquivalent,
-      bumpiEquivalent,
+      competitorAEquivalent,
+      competitorBEquivalent,
       competitorAvg,
       savings,
       savingsPercent
@@ -150,12 +150,12 @@ export function FeeCalculator() {
               </div>
               <div className="space-y-1 text-sm">
                 <div className="flex justify-between">
-                  <span>Smithii (~):</span>
-                  <span>{formatSOL(calculations.smithiiEquivalent)} SOL</span>
+                  <span>Competitor A (~):</span>
+                  <span>{formatSOL(calculations.competitorAEquivalent)} SOL</span>
                 </div>
                 <div className="flex justify-between">
-                  <span>Bumpi (~):</span>
-                  <span>{formatSOL(calculations.bumpiEquivalent)} SOL</span>
+                  <span>Competitor B (~):</span>
+                  <span>{formatSOL(calculations.competitorBEquivalent)} SOL</span>
                 </div>
                 <div className="flex justify-between font-medium border-t pt-1">
                   <span>Average:</span>
@@ -227,7 +227,7 @@ export function FeeCalculator() {
                     <span className="text-primary font-medium">0.02 SOL</span>
                   </div>
                   <div className="flex justify-between text-muted-foreground">
-                    <span>Smithii:</span>
+                    <span>Competitor A:</span>
                     <span>0.025 SOL</span>
                   </div>
                   <div className="text-green-600 text-xs">20% cheaper</div>
@@ -245,7 +245,7 @@ export function FeeCalculator() {
                     <span className="text-primary font-medium">0.09 SOL</span>
                   </div>
                   <div className="flex justify-between text-muted-foreground">
-                    <span>Bumpi:</span>
+                    <span>Competitor B:</span>
                     <span>0.125 SOL</span>
                   </div>
                   <div className="text-green-600 text-xs">28% cheaper</div>
