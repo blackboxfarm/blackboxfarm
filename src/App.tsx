@@ -6,6 +6,7 @@ import { BrowserRouter, Routes, Route } from "react-router-dom";
 import Index from "./pages/Index";
 import BumpBot from "./pages/BumpBot";
 import BlackBox from "./pages/BlackBox";
+import Auth from "./pages/Auth";
 import { ResetPassword } from "./pages/ResetPassword";
 import NotFound from "./pages/NotFound";
 
@@ -19,6 +20,7 @@ const App = () => (
       <BrowserRouter>
         <Routes>
           <Route path="/" element={<BlackBox />} />
+          <Route path="/auth" element={<Auth />} />
           <Route path="/admin" element={<Index />} />
           <Route path="/bb" element={<BumpBot />} />
           <Route path="/blackbox" element={<BlackBox />} />

@@ -9,6 +9,7 @@ import { useToast } from '@/hooks/use-toast';
 import { Loader2, Mail, Lock } from 'lucide-react';
 import { PasswordResetModal } from './PasswordResetModal';
 import { EmailVerificationModal } from './EmailVerificationModal';
+import { GoogleAuthButton } from './GoogleAuthButton';
 
 interface AuthModalProps {
   isOpen: boolean;
@@ -163,7 +164,20 @@ export const AuthModal = ({ isOpen, onClose, defaultTab = 'signin' }: AuthModalP
                 )}
               </Button>
 
-              <Button 
+              <div className="relative">
+                <div className="absolute inset-0 flex items-center">
+                  <span className="w-full border-t" />
+                </div>
+                <div className="relative flex justify-center text-xs uppercase">
+                  <span className="bg-background px-2 text-muted-foreground">
+                    Or continue with
+                  </span>
+                </div>
+              </div>
+
+              <GoogleAuthButton />
+
+              <Button
                 type="button"
                 variant="ghost"
                 size="sm"
@@ -240,6 +254,19 @@ export const AuthModal = ({ isOpen, onClose, defaultTab = 'signin' }: AuthModalP
                   'Create Account'
                 )}
               </Button>
+
+              <div className="relative">
+                <div className="absolute inset-0 flex items-center">
+                  <span className="w-full border-t" />
+                </div>
+                <div className="relative flex justify-center text-xs uppercase">
+                  <span className="bg-background px-2 text-muted-foreground">
+                    Or continue with
+                  </span>
+                </div>
+              </div>
+
+              <GoogleAuthButton />
             </form>
           </TabsContent>
         </Tabs>
