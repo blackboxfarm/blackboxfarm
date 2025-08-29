@@ -140,13 +140,8 @@ export function SubscriptionManager() {
   };
 
   const getTierColor = (tierName: string) => {
-    switch (tierName.toLowerCase()) {
-      case 'starter': return 'bg-orange-50 border-orange-200 text-gray-800';
-      case 'growth': return 'bg-amber-50 border-amber-200 text-gray-800';
-      case 'pro': return 'bg-yellow-50 border-yellow-200 text-gray-800';
-      case 'enterprise': return 'bg-orange-100 border-orange-300 text-gray-800';
-      default: return 'bg-orange-50 border-orange-200 text-gray-800';
-    }
+    // Use consistent darker beige color for all tiers
+    return 'bg-orange-100 border-orange-300 text-gray-800';
   };
 
   if (loading) {
