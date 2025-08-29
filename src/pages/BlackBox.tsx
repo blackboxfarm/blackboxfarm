@@ -7,12 +7,15 @@ import { FeeCalculator } from "@/components/blackbox/FeeCalculator";
 import { AuthButton } from "@/components/auth/AuthButton";
 import { RequireAuth } from "@/components/RequireAuth";
 import VolumeSimulator from "@/components/VolumeSimulator";
+import { FarmBanner } from "@/components/FarmBanner";
 
 export default function BlackBox() {
   const [activeTab, setActiveTab] = useState("dashboard");
 
   return (
     <div className="min-h-screen bg-background">
+      {/* Farm Banner Header */}
+      <FarmBanner />
       <div className="container mx-auto py-6 space-y-8">
         {/* Header */}
         <div className="flex justify-between items-start">
