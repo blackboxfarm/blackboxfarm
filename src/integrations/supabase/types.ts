@@ -837,7 +837,42 @@ export type Database = {
       }
     }
     Views: {
-      [_ in never]: never
+      safe_user_profiles: {
+        Row: {
+          avatar_url: string | null
+          created_at: string | null
+          display_name: string | null
+          email_verified: boolean | null
+          id: string | null
+          phone_verified: boolean | null
+          two_factor_enabled: boolean | null
+          updated_at: string | null
+          user_id: string | null
+        }
+        Insert: {
+          avatar_url?: string | null
+          created_at?: string | null
+          display_name?: string | null
+          email_verified?: boolean | null
+          id?: string | null
+          phone_verified?: boolean | null
+          two_factor_enabled?: boolean | null
+          updated_at?: string | null
+          user_id?: string | null
+        }
+        Update: {
+          avatar_url?: string | null
+          created_at?: string | null
+          display_name?: string | null
+          email_verified?: boolean | null
+          id?: string | null
+          phone_verified?: boolean | null
+          two_factor_enabled?: boolean | null
+          updated_at?: string | null
+          user_id?: string | null
+        }
+        Relationships: []
+      }
     }
     Functions: {
       check_rate_limit: {
@@ -852,6 +887,10 @@ export type Database = {
       check_suspicious_activity: {
         Args: { check_ip: unknown; time_window_minutes?: number }
         Returns: Json
+      }
+      check_user_access_with_security: {
+        Args: { target_user_id: string }
+        Returns: boolean
       }
       decrypt_owner_secret: {
         Args: { encrypted_secret: string }
@@ -940,6 +979,14 @@ export type Database = {
       log_auth_failure: {
         Args: { client_info?: Json; failure_reason: string; user_email: string }
         Returns: undefined
+      }
+      mask_sensitive_data: {
+        Args: { input_text: string }
+        Returns: string
+      }
+      validate_secret_access: {
+        Args: { requesting_user_id: string; target_user_id: string }
+        Returns: boolean
       }
       verify_access_password: {
         Args: { input_password: string }
