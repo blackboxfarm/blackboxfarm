@@ -266,54 +266,6 @@ export type Database = {
           },
         ]
       }
-      development_ideas: {
-        Row: {
-          category: string
-          completed_at: string | null
-          created_at: string | null
-          description: string
-          estimated_effort: string | null
-          id: string
-          notes: string | null
-          priority: string | null
-          status: string | null
-          tags: string[] | null
-          title: string
-          updated_at: string | null
-          user_id: string | null
-        }
-        Insert: {
-          category: string
-          completed_at?: string | null
-          created_at?: string | null
-          description: string
-          estimated_effort?: string | null
-          id?: string
-          notes?: string | null
-          priority?: string | null
-          status?: string | null
-          tags?: string[] | null
-          title: string
-          updated_at?: string | null
-          user_id?: string | null
-        }
-        Update: {
-          category?: string
-          completed_at?: string | null
-          created_at?: string | null
-          description?: string
-          estimated_effort?: string | null
-          id?: string
-          notes?: string | null
-          priority?: string | null
-          status?: string | null
-          tags?: string[] | null
-          title?: string
-          updated_at?: string | null
-          user_id?: string | null
-        }
-        Relationships: []
-      }
       emergency_sells: {
         Row: {
           created_at: string | null
