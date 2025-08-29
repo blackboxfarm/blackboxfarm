@@ -59,7 +59,7 @@ export function FeeCalculator() {
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <Calculator className="h-5 w-5" />
-            Fee Calculator - See Why We're 15% Cheaper
+            Fee Calculator - See Why We're Cheaper
           </CardTitle>
         </CardHeader>
         <CardContent className="space-y-6">

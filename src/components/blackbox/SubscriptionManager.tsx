@@ -280,36 +280,6 @@ export function SubscriptionManager() {
         </CardContent>
       </Card>
 
-      {/* Revenue Information */}
-      <Card className="bg-orange-100 border-orange-300 text-gray-800">
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            💰 Revenue Model
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="grid md:grid-cols-2 gap-6">
-            <div>
-              <h4 className="font-medium mb-2">How You Earn</h4>
-              <ul className="space-y-1 text-sm">
-                <li>• Setup fees collected upfront</li>
-                <li>• Per-trade fees on every transaction</li>
-                <li>• 25-35% markup on network fees</li>
-                <li>• Automatic revenue collection</li>
-              </ul>
-            </div>
-            <div>
-              <h4 className="font-medium mb-2">Pricing Strategy</h4>
-              <ul className="space-y-1 text-sm">
-                <li>• 15x higher than previous rates</li>
-                <li>• Still competitive with market</li>
-                <li>• Premium features justify pricing</li>
-                <li>• Subscription-based recurring revenue</li>
-              </ul>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
     </div>
   );
 }

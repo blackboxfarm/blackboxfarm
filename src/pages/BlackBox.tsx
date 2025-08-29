@@ -94,8 +94,8 @@ export default function BlackBox() {
           <CardContent className="p-8">
             <div className="grid md:grid-cols-3 gap-6 text-center">
               <div>
-                <h3 className="text-2xl font-bold text-primary mb-2">15% Cheaper</h3>
-                <p className="text-muted-foreground">Undercut Smithii & Bumpi with transparent flat-rate pricing</p>
+                <h3 className="text-2xl font-bold text-primary mb-2">Cheaper</h3>
+                <p className="text-muted-foreground">We Undercut our competitors with transparent flat-rate pricing</p>
               </div>
               <div>
                 <h3 className="text-2xl font-bold text-primary mb-2">Security First</h3>
