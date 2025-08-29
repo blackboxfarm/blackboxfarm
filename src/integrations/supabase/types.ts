@@ -837,42 +837,7 @@ export type Database = {
       }
     }
     Views: {
-      safe_user_profiles: {
-        Row: {
-          avatar_url: string | null
-          created_at: string | null
-          display_name: string | null
-          email_verified: boolean | null
-          id: string | null
-          phone_verified: boolean | null
-          two_factor_enabled: boolean | null
-          updated_at: string | null
-          user_id: string | null
-        }
-        Insert: {
-          avatar_url?: string | null
-          created_at?: string | null
-          display_name?: string | null
-          email_verified?: boolean | null
-          id?: string | null
-          phone_verified?: boolean | null
-          two_factor_enabled?: boolean | null
-          updated_at?: string | null
-          user_id?: string | null
-        }
-        Update: {
-          avatar_url?: string | null
-          created_at?: string | null
-          display_name?: string | null
-          email_verified?: boolean | null
-          id?: string | null
-          phone_verified?: boolean | null
-          two_factor_enabled?: boolean | null
-          updated_at?: string | null
-          user_id?: string | null
-        }
-        Relationships: []
-      }
+      [_ in never]: never
     }
     Functions: {
       check_rate_limit: {
