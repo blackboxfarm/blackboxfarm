@@ -915,6 +915,10 @@ export type Database = {
         Args: { config_key_param: string }
         Returns: Json
       }
+      get_security_status: {
+        Args: Record<PropertyKey, never>
+        Returns: Json
+      }
       get_user_secrets_decrypted: {
         Args: { user_id_param: string }
         Returns: {
