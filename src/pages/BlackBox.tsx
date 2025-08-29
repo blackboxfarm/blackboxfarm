@@ -8,6 +8,7 @@ import { AuthButton } from "@/components/auth/AuthButton";
 import { RequireAuth } from "@/components/RequireAuth";
 import VolumeSimulator from "@/components/VolumeSimulator";
 import { FarmBanner } from "@/components/FarmBanner";
+import { SecurityDashboard } from "@/components/security/SecurityDashboard";
 
 export default function BlackBox() {
   const [activeTab, setActiveTab] = useState("dashboard");
@@ -37,12 +38,17 @@ export default function BlackBox() {
 
         {/* Main Navigation */}
         <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-          <TabsList className="grid w-full grid-cols-4">
+          <TabsList className="grid w-full grid-cols-5">
+            <TabsTrigger value="security">Security</TabsTrigger>
             <TabsTrigger value="dashboard">Dashboard</TabsTrigger>
             <TabsTrigger value="simulator">Simulator</TabsTrigger>
             <TabsTrigger value="fees">Fee Calculator</TabsTrigger>
             <TabsTrigger value="account">Account</TabsTrigger>
           </TabsList>
+
+          <TabsContent value="security" className="space-y-6">
+            <SecurityDashboard />
+          </TabsContent>
 
           <TabsContent value="dashboard" className="space-y-6">
             <RequireAuth>
