@@ -21,3 +21,9 @@ verify_jwt = true
 [functions.agentic-browser]
 verify_jwt = false
 
+[functions.security-logger]
+verify_jwt = false
+
+[functions.development-ideas]
+verify_jwt = false
+
