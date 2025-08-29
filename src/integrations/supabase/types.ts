@@ -266,6 +266,54 @@ export type Database = {
           },
         ]
       }
+      development_ideas: {
+        Row: {
+          category: string
+          completed_at: string | null
+          created_at: string | null
+          description: string
+          estimated_effort: string | null
+          id: string
+          notes: string | null
+          priority: string | null
+          status: string | null
+          tags: string[] | null
+          title: string
+          updated_at: string | null
+          user_id: string | null
+        }
+        Insert: {
+          category: string
+          completed_at?: string | null
+          created_at?: string | null
+          description: string
+          estimated_effort?: string | null
+          id?: string
+          notes?: string | null
+          priority?: string | null
+          status?: string | null
+          tags?: string[] | null
+          title: string
+          updated_at?: string | null
+          user_id?: string | null
+        }
+        Update: {
+          category?: string
+          completed_at?: string | null
+          created_at?: string | null
+          description?: string
+          estimated_effort?: string | null
+          id?: string
+          notes?: string | null
+          priority?: string | null
+          status?: string | null
+          tags?: string[] | null
+          title?: string
+          updated_at?: string | null
+          user_id?: string | null
+        }
+        Relationships: []
+      }
       emergency_sells: {
         Row: {
           created_at: string | null
@@ -297,6 +345,84 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      notifications: {
+        Row: {
+          created_at: string
+          id: string
+          is_read: boolean
+          message: string
+          metadata: Json | null
+          title: string
+          type: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          is_read?: boolean
+          message: string
+          metadata?: Json | null
+          title: string
+          type?: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          is_read?: boolean
+          message?: string
+          metadata?: Json | null
+          title?: string
+          type?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      profiles: {
+        Row: {
+          avatar_url: string | null
+          created_at: string
+          display_name: string | null
+          email_verified: boolean | null
+          id: string
+          phone_number: string | null
+          phone_verified: boolean | null
+          two_factor_enabled: boolean | null
+          two_factor_secret: string | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          avatar_url?: string | null
+          created_at?: string
+          display_name?: string | null
+          email_verified?: boolean | null
+          id?: string
+          phone_number?: string | null
+          phone_verified?: boolean | null
+          two_factor_enabled?: boolean | null
+          two_factor_secret?: string | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          avatar_url?: string | null
+          created_at?: string
+          display_name?: string | null
+          email_verified?: boolean | null
+          id?: string
+          phone_number?: string | null
+          phone_verified?: boolean | null
+          two_factor_enabled?: boolean | null
+          two_factor_secret?: string | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
       }
       rate_limits: {
         Row: {
