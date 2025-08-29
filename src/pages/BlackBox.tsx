@@ -8,12 +8,14 @@ import { AuthButton } from "@/components/auth/AuthButton";
 import { RequireAuth } from "@/components/RequireAuth";
 import VolumeSimulator from "@/components/VolumeSimulator";
 import { FarmBanner } from "@/components/FarmBanner";
+import { SubscriptionManager } from "@/components/blackbox/SubscriptionManager";
+import { WalletGenerator } from "@/components/WalletGenerator";
 import { SecurityDashboard } from "@/components/security/SecurityDashboard";
 import { NotificationCenter } from "@/components/NotificationCenter";
 import { AnalyticsDashboard } from "@/components/AnalyticsDashboard";
 
 export default function BlackBox() {
-  const [activeTab, setActiveTab] = useState("dashboard");
+  const [activeTab, setActiveTab] = useState("pricing");
 
   return (
     <div className="min-h-screen bg-background">
@@ -42,21 +44,22 @@ export default function BlackBox() {
         {/* Main Navigation */}
         <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
           <TabsList className="grid w-full grid-cols-6">
-            <TabsTrigger value="security">Security</TabsTrigger>
+            <TabsTrigger value="pricing">Pricing</TabsTrigger>
             <TabsTrigger value="dashboard">Dashboard</TabsTrigger>
             <TabsTrigger value="simulator">Simulator</TabsTrigger>
-            <TabsTrigger value="fees">Fee Calculator</TabsTrigger>
+            <TabsTrigger value="fees">Calculator</TabsTrigger>
             <TabsTrigger value="analytics">Analytics</TabsTrigger>
-            <TabsTrigger value="account">Account</TabsTrigger>
+            <TabsTrigger value="security">Security</TabsTrigger>
           </TabsList>
 
-          <TabsContent value="security" className="space-y-6">
-            <SecurityDashboard />
+          <TabsContent value="pricing" className="space-y-6">
+            <SubscriptionManager />
           </TabsContent>
 
           <TabsContent value="dashboard" className="space-y-6">
             <RequireAuth>
               <CampaignDashboard />
+              <WalletGenerator />
             </RequireAuth>
           </TabsContent>
 
@@ -79,10 +82,8 @@ export default function BlackBox() {
             <AnalyticsDashboard />
           </TabsContent>
 
-          <TabsContent value="account" className="space-y-6">
-            <RequireAuth>
-              <BlackBoxAuth />
-            </RequireAuth>
+          <TabsContent value="security" className="space-y-6">
+            <SecurityDashboard />
           </TabsContent>
         </Tabs>
 

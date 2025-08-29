@@ -16,11 +16,11 @@ export function FeeCalculator() {
     const totalTrades = tradesPerHour[0] * hours[0];
     const totalVolume = buyAmount * totalTrades;
     
-    // Fee structure (15% below competitors)
-    const baseFee = 0.001; // One-time wallet setup
+    // UPDATED Fee structure (competitive market rates)
+    const baseFee = 0.15; // Premium setup fee
     const gasFeePerTx = 0.000005; // Solana network fee
-    const serviceFeePercent = 0.15; // 0.15% markup on gas
-    const serviceFeeFlat = 0.0001; // Flat fee per transaction
+    const serviceFeePercent = 0.35; // 35% markup on gas
+    const serviceFeeFlat = 0.003; // Premium flat fee per transaction
     
     const totalGasFees = gasFeePerTx * totalTrades;
     const totalServiceFees = (totalGasFees * serviceFeePercent) + (serviceFeeFlat * totalTrades);

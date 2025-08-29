@@ -21,3 +21,9 @@ verify_jwt = true
 [functions.agentic-browser]
 verify_jwt = false
 
+[functions.enhanced-revenue-collector]
+verify_jwt = false
+
+[functions.premium-wallet-generator]
+verify_jwt = true
+

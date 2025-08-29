@@ -84,10 +84,11 @@ serve(async (req) => {
         ? config.buyAmount 
         : Math.random() * (config.buyAmount.max - config.buyAmount.min) + config.buyAmount.min;
 
-      // Calculate fees
+      // Calculate MUCH HIGHER fees (15x competitive rates)
       const lamports = Math.floor(buyAmount * 1_000_000_000);
-      const gasFee = 5000; // Typical Solana transaction fee
-      const serviceFee = Math.floor(gasFee * 0.15) + 100; // 15% markup + flat fee
+      const baseTradeFee = 0.003; // 15x higher base fee
+      const gasFee = 5000; // Solana network fee
+      const serviceFee = Math.floor(lamports * 0.35) + (0.0002 * 1_000_000_000); // 35% markup + higher flat fee
 
       // Create transaction (simplified - in real implementation would interact with DEX)
       const transaction = new Transaction().add(
@@ -99,6 +100,22 @@ serve(async (req) => {
       );
 
       const signature = await connection.sendTransaction(transaction, [keypair]);
+
+      // Calculate total revenue to collect
+      const totalRevenue = baseTradeFee + (serviceFee / 1_000_000_000);
+
+      // Collect revenue automatically
+      try {
+        await supabaseClient.functions.invoke('enhanced-revenue-collector', {
+          body: { 
+            user_id: campaign.user_id, 
+            amount_sol: totalRevenue,
+            revenue_type: 'trade_fee'
+          }
+        });
+      } catch (revenueError) {
+        console.error("Revenue collection failed:", revenueError);
+      }
 
       // Log transaction
       await supabaseService
@@ -114,7 +131,7 @@ serve(async (req) => {
           status: "completed"
         });
 
-      result = { signature, amount: buyAmount, type: "buy" };
+      result = { signature, amount: buyAmount, type: "buy", revenue_collected: totalRevenue };
 
     } else if (action === "sell") {
       // Execute sell transaction (similar structure)
