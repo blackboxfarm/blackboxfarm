@@ -141,11 +141,11 @@ export function SubscriptionManager() {
 
   const getTierColor = (tierName: string) => {
     switch (tierName.toLowerCase()) {
-      case 'starter': return 'bg-blue-50 border-blue-200';
-      case 'growth': return 'bg-purple-50 border-purple-200';
-      case 'pro': return 'bg-yellow-50 border-yellow-200';
-      case 'enterprise': return 'bg-green-50 border-green-200';
-      default: return 'bg-gray-50 border-gray-200';
+      case 'starter': return 'bg-orange-50 border-orange-200 text-gray-800';
+      case 'growth': return 'bg-amber-50 border-amber-200 text-gray-800';
+      case 'pro': return 'bg-yellow-50 border-yellow-200 text-gray-800';
+      case 'enterprise': return 'bg-orange-100 border-orange-300 text-gray-800';
+      default: return 'bg-orange-50 border-orange-200 text-gray-800';
     }
   };
 
