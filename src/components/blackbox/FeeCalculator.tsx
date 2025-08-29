@@ -17,10 +17,10 @@ export function FeeCalculator() {
     const totalVolume = buyAmount * totalTrades;
     
     // BlackBox competitive fee structure (actually cheaper)
-    const baseFee = 0.005; // Minimal setup fee
+    const baseFee = 0.01; // Setup fee
     const gasFeePerTx = 0.000005; // Solana network fee
-    const serviceFeePercent = 0.05; // 5% markup on gas (very competitive)
-    const serviceFeeFlat = 0.0015; // Low flat fee per transaction
+    const serviceFeePercent = 0.13; // 13% markup on gas (competitive)
+    const serviceFeeFlat = 0.0018; // Flat fee per transaction (increased)
     
     const totalGasFees = gasFeePerTx * totalTrades;
     const totalServiceFees = (totalGasFees * serviceFeePercent) + (serviceFeeFlat * totalTrades);
