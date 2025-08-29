@@ -9,6 +9,7 @@ import { RequireAuth } from "@/components/RequireAuth";
 import VolumeSimulator from "@/components/VolumeSimulator";
 import { FarmBanner } from "@/components/FarmBanner";
 import { SecurityDashboard } from "@/components/security/SecurityDashboard";
+import { NotificationCenter } from "@/components/NotificationCenter";
 
 export default function BlackBox() {
   const [activeTab, setActiveTab] = useState("dashboard");
@@ -31,7 +32,8 @@ export default function BlackBox() {
               <AuthButton />
             </div>
           </div>
-          <div className="hidden md:flex flex-shrink-0">
+          <div className="hidden md:flex flex-shrink-0 items-center gap-3">
+            <NotificationCenter />
             <AuthButton />
           </div>
         </div>
