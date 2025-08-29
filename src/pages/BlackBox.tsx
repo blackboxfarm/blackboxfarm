@@ -13,6 +13,7 @@ import { WalletGenerator } from "@/components/WalletGenerator";
 import { SecurityDashboard } from "@/components/security/SecurityDashboard";
 import { NotificationCenter } from "@/components/NotificationCenter";
 import { AnalyticsDashboard } from "@/components/AnalyticsDashboard";
+import { ReferralDashboard } from "@/components/blackbox/ReferralDashboard";
 import { useAuth } from "@/hooks/useAuth";
 
 export default function BlackBox() {
@@ -45,12 +46,13 @@ export default function BlackBox() {
 
         {/* Main Navigation */}
         <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-          <TabsList className={`grid w-full ${user ? 'grid-cols-6' : 'grid-cols-4'}`}>
+          <TabsList className={`grid w-full ${user ? 'grid-cols-7' : 'grid-cols-4'}`}>
             <TabsTrigger value="pricing">Pricing</TabsTrigger>
             {user && <TabsTrigger value="dashboard">Dashboard</TabsTrigger>}
             <TabsTrigger value="simulator">Simulator</TabsTrigger>
             <TabsTrigger value="fees">Calculator</TabsTrigger>
             <TabsTrigger value="analytics">Analytics</TabsTrigger>
+            {user && <TabsTrigger value="referrals">Referrals</TabsTrigger>}
             {user && <TabsTrigger value="security">Security</TabsTrigger>}
           </TabsList>
 
@@ -82,6 +84,10 @@ export default function BlackBox() {
 
           <TabsContent value="analytics" className="space-y-6">
             <AnalyticsDashboard />
+          </TabsContent>
+
+          <TabsContent value="referrals" className="space-y-6">
+            <ReferralDashboard />
           </TabsContent>
 
           <TabsContent value="security" className="space-y-6">

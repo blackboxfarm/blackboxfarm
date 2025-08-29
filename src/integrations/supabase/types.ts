@@ -556,6 +556,75 @@ export type Database = {
         }
         Relationships: []
       }
+      referral_programs: {
+        Row: {
+          created_at: string
+          discount_earned: boolean
+          discount_used: boolean
+          id: string
+          referral_code: string
+          referrals_count: number
+          successful_referrals: number
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          discount_earned?: boolean
+          discount_used?: boolean
+          id?: string
+          referral_code: string
+          referrals_count?: number
+          successful_referrals?: number
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          discount_earned?: boolean
+          discount_used?: boolean
+          id?: string
+          referral_code?: string
+          referrals_count?: number
+          successful_referrals?: number
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      referrals: {
+        Row: {
+          campaign_created: boolean
+          created_at: string
+          id: string
+          referral_code: string
+          referred_user_id: string
+          referrer_id: string
+          reward_granted: boolean
+          updated_at: string
+        }
+        Insert: {
+          campaign_created?: boolean
+          created_at?: string
+          id?: string
+          referral_code: string
+          referred_user_id: string
+          referrer_id: string
+          reward_granted?: boolean
+          updated_at?: string
+        }
+        Update: {
+          campaign_created?: boolean
+          created_at?: string
+          id?: string
+          referral_code?: string
+          referred_user_id?: string
+          referrer_id?: string
+          reward_granted?: boolean
+          updated_at?: string
+        }
+        Relationships: []
+      }
       revenue_transactions: {
         Row: {
           amount_sol: number
@@ -1000,6 +1069,10 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      apply_referral_discount: {
+        Args: { user_id_param: string }
+        Returns: Json
+      }
       check_rate_limit: {
         Args: {
           check_action_type: string
@@ -1039,6 +1112,10 @@ export type Database = {
       }
       encrypt_wallet_secret: {
         Args: { input_secret: string }
+        Returns: string
+      }
+      generate_referral_code: {
+        Args: { user_id_param: string }
         Returns: string
       }
       get_active_positions_with_secrets: {
@@ -1123,6 +1200,10 @@ export type Database = {
       mask_sensitive_data: {
         Args: { input_text: string }
         Returns: string
+      }
+      track_referral_signup: {
+        Args: { new_user_id: string; referral_code_param: string }
+        Returns: Json
       }
       validate_secret_access: {
         Args: { requesting_user_id: string; target_user_id: string }
