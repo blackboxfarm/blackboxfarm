@@ -95,7 +95,7 @@ export function ReferralDashboard() {
 
       if (error) throw error;
 
-      const result = data as ReferralResponse;
+      const result = data as unknown as ReferralResponse;
       if (result.success) {
         toast({
           title: "Success!",
@@ -131,7 +131,7 @@ export function ReferralDashboard() {
 
       if (error) throw error;
 
-      const result = data as DiscountResponse;
+      const result = data as unknown as DiscountResponse;
       if (result.has_discount) {
         toast({
           title: "Discount Applied!",
