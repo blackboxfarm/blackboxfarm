@@ -45,15 +45,22 @@ export const FarmBanner = () => {
           <line x1="82" y1="32" x2="75" y2="25" />
         </g>
         
-        {/* Barn */}
+        {/* Red Barn */}
         <g stroke="hsl(var(--primary))" strokeWidth="2" fill="none">
-          {/* Barn base */}
-          <rect x="200" y="80" width="80" height="60" />
-          {/* Barn roof */}
-          <path d="M190 80 L240 50 L290 80 Z" />
-          {/* Barn door */}
+          {/* Barn main structure */}
+          <rect x="200" y="85" width="80" height="55" />
+          {/* Barn roof - peaked */}
+          <path d="M190 85 L240 55 L290 85 Z" />
+          {/* Barn door - classic X pattern */}
           <rect x="220" y="110" width="20" height="30" />
-          <line x1="230" y1="110" x2="230" y2="140" strokeWidth="1" />
+          <line x1="220" y1="110" x2="240" y2="140" strokeWidth="1" />
+          <line x1="240" y1="110" x2="220" y2="140" strokeWidth="1" />
+          {/* Barn windows */}
+          <rect x="210" y="95" width="8" height="8" />
+          <rect x="262" y="95" width="8" height="8" />
+          {/* Silo */}
+          <rect x="290" y="70" width="20" height="70" />
+          <ellipse cx="300" cy="70" rx="10" ry="4" />
         </g>
         
         {/* Tree */}
