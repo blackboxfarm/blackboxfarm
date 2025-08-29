@@ -298,6 +298,45 @@ export type Database = {
           },
         ]
       }
+      rate_limits: {
+        Row: {
+          action_type: string
+          attempt_count: number | null
+          blocked_until: string | null
+          created_at: string | null
+          first_attempt: string | null
+          id: string
+          identifier: string
+          is_blocked: boolean | null
+          last_attempt: string | null
+          updated_at: string | null
+        }
+        Insert: {
+          action_type: string
+          attempt_count?: number | null
+          blocked_until?: string | null
+          created_at?: string | null
+          first_attempt?: string | null
+          id?: string
+          identifier: string
+          is_blocked?: boolean | null
+          last_attempt?: string | null
+          updated_at?: string | null
+        }
+        Update: {
+          action_type?: string
+          attempt_count?: number | null
+          blocked_until?: string | null
+          created_at?: string | null
+          first_attempt?: string | null
+          id?: string
+          identifier?: string
+          is_blocked?: boolean | null
+          last_attempt?: string | null
+          updated_at?: string | null
+        }
+        Relationships: []
+      }
       security_audit_log: {
         Row: {
           created_at: string
@@ -325,6 +364,36 @@ export type Database = {
           ip_address?: unknown | null
           table_name?: string
           user_id?: string | null
+        }
+        Relationships: []
+      }
+      security_config: {
+        Row: {
+          config_key: string
+          config_value: Json
+          created_at: string | null
+          description: string | null
+          id: string
+          is_active: boolean | null
+          updated_at: string | null
+        }
+        Insert: {
+          config_key: string
+          config_value: Json
+          created_at?: string | null
+          description?: string | null
+          id?: string
+          is_active?: boolean | null
+          updated_at?: string | null
+        }
+        Update: {
+          config_key?: string
+          config_value?: Json
+          created_at?: string | null
+          description?: string | null
+          id?: string
+          is_active?: boolean | null
+          updated_at?: string | null
         }
         Relationships: []
       }
@@ -618,6 +687,19 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      check_rate_limit: {
+        Args: {
+          check_action_type: string
+          check_identifier: string
+          max_attempts?: number
+          window_minutes?: number
+        }
+        Returns: Json
+      }
+      check_suspicious_activity: {
+        Args: { check_ip: unknown; time_window_minutes?: number }
+        Returns: Json
+      }
       decrypt_owner_secret: {
         Args: { encrypted_secret: string }
         Returns: string
@@ -672,6 +754,10 @@ export type Database = {
           user_id: string
         }[]
       }
+      get_security_config: {
+        Args: { config_key_param: string }
+        Returns: Json
+      }
       get_user_secrets_decrypted: {
         Args: { user_id_param: string }
         Returns: {
@@ -697,6 +783,10 @@ export type Database = {
           sol_balance: number
           user_id: string
         }[]
+      }
+      log_auth_failure: {
+        Args: { client_info?: Json; failure_reason: string; user_email: string }
+        Returns: undefined
       }
       verify_access_password: {
         Args: { input_password: string }
