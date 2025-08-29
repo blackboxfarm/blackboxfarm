@@ -13,9 +13,11 @@ import { WalletGenerator } from "@/components/WalletGenerator";
 import { SecurityDashboard } from "@/components/security/SecurityDashboard";
 import { NotificationCenter } from "@/components/NotificationCenter";
 import { AnalyticsDashboard } from "@/components/AnalyticsDashboard";
+import { useAuth } from "@/hooks/useAuth";
 
 export default function BlackBox() {
   const [activeTab, setActiveTab] = useState("pricing");
+  const { user } = useAuth();
 
   return (
     <div className="min-h-screen bg-background">
@@ -43,13 +45,13 @@ export default function BlackBox() {
 
         {/* Main Navigation */}
         <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-          <TabsList className="grid w-full grid-cols-6">
+          <TabsList className={`grid w-full ${user ? 'grid-cols-6' : 'grid-cols-4'}`}>
             <TabsTrigger value="pricing">Pricing</TabsTrigger>
-            <TabsTrigger value="dashboard">Dashboard</TabsTrigger>
+            {user && <TabsTrigger value="dashboard">Dashboard</TabsTrigger>}
             <TabsTrigger value="simulator">Simulator</TabsTrigger>
             <TabsTrigger value="fees">Calculator</TabsTrigger>
             <TabsTrigger value="analytics">Analytics</TabsTrigger>
-            <TabsTrigger value="security">Security</TabsTrigger>
+            {user && <TabsTrigger value="security">Security</TabsTrigger>}
           </TabsList>
 
           <TabsContent value="pricing" className="space-y-6">

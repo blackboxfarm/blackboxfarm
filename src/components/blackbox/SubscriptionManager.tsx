@@ -281,7 +281,7 @@ export function SubscriptionManager() {
       </Card>
 
       {/* Revenue Information */}
-      <Card className="bg-yellow-50 border-yellow-200">
+      <Card className="bg-orange-100 border-orange-300 text-gray-800">
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             💰 Revenue Model
