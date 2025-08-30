@@ -7,7 +7,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Slider } from "@/components/ui/slider";
-import { Plus, Play, Pause, Settings, AlertTriangle, DollarSign, BarChart3, TrendingUp } from "lucide-react";
+import { Plus, Play, Pause, Settings, AlertTriangle, DollarSign, BarChart3, TrendingUp, Info, Eye, EyeOff } from "lucide-react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "@/hooks/use-toast";
@@ -56,6 +56,8 @@ export function WalletCommands({ wallet, campaign, isDevMode = false, devBalance
   const [commandStats, setCommandStats] = useState<Record<string, CommandStats>>({});
   const [showSimulation, setShowSimulation] = useState<string | null>(null);
   const [simulationHours, setSimulationHours] = useState([24]);
+  const [showWalletAlert, setShowWalletAlert] = useState(!isDevMode);
+  const [showTradingCosts, setShowTradingCosts] = useState(false);
   const [newCommand, setNewCommand] = useState({
     name: "",
     mode: "simple",
@@ -79,7 +81,8 @@ export function WalletCommands({ wallet, campaign, isDevMode = false, devBalance
   useEffect(() => {
     loadCommands();
     loadCommandStats();
-  }, [wallet.id]);
+    setShowWalletAlert(!isDevMode); // Hide alert in dev mode
+  }, [wallet.id, isDevMode]);
 
   const loadCommands = async () => {
     const { data, error } = await supabase
@@ -284,9 +287,35 @@ export function WalletCommands({ wallet, campaign, isDevMode = false, devBalance
     <Card>
       <CardHeader>
         <div className="flex items-center justify-between">
-          <CardTitle>
-            Wallet Commands - {wallet.pubkey.slice(0, 8)}...{wallet.pubkey.slice(-6)}
-          </CardTitle>
+          <div className="flex items-center gap-2">
+            <Button
+              size="sm"
+              variant="ghost"
+              onClick={() => setShowWalletAlert(!showWalletAlert)}
+              className="p-1 h-6 w-6"
+            >
+              {showWalletAlert ? (
+                <Eye className="h-3 w-3 text-destructive" />
+              ) : (
+                <EyeOff className="h-3 w-3 text-muted-foreground" />
+              )}
+            </Button>
+            <Button
+              size="sm"
+              variant="ghost"
+              onClick={() => setShowTradingCosts(!showTradingCosts)}
+              className="p-1 h-6 w-6"
+            >
+              {showTradingCosts ? (
+                <Eye className="h-3 w-3 text-primary" />
+              ) : (
+                <EyeOff className="h-3 w-3 text-muted-foreground" />
+              )}
+            </Button>
+            <CardTitle>
+              Wallet Commands - {wallet.pubkey.slice(0, 8)}...{wallet.pubkey.slice(-6)}
+            </CardTitle>
+          </div>
           <Button onClick={() => setShowCreateForm(true)} size="sm">
             <Plus className="h-4 w-4 mr-2" />
             New Command
@@ -295,7 +324,7 @@ export function WalletCommands({ wallet, campaign, isDevMode = false, devBalance
       </CardHeader>
       <CardContent className="space-y-6">
         {/* Wallet Balance Warning */}
-        {wallet.sol_balance <= 0 && (
+        {showWalletAlert && wallet.sol_balance <= 0 && !isDevMode && (
           <Alert variant="destructive">
             <AlertTriangle className="h-4 w-4" />
             <AlertDescription>
@@ -311,7 +340,7 @@ export function WalletCommands({ wallet, campaign, isDevMode = false, devBalance
         )}
 
         {/* Low Balance Warning */}
-        {wallet.sol_balance > 0 && wallet.sol_balance < 0.01 && (
+        {showWalletAlert && wallet.sol_balance > 0 && wallet.sol_balance < 0.01 && !isDevMode && (
           <Alert>
             <AlertTriangle className="h-4 w-4" />
             <AlertDescription>
@@ -322,9 +351,9 @@ export function WalletCommands({ wallet, campaign, isDevMode = false, devBalance
         )}
 
         {/* Cost Estimation for Active Commands */}
-        {commands.some(c => c.is_active) && (
+        {showTradingCosts && (
           <Alert>
-            <DollarSign className="h-4 w-4" />
+            <Info className="h-4 w-4" />
             <AlertDescription>
               <div className="space-y-1">
                 <p className="font-medium">💰 Trading Costs</p>
