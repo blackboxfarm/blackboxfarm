@@ -8,11 +8,18 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
-interface AuthEmailRequest {
-  email: string;
-  type: 'confirmation' | 'recovery' | 'magic_link';
-  token?: string;
-  redirect_url?: string;
+interface SupabaseAuthWebhook {
+  user: {
+    email: string;
+    id: string;
+  };
+  email_data: {
+    token: string;
+    token_hash: string;
+    redirect_to: string;
+    email_action_type: string;
+    site_url: string;
+  };
 }
 
 const handler = async (req: Request): Promise<Response> => {
@@ -21,7 +28,12 @@ const handler = async (req: Request): Promise<Response> => {
   }
 
   try {
-    const { email, type, token, redirect_url }: AuthEmailRequest = await req.json();
+    const payload: SupabaseAuthWebhook = await req.json();
+    const { user, email_data } = payload;
+    
+    const email = user.email;
+    const type = email_data.email_action_type;
+    const redirect_url = email_data.redirect_to;
 
     let subject: string;
     let html: string;
