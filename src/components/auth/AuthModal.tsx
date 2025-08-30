@@ -68,11 +68,22 @@ export const AuthModal = ({ isOpen, onClose, defaultTab = 'signin' }: AuthModalP
     const { error } = await signUp(email, password);
     
     if (error) {
-      toast({
-        title: "Sign Up Failed",
-        description: error.message,
-        variant: "destructive"
-      });
+      // Check if it's a user already registered error
+      if (error.message.includes('User already registered') || error.message.includes('already been registered')) {
+        toast({
+          title: "Account Already Exists",
+          description: "This email is already registered. Use 'Sign In' or click 'Forgot Password' to reset your password.",
+          variant: "destructive"
+        });
+        // Switch to sign in tab
+        setActiveTab('signin');
+      } else {
+        toast({
+          title: "Sign Up Failed",
+          description: error.message,
+          variant: "destructive"
+        });
+      }
     } else {
       setVerificationEmail(email);
       setShowEmailVerification(true);
