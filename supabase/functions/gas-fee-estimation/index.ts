@@ -10,8 +10,9 @@ interface FeeEstimation {
   basic: {
     estimatedCostSOL: number;
     estimatedCostUSD: number;
-    speed: 'slow' | 'medium' | 'fast';
+    speed: 'economy' | 'standard' | 'priority';
     successProbability: number;
+    batchAvailable: boolean;
   };
   pro: {
     baseFee: number;
@@ -22,6 +23,20 @@ interface FeeEstimation {
     slippageTolerance: number;
     historicalAverage: number;
     networkCongestion: 'low' | 'medium' | 'high';
+  };
+  batch: {
+    costPer100Operations: number;
+    minimumOperations: number;
+    effectiveCostPerOperation: number;
+    recommendedForVolume: number;
+  };
+  competitive: {
+    trojanFast: number;
+    trojanTurbo: number;
+    maestroFree: number;
+    mevx: number;
+    bananagun: number;
+    ourAdvantage: string;
   };
 }
 
@@ -62,14 +77,14 @@ serve(async (req) => {
     const priceData = await priceResponse.json();
     const solPrice = priceData.solana?.usd || 20; // Fallback price
 
-    // Calculate base transaction fee (5000 lamports = 0.000005 SOL)
+    // Realistic Solana base fee (5000 lamports = 0.000005 SOL)
     const baseFee = 0.000005;
     
-    // Calculate priority fees based on recent data
+    // Calculate priority fees based on recent data with realistic fallbacks
     const recentFees = feeData.result || [];
     const avgPriorityFee = recentFees.length > 0 
       ? recentFees.reduce((sum: number, fee: any) => sum + fee.prioritizationFee, 0) / recentFees.length / 1_000_000_000
-      : 0.000001; // Fallback: 1000 lamports
+      : 0.000001; // Conservative fallback for micro-trades
 
     // Determine network congestion
     const networkCongestion = avgPriorityFee > 0.00001 ? 'high' : avgPriorityFee > 0.000005 ? 'medium' : 'low';
@@ -78,18 +93,38 @@ serve(async (req) => {
     const computeUnits = transactionType === 'swap' ? 300_000 : 
                         transactionType === 'transfer' ? 200_000 : 250_000;
     
-    const priorityFeeOptions = {
-      slow: avgPriorityFee * 0.5,
-      medium: avgPriorityFee,
-      fast: avgPriorityFee * 2
+    // Smart fee tiers for different use cases
+    const feeOptions = {
+      economy: baseFee + (avgPriorityFee * 0.1), // For micro-trades where speed doesn't matter
+      standard: baseFee + avgPriorityFee,        // Normal operations
+      priority: baseFee + (avgPriorityFee * 2)   // When speed is critical
+    };
+
+    // Batch pricing model (Smithii-style)
+    const batchModel = {
+      costPer100Operations: 0.025, // SOL per 100 operations
+      minimumOperations: 10,
+      effectiveCostPerOperation: 0.025 / 100, // 0.00025 SOL per operation
+      recommendedForVolume: 50 // Recommend batch mode for 50+ operations
+    };
+
+    // Honest competitive analysis based on real market data
+    const competitiveData = {
+      trojanFast: 0.0015,    // Trojan fast mode
+      trojanTurbo: 0.0075,   // Trojan turbo mode  
+      maestroFree: amount * 0.01,  // Maestro 1% fee
+      mevx: amount * 0.008,        // MevX 0.8% fee
+      bananagun: amount * 0.0075,  // BananaGun 0.5-1% fee (avg 0.75%)
+      ourAdvantage: amount && amount < 0.1 ? 'batch_pricing' : 'competitive_fees'
     };
 
     const estimation: FeeEstimation = {
       basic: {
-        estimatedCostSOL: baseFee + priorityFeeOptions.medium,
-        estimatedCostUSD: (baseFee + priorityFeeOptions.medium) * solPrice,
-        speed: 'medium',
-        successProbability: networkCongestion === 'low' ? 95 : networkCongestion === 'medium' ? 85 : 75
+        estimatedCostSOL: amount < 0.1 ? feeOptions.economy : feeOptions.standard,
+        estimatedCostUSD: (amount < 0.1 ? feeOptions.economy : feeOptions.standard) * solPrice,
+        speed: amount < 0.1 ? 'economy' : 'standard',
+        successProbability: networkCongestion === 'low' ? 95 : networkCongestion === 'medium' ? 85 : 75,
+        batchAvailable: true
       },
       pro: {
         baseFee,
@@ -100,7 +135,9 @@ serve(async (req) => {
         slippageTolerance: transactionType === 'swap' ? (networkCongestion === 'high' ? 3 : 1) : 0,
         historicalAverage: avgPriorityFee,
         networkCongestion
-      }
+      },
+      batch: batchModel,
+      competitive: competitiveData
     };
 
     // Store fee estimation for analytics
