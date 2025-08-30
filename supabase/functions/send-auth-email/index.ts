@@ -28,18 +28,54 @@ const handler = async (req: Request): Promise<Response> => {
   }
 
   try {
-    const payload: SupabaseAuthWebhook = await req.json();
-    const { user, email_data } = payload;
+    // Log the entire payload to understand the structure
+    const body = await req.text();
+    console.log("Received webhook payload:", body);
     
-    const email = user.email;
-    const type = email_data.email_action_type;
-    const redirect_url = email_data.redirect_to;
+    let payload;
+    try {
+      payload = JSON.parse(body);
+    } catch (e) {
+      console.error("Failed to parse JSON:", e);
+      return new Response(JSON.stringify({ error: "Invalid JSON" }), {
+        status: 400,
+        headers: { "Content-Type": "application/json", ...corsHeaders }
+      });
+    }
+
+    console.log("Parsed payload:", JSON.stringify(payload, null, 2));
+
+    // Handle different possible payload structures
+    let email, type, redirect_url;
+    
+    if (payload.user && payload.email_data) {
+      // Webhook format
+      email = payload.user.email;
+      type = payload.email_data.email_action_type === 'signup' ? 'confirmation' : 
+            payload.email_data.email_action_type === 'recovery' ? 'recovery' : 
+            payload.email_data.email_action_type;
+      redirect_url = payload.email_data.redirect_to;
+    } else if (payload.email && payload.type) {
+      // Direct call format
+      email = payload.email;
+      type = payload.type;
+      redirect_url = payload.redirect_url;
+    } else {
+      console.error("Unknown payload structure:", payload);
+      return new Response(JSON.stringify({ error: "Unknown payload structure" }), {
+        status: 400,
+        headers: { "Content-Type": "application/json", ...corsHeaders }
+      });
+    }
+
+    console.log(`Processing email: ${email}, type: ${type}, redirect: ${redirect_url}`);
 
     let subject: string;
     let html: string;
 
     switch (type) {
       case 'confirmation':
+      case 'signup':
         subject = "Confirm your BlackBox account";
         html = `
           <div style="max-width: 600px; margin: 0 auto; padding: 20px; font-family: Arial, sans-serif;">
@@ -122,6 +158,7 @@ const handler = async (req: Request): Promise<Response> => {
         break;
 
       default:
+        console.error("Invalid email type:", type);
         return new Response(
           JSON.stringify({ error: "Invalid email type" }),
           { status: 400, headers: { "Content-Type": "application/json", ...corsHeaders } }
@@ -135,7 +172,7 @@ const handler = async (req: Request): Promise<Response> => {
       html: html,
     });
 
-    console.log("Auth email sent successfully:", emailResponse);
+    console.log("Email sent successfully:", emailResponse);
 
     return new Response(JSON.stringify(emailResponse), {
       status: 200,
