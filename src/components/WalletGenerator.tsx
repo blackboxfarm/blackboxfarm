@@ -216,15 +216,17 @@ export function WalletGenerator() {
       )}
 
       {/* Revenue Information */}
-      <Card className="bg-yellow-50 border-yellow-200">
+      <Card className="bg-background/50 border-border">
         <CardHeader>
-          <CardTitle>💰 Revenue Collection</CardTitle>
+          <CardTitle className="flex items-center gap-2">
+            💰 Revenue Collection
+          </CardTitle>
         </CardHeader>
         <CardContent>
           <div className="grid md:grid-cols-2 gap-4 text-sm">
             <div>
-              <h4 className="font-medium mb-2">Automatic Collection</h4>
-              <ul className="space-y-1">
+              <h4 className="font-medium mb-2 text-foreground">Automatic Collection</h4>
+              <ul className="space-y-1 text-muted-foreground">
                 <li>• Setup fees collected immediately</li>
                 <li>• Per-trade fees on every transaction</li>
                 <li>• Revenue tracked in database</li>
@@ -232,8 +234,8 @@ export function WalletGenerator() {
               </ul>
             </div>
             <div>
-              <h4 className="font-medium mb-2">Your Revenue Wallet</h4>
-              <p className="text-xs font-mono bg-white p-2 rounded border">
+              <h4 className="font-medium mb-2 text-foreground">Your Revenue Wallet</h4>
+              <p className="text-xs font-mono bg-muted/50 text-foreground p-2 rounded border border-border">
                 Revenue flows to your configured Solana wallet address
               </p>
               <p className="text-xs text-muted-foreground mt-1">
