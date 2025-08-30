@@ -6,7 +6,8 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Plus, Play, Pause, Settings, AlertTriangle, DollarSign } from "lucide-react";
+import { Slider } from "@/components/ui/slider";
+import { Plus, Play, Pause, Settings, AlertTriangle, DollarSign, BarChart3, TrendingUp } from "lucide-react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "@/hooks/use-toast";
@@ -32,6 +33,15 @@ interface CommandCode {
   created_at: string;
 }
 
+interface CommandStats {
+  baseFee: number;
+  totalTrades: { buy: number; sell: number };
+  gasFeesTotal: number;
+  gasFeeAverage: number;
+  ourFeesTotal: number;
+  ourFeeAverage: number;
+}
+
 interface WalletCommandsProps {
   wallet: WalletData;
   campaign: Campaign;
@@ -41,6 +51,9 @@ export function WalletCommands({ wallet, campaign }: WalletCommandsProps) {
   const [commands, setCommands] = useState<CommandCode[]>([]);
   const [showCreateForm, setShowCreateForm] = useState(false);
   const [mode, setMode] = useState<"simple" | "complex">("simple");
+  const [commandStats, setCommandStats] = useState<Record<string, CommandStats>>({});
+  const [showSimulation, setShowSimulation] = useState<string | null>(null);
+  const [simulationHours, setSimulationHours] = useState([24]);
   const [newCommand, setNewCommand] = useState({
     name: "",
     mode: "simple",
@@ -63,6 +76,7 @@ export function WalletCommands({ wallet, campaign }: WalletCommandsProps) {
 
   useEffect(() => {
     loadCommands();
+    loadCommandStats();
   }, [wallet.id]);
 
   const loadCommands = async () => {
@@ -78,6 +92,89 @@ export function WalletCommands({ wallet, campaign }: WalletCommandsProps) {
     }
 
     setCommands(data || []);
+  };
+
+  const loadCommandStats = async () => {
+    // Load transaction stats for each command
+    const { data: transactions, error } = await supabase
+      .from('blackbox_transactions')
+      .select('command_code_id, transaction_type, amount_sol, gas_fee, service_fee')
+      .eq('wallet_id', wallet.id);
+
+    if (error) {
+      console.error("Error loading transaction stats:", error);
+      return;
+    }
+
+    const stats: Record<string, CommandStats> = {};
+    
+    transactions?.forEach(tx => {
+      if (!tx.command_code_id) return;
+      
+      if (!stats[tx.command_code_id]) {
+        stats[tx.command_code_id] = {
+          baseFee: 0.001, // Base fee constant
+          totalTrades: { buy: 0, sell: 0 },
+          gasFeesTotal: 0,
+          gasFeeAverage: 0,
+          ourFeesTotal: 0,
+          ourFeeAverage: 0
+        };
+      }
+
+      const commandStats = stats[tx.command_code_id];
+      
+      if (tx.transaction_type === 'buy') {
+        commandStats.totalTrades.buy++;
+      } else if (tx.transaction_type === 'sell') {
+        commandStats.totalTrades.sell++;
+      }
+      
+      commandStats.gasFeesTotal += Number(tx.gas_fee || 0);
+      commandStats.ourFeesTotal += Number(tx.service_fee || 0);
+    });
+
+    // Calculate averages
+    Object.keys(stats).forEach(commandId => {
+      const commandStats = stats[commandId];
+      const totalTrades = commandStats.totalTrades.buy + commandStats.totalTrades.sell;
+      
+      if (totalTrades > 0) {
+        commandStats.gasFeeAverage = commandStats.gasFeesTotal / totalTrades;
+        commandStats.ourFeeAverage = commandStats.ourFeesTotal / totalTrades;
+      }
+    });
+
+    setCommandStats(stats);
+  };
+
+  const calculateSimulationStats = (command: CommandCode, hours: number) => {
+    const config = command.config;
+    let estimatedTrades = 0;
+    
+    if (config.type === "simple") {
+      const buyInterval = config.buyInterval || 60;
+      const sellInterval = config.sellInterval || 600;
+      const tradesPerHour = (3600 / buyInterval) + (3600 / sellInterval);
+      estimatedTrades = Math.floor(tradesPerHour * hours);
+    } else {
+      const avgBuyInterval = ((config.buyInterval?.min || 30) + (config.buyInterval?.max || 90)) / 2;
+      const avgSellInterval = ((config.sellInterval?.min || 300) + (config.sellInterval?.max || 900)) / 2;
+      const tradesPerHour = (3600 / avgBuyInterval) + (3600 / avgSellInterval);
+      estimatedTrades = Math.floor(tradesPerHour * hours);
+    }
+
+    const estimatedGasFees = estimatedTrades * 0.002; // Estimated gas fee per trade
+    const estimatedOurFees = estimatedTrades * 0.001; // Our service fee per trade
+    const baseFee = 0.001;
+
+    return {
+      trades: estimatedTrades,
+      gasFees: estimatedGasFees,
+      ourFees: estimatedOurFees,
+      baseFee,
+      totalCost: baseFee + estimatedGasFees + estimatedOurFees
+    };
   };
 
   const createCommand = async () => {
@@ -236,40 +333,137 @@ export function WalletCommands({ wallet, campaign }: WalletCommandsProps) {
         {commands.length > 0 && (
           <div className="space-y-3">
             <h3 className="font-medium">Active Commands</h3>
-            {commands.map((command) => (
-              <div key={command.id} className="p-4 border rounded-lg">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <div className="flex items-center gap-2">
-                      <h4 className="font-medium">{command.name}</h4>
-                      <Badge variant={command.is_active ? "default" : "secondary"}>
-                        {command.is_active ? "Running" : "Stopped"}
-                      </Badge>
-                      <Badge variant="outline">
-                        {command.config.type || "simple"}
-                      </Badge>
+            {commands.map((command) => {
+              const stats = commandStats[command.id] || {
+                baseFee: 0.001,
+                totalTrades: { buy: 0, sell: 0 },
+                gasFeesTotal: 0,
+                gasFeeAverage: 0,
+                ourFeesTotal: 0,
+                ourFeeAverage: 0
+              };
+              const totalTrades = stats.totalTrades.buy + stats.totalTrades.sell;
+              const simulationData = showSimulation === command.id ? calculateSimulationStats(command, simulationHours[0]) : null;
+
+              return (
+                <div key={command.id} className="p-4 border rounded-lg space-y-4">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <h4 className="font-medium">{command.name}</h4>
+                        <Badge variant={command.is_active ? "default" : "secondary"}>
+                          {command.is_active ? "Running" : "Stopped"}
+                        </Badge>
+                        <Badge variant="outline">
+                          {command.config.type || "simple"}
+                        </Badge>
+                      </div>
+                      <p className="text-sm text-muted-foreground mt-1">
+                        {command.config.type === "simple" 
+                          ? `Buy ${command.config.buyAmount} SOL every ${command.config.buyInterval}s, sell ${command.config.sellPercent}% every ${command.config.sellInterval}s`
+                          : `Random buy ${command.config.buyAmount?.min}-${command.config.buyAmount?.max} SOL`
+                        }
+                      </p>
                     </div>
-                    <p className="text-sm text-muted-foreground mt-1">
-                      {command.config.type === "simple" 
-                        ? `Buy ${command.config.buyAmount} SOL every ${command.config.buyInterval}s, sell ${command.config.sellPercent}% every ${command.config.sellInterval}s`
-                        : `Random buy ${command.config.buyAmount?.min}-${command.config.buyAmount?.max} SOL`
-                      }
-                    </p>
+                    <div className="flex gap-2">
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => setShowSimulation(showSimulation === command.id ? null : command.id)}
+                      >
+                        <BarChart3 className="h-4 w-4" />
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => toggleCommand(command)}
+                      >
+                        {command.is_active ? (
+                          <Pause className="h-4 w-4" />
+                        ) : (
+                          <Play className="h-4 w-4" />
+                        )}
+                      </Button>
+                    </div>
                   </div>
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    onClick={() => toggleCommand(command)}
-                  >
-                    {command.is_active ? (
-                      <Pause className="h-4 w-4" />
-                    ) : (
-                      <Play className="h-4 w-4" />
-                    )}
-                  </Button>
+
+                  {/* Stats Divs */}
+                  <div className="grid grid-cols-3 gap-4 p-3 bg-muted/50 rounded-lg">
+                    <div className="text-center">
+                      <div className="text-xs text-muted-foreground">Base Fee</div>
+                      <div className="font-medium">{stats.baseFee.toFixed(4)} SOL</div>
+                      <div className="text-xs text-muted-foreground">Constant</div>
+                    </div>
+                    <div className="text-center">
+                      <div className="text-xs text-muted-foreground">Total Trades</div>
+                      <div className="font-medium">{stats.totalTrades.buy}B / {stats.totalTrades.sell}S</div>
+                      <div className="text-xs text-muted-foreground">
+                        Gas: {stats.gasFeesTotal.toFixed(4)} ({stats.gasFeeAverage.toFixed(4)})
+                      </div>
+                    </div>
+                    <div className="text-center">
+                      <div className="text-xs text-muted-foreground">Our Fees</div>
+                      <div className="font-medium">{stats.ourFeesTotal.toFixed(4)} SOL</div>
+                      <div className="text-xs text-muted-foreground">
+                        Avg: ({stats.ourFeeAverage.toFixed(4)})
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Simulation Mode */}
+                  {showSimulation === command.id && (
+                    <div className="p-4 bg-muted/30 rounded-lg space-y-4">
+                      <div className="flex items-center gap-2">
+                        <TrendingUp className="h-4 w-4" />
+                        <h5 className="font-medium">Simulation Mode</h5>
+                      </div>
+                      
+                      <div className="space-y-3">
+                        <div>
+                          <Label>Time Duration: {simulationHours[0]} hours</Label>
+                          <Slider
+                            value={simulationHours}
+                            onValueChange={setSimulationHours}
+                            max={96}
+                            min={1}
+                            step={1}
+                            className="mt-2"
+                          />
+                          <div className="flex justify-between text-xs text-muted-foreground mt-1">
+                            <span>1hr</span>
+                            <span>24hr</span>
+                            <span>48hr</span>
+                            <span>96hr</span>
+                          </div>
+                        </div>
+
+                        {simulationData && (
+                          <div className="grid grid-cols-2 gap-4 p-3 bg-background rounded border">
+                            <div className="space-y-2">
+                              <div className="text-sm font-medium">Estimated Stats:</div>
+                              <div className="text-xs space-y-1">
+                                <div>Trades: {simulationData.trades}</div>
+                                <div>Gas Fees: {simulationData.gasFees.toFixed(4)} SOL</div>
+                                <div>Our Fees: {simulationData.ourFees.toFixed(4)} SOL</div>
+                              </div>
+                            </div>
+                            <div className="space-y-2">
+                              <div className="text-sm font-medium">Total Cost:</div>
+                              <div className="text-lg font-bold text-primary">
+                                {simulationData.totalCost.toFixed(4)} SOL
+                              </div>
+                              <div className="text-xs text-muted-foreground">
+                                Base + Gas + Service
+                              </div>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )}
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         )}
 
