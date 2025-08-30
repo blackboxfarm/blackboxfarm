@@ -136,7 +136,7 @@ export default function Index() {
                 🚀 NEW: BlackBox BumpBot
               </Badge>
               <p className="text-sm text-muted-foreground">
-                Professional volume generation platform - We undercut our competitors!
+                Putting the needle in the Haystack - We undercut our competitors!
               </p>
               <a href="/blackbox" className="inline-block mt-2 px-4 py-2 bg-primary text-primary-foreground rounded-md hover:bg-primary/90 transition-colors">
                 Launch BlackBox →

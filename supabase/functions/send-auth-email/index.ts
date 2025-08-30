@@ -105,7 +105,7 @@ const handler = async (req: Request): Promise<Response> => {
                         <div style="background: rgba(0,0,0,0.2); border-radius: 16px; padding: 24px; display: inline-block; margin-bottom: 24px; border: 2px solid rgba(255,255,255,0.1);">
                           <h1 style="color: #ffffff; font-size: 36px; font-weight: 800; margin: 0; letter-spacing: -1px; text-shadow: 0 2px 10px rgba(0,0,0,0.3);">⚫ BlackBox</h1>
                         </div>
-                        <p style="color: rgba(255,255,255,0.95); font-size: 20px; margin: 0; font-weight: 600; text-shadow: 0 1px 3px rgba(0,0,0,0.3);">Professional Volume Generation</p>
+                        <p style="color: rgba(255,255,255,0.95); font-size: 20px; margin: 0; font-weight: 600; text-shadow: 0 1px 3px rgba(0,0,0,0.3);">Putting the needle in the Haystack</p>
                         <p style="color: rgba(255,255,255,0.8); font-size: 16px; margin: 8px 0 0 0; font-weight: 400;">Solana Trading Platform</p>
                       </td>
                     </tr>
@@ -190,44 +190,105 @@ const handler = async (req: Request): Promise<Response> => {
 
       case 'recovery':
         subject = "Reset your BlackBox password";
+        
+        // Convert the redirect URL to use blackbox.farm instead of lovable.dev
+        const recoveryRedirectUrl = redirect_url.replace(
+          /https:\/\/lovable\.dev\/projects\/[^\/]+/,
+          'https://blackbox.farm/reset-password'
+        );
+        
         html = `
-          <div style="max-width: 600px; margin: 0 auto; padding: 20px; font-family: Arial, sans-serif;">
-            <div style="text-align: center; margin-bottom: 30px;">
-              <h1 style="color: #1a1a1a; margin: 0;">BlackBox</h1>
-              <p style="color: #666; margin: 5px 0 0 0;">Volume Generation Platform</p>
-            </div>
-            
-            <div style="background: #f8f9fa; border-radius: 8px; padding: 30px; margin: 20px 0;">
-              <h2 style="color: #1a1a1a; margin: 0 0 20px 0;">Reset Your Password</h2>
-              <p style="color: #666; line-height: 1.6; margin: 0 0 25px 0;">
-                We received a request to reset your password. Click the button below to create a new password.
-              </p>
-              
-              <div style="text-align: center;">
-                <a href="${redirect_url}" 
-                   style="display: inline-block; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); 
-                          color: white; text-decoration: none; padding: 12px 30px; border-radius: 6px; 
-                          font-weight: bold; margin: 20px 0;">
-                  Reset Password
-                </a>
-              </div>
-              
-              <p style="color: #999; font-size: 14px; margin: 25px 0 0 0; text-align: center;">
-                If the button doesn't work, copy and paste this link into your browser:<br>
-                <a href="${redirect_url}" style="color: #667eea; word-break: break-all;">${redirect_url}</a>
-              </p>
-              
-              <p style="color: #999; font-size: 14px; margin: 15px 0 0 0; text-align: center;">
-                This link will expire in 60 minutes for security reasons.
-              </p>
-            </div>
-            
-            <div style="text-align: center; margin-top: 30px;">
-              <p style="color: #999; font-size: 12px;">
-                If you didn't request a password reset, you can safely ignore this email.
-              </p>
-            </div>
-          </div>
+          <!DOCTYPE html>
+          <html>
+          <head>
+            <meta charset="utf-8">
+            <meta name="viewport" content="width=device-width, initial-scale=1.0">
+            <title>Reset Your BlackBox Password</title>
+          </head>
+          <body style="margin: 0; padding: 0; background: linear-gradient(135deg, #0f0f23 0%, #1a1a2e 100%); font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;">
+            <table width="100%" cellpadding="0" cellspacing="0" style="background: linear-gradient(135deg, #0f0f23 0%, #1a1a2e 100%); min-height: 100vh;">
+              <tr>
+                <td align="center" style="padding: 40px 20px;">
+                  <table width="600" cellpadding="0" cellspacing="0" style="background: #0f172a; border-radius: 16px; overflow: hidden; box-shadow: 0 25px 50px rgba(0,0,0,0.4); border: 1px solid #1e293b;">
+                    
+                    <!-- Header with BlackBox Branding -->
+                    <tr>
+                      <td style="background: linear-gradient(135deg, #ef4444 0%, #dc2626 50%, #b91c1c 100%); padding: 50px 40px; text-align: center; position: relative;">
+                        <!-- BlackBox Logo/Brand -->
+                        <div style="background: rgba(0,0,0,0.2); border-radius: 16px; padding: 24px; display: inline-block; margin-bottom: 24px; border: 2px solid rgba(255,255,255,0.1);">
+                          <h1 style="color: #ffffff; font-size: 36px; font-weight: 800; margin: 0; letter-spacing: -1px; text-shadow: 0 2px 10px rgba(0,0,0,0.3);">⚫ BlackBox</h1>
+                        </div>
+                        <p style="color: rgba(255,255,255,0.95); font-size: 20px; margin: 0; font-weight: 600; text-shadow: 0 1px 3px rgba(0,0,0,0.3);">Putting the needle in the Haystack</p>
+                        <p style="color: rgba(255,255,255,0.8); font-size: 16px; margin: 8px 0 0 0; font-weight: 400;">Solana Trading Platform</p>
+                      </td>
+                    </tr>
+                    
+                    <!-- Main Content -->
+                    <tr>
+                      <td style="padding: 50px 40px; background: #0f172a;">
+                        <h2 style="color: #f8fafc; font-size: 28px; font-weight: 700; margin: 0 0 24px 0; text-align: center;">🔐 Reset Your Password</h2>
+                        
+                        <p style="color: #cbd5e1; font-size: 16px; line-height: 1.6; margin: 0 0 32px 0; text-align: center;">
+                          We received a request to reset your BlackBox password. Click the button below to create a new secure password for your account.
+                        </p>
+                        
+                        <!-- Security Notice -->
+                        <div style="background: #1e293b; border-left: 4px solid #ef4444; padding: 24px; margin: 32px 0; border-radius: 12px; border: 1px solid #dc2626;">
+                          <h3 style="color: #fca5a5; font-size: 18px; font-weight: 600; margin: 0 0 16px 0;">🛡️ Security Notice:</h3>
+                          <ul style="color: #cbd5e1; font-size: 15px; line-height: 1.7; margin: 0; padding-left: 24px; list-style: none;">
+                            <li style="margin: 8px 0; position: relative; padding-left: 8px;">• This reset link expires in 60 minutes</li>
+                            <li style="margin: 8px 0; position: relative; padding-left: 8px;">• If you didn't request this, ignore this email</li>
+                            <li style="margin: 8px 0; position: relative; padding-left: 8px;">• Your account remains secure until you reset</li>
+                          </ul>
+                        </div>
+                        
+                        <!-- CTA Button -->
+                        <div style="text-align: center; margin: 48px 0;">
+                          <a href="${recoveryRedirectUrl}" 
+                             style="display: inline-block; background: linear-gradient(135deg, #ef4444 0%, #dc2626 50%, #b91c1c 100%); 
+                                    color: #ffffff; text-decoration: none; padding: 18px 48px; border-radius: 12px; 
+                                    font-weight: 700; font-size: 16px; box-shadow: 0 10px 30px rgba(239, 68, 68, 0.4);
+                                    transition: all 0.3s ease; border: 2px solid rgba(255,255,255,0.1);
+                                    text-transform: uppercase; letter-spacing: 0.5px;">
+                            🔑 Reset Password Now
+                          </a>
+                        </div>
+                        
+                        <!-- Backup Link -->
+                        <div style="text-align: center; margin-top: 32px; background: #1e293b; padding: 20px; border-radius: 8px;">
+                          <p style="color: #94a3b8; font-size: 14px; margin: 0 0 12px 0;">
+                            Having trouble with the button? Copy and paste this link:
+                          </p>
+                          <p style="background: #334155; padding: 12px; border-radius: 6px; font-family: 'Courier New', monospace; font-size: 11px; color: #e2e8f0; word-break: break-all; margin: 0; border: 1px solid #475569;">
+                            ${recoveryRedirectUrl}
+                          </p>
+                        </div>
+                      </td>
+                    </tr>
+                    
+                    <!-- Footer -->
+                    <tr>
+                      <td style="background: #0f172a; padding: 32px 40px; border-top: 1px solid #1e293b;">
+                        <table width="100%" cellpadding="0" cellspacing="0">
+                          <tr>
+                            <td style="text-align: center;">
+                              <p style="color: #64748b; font-size: 15px; margin: 0 0 16px 0; font-weight: 600;">BlackBox Farm</p>
+                              <p style="color: #475569; font-size: 12px; line-height: 1.6; margin: 0;">
+                                Putting the needle in the Haystack | Enterprise Trading Solutions<br>
+                                This email was sent to ${email} because you requested a password reset.<br>
+                                Visit <a href="https://blackbox.farm" style="color: #ef4444; text-decoration: none; font-weight: 600;">blackbox.farm</a> for support or questions.
+                              </p>
+                            </td>
+                          </tr>
+                        </table>
+                      </td>
+                    </tr>
+                  </table>
+                </td>
+              </tr>
+            </table>
+          </body>
+          </html>
         `;
         break;
 
