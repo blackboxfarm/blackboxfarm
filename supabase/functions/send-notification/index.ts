@@ -45,6 +45,7 @@ const handler = async (req: Request): Promise<Response> => {
         html: `
           <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
             <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); padding: 20px; text-align: center;">
+              <img src="https://blackbox.farm/lovable-uploads/8c88fead-d160-47f3-ac65-3493afcf9280.png" alt="BlackBox Logo" style="width: 48px; height: 48px; margin-bottom: 12px; object-fit: contain;" />
               <h1 style="color: white; margin: 0;">BlackBox Farm</h1>
             </div>
             <div style="padding: 20px; background: #f9f9f9;">

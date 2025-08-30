@@ -54,6 +54,7 @@ const handler = async (req: Request): Promise<Response> => {
       html: `
         <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen', 'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue', sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
           <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); padding: 30px; text-align: center; border-radius: 12px 12px 0 0;">
+            <img src="https://blackbox.farm/lovable-uploads/8c88fead-d160-47f3-ac65-3493afcf9280.png" alt="BlackBox Logo" style="width: 48px; height: 48px; margin-bottom: 12px; object-fit: contain;" />
             <h1 style="color: white; margin: 0; font-size: 28px; font-weight: bold;">BlackBox Trading</h1>
             <p style="color: rgba(255,255,255,0.8); margin: 10px 0 0 0; font-size: 16px;">Professional Trading Platform</p>
           </div>
