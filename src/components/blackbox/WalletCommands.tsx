@@ -58,6 +58,8 @@ export function WalletCommands({ wallet, campaign, isDevMode = false, devBalance
   const [simulationHours, setSimulationHours] = useState([24]);
   const [showWalletAlert, setShowWalletAlert] = useState(!isDevMode);
   const [showTradingCosts, setShowTradingCosts] = useState(false);
+  const [activeIntervals, setActiveIntervals] = useState<Record<string, NodeJS.Timeout>>({});
+  const [simulatedTrades, setSimulatedTrades] = useState<Record<string, Array<{type: 'buy' | 'sell', amount: number, timestamp: Date}>>>({});
   const [newCommand, setNewCommand] = useState({
     name: "",
     mode: "simple",
@@ -83,6 +85,69 @@ export function WalletCommands({ wallet, campaign, isDevMode = false, devBalance
     loadCommandStats();
     setShowWalletAlert(!isDevMode); // Hide alert in dev mode
   }, [wallet.id, isDevMode]);
+
+  // Setup simulation intervals for active commands in dev mode
+  useEffect(() => {
+    if (!isDevMode) {
+      // Clean up all intervals if not in dev mode
+      Object.values(activeIntervals).forEach(clearInterval);
+      setActiveIntervals({});
+      return;
+    }
+
+    // Setup intervals for active commands
+    commands.forEach(command => {
+      if (command.is_active && !activeIntervals[command.id]) {
+        const config = command.config;
+        const buyInterval = config.type === "simple" 
+          ? config.buyInterval || 60 
+          : Math.random() * ((config.buyInterval?.max || 60) - (config.buyInterval?.min || 30)) + (config.buyInterval?.min || 30);
+        
+        const sellInterval = config.type === "simple" 
+          ? config.sellInterval || 600 
+          : Math.random() * ((config.sellInterval?.max || 900) - (config.sellInterval?.min || 300)) + (config.sellInterval?.min || 300);
+
+        // Create buy interval
+        const buyIntervalId = setInterval(() => {
+          if (isDevMode && devBalance && devBalance > 0) {
+            simulateExecute(command.id, 'buy');
+          }
+        }, buyInterval * 1000);
+
+        // Create sell interval  
+        const sellIntervalId = setInterval(() => {
+          if (isDevMode && devBalance && devBalance > 0) {
+            simulateExecute(command.id, 'sell');
+          }
+        }, sellInterval * 1000);
+
+        setActiveIntervals(prev => ({
+          ...prev,
+          [command.id]: buyIntervalId,
+          [`${command.id}_sell`]: sellIntervalId
+        }));
+      }
+    });
+
+    // Clean up intervals for inactive commands
+    Object.keys(activeIntervals).forEach(intervalId => {
+      const commandId = intervalId.replace('_sell', '');
+      const command = commands.find(c => c.id === commandId);
+      if (!command || !command.is_active) {
+        clearInterval(activeIntervals[intervalId]);
+        setActiveIntervals(prev => {
+          const newIntervals = {...prev};
+          delete newIntervals[intervalId];
+          return newIntervals;
+        });
+      }
+    });
+
+    return () => {
+      // Cleanup on unmount
+      Object.values(activeIntervals).forEach(clearInterval);
+    };
+  }, [commands, isDevMode, devBalance]);
 
   const loadCommands = async () => {
     const { data, error } = await supabase
@@ -248,6 +313,72 @@ export function WalletCommands({ wallet, campaign, isDevMode = false, devBalance
       sellIntervalMax: "900"
     });
     loadCommands();
+  };
+
+  const simulateExecute = (commandId: string, action: 'buy' | 'sell') => {
+    const command = commands.find(c => c.id === commandId);
+    if (!command || !isDevMode) return;
+
+    const config = command.config;
+    let amount: number;
+
+    if (action === 'buy') {
+      amount = config.type === "simple" 
+        ? config.buyAmount 
+        : Math.random() * (config.buyAmount.max - config.buyAmount.min) + config.buyAmount.min;
+    } else {
+      const sellPercent = config.type === "simple" 
+        ? config.sellPercent 
+        : Math.random() * (config.sellPercent.max - config.sellPercent.min) + config.sellPercent.min;
+      amount = ((devBalance || 0) * sellPercent) / 100;
+    }
+
+    // Add simulated trade to history
+    setSimulatedTrades(prev => ({
+      ...prev,
+      [commandId]: [
+        ...(prev[commandId] || []),
+        { type: action, amount, timestamp: new Date() }
+      ].slice(-10) // Keep only last 10 trades per command
+    }));
+
+    // Update command stats
+    setCommandStats(prev => {
+      const commandStats = prev[commandId] || {
+        baseFee: 0.001,
+        totalTrades: { buy: 0, sell: 0 },
+        gasFeesTotal: 0,
+        gasFeeAverage: 0,
+        ourFeesTotal: 0,
+        ourFeeAverage: 0
+      };
+
+      const newStats = { ...commandStats };
+      if (action === 'buy') {
+        newStats.totalTrades.buy++;
+      } else {
+        newStats.totalTrades.sell++;
+      }
+
+      const gasFee = 0.002; // Simulated gas fee
+      const serviceFee = 0.001; // Simulated service fee
+      newStats.gasFeesTotal += gasFee;
+      newStats.ourFeesTotal += serviceFee;
+
+      const totalTrades = newStats.totalTrades.buy + newStats.totalTrades.sell;
+      if (totalTrades > 0) {
+        newStats.gasFeeAverage = newStats.gasFeesTotal / totalTrades;
+        newStats.ourFeeAverage = newStats.ourFeesTotal / totalTrades;
+      }
+
+      return { ...prev, [commandId]: newStats };
+    });
+
+    // Show toast notification for simulated trade
+    toast({
+      title: `Simulated ${action.toUpperCase()}`,
+      description: `${command.name}: ${amount.toFixed(4)} SOL`,
+    });
   };
 
   const toggleCommand = async (command: CommandCode) => {
@@ -444,7 +575,26 @@ export function WalletCommands({ wallet, campaign, isDevMode = false, devBalance
                         Avg: ({stats.ourFeeAverage.toFixed(4)})
                       </div>
                     </div>
-                  </div>
+                   </div>
+
+                  {/* Recent Simulated Trades (Dev Mode Only) */}
+                  {isDevMode && simulatedTrades[command.id] && simulatedTrades[command.id].length > 0 && (
+                    <div className="p-3 bg-accent/20 rounded-lg">
+                      <div className="text-sm font-medium text-accent-foreground mb-2">🔄 Recent Simulated Trades</div>
+                      <div className="space-y-1 max-h-32 overflow-y-auto">
+                        {simulatedTrades[command.id].slice(-5).reverse().map((trade, idx) => (
+                          <div key={idx} className="flex justify-between items-center text-xs p-1 rounded bg-background/50">
+                            <span className={trade.type === 'buy' ? 'text-green-600' : 'text-red-600'}>
+                              {trade.type.toUpperCase()}: {trade.amount.toFixed(4)} SOL
+                            </span>
+                            <span className="text-muted-foreground">
+                              {trade.timestamp.toLocaleTimeString()}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
 
                   {/* Simulation Mode */}
                   {showSimulation === command.id && (
