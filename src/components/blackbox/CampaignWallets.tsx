@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Plus, Wallet, Settings, Play, Pause } from "lucide-react";
+import { Plus, Wallet, Settings, Play, Pause, TestTube } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "@/hooks/use-toast";
 import { WalletCommands } from "./WalletCommands";
@@ -22,6 +22,9 @@ interface WalletData {
   created_at: string;
 }
 
+// Development mode storage key
+const DEV_BALANCES_KEY = "blackbox.dev.balances";
+
 interface CampaignWalletsProps {
   campaign: Campaign;
 }
@@ -30,10 +33,33 @@ export function CampaignWallets({ campaign }: CampaignWalletsProps) {
   const [wallets, setWallets] = useState<WalletData[]>([]);
   const [selectedWallet, setSelectedWallet] = useState<WalletData | null>(null);
   const [isGenerating, setIsGenerating] = useState(false);
+  const [isDevMode, setIsDevMode] = useState(false);
+  const [devBalances, setDevBalances] = useState<Record<string, number>>({});
 
   useEffect(() => {
     loadWallets();
+    loadDevBalances();
   }, [campaign.id]);
+
+  const loadDevBalances = () => {
+    try {
+      const stored = localStorage.getItem(DEV_BALANCES_KEY);
+      if (stored) {
+        setDevBalances(JSON.parse(stored));
+      }
+    } catch (error) {
+      console.warn('Failed to load dev balances:', error);
+    }
+  };
+
+  const saveDevBalances = (balances: Record<string, number>) => {
+    try {
+      localStorage.setItem(DEV_BALANCES_KEY, JSON.stringify(balances));
+      setDevBalances(balances);
+    } catch (error) {
+      console.warn('Failed to save dev balances:', error);
+    }
+  };
 
   const loadWallets = async () => {
     const { data, error } = await supabase
@@ -47,9 +73,16 @@ export function CampaignWallets({ campaign }: CampaignWalletsProps) {
       return;
     }
 
-    setWallets(data || []);
-    if (data && data.length > 0 && !selectedWallet) {
-      setSelectedWallet(data[0]);
+    const walletsWithDevBalances = (data || []).map(wallet => ({
+      ...wallet,
+      sol_balance: isDevMode && devBalances[wallet.pubkey] !== undefined 
+        ? devBalances[wallet.pubkey] 
+        : wallet.sol_balance
+    }));
+    
+    setWallets(walletsWithDevBalances);
+    if (walletsWithDevBalances.length > 0 && !selectedWallet) {
+      setSelectedWallet(walletsWithDevBalances[0]);
     }
   };
 
@@ -90,6 +123,25 @@ export function CampaignWallets({ campaign }: CampaignWalletsProps) {
     loadWallets();
   };
 
+  const addDevFunds = (pubkey: string, amount: number = 5) => {
+    const newBalances = { ...devBalances, [pubkey]: amount };
+    saveDevBalances(newBalances);
+    loadWallets(); // Reload to show updated balances
+    toast({ 
+      title: "Dev funds added", 
+      description: `Added ${amount} SOL to wallet for testing` 
+    });
+  };
+
+  const toggleDevMode = () => {
+    setIsDevMode(!isDevMode);
+    loadWallets(); // Reload to show real or dev balances
+    toast({ 
+      title: isDevMode ? "Dev mode disabled" : "Dev mode enabled", 
+      description: isDevMode ? "Showing real balances" : "Showing simulated balances" 
+    });
+  };
+
   return (
     <div className="space-y-6">
       <Card>
@@ -98,15 +150,26 @@ export function CampaignWallets({ campaign }: CampaignWalletsProps) {
             <CardTitle className="flex items-center gap-2">
               <Wallet className="h-5 w-5" />
               {campaign.nickname} - Wallets
+              {isDevMode && <Badge variant="outline" className="text-xs">DEV MODE</Badge>}
             </CardTitle>
-            <Button 
-              onClick={generateWallet} 
-              disabled={isGenerating || wallets.length >= 10}
-              size="sm"
-            >
-              <Plus className="h-4 w-4 mr-2" />
-              {isGenerating ? "Generating..." : "Generate Wallet"}
-            </Button>
+            <div className="flex gap-2">
+              <Button 
+                onClick={toggleDevMode} 
+                variant="outline"
+                size="sm"
+              >
+                <TestTube className="h-4 w-4 mr-2" />
+                {isDevMode ? "Exit Dev Mode" : "Dev Mode"}
+              </Button>
+              <Button 
+                onClick={generateWallet} 
+                disabled={isGenerating || wallets.length >= 10}
+                size="sm"
+              >
+                <Plus className="h-4 w-4 mr-2" />
+                {isGenerating ? "Generating..." : "Generate Wallet"}
+              </Button>
+            </div>
           </div>
         </CardHeader>
         <CardContent>
@@ -138,9 +201,23 @@ export function CampaignWallets({ campaign }: CampaignWalletsProps) {
                       </div>
                       <p className="text-sm text-muted-foreground mt-1">
                         Balance: {wallet.sol_balance.toFixed(4)} SOL
+                        {isDevMode && <span className="text-yellow-500 ml-2">(SIMULATED)</span>}
                       </p>
                     </div>
                     <div className="flex items-center gap-2">
+                      {isDevMode && (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            addDevFunds(wallet.pubkey, 5);
+                          }}
+                          className="text-xs"
+                        >
+                          +5 SOL
+                        </Button>
+                      )}
                       <Button
                         size="sm"
                         variant="outline"
@@ -181,7 +258,12 @@ export function CampaignWallets({ campaign }: CampaignWalletsProps) {
       </Card>
 
       {selectedWallet && (
-        <WalletCommands wallet={selectedWallet} campaign={campaign} />
+        <WalletCommands 
+          wallet={selectedWallet} 
+          campaign={campaign} 
+          isDevMode={isDevMode}
+          devBalance={devBalances[selectedWallet.pubkey]}
+        />
       )}
     </div>
   );

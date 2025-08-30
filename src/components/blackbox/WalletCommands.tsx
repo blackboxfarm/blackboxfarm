@@ -45,9 +45,11 @@ interface CommandStats {
 interface WalletCommandsProps {
   wallet: WalletData;
   campaign: Campaign;
+  isDevMode?: boolean;
+  devBalance?: number;
 }
 
-export function WalletCommands({ wallet, campaign }: WalletCommandsProps) {
+export function WalletCommands({ wallet, campaign, isDevMode = false, devBalance }: WalletCommandsProps) {
   const [commands, setCommands] = useState<CommandCode[]>([]);
   const [showCreateForm, setShowCreateForm] = useState(false);
   const [mode, setMode] = useState<"simple" | "complex">("simple");
