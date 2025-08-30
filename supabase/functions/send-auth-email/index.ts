@@ -103,7 +103,7 @@ const handler = async (req: Request): Promise<Response> => {
                       <td style="background: linear-gradient(135deg, #4f46e5 0%, #7c3aed 50%, #ec4899 100%); padding: 50px 40px; text-align: center; position: relative;">
                         <!-- BlackBox Logo/Brand -->
                         <div style="background: rgba(0,0,0,0.2); border-radius: 16px; padding: 24px; display: inline-block; margin-bottom: 24px; border: 2px solid rgba(255,255,255,0.1); text-align: center;">
-                          <div style="width: 64px; height: 64px; margin: 0 auto 16px auto; background: linear-gradient(135deg, #4f46e5, #7c3aed); border-radius: 12px; display: flex; align-items: center; justify-content: center; font-size: 24px; font-weight: 900; color: #ffffff; box-shadow: 0 8px 32px rgba(79, 70, 229, 0.4);">BB</div>
+                          <img src="https://blackbox.farm/blackbox-secondary-logo.png" alt="BlackBox Logo" style="width: 64px; height: 64px; margin-bottom: 16px; object-fit: contain;" />
                           <h1 style="color: #ffffff; font-size: 36px; font-weight: 800; margin: 0; letter-spacing: -1px; text-shadow: 0 2px 10px rgba(0,0,0,0.3);">BlackBox</h1>
                         </div>
                         <p style="color: rgba(255,255,255,0.95); font-size: 20px; margin: 0; font-weight: 600; text-shadow: 0 1px 3px rgba(0,0,0,0.3);">Putting the needle in the Haystack</p>
@@ -217,7 +217,7 @@ const handler = async (req: Request): Promise<Response> => {
                       <td style="background: linear-gradient(135deg, #ef4444 0%, #dc2626 50%, #b91c1c 100%); padding: 50px 40px; text-align: center; position: relative;">
                         <!-- BlackBox Logo/Brand -->
                         <div style="background: rgba(0,0,0,0.2); border-radius: 16px; padding: 24px; display: inline-block; margin-bottom: 24px; border: 2px solid rgba(255,255,255,0.1); text-align: center;">
-                          <div style="width: 64px; height: 64px; margin: 0 auto 16px auto; background: linear-gradient(135deg, #ef4444, #dc2626); border-radius: 12px; display: flex; align-items: center; justify-content: center; font-size: 24px; font-weight: 900; color: #ffffff; box-shadow: 0 8px 32px rgba(239, 68, 68, 0.4);">BB</div>
+                          <img src="https://blackbox.farm/blackbox-secondary-logo.png" alt="BlackBox Logo" style="width: 64px; height: 64px; margin-bottom: 16px; object-fit: contain;" />
                           <h1 style="color: #ffffff; font-size: 36px; font-weight: 800; margin: 0; letter-spacing: -1px; text-shadow: 0 2px 10px rgba(0,0,0,0.3);">BlackBox</h1>
                         </div>
                         <p style="color: rgba(255,255,255,0.95); font-size: 20px; margin: 0; font-weight: 600; text-shadow: 0 1px 3px rgba(0,0,0,0.3);">Putting the needle in the Haystack</p>
