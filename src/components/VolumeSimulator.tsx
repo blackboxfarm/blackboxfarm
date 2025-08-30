@@ -28,6 +28,7 @@ export default function VolumeSimulator() {
   const [networkFeePreset, setNetworkFeePreset] = React.useState<"low" | "typical" | "busy">("typical");
   const [pairMode, setPairMode] = React.useState(true); // buy+sell per interval
   const [newAccounts, setNewAccounts] = React.useState(0); // optional first-time inits
+  const [useBatchPricing, setUseBatchPricing] = React.useState(false); // Smithii-style batch pricing
 
   const networkFeePerTradeSOL = React.useMemo(() => {
     switch (networkFeePreset) {
@@ -50,12 +51,23 @@ export default function VolumeSimulator() {
     return (tradeSizeUsd * feePct) / solPriceUsd;
   }, [tradeSizeUsd, ammFeeBps, solPriceUsd]);
 
-  const totalFeePerTradeSOL = ammFeePerTradeSOL + networkFeePerTradeSOL;
+  // Calculate fees first
+  const totalFeePerTradeSOL = useBatchPricing 
+    ? 0.025 / 100 // Smithii model: 0.025 SOL per 100 makers = 0.00025 SOL per trade
+    : ammFeePerTradeSOL + networkFeePerTradeSOL;
+  
+  // Then calculate trades possible
   const tradesPossible = totalFeePerTradeSOL > 0 ? Math.floor(availableSol / totalFeePerTradeSOL) : 0;
   const tradesPerInterval = pairMode ? 2 : 1;
   const tradesPerSecond = intervalSec > 0 ? tradesPerInterval / intervalSec : 0;
   const runtimeSeconds = tradesPerSecond > 0 ? tradesPossible / tradesPerSecond : 0;
   const cycles = Math.floor(tradesPossible / 2);
+  
+  // Batch vs traditional comparison
+  const traditionalFeePerTrade = ammFeePerTradeSOL + networkFeePerTradeSOL;
+  const batchSavings = useBatchPricing 
+    ? ((traditionalFeePerTrade - totalFeePerTradeSOL) / traditionalFeePerTrade) * 100 
+    : 0;
 
   const totalFeePerTradeUSD = totalFeePerTradeSOL * solPriceUsd;
 
@@ -229,14 +241,39 @@ export default function VolumeSimulator() {
                 onChange={(e) => setNewAccounts(Math.max(0, Math.floor(Number(e.target.value))))}
               />
             </div>
+
+            <div className="space-y-2">
+              <div className="flex items-center gap-2">
+                <input
+                  id="batch-pricing"
+                  type="checkbox"
+                  className="h-4 w-4 rounded border-border bg-input text-primary accent-primary"
+                  checked={useBatchPricing}
+                  onChange={(e) => setUseBatchPricing(e.target.checked)}
+                />
+                <Label htmlFor="batch-pricing">Use Batch Pricing (Smithii Model)</Label>
+              </div>
+              <p className="text-xs text-muted-foreground">
+                {useBatchPricing 
+                  ? `0.025 SOL per 100 operations = ${formatNumber(totalFeePerTradeSOL, 6)} SOL per trade`
+                  : "Traditional per-transaction fees"
+                }
+              </p>
+            </div>
           </section>
         </div>
 
-        <article className="mt-8 grid gap-4 md:grid-cols-3">
+        <article className="mt-8 grid gap-4 md:grid-cols-4">
           <div className="rounded-lg border p-4">
-            <p className="text-sm text-muted-foreground">AMM fee per trade</p>
-            <p className="text-2xl font-semibold">{formatNumber(ammFeePerTradeSOL, 6)} SOL</p>
-            <p className="text-sm text-muted-foreground">≈ ${formatNumber(ammFeePerTradeSOL * solPriceUsd, 5)}</p>
+            <p className="text-sm text-muted-foreground">
+              {useBatchPricing ? "Batch fee per trade" : "AMM fee per trade"}
+            </p>
+            <p className="text-2xl font-semibold">
+              {formatNumber(useBatchPricing ? totalFeePerTradeSOL : ammFeePerTradeSOL, 6)} SOL
+            </p>
+            <p className="text-sm text-muted-foreground">
+              ≈ ${formatNumber((useBatchPricing ? totalFeePerTradeSOL : ammFeePerTradeSOL) * solPriceUsd, 5)}
+            </p>
           </div>
           <div className="rounded-lg border p-4">
             <p className="text-sm text-muted-foreground">Total fee per trade</p>
@@ -248,6 +285,13 @@ export default function VolumeSimulator() {
             <p className="text-2xl font-semibold">{formatNumber(tradesPossible, 0)}</p>
             <p className="text-sm text-muted-foreground">Cycles (buy+sell): {formatNumber(cycles, 0)}</p>
           </div>
+          {useBatchPricing && (
+            <div className="rounded-lg border p-4 bg-green-50 border-green-200">
+              <p className="text-sm text-muted-foreground">Batch savings</p>
+              <p className="text-2xl font-semibold text-green-600">{formatNumber(batchSavings, 1)}%</p>
+              <p className="text-sm text-muted-foreground">vs traditional pricing</p>
+            </div>
+          )}
         </article>
 
         <article className="mt-4 rounded-lg border p-4">
