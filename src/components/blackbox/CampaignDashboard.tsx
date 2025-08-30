@@ -8,6 +8,7 @@ import { Plus, Settings, Play, Pause, Trash2 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "@/hooks/use-toast";
 import { CampaignWallets } from "./CampaignWallets";
+import { CampaignActivationGuide } from "./CampaignActivationGuide";
 
 interface Campaign {
   id: string;
@@ -197,7 +198,10 @@ export function CampaignDashboard() {
 
       {/* Selected Campaign Details */}
       {selectedCampaign && (
-        <CampaignWallets campaign={selectedCampaign} />
+        <>
+          <CampaignActivationGuide campaign={selectedCampaign} />
+          <CampaignWallets campaign={selectedCampaign} />
+        </>
       )}
     </div>
   );

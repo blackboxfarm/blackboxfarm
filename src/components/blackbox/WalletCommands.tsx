@@ -6,7 +6,8 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Plus, Play, Pause, Settings } from "lucide-react";
+import { Plus, Play, Pause, Settings, AlertTriangle, DollarSign } from "lucide-react";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "@/hooks/use-toast";
 
@@ -148,6 +149,16 @@ export function WalletCommands({ wallet, campaign }: WalletCommandsProps) {
   };
 
   const toggleCommand = async (command: CommandCode) => {
+    // Check wallet balance before activating
+    if (!command.is_active && wallet.sol_balance <= 0) {
+      toast({ 
+        title: "Insufficient Funds", 
+        description: "This wallet has 0 SOL balance. Transfer funds before activating commands.",
+        variant: "destructive"
+      });
+      return;
+    }
+
     const { error } = await supabase
       .from('blackbox_command_codes')
       .update({ is_active: !command.is_active })
@@ -179,6 +190,48 @@ export function WalletCommands({ wallet, campaign }: WalletCommandsProps) {
         </div>
       </CardHeader>
       <CardContent className="space-y-6">
+        {/* Wallet Balance Warning */}
+        {wallet.sol_balance <= 0 && (
+          <Alert variant="destructive">
+            <AlertTriangle className="h-4 w-4" />
+            <AlertDescription>
+              <div className="space-y-2">
+                <p className="font-medium">⚠️ No Funds in Wallet</p>
+                <p>This wallet has 0 SOL balance. Transfer funds to enable trading:</p>
+                <div className="p-2 bg-muted rounded font-mono text-xs">
+                  {wallet.pubkey}
+                </div>
+              </div>
+            </AlertDescription>
+          </Alert>
+        )}
+
+        {/* Low Balance Warning */}
+        {wallet.sol_balance > 0 && wallet.sol_balance < 0.01 && (
+          <Alert>
+            <AlertTriangle className="h-4 w-4" />
+            <AlertDescription>
+              <p className="font-medium">⚠️ Low Balance</p>
+              <p>Current balance: {wallet.sol_balance.toFixed(4)} SOL. Consider adding more funds for sustained trading.</p>
+            </AlertDescription>
+          </Alert>
+        )}
+
+        {/* Cost Estimation for Active Commands */}
+        {commands.some(c => c.is_active) && (
+          <Alert>
+            <DollarSign className="h-4 w-4" />
+            <AlertDescription>
+              <div className="space-y-1">
+                <p className="font-medium">💰 Trading Costs</p>
+                <p>Active commands will incur small fees per trade execution</p>
+                <p className="text-xs text-muted-foreground">
+                  Estimated cost: ~0.001-0.005 SOL per trade + gas fees
+                </p>
+              </div>
+            </AlertDescription>
+          </Alert>
+        )}
         {/* Commands List */}
         {commands.length > 0 && (
           <div className="space-y-3">
