@@ -77,6 +77,13 @@ const handler = async (req: Request): Promise<Response> => {
       case 'confirmation':
       case 'signup':
         subject = "Welcome to BlackBox - Confirm Your Account";
+        
+        // Convert the redirect URL to use blackbox.farm instead of lovable.dev
+        const productionRedirectUrl = redirect_url.replace(
+          /https:\/\/lovable\.dev\/projects\/[^\/]+/,
+          'https://blackbox.farm/auth'
+        );
+        
         html = `
           <!DOCTYPE html>
           <html>
@@ -85,66 +92,71 @@ const handler = async (req: Request): Promise<Response> => {
             <meta name="viewport" content="width=device-width, initial-scale=1.0">
             <title>Welcome to BlackBox</title>
           </head>
-          <body style="margin: 0; padding: 0; background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%); font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;">
-            <table width="100%" cellpadding="0" cellspacing="0" style="background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%); min-height: 100vh;">
+          <body style="margin: 0; padding: 0; background: linear-gradient(135deg, #0f0f23 0%, #1a1a2e 100%); font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;">
+            <table width="100%" cellpadding="0" cellspacing="0" style="background: linear-gradient(135deg, #0f0f23 0%, #1a1a2e 100%); min-height: 100vh;">
               <tr>
                 <td align="center" style="padding: 40px 20px;">
-                  <table width="600" cellpadding="0" cellspacing="0" style="background: #ffffff; border-radius: 16px; overflow: hidden; box-shadow: 0 25px 50px rgba(0,0,0,0.25);">
+                  <table width="600" cellpadding="0" cellspacing="0" style="background: #0f172a; border-radius: 16px; overflow: hidden; box-shadow: 0 25px 50px rgba(0,0,0,0.4); border: 1px solid #1e293b;">
                     
-                    <!-- Header -->
+                    <!-- Header with BlackBox Branding -->
                     <tr>
-                      <td style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); padding: 40px 40px 60px 40px; text-align: center; position: relative;">
-                        <div style="background: rgba(255,255,255,0.1); border-radius: 12px; padding: 20px; display: inline-block; margin-bottom: 20px;">
-                          <h1 style="color: #ffffff; font-size: 32px; font-weight: 700; margin: 0; letter-spacing: -0.5px;">BlackBox</h1>
+                      <td style="background: linear-gradient(135deg, #4f46e5 0%, #7c3aed 50%, #ec4899 100%); padding: 50px 40px; text-align: center; position: relative;">
+                        <!-- BlackBox Logo/Brand -->
+                        <div style="background: rgba(0,0,0,0.2); border-radius: 16px; padding: 24px; display: inline-block; margin-bottom: 24px; border: 2px solid rgba(255,255,255,0.1);">
+                          <h1 style="color: #ffffff; font-size: 36px; font-weight: 800; margin: 0; letter-spacing: -1px; text-shadow: 0 2px 10px rgba(0,0,0,0.3);">⚫ BlackBox</h1>
                         </div>
-                        <p style="color: rgba(255,255,255,0.9); font-size: 18px; margin: 0; font-weight: 500;">Volume Generation Platform</p>
-                        <div style="position: absolute; top: -10px; right: -10px; width: 60px; height: 60px; background: rgba(255,255,255,0.1); border-radius: 50%; opacity: 0.3;"></div>
-                        <div style="position: absolute; bottom: -15px; left: -15px; width: 80px; height: 80px; background: rgba(255,255,255,0.05); border-radius: 50%; opacity: 0.5;"></div>
+                        <p style="color: rgba(255,255,255,0.95); font-size: 20px; margin: 0; font-weight: 600; text-shadow: 0 1px 3px rgba(0,0,0,0.3);">Professional Volume Generation</p>
+                        <p style="color: rgba(255,255,255,0.8); font-size: 16px; margin: 8px 0 0 0; font-weight: 400;">Solana Trading Platform</p>
                       </td>
                     </tr>
                     
-                    <!-- Content -->
+                    <!-- Main Content -->
                     <tr>
-                      <td style="padding: 50px 40px;">
-                        <h2 style="color: #1a1a1a; font-size: 28px; font-weight: 600; margin: 0 0 20px 0; text-align: center;">Welcome to BlackBox!</h2>
+                      <td style="padding: 50px 40px; background: #0f172a;">
+                        <h2 style="color: #f8fafc; font-size: 28px; font-weight: 700; margin: 0 0 24px 0; text-align: center;">Welcome to BlackBox!</h2>
                         
-                        <p style="color: #4a5568; font-size: 16px; line-height: 1.6; margin: 0 0 30px 0; text-align: center;">
+                        <p style="color: #cbd5e1; font-size: 16px; line-height: 1.6; margin: 0 0 32px 0; text-align: center;">
                           Thank you for joining the most advanced Solana volume generation platform. You're one step away from accessing institutional-grade trading tools.
                         </p>
                         
-                        <div style="background: #f8fafc; border-left: 4px solid #667eea; padding: 20px; margin: 30px 0; border-radius: 8px;">
-                          <h3 style="color: #2d3748; font-size: 16px; font-weight: 600; margin: 0 0 10px 0;">What happens next:</h3>
-                          <ul style="color: #4a5568; font-size: 14px; line-height: 1.6; margin: 0; padding-left: 20px;">
-                            <li>Click the confirmation button below</li>
-                            <li>Complete your profile setup</li>
-                            <li>Choose your trading plan</li>
-                            <li>Start generating volume immediately</li>
+                        <!-- Next Steps -->
+                        <div style="background: #1e293b; border-left: 4px solid #4f46e5; padding: 24px; margin: 32px 0; border-radius: 12px; border: 1px solid #334155;">
+                          <h3 style="color: #f1f5f9; font-size: 18px; font-weight: 600; margin: 0 0 16px 0;">🚀 What happens next:</h3>
+                          <ul style="color: #cbd5e1; font-size: 15px; line-height: 1.7; margin: 0; padding-left: 24px; list-style: none;">
+                            <li style="margin: 8px 0; position: relative; padding-left: 8px;">✓ Click the confirmation button below</li>
+                            <li style="margin: 8px 0; position: relative; padding-left: 8px;">✓ Complete your profile setup</li>
+                            <li style="margin: 8px 0; position: relative; padding-left: 8px;">✓ Choose your trading plan</li>
+                            <li style="margin: 8px 0; position: relative; padding-left: 8px;">✓ Start generating volume immediately</li>
                           </ul>
                         </div>
                         
-                        <div style="text-align: center; margin: 40px 0;">
-                          <a href="${redirect_url}" 
-                             style="display: inline-block; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); 
-                                    color: #ffffff; text-decoration: none; padding: 16px 40px; border-radius: 8px; 
-                                    font-weight: 600; font-size: 16px; box-shadow: 0 8px 25px rgba(102, 126, 234, 0.3);
-                                    transition: all 0.3s ease;">
-                            Confirm Your Account
+                        <!-- CTA Button -->
+                        <div style="text-align: center; margin: 48px 0;">
+                          <a href="${productionRedirectUrl}" 
+                             style="display: inline-block; background: linear-gradient(135deg, #4f46e5 0%, #7c3aed 50%, #ec4899 100%); 
+                                    color: #ffffff; text-decoration: none; padding: 18px 48px; border-radius: 12px; 
+                                    font-weight: 700; font-size: 16px; box-shadow: 0 10px 30px rgba(79, 70, 229, 0.4);
+                                    transition: all 0.3s ease; border: 2px solid rgba(255,255,255,0.1);
+                                    text-transform: uppercase; letter-spacing: 0.5px;">
+                            🔐 Confirm Your Account
                           </a>
                         </div>
                         
-                        <div style="background: #fff5f5; border: 1px solid #fed7d7; border-radius: 8px; padding: 20px; margin: 30px 0;">
-                          <p style="color: #c53030; font-size: 14px; font-weight: 600; margin: 0 0 8px 0;">🔒 Security Notice</p>
-                          <p style="color: #742a2a; font-size: 14px; line-height: 1.5; margin: 0;">
+                        <!-- Security Notice -->
+                        <div style="background: #1e293b; border: 1px solid #ef4444; border-radius: 12px; padding: 24px; margin: 32px 0;">
+                          <p style="color: #ef4444; font-size: 15px; font-weight: 700; margin: 0 0 12px 0;">🔒 Security Notice</p>
+                          <p style="color: #fca5a5; font-size: 14px; line-height: 1.6; margin: 0;">
                             This confirmation link expires in 24 hours for your security. If you didn't create this account, please ignore this email.
                           </p>
                         </div>
                         
-                        <div style="text-align: center; margin-top: 30px;">
-                          <p style="color: #718096; font-size: 14px; margin: 0 0 15px 0;">
+                        <!-- Backup Link -->
+                        <div style="text-align: center; margin-top: 32px; background: #1e293b; padding: 20px; border-radius: 8px;">
+                          <p style="color: #94a3b8; font-size: 14px; margin: 0 0 12px 0;">
                             Having trouble with the button? Copy and paste this link:
                           </p>
-                          <p style="background: #f7fafc; padding: 12px; border-radius: 6px; font-family: monospace; font-size: 12px; color: #4a5568; word-break: break-all; margin: 0;">
-                            ${redirect_url}
+                          <p style="background: #334155; padding: 12px; border-radius: 6px; font-family: 'Courier New', monospace; font-size: 11px; color: #e2e8f0; word-break: break-all; margin: 0; border: 1px solid #475569;">
+                            ${productionRedirectUrl}
                           </p>
                         </div>
                       </td>
@@ -152,15 +164,15 @@ const handler = async (req: Request): Promise<Response> => {
                     
                     <!-- Footer -->
                     <tr>
-                      <td style="background: #f8fafc; padding: 30px 40px; border-top: 1px solid #e2e8f0;">
+                      <td style="background: #0f172a; padding: 32px 40px; border-top: 1px solid #1e293b;">
                         <table width="100%" cellpadding="0" cellspacing="0">
                           <tr>
                             <td style="text-align: center;">
-                              <p style="color: #718096; font-size: 14px; margin: 0 0 15px 0; font-weight: 600;">BlackBox Farm</p>
-                              <p style="color: #a0aec0; font-size: 12px; line-height: 1.5; margin: 0;">
+                              <p style="color: #64748b; font-size: 15px; margin: 0 0 16px 0; font-weight: 600;">BlackBox Farm</p>
+                              <p style="color: #475569; font-size: 12px; line-height: 1.6; margin: 0;">
                                 Professional Solana Volume Generation | Enterprise Trading Solutions<br>
                                 This email was sent to ${email} because you signed up for BlackBox.<br>
-                                Visit <a href="https://blackbox.farm" style="color: #667eea; text-decoration: none;">blackbox.farm</a> for support or questions.
+                                Visit <a href="https://blackbox.farm" style="color: #4f46e5; text-decoration: none; font-weight: 600;">blackbox.farm</a> for support or questions.
                               </p>
                             </td>
                           </tr>
