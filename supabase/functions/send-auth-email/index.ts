@@ -131,16 +131,16 @@ const handler = async (req: Request): Promise<Response> => {
                         </div>
                         
                         <!-- CTA Button -->
-                        <div style="text-align: center; margin: 48px 0;">
-                          <a href="${productionRedirectUrl}" 
-                             style="display: inline-block; background: linear-gradient(135deg, #4f46e5 0%, #7c3aed 50%, #ec4899 100%); 
-                                    color: #ffffff; text-decoration: none; padding: 18px 48px; border-radius: 12px; 
-                                    font-weight: 700; font-size: 16px; box-shadow: 0 10px 30px rgba(79, 70, 229, 0.4);
-                                    transition: all 0.3s ease; border: 2px solid rgba(255,255,255,0.1);
-                                    text-transform: uppercase; letter-spacing: 0.5px;">
-                            🔐 Confirm Your Account
-                          </a>
-                        </div>
+                         <div style="text-align: center; margin: 48px 0;">
+                           <a href="${payload.email_data.site_url}/auth/v1/verify?token=${payload.email_data.token_hash}&type=${payload.email_data.email_action_type}&redirect_to=${productionRedirectUrl}" 
+                              style="display: inline-block; background: linear-gradient(135deg, #4f46e5 0%, #7c3aed 50%, #ec4899 100%); 
+                                     color: #ffffff; text-decoration: none; padding: 18px 48px; border-radius: 12px; 
+                                     font-weight: 700; font-size: 16px; box-shadow: 0 10px 30px rgba(79, 70, 229, 0.4);
+                                     transition: all 0.3s ease; border: 2px solid rgba(255,255,255,0.1);
+                                     text-transform: uppercase; letter-spacing: 0.5px;">
+                             🔐 Confirm Your Account
+                           </a>
+                         </div>
                         
                         <!-- Security Notice -->
                         <div style="background: #1e293b; border: 1px solid #ef4444; border-radius: 12px; padding: 24px; margin: 32px 0;">
