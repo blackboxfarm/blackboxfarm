@@ -248,11 +248,16 @@ export function WalletCommands({ wallet, campaign, isDevMode = false, devBalance
   };
 
   const toggleCommand = async (command: CommandCode) => {
+    // Get effective balance (dev mode uses simulated balance)
+    const effectiveBalance = isDevMode ? (devBalance || 0) : wallet.sol_balance;
+    
     // Check wallet balance before activating
-    if (!command.is_active && wallet.sol_balance <= 0) {
+    if (!command.is_active && effectiveBalance <= 0) {
       toast({ 
         title: "Insufficient Funds", 
-        description: "This wallet has 0 SOL balance. Transfer funds before activating commands.",
+        description: isDevMode 
+          ? "Enable dev mode and add fake funds to test commands."
+          : "This wallet has 0 SOL balance. Transfer funds before activating commands.",
         variant: "destructive"
       });
       return;
@@ -439,27 +444,52 @@ export function WalletCommands({ wallet, campaign, isDevMode = false, devBalance
                           </div>
                         </div>
 
-                        {simulationData && (
-                          <div className="grid grid-cols-2 gap-4 p-3 bg-background rounded border">
-                            <div className="space-y-2">
-                              <div className="text-sm font-medium">Estimated Stats:</div>
-                              <div className="text-xs space-y-1">
-                                <div>Trades: {simulationData.trades}</div>
-                                <div>Gas Fees: {simulationData.gasFees.toFixed(4)} SOL</div>
-                                <div>Our Fees: {simulationData.ourFees.toFixed(4)} SOL</div>
-                              </div>
-                            </div>
-                            <div className="space-y-2">
-                              <div className="text-sm font-medium">Total Cost:</div>
-                              <div className="text-lg font-bold text-primary">
-                                {simulationData.totalCost.toFixed(4)} SOL
-                              </div>
-                              <div className="text-xs text-muted-foreground">
-                                Base + Gas + Service
-                              </div>
-                            </div>
-                          </div>
-                        )}
+                         {simulationData && (
+                           <div className="grid grid-cols-2 gap-4 p-3 bg-background rounded border">
+                             <div className="space-y-2">
+                               <div className="text-sm font-medium">Estimated Stats:</div>
+                               <div className="text-xs space-y-1">
+                                 <div>Trades: {simulationData.trades}</div>
+                                 <div>Gas Fees: {simulationData.gasFees.toFixed(4)} SOL</div>
+                                 <div>Our Fees: {simulationData.ourFees.toFixed(4)} SOL</div>
+                               </div>
+                             </div>
+                             <div className="space-y-2">
+                               <div className="text-sm font-medium">Total Cost:</div>
+                               <div className="text-lg font-bold text-primary">
+                                 {simulationData.totalCost.toFixed(4)} SOL
+                               </div>
+                               <div className="text-xs text-muted-foreground">
+                                 Base + Gas + Service
+                               </div>
+                               {/* Balance Check */}
+                               {(() => {
+                                 const effectiveBalance = isDevMode ? (devBalance || 0) : wallet.sol_balance;
+                                 const canAfford = effectiveBalance >= simulationData.totalCost;
+                                 const remainingBalance = effectiveBalance - simulationData.totalCost;
+                                 
+                                 return (
+                                   <div className="mt-2 p-2 rounded bg-muted/50">
+                                     <div className="text-xs">
+                                       <div className={`font-medium ${canAfford ? 'text-green-600' : 'text-red-600'}`}>
+                                         {canAfford ? '✓ Affordable' : '✗ Insufficient funds'}
+                                       </div>
+                                       <div className="text-muted-foreground">
+                                         Current: {effectiveBalance.toFixed(4)} SOL
+                                         {isDevMode && ' (simulated)'}
+                                       </div>
+                                       {canAfford && (
+                                         <div className="text-muted-foreground">
+                                           Remaining: {remainingBalance.toFixed(4)} SOL
+                                         </div>
+                                       )}
+                                     </div>
+                                   </div>
+                                 );
+                               })()}
+                             </div>
+                           </div>
+                         )}
                       </div>
                     </div>
                   )}
