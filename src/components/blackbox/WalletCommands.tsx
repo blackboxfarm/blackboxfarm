@@ -56,6 +56,7 @@ interface DurationEstimate {
   totalCostPerCycle: number;
   cyclesUntilEmpty: number;
   isInfinite: boolean;
+  volumeGenerated: number;
 }
 
 interface WalletCommandsProps {
@@ -498,7 +499,7 @@ export function WalletCommands({ wallet, campaign, isDevMode = false, devBalance
     const effectiveBalance = useMockFunds ? parseFloat(mockFunds) : (isDevMode ? (devBalance || 0) : wallet.sol_balance);
     
     if (effectiveBalance <= 0) {
-      return { maxDurationHours: 0, totalCostPerCycle: 0, cyclesUntilEmpty: 0, isInfinite: false };
+      return { maxDurationHours: 0, totalCostPerCycle: 0, cyclesUntilEmpty: 0, isInfinite: false, volumeGenerated: 0 };
     }
 
     let avgBuyAmount = 0;
@@ -533,18 +534,30 @@ export function WalletCommands({ wallet, campaign, isDevMode = false, devBalance
     const isInfinite = avgSellPercent >= 100 && netCostPerCycle <= 0;
     
     if (isInfinite) {
-      return { maxDurationHours: Infinity, totalCostPerCycle: costPerBuy + costPerSell, cyclesUntilEmpty: Infinity, isInfinite: true };
+      return { 
+        maxDurationHours: Infinity, 
+        totalCostPerCycle: costPerBuy + costPerSell, 
+        cyclesUntilEmpty: Infinity, 
+        isInfinite: true,
+        volumeGenerated: Infinity
+      };
     }
 
     const cyclesUntilEmpty = Math.floor(effectiveBalance / Math.abs(netCostPerCycle));
     const cycleTimeSeconds = avgBuyInterval + avgSellInterval;
     const maxDurationHours = (cyclesUntilEmpty * cycleTimeSeconds) / 3600;
 
+    // Calculate volume generated
+    // Each cycle: buy amount + sell amount (tokens sold back for SOL)
+    const volumePerCycle = avgBuyAmount + (avgBuyAmount * avgSellPercent / 100);
+    const totalVolumeGenerated = cyclesUntilEmpty * volumePerCycle;
+
     return {
       maxDurationHours,
       totalCostPerCycle: Math.abs(netCostPerCycle),
       cyclesUntilEmpty,
-      isInfinite: false
+      isInfinite: false,
+      volumeGenerated: totalVolumeGenerated
     };
   };
 
@@ -1117,24 +1130,30 @@ export function WalletCommands({ wallet, campaign, isDevMode = false, devBalance
                        return (
                          <div className="mt-2 p-3 bg-muted/50 rounded-lg">
                            <div className="text-sm font-medium mb-2">💰 Duration Estimate</div>
-                           <div className="grid grid-cols-2 gap-2 text-xs">
-                             <div>
-                               <div className="text-muted-foreground">Funds Available:</div>
-                               <div className="font-medium">
-                                 {(useMockFunds ? parseFloat(mockFunds) : (isDevMode ? (devBalance || 0) : wallet.sol_balance)).toFixed(3)} SOL
-                                 {useMockFunds && <span className="text-accent"> (mock)</span>}
-                               </div>
-                             </div>
-                             <div>
-                               <div className="text-muted-foreground">Net Cost/Cycle:</div>
-                               <div className="font-medium">{estimate.totalCostPerCycle.toFixed(4)} SOL</div>
-                             </div>
-                             <div>
-                               <div className="text-muted-foreground">Can Run For:</div>
-                               <div className={`font-medium ${estimate.isInfinite ? 'text-green-600' : estimate.maxDurationHours < 1 ? 'text-red-600' : 'text-yellow-600'}`}>
-                                 {estimate.isInfinite ? '∞ (Infinite)' : 
-                                  estimate.maxDurationHours < 1 ? `${(estimate.maxDurationHours * 60).toFixed(0)}min` :
-                                  estimate.maxDurationHours < 24 ? `${estimate.maxDurationHours.toFixed(1)}hrs` :
+                            <div className="grid grid-cols-3 gap-2 text-xs">
+                              <div>
+                                <div className="text-muted-foreground">Funds Available:</div>
+                                <div className="font-medium">
+                                  {(useMockFunds ? parseFloat(mockFunds) : (isDevMode ? (devBalance || 0) : wallet.sol_balance)).toFixed(3)} SOL
+                                  {useMockFunds && <span className="text-accent"> (mock)</span>}
+                                </div>
+                              </div>
+                              <div>
+                                <div className="text-muted-foreground">Net Cost/Cycle:</div>
+                                <div className="font-medium">{estimate.totalCostPerCycle.toFixed(4)} SOL</div>
+                              </div>
+                              <div>
+                                <div className="text-muted-foreground">Volume Generated:</div>
+                                <div className="font-medium">
+                                  {estimate.isInfinite ? '∞' : `${estimate.volumeGenerated.toFixed(2)} SOL`}
+                                </div>
+                              </div>
+                              <div>
+                                <div className="text-muted-foreground">Can Run For:</div>
+                                <div className={`font-medium ${estimate.isInfinite ? 'text-green-600' : estimate.maxDurationHours < 1 ? 'text-red-600' : 'text-yellow-600'}`}>
+                                  {estimate.isInfinite ? '∞ (Infinite)' : 
+                                   estimate.maxDurationHours < 1 ? `${(estimate.maxDurationHours * 60).toFixed(0)}min` :
+                                   estimate.maxDurationHours < 24 ? `${estimate.maxDurationHours.toFixed(1)}hrs` :
                                   `${(estimate.maxDurationHours / 24).toFixed(1)} days`}
                                </div>
                              </div>
