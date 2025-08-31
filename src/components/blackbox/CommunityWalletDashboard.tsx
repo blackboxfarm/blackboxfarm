@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -8,9 +8,9 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, Di
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { supabase } from '@/integrations/supabase/client';
-import { useToast } from '@/hooks/use-toast';
-import { Plus, Users, Wallet, TrendingUp, Clock, Target } from 'lucide-react';
+import { useCommunityWallet } from '@/hooks/useCommunityWallet';
+import CommunityWalletConnect from './CommunityWalletConnect';
+import { Plus, Users, Wallet, Clock } from 'lucide-react';
 
 interface CommunityCampaign {
   id: string;
@@ -44,15 +44,18 @@ interface CommunityContribution {
 }
 
 export default function CommunityWalletDashboard() {
-  const [campaigns, setCampaigns] = useState<CommunityCampaign[]>([]);
-  const [myContributions, setMyContributions] = useState<CommunityContribution[]>([]);
+  const { 
+    campaigns, 
+    myContributions, 
+    isLoading, 
+    createCampaign, 
+    contributeToCampaign 
+  } = useCommunityWallet();
+  
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [isContributeModalOpen, setIsContributeModalOpen] = useState(false);
   const [selectedCampaign, setSelectedCampaign] = useState<CommunityCampaign | null>(null);
-  const [contributionAmount, setContributionAmount] = useState('');
-  const [isLoading, setIsLoading] = useState(true);
   const [activeTab, setActiveTab] = useState('discover');
-  const { toast } = useToast();
 
   const [newCampaign, setNewCampaign] = useState({
     title: '',
@@ -71,99 +74,24 @@ export default function CommunityWalletDashboard() {
     }
   });
 
-  useEffect(() => {
-    loadCampaigns();
-    loadMyContributions();
-  }, []);
+  const handleCreateCampaign = async () => {
+    // Calculate deadline timestamp
+    const deadline = new Date(newCampaign.target_deadline).toISOString();
 
-  const loadCampaigns = async () => {
-    try {
-      const { data, error } = await supabase
-        .from('community_campaigns')
-        .select('*')
-        .order('created_at', { ascending: false });
+    const campaignData = {
+      title: newCampaign.title,
+      description: newCampaign.description,
+      token_address: newCampaign.token_address,
+      funding_goal_sol: parseFloat(newCampaign.funding_goal_sol),
+      target_deadline: deadline,
+      min_contribution_sol: parseFloat(newCampaign.min_contribution_sol),
+      max_contribution_sol: newCampaign.max_contribution_sol ? parseFloat(newCampaign.max_contribution_sol) : null,
+      campaign_parameters: newCampaign.campaign_parameters
+    };
 
-      if (error) throw error;
-      setCampaigns(data || []);
-    } catch (error) {
-      console.error('Error loading campaigns:', error);
-      toast({
-        title: "Error",
-        description: "Failed to load community campaigns",
-        variant: "destructive"
-      });
-    }
-  };
-
-  const loadMyContributions = async () => {
-    try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) return;
-
-      const { data, error } = await supabase
-        .from('community_contributions')
-        .select(`
-          *,
-          community_campaigns (
-            title,
-            status,
-            funding_goal_sol,
-            current_funding_sol
-          )
-        `)
-        .eq('contributor_id', user.id)
-        .order('contribution_timestamp', { ascending: false });
-
-      if (error) throw error;
-      setMyContributions(data || []);
-    } catch (error) {
-      console.error('Error loading contributions:', error);
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  const createCampaign = async () => {
-    try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) {
-        toast({
-          title: "Authentication Required",
-          description: "Please sign in to create a campaign",
-          variant: "destructive"
-        });
-        return;
-      }
-
-      // Calculate deadline timestamp
-      const deadline = new Date(newCampaign.target_deadline).toISOString();
-
-      const { data, error } = await supabase
-        .from('community_campaigns')
-        .insert({
-          creator_id: user.id,
-          title: newCampaign.title,
-          description: newCampaign.description,
-          token_address: newCampaign.token_address,
-          funding_goal_sol: parseFloat(newCampaign.funding_goal_sol),
-          target_deadline: deadline,
-          min_contribution_sol: parseFloat(newCampaign.min_contribution_sol),
-          max_contribution_sol: newCampaign.max_contribution_sol ? parseFloat(newCampaign.max_contribution_sol) : null,
-          campaign_parameters: newCampaign.campaign_parameters
-        })
-        .select()
-        .single();
-
-      if (error) throw error;
-
-      toast({
-        title: "Campaign Created!",
-        description: "Your community campaign has been created successfully"
-      });
-
+    const result = await createCampaign(campaignData);
+    if (result) {
       setIsCreateModalOpen(false);
-      loadCampaigns();
-      
       // Reset form
       setNewCampaign({
         title: '',
@@ -181,92 +109,18 @@ export default function CommunityWalletDashboard() {
           sellTrigger: '2x'
         }
       });
-    } catch (error) {
-      console.error('Error creating campaign:', error);
-      toast({
-        title: "Error",
-        description: "Failed to create campaign",
-        variant: "destructive"
-      });
     }
   };
 
-  const contributeToCampaign = async () => {
-    if (!selectedCampaign || !contributionAmount) return;
-
-    try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) {
-        toast({
-          title: "Authentication Required",
-          description: "Please sign in to contribute",
-          variant: "destructive"
-        });
-        return;
-      }
-
-      const amount = parseFloat(contributionAmount);
-      
-      // Validate contribution amount
-      if (amount < selectedCampaign.min_contribution_sol) {
-        toast({
-          title: "Invalid Amount",
-          description: `Minimum contribution is ${selectedCampaign.min_contribution_sol} SOL`,
-          variant: "destructive"
-        });
-        return;
-      }
-
-      if (selectedCampaign.max_contribution_sol && amount > selectedCampaign.max_contribution_sol) {
-        toast({
-          title: "Invalid Amount",
-          description: `Maximum contribution is ${selectedCampaign.max_contribution_sol} SOL`,
-          variant: "destructive"
-        });
-        return;
-      }
-
-      // Insert contribution record
-      const { error: contributionError } = await supabase
-        .from('community_contributions')
-        .insert({
-          campaign_id: selectedCampaign.id,
-          contributor_id: user.id,
-          amount_sol: amount,
-          transaction_signature: 'mock_signature_' + Date.now() // In real implementation, this would be from Solana transaction
-        });
-
-      if (contributionError) throw contributionError;
-
-      // Update campaign funding
-      const { error: updateError } = await supabase
-        .from('community_campaigns')
-        .update({ 
-          current_funding_sol: selectedCampaign.current_funding_sol + amount,
-          contributor_count: selectedCampaign.contributor_count + 1
-        })
-        .eq('id', selectedCampaign.id);
-
-      if (updateError) throw updateError;
-
-      toast({
-        title: "Contribution Successful!",
-        description: `You contributed ${amount} SOL to ${selectedCampaign.title}`
-      });
-
+  const handleContribute = async (amount: number, walletSecret: string) => {
+    if (!selectedCampaign) return false;
+    
+    const success = await contributeToCampaign(selectedCampaign.id, amount, walletSecret);
+    if (success) {
       setIsContributeModalOpen(false);
-      setContributionAmount('');
       setSelectedCampaign(null);
-      loadCampaigns();
-      loadMyContributions();
-    } catch (error) {
-      console.error('Error contributing:', error);
-      toast({
-        title: "Error",
-        description: "Failed to process contribution",
-        variant: "destructive"
-      });
     }
+    return success;
   };
 
   const getStatusBadge = (status: string) => {
@@ -408,7 +262,7 @@ export default function CommunityWalletDashboard() {
                 <Button variant="outline" onClick={() => setIsCreateModalOpen(false)}>
                   Cancel
                 </Button>
-                <Button onClick={createCampaign}>
+                <Button onClick={handleCreateCampaign}>
                   Create Campaign
                 </Button>
               </div>
@@ -527,54 +381,18 @@ export default function CommunityWalletDashboard() {
         </TabsContent>
       </Tabs>
 
-      {/* Contribute Modal */}
-      <Dialog open={isContributeModalOpen} onOpenChange={setIsContributeModalOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Contribute to Campaign</DialogTitle>
-            <DialogDescription>
-              {selectedCampaign?.title}
-            </DialogDescription>
-          </DialogHeader>
-          
-          {selectedCampaign && (
-            <div className="space-y-4">
-              <div className="space-y-2">
-                <div className="flex justify-between text-sm">
-                  <span>Current Progress</span>
-                  <span>{selectedCampaign.current_funding_sol.toFixed(2)} / {selectedCampaign.funding_goal_sol} SOL</span>
-                </div>
-                <Progress value={getFundingProgress(selectedCampaign.current_funding_sol, selectedCampaign.funding_goal_sol)} />
-              </div>
-              
-              <div>
-                <Label htmlFor="amount">Contribution Amount (SOL)</Label>
-                <Input
-                  id="amount"
-                  type="number"
-                  step="0.001"
-                  value={contributionAmount}
-                  onChange={(e) => setContributionAmount(e.target.value)}
-                  placeholder={`Min: ${selectedCampaign.min_contribution_sol} SOL`}
-                />
-                <div className="text-xs text-muted-foreground mt-1">
-                  Min: {selectedCampaign.min_contribution_sol} SOL
-                  {selectedCampaign.max_contribution_sol && ` • Max: ${selectedCampaign.max_contribution_sol} SOL`}
-                </div>
-              </div>
-              
-              <div className="flex justify-end gap-2">
-                <Button variant="outline" onClick={() => setIsContributeModalOpen(false)}>
-                  Cancel
-                </Button>
-                <Button onClick={contributeToCampaign}>
-                  Contribute
-                </Button>
-              </div>
-            </div>
-          )}
-        </DialogContent>
-      </Dialog>
+      {/* Community Wallet Connect Modal */}
+      {selectedCampaign && (
+        <CommunityWalletConnect
+          isOpen={isContributeModalOpen}
+          onClose={() => {
+            setIsContributeModalOpen(false);
+            setSelectedCampaign(null);
+          }}
+          onContribute={handleContribute}
+          campaign={selectedCampaign}
+        />
+      )}
     </div>
   );
 }
