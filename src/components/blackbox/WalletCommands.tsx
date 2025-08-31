@@ -495,6 +495,19 @@ export function WalletCommands({ wallet, campaign, isDevMode = false, devBalance
     return (parseFloat(usdAmount) / SOL_PRICE).toFixed(3);
   };
 
+  const formatVolumeUSD = (solAmount: number) => {
+    const SOL_PRICE = 200;
+    const usdValue = solAmount * SOL_PRICE;
+    
+    if (usdValue >= 1000000) {
+      return `$${(usdValue / 1000000).toFixed(1)}M`;
+    } else if (usdValue >= 1000) {
+      return `$${(usdValue / 1000).toFixed(1)}K`;
+    } else {
+      return `$${usdValue.toFixed(0)}`;
+    }
+  };
+
   const calculateDurationEstimate = (config: any): DurationEstimate => {
     const effectiveBalance = useMockFunds ? parseFloat(mockFunds) : (isDevMode ? (devBalance || 0) : wallet.sol_balance);
     
@@ -1145,7 +1158,14 @@ export function WalletCommands({ wallet, campaign, isDevMode = false, devBalance
                               <div>
                                 <div className="text-muted-foreground">Volume Generated:</div>
                                 <div className="font-medium">
-                                  {estimate.isInfinite ? '∞' : `${estimate.volumeGenerated.toFixed(2)} SOL`}
+                                  {estimate.isInfinite ? '∞' : (
+                                    <div className="space-y-1">
+                                      <div>{estimate.volumeGenerated.toFixed(2)} SOL</div>
+                                      <div className="text-sm text-muted-foreground">
+                                        {formatVolumeUSD(estimate.volumeGenerated)}
+                                      </div>
+                                    </div>
+                                  )}
                                 </div>
                               </div>
                               <div>
