@@ -7,7 +7,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Slider } from "@/components/ui/slider";
-import { Plus, Play, Pause, Settings, AlertTriangle, DollarSign, BarChart3, TrendingUp, Info, Eye, EyeOff, Edit } from "lucide-react";
+import { Plus, Play, Pause, Settings, AlertTriangle, DollarSign, BarChart3, TrendingUp, Info, Eye, EyeOff, Edit, Shuffle, RotateCcw } from "lucide-react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "@/hooks/use-toast";
@@ -61,6 +61,8 @@ export function WalletCommands({ wallet, campaign, isDevMode = false, devBalance
   const [showTradingCosts, setShowTradingCosts] = useState(false);
   const [activeIntervals, setActiveIntervals] = useState<Record<string, NodeJS.Timeout>>({});
   const [simulatedTrades, setSimulatedTrades] = useState<Record<string, Array<{type: 'buy' | 'sell', amount: number, timestamp: Date}>>>({});
+  const [useUSD, setUseUSD] = useState(false);
+  const [previousCommand, setPreviousCommand] = useState<any>(null);
   const [newCommand, setNewCommand] = useState({
     name: "",
     mode: "simple",
@@ -383,6 +385,7 @@ export function WalletCommands({ wallet, campaign, isDevMode = false, devBalance
   const resetForm = () => {
     setShowCreateForm(false);
     setEditingCommand(null);
+    setPreviousCommand(null);
     setNewCommand({
       name: "",
       mode: "simple",
@@ -400,6 +403,77 @@ export function WalletCommands({ wallet, campaign, isDevMode = false, devBalance
       sellIntervalMin: "300",
       sellIntervalMax: "900"
     });
+  };
+
+  const randomizeCommand = () => {
+    // Save current state for "back to previous"
+    setPreviousCommand({ ...newCommand });
+
+    if (mode === "simple") {
+      // Convert simple values to ranges
+      const buyAmount = parseFloat(newCommand.buyAmount);
+      const buyInterval = parseInt(newCommand.buyInterval);
+      const sellInterval = parseInt(newCommand.sellInterval);
+      
+      setMode("complex");
+      setNewCommand(prev => ({
+        ...prev,
+        mode: "complex",
+        buyAmountMin: String((buyAmount * 0.5).toFixed(3)),
+        buyAmountMax: String((buyAmount * 3).toFixed(3)),
+        buyIntervalMin: String(Math.max(1, Math.floor(buyInterval * 0.2))),
+        buyIntervalMax: String(Math.floor(buyInterval * 6)),
+        sellPercentMin: String(Math.max(20, parseInt(newCommand.sellPercent) * 0.4)),
+        sellPercentMax: newCommand.sellPercent,
+        sellIntervalMin: String(Math.max(30, Math.floor(sellInterval * 0.33))),
+        sellIntervalMax: String(Math.floor(sellInterval * 2))
+      }));
+    } else {
+      // Already complex, just randomize within existing ranges or expand them
+      const currentBuyMin = parseFloat(newCommand.buyAmountMin);
+      const currentBuyMax = parseFloat(newCommand.buyAmountMax);
+      const avgBuy = (currentBuyMin + currentBuyMax) / 2;
+      
+      setNewCommand(prev => ({
+        ...prev,
+        buyAmountMin: String((avgBuy * 0.3).toFixed(3)),
+        buyAmountMax: String((avgBuy * 4).toFixed(3)),
+        buyIntervalMin: String(Math.max(1, Math.floor(parseInt(prev.buyIntervalMin) * 0.5))),
+        buyIntervalMax: String(Math.floor(parseInt(prev.buyIntervalMax) * 2)),
+        sellPercentMin: String(Math.max(20, parseInt(prev.sellPercentMin) * 0.7)),
+        sellPercentMax: "100",
+        sellIntervalMin: String(Math.max(30, Math.floor(parseInt(prev.sellIntervalMin) * 0.5))),
+        sellIntervalMax: String(Math.floor(parseInt(prev.sellIntervalMax) * 1.5))
+      }));
+    }
+
+    toast({
+      title: "Command Randomized",
+      description: "Values converted to ranges. Use 'Back to Previous' to restore original settings."
+    });
+  };
+
+  const restorePrevious = () => {
+    if (previousCommand) {
+      setNewCommand(previousCommand);
+      setMode(previousCommand.mode || "simple");
+      setPreviousCommand(null);
+      toast({
+        title: "Restored Previous Settings",
+        description: "Command values have been restored to before randomization."
+      });
+    }
+  };
+
+  const convertToUSD = (solAmount: string) => {
+    // Assuming 1 SOL = $200 (this should come from real-time price)
+    const SOL_PRICE = 200;
+    return (parseFloat(solAmount) * SOL_PRICE).toFixed(2);
+  };
+
+  const convertToSOL = (usdAmount: string) => {
+    const SOL_PRICE = 200;
+    return (parseFloat(usdAmount) / SOL_PRICE).toFixed(3);
   };
 
   const startEditing = (command: CommandCode) => {
@@ -829,6 +903,47 @@ export function WalletCommands({ wallet, campaign, isDevMode = false, devBalance
                 />
               </div>
 
+              {/* Controls Row */}
+              <div className="flex items-center justify-between p-3 bg-muted/50 rounded-lg">
+                <div className="flex items-center gap-2">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={randomizeCommand}
+                    className="flex items-center gap-2"
+                  >
+                    <Shuffle className="h-4 w-4" />
+                    Randomize
+                  </Button>
+                  {previousCommand && (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={restorePrevious}
+                      className="flex items-center gap-2"
+                    >
+                      <RotateCcw className="h-4 w-4" />
+                      Back to Previous
+                    </Button>
+                  )}
+                </div>
+                <div className="flex items-center gap-2">
+                  <Label htmlFor="usdToggle" className="text-sm">SOL</Label>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setUseUSD(!useUSD)}
+                    className={`p-2 h-8 w-12 ${useUSD ? 'bg-primary text-primary-foreground' : ''}`}
+                  >
+                    <DollarSign className="h-4 w-4" />
+                  </Button>
+                  <Label htmlFor="usdToggle" className="text-sm">USD</Label>
+                </div>
+              </div>
+
               <Tabs value={mode} onValueChange={(value) => setMode(value as "simple" | "complex")}>
                 <TabsList className="grid w-full grid-cols-2">
                   <TabsTrigger value="simple">Simple Mode</TabsTrigger>
@@ -838,14 +953,25 @@ export function WalletCommands({ wallet, campaign, isDevMode = false, devBalance
                 <TabsContent value="simple" className="space-y-4">
                   <div className="grid grid-cols-2 gap-4">
                     <div>
-                      <Label htmlFor="buyAmount">Buy Amount (SOL)</Label>
+                      <Label htmlFor="buyAmount">
+                        Buy Amount ({useUSD ? 'USD' : 'SOL'})
+                      </Label>
                       <Input
                         id="buyAmount"
                         type="number"
-                        step="0.001"
-                        value={newCommand.buyAmount}
-                        onChange={(e) => setNewCommand(prev => ({ ...prev, buyAmount: e.target.value }))}
+                        step={useUSD ? "0.01" : "0.001"}
+                        value={useUSD ? convertToUSD(newCommand.buyAmount) : newCommand.buyAmount}
+                        onChange={(e) => setNewCommand(prev => ({ 
+                          ...prev, 
+                          buyAmount: useUSD ? convertToSOL(e.target.value) : e.target.value 
+                        }))}
+                        placeholder={useUSD ? "5.00" : "0.025"}
                       />
+                      {useUSD && (
+                        <div className="text-xs text-muted-foreground mt-1">
+                          ≈ {newCommand.buyAmount} SOL
+                        </div>
+                      )}
                     </div>
                     <div>
                       <Label htmlFor="sellPercent">Sell Percent (%)</Label>
@@ -889,23 +1015,34 @@ export function WalletCommands({ wallet, campaign, isDevMode = false, devBalance
                 <TabsContent value="complex" className="space-y-4">
                   <div className="grid grid-cols-2 gap-4">
                     <div>
-                      <Label>Buy Amount Range (SOL)</Label>
+                      <Label>Buy Amount Range ({useUSD ? 'USD' : 'SOL'})</Label>
                       <div className="flex gap-2">
                         <Input
                           type="number"
-                          step="0.001"
-                          placeholder="Min"
-                          value={newCommand.buyAmountMin}
-                          onChange={(e) => setNewCommand(prev => ({ ...prev, buyAmountMin: e.target.value }))}
+                          step={useUSD ? "0.01" : "0.001"}
+                          placeholder={useUSD ? "Min USD" : "Min SOL"}
+                          value={useUSD ? convertToUSD(newCommand.buyAmountMin) : newCommand.buyAmountMin}
+                          onChange={(e) => setNewCommand(prev => ({ 
+                            ...prev, 
+                            buyAmountMin: useUSD ? convertToSOL(e.target.value) : e.target.value 
+                          }))}
                         />
                         <Input
                           type="number"
-                          step="0.001"
-                          placeholder="Max"
-                          value={newCommand.buyAmountMax}
-                          onChange={(e) => setNewCommand(prev => ({ ...prev, buyAmountMax: e.target.value }))}
+                          step={useUSD ? "0.01" : "0.001"}
+                          placeholder={useUSD ? "Max USD" : "Max SOL"}
+                          value={useUSD ? convertToUSD(newCommand.buyAmountMax) : newCommand.buyAmountMax}
+                          onChange={(e) => setNewCommand(prev => ({ 
+                            ...prev, 
+                            buyAmountMax: useUSD ? convertToSOL(e.target.value) : e.target.value 
+                          }))}
                         />
                       </div>
+                      {useUSD && (
+                        <div className="text-xs text-muted-foreground mt-1">
+                          ≈ {newCommand.buyAmountMin}-{newCommand.buyAmountMax} SOL
+                        </div>
+                      )}
                     </div>
                     <div>
                       <Label>Sell Percent Range (%)</Label>
