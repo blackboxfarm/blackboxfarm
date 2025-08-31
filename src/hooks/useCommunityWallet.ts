@@ -1,7 +1,6 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '@/integrations/supabase/client';
-import { Connection, PublicKey, Transaction, SystemProgram, sendAndConfirmTransaction, Keypair } from '@solana/web3.js';
-import bs58 from 'bs58';
+import { Connection } from '@solana/web3.js';
 import { useToast } from '@/hooks/use-toast';
 
 interface CommunityCampaign {
@@ -23,6 +22,7 @@ interface CommunityCampaign {
   updated_at: string;
   funded_at?: string;
   executed_at?: string;
+  blackbox_campaign_id?: string;
 }
 
 interface CommunityContribution {
@@ -89,9 +89,11 @@ export function useCommunityWallet() {
       console.error('Error loading campaigns:', error);
       toast({
         title: "Error",
-        description: "Failed to load community campaigns",
+        description: "Failed to load campaigns",
         variant: "destructive"
       });
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -104,12 +106,7 @@ export function useCommunityWallet() {
         .from('community_contributions')
         .select(`
           *,
-          community_campaigns (
-            title,
-            status,
-            funding_goal_sol,
-            current_funding_sol
-          )
+          community_campaigns!inner(title, status)
         `)
         .eq('contributor_id', user.id)
         .order('contribution_timestamp', { ascending: false });
@@ -163,16 +160,7 @@ export function useCommunityWallet() {
     }
   };
 
-  const contributeToCampaign = async (campaignId: string, amount: number, walletSecret: string) => {
-    if (!connection) {
-      toast({
-        title: "Connection Error",
-        description: "Solana connection not available",
-        variant: "destructive"
-      });
-      return false;
-    }
-
+  const contributeToCampaign = async (campaignId: string, amount: number, signature: string) => {
     try {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) {
@@ -181,34 +169,39 @@ export function useCommunityWallet() {
           description: "Please sign in to contribute",
           variant: "destructive"
         });
-        return false;
+        return;
       }
 
-      // Call the edge function to process the contribution
-      const { data, error } = await supabase.functions.invoke('community-contribution', {
-        body: {
+      // Record the contribution in the database
+      const { data, error } = await supabase
+        .from('community_contributions')
+        .insert({
           campaign_id: campaignId,
+          contributor_id: user.id,
           amount_sol: amount,
-          contributor_wallet_secret: walletSecret
-        }
-      });
+          transaction_signature: signature
+        })
+        .select()
+        .single();
 
-      if (error) throw error;
+      if (error) {
+        throw error;
+      }
 
       toast({
-        title: "Contribution Successful!",
-        description: `You contributed ${amount} SOL to the campaign`
+        title: "Contribution successful! ✅",
+        description: `Successfully contributed ${amount} SOL`,
       });
 
-      return true;
+      return data;
     } catch (error) {
-      console.error('Error contributing:', error);
+      console.error('Error contributing to campaign:', error);
       toast({
-        title: "Error",
-        description: "Failed to process contribution",
+        title: "Contribution failed",
+        description: error instanceof Error ? error.message : "Failed to process contribution",
         variant: "destructive"
       });
-      return false;
+      throw error;
     }
   };
 
@@ -218,15 +211,14 @@ export function useCommunityWallet() {
       if (!user) {
         toast({
           title: "Authentication Required",
-          description: "Please sign in to request refund",
+          description: "Please sign in to request a refund",
           variant: "destructive"
         });
         return false;
       }
 
-      // Call refund edge function (to be implemented)
       const { data, error } = await supabase.functions.invoke('community-refund', {
-        body: { contribution_id: contributionId }
+        body: { contributionId }
       });
 
       if (error) throw error;
@@ -240,8 +232,8 @@ export function useCommunityWallet() {
     } catch (error) {
       console.error('Error requesting refund:', error);
       toast({
-        title: "Error",
-        description: "Failed to process refund",
+        title: "Refund Failed",
+        description: error instanceof Error ? error.message : "Failed to process refund",
         variant: "destructive"
       });
       return false;

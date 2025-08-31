@@ -112,15 +112,12 @@ export default function CommunityWalletDashboard() {
     }
   };
 
-  const handleContribute = async (amount: number, walletSecret: string) => {
-    if (!selectedCampaign) return false;
+  const handleContribute = async (amount: number, signature: string) => {
+    if (!selectedCampaign) return;
     
-    const success = await contributeToCampaign(selectedCampaign.id, amount, walletSecret);
-    if (success) {
-      setIsContributeModalOpen(false);
-      setSelectedCampaign(null);
-    }
-    return success;
+    await contributeToCampaign(selectedCampaign.id, amount, signature);
+    setIsContributeModalOpen(false);
+    setSelectedCampaign(null);
   };
 
   const getStatusBadge = (status: string) => {

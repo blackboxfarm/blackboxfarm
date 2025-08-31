@@ -315,6 +315,7 @@ export type Database = {
       }
       community_campaigns: {
         Row: {
+          blackbox_campaign_id: string | null
           campaign_parameters: Json
           contributor_count: number
           created_at: string
@@ -335,6 +336,7 @@ export type Database = {
           updated_at: string
         }
         Insert: {
+          blackbox_campaign_id?: string | null
           campaign_parameters?: Json
           contributor_count?: number
           created_at?: string
@@ -355,6 +357,7 @@ export type Database = {
           updated_at?: string
         }
         Update: {
+          blackbox_campaign_id?: string | null
           campaign_parameters?: Json
           contributor_count?: number
           created_at?: string
@@ -374,7 +377,15 @@ export type Database = {
           token_address?: string
           updated_at?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "community_campaigns_blackbox_campaign_id_fkey"
+            columns: ["blackbox_campaign_id"]
+            isOneToOne: false
+            referencedRelation: "blackbox_campaigns"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       community_contributions: {
         Row: {
