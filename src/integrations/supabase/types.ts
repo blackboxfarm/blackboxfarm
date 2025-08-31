@@ -266,6 +266,160 @@ export type Database = {
           },
         ]
       }
+      community_campaign_executions: {
+        Row: {
+          campaign_id: string
+          command_config: Json
+          completed_at: string | null
+          error_message: string | null
+          execution_status: string
+          id: string
+          revenue_generated_sol: number | null
+          started_at: string | null
+          total_transactions: number | null
+          wallet_address: string
+        }
+        Insert: {
+          campaign_id: string
+          command_config: Json
+          completed_at?: string | null
+          error_message?: string | null
+          execution_status?: string
+          id?: string
+          revenue_generated_sol?: number | null
+          started_at?: string | null
+          total_transactions?: number | null
+          wallet_address: string
+        }
+        Update: {
+          campaign_id?: string
+          command_config?: Json
+          completed_at?: string | null
+          error_message?: string | null
+          execution_status?: string
+          id?: string
+          revenue_generated_sol?: number | null
+          started_at?: string | null
+          total_transactions?: number | null
+          wallet_address?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "community_campaign_executions_campaign_id_fkey"
+            columns: ["campaign_id"]
+            isOneToOne: false
+            referencedRelation: "community_campaigns"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      community_campaigns: {
+        Row: {
+          campaign_parameters: Json
+          contributor_count: number
+          created_at: string
+          creator_id: string
+          current_funding_sol: number
+          description: string | null
+          executed_at: string | null
+          funded_at: string | null
+          funding_goal_sol: number
+          id: string
+          max_contribution_sol: number | null
+          min_contribution_sol: number
+          multisig_wallet_address: string | null
+          status: string
+          target_deadline: string
+          title: string
+          token_address: string
+          updated_at: string
+        }
+        Insert: {
+          campaign_parameters?: Json
+          contributor_count?: number
+          created_at?: string
+          creator_id: string
+          current_funding_sol?: number
+          description?: string | null
+          executed_at?: string | null
+          funded_at?: string | null
+          funding_goal_sol: number
+          id?: string
+          max_contribution_sol?: number | null
+          min_contribution_sol?: number
+          multisig_wallet_address?: string | null
+          status?: string
+          target_deadline: string
+          title: string
+          token_address: string
+          updated_at?: string
+        }
+        Update: {
+          campaign_parameters?: Json
+          contributor_count?: number
+          created_at?: string
+          creator_id?: string
+          current_funding_sol?: number
+          description?: string | null
+          executed_at?: string | null
+          funded_at?: string | null
+          funding_goal_sol?: number
+          id?: string
+          max_contribution_sol?: number | null
+          min_contribution_sol?: number
+          multisig_wallet_address?: string | null
+          status?: string
+          target_deadline?: string
+          title?: string
+          token_address?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      community_contributions: {
+        Row: {
+          amount_sol: number
+          campaign_id: string
+          contribution_timestamp: string
+          contributor_id: string
+          id: string
+          refund_signature: string | null
+          refunded: boolean
+          refunded_at: string | null
+          transaction_signature: string | null
+        }
+        Insert: {
+          amount_sol: number
+          campaign_id: string
+          contribution_timestamp?: string
+          contributor_id: string
+          id?: string
+          refund_signature?: string | null
+          refunded?: boolean
+          refunded_at?: string | null
+          transaction_signature?: string | null
+        }
+        Update: {
+          amount_sol?: number
+          campaign_id?: string
+          contribution_timestamp?: string
+          contributor_id?: string
+          id?: string
+          refund_signature?: string | null
+          refunded?: boolean
+          refunded_at?: string | null
+          transaction_signature?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "community_contributions_campaign_id_fkey"
+            columns: ["campaign_id"]
+            isOneToOne: false
+            referencedRelation: "community_campaigns"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       development_ideas: {
         Row: {
           category: string
