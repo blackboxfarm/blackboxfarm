@@ -9,6 +9,7 @@ import BlackBox from "./pages/BlackBox";
 import Auth from "./pages/Auth";
 import { ResetPassword } from "./pages/ResetPassword";
 import CompetitiveAnalysis from "./pages/CompetitiveAnalysis";
+import CommunityWallet from "./pages/CommunityWallet";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -26,6 +27,7 @@ const App = () => (
           <Route path="/bb" element={<BumpBot />} />
           <Route path="/blackbox" element={<BlackBox />} />
           <Route path="/competitive-analysis" element={<CompetitiveAnalysis />} />
+          <Route path="/community-wallet" element={<CommunityWallet />} />
           <Route path="/reset-password" element={<ResetPassword />} />
           {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
           <Route path="*" element={<NotFound />} />

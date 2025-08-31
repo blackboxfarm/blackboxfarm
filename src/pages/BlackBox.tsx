@@ -14,6 +14,7 @@ import { SecurityDashboard } from "@/components/security/SecurityDashboard";
 import { NotificationCenter } from "@/components/NotificationCenter";
 import { AnalyticsDashboard } from "@/components/AnalyticsDashboard";
 import { ReferralDashboard } from "@/components/blackbox/ReferralDashboard";
+import CommunityWalletDashboard from "@/components/blackbox/CommunityWalletDashboard";
 import { useAuth } from "@/hooks/useAuth";
 
 export default function BlackBox() {
@@ -46,9 +47,10 @@ export default function BlackBox() {
 
         {/* Main Navigation */}
         <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-          <TabsList className={`grid w-full ${user ? 'grid-cols-7' : 'grid-cols-4'}`}>
+          <TabsList className={`grid w-full ${user ? 'grid-cols-8' : 'grid-cols-4'}`}>
             <TabsTrigger value="pricing">Pricing</TabsTrigger>
             {user && <TabsTrigger value="dashboard">Dashboard</TabsTrigger>}
+            {user && <TabsTrigger value="community">Community</TabsTrigger>}
             <TabsTrigger value="simulator">Simulator</TabsTrigger>
             <TabsTrigger value="fees">Calculator</TabsTrigger>
             <TabsTrigger value="analytics">Analytics</TabsTrigger>
@@ -64,6 +66,12 @@ export default function BlackBox() {
             <RequireAuth>
               <CampaignDashboard />
               <WalletGenerator />
+            </RequireAuth>
+          </TabsContent>
+
+          <TabsContent value="community" className="space-y-6">
+            <RequireAuth>
+              <CommunityWalletDashboard />
             </RequireAuth>
           </TabsContent>
 
