@@ -7,7 +7,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Slider } from "@/components/ui/slider";
-import { Plus, Play, Pause, Settings, AlertTriangle, DollarSign, BarChart3, TrendingUp, Info, Eye, EyeOff } from "lucide-react";
+import { Plus, Play, Pause, Settings, AlertTriangle, DollarSign, BarChart3, TrendingUp, Info, Eye, EyeOff, Edit } from "lucide-react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "@/hooks/use-toast";
@@ -52,6 +52,7 @@ interface WalletCommandsProps {
 export function WalletCommands({ wallet, campaign, isDevMode = false, devBalance }: WalletCommandsProps) {
   const [commands, setCommands] = useState<CommandCode[]>([]);
   const [showCreateForm, setShowCreateForm] = useState(false);
+  const [editingCommand, setEditingCommand] = useState<CommandCode | null>(null);
   const [mode, setMode] = useState<"simple" | "complex">("simple");
   const [commandStats, setCommandStats] = useState<Record<string, CommandStats>>({});
   const [showSimulation, setShowSimulation] = useState<string | null>(null);
@@ -309,24 +310,7 @@ export function WalletCommands({ wallet, campaign, isDevMode = false, devBalance
     }
 
     toast({ title: "Command created", description: `${newCommand.name} is ready` });
-    setShowCreateForm(false);
-    setNewCommand({
-      name: "",
-      mode: "simple",
-      buyAmount: "0.01",
-      sellPercent: "100",
-      buyInterval: "30",
-      sellInterval: "600",
-      duration: "3600",
-      buyAmountMin: "0.005",
-      buyAmountMax: "0.02",
-      buyIntervalMin: "10",
-      buyIntervalMax: "60",
-      sellPercentMin: "80",
-      sellPercentMax: "100",
-      sellIntervalMin: "300",
-      sellIntervalMax: "900"
-    });
+    resetForm();
     loadCommands();
   };
 
@@ -394,6 +378,125 @@ export function WalletCommands({ wallet, campaign, isDevMode = false, devBalance
       title: `Simulated ${action.toUpperCase()}`,
       description: `${command.name}: ${amount.toFixed(4)} SOL`,
     });
+  };
+
+  const resetForm = () => {
+    setShowCreateForm(false);
+    setEditingCommand(null);
+    setNewCommand({
+      name: "",
+      mode: "simple",
+      buyAmount: "0.01",
+      sellPercent: "100",
+      buyInterval: "30",
+      sellInterval: "600",
+      duration: "3600",
+      buyAmountMin: "0.005",
+      buyAmountMax: "0.02",
+      buyIntervalMin: "10",
+      buyIntervalMax: "60",
+      sellPercentMin: "80",
+      sellPercentMax: "100",
+      sellIntervalMin: "300",
+      sellIntervalMax: "900"
+    });
+  };
+
+  const startEditing = (command: CommandCode) => {
+    setEditingCommand(command);
+    setShowCreateForm(true);
+    
+    const config = command.config;
+    if (config.type === "simple") {
+      setMode("simple");
+      setNewCommand({
+        name: command.name,
+        mode: "simple",
+        buyAmount: String(config.buyAmount || 0.01),
+        sellPercent: String(config.sellPercent || 100),
+        buyInterval: String(config.buyInterval || 30),
+        sellInterval: String(config.sellInterval || 600),
+        duration: String(config.duration || 3600),
+        buyAmountMin: "0.005",
+        buyAmountMax: "0.02",
+        buyIntervalMin: "10",
+        buyIntervalMax: "60",
+        sellPercentMin: "80",
+        sellPercentMax: "100",
+        sellIntervalMin: "300",
+        sellIntervalMax: "900"
+      });
+    } else {
+      setMode("complex");
+      setNewCommand({
+        name: command.name,
+        mode: "complex",
+        buyAmount: "0.01",
+        sellPercent: "100",
+        buyInterval: "30",
+        sellInterval: "600",
+        duration: "3600",
+        buyAmountMin: String(config.buyAmount?.min || 0.005),
+        buyAmountMax: String(config.buyAmount?.max || 0.02),
+        buyIntervalMin: String(config.buyInterval?.min || 10),
+        buyIntervalMax: String(config.buyInterval?.max || 60),
+        sellPercentMin: String(config.sellPercent?.min || 80),
+        sellPercentMax: String(config.sellPercent?.max || 100),
+        sellIntervalMin: String(config.sellInterval?.min || 300),
+        sellIntervalMax: String(config.sellInterval?.max || 900)
+      });
+    }
+  };
+
+  const updateCommand = async () => {
+    if (!editingCommand || !newCommand.name) {
+      toast({ title: "Missing name", description: "Please enter a command name" });
+      return;
+    }
+
+    const config = mode === "simple" ? {
+      type: "simple",
+      buyAmount: parseFloat(newCommand.buyAmount),
+      sellPercent: parseFloat(newCommand.sellPercent),
+      buyInterval: parseInt(newCommand.buyInterval),
+      sellInterval: parseInt(newCommand.sellInterval),
+      duration: parseInt(newCommand.duration)
+    } : {
+      type: "complex",
+      buyAmount: {
+        min: parseFloat(newCommand.buyAmountMin),
+        max: parseFloat(newCommand.buyAmountMax)
+      },
+      buyInterval: {
+        min: parseInt(newCommand.buyIntervalMin),
+        max: parseInt(newCommand.buyIntervalMax)
+      },
+      sellPercent: {
+        min: parseFloat(newCommand.sellPercentMin),
+        max: parseFloat(newCommand.sellPercentMax)
+      },
+      sellInterval: {
+        min: parseInt(newCommand.sellIntervalMin),
+        max: parseInt(newCommand.sellIntervalMax)
+      }
+    };
+
+    const { error } = await supabase
+      .from('blackbox_command_codes')
+      .update({
+        name: newCommand.name,
+        config: config
+      })
+      .eq('id', editingCommand.id);
+
+    if (error) {
+      toast({ title: "Error updating command", description: error.message });
+      return;
+    }
+
+    toast({ title: "Command updated", description: `${newCommand.name} has been updated` });
+    resetForm();
+    loadCommands();
   };
 
   const toggleCommand = async (command: CommandCode) => {
@@ -550,26 +653,33 @@ export function WalletCommands({ wallet, campaign, isDevMode = false, devBalance
                         }
                       </p>
                     </div>
-                    <div className="flex gap-2">
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={() => setShowSimulation(showSimulation === command.id ? null : command.id)}
-                      >
-                        <BarChart3 className="h-4 w-4" />
-                      </Button>
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={() => toggleCommand(command)}
-                      >
-                        {command.is_active ? (
-                          <Pause className="h-4 w-4" />
-                        ) : (
-                          <Play className="h-4 w-4" />
-                        )}
-                      </Button>
-                    </div>
+                     <div className="flex gap-2">
+                       <Button
+                         size="sm"
+                         variant="outline"
+                         onClick={() => setShowSimulation(showSimulation === command.id ? null : command.id)}
+                       >
+                         <BarChart3 className="h-4 w-4" />
+                       </Button>
+                       <Button
+                         size="sm"
+                         variant="outline"
+                         onClick={() => startEditing(command)}
+                       >
+                         <Edit className="h-4 w-4" />
+                       </Button>
+                       <Button
+                         size="sm"
+                         variant="outline"
+                         onClick={() => toggleCommand(command)}
+                       >
+                         {command.is_active ? (
+                           <Pause className="h-4 w-4" />
+                         ) : (
+                           <Play className="h-4 w-4" />
+                         )}
+                       </Button>
+                     </div>
                   </div>
 
                   {/* Stats Divs */}
@@ -696,12 +806,14 @@ export function WalletCommands({ wallet, campaign, isDevMode = false, devBalance
           </div>
         )}
 
-        {/* Create Command Form */}
+        {/* Create/Edit Command Form */}
         {showCreateForm && (
           <div className="p-4 border rounded-lg space-y-4">
             <div className="flex items-center justify-between">
-              <h3 className="font-medium">Create New Command</h3>
-              <Button variant="outline" size="sm" onClick={() => setShowCreateForm(false)}>
+              <h3 className="font-medium">
+                {editingCommand ? "Edit Command" : "Create New Command"}
+              </h3>
+              <Button variant="outline" size="sm" onClick={resetForm}>
                 Cancel
               </Button>
             </div>
@@ -850,8 +962,8 @@ export function WalletCommands({ wallet, campaign, isDevMode = false, devBalance
                 </TabsContent>
               </Tabs>
 
-              <Button onClick={createCommand} className="w-full">
-                Create Command
+              <Button onClick={editingCommand ? updateCommand : createCommand} className="w-full">
+                {editingCommand ? "Update Command" : "Create Command"}
               </Button>
             </div>
           </div>
