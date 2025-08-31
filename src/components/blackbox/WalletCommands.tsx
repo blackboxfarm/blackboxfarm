@@ -42,6 +42,22 @@ interface CommandStats {
   ourFeeAverage: number;
 }
 
+interface CommandStats {
+  baseFee: number;
+  totalTrades: { buy: number; sell: number };
+  gasFeesTotal: number;
+  gasFeeAverage: number;
+  ourFeesTotal: number;
+  ourFeeAverage: number;
+}
+
+interface DurationEstimate {
+  maxDurationHours: number;
+  totalCostPerCycle: number;
+  cyclesUntilEmpty: number;
+  isInfinite: boolean;
+}
+
 interface WalletCommandsProps {
   wallet: WalletData;
   campaign: Campaign;
@@ -63,6 +79,8 @@ export function WalletCommands({ wallet, campaign, isDevMode = false, devBalance
   const [simulatedTrades, setSimulatedTrades] = useState<Record<string, Array<{type: 'buy' | 'sell', amount: number, timestamp: Date}>>>({});
   const [useUSD, setUseUSD] = useState(false);
   const [previousCommand, setPreviousCommand] = useState<any>(null);
+  const [mockFunds, setMockFunds] = useState("1.0");
+  const [useMockFunds, setUseMockFunds] = useState(false);
   const [newCommand, setNewCommand] = useState({
     name: "",
     mode: "simple",
@@ -474,6 +492,60 @@ export function WalletCommands({ wallet, campaign, isDevMode = false, devBalance
   const convertToSOL = (usdAmount: string) => {
     const SOL_PRICE = 200;
     return (parseFloat(usdAmount) / SOL_PRICE).toFixed(3);
+  };
+
+  const calculateDurationEstimate = (config: any): DurationEstimate => {
+    const effectiveBalance = useMockFunds ? parseFloat(mockFunds) : (isDevMode ? (devBalance || 0) : wallet.sol_balance);
+    
+    if (effectiveBalance <= 0) {
+      return { maxDurationHours: 0, totalCostPerCycle: 0, cyclesUntilEmpty: 0, isInfinite: false };
+    }
+
+    let avgBuyAmount = 0;
+    let avgBuyInterval = 0;
+    let avgSellPercent = 0;
+    let avgSellInterval = 0;
+
+    if (config.type === "simple") {
+      avgBuyAmount = config.buyAmount || 0.01;
+      avgBuyInterval = config.buyInterval || 30;
+      avgSellPercent = config.sellPercent || 100;
+      avgSellInterval = config.sellInterval || 600;
+    } else {
+      avgBuyAmount = ((config.buyAmount?.min || 0.005) + (config.buyAmount?.max || 0.02)) / 2;
+      avgBuyInterval = ((config.buyInterval?.min || 10) + (config.buyInterval?.max || 60)) / 2;
+      avgSellPercent = ((config.sellPercent?.min || 80) + (config.sellPercent?.max || 100)) / 2;
+      avgSellInterval = ((config.sellInterval?.min || 300) + (config.sellInterval?.max || 900)) / 2;
+    }
+
+    // Calculate cost per cycle (one buy + one sell)
+    const gasFeesPerTrade = 0.002; // Estimated gas fees
+    const serviceFeesPerTrade = 0.001; // Our service fees
+    const costPerBuy = avgBuyAmount + gasFeesPerTrade + serviceFeesPerTrade;
+    
+    // Sell essentially just costs gas + service fees since we're selling tokens back for SOL
+    const costPerSell = gasFeesPerTrade + serviceFeesPerTrade;
+    
+    // Net cost per cycle (considering we get some SOL back from selling)
+    const netCostPerCycle = costPerBuy + costPerSell - (avgBuyAmount * avgSellPercent / 100);
+    
+    // If sell percentage is 100%, we're essentially just paying fees
+    const isInfinite = avgSellPercent >= 100 && netCostPerCycle <= 0;
+    
+    if (isInfinite) {
+      return { maxDurationHours: Infinity, totalCostPerCycle: costPerBuy + costPerSell, cyclesUntilEmpty: Infinity, isInfinite: true };
+    }
+
+    const cyclesUntilEmpty = Math.floor(effectiveBalance / Math.abs(netCostPerCycle));
+    const cycleTimeSeconds = avgBuyInterval + avgSellInterval;
+    const maxDurationHours = (cyclesUntilEmpty * cycleTimeSeconds) / 3600;
+
+    return {
+      maxDurationHours,
+      totalCostPerCycle: Math.abs(netCostPerCycle),
+      cyclesUntilEmpty,
+      isInfinite: false
+    };
   };
 
   const startEditing = (command: CommandCode) => {
@@ -929,19 +1001,41 @@ export function WalletCommands({ wallet, campaign, isDevMode = false, devBalance
                     </Button>
                   )}
                 </div>
-                <div className="flex items-center gap-2">
-                  <Label htmlFor="usdToggle" className="text-sm">SOL</Label>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    onClick={() => setUseUSD(!useUSD)}
-                    className={`p-2 h-8 w-12 ${useUSD ? 'bg-primary text-primary-foreground' : ''}`}
-                  >
-                    <DollarSign className="h-4 w-4" />
-                  </Button>
-                  <Label htmlFor="usdToggle" className="text-sm">USD</Label>
-                </div>
+                 <div className="flex items-center gap-4">
+                   <div className="flex items-center gap-2">
+                     <Label htmlFor="usdToggle" className="text-sm">SOL</Label>
+                     <Button
+                       type="button"
+                       variant="outline"
+                       size="sm"
+                       onClick={() => setUseUSD(!useUSD)}
+                       className={`p-2 h-8 w-12 ${useUSD ? 'bg-primary text-primary-foreground' : ''}`}
+                     >
+                       <DollarSign className="h-4 w-4" />
+                     </Button>
+                     <Label htmlFor="usdToggle" className="text-sm">USD</Label>
+                   </div>
+                   <div className="flex items-center gap-2">
+                     <Label htmlFor="mockFunds" className="text-sm">Mock Funds:</Label>
+                     <Input
+                       id="mockFunds"
+                       type="number"
+                       step="0.1"
+                       value={mockFunds}
+                       onChange={(e) => setMockFunds(e.target.value)}
+                       className="w-20 h-8"
+                     />
+                     <Button
+                       type="button"
+                       variant="outline"
+                       size="sm"
+                       onClick={() => setUseMockFunds(!useMockFunds)}
+                       className={`px-3 h-8 ${useMockFunds ? 'bg-accent text-accent-foreground' : ''}`}
+                     >
+                       {useMockFunds ? 'ON' : 'OFF'}
+                     </Button>
+                   </div>
+                 </div>
               </div>
 
               <Tabs value={mode} onValueChange={(value) => setMode(value as "simple" | "complex")}>
@@ -1001,15 +1095,65 @@ export function WalletCommands({ wallet, campaign, isDevMode = false, devBalance
                       />
                     </div>
                   </div>
-                  <div>
-                    <Label htmlFor="duration">Duration (seconds, 0 for infinite)</Label>
-                    <Input
-                      id="duration"
-                      type="number"
-                      value={newCommand.duration}
-                      onChange={(e) => setNewCommand(prev => ({ ...prev, duration: e.target.value }))}
-                    />
-                  </div>
+                   <div>
+                     <Label htmlFor="duration">Duration (seconds, 0 for infinite)</Label>
+                     <Input
+                       id="duration"
+                       type="number"
+                       value={newCommand.duration}
+                       onChange={(e) => setNewCommand(prev => ({ ...prev, duration: e.target.value }))}
+                     />
+                     {/* Duration Feedback */}
+                     {(() => {
+                       const config = {
+                         type: "simple",
+                         buyAmount: parseFloat(newCommand.buyAmount) || 0.01,
+                         sellPercent: parseFloat(newCommand.sellPercent) || 100,
+                         buyInterval: parseInt(newCommand.buyInterval) || 30,
+                         sellInterval: parseInt(newCommand.sellInterval) || 600
+                       };
+                       const estimate = calculateDurationEstimate(config);
+                       
+                       return (
+                         <div className="mt-2 p-3 bg-muted/50 rounded-lg">
+                           <div className="text-sm font-medium mb-2">💰 Duration Estimate</div>
+                           <div className="grid grid-cols-2 gap-2 text-xs">
+                             <div>
+                               <div className="text-muted-foreground">Funds Available:</div>
+                               <div className="font-medium">
+                                 {(useMockFunds ? parseFloat(mockFunds) : (isDevMode ? (devBalance || 0) : wallet.sol_balance)).toFixed(3)} SOL
+                                 {useMockFunds && <span className="text-accent"> (mock)</span>}
+                               </div>
+                             </div>
+                             <div>
+                               <div className="text-muted-foreground">Net Cost/Cycle:</div>
+                               <div className="font-medium">{estimate.totalCostPerCycle.toFixed(4)} SOL</div>
+                             </div>
+                             <div>
+                               <div className="text-muted-foreground">Can Run For:</div>
+                               <div className={`font-medium ${estimate.isInfinite ? 'text-green-600' : estimate.maxDurationHours < 1 ? 'text-red-600' : 'text-yellow-600'}`}>
+                                 {estimate.isInfinite ? '∞ (Infinite)' : 
+                                  estimate.maxDurationHours < 1 ? `${(estimate.maxDurationHours * 60).toFixed(0)}min` :
+                                  estimate.maxDurationHours < 24 ? `${estimate.maxDurationHours.toFixed(1)}hrs` :
+                                  `${(estimate.maxDurationHours / 24).toFixed(1)} days`}
+                               </div>
+                             </div>
+                             <div>
+                               <div className="text-muted-foreground">Total Cycles:</div>
+                               <div className="font-medium">
+                                 {estimate.isInfinite ? '∞' : estimate.cyclesUntilEmpty}
+                               </div>
+                             </div>
+                           </div>
+                           {!estimate.isInfinite && estimate.maxDurationHours < 1 && (
+                             <div className="mt-2 text-xs text-red-600">
+                               ⚠️ Duration too short - consider increasing funds or reducing trade frequency
+                             </div>
+                           )}
+                         </div>
+                       );
+                     })()}
+                   </div>
                 </TabsContent>
 
                 <TabsContent value="complex" className="space-y-4">
