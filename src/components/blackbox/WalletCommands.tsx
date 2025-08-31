@@ -234,16 +234,31 @@ export function WalletCommands({ wallet, campaign, isDevMode = false, devBalance
       estimatedTrades = Math.floor(tradesPerHour * hours);
     }
 
-    const estimatedGasFees = estimatedTrades * 0.002; // Estimated gas fee per trade
-    const estimatedOurFees = estimatedTrades * 0.001; // Our service fee per trade
-    const baseFee = 0.001;
+    // Use realistic fee structure based on volume
+    const isHighVolume = estimatedTrades >= 50;
+    let gasFees: number, ourFees: number, baseFee: number;
+    
+    if (isHighVolume) {
+      // Batch pricing model (Smithii-style)
+      const batchesNeeded = Math.ceil(estimatedTrades / 100);
+      gasFees = batchesNeeded * 0.025; // 0.025 SOL per 100 operations
+      ourFees = 0; // No additional service fees for batch mode
+      baseFee = 0;
+    } else {
+      // Per-transaction pricing for smaller volumes
+      const feePerTx = 0.0005; // Reduced micro-trade fee
+      gasFees = estimatedTrades * feePerTx;
+      ourFees = estimatedTrades * 0.0001; // Minimal service fee
+      baseFee = 0.001;
+    }
 
     return {
       trades: estimatedTrades,
-      gasFees: estimatedGasFees,
-      ourFees: estimatedOurFees,
+      gasFees,
+      ourFees,
       baseFee,
-      totalCost: baseFee + estimatedGasFees + estimatedOurFees
+      totalCost: baseFee + gasFees + ourFees,
+      pricing: isHighVolume ? 'batch' : 'per_transaction'
     };
   };
 
@@ -490,7 +505,10 @@ export function WalletCommands({ wallet, campaign, isDevMode = false, devBalance
                 <p className="font-medium">💰 Trading Costs</p>
                 <p>Active commands will incur small fees per trade execution</p>
                 <p className="text-xs text-muted-foreground">
-                  Estimated cost: ~0.001-0.005 SOL per trade + gas fees
+                  Smart pricing: Batch mode for 50+ operations, micro-fees for small trades
+                </p>
+                <p className="text-xs text-muted-foreground">
+                  Batch: 0.025 SOL per 100 ops | Individual: 0.0005 SOL per trade
                 </p>
               </div>
             </AlertDescription>

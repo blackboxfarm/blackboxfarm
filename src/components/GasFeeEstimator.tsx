@@ -11,8 +11,9 @@ interface FeeEstimation {
   basic: {
     estimatedCostSOL: number;
     estimatedCostUSD: number;
-    speed: 'slow' | 'medium' | 'fast';
+    speed: 'economy' | 'standard' | 'priority';
     successProbability: number;
+    batchAvailable: boolean;
   };
   pro: {
     baseFee: number;
@@ -23,6 +24,20 @@ interface FeeEstimation {
     slippageTolerance: number;
     historicalAverage: number;
     networkCongestion: 'low' | 'medium' | 'high';
+  };
+  batch: {
+    costPer100Operations: number;
+    minimumOperations: number;
+    effectiveCostPerOperation: number;
+    recommendedForVolume: number;
+  };
+  competitive: {
+    trojanFast: number;
+    trojanTurbo: number;
+    maestroFree: number;
+    mevx: number;
+    bananagun: number;
+    ourAdvantage: string;
   };
 }
 
@@ -41,7 +56,7 @@ export function GasFeeEstimator({
 }: GasFeeEstimatorProps) {
   const [estimation, setEstimation] = useState<FeeEstimation | null>(null);
   const [loading, setLoading] = useState(false);
-  const [selectedSpeed, setSelectedSpeed] = useState<'slow' | 'medium' | 'fast'>('medium');
+  const [selectedSpeed, setSelectedSpeed] = useState<'economy' | 'standard' | 'priority'>('standard');
   const { toast } = useToast();
 
   const fetchEstimation = async () => {
@@ -69,25 +84,34 @@ export function GasFeeEstimator({
     fetchEstimation();
   }, [transactionType, amount, tokenMint]);
 
-  const getSpeedConfig = (speed: 'slow' | 'medium' | 'fast') => {
+  const getSpeedConfig = (speed: 'economy' | 'standard' | 'priority') => {
     if (!estimation) return null;
     
-    const multiplier = speed === 'slow' ? 0.5 : speed === 'fast' ? 2 : 1;
-    const fee = estimation.basic.estimatedCostSOL * multiplier;
+    // Use smart fee selection based on amount
+    const isSmallTrade = (amount || 0) < 0.05;
+    const baseMultiplier = speed === 'economy' ? 0.1 : speed === 'priority' ? 2 : 1;
+    
+    let fee: number;
+    if (isSmallTrade && speed === 'economy') {
+      fee = 0.0005; // Micro-trade optimized fee
+    } else {
+      fee = estimation.basic.estimatedCostSOL * baseMultiplier;
+    }
     
     return {
       fee,
       feeUSD: fee * (estimation.basic.estimatedCostUSD / estimation.basic.estimatedCostSOL),
-      time: speed === 'slow' ? '30-60s' : speed === 'fast' ? '5-15s' : '15-30s',
-      success: speed === 'slow' ? 
-        Math.max(estimation.basic.successProbability - 10, 60) :
-        speed === 'fast' ? 
-        Math.min(estimation.basic.successProbability + 10, 99) :
-        estimation.basic.successProbability
+      time: speed === 'economy' ? '60-120s' : speed === 'priority' ? '5-15s' : '15-30s',
+      success: speed === 'economy' ? 
+        Math.max(estimation.basic.successProbability - 15, 60) :
+        speed === 'priority' ? 
+        Math.min(estimation.basic.successProbability + 15, 99) :
+        estimation.basic.successProbability,
+      batchRecommended: estimation.batch && estimation.batch.recommendedForVolume <= (amount || 0) * 100
     };
   };
 
-  const handleSpeedSelect = (speed: 'slow' | 'medium' | 'fast') => {
+  const handleSpeedSelect = (speed: 'economy' | 'standard' | 'priority') => {
     setSelectedSpeed(speed);
     const config = getSpeedConfig(speed);
     if (config && onFeeSelect) {
@@ -111,19 +135,20 @@ export function GasFeeEstimator({
   return (
     <Card className="p-4">
       <Tabs defaultValue="basic" className="w-full">
-        <TabsList className="grid w-full grid-cols-2">
-          <TabsTrigger value="basic">Quick</TabsTrigger>
+        <TabsList className="grid w-full grid-cols-3">
+          <TabsTrigger value="basic">Smart Fees</TabsTrigger>
+          <TabsTrigger value="batch">Batch Pricing</TabsTrigger>
           <TabsTrigger value="pro">Advanced</TabsTrigger>
         </TabsList>
         
         <TabsContent value="basic" className="space-y-4">
           <div className="flex items-center gap-2 mb-3">
             <Zap className="w-4 h-4" />
-            <span className="font-medium">Transaction Speed</span>
+            <span className="font-medium">Smart Fee Selection</span>
           </div>
           
           <div className="grid gap-2">
-            {(['slow', 'medium', 'fast'] as const).map((speed) => {
+            {(['economy', 'standard', 'priority'] as const).map((speed) => {
               const config = getSpeedConfig(speed);
               if (!config) return null;
               
@@ -136,12 +161,15 @@ export function GasFeeEstimator({
                 >
                   <div className="flex items-center gap-2">
                     <Badge variant={
-                      speed === 'slow' ? 'secondary' : 
-                      speed === 'fast' ? 'destructive' : 'default'
+                      speed === 'economy' ? 'secondary' : 
+                      speed === 'priority' ? 'destructive' : 'default'
                     }>
                       {speed.charAt(0).toUpperCase() + speed.slice(1)}
                     </Badge>
                     <span>{config.time}</span>
+                    {config.batchRecommended && (
+                      <Badge variant="outline" className="text-xs">Batch Available</Badge>
+                    )}
                   </div>
                   <div className="text-right">
                     <div className="font-medium">
@@ -162,6 +190,42 @@ export function GasFeeEstimator({
               {getSpeedConfig(selectedSpeed)?.success}% success probability
             </span>
           </div>
+        </TabsContent>
+
+        <TabsContent value="batch" className="space-y-4">
+          {estimation.batch && (
+            <div className="space-y-3">
+              <div className="flex items-center gap-2 mb-3">
+                <Badge className="bg-primary">Batch Pricing</Badge>
+                <span className="text-sm">Smithii Model</span>
+              </div>
+              
+              <div className="grid gap-3 text-sm">
+                <div className="flex justify-between">
+                  <span>Cost per 100 operations:</span>
+                  <span className="font-medium">{estimation.batch.costPer100Operations} SOL</span>
+                </div>
+                <div className="flex justify-between">
+                  <span>Minimum operations:</span>
+                  <span>{estimation.batch.minimumOperations}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span>Effective cost per operation:</span>
+                  <span className="text-green-600">{estimation.batch.effectiveCostPerOperation.toFixed(6)} SOL</span>
+                </div>
+                <div className="flex justify-between">
+                  <span>Recommended for volume ≥:</span>
+                  <span>{estimation.batch.recommendedForVolume} operations</span>
+                </div>
+              </div>
+              
+              <div className="p-3 bg-green-50 border border-green-200 rounded-lg">
+                <p className="text-sm text-green-800">
+                  <strong>90%+ savings</strong> on large volume operations vs traditional per-transaction pricing
+                </p>
+              </div>
+            </div>
+          )}
         </TabsContent>
         
         <TabsContent value="pro" className="space-y-4">
