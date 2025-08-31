@@ -324,7 +324,7 @@ export type Database = {
           description: string | null
           executed_at: string | null
           funded_at: string | null
-          funding_goal_sol: number
+          funding_goal_sol: number | null
           id: string
           max_contribution_sol: number | null
           min_contribution_sol: number
@@ -345,7 +345,7 @@ export type Database = {
           description?: string | null
           executed_at?: string | null
           funded_at?: string | null
-          funding_goal_sol: number
+          funding_goal_sol?: number | null
           id?: string
           max_contribution_sol?: number | null
           min_contribution_sol?: number
@@ -366,7 +366,7 @@ export type Database = {
           description?: string | null
           executed_at?: string | null
           funded_at?: string | null
-          funding_goal_sol?: number
+          funding_goal_sol?: number | null
           id?: string
           max_contribution_sol?: number | null
           min_contribution_sol?: number
