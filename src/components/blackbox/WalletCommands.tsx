@@ -82,6 +82,7 @@ export function WalletCommands({ wallet, campaign, isDevMode = false, devBalance
   const [previousCommand, setPreviousCommand] = useState<any>(null);
   const [mockFunds, setMockFunds] = useState("1.0");
   const [useMockFunds, setUseMockFunds] = useState(false);
+  const [buyAmountUnit, setBuyAmountUnit] = useState<'USD' | 'SOL'>('USD');
   const [newCommand, setNewCommand] = useState({
     name: "",
     mode: "simple",
@@ -506,6 +507,13 @@ export function WalletCommands({ wallet, campaign, isDevMode = false, devBalance
     } else {
       return `$${usdValue.toFixed(0)}`;
     }
+  };
+
+  const calculateBlackBoxIncome = (estimate: DurationEstimate) => {
+    // BlackBox fee: 0.5% of each trade volume
+    const BLACKBOX_FEE_RATE = 0.005;
+    const income = estimate.volumeGenerated * BLACKBOX_FEE_RATE;
+    return income;
   };
 
   const calculateDurationEstimate = (config: any): DurationEstimate => {
@@ -1073,21 +1081,29 @@ export function WalletCommands({ wallet, campaign, isDevMode = false, devBalance
                 <TabsContent value="simple" className="space-y-4">
                   <div className="grid grid-cols-2 gap-4">
                     <div>
-                      <Label htmlFor="buyAmount">
-                        Buy Amount ({useUSD ? 'USD' : 'SOL'})
-                      </Label>
+                      <div className="flex items-center justify-between mb-2">
+                        <Label htmlFor="buyAmount">Buy Amount</Label>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => setBuyAmountUnit(prev => prev === 'USD' ? 'SOL' : 'USD')}
+                          className="h-6 px-2 text-xs"
+                        >
+                          {buyAmountUnit}
+                        </Button>
+                      </div>
                       <Input
                         id="buyAmount"
                         type="number"
-                        step={useUSD ? "0.01" : "0.001"}
-                        value={useUSD ? convertToUSD(newCommand.buyAmount) : newCommand.buyAmount}
+                        step={buyAmountUnit === 'USD' ? "0.01" : "0.001"}
+                        value={buyAmountUnit === 'USD' ? convertToUSD(newCommand.buyAmount) : newCommand.buyAmount}
                         onChange={(e) => setNewCommand(prev => ({ 
                           ...prev, 
-                          buyAmount: useUSD ? convertToSOL(e.target.value) : e.target.value 
+                          buyAmount: buyAmountUnit === 'USD' ? convertToSOL(e.target.value) : e.target.value 
                         }))}
-                        placeholder={useUSD ? "5.00" : "0.025"}
+                        placeholder={buyAmountUnit === 'USD' ? "5.00" : "0.025"}
                       />
-                      {useUSD && (
+                      {buyAmountUnit === 'USD' && (
                         <div className="text-xs text-muted-foreground mt-1">
                           ≈ {newCommand.buyAmount} SOL
                         </div>
@@ -1163,6 +1179,19 @@ export function WalletCommands({ wallet, campaign, isDevMode = false, devBalance
                                       <div>{estimate.volumeGenerated.toFixed(2)} SOL</div>
                                       <div className="text-sm text-muted-foreground">
                                         {formatVolumeUSD(estimate.volumeGenerated)}
+                                      </div>
+                                    </div>
+                                  )}
+                                </div>
+                              </div>
+                              <div>
+                                <div className="text-muted-foreground">BlackBox Income:</div>
+                                <div className="font-medium text-accent">
+                                  {estimate.isInfinite ? '∞' : (
+                                    <div className="space-y-1">
+                                      <div>{calculateBlackBoxIncome(estimate).toFixed(4)} SOL</div>
+                                      <div className="text-sm text-muted-foreground">
+                                        {formatVolumeUSD(calculateBlackBoxIncome(estimate))}
                                       </div>
                                     </div>
                                   )}
