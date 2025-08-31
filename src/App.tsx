@@ -8,6 +8,7 @@ import BumpBot from "./pages/BumpBot";
 import BlackBox from "./pages/BlackBox";
 import Auth from "./pages/Auth";
 import { ResetPassword } from "./pages/ResetPassword";
+import CompetitiveAnalysis from "./pages/CompetitiveAnalysis";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -24,6 +25,7 @@ const App = () => (
           <Route path="/admin" element={<Index />} />
           <Route path="/bb" element={<BumpBot />} />
           <Route path="/blackbox" element={<BlackBox />} />
+          <Route path="/competitive-analysis" element={<CompetitiveAnalysis />} />
           <Route path="/reset-password" element={<ResetPassword />} />
           {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
           <Route path="*" element={<NotFound />} />

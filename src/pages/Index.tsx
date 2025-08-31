@@ -138,13 +138,18 @@ export default function Index() {
               <p className="text-sm text-muted-foreground mb-2">
                 Batch pricing for volume operations • 90%+ cheaper than competitors
               </p>
-              <div className="flex justify-center gap-2 text-xs">
+              <div className="flex justify-center gap-2 text-xs mb-3">
                 <span className="px-2 py-1 bg-green-100 text-green-800 rounded">Smithii Model: 0.025 SOL/100 ops</span>
                 <span className="px-2 py-1 bg-blue-100 text-blue-800 rounded">Micro-trades: 0.0005 SOL</span>
               </div>
-              <a href="/blackbox" className="inline-block mt-2 px-4 py-2 bg-primary text-primary-foreground rounded-md hover:bg-primary/90 transition-colors">
-                Launch BlackBox →
-              </a>
+              <div className="flex justify-center gap-2">
+                <a href="/blackbox" className="px-4 py-2 bg-primary text-primary-foreground rounded-md hover:bg-primary/90 transition-colors">
+                  Launch BlackBox →
+                </a>
+                <a href="/competitive-analysis" className="px-4 py-2 border border-primary text-primary rounded-md hover:bg-primary/10 transition-colors">
+                  View Analysis
+                </a>
+              </div>
             </div>
           </div>
         </div>
