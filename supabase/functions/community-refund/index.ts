@@ -30,10 +30,14 @@ serve(async (req) => {
       throw new Error("User not authenticated");
     }
 
-    const { contribution_id } = await req.json();
+    const { contributionId, contributorWalletAddress } = await req.json();
 
-    if (!contribution_id) {
+    if (!contributionId) {
       throw new Error("Contribution ID is required");
+    }
+
+    if (!contributorWalletAddress) {
+      throw new Error("Contributor wallet address is required");
     }
 
     // Use service role to access data
@@ -51,13 +55,12 @@ serve(async (req) => {
         community_campaigns (
           id,
           status,
-          target_deadline,
           multisig_wallet_address,
           current_funding_sol,
-          funding_goal_sol
+          blackbox_campaign_id
         )
       `)
-      .eq('id', contribution_id)
+      .eq('id', contributionId)
       .eq('contributor_id', user.id)
       .eq('refunded', false)
       .single();
@@ -68,52 +71,81 @@ serve(async (req) => {
 
     const campaign = contribution.community_campaigns;
     
-    // Check if refund is allowed (campaign not funded or expired)
-    const now = new Date();
-    const deadline = new Date(campaign.target_deadline);
-    const isExpired = now > deadline;
-    const isFunded = campaign.current_funding_sol >= campaign.funding_goal_sol;
-
-    if (isFunded && !isExpired) {
-      throw new Error("Cannot refund - campaign is funded and active");
+    // Check if refund is allowed (before trading starts)
+    if (campaign.status === 'executing' || campaign.status === 'completed') {
+      throw new Error("Cannot refund - trading has already started or completed");
     }
 
-    // For now, mark as refunded in database (in production, would need actual SOL refund)
-    const refundSignature = `refund_${Date.now()}_${contribution_id}`;
+    // Setup Solana connection
+    const connection = new Connection(Deno.env.get("SOLANA_RPC_URL") || "https://api.mainnet-beta.solana.com");
+    
+    // Get the platform wallet private key
+    const platformPrivateKey = Deno.env.get("TRADER_PRIVATE_KEY");
+    if (!platformPrivateKey) {
+      throw new Error("Platform private key not configured");
+    }
+
+    const platformKeypair = Keypair.fromSecretKey(decode(platformPrivateKey));
+    const contributorPubkey = new PublicKey(contributorWalletAddress);
+
+    // Calculate refund amount in lamports (SOL * 1e9)
+    const refundLamports = contribution.amount_sol * 1e9;
+
+    // Create transfer transaction
+    const transaction = new Transaction().add(
+      SystemProgram.transfer({
+        fromPubkey: platformKeypair.publicKey,
+        toPubkey: contributorPubkey,
+        lamports: refundLamports,
+      })
+    );
+
+    // Get recent blockhash
+    const { blockhash } = await connection.getLatestBlockhash();
+    transaction.recentBlockhash = blockhash;
+    transaction.feePayer = platformKeypair.publicKey;
+
+    // Send and confirm transaction
+    const signature = await sendAndConfirmTransaction(
+      connection,
+      transaction,
+      [platformKeypair],
+      { commitment: 'confirmed' }
+    );
+
+    console.log(`SOL refund sent: ${contribution.amount_sol} SOL to ${contributorWalletAddress}, signature: ${signature}`);
 
     // Update contribution as refunded
     const { error: updateError } = await supabaseService
       .from('community_contributions')
       .update({
         refunded: true,
-        refund_signature: refundSignature,
+        refund_signature: signature,
         refunded_at: new Date().toISOString()
       })
-      .eq('id', contribution_id);
+      .eq('id', contributionId);
 
     if (updateError) throw updateError;
 
-    // Update campaign funding if applicable
-    if (campaign.current_funding_sol > 0) {
-      const { error: campaignUpdateError } = await supabaseService
-        .from('community_campaigns')
-        .update({
-          current_funding_sol: Math.max(0, campaign.current_funding_sol - contribution.amount_sol),
-          contributor_count: Math.max(0, (campaign as any).contributor_count - 1)
-        })
-        .eq('id', campaign.id);
+    // Update campaign funding
+    const { error: campaignUpdateError } = await supabaseService
+      .from('community_campaigns')
+      .update({
+        current_funding_sol: Math.max(0, campaign.current_funding_sol - contribution.amount_sol),
+        contributor_count: Math.max(0, campaign.contributor_count - 1)
+      })
+      .eq('id', campaign.id);
 
-      if (campaignUpdateError) throw campaignUpdateError;
-    }
+    if (campaignUpdateError) throw campaignUpdateError;
 
-    console.log(`Refund processed: ${contribution.amount_sol} SOL for contribution ${contribution_id}`);
+    console.log(`Refund processed: ${contribution.amount_sol} SOL for contribution ${contributionId}`);
 
     return new Response(
       JSON.stringify({ 
         success: true, 
-        refund_signature: refundSignature,
+        refund_signature: signature,
         amount_sol: contribution.amount_sol,
-        contribution_id: contribution_id
+        contribution_id: contributionId
       }),
       {
         headers: { ...corsHeaders, "Content-Type": "application/json" },

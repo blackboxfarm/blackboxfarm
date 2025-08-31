@@ -205,7 +205,7 @@ export function useCommunityWallet() {
     }
   };
 
-  const requestRefund = async (contributionId: string) => {
+  const requestRefund = async (contributionId: string, contributorWalletAddress: string) => {
     try {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) {
@@ -218,14 +218,17 @@ export function useCommunityWallet() {
       }
 
       const { data, error } = await supabase.functions.invoke('community-refund', {
-        body: { contributionId }
+        body: { 
+          contributionId,
+          contributorWalletAddress 
+        }
       });
 
       if (error) throw error;
 
       toast({
-        title: "Refund Processed",
-        description: "Your refund has been processed successfully"
+        title: "Refund Processed ✅",
+        description: `${data.amount_sol} SOL has been refunded to your wallet`
       });
 
       return true;

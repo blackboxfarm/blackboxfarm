@@ -10,7 +10,9 @@ import { Progress } from "@/components/ui/progress";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useCommunityWallet } from '@/hooks/useCommunityWallet';
 import CommunityWalletConnect from './CommunityWalletConnect';
-import { Plus, Users, Wallet, Clock } from 'lucide-react';
+import { Plus, Users, Wallet, Clock, RefreshCw } from 'lucide-react';
+import { useWallet } from '@solana/wallet-adapter-react';
+import { useToast } from '@/hooks/use-toast';
 
 interface CommunityCampaign {
   id: string;
@@ -49,8 +51,13 @@ export default function CommunityWalletDashboard() {
     myContributions, 
     isLoading, 
     createCampaign, 
-    contributeToCampaign 
+    contributeToCampaign,
+    requestRefund,
+    loadMyContributions 
   } = useCommunityWallet();
+  
+  const { publicKey } = useWallet();
+  const { toast } = useToast();
   
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [isContributeModalOpen, setIsContributeModalOpen] = useState(false);
@@ -118,6 +125,23 @@ export default function CommunityWalletDashboard() {
     await contributeToCampaign(selectedCampaign.id, amount, signature);
     setIsContributeModalOpen(false);
     setSelectedCampaign(null);
+  };
+
+  const handleRefund = async (contributionId: string) => {
+    if (!publicKey) {
+      toast({
+        title: "Wallet Required",
+        description: "Please connect your wallet to request a refund",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    const success = await requestRefund(contributionId, publicKey.toString());
+    if (success) {
+      // Refresh data to show updated status
+      loadMyContributions();
+    }
   };
 
   const getStatusBadge = (status: string) => {
@@ -341,29 +365,55 @@ export default function CommunityWalletDashboard() {
 
         <TabsContent value="contributions" className="space-y-4">
           <div className="grid gap-4">
-            {myContributions.map((contribution) => (
-              <Card key={contribution.id}>
-                <CardContent className="pt-6">
-                  <div className="flex items-center justify-between">
-                    <div className="space-y-1">
-                      <div className="font-medium">
-                        {(contribution as any).community_campaigns?.title || 'Unknown Campaign'}
+            {myContributions.map((contribution) => {
+              const campaignStatus = (contribution as any).community_campaigns?.status || 'funding';
+              const canRefund = !contribution.refunded && 
+                              (campaignStatus === 'funding' || campaignStatus === 'funded') &&
+                              campaignStatus !== 'executing' && 
+                              campaignStatus !== 'completed';
+              
+              return (
+                <Card key={contribution.id}>
+                  <CardContent className="pt-6">
+                    <div className="flex items-center justify-between">
+                      <div className="space-y-1">
+                        <div className="font-medium">
+                          {(contribution as any).community_campaigns?.title || 'Unknown Campaign'}
+                        </div>
+                        <div className="text-sm text-muted-foreground">
+                          Contributed {contribution.amount_sol} SOL on{' '}
+                          {new Date(contribution.contribution_timestamp).toLocaleDateString()}
+                        </div>
+                        {contribution.transaction_signature && (
+                          <div className="text-xs text-muted-foreground">
+                            Tx: {contribution.transaction_signature.slice(0, 8)}...{contribution.transaction_signature.slice(-4)}
+                          </div>
+                        )}
                       </div>
-                      <div className="text-sm text-muted-foreground">
-                        Contributed {contribution.amount_sol} SOL on{' '}
-                        {new Date(contribution.contribution_timestamp).toLocaleDateString()}
+                      <div className="text-right space-y-2">
+                        <div className="space-x-2">
+                          {getStatusBadge(campaignStatus)}
+                          {contribution.refunded && (
+                            <Badge variant="outline">Refunded</Badge>
+                          )}
+                        </div>
+                        {canRefund && (
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => handleRefund(contribution.id)}
+                            className="gap-2"
+                          >
+                            <RefreshCw className="h-3 w-3" />
+                            Request Refund
+                          </Button>
+                        )}
                       </div>
                     </div>
-                    <div className="text-right space-y-1">
-                      {getStatusBadge((contribution as any).community_campaigns?.status || 'funding')}
-                      {contribution.refunded && (
-                        <Badge variant="outline" className="ml-2">Refunded</Badge>
-                      )}
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-            ))}
+                  </CardContent>
+                </Card>
+              );
+            })}
             
             {myContributions.length === 0 && (
               <Card>
