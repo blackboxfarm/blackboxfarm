@@ -1,13 +1,13 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Shield, Zap, Users, Target, Rocket, Globe } from "lucide-react";
-import { FarmBanner } from "@/components/FarmBanner";
+import { PageHeader } from "@/components/PageHeader";
 
 export default function AboutUs() {
   return (
     <div className="min-h-screen tech-gradient relative overflow-hidden">
       <div className="container mx-auto py-12 space-y-12 relative z-10">
-        <FarmBanner />
+        <PageHeader />
         
         {/* Hero Section */}
         <div className="text-center space-y-6">
