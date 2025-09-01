@@ -29,7 +29,7 @@ export function PageHeader({ showTabs = false, activeTab, onTabChange }: PageHea
         <div className="absolute inset-0 flex flex-col justify-center items-center">
           <div className="flex items-center gap-3 mb-2">
             <img 
-              src="/lovable-uploads/33fad75a-246c-487a-8af1-52b9c09a648a.png" 
+              src="/lovable-uploads/4caa07ef-479a-49fa-8f9f-c474607a99cd.png" 
               alt="BlackBox Farm Cube Logo" 
               className="w-12 h-12"
             />
