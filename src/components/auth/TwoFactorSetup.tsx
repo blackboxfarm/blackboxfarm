@@ -8,7 +8,11 @@ import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
 import { Loader2, Shield, Smartphone, Key } from 'lucide-react';
 
-export const TwoFactorSetup = () => {
+interface TwoFactorSetupProps {
+  onComplete?: () => void;
+}
+
+export const TwoFactorSetup = ({ onComplete }: TwoFactorSetupProps) => {
   const [step, setStep] = useState<'phone' | 'verify' | 'totp' | 'complete'>('phone');
   const [phoneNumber, setPhoneNumber] = useState('');
   const [verificationCode, setVerificationCode] = useState('');
@@ -99,6 +103,11 @@ export const TwoFactorSetup = () => {
         title: "2FA Enabled",
         description: "Two-factor authentication is now active"
       });
+      
+      // Call onComplete callback if provided
+      if (onComplete) {
+        setTimeout(() => onComplete(), 1500);
+      }
     } catch (error: any) {
       toast({
         title: "2FA Setup Failed",
