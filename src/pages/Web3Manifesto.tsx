@@ -1,16 +1,19 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Zap, Shield, Users, Globe, Code, Lightbulb, Target, Heart } from "lucide-react";
+import { PageHeader } from "@/components/PageHeader";
 
 export default function Web3Manifesto() {
   return (
-    <div className="min-h-screen bg-background">
-      <div className="container mx-auto py-12 space-y-12">
+    <div className="min-h-screen tech-gradient relative overflow-hidden">
+      <div className="container mx-auto py-12 space-y-12 relative z-10">
+        <PageHeader />
+        
         {/* Hero Section */}
         <div className="text-center space-y-6">
-          <h1 className="text-4xl md:text-6xl font-bold bg-gradient-to-r from-primary to-primary/70 bg-clip-text text-transparent">
+          <h2 className="text-3xl md:text-5xl font-bold bg-gradient-to-r from-primary to-primary/70 bg-clip-text text-transparent">
             Web3 Manifesto
-          </h1>
+          </h2>
           <p className="text-xl text-muted-foreground max-w-4xl mx-auto">
             Our vision for a decentralized future where financial tools are transparent, accessible, 
             and owned by the community they serve.

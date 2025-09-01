@@ -10,12 +10,14 @@ export function Footer() {
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8">
           {/* Brand Section */}
           <div className="space-y-4">
-            <div className="flex items-center gap-2">
-              <div className="w-8 h-8 bg-primary rounded-lg flex items-center justify-center">
-                <span className="text-primary-foreground font-bold text-sm">BB</span>
-              </div>
+            <Link to="/" className="flex items-center gap-2 hover:opacity-80 transition-opacity">
+              <img 
+                src="/lovable-uploads/f662a3d2-f3b3-468c-bebc-bae858294fc5.png" 
+                alt="BlackBox Farm Logo" 
+                className="w-8 h-8"
+              />
               <span className="font-bold text-lg">BlackBox Farm</span>
-            </div>
+            </Link>
             <p className="text-sm text-muted-foreground">
               Democratizing DeFi trading with transparent, affordable, and secure automated solutions for the Solana ecosystem.
             </p>
