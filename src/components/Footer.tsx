@@ -2,8 +2,16 @@ import { Link } from "react-router-dom";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { Github, Twitter, MessageCircle, Mail, Shield, FileText, Globe, Heart } from "lucide-react";
+import { useAuth } from "@/hooks/useAuth";
+import { usePasswordAuth } from "@/hooks/usePasswordAuth";
 
 export function Footer() {
+  const { isAuthenticated } = useAuth();
+  const { isAuthenticated: isPasswordAuth } = usePasswordAuth();
+  
+  // Check if user has super admin access (password auth)
+  const isSuperAdmin = isPasswordAuth;
+  
   return (
     <footer className="bg-muted/20 border-t">
       <div className="container mx-auto px-4 py-12">
@@ -44,21 +52,27 @@ export function Footer() {
                   Volume Simulator
                 </Link>
               </li>
-              <li>
-                <Link to="/community-wallet" className="text-muted-foreground hover:text-primary transition-colors">
-                  Community Campaigns
-                </Link>
-              </li>
-              <li>
-                <Link to="/?tab=analytics" className="text-muted-foreground hover:text-primary transition-colors">
-                  Analytics Dashboard
-                </Link>
-              </li>
-              <li>
-                <Link to="/super-admin?tab=security" className="text-muted-foreground hover:text-primary transition-colors">
-                  Security Center
-                </Link>
-              </li>
+              {isAuthenticated && (
+                <li>
+                  <Link to="/community-wallet" className="text-muted-foreground hover:text-primary transition-colors">
+                    Community Campaigns
+                  </Link>
+                </li>
+              )}
+              {isAuthenticated && (
+                <li>
+                  <Link to="/?tab=analytics" className="text-muted-foreground hover:text-primary transition-colors">
+                    Analytics Dashboard
+                  </Link>
+                </li>
+              )}
+              {isSuperAdmin && (
+                <li>
+                  <Link to="/super-admin?tab=security" className="text-muted-foreground hover:text-primary transition-colors">
+                    Security Center
+                  </Link>
+                </li>
+              )}
             </ul>
           </div>
 
