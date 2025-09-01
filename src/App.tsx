@@ -26,18 +26,7 @@ const App = () => (
       <Sonner />
       <BrowserRouter>
         <Routes>
-          <Route path="/" element={
-            <div className="min-h-screen bg-background text-foreground flex items-center justify-center">
-              <div className="text-center">
-                <h1 className="text-4xl font-bold text-primary mb-4">BlackBox Farm</h1>
-                <p className="text-xl text-muted-foreground mb-8">Loading...</p>
-                <div className="space-y-4">
-                  <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto"></div>
-                  <p className="text-sm text-muted-foreground">If this loading persists, please refresh the page</p>
-                </div>
-              </div>
-            </div>
-          } />
+          <Route path="/" element={<BlackBox />} />
           <Route path="/auth" element={<Auth />} />
           <Route path="/admin" element={<Index />} />
           <Route path="/bb" element={<BumpBot />} />
