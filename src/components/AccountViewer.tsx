@@ -41,6 +41,8 @@ export const AccountViewer = () => {
     try {
       setLoading(true);
       
+      console.log('Fetching accounts...');
+      
       // Fetch profiles with campaign and contribution data
       const { data: profiles, error: profilesError } = await supabase
         .from('profiles')
@@ -51,6 +53,8 @@ export const AccountViewer = () => {
           created_at
         `);
 
+      console.log('Profiles query result:', { profiles, profilesError });
+      
       if (profilesError) throw profilesError;
 
       // Fetch campaign counts
