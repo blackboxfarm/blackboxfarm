@@ -256,7 +256,7 @@ export function SuperAdminWallets() {
               <p className="text-sm">Create platform wallets for treasury, funding, and emergency operations.</p>
             </div>
           ) : (
-            <div className="space-y-4">
+            <div className="space-y-4 max-h-96 overflow-y-auto pr-2">
               {wallets.map((wallet) => {
                 const typeInfo = getWalletTypeInfo(wallet.wallet_type);
                 return (
