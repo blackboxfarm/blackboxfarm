@@ -1,24 +1,12 @@
 import { useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { BlackBoxAuth } from "@/components/blackbox/BlackBoxAuth";
-import { CampaignDashboard } from "@/components/blackbox/CampaignDashboard";
-import { FeeCalculator } from "@/components/blackbox/FeeCalculator";
 import { AuthButton } from "@/components/auth/AuthButton";
-import { RequireAuth } from "@/components/RequireAuth";
-import VolumeSimulator from "@/components/VolumeSimulator";
 import { FarmBanner } from "@/components/FarmBanner";
-import { SubscriptionManager } from "@/components/blackbox/SubscriptionManager";
-import { WalletGenerator } from "@/components/WalletGenerator";
-import { SecurityDashboard } from "@/components/security/SecurityDashboard";
-import { NotificationCenter } from "@/components/NotificationCenter";
-import { AnalyticsDashboard } from "@/components/AnalyticsDashboard";
-import { ReferralDashboard } from "@/components/blackbox/ReferralDashboard";
-import CommunityWalletDashboard from "@/components/blackbox/CommunityWalletDashboard";
 import { useAuth } from "@/hooks/useAuth";
 
 export default function BlackBox() {
-  const [activeTab, setActiveTab] = useState("pricing");
+  const [activeTab, setActiveTab] = useState("about");
   const { user } = useAuth();
 
   return (
@@ -40,66 +28,57 @@ export default function BlackBox() {
             </div>
           </div>
           <div className="hidden md:flex flex-shrink-0 items-center gap-3">
-            <NotificationCenter />
             <AuthButton />
           </div>
         </div>
 
         {/* Main Navigation */}
         <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-          <TabsList className={`grid w-full ${user ? 'grid-cols-8' : 'grid-cols-4'}`}>
-            <TabsTrigger value="pricing">Pricing</TabsTrigger>
-            {user && <TabsTrigger value="dashboard">Dashboard</TabsTrigger>}
-            {user && <TabsTrigger value="community">Community</TabsTrigger>}
-            <TabsTrigger value="simulator">Simulator</TabsTrigger>
-            <TabsTrigger value="fees">Calculator</TabsTrigger>
-            <TabsTrigger value="analytics">Analytics</TabsTrigger>
-            {user && <TabsTrigger value="referrals">Referrals</TabsTrigger>}
-            {user && <TabsTrigger value="security">Security</TabsTrigger>}
+          <TabsList className="grid w-full grid-cols-2">
+            <TabsTrigger value="about">About</TabsTrigger>
+            <TabsTrigger value="features">Features</TabsTrigger>
           </TabsList>
 
-          <TabsContent value="pricing" className="space-y-6">
-            <SubscriptionManager />
-          </TabsContent>
-
-          <TabsContent value="dashboard" className="space-y-6">
-            <RequireAuth>
-              <CampaignDashboard />
-              <WalletGenerator />
-            </RequireAuth>
-          </TabsContent>
-
-          <TabsContent value="community" className="space-y-6">
-            <RequireAuth>
-              <CommunityWalletDashboard />
-            </RequireAuth>
-          </TabsContent>
-
-          <TabsContent value="simulator" className="space-y-6">
+          <TabsContent value="about" className="space-y-6">
             <Card>
               <CardHeader>
-                <CardTitle>Volume Bot Simulator</CardTitle>
+                <CardTitle>Welcome to BlackBox Farm</CardTitle>
               </CardHeader>
               <CardContent>
-                <VolumeSimulator />
+                <p className="text-muted-foreground">
+                  BlackBox Farm is your comprehensive solution for cryptocurrency trading automation and volume generation.
+                  Our platform provides cutting-edge tools for traders looking to optimize their strategies and increase their market presence.
+                </p>
               </CardContent>
             </Card>
           </TabsContent>
 
-          <TabsContent value="fees" className="space-y-6">
-            <FeeCalculator />
-          </TabsContent>
-
-          <TabsContent value="analytics" className="space-y-6">
-            <AnalyticsDashboard />
-          </TabsContent>
-
-          <TabsContent value="referrals" className="space-y-6">
-            <ReferralDashboard />
-          </TabsContent>
-
-          <TabsContent value="security" className="space-y-6">
-            <SecurityDashboard />
+          <TabsContent value="features" className="space-y-6">
+            <Card>
+              <CardHeader>
+                <CardTitle>Key Features</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="grid md:grid-cols-2 gap-4">
+                  <div>
+                    <h4 className="font-semibold text-primary mb-2">Automated Trading</h4>
+                    <p className="text-sm text-muted-foreground">Advanced algorithms for optimal trade execution</p>
+                  </div>
+                  <div>
+                    <h4 className="font-semibold text-primary mb-2">Volume Generation</h4>
+                    <p className="text-sm text-muted-foreground">Increase market visibility and liquidity</p>
+                  </div>
+                  <div>
+                    <h4 className="font-semibold text-primary mb-2">Real-time Analytics</h4>
+                    <p className="text-sm text-muted-foreground">Monitor performance with live dashboards</p>
+                  </div>
+                  <div>
+                    <h4 className="font-semibold text-primary mb-2">Security First</h4>
+                    <p className="text-sm text-muted-foreground">Enterprise-grade encryption and 2FA</p>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
           </TabsContent>
         </Tabs>
 
