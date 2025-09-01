@@ -10,6 +10,7 @@ import { Connection, Keypair, PublicKey } from "@solana/web3.js";
 import bs58 from "bs58";
 import { refundToFunder, splitEvenly } from "@/lib/solana";
 import { toast } from "@/hooks/use-toast";
+import { FundManagement } from "./FundManagement";
 
 export default function WalletPoolManager() {
   const { state, wallets, setMode, ensureCount, importCustomSecrets, removeAt } = useWalletPool();
@@ -111,6 +112,23 @@ export default function WalletPoolManager() {
         <div className="space-y-3">
           <Label>Override refund address (optional)</Label>
           <Input placeholder="Destination public key" value={overrideAddr} onChange={(e) => setOverrideAddr(e.target.value.trim())} />
+        </div>
+
+        {/* Enhanced Fund Management */}
+        <div className="space-y-3">
+          <Label>Advanced Fund Management</Label>
+          <FundManagement 
+            wallets={wallets.map(w => ({ 
+              ...w, 
+              balance: balances[w.pubkey] 
+            }))}
+            onWalletUpdate={() => {
+              // Refresh balances after fund operations
+              setTimeout(() => {
+                setBalances({});
+              }, 1000);
+            }}
+          />
         </div>
 
         <div className="space-y-2">
