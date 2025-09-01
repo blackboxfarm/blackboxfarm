@@ -36,6 +36,13 @@ export default function Index() {
   const [activeTab, setActiveTab] = useState("server-control");
 
   useEffect(() => {
+    // Check for tab parameter in URL
+    const urlParams = new URLSearchParams(window.location.search);
+    const tabParam = urlParams.get('tab');
+    if (tabParam) {
+      setActiveTab(tabParam);
+    }
+
     const title = "24/7 Server-Side Trading Bot | Solana Auto Trades";
     document.title = title;
 

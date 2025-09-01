@@ -35,27 +35,27 @@ export function Footer() {
             <h3 className="font-semibold text-sm uppercase tracking-wide">Product</h3>
             <ul className="space-y-2 text-sm">
               <li>
-                <Link to="/" className="text-muted-foreground hover:text-primary transition-colors">
+                <Link to="/?tab=volume-sim" className="text-muted-foreground hover:text-primary transition-colors">
                   Fee Calculator
                 </Link>
               </li>
               <li>
-                <Link to="/" className="text-muted-foreground hover:text-primary transition-colors">
+                <Link to="/?tab=volume-sim" className="text-muted-foreground hover:text-primary transition-colors">
                   Volume Simulator
                 </Link>
               </li>
               <li>
-                <Link to="/" className="text-muted-foreground hover:text-primary transition-colors">
+                <Link to="/community-wallet" className="text-muted-foreground hover:text-primary transition-colors">
                   Community Campaigns
                 </Link>
               </li>
               <li>
-                <Link to="/" className="text-muted-foreground hover:text-primary transition-colors">
+                <Link to="/?tab=analytics" className="text-muted-foreground hover:text-primary transition-colors">
                   Analytics Dashboard
                 </Link>
               </li>
               <li>
-                <Link to="/" className="text-muted-foreground hover:text-primary transition-colors">
+                <Link to="/super-admin?tab=security" className="text-muted-foreground hover:text-primary transition-colors">
                   Security Center
                 </Link>
               </li>

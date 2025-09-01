@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { SuperAdminWallets } from "@/components/SuperAdminWallets";
 import { AdminWalletRecovery } from "@/components/AdminWalletRecovery";
 import { SecurityDashboard } from "@/components/security/SecurityDashboard";
@@ -6,6 +6,17 @@ import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 export default function SuperAdmin() {
+  const [activeTab, setActiveTab] = useState("wallets");
+
+  useEffect(() => {
+    // Check for tab parameter in URL
+    const urlParams = new URLSearchParams(window.location.search);
+    const tabParam = urlParams.get('tab');
+    if (tabParam) {
+      setActiveTab(tabParam);
+    }
+  }, []);
+
   return (
     <div className="min-h-screen bg-background">
       <div className="container mx-auto px-6 py-8">
@@ -16,7 +27,7 @@ export default function SuperAdmin() {
           </p>
         </div>
         
-        <Tabs defaultValue="wallets" className="space-y-6">
+        <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
           <TabsList className="grid w-full grid-cols-3">
             <TabsTrigger value="wallets">Wallet Management</TabsTrigger>
             <TabsTrigger value="recovery">Wallet Recovery</TabsTrigger>
