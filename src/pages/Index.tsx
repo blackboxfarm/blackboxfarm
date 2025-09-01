@@ -8,7 +8,7 @@ import VolumeSimulator from "@/components/VolumeSimulator";
 import WalletPoolManager from "@/components/WalletPoolManager";
 import { AgenticBrowser } from "@/components/AgenticBrowser";
 import { AnalyticsDashboard } from "@/components/AnalyticsDashboard";
-import { FarmBanner } from "@/components/FarmBanner";
+import { PageHeader } from "@/components/PageHeader";
 
 import SecretsModal from "@/components/SecretsModal";
 import { PasswordLogin } from "@/components/PasswordLogin";
@@ -101,7 +101,7 @@ export default function Index() {
         </div>
       </div>
 
-      <FarmBanner />
+      <PageHeader showTabs={false} />
 
       <div className="container mx-auto p-4 space-y-6 relative z-10">
         {/* System Status */}
