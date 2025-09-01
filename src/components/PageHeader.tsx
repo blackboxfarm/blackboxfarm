@@ -36,7 +36,7 @@ export function PageHeader({ showTabs = false, activeTab, onTabChange }: PageHea
               BlackBox Farm
             </h1>
           </div>
-          <p className="text-lg text-muted-foreground text-center">
+          <p className="text-lg text-gray-400 text-center">
             Putting the needle in the Haystack - Bumps for the whole Farm!
           </p>
         </div>
