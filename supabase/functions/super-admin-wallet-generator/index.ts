@@ -28,37 +28,61 @@ serve(async (req) => {
       });
     }
 
-    const { label, wallet_type, pubkey, secret_key_encrypted } = await req.json();
+    if (req.method === 'GET') {
+      // Load wallets
+      const { data, error } = await supabaseClient
+        .from('super_admin_wallets')
+        .select('*')
+        .order('created_at', { ascending: false });
 
-    if (!label || !wallet_type || !pubkey || !secret_key_encrypted) {
-      return new Response(JSON.stringify({ 
-        error: 'Missing required fields: label, wallet_type, pubkey, secret_key_encrypted' 
-      }), {
-        status: 400,
+      if (error) {
+        console.error('Database error:', error);
+        throw error;
+      }
+
+      return new Response(JSON.stringify({ data }), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }
 
-    // Insert the super admin wallet using service role
-    const { data, error } = await supabaseClient
-      .from('super_admin_wallets')
-      .insert({
-        label,
-        wallet_type,
-        pubkey,
-        secret_key_encrypted,
-        created_by: user.id,
-        is_active: true
-      })
-      .select()
-      .single();
+    if (req.method === 'POST') {
+      const { label, wallet_type, pubkey, secret_key_encrypted } = await req.json();
 
-    if (error) {
-      console.error('Database error:', error);
-      throw error;
+      if (!label || !wallet_type || !pubkey || !secret_key_encrypted) {
+        return new Response(JSON.stringify({ 
+          error: 'Missing required fields: label, wallet_type, pubkey, secret_key_encrypted' 
+        }), {
+          status: 400,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+
+      // Insert the super admin wallet using service role
+      const { data, error } = await supabaseClient
+        .from('super_admin_wallets')
+        .insert({
+          label,
+          wallet_type,
+          pubkey,
+          secret_key_encrypted,
+          created_by: user.id,
+          is_active: true
+        })
+        .select()
+        .single();
+
+      if (error) {
+        console.error('Database error:', error);
+        throw error;
+      }
+
+      return new Response(JSON.stringify({ data }), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
     }
 
-    return new Response(JSON.stringify({ data }), {
+    return new Response(JSON.stringify({ error: 'Method not allowed' }), {
+      status: 405,
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
 

@@ -67,14 +67,13 @@ export function SuperAdminWallets() {
 
   const loadSuperAdminWallets = async () => {
     try {
-      // Using any type since Supabase types aren't updated yet
-      const { data, error } = await (supabase as any)
-        .from('super_admin_wallets')
-        .select('*')
-        .order('created_at', { ascending: false });
+      // Use edge function to load wallets with proper authentication
+      const { data: response, error } = await supabase.functions.invoke('super-admin-wallet-generator', {
+        method: 'GET'
+      });
 
       if (error) throw error;
-      setWallets(data || []);
+      setWallets(response?.data || []);
     } catch (error: any) {
       toast({ 
         title: "Error loading wallets", 
