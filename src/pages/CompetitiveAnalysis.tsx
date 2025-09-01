@@ -3,15 +3,42 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { ArrowLeft, CheckCircle, XCircle, TrendingDown, Zap } from "lucide-react";
+import { FarmBanner } from "@/components/FarmBanner";
+import { AuthButton } from "@/components/auth/AuthButton";
+import { NotificationCenter } from "@/components/NotificationCenter";
+import { useAuth } from "@/hooks/useAuth";
 
 export default function CompetitiveAnalysis() {
+  const { user } = useAuth();
+  
   useEffect(() => {
     document.title = "Competitive Analysis - Fee Structure Comparison";
   }, []);
 
   return (
     <div className="min-h-screen bg-background">
-      <div className="container mx-auto p-6 max-w-6xl">
+      {/* Farm Banner Header */}
+      <FarmBanner />
+      <div className="container mx-auto py-6 space-y-8">
+        {/* Main Header Section */}
+        <div className="flex flex-col md:flex-row md:justify-between md:items-start space-y-4 md:space-y-0">
+          <div className="text-center md:text-left flex-1 space-y-4">
+            <h1 className="text-3xl md:text-4xl font-bold bg-gradient-to-r from-primary to-primary/70 bg-clip-text text-transparent">
+              BlackBox Farm
+            </h1>
+            <p className="text-lg md:text-xl text-muted-foreground max-w-2xl mx-auto md:mx-0">
+              Putting the needle in the Haystack - Bumps for the whole Fam!
+            </p>
+            <div className="flex justify-center md:hidden space-x-3">
+              <AuthButton />
+            </div>
+          </div>
+          <div className="hidden md:flex flex-shrink-0 items-center gap-3">
+            <NotificationCenter />
+            <AuthButton />
+          </div>
+        </div>
+
         {/* Header */}
         <div className="flex items-center gap-4 mb-8">
           <Button variant="outline" size="sm" onClick={() => window.history.back()}>

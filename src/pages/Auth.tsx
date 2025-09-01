@@ -7,6 +7,9 @@ import { useAuth } from '@/hooks/useAuth';
 import { WalletBalanceMonitor } from '@/components/WalletBalanceMonitor';
 import { Badge } from '@/components/ui/badge';
 import { Shield, UserPlus, Mail, Smartphone, Key, CheckCircle } from 'lucide-react';
+import { FarmBanner } from '@/components/FarmBanner';
+import { AuthButton } from '@/components/auth/AuthButton';
+import { NotificationCenter } from '@/components/NotificationCenter';
 
 export default function AuthPage() {
   const [showAuthModal, setShowAuthModal] = useState(false);
@@ -29,19 +32,41 @@ export default function AuthPage() {
 
   if (user) {
     return (
-      <div className="min-h-screen bg-background p-6">
-        <div className="container mx-auto max-w-4xl space-y-6">
-          <div className="flex justify-between items-center">
-            <div>
-              <h1 className="text-3xl font-bold">Welcome, {user.email}</h1>
-              <p className="text-muted-foreground">Manage your BlackBox Trading account</p>
+      <div className="min-h-screen bg-background">
+        {/* Farm Banner Header */}
+        <FarmBanner />
+        <div className="container mx-auto py-6 space-y-8">
+          {/* Main Header Section */}
+          <div className="flex flex-col md:flex-row md:justify-between md:items-start space-y-4 md:space-y-0">
+            <div className="text-center md:text-left flex-1 space-y-4">
+              <h1 className="text-3xl md:text-4xl font-bold bg-gradient-to-r from-primary to-primary/70 bg-clip-text text-transparent">
+                BlackBox Farm
+              </h1>
+              <p className="text-lg md:text-xl text-muted-foreground max-w-2xl mx-auto md:mx-0">
+                Putting the needle in the Haystack - Bumps for the whole Fam!
+              </p>
+              <div className="flex justify-center md:hidden space-x-3">
+                <AuthButton />
+              </div>
             </div>
-            <Button variant="outline" onClick={handleSignOut}>
-              Sign Out
-            </Button>
+            <div className="hidden md:flex flex-shrink-0 items-center gap-3">
+              <NotificationCenter />
+              <AuthButton />
+            </div>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <div className="space-y-6">
+        <div className="flex justify-between items-center">
+              <div>
+                <h2 className="text-2xl font-bold">Welcome, {user.email}</h2>
+                <p className="text-muted-foreground">Manage your BlackBox Trading account</p>
+              </div>
+            <Button variant="outline" onClick={handleSignOut}>
+              Sign Out
+              </Button>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <Card>
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
@@ -91,11 +116,12 @@ export default function AuthPage() {
                 </div>
               </CardContent>
             </Card>
-          </div>
+            </div>
 
-          <TwoFactorSetup />
-          
-          <WalletBalanceMonitor />
+            <TwoFactorSetup />
+            
+            <WalletBalanceMonitor />
+          </div>
         </div>
       </div>
     );

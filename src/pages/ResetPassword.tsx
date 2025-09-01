@@ -7,8 +7,13 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { useToast } from '@/hooks/use-toast';
 import { Loader2, Lock, Eye, EyeOff, CheckCircle } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
+import { FarmBanner } from '@/components/FarmBanner';
+import { AuthButton } from '@/components/auth/AuthButton';
+import { NotificationCenter } from '@/components/NotificationCenter';
+import { useAuth } from '@/hooks/useAuth';
 
 export const ResetPassword = () => {
+  const { user } = useAuth();
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [loading, setLoading] = useState(false);
@@ -125,6 +130,29 @@ export const ResetPassword = () => {
   }
 
   return (
+    <div className="min-h-screen bg-background">
+      {/* Farm Banner Header */}
+      <FarmBanner />
+      <div className="container mx-auto py-6 space-y-8">
+        {/* Main Header Section */}
+        <div className="flex flex-col md:flex-row md:justify-between md:items-start space-y-4 md:space-y-0">
+          <div className="text-center md:text-left flex-1 space-y-4">
+            <h1 className="text-3xl md:text-4xl font-bold bg-gradient-to-r from-primary to-primary/70 bg-clip-text text-transparent">
+              BlackBox Farm
+            </h1>
+            <p className="text-lg md:text-xl text-muted-foreground max-w-2xl mx-auto md:mx-0">
+              Putting the needle in the Haystack - Bumps for the whole Fam!
+            </p>
+            <div className="flex justify-center md:hidden space-x-3">
+              <AuthButton />
+            </div>
+          </div>
+          <div className="hidden md:flex flex-shrink-0 items-center gap-3">
+            <NotificationCenter />
+            <AuthButton />
+          </div>
+        </div>
+
     <div className="min-h-screen flex items-center justify-center bg-background p-4">
       <Card className="w-full max-w-md tech-border">
         <CardHeader className="text-center">
@@ -225,6 +253,8 @@ export const ResetPassword = () => {
           </form>
         </CardContent>
       </Card>
+      </div>
+      </div>
     </div>
   );
 };
