@@ -8,7 +8,6 @@ import VolumeSimulator from "@/components/VolumeSimulator";
 import WalletPoolManager from "@/components/WalletPoolManager";
 import { AgenticBrowser } from "@/components/AgenticBrowser";
 import { AnalyticsDashboard } from "@/components/AnalyticsDashboard";
-import { FarmBanner } from "@/components/FarmBanner";
 
 import SecretsModal from "@/components/SecretsModal";
 import { PasswordLogin } from "@/components/PasswordLogin";
@@ -101,10 +100,8 @@ export default function Index() {
         </div>
       </div>
 
-      <FarmBanner />
-
       <div className="container mx-auto p-4 space-y-6 relative z-10">
-        {/* System Status */}
+        {/* Header */}
         <div className="tech-border p-6 mb-6">
           <h1 className="text-4xl font-bold text-center mb-2 accent-gradient bg-clip-text text-transparent">
             System Reset AI Evolution

@@ -1,19 +1,16 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Shield, Zap, Users, Target, Rocket, Globe } from "lucide-react";
-import { PageHeader } from "@/components/PageHeader";
 
 export default function AboutUs() {
   return (
-    <div className="min-h-screen tech-gradient relative overflow-hidden">
-      <div className="container mx-auto py-12 space-y-12 relative z-10">
-        <PageHeader />
-        
+    <div className="min-h-screen bg-background">
+      <div className="container mx-auto py-12 space-y-12">
         {/* Hero Section */}
         <div className="text-center space-y-6">
-          <h2 className="text-3xl md:text-5xl font-bold bg-gradient-to-r from-primary to-primary/70 bg-clip-text text-transparent">
+          <h1 className="text-4xl md:text-6xl font-bold bg-gradient-to-r from-primary to-primary/70 bg-clip-text text-transparent">
             About BlackBox Farm
-          </h2>
+          </h1>
           <p className="text-xl text-muted-foreground max-w-3xl mx-auto">
             Revolutionizing DeFi trading with transparent, affordable, and secure automated solutions for the Solana ecosystem.
           </p>

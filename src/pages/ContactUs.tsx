@@ -9,7 +9,6 @@ import { Badge } from "@/components/ui/badge";
 import { Mail, MessageSquare, Phone, MapPin, Clock, Send, CheckCircle } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
-import { PageHeader } from "@/components/PageHeader";
 
 export default function ContactUs() {
   const [formData, setFormData] = useState({
@@ -75,15 +74,13 @@ export default function ContactUs() {
   }
 
   return (
-    <div className="min-h-screen tech-gradient relative overflow-hidden">
-      <div className="container mx-auto py-12 space-y-12 relative z-10">
-        <PageHeader />
-        
+    <div className="min-h-screen bg-background">
+      <div className="container mx-auto py-12 space-y-12">
         {/* Header */}
         <div className="text-center space-y-6">
-          <h2 className="text-3xl md:text-5xl font-bold bg-gradient-to-r from-primary to-primary/70 bg-clip-text text-transparent">
+          <h1 className="text-4xl md:text-6xl font-bold bg-gradient-to-r from-primary to-primary/70 bg-clip-text text-transparent">
             Contact Us
-          </h2>
+          </h1>
           <p className="text-xl text-muted-foreground max-w-3xl mx-auto">
             Have questions about BlackBox Farm? Need support? Want to explore partnership opportunities? 
             We're here to help and always excited to connect with our community.
@@ -105,7 +102,7 @@ export default function ContactUs() {
                   <Mail className="h-5 w-5 text-muted-foreground" />
                   <div>
                     <p className="font-medium">General Inquiries</p>
-                    <p className="text-sm text-muted-foreground">contact@blackbox.farm</p>
+                    <p className="text-sm text-muted-foreground">support@blackboxfarm.io</p>
                   </div>
                 </div>
                 

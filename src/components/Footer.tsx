@@ -10,14 +10,12 @@ export function Footer() {
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8">
           {/* Brand Section */}
           <div className="space-y-4">
-            <Link to="/" className="flex items-center gap-2 hover:opacity-80 transition-opacity">
-              <img 
-                src="/lovable-uploads/f662a3d2-f3b3-468c-bebc-bae858294fc5.png" 
-                alt="BlackBox Farm Logo" 
-                className="w-8 h-8"
-              />
+            <div className="flex items-center gap-2">
+              <div className="w-8 h-8 bg-primary rounded-lg flex items-center justify-center">
+                <span className="text-primary-foreground font-bold text-sm">BB</span>
+              </div>
               <span className="font-bold text-lg">BlackBox Farm</span>
-            </Link>
+            </div>
             <p className="text-sm text-muted-foreground">
               Democratizing DeFi trading with transparent, affordable, and secure automated solutions for the Solana ecosystem.
             </p>
@@ -118,13 +116,16 @@ export function Footer() {
             <div className="pt-2">
               <h4 className="font-medium text-sm mb-2">Connect With Us</h4>
               <div className="flex gap-3">
-                <a href="https://x.com/blackbox_farm" target="_blank" rel="noopener noreferrer" className="text-muted-foreground hover:text-primary transition-colors">
+                <a href="#" className="text-muted-foreground hover:text-primary transition-colors">
                   <Twitter className="h-4 w-4" />
+                </a>
+                <a href="#" className="text-muted-foreground hover:text-primary transition-colors">
+                  <Github className="h-4 w-4" />
                 </a>
                 <a href="#" className="text-muted-foreground hover:text-primary transition-colors">
                   <MessageCircle className="h-4 w-4" />
                 </a>
-                <a href="mailto:contact@blackbox.farm" className="text-muted-foreground hover:text-primary transition-colors">
+                <a href="mailto:support@blackboxfarm.io" className="text-muted-foreground hover:text-primary transition-colors">
                   <Mail className="h-4 w-4" />
                 </a>
               </div>
