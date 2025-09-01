@@ -969,6 +969,42 @@ export type Database = {
         }
         Relationships: []
       }
+      super_admin_wallets: {
+        Row: {
+          created_at: string
+          created_by: string | null
+          id: string
+          is_active: boolean
+          label: string
+          pubkey: string
+          secret_key_encrypted: string
+          updated_at: string
+          wallet_type: string
+        }
+        Insert: {
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          is_active?: boolean
+          label: string
+          pubkey: string
+          secret_key_encrypted: string
+          updated_at?: string
+          wallet_type: string
+        }
+        Update: {
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          is_active?: boolean
+          label?: string
+          pubkey?: string
+          secret_key_encrypted?: string
+          updated_at?: string
+          wallet_type?: string
+        }
+        Relationships: []
+      }
       token_watchlist: {
         Row: {
           current_price: number | null
@@ -1379,6 +1415,14 @@ export type Database = {
           session_id: string
           status: string
           updated_at: string
+        }[]
+      }
+      get_active_super_admin_wallet: {
+        Args: { wallet_type_param: string }
+        Returns: {
+          id: string
+          label: string
+          pubkey: string
         }[]
       }
       get_blackbox_user_decrypted: {

@@ -67,7 +67,8 @@ export function SuperAdminWallets() {
 
   const loadSuperAdminWallets = async () => {
     try {
-      const { data, error } = await supabase
+      // Using any type since Supabase types aren't updated yet
+      const { data, error } = await (supabase as any)
         .from('super_admin_wallets')
         .select('*')
         .order('created_at', { ascending: false });
@@ -99,7 +100,7 @@ export function SuperAdminWallets() {
       // Store in database (encrypted)
       const { data: { user } } = await supabase.auth.getUser();
       
-      const { data, error } = await supabase
+      const { data, error } = await (supabase as any)
         .from('super_admin_wallets')
         .insert({
           label: newWallet.label,
@@ -147,7 +148,7 @@ export function SuperAdminWallets() {
 
   const toggleWalletStatus = async (wallet: SuperAdminWallet) => {
     try {
-      const { error } = await supabase
+      const { error } = await (supabase as any)
         .from('super_admin_wallets')
         .update({ is_active: !wallet.is_active })
         .eq('id', wallet.id);

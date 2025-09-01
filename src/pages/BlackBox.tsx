@@ -16,10 +16,14 @@ import { AnalyticsDashboard } from "@/components/AnalyticsDashboard";
 import { ReferralDashboard } from "@/components/blackbox/ReferralDashboard";
 import CommunityWalletDashboard from "@/components/blackbox/CommunityWalletDashboard";
 import { useAuth } from "@/hooks/useAuth";
+import { Button } from "@/components/ui/button";
+import { useNavigate } from "react-router-dom";
+import { Shield } from "lucide-react";
 
 export default function BlackBox() {
   const [activeTab, setActiveTab] = useState("fees");
   const { user } = useAuth();
+  const navigate = useNavigate();
 
   return (
     <div className="min-h-screen bg-background">
@@ -47,6 +51,17 @@ export default function BlackBox() {
             </div>
           </div>
           <div className="hidden md:flex flex-shrink-0 items-center gap-3">
+            {user && (
+              <Button 
+                onClick={() => navigate("/super-admin")}
+                variant="outline"
+                size="sm"
+                className="border-yellow-400 text-yellow-600 hover:bg-yellow-50"
+              >
+                <Shield className="mr-2 h-4 w-4" />
+                Super Admin
+              </Button>
+            )}
             <NotificationCenter />
             <AuthButton />
           </div>
