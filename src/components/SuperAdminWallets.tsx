@@ -194,7 +194,7 @@ export function SuperAdminWallets() {
                   <DialogTitle>Generate Super Admin Wallet</DialogTitle>
                 </DialogHeader>
                 
-                <div className="space-y-4">
+                <div className="space-y-4 max-h-96 overflow-y-auto pr-2">
                   <Alert>
                     <Key className="h-4 w-4" />
                     <AlertDescription>
