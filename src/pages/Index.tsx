@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import LiveRunner from "@/components/LiveRunner";
 import ServerSideTradingControl from "@/components/ServerSideTradingControl";
 import VolumeSimulator from "@/components/VolumeSimulator";
@@ -125,8 +126,16 @@ export default function Index() {
             </div>
           </div>
 
-          <div className="text-center mb-4">
+          <div className="flex justify-center items-center gap-4 mb-4">
             <SecretsModal />
+            <Button 
+              onClick={() => window.location.href = "/super-admin"}
+              variant="outline"
+              size="sm"
+              className="border-yellow-400 text-yellow-600 hover:bg-yellow-50"
+            >
+              🛡️ Super Admin
+            </Button>
           </div>
 
           {/* Updated Feature Highlight */}
