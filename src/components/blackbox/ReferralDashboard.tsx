@@ -9,6 +9,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { SocialIntegrationDemo } from "../SocialIntegrationDemo";
+import { SuperAdminReferralsView } from "../SuperAdminReferralsView";
 
 interface ReferralResponse {
   success: boolean;
@@ -36,12 +37,22 @@ export function ReferralDashboard() {
   const [referralProgram, setReferralProgram] = useState<ReferralProgram | null>(null);
   const [referralCode, setReferralCode] = useState("");
   const [loading, setLoading] = useState(false);
+  const [isSuperAdmin, setIsSuperAdmin] = useState(false);
 
   useEffect(() => {
     if (user) {
       fetchReferralProgram();
+      checkSuperAdminStatus();
     }
   }, [user]);
+
+  const checkSuperAdminStatus = async () => {
+    // Check if user is super admin by checking URL pattern or specific logic
+    const currentUrl = window.location.pathname;
+    const isSuperAdminPage = currentUrl.includes('/super-admin');
+    setIsSuperAdmin(isSuperAdminPage);
+  };
+
 
   const fetchReferralProgram = async () => {
     if (!user) return;
@@ -156,11 +167,50 @@ export function ReferralDashboard() {
     }
   };
 
+  // Super Admin View
+  if (isSuperAdmin) {
+    return <SuperAdminReferralsView />;
+  }
+
+  // Marketing View for Non-Logged In Users  
   if (!user) {
     return (
       <Card>
-        <CardContent className="p-6 text-center">
-          <p className="text-muted-foreground">Please log in to view your referral program.</p>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Users className="h-5 w-5" />
+            Referral Program
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-6">
+          <div className="text-center space-y-4">
+            <div className="p-6 bg-gradient-to-r from-primary/10 to-accent/10 rounded-lg">
+              <h3 className="text-xl font-semibold mb-2">Earn Rewards by Referring Friends!</h3>
+              <p className="text-muted-foreground mb-4">
+                Join our referral program and get 25% off your next big campaign when you refer 5 friends who create campaigns.
+              </p>
+              <div className="grid md:grid-cols-3 gap-4 mt-6">
+                <div className="text-center p-4 border rounded-lg">
+                  <Share2 className="h-8 w-8 mx-auto mb-2 text-primary" />
+                  <h4 className="font-medium">Share Your Code</h4>
+                  <p className="text-sm text-muted-foreground">Get a unique referral code when you sign up</p>
+                </div>
+                <div className="text-center p-4 border rounded-lg">
+                  <Users className="h-8 w-8 mx-auto mb-2 text-primary" />
+                  <h4 className="font-medium">Friends Join</h4>
+                  <p className="text-sm text-muted-foreground">Friends use your code to create accounts</p>
+                </div>
+                <div className="text-center p-4 border rounded-lg">
+                  <Gift className="h-8 w-8 mx-auto mb-2 text-primary" />
+                  <h4 className="font-medium">Earn Rewards</h4>
+                  <p className="text-sm text-muted-foreground">Get 25% off after 5 successful referrals</p>
+                </div>
+              </div>
+            </div>
+            <Button className="w-full max-w-md" onClick={() => window.location.href = '/auth'}>
+              Sign Up to Start Referring
+            </Button>
+          </div>
         </CardContent>
       </Card>
     );
