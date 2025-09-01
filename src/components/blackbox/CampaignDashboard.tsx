@@ -4,11 +4,12 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
-import { Plus, Settings, Play, Pause, Trash2 } from "lucide-react";
+import { Plus, Settings, Play, Pause, Trash2, Bell } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "@/hooks/use-toast";
 import { CampaignWallets } from "./CampaignWallets";
 import { CampaignActivationGuide } from "./CampaignActivationGuide";
+import { useCampaignNotifications } from "@/hooks/useCampaignNotifications";
 
 interface Campaign {
   id: string;
@@ -23,10 +24,25 @@ export function CampaignDashboard() {
   const [selectedCampaign, setSelectedCampaign] = useState<Campaign | null>(null);
   const [showCreateForm, setShowCreateForm] = useState(false);
   const [newCampaign, setNewCampaign] = useState({ nickname: "", token_address: "" });
+  
+  const {
+    sendCampaignNotification,
+    getNotificationButtonText,
+    canSendNotification,
+    isLoading: isNotificationLoading,
+    checkNotificationCooldown
+  } = useCampaignNotifications();
 
   useEffect(() => {
     loadCampaigns();
   }, []);
+
+  useEffect(() => {
+    // Check cooldowns for all campaigns when they load
+    campaigns.forEach(campaign => {
+      checkNotificationCooldown(campaign.id, 'blackbox');
+    });
+  }, [campaigns, checkNotificationCooldown]);
 
   const loadCampaigns = async () => {
     const { data, error } = await supabase
@@ -97,6 +113,17 @@ export function CampaignDashboard() {
     loadCampaigns();
   };
 
+  const handleNotifyDonors = async (campaign: Campaign) => {
+    const notificationType = campaign.is_active ? 'manual_start' : 'manual_restart';
+    await sendCampaignNotification(
+      campaign.id,
+      'blackbox',
+      notificationType,
+      campaign.nickname,
+      campaign.token_address
+    );
+  };
+
   return (
     <div className="space-y-6">
       {/* Campaign List */}
@@ -138,6 +165,18 @@ export function CampaignDashboard() {
                       <Badge variant={campaign.is_active ? "default" : "secondary"}>
                         {campaign.is_active ? "Active" : "Paused"}
                       </Badge>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleNotifyDonors(campaign);
+                        }}
+                        disabled={!canSendNotification(campaign.id) || isNotificationLoading}
+                        title={getNotificationButtonText(campaign.id, campaign.is_active)}
+                      >
+                        <Bell className="h-4 w-4" />
+                      </Button>
                       <Button
                         size="sm"
                         variant="outline"

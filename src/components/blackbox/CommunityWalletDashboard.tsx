@@ -10,9 +10,10 @@ import { Progress } from "@/components/ui/progress";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useCommunityWallet } from '@/hooks/useCommunityWallet';
 import CommunityWalletConnect from './CommunityWalletConnect';
-import { Plus, Users, Wallet, Clock, RefreshCw } from 'lucide-react';
+import { Plus, Users, Wallet, Clock, RefreshCw, Bell } from 'lucide-react';
 import { useWallet } from '@solana/wallet-adapter-react';
 import { useToast } from '@/hooks/use-toast';
+import { useCampaignNotifications } from '@/hooks/useCampaignNotifications';
 
 interface CommunityCampaign {
   id: string;
@@ -33,6 +34,7 @@ interface CommunityCampaign {
   updated_at: string;
   funded_at?: string;
   executed_at?: string;
+  blackbox_campaign_id?: string;
 }
 
 interface CommunityContribution {
@@ -58,6 +60,14 @@ export default function CommunityWalletDashboard() {
   
   const { publicKey } = useWallet();
   const { toast } = useToast();
+  
+  const {
+    sendCampaignNotification,
+    getNotificationButtonText,
+    canSendNotification,
+    isLoading: isNotificationLoading,
+    checkNotificationCooldown
+  } = useCampaignNotifications();
   
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [isContributeModalOpen, setIsContributeModalOpen] = useState(false);
@@ -141,6 +151,25 @@ export default function CommunityWalletDashboard() {
     if (success) {
       // Refresh data to show updated status
       loadMyContributions();
+    }
+  };
+
+  const handleNotifyDonors = async (campaign: CommunityCampaign) => {
+    // For community campaigns, we can send notifications when they're funded and linked to blackbox
+    if (campaign.blackbox_campaign_id) {
+      await sendCampaignNotification(
+        campaign.id,
+        'community',
+        'manual_start',
+        campaign.title,
+        campaign.token_address
+      );
+    } else {
+      toast({
+        title: "Campaign not ready",
+        description: "Campaign must be funded and linked to trading bot first",
+        variant: "destructive"
+      });
     }
   };
 
@@ -346,17 +375,32 @@ export default function CommunityWalletDashboard() {
                     </div>
                   </div>
                   
-                  {campaign.status === 'funding' && (
-                    <Button 
-                      className="w-full" 
-                      onClick={() => {
-                        setSelectedCampaign(campaign);
-                        setIsContributeModalOpen(true);
-                      }}
-                    >
-                      Contribute
-                    </Button>
-                  )}
+                  <div className="space-y-2">
+                    {campaign.blackbox_campaign_id && (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="w-full"
+                        onClick={() => handleNotifyDonors(campaign)}
+                        disabled={!canSendNotification(campaign.id) || isNotificationLoading}
+                      >
+                        <Bell className="h-4 w-4 mr-2" />
+                        {getNotificationButtonText(campaign.id, campaign.status === 'executing')}
+                      </Button>
+                    )}
+                    
+                    {campaign.status === 'funding' && (
+                      <Button 
+                        className="w-full" 
+                        onClick={() => {
+                          setSelectedCampaign(campaign);
+                          setIsContributeModalOpen(true);
+                        }}
+                      >
+                        Contribute
+                      </Button>
+                    )}
+                  </div>
                 </CardContent>
               </Card>
             ))}

@@ -266,6 +266,78 @@ export type Database = {
           },
         ]
       }
+      campaign_notifications: {
+        Row: {
+          campaign_id: string
+          campaign_type: string
+          created_at: string
+          id: string
+          notification_type: string
+          recipients_count: number
+          sent_at: string
+        }
+        Insert: {
+          campaign_id: string
+          campaign_type: string
+          created_at?: string
+          id?: string
+          notification_type: string
+          recipients_count?: number
+          sent_at?: string
+        }
+        Update: {
+          campaign_id?: string
+          campaign_type?: string
+          created_at?: string
+          id?: string
+          notification_type?: string
+          recipients_count?: number
+          sent_at?: string
+        }
+        Relationships: []
+      }
+      campaign_timing: {
+        Row: {
+          campaign_id: string
+          campaign_type: string
+          created_at: string
+          ended_at: string | null
+          id: string
+          paused_at: string | null
+          planned_duration_minutes: number | null
+          started_at: string | null
+          state_changes: Json
+          total_runtime_minutes: number | null
+          updated_at: string
+        }
+        Insert: {
+          campaign_id: string
+          campaign_type: string
+          created_at?: string
+          ended_at?: string | null
+          id?: string
+          paused_at?: string | null
+          planned_duration_minutes?: number | null
+          started_at?: string | null
+          state_changes?: Json
+          total_runtime_minutes?: number | null
+          updated_at?: string
+        }
+        Update: {
+          campaign_id?: string
+          campaign_type?: string
+          created_at?: string
+          ended_at?: string | null
+          id?: string
+          paused_at?: string | null
+          planned_duration_minutes?: number | null
+          started_at?: string | null
+          state_changes?: Json
+          total_runtime_minutes?: number | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
       community_campaign_executions: {
         Row: {
           campaign_id: string
@@ -1237,6 +1309,14 @@ export type Database = {
       apply_referral_discount: {
         Args: { user_id_param: string }
         Returns: Json
+      }
+      check_notification_cooldown: {
+        Args: {
+          p_campaign_id: string
+          p_campaign_type: string
+          p_hours?: number
+        }
+        Returns: boolean
       }
       check_rate_limit: {
         Args: {
