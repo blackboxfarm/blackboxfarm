@@ -1293,6 +1293,45 @@ export type Database = {
           },
         ]
       }
+      wallet_backups: {
+        Row: {
+          backup_reason: string
+          backup_timestamp: string
+          created_by: string | null
+          id: string
+          metadata: Json | null
+          pubkey: string
+          secret_key_encrypted: string
+          verification_hash: string
+          wallet_id: string
+          wallet_type: string
+        }
+        Insert: {
+          backup_reason?: string
+          backup_timestamp?: string
+          created_by?: string | null
+          id?: string
+          metadata?: Json | null
+          pubkey: string
+          secret_key_encrypted: string
+          verification_hash: string
+          wallet_id: string
+          wallet_type: string
+        }
+        Update: {
+          backup_reason?: string
+          backup_timestamp?: string
+          created_by?: string | null
+          id?: string
+          metadata?: Json | null
+          pubkey?: string
+          secret_key_encrypted?: string
+          verification_hash?: string
+          wallet_id?: string
+          wallet_type?: string
+        }
+        Relationships: []
+      }
       wallet_pools: {
         Row: {
           created_at: string | null
@@ -1337,6 +1376,51 @@ export type Database = {
           },
         ]
       }
+      wallet_security_audit: {
+        Row: {
+          created_at: string
+          error_message: string | null
+          id: string
+          ip_address: unknown | null
+          operation: string
+          security_flags: Json | null
+          session_id: string | null
+          success: boolean
+          user_agent: string | null
+          user_id: string | null
+          wallet_id: string
+          wallet_type: string
+        }
+        Insert: {
+          created_at?: string
+          error_message?: string | null
+          id?: string
+          ip_address?: unknown | null
+          operation: string
+          security_flags?: Json | null
+          session_id?: string | null
+          success: boolean
+          user_agent?: string | null
+          user_id?: string | null
+          wallet_id: string
+          wallet_type: string
+        }
+        Update: {
+          created_at?: string
+          error_message?: string | null
+          id?: string
+          ip_address?: unknown | null
+          operation?: string
+          security_flags?: Json | null
+          session_id?: string | null
+          success?: boolean
+          user_agent?: string | null
+          user_id?: string | null
+          wallet_id?: string
+          wallet_type?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
@@ -1370,6 +1454,17 @@ export type Database = {
       check_user_access_with_security: {
         Args: { target_user_id: string }
         Returns: boolean
+      }
+      create_wallet_backup: {
+        Args: {
+          p_pubkey: string
+          p_reason?: string
+          p_secret_encrypted: string
+          p_user_id?: string
+          p_wallet_id: string
+          p_wallet_type: string
+        }
+        Returns: string
       }
       decrypt_owner_secret: {
         Args: { encrypted_secret: string }
@@ -1486,6 +1581,18 @@ export type Database = {
         Args: { client_info?: Json; failure_reason: string; user_email: string }
         Returns: undefined
       }
+      log_wallet_operation: {
+        Args: {
+          p_error_message?: string
+          p_operation: string
+          p_security_flags?: Json
+          p_success?: boolean
+          p_user_id?: string
+          p_wallet_id: string
+          p_wallet_type: string
+        }
+        Returns: undefined
+      }
       mask_sensitive_data: {
         Args: { input_text: string }
         Returns: string
@@ -1501,6 +1608,10 @@ export type Database = {
       verify_access_password: {
         Args: { input_password: string }
         Returns: boolean
+      }
+      verify_wallet_integrity: {
+        Args: { p_wallet_id: string; p_wallet_type: string }
+        Returns: Json
       }
     }
     Enums: {

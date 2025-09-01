@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { SecureStorage } from "../_shared/encryption.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -22,6 +23,21 @@ serve(async (req) => {
     const { data: { user }, error: authError } = await supabaseClient.auth.getUser(token);
 
     if (authError || !user) {
+      // Log unauthorized access attempt
+      await supabaseClient.rpc('log_wallet_operation', {
+        p_wallet_id: '00000000-0000-0000-0000-000000000000',
+        p_wallet_type: 'super_admin',
+        p_operation: 'unauthorized_access',
+        p_user_id: null,
+        p_success: false,
+        p_error_message: 'Invalid or missing authentication token',
+        p_security_flags: {
+          ip_address: req.headers.get('CF-Connecting-IP') || req.headers.get('X-Forwarded-For'),
+          user_agent: req.headers.get('User-Agent'),
+          timestamp: new Date().toISOString()
+        }
+      });
+      
       return new Response(JSON.stringify({ error: 'Unauthorized' }), {
         status: 401,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
@@ -29,6 +45,20 @@ serve(async (req) => {
     }
 
     if (req.method === 'GET') {
+      // Log wallet access attempt
+      await supabaseClient.rpc('log_wallet_operation', {
+        p_wallet_id: '00000000-0000-0000-0000-000000000000',
+        p_wallet_type: 'super_admin',
+        p_operation: 'list_access',
+        p_user_id: user.id,
+        p_success: true,
+        p_security_flags: {
+          ip_address: req.headers.get('CF-Connecting-IP') || req.headers.get('X-Forwarded-For'),
+          user_agent: req.headers.get('User-Agent'),
+          timestamp: new Date().toISOString()
+        }
+      });
+
       // Load wallets
       const { data, error } = await supabaseClient
         .from('super_admin_wallets')
@@ -37,6 +67,15 @@ serve(async (req) => {
 
       if (error) {
         console.error('Database error:', error);
+        await supabaseClient.rpc('log_wallet_operation', {
+          p_wallet_id: '00000000-0000-0000-0000-000000000000',
+          p_wallet_type: 'super_admin',
+          p_operation: 'list_access',
+          p_user_id: user.id,
+          p_success: false,
+          p_error_message: error.message,
+          p_security_flags: { database_error: true }
+        });
         throw error;
       }
 
@@ -49,10 +88,42 @@ serve(async (req) => {
       const { label, wallet_type, pubkey, secret_key_encrypted } = await req.json();
 
       if (!label || !wallet_type || !pubkey || !secret_key_encrypted) {
+        await supabaseClient.rpc('log_wallet_operation', {
+          p_wallet_id: '00000000-0000-0000-0000-000000000000',
+          p_wallet_type: 'super_admin',
+          p_operation: 'create_attempt',
+          p_user_id: user.id,
+          p_success: false,
+          p_error_message: 'Missing required fields',
+          p_security_flags: { validation_error: true }
+        });
+        
         return new Response(JSON.stringify({ 
           error: 'Missing required fields: label, wallet_type, pubkey, secret_key_encrypted' 
         }), {
           status: 400,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+
+      // Additional security: Encrypt the secret using our secure encryption
+      let finalEncryptedSecret;
+      try {
+        finalEncryptedSecret = await SecureStorage.encryptWalletSecret(secret_key_encrypted);
+      } catch (encryptError) {
+        console.error('Encryption error:', encryptError);
+        await supabaseClient.rpc('log_wallet_operation', {
+          p_wallet_id: '00000000-0000-0000-0000-000000000000',
+          p_wallet_type: 'super_admin',
+          p_operation: 'create_attempt',
+          p_user_id: user.id,
+          p_success: false,
+          p_error_message: 'Encryption failed',
+          p_security_flags: { encryption_error: true }
+        });
+        
+        return new Response(JSON.stringify({ error: 'Encryption failed' }), {
+          status: 500,
           headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         });
       }
@@ -64,7 +135,7 @@ serve(async (req) => {
           label,
           wallet_type,
           pubkey,
-          secret_key_encrypted,
+          secret_key_encrypted: finalEncryptedSecret,
           created_by: user.id,
           is_active: true
         })
@@ -73,8 +144,36 @@ serve(async (req) => {
 
       if (error) {
         console.error('Database error:', error);
+        await supabaseClient.rpc('log_wallet_operation', {
+          p_wallet_id: '00000000-0000-0000-0000-000000000000',
+          p_wallet_type: 'super_admin',
+          p_operation: 'create_attempt',
+          p_user_id: user.id,
+          p_success: false,
+          p_error_message: error.message,
+          p_security_flags: { database_error: true }
+        });
         throw error;
       }
+
+      // Log successful creation
+      await supabaseClient.rpc('log_wallet_operation', {
+        p_wallet_id: data.id,
+        p_wallet_type: 'super_admin',
+        p_operation: 'create_success',
+        p_user_id: user.id,
+        p_success: true,
+        p_security_flags: {
+          wallet_type,
+          label,
+          pubkey,
+          ip_address: req.headers.get('CF-Connecting-IP') || req.headers.get('X-Forwarded-For'),
+          user_agent: req.headers.get('User-Agent'),
+          timestamp: new Date().toISOString()
+        }
+      });
+
+      console.log(`Super admin wallet created successfully: ${data.id} (${wallet_type})`);
 
       return new Response(JSON.stringify({ data }), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
@@ -88,6 +187,31 @@ serve(async (req) => {
 
   } catch (error) {
     console.error('Function error:', error);
+    
+    // Log critical error
+    try {
+      const supabaseClient = createClient(
+        Deno.env.get('SUPABASE_URL') ?? '',
+        Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
+      );
+      
+      await supabaseClient.rpc('log_wallet_operation', {
+        p_wallet_id: '00000000-0000-0000-0000-000000000000',
+        p_wallet_type: 'super_admin',
+        p_operation: 'system_error',
+        p_user_id: null,
+        p_success: false,
+        p_error_message: error.message || 'Internal server error',
+        p_security_flags: {
+          critical_error: true,
+          timestamp: new Date().toISOString(),
+          stack_trace: error.stack
+        }
+      });
+    } catch (logError) {
+      console.error('Failed to log error:', logError);
+    }
+    
     return new Response(JSON.stringify({ 
       error: error.message || 'Internal server error' 
     }), {
