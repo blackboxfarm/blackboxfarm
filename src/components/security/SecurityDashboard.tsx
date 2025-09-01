@@ -3,10 +3,12 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { Shield, AlertTriangle, CheckCircle, XCircle, RefreshCw } from 'lucide-react';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Shield, AlertTriangle, CheckCircle, XCircle, RefreshCw, Search } from 'lucide-react';
 import { useSecretManager } from '@/hooks/useSecretManager';
 import { useSecureAuth } from '@/hooks/useSecureAuth';
 import { supabase } from '@/integrations/supabase/client';
+import { AccountAuditPanel } from './AccountAuditPanel';
 
 interface SecurityCheck {
   id: string;
@@ -210,68 +212,94 @@ export const SecurityDashboard = () => {
     : 'unknown';
 
   return (
-    <Card className="w-full">
-      <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-        <div className="flex items-center space-x-2">
-          <Shield className="h-5 w-5 text-primary" />
-          <CardTitle>Security Dashboard</CardTitle>
-        </div>
-        <div className="flex items-center space-x-2">
-          <Badge className={getStatusColor(overallStatus)}>
-            {getStatusIcon(overallStatus)}
-            <span className="ml-1 capitalize">{overallStatus}</span>
-          </Badge>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={runSecurityScan}
-            disabled={isScanning}
-            className="gap-2"
-          >
-            <RefreshCw className={`h-4 w-4 ${isScanning ? 'animate-spin' : ''}`} />
-            {isScanning ? 'Scanning...' : 'Scan'}
-          </Button>
-        </div>
-      </CardHeader>
-      
-      <CardContent className="space-y-4">
-        <CardDescription>
-          Last scan: {lastScan ? lastScan.toLocaleString() : 'Never'}
-        </CardDescription>
+    <div className="w-full space-y-6">
+      <div className="flex items-center space-x-2 mb-6">
+        <Shield className="h-6 w-6 text-primary" />
+        <h2 className="text-2xl font-bold">Security Management</h2>
+      </div>
 
-        {securityChecks.length === 0 && !isScanning && (
-          <Alert>
-            <AlertTriangle className="h-4 w-4" />
-            <AlertDescription>
-              No security scan data available. Click "Scan" to run security checks.
-            </AlertDescription>
-          </Alert>
-        )}
+      <Tabs defaultValue="overview" className="space-y-6">
+        <TabsList className="grid w-full grid-cols-2">
+          <TabsTrigger value="overview" className="flex items-center gap-2">
+            <Shield className="h-4 w-4" />
+            System Overview
+          </TabsTrigger>
+          <TabsTrigger value="audit" className="flex items-center gap-2">
+            <Search className="h-4 w-4" />
+            Account Audit
+          </TabsTrigger>
+        </TabsList>
 
-        <div className="space-y-3">
-          {securityChecks.map((check) => (
-            <div key={check.id} className="flex items-start space-x-3 p-3 border rounded-lg">
-              {getStatusIcon(check.status)}
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center justify-between">
-                  <h4 className="font-medium text-sm">{check.name}</h4>
-                  <Badge variant="outline" className={`text-xs ${getStatusColor(check.status)}`}>
-                    {check.status.toUpperCase()}
-                  </Badge>
-                </div>
-                <p className="text-sm text-muted-foreground mt-1">
-                  {check.description}
-                </p>
-                {check.recommendation && (
-                  <p className="text-xs text-yellow-600 dark:text-yellow-400 mt-1">
-                    💡 {check.recommendation}
-                  </p>
-                )}
+        <TabsContent value="overview">
+          <Card className="w-full">
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <div className="flex items-center space-x-2">
+                <Shield className="h-5 w-5 text-primary" />
+                <CardTitle>Security Overview</CardTitle>
               </div>
-            </div>
-          ))}
-        </div>
-      </CardContent>
-    </Card>
+              <div className="flex items-center space-x-2">
+                <Badge className={getStatusColor(overallStatus)}>
+                  {getStatusIcon(overallStatus)}
+                  <span className="ml-1 capitalize">{overallStatus}</span>
+                </Badge>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={runSecurityScan}
+                  disabled={isScanning}
+                  className="gap-2"
+                >
+                  <RefreshCw className={`h-4 w-4 ${isScanning ? 'animate-spin' : ''}`} />
+                  {isScanning ? 'Scanning...' : 'Scan'}
+                </Button>
+              </div>
+            </CardHeader>
+            
+            <CardContent className="space-y-4">
+              <CardDescription>
+                Last scan: {lastScan ? lastScan.toLocaleString() : 'Never'}
+              </CardDescription>
+
+              {securityChecks.length === 0 && !isScanning && (
+                <Alert>
+                  <AlertTriangle className="h-4 w-4" />
+                  <AlertDescription>
+                    No security scan data available. Click "Scan" to run security checks.
+                  </AlertDescription>
+                </Alert>
+              )}
+
+              <div className="space-y-3">
+                {securityChecks.map((check) => (
+                  <div key={check.id} className="flex items-start space-x-3 p-3 border rounded-lg">
+                    {getStatusIcon(check.status)}
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center justify-between">
+                        <h4 className="font-medium text-sm">{check.name}</h4>
+                        <Badge variant="outline" className={`text-xs ${getStatusColor(check.status)}`}>
+                          {check.status.toUpperCase()}
+                        </Badge>
+                      </div>
+                      <p className="text-sm text-muted-foreground mt-1">
+                        {check.description}
+                      </p>
+                      {check.recommendation && (
+                        <p className="text-xs text-yellow-600 dark:text-yellow-400 mt-1">
+                          💡 {check.recommendation}
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="audit">
+          <AccountAuditPanel />
+        </TabsContent>
+      </Tabs>
+    </div>
   );
 };
