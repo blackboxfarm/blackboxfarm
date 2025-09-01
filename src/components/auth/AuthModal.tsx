@@ -10,6 +10,8 @@ import { Loader2, Mail, Lock } from 'lucide-react';
 import { PasswordResetModal } from './PasswordResetModal';
 import { EmailVerificationModal } from './EmailVerificationModal';
 import { GoogleAuthButton } from './GoogleAuthButton';
+import { OTPVerification } from './OTPVerification';
+import { supabase } from '@/integrations/supabase/client';
 
 interface AuthModalProps {
   isOpen: boolean;
@@ -26,6 +28,8 @@ export const AuthModal = ({ isOpen, onClose, defaultTab = 'signin' }: AuthModalP
   const [showPasswordReset, setShowPasswordReset] = useState(false);
   const [showEmailVerification, setShowEmailVerification] = useState(false);
   const [verificationEmail, setVerificationEmail] = useState('');
+  const [showOTPVerification, setShowOTPVerification] = useState(false);
+  const [otpEmail, setOtpEmail] = useState('');
   
   const { signIn, signUp } = useAuth();
   const { toast } = useToast();
@@ -35,21 +39,50 @@ export const AuthModal = ({ isOpen, onClose, defaultTab = 'signin' }: AuthModalP
     if (!email || !password) return;
 
     setLoading(true);
-    const { error } = await signIn(email, password);
     
-    if (error) {
+    try {
+      // First check if 2FA is required for this user
+      const { data: check2FAData, error: check2FAError } = await supabase.functions.invoke('check-2fa-requirement', {
+        body: { email }
+      });
+
+      if (check2FAError) throw check2FAError;
+
+      if (check2FAData.requires2FA) {
+        // First do a regular sign in to validate credentials
+        const { error: signInError } = await signIn(email, password);
+        
+        if (signInError) {
+          throw signInError;
+        }
+
+        // If sign in successful but 2FA required, show OTP verification
+        setOtpEmail(email);
+        setShowOTPVerification(true);
+        setLoading(false);
+        return;
+      } else {
+        // No 2FA required, proceed with normal sign in
+        const { error } = await signIn(email, password);
+        
+        if (error) {
+          throw error;
+        }
+
+        toast({
+          title: "Welcome back!",
+          description: "You've been signed in successfully."
+        });
+        onClose();
+      }
+    } catch (error: any) {
       toast({
         title: "Sign In Failed",
         description: error.message,
         variant: "destructive"
       });
-    } else {
-      toast({
-        title: "Welcome back!",
-        description: "You've been signed in successfully."
-      });
-      onClose();
     }
+    
     setLoading(false);
   };
 
@@ -107,9 +140,37 @@ export const AuthModal = ({ isOpen, onClose, defaultTab = 'signin' }: AuthModalP
     onClose();
   };
 
+  const handleOTPVerificationSuccess = (session: any) => {
+    toast({
+      title: "Welcome back!",
+      description: "You've been signed in successfully with 2FA."
+    });
+    onClose();
+  };
+
+  const handleOTPBack = () => {
+    setShowOTPVerification(false);
+    setOtpEmail('');
+  };
+
   const handleForgotPassword = () => {
     setShowPasswordReset(true);
   };
+
+  // Show OTP verification instead of main modal if required
+  if (showOTPVerification) {
+    return (
+      <Dialog open={isOpen} onOpenChange={handleClose}>
+        <DialogContent className="sm:max-w-md">
+          <OTPVerification
+            email={otpEmail}
+            onVerificationSuccess={handleOTPVerificationSuccess}
+            onBack={handleOTPBack}
+          />
+        </DialogContent>
+      </Dialog>
+    );
+  }
 
   return (
     <Dialog open={isOpen} onOpenChange={handleClose}>

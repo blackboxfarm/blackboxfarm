@@ -1216,6 +1216,39 @@ export type Database = {
         }
         Relationships: []
       }
+      trusted_devices: {
+        Row: {
+          created_at: string
+          device_fingerprint: string
+          device_name: string | null
+          id: string
+          is_active: boolean
+          last_used: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          device_fingerprint: string
+          device_name?: string | null
+          id?: string
+          is_active?: boolean
+          last_used?: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          device_fingerprint?: string
+          device_name?: string | null
+          id?: string
+          is_active?: boolean
+          last_used?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       user_secrets: {
         Row: {
           created_at: string
