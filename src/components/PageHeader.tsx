@@ -95,31 +95,6 @@ export function PageHeader({ showTabs = false, activeTab, onTabChange }: PageHea
         </Tabs>
       )}
 
-      {/* Feature Highlight - only show on main page */}
-      {location.pathname === "/" && (
-        <div className="tech-border p-4 mt-4 bg-gradient-to-r from-primary/10 to-accent/10">
-          <div className="text-center">
-            <Badge className="mb-2 bg-gradient-to-r from-primary to-accent text-primary-foreground">
-              🚀 NEW: Smart Fee Structure
-            </Badge>
-            <p className="text-sm text-muted-foreground mb-2">
-              Batch pricing for volume operations • 90%+ cheaper than competitors
-            </p>
-            <div className="flex justify-center gap-2 text-xs mb-3">
-              <span className="px-2 py-1 bg-green-100 text-green-800 rounded">Smithii Model: 0.025 SOL/100 ops</span>
-              <span className="px-2 py-1 bg-blue-100 text-blue-800 rounded">Micro-trades: 0.0005 SOL</span>
-            </div>
-            <div className="flex justify-center gap-2">
-              <Link to="/blackbox" className="px-4 py-2 bg-primary text-primary-foreground rounded-md hover:bg-primary/90 transition-colors">
-                Launch BlackBox →
-              </Link>
-              <Link to="/competitive-analysis" className="px-4 py-2 border border-primary text-primary rounded-md hover:bg-primary/10 transition-colors">
-                View Analysis
-              </Link>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 }
