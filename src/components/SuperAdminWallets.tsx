@@ -97,21 +97,21 @@ export function SuperAdminWallets() {
       const pubkey = keypair.publicKey.toBase58();
       const secretKey = bs58.encode(keypair.secretKey);
 
-      // Store in database (encrypted)
-      const { data: { user } } = await supabase.auth.getUser();
-      
-      const { data, error } = await (supabase as any)
-        .from('super_admin_wallets')
-        .insert({
+      // Get auth token for edge function
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) {
+        throw new Error('No active session');
+      }
+
+      // Call edge function to create wallet securely
+      const { data, error } = await supabase.functions.invoke('super-admin-wallet-generator', {
+        body: {
           label: newWallet.label,
-          pubkey: pubkey,
-          secret_key_encrypted: secretKey, // This will be encrypted by database trigger
           wallet_type: newWallet.wallet_type,
-          created_by: user?.id,
-          is_active: true
-        })
-        .select()
-        .single();
+          pubkey: pubkey,
+          secret_key_encrypted: secretKey
+        }
+      });
 
       if (error) throw error;
 
