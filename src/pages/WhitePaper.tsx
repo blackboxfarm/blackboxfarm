@@ -2,6 +2,8 @@ import { FarmBanner } from "@/components/FarmBanner";
 import { AuthButton } from "@/components/auth/AuthButton";
 import { NotificationCenter } from "@/components/NotificationCenter";
 import { useAuth } from "@/hooks/useAuth";
+import { ArrowLeft } from "lucide-react";
+import { Link } from "react-router-dom";
 
 const WhitePaper = () => {
   const { user } = useAuth();
@@ -31,7 +33,12 @@ const WhitePaper = () => {
         </div>
 
       <div className="container max-w-4xl mx-auto px-4 py-12">
-        <h1 className="text-4xl font-bold text-foreground mb-8">BlackBox Farm White Paper</h1>
+        <div className="flex items-center gap-4 mb-8">
+          <Link to="/" className="hover:opacity-80 transition-opacity">
+            <ArrowLeft className="h-10 w-10 text-primary" strokeWidth={3} />
+          </Link>
+          <h1 className="text-4xl font-bold text-foreground">BlackBox Farm White Paper</h1>
+        </div>
         <div className="prose prose-slate dark:prose-invert max-w-none space-y-8 text-foreground">
           <p className="text-sm text-muted-foreground">Version 1.0 | {new Date().toLocaleDateString()}</p>
           

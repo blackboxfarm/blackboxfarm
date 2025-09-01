@@ -6,10 +6,11 @@ import { TwoFactorSetup } from '@/components/auth/TwoFactorSetup';
 import { useAuth } from '@/hooks/useAuth';
 import { WalletBalanceMonitor } from '@/components/WalletBalanceMonitor';
 import { Badge } from '@/components/ui/badge';
-import { Shield, UserPlus, Mail, Smartphone, Key, CheckCircle } from 'lucide-react';
+import { Shield, UserPlus, Mail, Smartphone, Key, CheckCircle, ArrowLeft } from 'lucide-react';
 import { FarmBanner } from '@/components/FarmBanner';
 import { AuthButton } from '@/components/auth/AuthButton';
 import { NotificationCenter } from '@/components/NotificationCenter';
+import { Link } from 'react-router-dom';
 
 export default function AuthPage() {
   const [showAuthModal, setShowAuthModal] = useState(false);
@@ -55,12 +56,15 @@ export default function AuthPage() {
             </div>
           </div>
 
-        <div className="space-y-6">
-        <div className="flex justify-between items-center">
-              <div>
+            <div className="space-y-6">
+              <div className="flex items-center gap-4">
+                <Link to="/" className="hover:opacity-80 transition-opacity">
+                  <ArrowLeft className="h-10 w-10 text-primary" strokeWidth={3} />
+                </Link>
                 <h2 className="text-2xl font-bold">Welcome, {user.email}</h2>
-                <p className="text-muted-foreground">Manage your BlackBox Trading account</p>
               </div>
+              <p className="text-muted-foreground">Manage your BlackBox Trading account</p>
+            <div className="flex justify-between items-center">
             <Button variant="outline" onClick={handleSignOut}>
               Sign Out
               </Button>

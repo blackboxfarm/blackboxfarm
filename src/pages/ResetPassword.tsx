@@ -5,12 +5,13 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { useToast } from '@/hooks/use-toast';
-import { Loader2, Lock, Eye, EyeOff, CheckCircle } from 'lucide-react';
+import { Loader2, Lock, Eye, EyeOff, CheckCircle, ArrowLeft } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { FarmBanner } from '@/components/FarmBanner';
 import { AuthButton } from '@/components/auth/AuthButton';
 import { NotificationCenter } from '@/components/NotificationCenter';
 import { useAuth } from '@/hooks/useAuth';
+import { Link } from 'react-router-dom';
 
 export const ResetPassword = () => {
   const { user } = useAuth();
@@ -154,6 +155,11 @@ export const ResetPassword = () => {
         </div>
 
     <div className="min-h-screen flex items-center justify-center bg-background p-4">
+      <div className="flex items-center gap-4 mb-8 absolute top-8 left-8">
+        <Link to="/" className="hover:opacity-80 transition-opacity">
+          <ArrowLeft className="h-8 w-8 text-primary" strokeWidth={3} />
+        </Link>
+      </div>
       <Card className="w-full max-w-md tech-border">
         <CardHeader className="text-center">
           <CardTitle className="text-2xl font-bold bg-gradient-to-r from-primary to-accent bg-clip-text text-transparent">

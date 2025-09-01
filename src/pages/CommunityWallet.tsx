@@ -5,6 +5,8 @@ import { FarmBanner } from '@/components/FarmBanner';
 import { AuthButton } from '@/components/auth/AuthButton';
 import { NotificationCenter } from '@/components/NotificationCenter';
 import { useAuth } from '@/hooks/useAuth';
+import { ArrowLeft } from 'lucide-react';
+import { Link } from 'react-router-dom';
 
 export default function CommunityWallet() {
   const { user } = useAuth();
@@ -33,10 +35,13 @@ export default function CommunityWallet() {
               <AuthButton />
             </div>
           </div>
-          
-        <div className="container mx-auto py-8">
+          <div className="flex items-center gap-4 mb-8">
+            <Link to="/" className="hover:opacity-80 transition-opacity">
+              <ArrowLeft className="h-10 w-10 text-primary" strokeWidth={3} />
+            </Link>
+            <h2 className="text-2xl font-bold">Community Wallet</h2>
+          </div>
           <CommunityWalletDashboard />
-        </div>
         </div>
       </div>
     </RequireAuth>

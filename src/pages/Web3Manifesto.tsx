@@ -1,10 +1,11 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Zap, Shield, Users, Globe, Code, Lightbulb, Target, Heart } from "lucide-react";
+import { Zap, Shield, Users, Globe, Code, Lightbulb, Target, Heart, ArrowLeft } from "lucide-react";
 import { FarmBanner } from "@/components/FarmBanner";
 import { AuthButton } from "@/components/auth/AuthButton";
 import { NotificationCenter } from "@/components/NotificationCenter";
 import { useAuth } from "@/hooks/useAuth";
+import { Link } from "react-router-dom";
 
 export default function Web3Manifesto() {
   const { user } = useAuth();
@@ -36,9 +37,14 @@ export default function Web3Manifesto() {
       <div className="container mx-auto py-12 space-y-12">
         {/* Hero Section */}
         <div className="text-center space-y-6">
-          <h1 className="text-4xl md:text-6xl font-bold bg-gradient-to-r from-primary to-primary/70 bg-clip-text text-transparent">
-            Web3 Manifesto
-          </h1>
+          <div className="flex items-center justify-center gap-4 mb-8">
+            <Link to="/" className="hover:opacity-80 transition-opacity">
+              <ArrowLeft className="h-10 w-10 text-primary" strokeWidth={3} />
+            </Link>
+            <h1 className="text-4xl md:text-6xl font-bold bg-gradient-to-r from-primary to-primary/70 bg-clip-text text-transparent">
+              Web3 Manifesto
+            </h1>
+          </div>
           <p className="text-xl text-muted-foreground max-w-4xl mx-auto">
             Our vision for a decentralized future where financial tools are transparent, accessible, 
             and owned by the community they serve.

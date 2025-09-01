@@ -6,13 +6,14 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
-import { Mail, MessageSquare, Phone, MapPin, Clock, Send, CheckCircle } from "lucide-react";
+import { Mail, MessageSquare, Phone, MapPin, Clock, Send, CheckCircle, ArrowLeft } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { FarmBanner } from "@/components/FarmBanner";
 import { AuthButton } from "@/components/auth/AuthButton";
 import { NotificationCenter } from "@/components/NotificationCenter";
 import { useAuth } from "@/hooks/useAuth";
+import { Link } from "react-router-dom";
 
 export default function ContactUs() {
   const { user } = useAuth();
@@ -105,9 +106,14 @@ export default function ContactUs() {
       <div className="container mx-auto py-12 space-y-12">
         {/* Header */}
         <div className="text-center space-y-6">
-          <h1 className="text-4xl md:text-6xl font-bold bg-gradient-to-r from-primary to-primary/70 bg-clip-text text-transparent">
-            Contact Us
-          </h1>
+          <div className="flex items-center justify-center gap-4 mb-8">
+            <Link to="/" className="hover:opacity-80 transition-opacity">
+              <ArrowLeft className="h-10 w-10 text-primary" strokeWidth={3} />
+            </Link>
+            <h1 className="text-4xl md:text-6xl font-bold bg-gradient-to-r from-primary to-primary/70 bg-clip-text text-transparent">
+              Contact Us
+            </h1>
+          </div>
           <p className="text-xl text-muted-foreground max-w-3xl mx-auto">
             Have questions about BlackBox Farm? Need support? Want to explore partnership opportunities? 
             We're here to help and always excited to connect with our community.

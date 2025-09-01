@@ -4,6 +4,8 @@ import { FarmBanner } from "@/components/FarmBanner";
 import { AuthButton } from "@/components/auth/AuthButton";
 import { NotificationCenter } from "@/components/NotificationCenter";
 import { useAuth } from "@/hooks/useAuth";
+import { ArrowLeft } from "lucide-react";
+import { Link } from "react-router-dom";
 
 const NotFound = () => {
   const { user } = useAuth();
@@ -42,8 +44,13 @@ const NotFound = () => {
 
       <div className="min-h-screen flex items-center justify-center bg-gray-100">
         <div className="text-center">
-          <h1 className="text-4xl font-bold mb-4">404</h1>
-          <p className="text-xl text-gray-600 mb-4">Oops! Page not found</p>
+          <div className="flex items-center gap-4 mb-8">
+            <Link to="/" className="hover:opacity-80 transition-opacity">
+              <ArrowLeft className="h-10 w-10 text-primary" strokeWidth={3} />
+            </Link>
+            <h1 className="text-4xl font-bold">404 - Page Not Found</h1>
+          </div>
+          <p className="text-xl text-gray-600 mb-4">Oops! The page you're looking for doesn't exist.</p>
           <a href="/" className="text-blue-500 hover:text-blue-700 underline">
             Return to Home
           </a>

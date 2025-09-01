@@ -7,6 +7,7 @@ import { FarmBanner } from "@/components/FarmBanner";
 import { AuthButton } from "@/components/auth/AuthButton";
 import { NotificationCenter } from "@/components/NotificationCenter";
 import { useAuth } from "@/hooks/useAuth";
+import { Link } from "react-router-dom";
 
 export default function CompetitiveAnalysis() {
   const { user } = useAuth();
@@ -41,10 +42,9 @@ export default function CompetitiveAnalysis() {
 
         {/* Header */}
         <div className="flex items-center gap-4 mb-8">
-          <Button variant="outline" size="sm" onClick={() => window.history.back()}>
-            <ArrowLeft className="h-4 w-4 mr-2" />
-            Back
-          </Button>
+          <Link to="/" className="hover:opacity-80 transition-opacity">
+            <ArrowLeft className="h-10 w-10 text-primary" strokeWidth={3} />
+          </Link>
           <div>
             <h1 className="text-3xl font-bold">Competitive Fee Analysis</h1>
             <p className="text-muted-foreground">How we stack up against market leaders</p>
