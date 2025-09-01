@@ -13,6 +13,7 @@ import CompetitiveAnalysis from "./pages/CompetitiveAnalysis";
 import CommunityWallet from "./pages/CommunityWallet";
 import NotFound from "./pages/NotFound";
 import TermsOfService from "./pages/TermsOfService";
+import TOS from "./pages/TOS";
 import PrivacyPolicy from "./pages/PrivacyPolicy";
 import WhitePaper from "./pages/WhitePaper";
 import CookiesPolicy from "./pages/CookiesPolicy";
@@ -41,7 +42,7 @@ const App = () => (
               <Route path="/community-wallet" element={<CommunityWallet />} />
               <Route path="/reset-password" element={<ResetPassword />} />
               <Route path="/terms" element={<TermsOfService />} />
-              <Route path="/tos" element={<TermsOfService />} />
+              <Route path="/tos" element={<TOS />} />
               <Route path="/privacy" element={<PrivacyPolicy />} />
               <Route path="/policy" element={<PrivacyPolicy />} />
               <Route path="/whitepaper" element={<WhitePaper />} />
