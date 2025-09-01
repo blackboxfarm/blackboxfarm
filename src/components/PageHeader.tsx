@@ -24,8 +24,8 @@ export function PageHeader({ showTabs = false, activeTab, onTabChange }: PageHea
           className="w-full h-full object-cover"
         />
         
-        {/* Header Content */}
-        <div className="absolute inset-0 flex flex-col justify-center items-center">
+        {/* Header Content - Always Centered */}
+        <div className="absolute inset-0 flex flex-col justify-center items-center z-10">
           <div className="flex items-center gap-3 mb-2">
             <img 
               src="/lovable-uploads/4caa07ef-479a-49fa-8f9f-c474607a99cd.png" 
