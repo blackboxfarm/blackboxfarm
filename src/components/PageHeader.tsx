@@ -17,13 +17,12 @@ export function PageHeader({ showTabs = false, activeTab, onTabChange }: PageHea
   return (
     <div className="relative">
       {/* Farm Banner */}
-      <div className="relative h-48 bg-gradient-to-r from-background to-muted overflow-hidden">
+      <div className="relative h-48 bg-background overflow-hidden">
         <img 
           src="/farm-banner.svg" 
           alt="BlackBox Farm Banner" 
-          className="w-full h-full object-cover opacity-80"
+          className="w-full h-full object-cover"
         />
-        <div className="absolute inset-0 bg-gradient-to-t from-background/80 to-transparent"></div>
         
         {/* Header Content */}
         <div className="absolute inset-0 flex flex-col justify-center items-center">
@@ -33,7 +32,7 @@ export function PageHeader({ showTabs = false, activeTab, onTabChange }: PageHea
               alt="BlackBox Farm Cube Logo" 
               className="w-12 h-12"
             />
-            <h1 className="text-5xl font-bold accent-gradient bg-clip-text text-transparent">
+            <h1 className="text-5xl font-bold text-cyan-400">
               BlackBox Farm
             </h1>
           </div>
@@ -59,9 +58,14 @@ export function PageHeader({ showTabs = false, activeTab, onTabChange }: PageHea
               <span className="text-sm text-foreground">{user.email}</span>
             </div>
           ) : (
-            <Link to="/auth" className="bg-primary text-primary-foreground px-4 py-2 rounded-lg hover:bg-primary/90 transition-colors">
-              Login
-            </Link>
+            <div className="flex items-center gap-2">
+              <Link to="/auth" className="bg-background/80 backdrop-blur-sm text-foreground px-4 py-2 rounded-lg hover:bg-background/90 transition-colors">
+                Sign In
+              </Link>
+              <Link to="/auth" className="bg-cyan-400 text-background px-4 py-2 rounded-lg hover:bg-cyan-500 transition-colors">
+                Join BlackBox
+              </Link>
+            </div>
           )}
         </div>
       </div>
