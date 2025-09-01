@@ -18,7 +18,7 @@ import CommunityWalletDashboard from "@/components/blackbox/CommunityWalletDashb
 import { useAuth } from "@/hooks/useAuth";
 
 export default function BlackBox() {
-  const [activeTab, setActiveTab] = useState("pricing");
+  const [activeTab, setActiveTab] = useState("fees");
   const { user } = useAuth();
 
   return (
@@ -47,8 +47,7 @@ export default function BlackBox() {
 
         {/* Main Navigation */}
         <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-          <TabsList className={`grid w-full ${user ? 'grid-cols-8' : 'grid-cols-4'}`}>
-            <TabsTrigger value="pricing">Pricing</TabsTrigger>
+          <TabsList className={`grid w-full ${user ? 'grid-cols-7' : 'grid-cols-3'}`}>
             {user && <TabsTrigger value="dashboard">Dashboard</TabsTrigger>}
             {user && <TabsTrigger value="community">Community</TabsTrigger>}
             <TabsTrigger value="simulator">Simulator</TabsTrigger>
@@ -57,10 +56,6 @@ export default function BlackBox() {
             {user && <TabsTrigger value="referrals">Referrals</TabsTrigger>}
             {user && <TabsTrigger value="security">Security</TabsTrigger>}
           </TabsList>
-
-          <TabsContent value="pricing" className="space-y-6">
-            <SubscriptionManager />
-          </TabsContent>
 
           <TabsContent value="dashboard" className="space-y-6">
             <RequireAuth>
