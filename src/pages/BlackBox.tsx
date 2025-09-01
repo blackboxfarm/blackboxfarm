@@ -7,7 +7,7 @@ import { FeeCalculator } from "@/components/blackbox/FeeCalculator";
 import { AuthButton } from "@/components/auth/AuthButton";
 import { RequireAuth } from "@/components/RequireAuth";
 import VolumeSimulator from "@/components/VolumeSimulator";
-import { PageHeader } from "@/components/PageHeader";
+import { FarmBanner } from "@/components/FarmBanner";
 import { SubscriptionManager } from "@/components/blackbox/SubscriptionManager";
 import { WalletGenerator } from "@/components/WalletGenerator";
 import { SecurityDashboard } from "@/components/security/SecurityDashboard";
@@ -23,8 +23,8 @@ export default function BlackBox() {
 
   return (
     <div className="min-h-screen bg-background">
-      {/* Page Header */}
-      <PageHeader />
+      {/* Farm Banner Header */}
+      <FarmBanner />
       <div className="container mx-auto py-6 space-y-8">
         {/* Header */}
         <div className="flex flex-col md:flex-row md:justify-between md:items-start space-y-4 md:space-y-0">
