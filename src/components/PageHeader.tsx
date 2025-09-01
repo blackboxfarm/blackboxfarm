@@ -1,6 +1,8 @@
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Link, useLocation } from "react-router-dom";
+import { Bell, User } from "lucide-react";
+import { useAuth } from "@/hooks/useAuth";
 
 interface PageHeaderProps {
   showTabs?: boolean;
@@ -10,35 +12,57 @@ interface PageHeaderProps {
 
 export function PageHeader({ showTabs = false, activeTab, onTabChange }: PageHeaderProps) {
   const location = useLocation();
+  const { user } = useAuth();
 
   return (
-    <div className="tech-border p-6 mb-6">
-      <div className="flex items-center justify-center gap-3 mb-2">
+    <div className="relative">
+      {/* Farm Banner */}
+      <div className="relative h-48 bg-gradient-to-r from-background to-muted overflow-hidden">
         <img 
-          src="/lovable-uploads/33fad75a-246c-487a-8af1-52b9c09a648a.png" 
-          alt="BlackBox Farm Cube Logo" 
-          className="w-9 h-9"
+          src="/farm-banner.svg" 
+          alt="BlackBox Farm Banner" 
+          className="w-full h-full object-cover opacity-80"
         />
-        <h1 className="text-4xl font-bold text-center accent-gradient bg-clip-text text-transparent">
-          BlackBox Farm
-        </h1>
-      </div>
-      <p className="text-center text-muted-foreground mb-4">
-        24/7 Autonomous Trading Intelligence Platform
-      </p>
-      
-      <div className="flex justify-center items-center gap-4 mb-6">
-        <div className="flex items-center gap-2">
-          <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse"></div>
-          <span className="text-sm code-text">SERVER: ACTIVE</span>
+        <div className="absolute inset-0 bg-gradient-to-t from-background/80 to-transparent"></div>
+        
+        {/* Header Content */}
+        <div className="absolute inset-0 flex flex-col justify-center items-center">
+          <div className="flex items-center gap-3 mb-2">
+            <img 
+              src="/lovable-uploads/33fad75a-246c-487a-8af1-52b9c09a648a.png" 
+              alt="BlackBox Farm Cube Logo" 
+              className="w-12 h-12"
+            />
+            <h1 className="text-5xl font-bold accent-gradient bg-clip-text text-transparent">
+              BlackBox Farm
+            </h1>
+          </div>
+          <p className="text-lg text-muted-foreground text-center">
+            Putting the needle in the Haystack - Bumps for the whole Farm!
+          </p>
         </div>
-        <div className="flex items-center gap-2">
-          <div className="w-2 h-2 rounded-full bg-cyan-400 animate-pulse"></div>
-          <span className="text-sm code-text">CRON: RUNNING</span>
-        </div>
-        <div className="flex items-center gap-2">
-          <div className="w-2 h-2 rounded-full bg-amber-500 animate-pulse"></div>
-          <span className="text-sm code-text">TRADING: READY</span>
+
+        {/* Top Right User Area */}
+        <div className="absolute top-4 right-4 flex items-center gap-4">
+          {/* Notification Icon */}
+          <div className="relative">
+            <Bell className="w-6 h-6 text-muted-foreground" />
+            <div className="absolute -top-1 -right-1 w-4 h-4 bg-red-500 rounded-full flex items-center justify-center">
+              <span className="text-xs text-white font-bold">2</span>
+            </div>
+          </div>
+          
+          {/* User Info */}
+          {user ? (
+            <div className="flex items-center gap-2 bg-background/80 backdrop-blur-sm rounded-lg px-3 py-2">
+              <User className="w-5 h-5 text-muted-foreground" />
+              <span className="text-sm text-foreground">{user.email}</span>
+            </div>
+          ) : (
+            <Link to="/auth" className="bg-primary text-primary-foreground px-4 py-2 rounded-lg hover:bg-primary/90 transition-colors">
+              Login
+            </Link>
+          )}
         </div>
       </div>
 

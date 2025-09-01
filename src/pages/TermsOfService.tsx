@@ -1,6 +1,9 @@
+import { PageHeader } from "@/components/PageHeader";
+
 const TermsOfService = () => {
   return (
     <div className="min-h-screen bg-background">
+      <PageHeader />
       <div className="container max-w-4xl mx-auto px-4 py-12">
         <h1 className="text-4xl font-bold text-foreground mb-8">Terms of Service</h1>
         <div className="prose prose-slate dark:prose-invert max-w-none space-y-6 text-foreground">
