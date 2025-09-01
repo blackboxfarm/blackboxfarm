@@ -15,9 +15,9 @@ export function PageHeader({ showTabs = false, activeTab, onTabChange }: PageHea
     <div className="tech-border p-6 mb-6">
       <div className="flex items-center justify-center gap-3 mb-2">
         <img 
-          src="/lovable-uploads/f662a3d2-f3b3-468c-bebc-bae858294fc5.png" 
-          alt="BlackBox Farm Logo" 
-          className="w-10 h-10"
+          src="/lovable-uploads/33fad75a-246c-487a-8af1-52b9c09a648a.png" 
+          alt="BlackBox Farm Cube Logo" 
+          className="w-9 h-9"
         />
         <h1 className="text-4xl font-bold text-center accent-gradient bg-clip-text text-transparent">
           BlackBox Farm
