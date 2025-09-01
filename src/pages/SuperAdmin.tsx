@@ -1,6 +1,7 @@
 import React, { useState } from "react";
 import { SuperAdminWallets } from "@/components/SuperAdminWallets";
 import { AdminWalletRecovery } from "@/components/AdminWalletRecovery";
+import { SecurityDashboard } from "@/components/security/SecurityDashboard";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
@@ -16,9 +17,10 @@ export default function SuperAdmin() {
         </div>
         
         <Tabs defaultValue="wallets" className="space-y-6">
-          <TabsList className="grid w-full grid-cols-2">
+          <TabsList className="grid w-full grid-cols-3">
             <TabsTrigger value="wallets">Wallet Management</TabsTrigger>
             <TabsTrigger value="recovery">Wallet Recovery</TabsTrigger>
+            <TabsTrigger value="security">Security Dashboard</TabsTrigger>
           </TabsList>
           
           <TabsContent value="wallets">
@@ -27,6 +29,10 @@ export default function SuperAdmin() {
           
           <TabsContent value="recovery">
             <AdminWalletRecovery />
+          </TabsContent>
+          
+          <TabsContent value="security">
+            <SecurityDashboard />
           </TabsContent>
         </Tabs>
       </div>
