@@ -11,8 +11,12 @@ export function Footer() {
           {/* Brand Section */}
           <div className="space-y-4">
             <div className="flex items-center gap-2">
-              <div className="w-8 h-8 bg-primary rounded-lg flex items-center justify-center">
-                <span className="text-primary-foreground font-bold text-sm">BB</span>
+              <div className="w-8 h-8 bg-primary/10 rounded-lg flex items-center justify-center p-1">
+                <img 
+                  src="/lovable-uploads/7283e809-e703-4594-8dc8-a1ade76b06de.png" 
+                  alt="BlackBox Cube Logo" 
+                  className="w-full h-full object-contain"
+                />
               </div>
               <span className="font-bold text-lg">BlackBox Farm</span>
             </div>
