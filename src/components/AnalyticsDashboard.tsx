@@ -26,6 +26,13 @@ import {
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
+import { usePasswordAuth } from "@/hooks/usePasswordAuth";
+import { 
+  AnalyticsMarketingView, 
+  DonorAnalyticsView, 
+  CampaignCreatorAnalyticsView, 
+  SuperAdminAnalyticsView 
+} from "./analytics/AnalyticsViews";
 
 interface AnalyticsData {
   performance: {
@@ -64,7 +71,19 @@ export function AnalyticsDashboard() {
   const [analytics, setAnalytics] = useState<AnalyticsData | null>(null);
   const [loading, setLoading] = useState(true);
   const [timeRange, setTimeRange] = useState('7d');
-  const { user } = useAuth();
+  const { user, isAuthenticated } = useAuth();
+  const { isAuthenticated: isSuperAdmin } = usePasswordAuth();
+  
+  // Determine user type and what analytics to show
+  const getUserType = () => {
+    if (!isAuthenticated) return 'anonymous';
+    if (isSuperAdmin) return 'superadmin';
+    // TODO: Add logic to check if user is campaign creator vs donor
+    // For now, we'll check if they have any campaigns
+    return 'donor'; // Default to donor view
+  };
+
+  const userType = getUserType();
 
   const fetchAnalytics = async () => {
     if (!user) return;
@@ -170,9 +189,26 @@ export function AnalyticsDashboard() {
   };
 
   useEffect(() => {
-    fetchAnalytics();
-  }, [user, timeRange]);
+    if (isAuthenticated) {
+      fetchAnalytics();
+    }
+  }, [user, timeRange, isAuthenticated]);
 
+  // Show different views based on user type
+  if (userType === 'anonymous') {
+    return <AnalyticsMarketingView />;
+  }
+
+  if (userType === 'superadmin') {
+    return <SuperAdminAnalyticsView />;
+  }
+
+  if (userType === 'donor') {
+    return <DonorAnalyticsView userId={user?.id || ''} />;
+  }
+
+  // TODO: Detect campaign creators and show CampaignCreatorAnalyticsView
+  
   if (loading) {
     return (
       <Card className="p-4">

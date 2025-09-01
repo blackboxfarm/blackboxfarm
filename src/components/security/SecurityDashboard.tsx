@@ -8,7 +8,14 @@ import { Shield, AlertTriangle, CheckCircle, XCircle, RefreshCw, Search } from '
 import { useSecretManager } from '@/hooks/useSecretManager';
 import { useSecureAuth } from '@/hooks/useSecureAuth';
 import { supabase } from '@/integrations/supabase/client';
+import { usePasswordAuth } from '@/hooks/usePasswordAuth';
 import { AccountAuditPanel } from './AccountAuditPanel';
+import { 
+  SecurityMarketingView, 
+  DonorSecurityView, 
+  CampaignCreatorSecurityView, 
+  SuperAdminSecurityView 
+} from './SecurityViews';
 
 interface SecurityCheck {
   id: string;
@@ -23,7 +30,18 @@ export const SecurityDashboard = () => {
   const [isScanning, setIsScanning] = useState(false);
   const [lastScan, setLastScan] = useState<Date | null>(null);
   const { secrets, hasSecrets, getSecretStatus } = useSecretManager();
-  const { user, isRateLimited, rateLimitState } = useSecureAuth();
+  const { user, isRateLimited, rateLimitState, isAuthenticated } = useSecureAuth();
+  const { isAuthenticated: isSuperAdmin } = usePasswordAuth();
+  
+  // Determine user type and what security view to show
+  const getUserType = () => {
+    if (!isAuthenticated) return 'anonymous';
+    if (isSuperAdmin) return 'superadmin';
+    // TODO: Add logic to check if user is campaign creator vs donor
+    return 'donor'; // Default to donor view
+  };
+
+  const userType = getUserType();
 
   const runSecurityScan = async () => {
     setIsScanning(true);
@@ -172,10 +190,25 @@ export const SecurityDashboard = () => {
   };
 
   useEffect(() => {
-    if (user) {
+    if (user && isAuthenticated) {
       runSecurityScan();
     }
-  }, [user, secrets]);
+  }, [user, secrets, isAuthenticated]);
+
+  // Show different views based on user type
+  if (userType === 'anonymous') {
+    return <SecurityMarketingView />;
+  }
+
+  if (userType === 'superadmin') {
+    return <SuperAdminSecurityView />;
+  }
+
+  if (userType === 'donor') {
+    return <DonorSecurityView userId={user?.id || ''} />;
+  }
+
+  // TODO: Detect campaign creators and show CampaignCreatorSecurityView
 
   const getStatusIcon = (status: string) => {
     switch (status) {
