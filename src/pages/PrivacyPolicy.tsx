@@ -16,9 +16,16 @@ const PrivacyPolicy = () => {
         {/* Main Header Section */}
         <div className="flex flex-col md:flex-row md:justify-between md:items-start space-y-4 md:space-y-0">
           <div className="text-center md:text-left flex-1 space-y-4">
-            <h1 className="text-3xl md:text-4xl font-bold bg-gradient-to-r from-primary to-primary/70 bg-clip-text text-transparent">
-              BlackBox Farm
-            </h1>
+            <div className="flex items-center justify-center md:justify-start gap-3">
+              <img 
+                src="/lovable-uploads/7283e809-e703-4594-8dc8-a1ade76b06de.png" 
+                alt="BlackBox Cube Logo" 
+                className="w-10 h-10 md:w-12 md:h-12"
+              />
+              <h1 className="text-3xl md:text-4xl font-bold bg-gradient-to-r from-primary to-primary/70 bg-clip-text text-transparent">
+                BlackBox Farm
+              </h1>
+            </div>
             <p className="text-lg md:text-xl text-muted-foreground max-w-2xl mx-auto md:mx-0">
               Putting the needle in the Haystack - Bumps for the whole Fam!
             </p>
