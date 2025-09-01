@@ -14,6 +14,7 @@ import { Plus, Users, Wallet, Clock, RefreshCw, Bell } from 'lucide-react';
 import { useWallet } from '@solana/wallet-adapter-react';
 import { useToast } from '@/hooks/use-toast';
 import { useCampaignNotifications } from '@/hooks/useCampaignNotifications';
+import { CampaignTemplates } from '../CampaignTemplates';
 
 interface CommunityCampaign {
   id: string;
@@ -73,6 +74,7 @@ export default function CommunityWalletDashboard() {
   const [isContributeModalOpen, setIsContributeModalOpen] = useState(false);
   const [selectedCampaign, setSelectedCampaign] = useState<CommunityCampaign | null>(null);
   const [activeTab, setActiveTab] = useState('discover');
+  const [showTemplates, setShowTemplates] = useState(false);
 
   const [newCampaign, setNewCampaign] = useState({
     title: '',
@@ -243,6 +245,40 @@ export default function CommunityWalletDashboard() {
             </DialogHeader>
             
             <div className="grid gap-4 py-4">
+              {/* Templates Section */}
+              {showTemplates && (
+                <div className="border-b pb-4 mb-4">
+                  <CampaignTemplates 
+                    onSelectTemplate={(template) => {
+                      setNewCampaign(prev => ({
+                        ...prev,
+                        title: `${template.name} Campaign`,
+                        description: template.description,
+                        campaign_parameters: {
+                          buyAmount: template.params.buyAmount,
+                          buyInterval: template.params.buyInterval,
+                          maxSlippage: template.params.maxSlippage,
+                          enableSellConditions: template.params.sellTrigger !== 'manual',
+                          sellTrigger: template.params.sellTrigger
+                        }
+                      }));
+                      setShowTemplates(false);
+                    }}
+                  />
+                </div>
+              )}
+              
+              <div className="flex items-center justify-between">
+                <h4 className="font-medium">Campaign Details</h4>
+                <Button 
+                  variant="outline" 
+                  size="sm"
+                  onClick={() => setShowTemplates(!showTemplates)}
+                >
+                  {showTemplates ? 'Hide Templates' : 'Use Template'}
+                </Button>
+              </div>
+              
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <Label htmlFor="title">Campaign Title</Label>

@@ -8,6 +8,7 @@ import { Copy, Users, Gift, Share2 } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
+import { SocialIntegrationDemo } from "../SocialIntegrationDemo";
 
 interface ReferralResponse {
   success: boolean;
@@ -285,6 +286,9 @@ export function ReferralDashboard() {
           </div>
         </CardContent>
       </Card>
+
+      {/* Social Integration Demo */}
+      <SocialIntegrationDemo />
 
       {/* How It Works */}
       <Card>

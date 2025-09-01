@@ -5,6 +5,7 @@ import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { toast } from "@/hooks/use-toast";
+import { VolumeSimulatorPresets } from "./VolumeSimulatorPresets";
 
 const formatNumber = (n: number, digits = 2) =>
   Number.isFinite(n) ? n.toLocaleString(undefined, { maximumFractionDigits: digits }) : "-";
@@ -29,6 +30,7 @@ export default function VolumeSimulator() {
   const [pairMode, setPairMode] = React.useState(true); // buy+sell per interval
   const [newAccounts, setNewAccounts] = React.useState(0); // optional first-time inits
   const [useBatchPricing, setUseBatchPricing] = React.useState(false); // Smithii-style batch pricing
+  const [showPresets, setShowPresets] = React.useState(false);
 
   const networkFeePerTradeSOL = React.useMemo(() => {
     switch (networkFeePreset) {
@@ -79,11 +81,55 @@ export default function VolumeSimulator() {
     });
   };
 
+  const loadPreset = (preset: any) => {
+    setBankrollSol(preset.params.bankrollSol);
+    setTradeSizeUsd(preset.params.tradeSizeUsd);
+    setSolPriceUsd(preset.params.solPriceUsd);
+    setIntervalSec(preset.params.intervalSec);
+    setAmmFeeBps(preset.params.ammFeeBps);
+    setNetworkFeePreset(preset.params.networkFeePreset);
+    setPairMode(preset.params.pairMode);
+    setUseBatchPricing(preset.params.useBatchPricing);
+    toast({ title: "Preset loaded", description: `${preset.name} configuration applied` });
+  };
+
+  const savePreset = (name: string, description: string) => {
+    toast({ title: "Preset saved", description: `${name} saved successfully` });
+  };
+
+  const currentParams = {
+    bankrollSol,
+    tradeSizeUsd,
+    solPriceUsd,
+    intervalSec,
+    ammFeeBps,
+    networkFeePreset,
+    pairMode,
+    useBatchPricing
+  };
+
   return (
-    <Card className="max-w-4xl mx-auto shadow">
-      <CardHeader>
-        <CardTitle>Solana Volume Bot Simulator</CardTitle>
-      </CardHeader>
+    <div className="max-w-6xl mx-auto space-y-6">
+      {showPresets && (
+        <VolumeSimulatorPresets 
+          onLoadPreset={loadPreset}
+          currentParams={currentParams}
+          onSavePreset={savePreset}
+        />
+      )}
+      
+      <Card className="shadow">
+        <CardHeader>
+          <div className="flex items-center justify-between">
+            <CardTitle>Solana Volume Bot Simulator</CardTitle>
+            <Button 
+              variant="outline" 
+              onClick={() => setShowPresets(!showPresets)}
+            >
+              {showPresets ? 'Hide Presets' : 'Show Presets'}
+            </Button>
+          </div>
+        </CardHeader>
       <CardContent>
         <div className="grid gap-6 md:grid-cols-2">
           <section className="space-y-4">
@@ -332,5 +378,6 @@ export default function VolumeSimulator() {
         </Button>
       </CardFooter>
     </Card>
+    </div>
   );
 }

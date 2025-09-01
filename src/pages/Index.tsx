@@ -9,6 +9,7 @@ import VolumeSimulator from "@/components/VolumeSimulator";
 import WalletPoolManager from "@/components/WalletPoolManager";
 import { AgenticBrowser } from "@/components/AgenticBrowser";
 import { AnalyticsDashboard } from "@/components/AnalyticsDashboard";
+import { DashboardStatsWidget } from "@/components/DashboardStatsWidget";
 
 import SecretsModal from "@/components/SecretsModal";
 import { PasswordLogin } from "@/components/PasswordLogin";
@@ -169,6 +170,9 @@ export default function Index() {
             </div>
           </div>
         </div>
+
+        {/* Dashboard Stats Widget */}
+        <DashboardStatsWidget />
 
         <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
           <TabsList className="grid w-full grid-cols-6 tech-border">
