@@ -27,19 +27,13 @@ export function SolPriceDisplay({ className, showSource = false, size = 'md' }: 
   return (
     <div className={cn('flex items-center gap-2', className)}>
       {/* SOL Token Icon */}
-      <div className={cn('rounded-full bg-gradient-to-r from-purple-400 to-purple-600 p-1', 
-        size === 'sm' ? 'p-0.5' : size === 'lg' ? 'p-1.5' : 'p-1'
-      )}>
-        <div className={cn('rounded-full bg-white flex items-center justify-center',
-          size === 'sm' ? 'h-3 w-3' : size === 'lg' ? 'h-5 w-5' : 'h-4 w-4'
-        )}>
-          <span className={cn('font-bold text-purple-600',
-            size === 'sm' ? 'text-xs' : size === 'lg' ? 'text-sm' : 'text-xs'
-          )}>
-            S
-          </span>
-        </div>
-      </div>
+      <img 
+        src="/lovable-uploads/fce64802-aa0f-4a71-bd5a-d57fb764caea.png"
+        alt="Solana"
+        className={cn('rounded-full',
+          size === 'sm' ? 'h-4 w-4' : size === 'lg' ? 'h-6 w-6' : 'h-5 w-5'
+        )}
+      />
       
       {/* Price Display */}
       <div className="flex items-center gap-1">
