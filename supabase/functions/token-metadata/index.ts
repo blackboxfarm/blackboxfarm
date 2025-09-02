@@ -86,12 +86,13 @@ serve(async (req) => {
     };
 
     try {
-      // Jupiter token list API with timeout
+      // Jupiter token list API with shorter timeout
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 5000); // 5 second timeout
+      const timeoutId = setTimeout(() => controller.abort(), 2000); // 2 second timeout
       
       const jupiterResponse = await fetch('https://token.jup.ag/all', {
-        signal: controller.signal
+        signal: controller.signal,
+        headers: { 'Accept': 'application/json' }
       });
       clearTimeout(timeoutId);
       
@@ -100,6 +101,7 @@ serve(async (req) => {
         const tokenData = tokens.find((t: any) => t.address === tokenMint);
         
         if (tokenData) {
+          console.log('Found token in Jupiter list:', tokenData.name);
           metadata = {
             mint: tokenMint,
             name: tokenData.name || 'Unknown Token',
@@ -109,48 +111,31 @@ serve(async (req) => {
             totalSupply: supply / Math.pow(10, tokenData.decimals || decimals),
             verified: true
           };
+        } else {
+          console.log('Token not found in Jupiter list');
         }
+      } else {
+        console.log('Jupiter API response not ok:', jupiterResponse.status);
       }
     } catch (error) {
-      console.log('Jupiter API failed, using basic metadata:', error);
+      console.log('Jupiter API failed:', error);
     }
 
-    // Try CoinGecko as fallback
-    if (!metadata.verified) {
-      try {
-        const controller2 = new AbortController();
-        const timeoutId2 = setTimeout(() => controller2.abort(), 3000); // 3 second timeout
-        
-        const cgResponse = await fetch(
-          `https://api.coingecko.com/api/v3/coins/solana/contract/${tokenMint}`,
-          { signal: controller2.signal }
-        );
-        clearTimeout(timeoutId2);
-        
-        if (cgResponse.ok) {
-          const cgData = await cgResponse.json();
-          metadata = {
-            ...metadata,
-            name: cgData.name || metadata.name,
-            symbol: cgData.symbol?.toUpperCase() || metadata.symbol,
-            logoURI: cgData.image?.small || metadata.logoURI,
-            verified: true
-          };
-        }
-      } catch (error) {
-        console.log('CoinGecko API failed:', error);
-      }
-    }
+    // Skip CoinGecko for now to reduce timeout issues
+    console.log('Skipping CoinGecko API to improve performance');
 
-    // Try to get current price from DexScreener
+    // Try to get current price from DexScreener with shorter timeout
     let priceInfo = null;
     try {
       const controller3 = new AbortController();
-      const timeoutId3 = setTimeout(() => controller3.abort(), 3000); // 3 second timeout
+      const timeoutId3 = setTimeout(() => controller3.abort(), 1500); // 1.5 second timeout
       
       const dexResponse = await fetch(
         `https://api.dexscreener.com/latest/dex/tokens/${tokenMint}`,
-        { signal: controller3.signal }
+        { 
+          signal: controller3.signal,
+          headers: { 'Accept': 'application/json' }
+        }
       );
       clearTimeout(timeoutId3);
       
@@ -158,6 +143,7 @@ serve(async (req) => {
         const dexData = await dexResponse.json();
         if (dexData.pairs && dexData.pairs.length > 0) {
           const pair = dexData.pairs[0];
+          console.log('Found price data in DexScreener');
           priceInfo = {
             priceUsd: parseFloat(pair.priceUsd || '0'),
             priceChange24h: parseFloat(pair.priceChange?.h24 || '0'),
@@ -165,11 +151,17 @@ serve(async (req) => {
             liquidity: parseFloat(pair.liquidity?.usd || '0'),
             dexUrl: pair.url
           };
+        } else {
+          console.log('No pairs found in DexScreener');
         }
+      } else {
+        console.log('DexScreener API response not ok:', dexResponse.status);
       }
     } catch (error) {
       console.log('DexScreener API failed:', error);
     }
+
+    console.log('Returning metadata:', { success: true, hasPrice: !!priceInfo });
 
     return new Response(
       JSON.stringify({
