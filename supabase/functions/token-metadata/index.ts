@@ -119,11 +119,52 @@ serve(async (req) => {
       isImmutable: mintAuthority === null
     });
 
+    // Get token price from DexScreener
+    let priceInfo = null;
+    try {
+      console.log('Fetching price data from DexScreener...');
+      
+      const dexResponse = await fetch(
+        `https://api.dexscreener.com/latest/dex/tokens/${tokenMint}`,
+        { 
+          headers: { 'Accept': 'application/json' },
+          signal: AbortSignal.timeout(3000) // 3 second timeout
+        }
+      );
+      
+      if (dexResponse.ok) {
+        const dexData = await dexResponse.json();
+        if (dexData.pairs && dexData.pairs.length > 0) {
+          const pair = dexData.pairs[0];
+          priceInfo = {
+            priceUsd: parseFloat(pair.priceUsd || '0'),
+            priceChange24h: parseFloat(pair.priceChange?.h24 || '0'),
+            volume24h: parseFloat(pair.volume?.h24 || '0'),
+            liquidity: parseFloat(pair.liquidity?.usd || '0'),
+            marketCap: parseFloat(pair.fdv || '0'),
+            dexUrl: pair.url,
+            pairAddress: pair.pairAddress
+          };
+          console.log('Found price data:', {
+            priceUsd: priceInfo.priceUsd,
+            volume24h: priceInfo.volume24h,
+            marketCap: priceInfo.marketCap
+          });
+        } else {
+          console.log('No trading pairs found for token');
+        }
+      } else {
+        console.log('DexScreener API failed with status:', dexResponse.status);
+      }
+    } catch (error) {
+      console.log('DexScreener API error:', error);
+    }
+
     return new Response(
       JSON.stringify({
         success: true,
         metadata,
-        priceInfo: null, // Skip for now
+        priceInfo,
         onChainData: {
           decimals,
           supply: supply.toString(),
