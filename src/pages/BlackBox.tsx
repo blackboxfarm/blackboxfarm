@@ -15,13 +15,14 @@ import { NotificationCenter } from "@/components/NotificationCenter";
 import { AnalyticsDashboard } from "@/components/AnalyticsDashboard";
 import { ReferralDashboard } from "@/components/blackbox/ReferralDashboard";
 import CommunityWalletDashboard from "@/components/blackbox/CommunityWalletDashboard";
+import { OverviewTab } from "@/components/blackbox/OverviewTab";
 import { useAuth } from "@/hooks/useAuth";
 import { Button } from "@/components/ui/button";
 import { useNavigate } from "react-router-dom";
 import { Shield } from "lucide-react";
 
 export default function BlackBox() {
-  const [activeTab, setActiveTab] = useState("fees");
+  const [activeTab, setActiveTab] = useState("overview");
   const { user } = useAuth();
   const navigate = useNavigate();
 
@@ -69,7 +70,8 @@ export default function BlackBox() {
 
         {/* Main Navigation */}
         <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-          <TabsList className={`grid w-full ${user ? 'grid-cols-7' : 'grid-cols-3'}`}>
+          <TabsList className={`grid w-full ${user ? 'grid-cols-8' : 'grid-cols-4'}`}>
+            <TabsTrigger value="overview">Overview</TabsTrigger>
             {user && <TabsTrigger value="dashboard">Dashboard</TabsTrigger>}
             {user && <TabsTrigger value="community">Community</TabsTrigger>}
             <TabsTrigger value="simulator">Simulator</TabsTrigger>
@@ -78,6 +80,10 @@ export default function BlackBox() {
             {user && <TabsTrigger value="referrals">Referrals</TabsTrigger>}
             {user && <TabsTrigger value="security">Security</TabsTrigger>}
           </TabsList>
+
+          <TabsContent value="overview" className="space-y-6">
+            <OverviewTab />
+          </TabsContent>
 
           <TabsContent value="dashboard" className="space-y-6">
             <RequireAuth>
