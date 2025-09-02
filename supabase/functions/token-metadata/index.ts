@@ -21,16 +21,31 @@ serve(async (req) => {
   }
 
   try {
-    const { tokenMint } = await req.json();
+    console.log('Token metadata request received');
+    
+    let body;
+    try {
+      body = await req.json();
+      console.log('Request body:', body);
+    } catch (parseError) {
+      console.error('Failed to parse request body:', parseError);
+      throw new Error('Invalid JSON in request body');
+    }
+
+    const { tokenMint } = body;
 
     if (!tokenMint) {
+      console.error('No token mint provided');
       throw new Error('Token mint address is required');
     }
 
     // Validate mint address format (basic validation)
-    if (!tokenMint || tokenMint.length < 32 || tokenMint.length > 44) {
+    if (typeof tokenMint !== 'string' || tokenMint.length < 32 || tokenMint.length > 44) {
+      console.error('Invalid token mint format:', tokenMint);
       throw new Error('Invalid mint address format');
     }
+
+    console.log('Processing token mint:', tokenMint);
 
     // Get basic token info from RPC (lighter approach)
     let decimals = 9;
@@ -71,8 +86,15 @@ serve(async (req) => {
     };
 
     try {
-      // Jupiter token list API
-      const jupiterResponse = await fetch('https://token.jup.ag/all');
+      // Jupiter token list API with timeout
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 5000); // 5 second timeout
+      
+      const jupiterResponse = await fetch('https://token.jup.ag/all', {
+        signal: controller.signal
+      });
+      clearTimeout(timeoutId);
+      
       if (jupiterResponse.ok) {
         const tokens = await jupiterResponse.json();
         const tokenData = tokens.find((t: any) => t.address === tokenMint);
@@ -96,9 +118,14 @@ serve(async (req) => {
     // Try CoinGecko as fallback
     if (!metadata.verified) {
       try {
+        const controller2 = new AbortController();
+        const timeoutId2 = setTimeout(() => controller2.abort(), 3000); // 3 second timeout
+        
         const cgResponse = await fetch(
-          `https://api.coingecko.com/api/v3/coins/solana/contract/${tokenMint}`
+          `https://api.coingecko.com/api/v3/coins/solana/contract/${tokenMint}`,
+          { signal: controller2.signal }
         );
+        clearTimeout(timeoutId2);
         
         if (cgResponse.ok) {
           const cgData = await cgResponse.json();
@@ -118,9 +145,14 @@ serve(async (req) => {
     // Try to get current price from DexScreener
     let priceInfo = null;
     try {
+      const controller3 = new AbortController();
+      const timeoutId3 = setTimeout(() => controller3.abort(), 3000); // 3 second timeout
+      
       const dexResponse = await fetch(
-        `https://api.dexscreener.com/latest/dex/tokens/${tokenMint}`
+        `https://api.dexscreener.com/latest/dex/tokens/${tokenMint}`,
+        { signal: controller3.signal }
       );
+      clearTimeout(timeoutId3);
       
       if (dexResponse.ok) {
         const dexData = await dexResponse.json();
