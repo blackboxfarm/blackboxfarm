@@ -1,8 +1,12 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
+import { useAuth } from "@/hooks/useAuth";
+import { useCommunityWallet } from "@/hooks/useCommunityWallet";
+import { CampaignCreatorSetupDialog } from "@/components/dialogs/CampaignCreatorSetupDialog";
+import { CampaignSearchModal } from "@/components/dialogs/CampaignSearchModal";
 import { 
   Users, 
   Wallet, 
@@ -19,6 +23,10 @@ import { AuthButton } from "@/components/auth/AuthButton";
 
 export function CommunityWalletPublic() {
   const { toast } = useToast();
+  const { isAuthenticated, user } = useAuth();
+  const { campaigns, myContributions, isLoading } = useCommunityWallet();
+  const [showCreatorDialog, setShowCreatorDialog] = useState(false);
+  const [showSearchModal, setShowSearchModal] = useState(false);
 
   const handleShare = async () => {
     const shareData = {
@@ -60,6 +68,53 @@ export function CommunityWalletPublic() {
     }
   };
 
+  const handleCreateCampaignClick = () => {
+    if (!isAuthenticated) {
+      // Show auth modal or redirect to login
+      toast({
+        title: "Authentication Required",
+        description: "Please sign in or create an account to create campaigns",
+      });
+      return;
+    }
+
+    // Check if user is already a campaign creator (has created campaigns)
+    const hasCreatedCampaigns = campaigns.some(campaign => campaign.creator_id === user?.id);
+    
+    if (hasCreatedCampaigns) {
+      // User is already a creator, redirect to dashboard
+      window.location.href = '/blackbox';
+      return;
+    }
+
+    // User is authenticated but hasn't created campaigns yet, show upgrade dialog
+    setShowCreatorDialog(true);
+  };
+
+  const handleCreatorSetup = () => {
+    setShowCreatorDialog(false);
+    // Here we would typically update user profile/role in the database
+    // For now, redirect to dashboard
+    toast({
+      title: "Dashboard Account Created!",
+      description: "Welcome to your campaign dashboard. You can now create and manage campaigns.",
+    });
+    window.location.href = '/blackbox';
+  };
+
+  const handleSearchCampaigns = () => {
+    setShowSearchModal(true);
+  };
+
+  const handleSelectCampaign = (campaign: any) => {
+    // Redirect to the specific campaign or open contribution modal
+    toast({
+      title: "Campaign Selected",
+      description: `Viewing ${campaign.title}`,
+    });
+    // Could implement specific campaign view or contribution flow here
+  };
+
   return (
     <div className="space-y-8">
       {/* Hero Section */}
@@ -79,13 +134,24 @@ export function CommunityWalletPublic() {
       <div className="grid md:grid-cols-3 gap-6">
         <Card className="text-center p-6 border-dashed border-2 border-muted">
           <Wallet className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
-          <h3 className="text-lg font-semibold mb-2">No Active Contributions</h3>
+          <h3 className="text-lg font-semibold mb-2">
+            {isAuthenticated && myContributions.length > 0 
+              ? `${myContributions.length} Active Contributions` 
+              : "No Active Contributions"
+            }
+          </h3>
           <p className="text-sm text-muted-foreground">
-            You haven't joined any community campaigns yet
+            {isAuthenticated && myContributions.length > 0
+              ? "You're contributing to community campaigns"
+              : "You haven't joined any community campaigns yet"
+            }
           </p>
         </Card>
 
-        <Card className="text-center p-6 border-2 border-primary/20 bg-primary/5">
+        <Card 
+          className="text-center p-6 border-2 border-primary/20 bg-primary/5 cursor-pointer hover:bg-primary/10 transition-colors"
+          onClick={handleSearchCampaigns}
+        >
           <Search className="h-12 w-12 text-primary mx-auto mb-4" />
           <h3 className="text-lg font-semibold mb-2">Search Campaigns</h3>
           <p className="text-sm text-muted-foreground">
@@ -93,7 +159,10 @@ export function CommunityWalletPublic() {
           </p>
         </Card>
 
-        <Card className="text-center p-6 border-2 border-primary/20 bg-primary/5">
+        <Card 
+          className="text-center p-6 border-2 border-primary/20 bg-primary/5 cursor-pointer hover:bg-primary/10 transition-colors"
+          onClick={handleCreateCampaignClick}
+        >
           <Users className="h-12 w-12 text-primary mx-auto mb-4" />
           <h3 className="text-lg font-semibold mb-2">Create Campaign</h3>
           <p className="text-sm text-muted-foreground">
@@ -243,6 +312,21 @@ export function CommunityWalletPublic() {
           💡 <strong>Tip:</strong> Share this link with your team so they can create campaigns and invite you to contribute
         </p>
       </div>
+
+      {/* Dialogs */}
+      <CampaignCreatorSetupDialog
+        isOpen={showCreatorDialog}
+        onClose={() => setShowCreatorDialog(false)}
+        onConfirm={handleCreatorSetup}
+        onCancel={() => setShowCreatorDialog(false)}
+      />
+
+      <CampaignSearchModal
+        isOpen={showSearchModal}
+        onClose={() => setShowSearchModal(false)}
+        campaigns={campaigns}
+        onSelectCampaign={handleSelectCampaign}
+      />
     </div>
   );
 }
