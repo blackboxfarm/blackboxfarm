@@ -3,6 +3,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { TrendingUp, Clock } from "lucide-react";
+import { supabase } from "@/integrations/supabase/client";
 
 interface PricePoint {
   timestamp: number;
@@ -22,43 +23,54 @@ export function TokenPriceChart({ tokenAddress, className }: TokenPriceChartProp
 
   useEffect(() => {
     if (tokenAddress) {
-      generateMockPriceData();
+      fetchRealPriceData();
     }
   }, [tokenAddress, timeRange]);
 
-  const generateMockPriceData = () => {
+  const fetchRealPriceData = async () => {
     setIsLoading(true);
     
-    // Generate realistic price movement data
-    const now = Date.now();
-    const intervals = timeRange === '1h' ? 12 : timeRange === '4h' ? 48 : timeRange === '12h' ? 144 : 288;
-    const minutesPerInterval = timeRange === '1h' ? 5 : timeRange === '4h' ? 5 : timeRange === '12h' ? 5 : 5;
-    
-    let currentPrice = 0.00435; // Starting price
-    const data: PricePoint[] = [];
-    
-    for (let i = intervals; i >= 0; i--) {
-      const timestamp = now - (i * minutesPerInterval * 60 * 1000);
+    try {
+      console.log('Fetching real price data for token:', tokenAddress);
       
-      // Add some realistic price volatility
-      const volatility = 0.02; // 2% max change per interval
-      const change = (Math.random() - 0.5) * volatility;
-      currentPrice = Math.max(0.001, currentPrice * (1 + change));
-      
-      // Generate volume based on price action
-      const baseVolume = 50000;
-      const volumeMultiplier = 1 + Math.abs(change) * 10;
-      const volume = baseVolume * volumeMultiplier * (0.5 + Math.random());
-      
-      data.push({
-        timestamp,
-        price: currentPrice,
-        volume
+      const { data, error } = await supabase.functions.invoke('token-metadata', {
+        body: { tokenMint: tokenAddress }
       });
+      
+      if (error) throw error;
+      
+      if (data.success && data.historicalPrices) {
+        console.log('Received real historical prices:', data.historicalPrices.length, 'data points');
+        
+        // Filter data based on time range
+        const now = Date.now();
+        const timeRangeMs = {
+          '1h': 60 * 60 * 1000,
+          '4h': 4 * 60 * 60 * 1000,
+          '12h': 12 * 60 * 60 * 1000,
+          '24h': 24 * 60 * 60 * 1000
+        }[timeRange];
+        
+        const filteredData = data.historicalPrices
+          .filter((point: any) => point.timestamp >= (now - timeRangeMs))
+          .map((point: any) => ({
+            timestamp: point.timestamp,
+            price: point.price,
+            volume: point.volume
+          }));
+        
+        setPriceData(filteredData);
+        console.log('Set real price data:', filteredData.length, 'points for', timeRange);
+      } else {
+        console.error('No historical price data received from token-metadata function');
+        setPriceData([]);
+      }
+    } catch (error: any) {
+      console.error('Error fetching real price data:', error);
+      setPriceData([]);
+    } finally {
+      setIsLoading(false);
     }
-    
-    setPriceData(data);
-    setIsLoading(false);
   };
 
   const formatPrice = (value: number) => `$${value.toFixed(6)}`;

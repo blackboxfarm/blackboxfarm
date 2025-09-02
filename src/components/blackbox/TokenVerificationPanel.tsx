@@ -94,22 +94,24 @@ export function TokenVerificationPanel({ tokenAddress, className }: TokenVerific
 
   const fetchRecentTrades = async () => {
     try {
-      // Mock recent trades data - in production, integrate with DexScreener or Birdeye API
-      const mockTrades: RecentTrade[] = [
-        { type: 'buy', amount: 1250, price: 0.0045, timestamp: Date.now() - 120000, txHash: 'abc123' },
-        { type: 'sell', amount: 890, price: 0.0043, timestamp: Date.now() - 180000, txHash: 'def456' },
-        { type: 'buy', amount: 2100, price: 0.0044, timestamp: Date.now() - 240000, txHash: 'ghi789' },
-        { type: 'buy', amount: 560, price: 0.0042, timestamp: Date.now() - 300000, txHash: 'jkl012' },
-        { type: 'sell', amount: 1800, price: 0.0041, timestamp: Date.now() - 360000, txHash: 'mno345' },
-        { type: 'buy', amount: 750, price: 0.0043, timestamp: Date.now() - 420000, txHash: 'pqr678' },
-        { type: 'sell', amount: 920, price: 0.0040, timestamp: Date.now() - 480000, txHash: 'stu901' },
-        { type: 'buy', amount: 1350, price: 0.0041, timestamp: Date.now() - 540000, txHash: 'vwx234' },
-        { type: 'buy', amount: 680, price: 0.0039, timestamp: Date.now() - 600000, txHash: 'yzab567' },
-        { type: 'sell', amount: 1100, price: 0.0038, timestamp: Date.now() - 660000, txHash: 'cdef890' }
-      ];
-      setRecentTrades(mockTrades);
+      console.log('Fetching real recent trades for token:', tokenAddress);
+      
+      const { data, error } = await supabase.functions.invoke('token-metadata', {
+        body: { tokenMint: tokenAddress }
+      });
+      
+      if (error) throw error;
+      
+      if (data.success && data.recentTrades) {
+        console.log('Received real recent trades:', data.recentTrades.length, 'trades');
+        setRecentTrades(data.recentTrades);
+      } else {
+        console.error('No recent trades data received from token-metadata function');
+        setRecentTrades([]);
+      }
     } catch (error) {
       console.error('Error fetching recent trades:', error);
+      setRecentTrades([]);
     }
   };
 
