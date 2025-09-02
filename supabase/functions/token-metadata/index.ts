@@ -52,7 +52,13 @@ serve(async (req) => {
     let supply = 0;
     
     try {
-      const rpcUrl = Deno.env.get('SOLANA_RPC_URL') || 'https://api.mainnet-beta.solana.com';
+      const heliosApiKey = Deno.env.get('HELIOS_API_KEY');
+      const rpcUrl = heliosApiKey ? 
+        `https://mainnet.helius-rpc.com/?api-key=${heliosApiKey}` : 
+        'https://api.mainnet-beta.solana.com';
+      
+      console.log('Using RPC:', heliosApiKey ? 'Helios (fast)' : 'Default (slow)');
+      
       const response = await fetch(rpcUrl, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -71,6 +77,7 @@ serve(async (req) => {
       if (data.result?.value?.data?.parsed?.info) {
         decimals = data.result.value.data.parsed.info.decimals || 9;
         supply = parseInt(data.result.value.data.parsed.info.supply || '0');
+        console.log('Got on-chain data - decimals:', decimals, 'supply:', supply);
       }
     } catch (error) {
       console.log('Failed to fetch on-chain data, using defaults:', error);
