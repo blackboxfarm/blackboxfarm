@@ -191,7 +191,7 @@ export default function ContactUs() {
               </CardContent>
             </Card>
 
-            <Card className="bg-gradient-to-r from-primary/5 to-primary/10 border-primary/20">
+            <Card className="bg-gradient-to-r from-primary/5 to-primary/10 border-primary/20 hidden">
               <CardContent className="p-6">
                 <h3 className="font-medium mb-2">Need Immediate Help?</h3>
                 <p className="text-sm text-muted-foreground mb-4">
