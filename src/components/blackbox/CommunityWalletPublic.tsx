@@ -2,6 +2,7 @@ import React from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { useToast } from "@/hooks/use-toast";
 import { 
   Users, 
   Wallet, 
@@ -17,15 +18,45 @@ import {
 import { AuthButton } from "@/components/auth/AuthButton";
 
 export function CommunityWalletPublic() {
-  const handleShare = () => {
-    if (navigator.share) {
-      navigator.share({
-        title: 'BlackBox Farm Community Campaigns',
-        text: 'Join our community campaigns for collaborative token pumping!',
-        url: window.location.href,
-      });
-    } else {
-      navigator.clipboard.writeText(window.location.href);
+  const { toast } = useToast();
+
+  const handleShare = async () => {
+    const shareData = {
+      title: 'BlackBox Farm - Community Campaigns',
+      text: 'Join our community-powered token campaigns! Pool resources for bigger impact and better trading outcomes. 🚀',
+      url: window.location.href,
+    };
+
+    try {
+      if (navigator.share && navigator.canShare && navigator.canShare(shareData)) {
+        await navigator.share(shareData);
+        toast({
+          title: "Shared successfully!",
+          description: "Your team can now join the community campaigns.",
+        });
+      } else {
+        await navigator.clipboard.writeText(window.location.href);
+        toast({
+          title: "Link copied!",
+          description: "Share this link with your team to get started.",
+        });
+      }
+    } catch (error) {
+      console.error('Share failed:', error);
+      // Fallback to clipboard
+      try {
+        await navigator.clipboard.writeText(window.location.href);
+        toast({
+          title: "Link copied!",
+          description: "Share this link with your team to get started.",
+        });
+      } catch (clipboardError) {
+        toast({
+          title: "Share failed",
+          description: "Please copy the URL manually to share with your team.",
+          variant: "destructive",
+        });
+      }
     }
   };
 
