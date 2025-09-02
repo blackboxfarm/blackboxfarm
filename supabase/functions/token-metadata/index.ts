@@ -99,17 +99,25 @@ serve(async (req) => {
       console.log('Failed to fetch on-chain data:', error);
     }
 
-    // Basic metadata (no external API calls for now)
+    // Basic metadata with actual mint address and real on-chain data
     const metadata = {
       mint: tokenMint,
-      name: 'Token',
-      symbol: 'TOKEN',
+      name: `Token ${tokenMint.slice(0, 8)}...`, // Show part of mint address
+      symbol: supply > 0 ? 'LIVE' : 'DEAD', // Show if token has supply
       decimals,
       totalSupply: supply / Math.pow(10, decimals),
-      verified: false
+      verified: mintAuthority === null, // Immutable if no mint authority
+      mintAuthority,
+      freezeAuthority
     };
 
-    console.log('Returning basic mint data successfully');
+    console.log('Returning mint data:', {
+      tokenMint,
+      decimals,
+      totalSupply: metadata.totalSupply,
+      hasSupply: supply > 0,
+      isImmutable: mintAuthority === null
+    });
 
     return new Response(
       JSON.stringify({
