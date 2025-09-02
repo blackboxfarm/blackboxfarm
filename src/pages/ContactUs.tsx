@@ -48,7 +48,7 @@ export default function ContactUs() {
       console.error('Contact form error:', error);
       toast({
         title: "Error Sending Message",
-        description: "Please try again or contact us directly at support@blackboxfarm.io",
+        description: "Please try again or contact us directly at support@blackbox.farm",
         variant: "destructive",
       });
     } finally {
@@ -142,23 +142,23 @@ export default function ContactUs() {
                   <Mail className="h-5 w-5 text-muted-foreground" />
                   <div>
                     <p className="font-medium">General Inquiries</p>
-                    <p className="text-sm text-muted-foreground">support@blackboxfarm.io</p>
-                  </div>
-                </div>
-                
-                <div className="flex items-center gap-3">
-                  <MessageSquare className="h-5 w-5 text-muted-foreground" />
-                  <div>
-                    <p className="font-medium">Technical Support</p>
-                    <p className="text-sm text-muted-foreground">tech@blackboxfarm.io</p>
-                  </div>
-                </div>
+                     <p className="text-sm text-muted-foreground">support@blackbox.farm</p>
+                   </div>
+                 </div>
+                 
+                 <div className="flex items-center gap-3">
+                   <MessageSquare className="h-5 w-5 text-muted-foreground" />
+                   <div>
+                     <p className="font-medium">Technical Support</p>
+                     <p className="text-sm text-muted-foreground">tech@blackbox.farm</p>
+                   </div>
+                 </div>
 
-                <div className="flex items-center gap-3">
-                  <Phone className="h-5 w-5 text-muted-foreground" />
-                  <div>
-                    <p className="font-medium">Partnership Inquiries</p>
-                    <p className="text-sm text-muted-foreground">partnerships@blackboxfarm.io</p>
+                 <div className="flex items-center gap-3">
+                   <Phone className="h-5 w-5 text-muted-foreground" />
+                   <div>
+                     <p className="font-medium">Partnership Inquiries</p>
+                     <p className="text-sm text-muted-foreground">partnerships@blackbox.farm</p>
                   </div>
                 </div>
               </CardContent>

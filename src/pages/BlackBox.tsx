@@ -15,6 +15,7 @@ import { NotificationCenter } from "@/components/NotificationCenter";
 import { AnalyticsDashboard } from "@/components/AnalyticsDashboard";
 import { ReferralDashboard } from "@/components/blackbox/ReferralDashboard";
 import CommunityWalletDashboard from "@/components/blackbox/CommunityWalletDashboard";
+import { CommunityWalletPublic } from "@/components/blackbox/CommunityWalletPublic";
 import { OverviewTab } from "@/components/blackbox/OverviewTab";
 import { useAuth } from "@/hooks/useAuth";
 import { Button } from "@/components/ui/button";
@@ -70,10 +71,10 @@ export default function BlackBox() {
 
         {/* Main Navigation */}
         <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-          <TabsList className={`grid w-full ${user ? 'grid-cols-8' : 'grid-cols-4'}`}>
+          <TabsList className={`grid w-full ${user ? 'grid-cols-8' : 'grid-cols-5'}`}>
             <TabsTrigger value="overview">Overview</TabsTrigger>
             {user && <TabsTrigger value="dashboard">Dashboard</TabsTrigger>}
-            {user && <TabsTrigger value="community">Community</TabsTrigger>}
+            <TabsTrigger value="community">Community</TabsTrigger>
             <TabsTrigger value="simulator">Simulator</TabsTrigger>
             <TabsTrigger value="fees">Calculator</TabsTrigger>
             <TabsTrigger value="analytics">Analytics</TabsTrigger>
@@ -93,7 +94,7 @@ export default function BlackBox() {
           </TabsContent>
 
           <TabsContent value="community" className="space-y-6">
-            <RequireAuth>
+            <RequireAuth fallback={<CommunityWalletPublic />}>
               <CommunityWalletDashboard />
             </RequireAuth>
           </TabsContent>

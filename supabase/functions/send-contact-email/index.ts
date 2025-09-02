@@ -28,8 +28,8 @@ const handler = async (req: Request): Promise<Response> => {
 
     // Send notification to support team
     const supportEmail = await resend.emails.send({
-      from: "BlackBox Farm <noreply@blackboxfarm.io>",
-      to: ["support@blackboxfarm.io"],
+      from: "BlackBox Farm <noreply@blackbox.farm>",
+      to: ["support@blackbox.farm"],
       subject: `New Contact Form: ${category} - ${subject}`,
       html: `
         <h2>New Contact Form Submission</h2>
@@ -46,7 +46,7 @@ const handler = async (req: Request): Promise<Response> => {
 
     // Send confirmation to user
     const userEmail = await resend.emails.send({
-      from: "BlackBox Farm <support@blackboxfarm.io>",
+      from: "BlackBox Farm <support@blackbox.farm>",
       to: [email],
       subject: "We received your message - BlackBox Farm",
       html: `

@@ -144,6 +144,30 @@ export function OverviewTab() {
         </Card>
       </div>
 
+      {/* Ready to Get Started Section */}
+      <div className="text-center bg-gradient-to-r from-primary/10 to-accent/10 p-8 rounded-lg">
+        <h3 className="text-2xl font-semibold mb-3">Ready to Get Started?</h3>
+        <p className="text-muted-foreground mb-6 max-w-2xl mx-auto">
+          Join thousands of successful token projects using BlackBox Farm's automated BumpBot campaigns. 
+          Start pumping your token with enterprise-grade security and transparency.
+        </p>
+        <div className="flex flex-col sm:flex-row gap-4 justify-center">
+          <Button size="lg" className="px-8">
+            Create Account
+            <ArrowRight className="ml-2 h-4 w-4" />
+          </Button>
+          <Button 
+            variant="outline" 
+            size="lg" 
+            className="px-8"
+            onClick={() => window.open('/demo', '_blank')}
+          >
+            <Play className="mr-2 h-4 w-4" />
+            View Demo
+          </Button>
+        </div>
+      </div>
+
       {/* Features Grid */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
         <Card className="p-6 text-center">
@@ -169,30 +193,6 @@ export function OverviewTab() {
             Live dashboards, instant notifications, and comprehensive performance tracking
           </p>
         </Card>
-      </div>
-
-      {/* Ready to Get Started Section */}
-      <div className="text-center bg-gradient-to-r from-primary/10 to-accent/10 p-8 rounded-lg">
-        <h3 className="text-2xl font-semibold mb-3">Ready to Get Started?</h3>
-        <p className="text-muted-foreground mb-6 max-w-2xl mx-auto">
-          Join thousands of successful token projects using BlackBox Farm's automated BumpBot campaigns. 
-          Start pumping your token with enterprise-grade security and transparency.
-        </p>
-        <div className="flex flex-col sm:flex-row gap-4 justify-center">
-          <Button size="lg" className="px-8">
-            Create Account
-            <ArrowRight className="ml-2 h-4 w-4" />
-          </Button>
-          <Button 
-            variant="outline" 
-            size="lg" 
-            className="px-8"
-            onClick={() => window.open('/demo', '_blank')}
-          >
-            <Play className="mr-2 h-4 w-4" />
-            View Demo
-          </Button>
-        </div>
       </div>
 
       {/* Stats Section */}
