@@ -9,6 +9,8 @@ import { supabase } from "@/integrations/supabase/client";
 import { toast } from "@/hooks/use-toast";
 import { CampaignWallets } from "./CampaignWallets";
 import { CampaignActivationGuide } from "./CampaignActivationGuide";
+import { TokenVerificationPanel } from "./TokenVerificationPanel";
+import { TokenPriceChart } from "./TokenPriceChart";
 import { useCampaignNotifications } from "@/hooks/useCampaignNotifications";
 
 interface Campaign {
@@ -238,6 +240,12 @@ export function CampaignDashboard() {
       {/* Selected Campaign Details */}
       {selectedCampaign && (
         <>
+          {/* Token Verification and Live Data */}
+          <TokenVerificationPanel tokenAddress={selectedCampaign.token_address} />
+          
+          {/* Price Chart */}
+          <TokenPriceChart tokenAddress={selectedCampaign.token_address} />
+          
           <CampaignActivationGuide campaign={selectedCampaign} />
           <CampaignWallets campaign={selectedCampaign} />
         </>
