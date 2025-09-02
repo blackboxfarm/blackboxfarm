@@ -119,45 +119,42 @@ serve(async (req) => {
       isImmutable: mintAuthority === null
     });
 
-    // Get token price from DexScreener
+    // Get token price using Jupiter Price API (same as SOL price method)
     let priceInfo = null;
     try {
-      console.log('Fetching price data from DexScreener...');
+      console.log('Fetching token price from Jupiter Price API...');
       
-      const dexResponse = await fetch(
-        `https://api.dexscreener.com/latest/dex/tokens/${tokenMint}`,
+      const jupiterPriceResponse = await fetch(
+        `https://price.jup.ag/v6/price?ids=${tokenMint}`,
         { 
           headers: { 'Accept': 'application/json' },
-          signal: AbortSignal.timeout(3000) // 3 second timeout
+          signal: AbortSignal.timeout(3000)
         }
       );
       
-      if (dexResponse.ok) {
-        const dexData = await dexResponse.json();
-        if (dexData.pairs && dexData.pairs.length > 0) {
-          const pair = dexData.pairs[0];
+      if (jupiterPriceResponse.ok) {
+        const jupiterData = await jupiterPriceResponse.json();
+        const tokenPriceData = jupiterData?.data?.[tokenMint];
+        
+        if (tokenPriceData?.price && typeof tokenPriceData.price === 'number') {
           priceInfo = {
-            priceUsd: parseFloat(pair.priceUsd || '0'),
-            priceChange24h: parseFloat(pair.priceChange?.h24 || '0'),
-            volume24h: parseFloat(pair.volume?.h24 || '0'),
-            liquidity: parseFloat(pair.liquidity?.usd || '0'),
-            marketCap: parseFloat(pair.fdv || '0'),
-            dexUrl: pair.url,
-            pairAddress: pair.pairAddress
+            priceUsd: tokenPriceData.price,
+            priceChange24h: 0, // Jupiter doesn't provide 24h change
+            volume24h: 0,
+            liquidity: 0,
+            marketCap: (tokenPriceData.price * metadata.totalSupply),
+            source: 'jupiter',
+            timestamp: new Date().toISOString()
           };
-          console.log('Found price data:', {
-            priceUsd: priceInfo.priceUsd,
-            volume24h: priceInfo.volume24h,
-            marketCap: priceInfo.marketCap
-          });
+          console.log(`Token price from Jupiter: $${tokenPriceData.price}`);
         } else {
-          console.log('No trading pairs found for token');
+          console.log('No price data found in Jupiter response');
         }
       } else {
-        console.log('DexScreener API failed with status:', dexResponse.status);
+        console.log('Jupiter Price API failed with status:', jupiterPriceResponse.status);
       }
     } catch (error) {
-      console.log('DexScreener API error:', error);
+      console.log('Jupiter Price API error:', error);
     }
 
     return new Response(
