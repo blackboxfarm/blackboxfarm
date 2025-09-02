@@ -6,6 +6,8 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { toast } from "@/hooks/use-toast";
 import { VolumeSimulatorPresets } from "./VolumeSimulatorPresets";
+import { useSolPrice } from "@/hooks/useSolPrice";
+import { SolPriceDisplay } from "@/components/SolPriceDisplay";
 
 const formatNumber = (n: number, digits = 2) =>
   Number.isFinite(n) ? n.toLocaleString(undefined, { maximumFractionDigits: digits }) : "-";
@@ -23,7 +25,7 @@ const formatDuration = (seconds: number) => {
 export default function VolumeSimulator() {
   const [bankrollSol, setBankrollSol] = React.useState(1);
   const [tradeSizeUsd, setTradeSizeUsd] = React.useState(0.1);
-  const [solPriceUsd, setSolPriceUsd] = React.useState(175);
+  const { price: solPriceUsd } = useSolPrice();
   const [intervalSec, setIntervalSec] = React.useState(15);
   const [ammFeeBps, setAmmFeeBps] = React.useState(25); // 25 bps = 0.25%
   const [networkFeePreset, setNetworkFeePreset] = React.useState<"low" | "typical" | "busy">("typical");
@@ -84,13 +86,13 @@ export default function VolumeSimulator() {
   const loadPreset = (preset: any) => {
     setBankrollSol(preset.params.bankrollSol);
     setTradeSizeUsd(preset.params.tradeSizeUsd);
-    setSolPriceUsd(preset.params.solPriceUsd);
+    // Note: SOL price is now live, so we don't set it from presets
     setIntervalSec(preset.params.intervalSec);
     setAmmFeeBps(preset.params.ammFeeBps);
     setNetworkFeePreset(preset.params.networkFeePreset);
     setPairMode(preset.params.pairMode);
     setUseBatchPricing(preset.params.useBatchPricing);
-    toast({ title: "Preset loaded", description: `${preset.name} configuration applied` });
+    toast({ title: "Preset loaded", description: `${preset.name} configuration applied (SOL price is live)` });
   };
 
   const savePreset = (name: string, description: string) => {
@@ -254,24 +256,12 @@ export default function VolumeSimulator() {
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="sol-price">SOL price (USD)</Label>
-              <div className="flex items-center gap-3">
-                <Slider
-                  id="sol-price"
-                  min={25}
-                  max={500}
-                  step={1}
-                  value={[solPriceUsd]}
-                  onValueChange={([v]) => setSolPriceUsd(Math.round(v))}
-                />
-                <Input
-                  className="w-28"
-                  type="number"
-                  min={1}
-                  step="1"
-                  value={solPriceUsd}
-                  onChange={(e) => setSolPriceUsd(Number(e.target.value))}
-                />
+              <Label htmlFor="sol-price">SOL Price (USD) - Live</Label>
+              <div className="flex items-center gap-2 p-3 border rounded-md bg-muted/30">
+                <SolPriceDisplay size="md" />
+                <span className="text-sm text-muted-foreground ml-auto">
+                  Auto-updating every 30s
+                </span>
               </div>
             </div>
 

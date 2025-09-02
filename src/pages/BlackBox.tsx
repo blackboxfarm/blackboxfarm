@@ -21,6 +21,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { Button } from "@/components/ui/button";
 import { useNavigate } from "react-router-dom";
 import { Shield } from "lucide-react";
+import { SolPriceDisplay } from "@/components/SolPriceDisplay";
 
 export default function BlackBox() {
   const [activeTab, setActiveTab] = useState("overview");
@@ -44,6 +45,7 @@ export default function BlackBox() {
               <h1 className="text-3xl md:text-4xl font-bold bg-gradient-to-r from-primary to-primary/70 bg-clip-text text-transparent">
                 BlackBox Farm
               </h1>
+              <SolPriceDisplay size="lg" className="ml-4" />
             </div>
             <p className="text-lg md:text-xl text-muted-foreground max-w-2xl mx-auto md:mx-0">
               Putting the needle in the Haystack - Bumps for the whole Fam!

@@ -5,12 +5,14 @@ import { Label } from "@/components/ui/label";
 import { Slider } from "@/components/ui/slider";
 import { Badge } from "@/components/ui/badge";
 import { Calculator, TrendingUp, Shield, Zap } from "lucide-react";
+import { useSolPrice } from "@/hooks/useSolPrice";
+import { SolPriceDisplay } from "@/components/SolPriceDisplay";
 
 export function FeeCalculator() {
   const [buyAmount, setBuyAmount] = useState(0.01);
   const [tradesPerHour, setTradesPerHour] = useState([12]);
   const [hours, setHours] = useState([6]);
-  const [solPrice, setSolPrice] = useState(200);
+  const { price: solPrice } = useSolPrice();
 
   const calculations = useMemo(() => {
     const totalTrades = tradesPerHour[0] * hours[0];
@@ -108,13 +110,13 @@ export function FeeCalculator() {
                 />
               </div>
               <div>
-                <Label htmlFor="solPrice">SOL Price (USD)</Label>
-                <Input
-                  id="solPrice"
-                  type="number"
-                  value={solPrice}
-                  onChange={(e) => setSolPrice(parseFloat(e.target.value) || 200)}
-                />
+                <Label htmlFor="solPrice">SOL Price (USD) - Live</Label>
+                <div className="flex items-center gap-2 p-3 border rounded-md bg-muted/30">
+                  <SolPriceDisplay size="md" />
+                  <span className="text-sm text-muted-foreground ml-auto">
+                    Auto-updating
+                  </span>
+                </div>
               </div>
             </div>
             

@@ -7,10 +7,12 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "@/hooks/use-toast";
 import { Calculator, Users, Zap, TrendingDown } from "lucide-react";
+import { useSolPrice } from "@/hooks/useSolPrice";
+import { SolPriceDisplay } from "@/components/SolPriceDisplay";
 
 export function BatchPricingCalculator() {
   const [makersNeeded, setMakersNeeded] = useState(100);
-  const [solPrice, setSolPrice] = useState(200);
+  const { price: solPrice } = useSolPrice();
   const [batchMode, setBatchMode] = useState<"bump" | "volume" | "spray">("bump");
 
   const calculations = useMemo(() => {
@@ -144,14 +146,13 @@ export function BatchPricingCalculator() {
           
           <div className="space-y-4">
             <div>
-              <Label htmlFor="solPrice">SOL Price (USD)</Label>
-              <Input
-                id="solPrice"
-                type="number"
-                value={solPrice}
-                onChange={(e) => setSolPrice(parseFloat(e.target.value) || 200)}
-                className="mt-2"
-              />
+              <Label htmlFor="solPrice">SOL Price (USD) - Live</Label>
+              <div className="flex items-center gap-2 p-3 border rounded-md bg-muted/30 mt-2">
+                <SolPriceDisplay size="md" />
+                <span className="text-sm text-muted-foreground ml-auto">
+                  Auto-updating
+                </span>
+              </div>
             </div>
           </div>
         </div>
