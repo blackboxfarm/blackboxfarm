@@ -47,9 +47,11 @@ serve(async (req) => {
 
     console.log('Processing token mint:', tokenMint);
 
-    // Get basic token info from RPC (lighter approach)
+    // Get basic token info from RPC - SIMPLIFIED to just mint data
     let decimals = 9;
     let supply = 0;
+    let mintAuthority = null;
+    let freezeAuthority = null;
     
     try {
       const heliosApiKey = Deno.env.get('HELIOS_API_KEY');
@@ -58,6 +60,7 @@ serve(async (req) => {
         'https://api.mainnet-beta.solana.com';
       
       console.log('Using RPC:', heliosApiKey ? 'Helios (fast)' : 'Default (slow)');
+      console.log('Fetching mint data for:', tokenMint);
       
       const response = await fetch(rpcUrl, {
         method: 'POST',
@@ -74,112 +77,50 @@ serve(async (req) => {
       });
       
       const data = await response.json();
+      console.log('RPC response received');
+      
       if (data.result?.value?.data?.parsed?.info) {
-        decimals = data.result.value.data.parsed.info.decimals || 9;
-        supply = parseInt(data.result.value.data.parsed.info.supply || '0');
-        console.log('Got on-chain data - decimals:', decimals, 'supply:', supply);
+        const mintInfo = data.result.value.data.parsed.info;
+        decimals = mintInfo.decimals || 9;
+        supply = parseInt(mintInfo.supply || '0');
+        mintAuthority = mintInfo.mintAuthority;
+        freezeAuthority = mintInfo.freezeAuthority;
+        
+        console.log('Mint data parsed:', {
+          decimals,
+          supply: supply.toString(),
+          mintAuthority,
+          freezeAuthority
+        });
+      } else {
+        console.log('No mint data found in RPC response');
       }
     } catch (error) {
-      console.log('Failed to fetch on-chain data, using defaults:', error);
+      console.log('Failed to fetch on-chain data:', error);
     }
 
-    // Try to fetch metadata from Jupiter API (public token list)
-    let metadata: TokenMetadata = {
+    // Basic metadata (no external API calls for now)
+    const metadata = {
       mint: tokenMint,
-      name: 'Unknown Token',
-      symbol: 'UNK',
+      name: 'Token',
+      symbol: 'TOKEN',
       decimals,
-      totalSupply: supply / Math.pow(10, decimals)
+      totalSupply: supply / Math.pow(10, decimals),
+      verified: false
     };
 
-    try {
-      // Jupiter token list API with shorter timeout
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 2000); // 2 second timeout
-      
-      const jupiterResponse = await fetch('https://token.jup.ag/all', {
-        signal: controller.signal,
-        headers: { 'Accept': 'application/json' }
-      });
-      clearTimeout(timeoutId);
-      
-      if (jupiterResponse.ok) {
-        const tokens = await jupiterResponse.json();
-        const tokenData = tokens.find((t: any) => t.address === tokenMint);
-        
-        if (tokenData) {
-          console.log('Found token in Jupiter list:', tokenData.name);
-          metadata = {
-            mint: tokenMint,
-            name: tokenData.name || 'Unknown Token',
-            symbol: tokenData.symbol || 'UNK',
-            decimals: tokenData.decimals || decimals,
-            logoURI: tokenData.logoURI,
-            totalSupply: supply / Math.pow(10, tokenData.decimals || decimals),
-            verified: true
-          };
-        } else {
-          console.log('Token not found in Jupiter list');
-        }
-      } else {
-        console.log('Jupiter API response not ok:', jupiterResponse.status);
-      }
-    } catch (error) {
-      console.log('Jupiter API failed:', error);
-    }
-
-    // Skip CoinGecko for now to reduce timeout issues
-    console.log('Skipping CoinGecko API to improve performance');
-
-    // Try to get current price from DexScreener with shorter timeout
-    let priceInfo = null;
-    try {
-      const controller3 = new AbortController();
-      const timeoutId3 = setTimeout(() => controller3.abort(), 1500); // 1.5 second timeout
-      
-      const dexResponse = await fetch(
-        `https://api.dexscreener.com/latest/dex/tokens/${tokenMint}`,
-        { 
-          signal: controller3.signal,
-          headers: { 'Accept': 'application/json' }
-        }
-      );
-      clearTimeout(timeoutId3);
-      
-      if (dexResponse.ok) {
-        const dexData = await dexResponse.json();
-        if (dexData.pairs && dexData.pairs.length > 0) {
-          const pair = dexData.pairs[0];
-          console.log('Found price data in DexScreener');
-          priceInfo = {
-            priceUsd: parseFloat(pair.priceUsd || '0'),
-            priceChange24h: parseFloat(pair.priceChange?.h24 || '0'),
-            volume24h: parseFloat(pair.volume?.h24 || '0'),
-            liquidity: parseFloat(pair.liquidity?.usd || '0'),
-            dexUrl: pair.url
-          };
-        } else {
-          console.log('No pairs found in DexScreener');
-        }
-      } else {
-        console.log('DexScreener API response not ok:', dexResponse.status);
-      }
-    } catch (error) {
-      console.log('DexScreener API failed:', error);
-    }
-
-    console.log('Returning metadata:', { success: true, hasPrice: !!priceInfo });
+    console.log('Returning basic mint data successfully');
 
     return new Response(
       JSON.stringify({
         success: true,
         metadata,
-        priceInfo,
+        priceInfo: null, // Skip for now
         onChainData: {
           decimals,
           supply: supply.toString(),
-          mintAuthority: null,
-          freezeAuthority: null
+          mintAuthority,
+          freezeAuthority
         }
       }),
       {
