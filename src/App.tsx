@@ -22,6 +22,7 @@ import AboutUs from "./pages/AboutUs";
 import ContactUs from "./pages/ContactUs";
 import Web3Manifesto from "./pages/Web3Manifesto";
 import SuperAdmin from "./pages/SuperAdmin";
+import Demo from "./pages/Demo";
 
 const queryClient = new QueryClient();
 
@@ -53,6 +54,7 @@ const App = () => (
               <Route path="/contact" element={<ContactUs />} />
               <Route path="/web3-manifesto" element={<Web3Manifesto />} />
               <Route path="/super-admin" element={<SuperAdmin />} />
+              <Route path="/demo" element={<Demo />} />
               {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
               <Route path="*" element={<NotFound />} />
             </Routes>

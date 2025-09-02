@@ -183,7 +183,12 @@ export function OverviewTab() {
             Create Account
             <ArrowRight className="ml-2 h-4 w-4" />
           </Button>
-          <Button variant="outline" size="lg" className="px-8">
+          <Button 
+            variant="outline" 
+            size="lg" 
+            className="px-8"
+            onClick={() => window.open('/demo', '_blank')}
+          >
             <Play className="mr-2 h-4 w-4" />
             View Demo
           </Button>
