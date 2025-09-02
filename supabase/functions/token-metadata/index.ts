@@ -1,5 +1,4 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
-import { Connection, PublicKey } from "https://esm.sh/@solana/web3.js@1.78.8";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -28,28 +27,39 @@ serve(async (req) => {
       throw new Error('Token mint address is required');
     }
 
-    const connection = new Connection(
-      Deno.env.get('SOLANA_RPC_URL') || 'https://api.mainnet-beta.solana.com'
-    );
-
-    // Validate mint address
-    let mintPubkey: PublicKey;
-    try {
-      mintPubkey = new PublicKey(tokenMint);
-    } catch {
-      throw new Error('Invalid mint address');
+    // Validate mint address format (basic validation)
+    if (!tokenMint || tokenMint.length < 32 || tokenMint.length > 44) {
+      throw new Error('Invalid mint address format');
     }
 
-    // Get mint info from Solana
-    const mintInfo = await connection.getParsedAccountInfo(mintPubkey);
+    // Get basic token info from RPC (lighter approach)
+    let decimals = 9;
+    let supply = 0;
     
-    if (!mintInfo.value || !mintInfo.value.data || mintInfo.value.data.space === undefined) {
-      throw new Error('Token mint not found');
+    try {
+      const rpcUrl = Deno.env.get('SOLANA_RPC_URL') || 'https://api.mainnet-beta.solana.com';
+      const response = await fetch(rpcUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          jsonrpc: '2.0',
+          id: 1,
+          method: 'getAccountInfo',
+          params: [
+            tokenMint,
+            { encoding: 'jsonParsed' }
+          ]
+        })
+      });
+      
+      const data = await response.json();
+      if (data.result?.value?.data?.parsed?.info) {
+        decimals = data.result.value.data.parsed.info.decimals || 9;
+        supply = parseInt(data.result.value.data.parsed.info.supply || '0');
+      }
+    } catch (error) {
+      console.log('Failed to fetch on-chain data, using defaults:', error);
     }
-
-    const parsedData = mintInfo.value.data as any;
-    const decimals = parsedData.parsed?.info?.decimals || 9;
-    const supply = parsedData.parsed?.info?.supply || 0;
 
     // Try to fetch metadata from Jupiter API (public token list)
     let metadata: TokenMetadata = {
@@ -137,8 +147,8 @@ serve(async (req) => {
         onChainData: {
           decimals,
           supply: supply.toString(),
-          mintAuthority: parsedData.parsed?.info?.mintAuthority,
-          freezeAuthority: parsedData.parsed?.info?.freezeAuthority
+          mintAuthority: null,
+          freezeAuthority: null
         }
       }),
       {
