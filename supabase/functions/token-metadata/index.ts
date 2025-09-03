@@ -111,7 +111,7 @@ serve(async (req) => {
     const metadata = {
       mint: tokenMint,
       name: `Token ${tokenMint.slice(0, 8)}...`, // Show part of mint address
-      symbol: supply > 0 ? 'LIVE' : 'DEAD', // Show if token has supply
+      symbol: supply > 0 ? 'LIVE' : 'INACTIVE', // Show if token has supply
       decimals,
       totalSupply: actualTotalSupply,
       verified: mintAuthority === null, // Immutable if no mint authority
@@ -152,9 +152,10 @@ serve(async (req) => {
           const pair = dexData.pairs[0];
           
           // Update supply from DexScreener if RPC failed
-          if (supply === 0 && pair.info?.totalSupply) {
-            supply = parseInt(pair.info.totalSupply);
-            console.log('Updated supply from DexScreener:', supply);
+          if (supply === 0 && pair.fdv && priceInfo?.priceUsd) {
+            // Calculate supply from market cap and price
+            supply = Math.floor(pair.fdv / parseFloat(pair.priceUsd));
+            console.log('Calculated supply from market cap:', supply);
           }
           
           // Current price info

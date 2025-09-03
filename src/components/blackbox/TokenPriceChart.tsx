@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { ComposedChart, Bar, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell } from 'recharts';
+import { ComposedChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell, ReferenceLine } from 'recharts';
 import { TrendingUp, Clock } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 
@@ -189,16 +189,31 @@ export function TokenPriceChart({ tokenAddress, className }: TokenPriceChartProp
                   opacity={0.3}
                   name="Volume"
                 />
-                <Line 
+                {/* Candlestick bars - representing price movement */}
+                <Bar 
                   yAxisId="price"
-                  type="monotone" 
-                  dataKey="close" 
-                  stroke="hsl(var(--primary))" 
-                  strokeWidth={2}
-                  dot={false}
-                  activeDot={{ r: 4, stroke: 'hsl(var(--primary))', strokeWidth: 2 }}
-                  name="close"
+                  dataKey={(data) => [data.low, data.high - data.low]}
+                  stackId="candle"
+                  fill="transparent"
+                  stroke="hsl(var(--border))"
+                  strokeWidth={1}
+                  name="Range"
                 />
+                <Bar 
+                  yAxisId="price"
+                  dataKey={(data) => [Math.min(data.open, data.close), Math.abs(data.close - data.open)]}
+                  stackId="body"
+                  name="Price"
+                >
+                  {priceData.map((data, index) => (
+                    <Cell 
+                      key={index} 
+                      fill={data.close >= data.open ? '#10B981' : '#EF4444'}
+                      stroke={data.close >= data.open ? '#10B981' : '#EF4444'}
+                      strokeWidth={1}
+                    />
+                  ))}
+                </Bar>
               </ComposedChart>
             </ResponsiveContainer>
           </div>
