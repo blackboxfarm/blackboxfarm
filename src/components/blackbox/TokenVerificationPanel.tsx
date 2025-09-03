@@ -56,6 +56,11 @@ export function TokenVerificationPanel({ tokenAddress, className }: TokenVerific
   const [recentTrades, setRecentTrades] = useState<RecentTrade[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [lastRefresh, setLastRefresh] = useState<Date>(new Date());
+  const [debugData, setDebugData] = useState<{
+    sentData: any;
+    receivedData: any;
+    heliusData: any;
+  } | null>(null);
 
   useEffect(() => {
     if (tokenAddress) {
@@ -69,13 +74,42 @@ export function TokenVerificationPanel({ tokenAddress, className }: TokenVerific
   const fetchTokenData = async () => {
     setIsLoading(true);
     try {
-      const { data, error } = await supabase.functions.invoke('token-metadata', {
-        body: { tokenMint: tokenAddress, includeTransactions: false }
+      const requestPayload = { tokenMint: tokenAddress, includeTransactions: false };
+      
+      // Test both functions to compare
+      const [tokenMetadataResponse, heliusPriceResponse] = await Promise.all([
+        supabase.functions.invoke('token-metadata', {
+          body: requestPayload
+        }),
+        supabase.functions.invoke('helius-token-price', {
+          body: { tokenMint: tokenAddress }
+        })
+      ]);
+
+      console.log('=== SENT DATA ===');
+      console.log('Token Metadata Request:', requestPayload);
+      console.log('Helius Price Request:', { tokenMint: tokenAddress });
+
+      console.log('=== RECEIVED DATA ===');
+      console.log('Token Metadata Response:', tokenMetadataResponse);
+      console.log('Helius Price Response:', heliusPriceResponse);
+
+      // Store debug data
+      setDebugData({
+        sentData: {
+          tokenMetadataRequest: requestPayload,
+          heliusPriceRequest: { tokenMint: tokenAddress }
+        },
+        receivedData: {
+          tokenMetadataResponse: tokenMetadataResponse.data,
+          heliusPriceResponse: heliusPriceResponse.data
+        },
+        heliusData: heliusPriceResponse.data?.heliusData || null
       });
 
-      if (error) throw error;
+      if (tokenMetadataResponse.error) throw tokenMetadataResponse.error;
 
-      console.log('Raw token metadata response:', data);
+      const data = tokenMetadataResponse.data;
 
       if (data.success) {
         // Debug the metadata
@@ -345,6 +379,37 @@ export function TokenVerificationPanel({ tokenAddress, className }: TokenVerific
 
       {/* Transaction Table */}
       <TransactionTable tokenAddress={tokenAddress} tokenSymbol={metadata.symbol} />
+
+      {/* Debug Data Display */}
+      {debugData && (
+        <Card className="mt-6">
+          <CardHeader>
+            <CardTitle className="text-lg">Raw API Data Debug</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div>
+              <h4 className="font-semibold mb-2">SENT DATA:</h4>
+              <pre className="bg-muted p-4 rounded text-xs overflow-auto max-h-40">
+                {JSON.stringify(debugData.sentData, null, 2)}
+              </pre>
+            </div>
+            <div>
+              <h4 className="font-semibold mb-2">RECEIVED DATA:</h4>
+              <pre className="bg-muted p-4 rounded text-xs overflow-auto max-h-60">
+                {JSON.stringify(debugData.receivedData, null, 2)}
+              </pre>
+            </div>
+            {debugData.heliusData && (
+              <div>
+                <h4 className="font-semibold mb-2">HELIUS RAW DATA:</h4>
+                <pre className="bg-muted p-4 rounded text-xs overflow-auto max-h-60">
+                  {JSON.stringify(debugData.heliusData, null, 2)}
+                </pre>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
     </div>
   );
 }
