@@ -174,6 +174,14 @@ export function TokenVerificationPanel({ tokenAddress, className }: TokenVerific
       {/* Token Verification Panel Title */}
       <div className="text-center">
         <h1 className="text-3xl font-bold text-primary mb-2">Token Verification Panel</h1>
+        {tokenData && (
+          <div className="flex items-center justify-center gap-2 mb-2">
+            <span className="text-xl font-semibold">{tokenData.metadata.name}</span>
+            <Badge variant="outline" className="text-lg px-3 py-1">
+              {tokenData.metadata.symbol}
+            </Badge>
+          </div>
+        )}
         <p className="text-muted-foreground">Real-time token analysis and verification</p>
       </div>
       {/* Token Overview */}
