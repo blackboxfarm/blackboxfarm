@@ -22,15 +22,24 @@ serve(async (req) => {
   }
 
   try {
-    const { tokenMint } = await req.json();
+    console.log('Token metadata request received');
+    console.log('Request URL:', req.url);
+    console.log('Request method:', req.method);
+    
+    const body = await req.json();
+    console.log('Raw request body:', JSON.stringify(body));
+    const { tokenMint } = body;
+    console.log('Parsed request body:', { tokenMint });
 
     if (!tokenMint) {
       throw new Error('Token mint address is required');
     }
 
-    const connection = new Connection(
-      Deno.env.get('SOLANA_RPC_URL') || 'https://api.mainnet-beta.solana.com'
-    );
+    // Use public RPC endpoint as fallback
+    const rpcUrl = Deno.env.get('SOLANA_RPC_URL') || 'https://api.mainnet-beta.solana.com';
+    console.log('Using RPC URL:', rpcUrl);
+    
+    const connection = new Connection(rpcUrl);
 
     // Validate mint address
     let mintPubkey: PublicKey;
