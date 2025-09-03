@@ -159,75 +159,14 @@ serve(async (req) => {
         console.error('RPC fetch error:', error);
       }
 
-      // Just get the metadata - simple approach
-      let tokenName = `Token ${tokenMint.slice(0, 8)}...`;
-      let tokenSymbol = 'TOKEN';
-      let logoUri = null;
-      let description = null;
-      let verified = false;
-
-      // Try Helius metadata API first (simplest)
-      try {
-        const heliosApiKey = Deno.env.get('HELIOS_API_KEY');
-        if (heliosApiKey) {
-          console.log('Fetching metadata from Helius...');
-          const heliusResponse = await fetch(`https://api.helius.xyz/v0/token-metadata?api-key=${heliosApiKey}`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ mintAccounts: [tokenMint] })
-          });
-          
-          if (heliusResponse.ok) {
-            const heliusData = await heliusResponse.json();
-            if (heliusData && heliusData.length > 0) {
-              const token = heliusData[0];
-              tokenName = token.onChainMetadata?.metadata?.name || token.offChainMetadata?.name || tokenName;
-              tokenSymbol = token.onChainMetadata?.metadata?.symbol || token.offChainMetadata?.symbol || tokenSymbol;
-              logoUri = token.offChainMetadata?.image || token.onChainMetadata?.metadata?.image || null;
-              description = token.offChainMetadata?.description || null;
-              verified = true;
-              
-              console.log('Found Helius metadata:', { tokenName, tokenSymbol, logoUri });
-            }
-          }
-        }
-      } catch (error) {
-        console.log('Helius metadata failed:', error.message);
-      }
-
-      // Fallback to RPC mint info
-      if (!verified) {
-        try {
-          const rpcUrl = Deno.env.get('HELIOS_API_KEY') ? 
-            `https://mainnet.helius-rpc.com/?api-key=${Deno.env.get('HELIOS_API_KEY')}` : 
-            'https://api.mainnet-beta.solana.com';
-            
-          const response = await fetch(rpcUrl, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              jsonrpc: '2.0',
-              id: 1,
-              method: 'getAccountInfo',
-              params: [
-                tokenMint,
-                { encoding: 'jsonParsed', commitment: 'confirmed' }
-              ]
-            })
-          });
-          
-          const data = await response.json();
-          if (data.result?.value?.data?.parsed?.info) {
-            const mintInfo = data.result.value.data.parsed.info;
-            decimals = mintInfo.decimals || 9;
-            supply = parseInt(mintInfo.supply || '0');
-            mintAuthority = mintInfo.mintAuthority;
-            freezeAuthority = mintInfo.freezeAuthority;
-          }
-        } catch (error) {
-          console.error('RPC fetch error:', error);
-        }
-      }
+      // Fetch on-chain metadata properly
+      const onChainMetadata = await fetchOnChainMetadata(tokenMint);
+      
+      let tokenName = onChainMetadata.name || `Token ${tokenMint.slice(0, 8)}...`;
+      let tokenSymbol = onChainMetadata.symbol || 'TOKEN';
+      let logoUri = onChainMetadata.logoURI;
+      let description = onChainMetadata.description;
+      let verified = !!onChainMetadata.name; // Verified if we found real metadata
 
       // Calculate total supply properly
       const actualTotalSupply = supply / Math.pow(10, decimals);
@@ -419,3 +358,174 @@ serve(async (req) => {
     );
   }
 });
+
+// Function to fetch on-chain metadata using Metaplex standards
+async function fetchOnChainMetadata(tokenMint: string) {
+  const rpcUrl = Deno.env.get('HELIOS_API_KEY') ? 
+    `https://mainnet.helius-rpc.com/?api-key=${Deno.env.get('HELIOS_API_KEY')}` : 
+    'https://api.mainnet-beta.solana.com';
+
+  try {
+    console.log('Fetching on-chain metadata for:', tokenMint);
+    
+    // First, try Helius DAS API for the easiest approach
+    const heliosApiKey = Deno.env.get('HELIOS_API_KEY');
+    if (heliosApiKey) {
+      try {
+        console.log('Trying Helius DAS API...');
+        const heliusResponse = await fetch(`https://api.helius.xyz/v0/token-metadata?api-key=${heliosApiKey}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ mintAccounts: [tokenMint] })
+        });
+        
+        if (heliusResponse.ok) {
+          const heliusData = await heliusResponse.json();
+          console.log('Helius response:', heliusData);
+          
+          if (heliusData && heliusData.length > 0) {
+            const token = heliusData[0];
+            const metadata = token.onChainMetadata?.metadata || token.offChainMetadata || {};
+            
+            if (metadata.name || metadata.symbol) {
+              console.log('Found Helius metadata:', {
+                name: metadata.name,
+                symbol: metadata.symbol,
+                image: metadata.image
+              });
+              
+              return {
+                name: metadata.name?.trim() || null,
+                symbol: metadata.symbol?.trim() || null,
+                logoURI: metadata.image || null,
+                description: metadata.description || null
+              };
+            }
+          }
+        }
+      } catch (error) {
+        console.log('Helius DAS API failed:', error.message);
+      }
+    }
+
+    // Fallback: Calculate and fetch Metaplex metadata PDA manually
+    console.log('Trying Metaplex metadata PDA...');
+    const metadataPDA = await findMetadataPDA(tokenMint);
+    
+    if (metadataPDA) {
+      console.log('Metadata PDA found:', metadataPDA);
+      
+      const metadataResponse = await fetch(rpcUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          jsonrpc: '2.0',
+          id: 2,
+          method: 'getAccountInfo',
+          params: [
+            metadataPDA,
+            { encoding: 'base64', commitment: 'confirmed' }
+          ]
+        })
+      });
+
+      const metadataData = await metadataResponse.json();
+      
+      if (metadataData.result?.value?.data) {
+        console.log('Parsing Metaplex metadata...');
+        const parsed = parseMetaplexMetadata(metadataData.result.value.data[0]);
+        
+        if (parsed.name || parsed.symbol) {
+          console.log('Found Metaplex metadata:', parsed);
+          return parsed;
+        }
+      }
+    }
+
+    console.log('No metadata found, returning null values');
+    return {
+      name: null,
+      symbol: null,
+      logoURI: null,
+      description: null
+    };
+  } catch (error) {
+    console.error('Error fetching on-chain metadata:', error);
+    return {
+      name: null,
+      symbol: null,
+      logoURI: null,
+      description: null
+    };
+  }
+}
+
+// Find Metaplex metadata PDA (simplified for now - focusing on Helius API)
+async function findMetadataPDA(tokenMint: string): Promise<string | null> {
+  // For now, we'll focus on the Helius API approach
+  // PDA calculation requires proper cryptographic libraries
+  return null;
+}
+
+// Parse Metaplex metadata account data
+function parseMetaplexMetadata(base64Data: string) {
+  try {
+    const data = atob(base64Data);
+    const view = new DataView(new ArrayBuffer(data.length));
+    
+    for (let i = 0; i < data.length; i++) {
+      view.setUint8(i, data.charCodeAt(i));
+    }
+    
+    // Metaplex metadata structure:
+    // 1 byte - discriminator
+    // 32 bytes - update authority
+    // 32 bytes - mint
+    // Variable - metadata
+    
+    let offset = 1 + 32 + 32; // Skip discriminator + update_authority + mint
+    
+    // Read name length (4 bytes little endian)
+    const nameLen = view.getUint32(offset, true);
+    offset += 4;
+    
+    // Read name
+    const nameBytes = new Uint8Array(data.slice(offset, offset + nameLen));
+    const name = new TextDecoder().decode(nameBytes).replace(/\0/g, '').trim();
+    offset += nameLen;
+    
+    // Read symbol length
+    const symbolLen = view.getUint32(offset, true);
+    offset += 4;
+    
+    // Read symbol
+    const symbolBytes = new Uint8Array(data.slice(offset, offset + symbolLen));
+    const symbol = new TextDecoder().decode(symbolBytes).replace(/\0/g, '').trim();
+    offset += symbolLen;
+    
+    // Read URI length
+    const uriLen = view.getUint32(offset, true);
+    offset += 4;
+    
+    // Read URI
+    const uriBytes = new Uint8Array(data.slice(offset, offset + uriLen));
+    const uri = new TextDecoder().decode(uriBytes).replace(/\0/g, '').trim();
+    
+    console.log('Parsed Metaplex data:', { name, symbol, uri });
+    
+    return {
+      name: name || null,
+      symbol: symbol || null,
+      logoURI: uri || null,
+      description: null
+    };
+  } catch (error) {
+    console.error('Error parsing Metaplex metadata:', error);
+    return {
+      name: null,
+      symbol: null,
+      logoURI: null,
+      description: null
+    };
+  }
+}
