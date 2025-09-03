@@ -3,6 +3,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { RefreshCw, ExternalLink, TrendingUp, TrendingDown, DollarSign, Users, Droplets } from "lucide-react";
+import { TransactionTable } from "./TransactionTable";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "@/hooks/use-toast";
 
@@ -319,30 +320,8 @@ export function TokenVerificationPanel({ tokenAddress, className }: TokenVerific
         </CardContent>
       </Card>
 
-      {/* Market Information */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <TrendingUp className="h-5 w-5 text-primary" />
-            Market Information
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="text-center py-8 text-muted-foreground">
-            <TrendingUp className="h-12 w-12 mx-auto mb-4 opacity-30" />
-            <h3 className="text-lg font-medium mb-2">Live Transaction Data</h3>
-            <p className="text-sm max-w-md mx-auto">
-              Real-time transaction data requires direct blockchain integration. 
-              Currently showing market statistics from DexScreener API.
-            </p>
-            <div className="mt-4 p-4 bg-muted/30 rounded-lg">
-              <p className="text-xs">
-                To view live transactions, consider integrating with Solana RPC or transaction parsing services.
-              </p>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
+      {/* Transaction Table */}
+      <TransactionTable tokenSymbol={metadata.symbol} />
     </div>
   );
 }

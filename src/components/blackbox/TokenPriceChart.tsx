@@ -144,7 +144,7 @@ export function TokenPriceChart({ tokenAddress, className }: TokenPriceChartProp
         ) : (
           <div className="h-64">
             <ResponsiveContainer width="100%" height="100%">
-              <ComposedChart data={priceData}>
+              <ComposedChart data={priceData} margin={{ top: 5, right: 30, left: 20, bottom: 5 }}>
                 <CartesianGrid strokeDasharray="3 3" className="opacity-30" />
                 <XAxis 
                   dataKey="timestamp"
@@ -173,8 +173,15 @@ export function TokenPriceChart({ tokenAddress, className }: TokenPriceChartProp
                 <Tooltip 
                   labelFormatter={(value) => formatTime(Number(value))}
                   formatter={(value: number, name: string) => [
-                    name === 'close' ? formatPrice(value) : formatVolume(value),
-                    name === 'close' ? 'Close Price' : name
+                    name === 'close' ? formatPrice(value) : 
+                    name === 'open' ? formatPrice(value) :
+                    name === 'high' ? formatPrice(value) :
+                    name === 'low' ? formatPrice(value) :
+                    formatVolume(value),
+                    name === 'close' ? 'Close' :
+                    name === 'open' ? 'Open' :
+                    name === 'high' ? 'High' :
+                    name === 'low' ? 'Low' : 'Volume'
                   ]}
                   contentStyle={{
                     backgroundColor: 'hsl(var(--background))',
@@ -182,6 +189,8 @@ export function TokenPriceChart({ tokenAddress, className }: TokenPriceChartProp
                     borderRadius: '8px'
                   }}
                 />
+                
+                {/* Volume bars */}
                 <Bar 
                   yAxisId="volume"
                   dataKey="volume" 
@@ -189,38 +198,37 @@ export function TokenPriceChart({ tokenAddress, className }: TokenPriceChartProp
                   opacity={0.3}
                   name="Volume"
                 />
-                {/* Candlestick wicks */}
-                <Bar 
-                  yAxisId="price"
-                  dataKey="high"
-                  fill="transparent"
-                  stroke="hsl(var(--border))"
-                  strokeWidth={1}
-                  name="Wick High"
-                />
-                <Bar 
-                  yAxisId="price"
-                  dataKey="low" 
-                  fill="transparent"
-                  stroke="hsl(var(--border))"
-                  strokeWidth={1}
-                  name="Wick Low"
-                />
-                {/* Candlestick bodies */}
-                <Bar 
-                  yAxisId="price"
-                  dataKey={(entry) => Math.abs(entry.close - entry.open)}
-                  name="Price"
-                >
-                  {priceData.map((entry, index) => (
-                    <Cell 
-                      key={`candle-${index}`}
-                      fill={entry.close >= entry.open ? '#10B981' : '#EF4444'}
-                      stroke={entry.close >= entry.open ? '#10B981' : '#EF4444'}
-                      strokeWidth={1}
-                    />
-                  ))}
-                </Bar>
+                
+                {/* Candlestick implementation using multiple bars */}
+                {priceData.map((entry, index) => {
+                  const isGreen = entry.close >= entry.open;
+                  const bodyHeight = Math.abs(entry.close - entry.open);
+                  const bodyBottom = Math.min(entry.open, entry.close);
+                  
+                  return (
+                    <g key={`candle-${index}`}>
+                      {/* Wick lines */}
+                      <line
+                        x1={index * (100 / priceData.length) + '%'}
+                        x2={index * (100 / priceData.length) + '%'}
+                        y1={`${((entry.high - entry.low) / (Math.max(...priceData.map(p => p.high)) - Math.min(...priceData.map(p => p.low)))) * 100}%`}
+                        y2={`${((entry.low) / (Math.max(...priceData.map(p => p.high)) - Math.min(...priceData.map(p => p.low)))) * 100}%`}
+                        stroke={isGreen ? '#10B981' : '#EF4444'}
+                        strokeWidth={1}
+                      />
+                      {/* Body rectangle */}
+                      <rect
+                        x={`${index * (100 / priceData.length) - 2}%`}
+                        y={`${((Math.max(...priceData.map(p => p.high)) - Math.max(entry.open, entry.close)) / (Math.max(...priceData.map(p => p.high)) - Math.min(...priceData.map(p => p.low)))) * 100}%`}
+                        width="4%"
+                        height={`${(bodyHeight / (Math.max(...priceData.map(p => p.high)) - Math.min(...priceData.map(p => p.low)))) * 100}%`}
+                        fill={isGreen ? '#10B981' : '#EF4444'}
+                        stroke={isGreen ? '#10B981' : '#EF4444'}
+                        strokeWidth={1}
+                      />
+                    </g>
+                  );
+                })}
               </ComposedChart>
             </ResponsiveContainer>
           </div>
