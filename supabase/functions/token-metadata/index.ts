@@ -85,25 +85,31 @@ serve(async (req) => {
     shouldUpdateCache = true;
 
     if (shouldUpdateCache) {
-      console.log('Fetching fresh metadata');
+      console.log('Fetching fresh metadata for token:', tokenMint);
       
-      // Get real token info from RPC with better error handling
+      // Get real token info from Helius RPC
       let decimals = 9;
       let supply = 0;
       let mintAuthority = null;
       let freezeAuthority = null;
+      let tokenName = `Token ${tokenMint.slice(0, 8)}...`;
+      let tokenSymbol = 'TOKEN';
+      let logoUri = null;
+      let description = null;
+      let verified = false;
       
       try {
         const heliosApiKey = Deno.env.get('HELIOS_API_KEY');
-        const rpcUrl = heliosApiKey ? 
-          `https://mainnet.helius-rpc.com/?api-key=${heliosApiKey}` : 
-          'https://api.mainnet-beta.solana.com';
         
-        console.log('Using RPC:', heliosApiKey ? 'Helios (fast)' : 'Default (slow)');
-        console.log('Fetching mint data for:', tokenMint);
+        if (!heliosApiKey) {
+          console.error('HELIOS_API_KEY not found in environment');
+          throw new Error('Helius API key not configured');
+        }
         
-        // Try multiple RPC methods for better data retrieval
-        const response = await fetch(rpcUrl, {
+        console.log('Using Helius RPC with API key');
+        
+        // First get basic mint info from Helius RPC
+        const rpcResponse = await fetch(`https://mainnet.helius-rpc.com/?api-key=${heliosApiKey}`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -117,38 +123,83 @@ serve(async (req) => {
           })
         });
         
-        const data = await response.json();
-        console.log('RPC response status:', response.status);
+        const rpcData = await rpcResponse.json();
+        console.log('Helius RPC response:', rpcData);
         
-        if (data.result?.value?.data?.parsed?.info) {
-          const mintInfo = data.result.value.data.parsed.info;
+        if (rpcData.result?.value?.data?.parsed?.info) {
+          const mintInfo = rpcData.result.value.data.parsed.info;
           decimals = mintInfo.decimals || 9;
           supply = parseInt(mintInfo.supply || '0');
           mintAuthority = mintInfo.mintAuthority;
           freezeAuthority = mintInfo.freezeAuthority;
           
-          console.log('Successfully parsed mint data:', {
+          console.log('Got mint info from Helius:', {
             decimals,
             supply: supply.toString(),
             mintAuthority,
             freezeAuthority
           });
         }
+        
+        // Now get token metadata from Helius DAS API
+        console.log('Fetching token metadata from Helius DAS API...');
+        const metadataResponse = await fetch(`https://api.helius.xyz/v0/token-metadata?api-key=${heliosApiKey}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            mintAccounts: [tokenMint]
+          })
+        });
+        
+        if (metadataResponse.ok) {
+          const metadataData = await metadataResponse.json();
+          console.log('Helius metadata response:', metadataData);
+          
+          if (metadataData && metadataData.length > 0) {
+            const tokenData = metadataData[0];
+            const metadata = tokenData.onChainMetadata?.metadata || tokenData.offChainMetadata || {};
+            
+            if (metadata.name) {
+              tokenName = metadata.name.trim();
+              verified = true;
+              console.log('Found token name:', tokenName);
+            }
+            
+            if (metadata.symbol) {
+              tokenSymbol = metadata.symbol.trim();
+              console.log('Found token symbol:', tokenSymbol);
+            }
+            
+            if (metadata.image) {
+              logoUri = metadata.image;
+              console.log('Found token logo:', logoUri);
+            }
+            
+            if (metadata.description) {
+              description = metadata.description;
+            }
+          } else {
+            console.log('No metadata found in Helius response');
+          }
+        } else {
+          console.error('Helius metadata API failed:', metadataResponse.status, await metadataResponse.text());
+        }
+        
       } catch (error) {
-        console.error('RPC fetch error:', error);
+        console.error('Error fetching from Helius:', error);
       }
-
-      // Fetch on-chain metadata properly
-      const onChainMetadata = await fetchOnChainMetadata(tokenMint);
-      
-      let tokenName = onChainMetadata.name || `Token ${tokenMint.slice(0, 8)}...`;
-      let tokenSymbol = onChainMetadata.symbol || 'TOKEN';
-      let logoUri = onChainMetadata.logoURI;
-      let description = onChainMetadata.description;
-      let verified = !!onChainMetadata.name; // Verified if we found real metadata
 
       // Calculate total supply properly
       const actualTotalSupply = supply / Math.pow(10, decimals);
+      
+      console.log('Final token metadata:', {
+        name: tokenName,
+        symbol: tokenSymbol,
+        decimals,
+        totalSupply: actualTotalSupply,
+        verified,
+        logoUri
+      });
       
       // Create metadata object
       metadata = {
