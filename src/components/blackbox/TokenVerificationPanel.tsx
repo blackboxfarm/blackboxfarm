@@ -70,12 +70,22 @@ export function TokenVerificationPanel({ tokenAddress, className }: TokenVerific
     setIsLoading(true);
     try {
       const { data, error } = await supabase.functions.invoke('token-metadata', {
-        body: { tokenMint: tokenAddress }
+        body: { tokenMint: tokenAddress, includeTransactions: false }
       });
 
       if (error) throw error;
 
+      console.log('Raw token metadata response:', data);
+
       if (data.success) {
+        // Debug the metadata
+        console.log('Token metadata received:', {
+          name: data.metadata?.name,
+          symbol: data.metadata?.symbol,
+          logoURI: data.metadata?.logoURI,
+          verified: data.metadata?.verified
+        });
+
         // Fix data structure mapping
         const formattedData = {
           metadata: data.metadata,
