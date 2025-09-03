@@ -10,6 +10,9 @@ import { toast } from "@/hooks/use-toast";
 import { CampaignWallets } from "./CampaignWallets";
 import { CampaignActivationGuide } from "./CampaignActivationGuide";
 import { useCampaignNotifications } from "@/hooks/useCampaignNotifications";
+import { TokenValidationInput } from "@/components/token/TokenValidationInput";
+import { TokenMetadataDisplay } from "@/components/token/TokenMetadataDisplay";
+import { useTokenMetadata } from "@/hooks/useTokenMetadata";
 
 interface Campaign {
   id: string;
@@ -17,6 +20,7 @@ interface Campaign {
   token_address: string;
   is_active: boolean;
   created_at: string;
+  token_metadata?: any;
 }
 
 export function CampaignDashboard() {
@@ -24,6 +28,8 @@ export function CampaignDashboard() {
   const [selectedCampaign, setSelectedCampaign] = useState<Campaign | null>(null);
   const [showCreateForm, setShowCreateForm] = useState(false);
   const [newCampaign, setNewCampaign] = useState({ nickname: "", token_address: "" });
+  const [isValidToken, setIsValidToken] = useState(false);
+  const [tokenData, setTokenData] = useState<any>(null);
   
   const {
     sendCampaignNotification,
@@ -32,6 +38,8 @@ export function CampaignDashboard() {
     isLoading: isNotificationLoading,
     checkNotificationCooldown
   } = useCampaignNotifications();
+
+  const { fetchTokenMetadata } = useTokenMetadata();
 
   useEffect(() => {
     loadCampaigns();
@@ -55,15 +63,32 @@ export function CampaignDashboard() {
       return;
     }
 
-    setCampaigns(data || []);
-    if (data && data.length > 0 && !selectedCampaign) {
-      setSelectedCampaign(data[0]);
+    // Fetch token metadata for each campaign
+    const campaignsWithMetadata = await Promise.all(
+      (data || []).map(async (campaign) => {
+        try {
+          const { data: tokenInfo } = await supabase.functions.invoke('token-metadata', {
+            body: { tokenMint: campaign.token_address }
+          });
+          return {
+            ...campaign,
+            token_metadata: tokenInfo?.success ? tokenInfo : null
+          };
+        } catch (error) {
+          return campaign;
+        }
+      })
+    );
+
+    setCampaigns(campaignsWithMetadata);
+    if (campaignsWithMetadata && campaignsWithMetadata.length > 0 && !selectedCampaign) {
+      setSelectedCampaign(campaignsWithMetadata[0]);
     }
   };
 
   const createCampaign = async () => {
-    if (!newCampaign.nickname || !newCampaign.token_address) {
-      toast({ title: "Missing fields", description: "Please fill in all fields" });
+    if (!newCampaign.nickname || !newCampaign.token_address || !isValidToken) {
+      toast({ title: "Missing fields", description: "Please fill in all fields and ensure token is valid" });
       return;
     }
 
@@ -88,11 +113,19 @@ export function CampaignDashboard() {
       return;
     }
 
+    // Add token metadata to the created campaign
+    const campaignWithMetadata = {
+      ...data,
+      token_metadata: tokenData
+    };
+
     toast({ title: "Campaign created", description: `${newCampaign.nickname} is ready` });
     setNewCampaign({ nickname: "", token_address: "" });
+    setIsValidToken(false);
+    setTokenData(null);
     setShowCreateForm(false);
     loadCampaigns();
-    setSelectedCampaign(data);
+    setSelectedCampaign(campaignWithMetadata);
   };
 
   const toggleCampaign = async (campaign: Campaign) => {
@@ -155,11 +188,19 @@ export function CampaignDashboard() {
                   onClick={() => setSelectedCampaign(campaign)}
                 >
                   <div className="flex items-center justify-between">
-                    <div>
-                      <h3 className="font-medium">{campaign.nickname}</h3>
-                      <p className="text-sm text-muted-foreground">
-                        {campaign.token_address.slice(0, 8)}...{campaign.token_address.slice(-6)}
-                      </p>
+                    <div className="flex-1 min-w-0">
+                      <h3 className="font-medium mb-2">{campaign.nickname}</h3>
+                      {campaign.token_metadata?.metadata ? (
+                        <TokenMetadataDisplay 
+                          metadata={campaign.token_metadata.metadata}
+                          priceInfo={campaign.token_metadata.priceInfo}
+                          compact
+                        />
+                      ) : (
+                        <p className="text-sm text-muted-foreground font-mono">
+                          {campaign.token_address.slice(0, 8)}...{campaign.token_address.slice(-6)}
+                        </p>
+                      )}
                     </div>
                     <div className="flex items-center gap-2">
                       <Badge variant={campaign.is_active ? "default" : "secondary"}>
@@ -216,18 +257,30 @@ export function CampaignDashboard() {
                 placeholder="My Token Pump"
               />
             </div>
-            <div>
-              <Label htmlFor="token">Token Address</Label>
-              <Input
-                id="token"
-                value={newCampaign.token_address}
-                onChange={(e) => setNewCampaign(prev => ({ ...prev, token_address: e.target.value }))}
-                placeholder="Enter Solana token address"
-              />
-            </div>
+            <TokenValidationInput
+              value={newCampaign.token_address}
+              onChange={(value) => setNewCampaign(prev => ({ ...prev, token_address: value }))}
+              onValidationChange={(isValid, data) => {
+                setIsValidToken(isValid);
+                setTokenData(data);
+              }}
+            />
             <div className="flex gap-2">
-              <Button onClick={createCampaign}>Create Campaign</Button>
-              <Button variant="outline" onClick={() => setShowCreateForm(false)}>
+              <Button 
+                onClick={createCampaign} 
+                disabled={!isValidToken || !newCampaign.nickname}
+              >
+                Create Campaign
+              </Button>
+              <Button 
+                variant="outline" 
+                onClick={() => {
+                  setShowCreateForm(false);
+                  setNewCampaign({ nickname: "", token_address: "" });
+                  setIsValidToken(false);
+                  setTokenData(null);
+                }}
+              >
                 Cancel
               </Button>
             </div>
