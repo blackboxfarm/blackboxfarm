@@ -171,6 +171,11 @@ export function TokenVerificationPanel({ tokenAddress, className }: TokenVerific
 
   return (
     <div className={`space-y-6 ${className}`}>
+      {/* Token Verification Panel Title */}
+      <div className="text-center">
+        <h1 className="text-3xl font-bold text-primary mb-2">Token Verification Panel</h1>
+        <p className="text-muted-foreground">Real-time token analysis and verification</p>
+      </div>
       {/* Token Overview */}
       <Card className="overflow-hidden bg-gradient-to-br from-primary/5 via-background to-secondary/5">
         <CardHeader className="pb-4">
