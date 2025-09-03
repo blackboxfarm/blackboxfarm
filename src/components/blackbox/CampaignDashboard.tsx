@@ -12,6 +12,7 @@ import { CampaignActivationGuide } from "./CampaignActivationGuide";
 import { useCampaignNotifications } from "@/hooks/useCampaignNotifications";
 import { TokenValidationInput } from "@/components/token/TokenValidationInput";
 import { TokenMetadataDisplay } from "@/components/token/TokenMetadataDisplay";
+import { TokenPriceDisplay } from "@/components/token/TokenPriceDisplay";
 import { useTokenMetadata } from "@/hooks/useTokenMetadata";
 
 interface Campaign {
@@ -190,17 +191,16 @@ export function CampaignDashboard() {
                   <div className="flex items-center justify-between">
                     <div className="flex-1 min-w-0">
                       <h3 className="font-medium mb-2">{campaign.nickname}</h3>
-                      {campaign.token_metadata?.metadata ? (
-                        <TokenMetadataDisplay 
-                          metadata={campaign.token_metadata.metadata}
-                          priceInfo={campaign.token_metadata.priceInfo}
-                          compact
-                        />
-                      ) : (
+                      <div className="space-y-2">
                         <p className="text-sm text-muted-foreground font-mono">
                           {campaign.token_address.slice(0, 8)}...{campaign.token_address.slice(-6)}
                         </p>
-                      )}
+                        <TokenPriceDisplay 
+                          tokenMint={campaign.token_address}
+                          size="sm"
+                          showDetails={true}
+                        />
+                      </div>
                     </div>
                     <div className="flex items-center gap-2">
                       <Badge variant={campaign.is_active ? "default" : "secondary"}>

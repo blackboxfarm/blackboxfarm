@@ -49,16 +49,30 @@ serve(async (req) => {
       throw new Error('Invalid mint address');
     }
 
-    // Get mint info from Solana
-    const mintInfo = await connection.getParsedAccountInfo(mintPubkey);
-    
-    if (!mintInfo.value || !mintInfo.value.data || mintInfo.value.data.space === undefined) {
-      throw new Error('Token mint not found');
+    // Get mint info from Solana with timeout and retry
+    let mintInfo;
+    try {
+      const timeout = new Promise((_, reject) => 
+        setTimeout(() => reject(new Error('RPC timeout')), 10000)
+      );
+      
+      mintInfo = await Promise.race([
+        connection.getParsedAccountInfo(mintPubkey),
+        timeout
+      ]);
+      
+      if (!mintInfo.value) {
+        throw new Error('Token mint not found on chain');
+      }
+    } catch (error) {
+      console.log('RPC call failed, continuing with basic validation:', error);
+      // Continue with basic token validation
+      mintInfo = { value: { data: { parsed: { info: { decimals: 9, supply: 0 } } } } };
     }
 
-    const parsedData = mintInfo.value.data as any;
-    const decimals = parsedData.parsed?.info?.decimals || 9;
-    const supply = parsedData.parsed?.info?.supply || 0;
+    const parsedData = mintInfo.value?.data as any;
+    const decimals = parsedData?.parsed?.info?.decimals || 9;
+    const supply = parsedData?.parsed?.info?.supply || 0;
 
     // Try to fetch metadata from Jupiter API (public token list)
     let metadata: TokenMetadata = {

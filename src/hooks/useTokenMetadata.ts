@@ -1,4 +1,5 @@
 import { useState, useCallback } from 'react';
+import React from 'react';
 import { supabase } from '@/integrations/supabase/client';
 
 interface TokenMetadata {
