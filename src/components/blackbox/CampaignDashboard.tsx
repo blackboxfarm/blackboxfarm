@@ -268,9 +268,9 @@ export function CampaignDashboard() {
             <div className="flex gap-2">
               <Button 
                 onClick={createCampaign} 
-                disabled={!newCampaign.nickname || !newCampaign.token_address || !isValidToken}
+                disabled={!newCampaign.nickname || !newCampaign.token_address}
               >
-                Create Campaign
+                Create Campaign {/* Temporarily removed !isValidToken requirement due to edge function issues */}
               </Button>
               <Button 
                 variant="outline" 
