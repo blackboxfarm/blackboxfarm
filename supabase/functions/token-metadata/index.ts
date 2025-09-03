@@ -81,29 +81,8 @@ serve(async (req) => {
     let metadata: TokenMetadata;
     let shouldUpdateCache = false;
 
-    if (cachedMetadata && cachedMetadata.updated_at) {
-      // Check if cache is older than 1 hour
-      const cacheAge = Date.now() - new Date(cachedMetadata.updated_at).getTime();
-      const oneHour = 60 * 60 * 1000;
-      
-      if (cacheAge < oneHour) {
-        console.log('Using cached metadata');
-        metadata = {
-          mint: cachedMetadata.mint_address,
-          name: cachedMetadata.name || `Token ${tokenMint.slice(0, 8)}...`,
-          symbol: cachedMetadata.symbol || 'TOKEN',
-          decimals: cachedMetadata.decimals || 9,
-          logoURI: cachedMetadata.logo_uri,
-          totalSupply: parseFloat(cachedMetadata.total_supply || '0'),
-          verified: cachedMetadata.verified || false,
-          description: cachedMetadata.description
-        };
-      } else {
-        shouldUpdateCache = true;
-      }
-    } else {
-      shouldUpdateCache = true;
-    }
+    // Force refresh to get real metadata - skip cache for now
+    shouldUpdateCache = true;
 
     if (shouldUpdateCache) {
       console.log('Fetching fresh metadata');
