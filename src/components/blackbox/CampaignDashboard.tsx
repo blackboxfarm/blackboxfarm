@@ -49,12 +49,21 @@ export function CampaignDashboard() {
   }, [campaigns.length]); // Only run when campaigns count changes
 
   const loadCampaigns = async () => {
+    console.log('=== LOADING CAMPAIGNS ===');
+    
+    // Check authentication first
+    const { data: { user }, error: authError } = await supabase.auth.getUser();
+    console.log('User auth status:', { user: user?.id, authError });
+    
     const { data, error } = await supabase
       .from('blackbox_campaigns')
       .select('*')
       .order('created_at', { ascending: false });
 
+    console.log('Campaign query result:', { data, error, count: data?.length });
+
     if (error) {
+      console.error('Campaign load error:', error);
       toast({ title: "Error loading campaigns", description: error.message });
       return;
     }
@@ -62,6 +71,11 @@ export function CampaignDashboard() {
     setCampaigns(data || []);
     if (data && data.length > 0 && !selectedCampaign) {
       setSelectedCampaign(data[0]);
+    }
+    
+    // Show helpful message if no campaigns
+    if (!data || data.length === 0) {
+      console.log('No campaigns found - user needs to create one');
     }
   };
 
