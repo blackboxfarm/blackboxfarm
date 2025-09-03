@@ -257,15 +257,14 @@ export function CampaignDashboard() {
                 placeholder="My Token Pump"
               />
             </div>
-            <div>
-              <Label htmlFor="token">Token Address</Label>
-              <Input
-                id="token"
-                value={newCampaign.token_address}
-                onChange={(e) => setNewCampaign(prev => ({ ...prev, token_address: e.target.value }))}
-                placeholder="Enter Solana token address"
-              />
-            </div>
+            <TokenValidationInput
+              value={newCampaign.token_address}
+              onChange={(value) => setNewCampaign(prev => ({ ...prev, token_address: value }))}
+              onValidationChange={(isValid, data) => {
+                setIsValidToken(isValid);
+                setTokenData(data);
+              }}
+            />
             <div className="flex gap-2">
               <Button 
                 onClick={createCampaign} 
@@ -278,6 +277,8 @@ export function CampaignDashboard() {
                 onClick={() => {
                   setShowCreateForm(false);
                   setNewCampaign({ nickname: "", token_address: "" });
+                  setIsValidToken(false);
+                  setTokenData(null);
                 }}
               >
                 Cancel

@@ -157,11 +157,23 @@ serve(async (req) => {
     );
   } catch (error) {
     console.error('Error in token-metadata:', error);
+    console.error('Error details:', {
+      message: error.message,
+      name: error.name,
+      cause: error.cause
+    });
     return new Response(
-      JSON.stringify({ error: error.message }),
+      JSON.stringify({ 
+        success: false,
+        error: error.message,
+        debug: {
+          timestamp: new Date().toISOString(),
+          error_type: error.name
+        }
+      }),
       {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        status: 400,
+        status: 200, // Return 200 so frontend can handle the error gracefully
       }
     );
   }

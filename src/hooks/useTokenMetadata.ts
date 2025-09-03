@@ -52,16 +52,21 @@ export function useTokenMetadata() {
       });
 
       if (fetchError) {
+        console.error('Supabase function invoke error:', fetchError);
         throw new Error(fetchError.message);
       }
 
+      console.log('Token metadata response:', data);
+
       if (!data.success) {
+        console.error('Token metadata error:', data.error);
         throw new Error(data.error || 'Failed to fetch token metadata');
       }
 
       setTokenData(data);
       return true;
     } catch (err: any) {
+      console.error('Token metadata fetch error:', err);
       setError(err.message || 'Failed to fetch token metadata');
       setTokenData(null);
       return false;
