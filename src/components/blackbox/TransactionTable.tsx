@@ -37,11 +37,13 @@ export function TransactionTable({ tokenAddress, tokenSymbol = "TOKEN", classNam
       
       if (error) throw error;
       
-      if (data.success && data.transactions) {
-        setTransactions(data.transactions.slice(0, 10)); // Last 10 transactions
+      if (data.success && data.transactions && data.transactions.length > 0) {
+        setTransactions(data.transactions.slice(0, 15)); // Last 15 transactions
+        console.log('Real transactions loaded:', data.transactions.length);
       } else {
         // Fallback to sample data if no real data available
         generateSampleTransactions();
+        console.log('Using sample transactions as fallback');
       }
     } catch (error) {
       console.error('Error fetching transactions:', error);

@@ -1005,6 +1005,54 @@ export type Database = {
         }
         Relationships: []
       }
+      token_metadata: {
+        Row: {
+          created_at: string | null
+          decimals: number | null
+          description: string | null
+          freeze_authority: string | null
+          id: string
+          logo_uri: string | null
+          mint_address: string
+          mint_authority: string | null
+          name: string | null
+          symbol: string | null
+          total_supply: number | null
+          updated_at: string | null
+          verified: boolean | null
+        }
+        Insert: {
+          created_at?: string | null
+          decimals?: number | null
+          description?: string | null
+          freeze_authority?: string | null
+          id?: string
+          logo_uri?: string | null
+          mint_address: string
+          mint_authority?: string | null
+          name?: string | null
+          symbol?: string | null
+          total_supply?: number | null
+          updated_at?: string | null
+          verified?: boolean | null
+        }
+        Update: {
+          created_at?: string | null
+          decimals?: number | null
+          description?: string | null
+          freeze_authority?: string | null
+          id?: string
+          logo_uri?: string | null
+          mint_address?: string
+          mint_authority?: string | null
+          name?: string | null
+          symbol?: string | null
+          total_supply?: number | null
+          updated_at?: string | null
+          verified?: boolean | null
+        }
+        Relationships: []
+      }
       token_watchlist: {
         Row: {
           current_price: number | null
