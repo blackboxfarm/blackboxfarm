@@ -57,6 +57,13 @@ serve(async (req) => {
 
     const { tokenMint, includeTransactions } = body;
 
+    const solanaRpcUrl = Deno.env.get('SOLANA_RPC_URL');
+    console.log('Solana RPC URL status:', solanaRpcUrl ? 'Found' : 'Missing');
+    if (!solanaRpcUrl) {
+      console.error('Available env vars:', Object.keys(Deno.env.toObject()));
+      throw new Error('Solana RPC URL not configured - required for token metadata');
+    }
+
     if (!tokenMint) {
       console.error('No token mint provided');
       throw new Error('Token mint address is required');
@@ -95,13 +102,6 @@ serve(async (req) => {
 
     if (shouldUpdateCache) {
       console.log('Fetching fresh metadata for token:', tokenMint);
-      
-      const solanaRpcUrl = Deno.env.get('SOLANA_RPC_URL');
-      console.log('Solana RPC URL status:', solanaRpcUrl ? 'Found' : 'Missing');
-      if (!solanaRpcUrl) {
-        console.error('Available env vars:', Object.keys(Deno.env.toObject()));
-        throw new Error('Solana RPC URL not configured - required for token metadata');
-      }
       
       // Extract API key from RPC URL if it's a Helius URL
       const heliusApiKey = solanaRpcUrl.includes('helius-rpc.com') ? 
