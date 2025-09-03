@@ -213,14 +213,13 @@ export function TransactionTable({ tokenAddress, tokenSymbol = "TOKEN", classNam
           <Table>
             <TableHeader>
               <TableRow className="bg-muted/50 h-8">
-                <TableHead className="w-[80px] text-xs font-medium py-1">DATE</TableHead>
+                <TableHead className="w-[120px] text-xs font-medium py-1">DATE</TableHead>
                 <TableHead className="w-[60px] text-xs font-medium py-1">TYPE</TableHead>
                 <TableHead className="text-right w-[80px] text-xs font-medium py-1">USD</TableHead>
                 <TableHead className="text-right w-[100px] text-xs font-medium py-1">{tokenSymbol}</TableHead>
                 <TableHead className="text-right w-[80px] text-xs font-medium py-1">SOL</TableHead>
                 <TableHead className="text-right w-[100px] text-xs font-medium py-1">PRICE</TableHead>
                 <TableHead className="text-center w-[70px] text-xs font-medium py-1">MAKER</TableHead>
-                <TableHead className="text-right w-[80px] text-xs font-medium py-1">VOLUME</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -232,7 +231,7 @@ export function TransactionTable({ tokenAddress, tokenSymbol = "TOKEN", classNam
                   <TableCell className="py-1">
                     <Badge 
                       variant={tx.type === 'Buy' ? 'default' : 'destructive'}
-                      className={`text-xs px-2 py-0 h-5 min-w-[40px] justify-center ${
+                      className={`text-xs px-1 py-0 h-4 min-w-[35px] justify-center ${
                         tx.type === 'Buy' 
                           ? 'bg-green-500 hover:bg-green-600 text-white' 
                           : 'bg-red-500 hover:bg-red-600 text-white'
@@ -257,9 +256,6 @@ export function TransactionTable({ tokenAddress, tokenSymbol = "TOKEN", classNam
                     <Badge variant="outline" className="font-mono text-xs px-1 py-0 h-4">
                       {tx.maker}
                     </Badge>
-                  </TableCell>
-                  <TableCell className="text-right font-mono text-xs py-1">
-                    ${formatNumber(tx.volume, 0)}
                   </TableCell>
                 </TableRow>
               ))}
