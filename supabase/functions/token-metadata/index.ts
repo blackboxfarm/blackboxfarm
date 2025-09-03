@@ -159,186 +159,73 @@ serve(async (req) => {
         console.error('RPC fetch error:', error);
       }
 
-      // Try to get metadata from Jupiter Token List
+      // Just get the metadata - simple approach
       let tokenName = `Token ${tokenMint.slice(0, 8)}...`;
       let tokenSymbol = 'TOKEN';
       let logoUri = null;
       let description = null;
       let verified = false;
 
+      // Try Helius metadata API first (simplest)
       try {
-        console.log('Fetching metadata from Jupiter Token List...');
-        const jupiterResponse = await fetch(
-          `https://token.jup.ag/strict`,
-          { 
-            headers: { 'Accept': 'application/json' },
-            signal: AbortSignal.timeout(5000)
-          }
-        );
-        
-        if (jupiterResponse.ok) {
-          const jupiterData = await jupiterResponse.json();
-          const token = jupiterData.find((t: any) => t.address === tokenMint);
+        const heliosApiKey = Deno.env.get('HELIOS_API_KEY');
+        if (heliosApiKey) {
+          console.log('Fetching metadata from Helius...');
+          const heliusResponse = await fetch(`https://api.helius.xyz/v0/token-metadata?api-key=${heliosApiKey}`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ mintAccounts: [tokenMint] })
+          });
           
-          if (token) {
-            tokenName = token.name || tokenName;
-            tokenSymbol = token.symbol || tokenSymbol;
-            logoUri = token.logoURI || null;
-            verified = true;
-            
-            console.log('Found token in Jupiter list:', {
-              name: tokenName,
-              symbol: tokenSymbol,
-              logoURI: logoUri
-            });
+          if (heliusResponse.ok) {
+            const heliusData = await heliusResponse.json();
+            if (heliusData && heliusData.length > 0) {
+              const token = heliusData[0];
+              tokenName = token.onChainMetadata?.metadata?.name || token.offChainMetadata?.name || tokenName;
+              tokenSymbol = token.onChainMetadata?.metadata?.symbol || token.offChainMetadata?.symbol || tokenSymbol;
+              logoUri = token.offChainMetadata?.image || token.onChainMetadata?.metadata?.image || null;
+              description = token.offChainMetadata?.description || null;
+              verified = true;
+              
+              console.log('Found Helius metadata:', { tokenName, tokenSymbol, logoUri });
+            }
           }
         }
       } catch (error) {
-        console.log('Jupiter Token List fetch failed:', error);
+        console.log('Helius metadata failed:', error.message);
       }
 
-      // Fallback to Solana Token List
+      // Fallback to RPC mint info
       if (!verified) {
         try {
-          console.log('Trying Solana Token List...');
-          const solanaListResponse = await fetch(
-            'https://raw.githubusercontent.com/solana-labs/token-list/main/src/tokens/solana.tokenlist.json',
-            { 
-              headers: { 'Accept': 'application/json' },
-              signal: AbortSignal.timeout(5000)
-            }
-          );
-          
-          if (solanaListResponse.ok) {
-            const solanaData = await solanaListResponse.json();
-            const token = solanaData.tokens?.find((t: any) => t.address === tokenMint);
+          const rpcUrl = Deno.env.get('HELIOS_API_KEY') ? 
+            `https://mainnet.helius-rpc.com/?api-key=${Deno.env.get('HELIOS_API_KEY')}` : 
+            'https://api.mainnet-beta.solana.com';
             
-            if (token) {
-              tokenName = token.name || tokenName;
-              tokenSymbol = token.symbol || tokenSymbol;
-              logoUri = token.logoURI || logoUri;
-              verified = true;
-              
-              console.log('Found token in Solana list:', {
-                name: tokenName,
-                symbol: tokenSymbol,
-                logoURI: logoUri
-              });
-            }
-          }
-        } catch (error) {
-          console.log('Solana Token List fetch failed:', error);
-        }
-      }
-
-      // Try getting on-chain metadata from Metaplex if not found in token lists
-      if (!verified) {
-        try {
-          console.log('Fetching on-chain Metaplex metadata...');
-          
-          // Calculate Metaplex metadata PDA
-          const TOKEN_METADATA_PROGRAM_ID = 'metaqbxxUerdq28cj1RbAWkYQm3ybzjb6a8bt518x1s';
-          
-          // Get metadata account using getProgramAccounts
-          const metadataResponse = await fetch(rpcUrl, {
+          const response = await fetch(rpcUrl, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
               jsonrpc: '2.0',
               id: 1,
-              method: 'getProgramAccounts',
+              method: 'getAccountInfo',
               params: [
-                TOKEN_METADATA_PROGRAM_ID,
-                {
-                  filters: [
-                    {
-                      memcmp: {
-                        offset: 33, // Mint is at offset 33 in metadata account
-                        bytes: tokenMint
-                      }
-                    }
-                  ],
-                  encoding: 'base64',
-                  dataSlice: {
-                    offset: 0,
-                    length: 679 // Standard metadata account size
-                  }
-                }
+                tokenMint,
+                { encoding: 'jsonParsed', commitment: 'confirmed' }
               ]
             })
           });
           
-          if (metadataResponse.ok) {
-            const metadataData = await metadataResponse.json();
-            
-            if (metadataData.result && metadataData.result.length > 0) {
-              const accountData = metadataData.result[0].account.data;
-              
-              try {
-                // Decode base64 data
-                const buffer = Uint8Array.from(atob(accountData), c => c.charCodeAt(0));
-                
-                // Parse Metaplex metadata structure
-                let offset = 69; // Skip metadata account header
-                
-                // Read name (first 4 bytes = length, then string)
-                const nameLen = new DataView(buffer.buffer).getUint32(offset, true);
-                offset += 4;
-                const nameBytes = buffer.slice(offset, offset + nameLen);
-                const name = new TextDecoder().decode(nameBytes).replace(/\0/g, '').trim();
-                offset += nameLen;
-                
-                // Read symbol
-                const symbolLen = new DataView(buffer.buffer).getUint32(offset, true);
-                offset += 4;
-                const symbolBytes = buffer.slice(offset, offset + symbolLen);
-                const symbol = new TextDecoder().decode(symbolBytes).replace(/\0/g, '').trim();
-                offset += symbolLen;
-                
-                // Read URI
-                const uriLen = new DataView(buffer.buffer).getUint32(offset, true);
-                offset += 4;
-                const uriBytes = buffer.slice(offset, offset + uriLen);
-                const uri = new TextDecoder().decode(uriBytes).replace(/\0/g, '').trim();
-                
-                if (name && name.length > 0) {
-                  console.log('Found on-chain metadata:', { name, symbol, uri });
-                  
-                  tokenName = name;
-                  tokenSymbol = symbol || tokenSymbol;
-                  
-                  // Try to fetch metadata from URI for logo
-                  if (uri && uri.startsWith('http')) {
-                    try {
-                      const uriResponse = await fetch(uri, { 
-                        signal: AbortSignal.timeout(5000),
-                        headers: { 'Accept': 'application/json' }
-                      });
-                      
-                      if (uriResponse.ok) {
-                        const uriData = await uriResponse.json();
-                        if (uriData.image) {
-                          logoUri = uriData.image;
-                          console.log('Found logo from URI metadata:', logoUri);
-                        }
-                        if (uriData.description) {
-                          description = uriData.description;
-                        }
-                      }
-                    } catch (uriError) {
-                      console.log('Failed to fetch URI metadata:', uriError.message);
-                    }
-                  }
-                  
-                  verified = true; // Mark as verified since we found on-chain metadata
-                }
-              } catch (parseError) {
-                console.log('Failed to parse Metaplex metadata:', parseError.message);
-              }
-            }
+          const data = await response.json();
+          if (data.result?.value?.data?.parsed?.info) {
+            const mintInfo = data.result.value.data.parsed.info;
+            decimals = mintInfo.decimals || 9;
+            supply = parseInt(mintInfo.supply || '0');
+            mintAuthority = mintInfo.mintAuthority;
+            freezeAuthority = mintInfo.freezeAuthority;
           }
         } catch (error) {
-          console.log('Metaplex metadata fetch failed:', error.message);
+          console.error('RPC fetch error:', error);
         }
       }
 
@@ -357,28 +244,24 @@ serve(async (req) => {
         description
       };
 
-      // Store/update in cache
-      const upsertData = {
-        mint_address: tokenMint,
-        name: tokenName,
-        symbol: tokenSymbol,
-        decimals,
-        logo_uri: logoUri,
-        description,
-        total_supply: actualTotalSupply,
-        verified,
-        mint_authority: mintAuthority,
-        freeze_authority: freezeAuthority
-      };
-
+      // Store in cache
       const { error: upsertError } = await supabase
         .from('token_metadata')
-        .upsert(upsertData, { onConflict: 'mint_address' });
+        .upsert({
+          mint_address: tokenMint,
+          name: tokenName,
+          symbol: tokenSymbol,
+          decimals,
+          logo_uri: logoUri,
+          description,
+          total_supply: actualTotalSupply,
+          verified,
+          mint_authority: mintAuthority,
+          freeze_authority: freezeAuthority
+        }, { onConflict: 'mint_address' });
 
       if (upsertError) {
-        console.error('Error upserting metadata:', upsertError);
-      } else {
-        console.log('Successfully cached metadata');
+        console.error('Cache error:', upsertError);
       }
     }
 
