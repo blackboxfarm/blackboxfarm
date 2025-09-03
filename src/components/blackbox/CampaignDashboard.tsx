@@ -87,8 +87,8 @@ export function CampaignDashboard() {
   };
 
   const createCampaign = async () => {
-    if (!newCampaign.nickname || !newCampaign.token_address || !isValidToken) {
-      toast({ title: "Missing fields", description: "Please fill in all fields and ensure token is valid" });
+    if (!newCampaign.nickname || !newCampaign.token_address) {
+      toast({ title: "Missing fields", description: "Please fill in all fields" });
       return;
     }
 
@@ -257,18 +257,19 @@ export function CampaignDashboard() {
                 placeholder="My Token Pump"
               />
             </div>
-            <TokenValidationInput
-              value={newCampaign.token_address}
-              onChange={(value) => setNewCampaign(prev => ({ ...prev, token_address: value }))}
-              onValidationChange={(isValid, data) => {
-                setIsValidToken(isValid);
-                setTokenData(data);
-              }}
-            />
+            <div>
+              <Label htmlFor="token">Token Address</Label>
+              <Input
+                id="token"
+                value={newCampaign.token_address}
+                onChange={(e) => setNewCampaign(prev => ({ ...prev, token_address: e.target.value }))}
+                placeholder="Enter Solana token address"
+              />
+            </div>
             <div className="flex gap-2">
               <Button 
                 onClick={createCampaign} 
-                disabled={!isValidToken || !newCampaign.nickname}
+                disabled={!newCampaign.nickname || !newCampaign.token_address}
               >
                 Create Campaign
               </Button>
@@ -277,8 +278,6 @@ export function CampaignDashboard() {
                 onClick={() => {
                   setShowCreateForm(false);
                   setNewCampaign({ nickname: "", token_address: "" });
-                  setIsValidToken(false);
-                  setTokenData(null);
                 }}
               >
                 Cancel
