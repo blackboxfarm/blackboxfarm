@@ -24,76 +24,51 @@ serve(async (req) => {
       throw new Error('Token mint address is required');
     }
 
-    console.log('Fetching price for token:', tokenMint);
+    console.log('Fetching price for token from Helius:', tokenMint);
 
-    // Get token account info from Helius
-    const rpcResponse = await fetch(heliusRpcUrl, {
+    // Extract API key from the RPC URL
+    const apiKey = heliusRpcUrl.split('api-key=')[1];
+    
+    if (!apiKey) {
+      throw new Error('API key not found in HELIUS_RPC_URL');
+    }
+
+    // Use Helius DAS API to get token price
+    const heliusResponse = await fetch(`https://api.helius.xyz/v0/token-metadata?api-key=${apiKey}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        jsonrpc: '2.0',
-        id: 1,
-        method: 'getAccountInfo',
-        params: [
-          tokenMint,
-          { encoding: 'jsonParsed', commitment: 'confirmed' }
-        ]
+        mintAccounts: [tokenMint],
+        includeOffChain: true,
+        disableCache: false
       })
     });
 
-    const rpcData = await rpcResponse.json();
+    if (!heliusResponse.ok) {
+      throw new Error(`Helius API error: ${heliusResponse.status}`);
+    }
+
+    const heliusData = await heliusResponse.json();
+    console.log('Helius response:', heliusData);
+
+    if (!heliusData || heliusData.length === 0) {
+      throw new Error('No token data found from Helius');
+    }
+
+    const tokenData = heliusData[0];
     
-    if (rpcData.error) {
-      throw new Error(`Helius RPC error: ${rpcData.error.message}`);
+    // Try to get price from token metadata
+    let price = 0;
+    if (tokenData.offChainMetadata?.price) {
+      price = parseFloat(tokenData.offChainMetadata.price);
     }
-
-    // Also get price from Jupiter as backup/comparison
-    let jupiterPrice = null;
-    try {
-      const jupiterResponse = await fetch(`https://price.jup.ag/v6/price?ids=${tokenMint}`);
-      if (jupiterResponse.ok) {
-        const jupiterData = await jupiterResponse.json();
-        jupiterPrice = jupiterData?.data?.[tokenMint]?.price;
-      }
-    } catch (error) {
-      console.log('Jupiter price fetch failed:', error.message);
-    }
-
-    // Get market data from DexScreener
-    let marketData = null;
-    try {
-      const dexResponse = await fetch(`https://api.dexscreener.com/latest/dex/tokens/${tokenMint}`);
-      if (dexResponse.ok) {
-        const dexData = await dexResponse.json();
-        if (dexData.pairs && dexData.pairs.length > 0) {
-          const pair = dexData.pairs[0];
-          marketData = {
-            priceUsd: parseFloat(pair.priceUsd || '0'),
-            priceChange24h: parseFloat(pair.priceChange?.h24 || '0'),
-            volume24h: parseFloat(pair.volume?.h24 || '0'),
-            liquidity: parseFloat(pair.liquidity?.usd || '0'),
-            marketCap: parseFloat(pair.fdv || '0'),
-            source: 'dexscreener'
-          };
-        }
-      }
-    } catch (error) {
-      console.log('DexScreener fetch failed:', error.message);
-    }
-
-    const finalPrice = marketData?.priceUsd || jupiterPrice || 0;
 
     return new Response(
       JSON.stringify({
         success: true,
         tokenMint,
-        price: finalPrice,
-        sources: {
-          jupiter: jupiterPrice,
-          dexscreener: marketData?.priceUsd,
-          helius_rpc_status: 'connected'
-        },
-        marketData,
+        price,
+        heliusData: tokenData,
         timestamp: new Date().toISOString()
       }),
       {
