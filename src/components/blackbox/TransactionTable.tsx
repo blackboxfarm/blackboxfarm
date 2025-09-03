@@ -4,6 +4,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Badge } from "@/components/ui/badge";
 import { Activity, RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { supabase } from "@/integrations/supabase/client";
 
 interface Transaction {
   date: string;
@@ -18,15 +19,39 @@ interface Transaction {
 }
 
 interface TransactionTableProps {
+  tokenAddress: string;
   tokenSymbol?: string;
   className?: string;
 }
 
-export function TransactionTable({ tokenSymbol = "TOKEN", className }: TransactionTableProps) {
+export function TransactionTable({ tokenAddress, tokenSymbol = "TOKEN", className }: TransactionTableProps) {
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [isLoading, setIsLoading] = useState(false);
 
-  // Generate more sample transaction data for a fuller table
+  const fetchTransactions = async () => {
+    setIsLoading(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('token-metadata', {
+        body: { tokenMint: tokenAddress, includeTransactions: true }
+      });
+      
+      if (error) throw error;
+      
+      if (data.success && data.transactions) {
+        setTransactions(data.transactions.slice(0, 10)); // Last 10 transactions
+      } else {
+        // Fallback to sample data if no real data available
+        generateSampleTransactions();
+      }
+    } catch (error) {
+      console.error('Error fetching transactions:', error);
+      generateSampleTransactions();
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  // Generate sample transaction data as fallback
   const generateSampleTransactions = () => {
     const sampleData: Transaction[] = [
       {
@@ -145,8 +170,10 @@ export function TransactionTable({ tokenSymbol = "TOKEN", className }: Transacti
   };
 
   useEffect(() => {
-    generateSampleTransactions();
-  }, []);
+    if (tokenAddress) {
+      fetchTransactions();
+    }
+  }, [tokenAddress]);
 
   const formatNumber = (num: number, decimals: number = 2) => {
     if (num >= 1e6) return `${(num / 1e6).toFixed(decimals)}M`;
@@ -159,11 +186,7 @@ export function TransactionTable({ tokenSymbol = "TOKEN", className }: Transacti
   };
 
   const refresh = () => {
-    setIsLoading(true);
-    setTimeout(() => {
-      generateSampleTransactions();
-      setIsLoading(false);
-    }, 1000);
+    fetchTransactions();
   };
 
   return (
@@ -251,11 +274,6 @@ export function TransactionTable({ tokenSymbol = "TOKEN", className }: Transacti
           </div>
         )}
         
-        <div className="mt-4 text-center">
-          <p className="text-xs text-muted-foreground">
-            Sample transaction data - Real data requires blockchain transaction parsing
-          </p>
-        </div>
       </CardContent>
     </Card>
   );

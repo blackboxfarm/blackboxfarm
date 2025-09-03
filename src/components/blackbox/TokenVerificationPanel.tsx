@@ -321,7 +321,7 @@ export function TokenVerificationPanel({ tokenAddress, className }: TokenVerific
       </Card>
 
       {/* Transaction Table */}
-      <TransactionTable tokenSymbol={metadata.symbol} />
+      <TransactionTable tokenAddress={tokenAddress} tokenSymbol={metadata.symbol} />
     </div>
   );
 }

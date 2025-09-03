@@ -190,7 +190,7 @@ export function TokenPriceChart({ tokenAddress, className }: TokenPriceChartProp
                   yAxisId="volume"
                   dataKey="volume" 
                   fill="hsl(var(--muted-foreground))"
-                  opacity={0.6}
+                  opacity={0.3}
                   name="Volume"
                 />
                 
@@ -200,7 +200,7 @@ export function TokenPriceChart({ tokenAddress, className }: TokenPriceChartProp
                   type="monotone"
                   dataKey="close"
                   stroke="hsl(var(--primary))"
-                  strokeWidth={2}
+                  strokeWidth={1.5}
                   dot={false}
                   name="Price"
                 />
