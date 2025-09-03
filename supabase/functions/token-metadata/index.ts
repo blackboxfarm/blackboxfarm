@@ -36,11 +36,20 @@ serve(async (req) => {
 
   try {
     console.log('Token metadata request received');
+    console.log('Request method:', req.method);
+    console.log('Request URL:', req.url);
     
     let body;
     try {
-      body = await req.json();
-      console.log('Request body:', body);
+      const text = await req.text();
+      console.log('Raw request body:', text);
+      if (text) {
+        body = JSON.parse(text);
+        console.log('Parsed request body:', body);
+      } else {
+        console.log('Empty request body');
+        body = {};
+      }
     } catch (parseError) {
       console.error('Failed to parse request body:', parseError);
       throw new Error('Invalid JSON in request body');
