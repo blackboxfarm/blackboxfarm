@@ -1,13 +1,16 @@
 import { useState, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
+import { ComposedChart, Bar, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell } from 'recharts';
 import { TrendingUp, Clock } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 
 interface PricePoint {
   timestamp: number;
-  price: number;
+  open: number;
+  high: number;
+  low: number;
+  close: number;
   volume: number;
 }
 
@@ -55,7 +58,10 @@ export function TokenPriceChart({ tokenAddress, className }: TokenPriceChartProp
           .filter((point: any) => point.timestamp >= (now - timeRangeMs))
           .map((point: any) => ({
             timestamp: point.timestamp,
-            price: point.price,
+            open: point.open,
+            high: point.high,
+            low: point.low,
+            close: point.close,
             volume: point.volume
           }));
         
@@ -87,7 +93,7 @@ export function TokenPriceChart({ tokenAddress, className }: TokenPriceChartProp
   };
 
   const priceChange = priceData.length > 1 ? 
-    ((priceData[priceData.length - 1].price - priceData[0].price) / priceData[0].price) * 100 : 0;
+    ((priceData[priceData.length - 1].close - priceData[0].open) / priceData[0].open) * 100 : 0;
 
   const timeRangeOptions = [
     { value: '1h' as const, label: '1H' },
@@ -138,7 +144,7 @@ export function TokenPriceChart({ tokenAddress, className }: TokenPriceChartProp
         ) : (
           <div className="h-64">
             <ResponsiveContainer width="100%" height="100%">
-              <LineChart data={priceData}>
+              <ComposedChart data={priceData}>
                 <CartesianGrid strokeDasharray="3 3" className="opacity-30" />
                 <XAxis 
                   dataKey="timestamp"
@@ -148,17 +154,27 @@ export function TokenPriceChart({ tokenAddress, className }: TokenPriceChartProp
                   tick={{ fontSize: 12 }}
                 />
                 <YAxis 
+                  yAxisId="price"
+                  orientation="right"
                   tickFormatter={formatPrice}
                   axisLine={false}
                   tickLine={false}
                   tick={{ fontSize: 12 }}
-                  domain={['dataMin * 0.995', 'dataMax * 1.005']}
+                  domain={['dataMin * 0.98', 'dataMax * 1.02']}
+                />
+                <YAxis 
+                  yAxisId="volume"
+                  orientation="left"
+                  tickFormatter={formatVolume}
+                  axisLine={false}
+                  tickLine={false}
+                  tick={{ fontSize: 12 }}
                 />
                 <Tooltip 
                   labelFormatter={(value) => formatTime(Number(value))}
                   formatter={(value: number, name: string) => [
-                    name === 'price' ? formatPrice(value) : formatVolume(value),
-                    name === 'price' ? 'Price' : 'Volume'
+                    name === 'close' ? formatPrice(value) : formatVolume(value),
+                    name === 'close' ? 'Close Price' : name
                   ]}
                   contentStyle={{
                     backgroundColor: 'hsl(var(--background))',
@@ -166,15 +182,24 @@ export function TokenPriceChart({ tokenAddress, className }: TokenPriceChartProp
                     borderRadius: '8px'
                   }}
                 />
+                <Bar 
+                  yAxisId="volume"
+                  dataKey="volume" 
+                  fill="hsl(var(--muted))" 
+                  opacity={0.3}
+                  name="Volume"
+                />
                 <Line 
+                  yAxisId="price"
                   type="monotone" 
-                  dataKey="price" 
+                  dataKey="close" 
                   stroke="hsl(var(--primary))" 
                   strokeWidth={2}
                   dot={false}
                   activeDot={{ r: 4, stroke: 'hsl(var(--primary))', strokeWidth: 2 }}
+                  name="close"
                 />
-              </LineChart>
+              </ComposedChart>
             </ResponsiveContainer>
           </div>
         )}
@@ -185,13 +210,13 @@ export function TokenPriceChart({ tokenAddress, className }: TokenPriceChartProp
             <div className="text-center">
               <p className="text-sm text-muted-foreground">High</p>
               <p className="font-semibold">
-                {formatPrice(Math.max(...priceData.map(p => p.price)))}
+                {formatPrice(Math.max(...priceData.map(p => p.high)))}
               </p>
             </div>
             <div className="text-center">
               <p className="text-sm text-muted-foreground">Low</p>
               <p className="font-semibold">
-                {formatPrice(Math.min(...priceData.map(p => p.price)))}
+                {formatPrice(Math.min(...priceData.map(p => p.low)))}
               </p>
             </div>
             <div className="text-center">
