@@ -185,28 +185,8 @@ serve(async (req) => {
               const txData = await txResponse.json();
               console.log('Pair details response received');
               
-              // Generate realistic trades based on current volume and price
-              const currentPrice = priceInfo.priceUsd;
-              const now = Date.now();
-              
-              for (let i = 0; i < 10; i++) {
-                const isBuy = Math.random() > 0.5;
-                const tradeTime = now - (Math.random() * 3600000); // Last hour
-                const tradeAmount = Math.random() * (priceInfo.volume24h / 100) + 50; // Realistic trade size
-                const priceVariation = (Math.random() - 0.5) * 0.01; // ±0.5% realistic variation
-                const tradePrice = currentPrice * (1 + priceVariation);
-                
-                recentTrades.push({
-                  type: isBuy ? 'buy' : 'sell',
-                  amount: tradeAmount,
-                  price: Math.max(tradePrice, 0.000001),
-                  timestamp: tradeTime,
-                  txHash: `${Math.random().toString(36).substring(2, 8)}...${Math.random().toString(36).substring(2, 4)}`
-                });
-              }
-              
-              // Sort recent trades by timestamp (newest first)
-              recentTrades.sort((a, b) => b.timestamp - a.timestamp);
+              // No recent trades - this would require Solana transaction parsing
+              console.log('Recent trades not implemented - requires blockchain transaction analysis');
             }
           } catch (txError) {
             console.log('Failed to fetch transaction data:', txError);

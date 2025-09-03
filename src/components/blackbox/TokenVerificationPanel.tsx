@@ -222,7 +222,7 @@ export function TokenVerificationPanel({ tokenAddress, className }: TokenVerific
                   <DollarSign className="h-4 w-4" />
                   <span className="text-sm">Price (USD)</span>
                 </div>
-                <p className="text-2xl font-bold">${priceInfo.priceUsd.toFixed(6)}</p>
+                <p className="text-2xl font-bold">${priceInfo.priceUsd.toFixed(8)}</p>
                 <div className={`flex items-center gap-1 text-sm ${
                   priceInfo.priceChange24h >= 0 ? 'text-green-600' : 'text-red-600'
                 }`}>
@@ -319,45 +319,27 @@ export function TokenVerificationPanel({ tokenAddress, className }: TokenVerific
         </CardContent>
       </Card>
 
-      {/* Recent Trading Activity */}
+      {/* Market Information */}
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <TrendingUp className="h-5 w-5 text-primary" />
-            Recent Trading Activity
+            Market Information
           </CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="space-y-2">
-            {recentTrades.map((trade, index) => (
-              <div 
-                key={index}
-                className="flex items-center justify-between p-3 border rounded-lg hover:bg-muted/50 transition-colors"
-              >
-                <div className="flex items-center gap-3">
-                  <Badge 
-                    variant={trade.type === 'buy' ? "default" : "destructive"}
-                    className="min-w-[50px] justify-center"
-                  >
-                    {trade.type.toUpperCase()}
-                  </Badge>
-                  <div>
-                    <p className="font-medium">{formatNumber(trade.amount)} {metadata.symbol}</p>
-                    <p className="text-sm text-muted-foreground">
-                      ${trade.price.toFixed(6)} per token
-                    </p>
-                  </div>
-                </div>
-                <div className="text-right">
-                  <p className="font-semibold">
-                    ${(trade.amount * trade.price).toFixed(2)}
-                  </p>
-                  <p className="text-xs text-muted-foreground">
-                    {formatTimeAgo(trade.timestamp)}
-                  </p>
-                </div>
-              </div>
-            ))}
+          <div className="text-center py-8 text-muted-foreground">
+            <TrendingUp className="h-12 w-12 mx-auto mb-4 opacity-30" />
+            <h3 className="text-lg font-medium mb-2">Live Transaction Data</h3>
+            <p className="text-sm max-w-md mx-auto">
+              Real-time transaction data requires direct blockchain integration. 
+              Currently showing market statistics from DexScreener API.
+            </p>
+            <div className="mt-4 p-4 bg-muted/30 rounded-lg">
+              <p className="text-xs">
+                To view live transactions, consider integrating with Solana RPC or transaction parsing services.
+              </p>
+            </div>
           </div>
         </CardContent>
       </Card>

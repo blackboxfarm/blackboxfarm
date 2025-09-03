@@ -79,7 +79,7 @@ export function TokenPriceChart({ tokenAddress, className }: TokenPriceChartProp
     }
   };
 
-  const formatPrice = (value: number) => `$${value.toFixed(6)}`;
+  const formatPrice = (value: number) => `$${value.toFixed(8)}`;
   
   const formatTime = (timestamp: number) => {
     const date = new Date(timestamp);
