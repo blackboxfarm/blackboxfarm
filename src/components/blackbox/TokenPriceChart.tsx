@@ -189,27 +189,34 @@ export function TokenPriceChart({ tokenAddress, className }: TokenPriceChartProp
                   opacity={0.3}
                   name="Volume"
                 />
-                {/* Candlestick bars - representing price movement */}
+                {/* Candlestick wicks */}
                 <Bar 
                   yAxisId="price"
-                  dataKey={(data) => [data.low, data.high - data.low]}
-                  stackId="candle"
+                  dataKey="high"
                   fill="transparent"
                   stroke="hsl(var(--border))"
                   strokeWidth={1}
-                  name="Range"
+                  name="Wick High"
                 />
                 <Bar 
                   yAxisId="price"
-                  dataKey={(data) => [Math.min(data.open, data.close), Math.abs(data.close - data.open)]}
-                  stackId="body"
+                  dataKey="low" 
+                  fill="transparent"
+                  stroke="hsl(var(--border))"
+                  strokeWidth={1}
+                  name="Wick Low"
+                />
+                {/* Candlestick bodies */}
+                <Bar 
+                  yAxisId="price"
+                  dataKey={(entry) => Math.abs(entry.close - entry.open)}
                   name="Price"
                 >
-                  {priceData.map((data, index) => (
+                  {priceData.map((entry, index) => (
                     <Cell 
-                      key={index} 
-                      fill={data.close >= data.open ? '#10B981' : '#EF4444'}
-                      stroke={data.close >= data.open ? '#10B981' : '#EF4444'}
+                      key={`candle-${index}`}
+                      fill={entry.close >= entry.open ? '#10B981' : '#EF4444'}
+                      stroke={entry.close >= entry.open ? '#10B981' : '#EF4444'}
                       strokeWidth={1}
                     />
                   ))}

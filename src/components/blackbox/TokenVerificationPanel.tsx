@@ -75,8 +75,18 @@ export function TokenVerificationPanel({ tokenAddress, className }: TokenVerific
       if (error) throw error;
 
       if (data.success) {
-        setTokenData(data);
-        await fetchRecentTrades();
+        // Fix data structure mapping
+        const formattedData = {
+          metadata: data.metadata,
+          priceInfo: data.priceInfo,
+          onChainData: data.onChainData
+        };
+        setTokenData(formattedData);
+        
+        // Set recent trades directly from the same response
+        if (data.recentTrades) {
+          setRecentTrades(data.recentTrades);
+        }
       } else {
         throw new Error(data.error || 'Failed to fetch token data');
       }
@@ -92,28 +102,7 @@ export function TokenVerificationPanel({ tokenAddress, className }: TokenVerific
     }
   };
 
-  const fetchRecentTrades = async () => {
-    try {
-      console.log('Fetching real recent trades for token:', tokenAddress);
-      
-      const { data, error } = await supabase.functions.invoke('token-metadata', {
-        body: { tokenMint: tokenAddress }
-      });
-      
-      if (error) throw error;
-      
-      if (data.success && data.recentTrades) {
-        console.log('Received real recent trades:', data.recentTrades.length, 'trades');
-        setRecentTrades(data.recentTrades);
-      } else {
-        console.error('No recent trades data received from token-metadata function');
-        setRecentTrades([]);
-      }
-    } catch (error) {
-      console.error('Error fetching recent trades:', error);
-      setRecentTrades([]);
-    }
-  };
+  // Remove duplicate fetch function since we now get trades in the main fetch
 
   const formatNumber = (num: number, decimals: number = 2) => {
     if (num >= 1e9) return `${(num / 1e9).toFixed(decimals)}B`;
