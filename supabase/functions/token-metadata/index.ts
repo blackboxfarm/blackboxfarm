@@ -100,17 +100,17 @@ serve(async (req) => {
       
       
       try {
-        const heliosApiKey = Deno.env.get('HELIOS_API_KEY');
+        const heliusApiKey = Deno.env.get('HELIUS_API_KEY');
         
-        if (!heliosApiKey) {
-          console.error('HELIOS_API_KEY not found in environment');
+        if (!heliusApiKey) {
+          console.error('HELIUS_API_KEY not found in environment');
           throw new Error('Helius API key not configured');
         }
         
         console.log('Using Helius RPC with valid API key');
         
         // First get basic mint info from Helius RPC
-        const rpcResponse = await fetch(`https://mainnet.helius-rpc.com/?api-key=${heliosApiKey}`, {
+        const rpcResponse = await fetch(`https://mainnet.helius-rpc.com/?api-key=${heliusApiKey}`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -149,7 +149,7 @@ serve(async (req) => {
         
         // Now get token metadata from Helius DAS API
         console.log('Fetching token metadata from Helius DAS API...');
-        const metadataResponse = await fetch(`https://api.helius.xyz/v0/token-metadata?api-key=${heliosApiKey}`, {
+        const metadataResponse = await fetch(`https://api.helius.xyz/v0/token-metadata?api-key=${heliusApiKey}`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -446,19 +446,19 @@ serve(async (req) => {
 
 // Function to fetch on-chain metadata using Metaplex standards
 async function fetchOnChainMetadata(tokenMint: string) {
-  const rpcUrl = Deno.env.get('HELIOS_API_KEY') ? 
-    `https://mainnet.helius-rpc.com/?api-key=${Deno.env.get('HELIOS_API_KEY')}` : 
+  const rpcUrl = Deno.env.get('HELIUS_API_KEY') ? 
+    `https://mainnet.helius-rpc.com/?api-key=${Deno.env.get('HELIUS_API_KEY')}` : 
     'https://api.mainnet-beta.solana.com';
 
   try {
     console.log('Fetching on-chain metadata for:', tokenMint);
     
     // First, try Helius DAS API for the easiest approach
-    const heliosApiKey = Deno.env.get('HELIOS_API_KEY');
-    if (heliosApiKey) {
+    const heliusApiKey = Deno.env.get('HELIUS_API_KEY');
+    if (heliusApiKey) {
       try {
         console.log('Trying Helius DAS API...');
-        const heliusResponse = await fetch(`https://api.helius.xyz/v0/token-metadata?api-key=${heliosApiKey}`, {
+        const heliusResponse = await fetch(`https://api.helius.xyz/v0/token-metadata?api-key=${heliusApiKey}`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ mintAccounts: [tokenMint] })
