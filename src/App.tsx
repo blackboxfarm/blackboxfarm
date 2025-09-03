@@ -35,7 +35,7 @@ const App = () => (
         <BrowserRouter>
           <div className="flex-1">
             <Routes>
-              <Route path="/" element={<Index />} />
+              <Route path="/" element={<BlackBox />} />
               <Route path="/auth" element={<Auth />} />
               <Route path="/admin" element={<Index />} />
               <Route path="/bb" element={<BumpBot />} />
