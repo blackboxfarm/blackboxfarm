@@ -56,13 +56,13 @@ serve(async (req) => {
     }
 
     const { tokenMint, includeTransactions } = body;
-
-    const solanaRpcUrl = Deno.env.get('SOLANA_RPC_URL');
-    console.log('Solana RPC URL status:', solanaRpcUrl ? 'Found' : 'Missing');
-    if (!solanaRpcUrl) {
-      console.error('Available env vars:', Object.keys(Deno.env.toObject()));
-      throw new Error('Solana RPC URL not configured - required for token metadata');
-    }
+      const solanaRpcUrl = Deno.env.get('SOLANA_RPC_URL');
+      console.log('Solana RPC URL status:', solanaRpcUrl ? 'Found' : 'Missing');
+      if (!solanaRpcUrl) {
+        console.error('Available env vars:', Object.keys(Deno.env.toObject()));
+        console.error('SOLANA_RPC_URL env value:', Deno.env.get('SOLANA_RPC_URL'));
+        throw new Error('Solana RPC URL not configured - required for token metadata');
+      }
 
     if (!tokenMint) {
       console.error('No token mint provided');

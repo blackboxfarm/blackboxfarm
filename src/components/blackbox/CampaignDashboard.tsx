@@ -40,11 +40,13 @@ export function CampaignDashboard() {
   }, []);
 
   useEffect(() => {
-    // Check cooldowns for all campaigns when they load
-    campaigns.forEach(campaign => {
-      checkNotificationCooldown(campaign.id, 'blackbox');
-    });
-  }, [campaigns, checkNotificationCooldown]);
+    // Check cooldowns for all campaigns when they load (only once)
+    if (campaigns.length > 0) {
+      campaigns.forEach(campaign => {
+        checkNotificationCooldown(campaign.id, 'blackbox');
+      });
+    }
+  }, [campaigns.length]); // Only run when campaigns count changes
 
   const loadCampaigns = async () => {
     const { data, error } = await supabase
