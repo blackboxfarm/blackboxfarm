@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { ComposedChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell, ReferenceLine } from 'recharts';
+import { ComposedChart, Line, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { TrendingUp, Clock } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 
@@ -142,16 +142,16 @@ export function TokenPriceChart({ tokenAddress, className }: TokenPriceChartProp
             </div>
           </div>
         ) : (
-          <div className="h-64">
+          <div className="h-80">
             <ResponsiveContainer width="100%" height="100%">
               <ComposedChart data={priceData} margin={{ top: 5, right: 30, left: 20, bottom: 5 }}>
-                <CartesianGrid strokeDasharray="3 3" className="opacity-30" />
+                <CartesianGrid strokeDasharray="3 3" className="opacity-20" />
                 <XAxis 
                   dataKey="timestamp"
                   tickFormatter={formatTime}
                   axisLine={false}
                   tickLine={false}
-                  tick={{ fontSize: 12 }}
+                  tick={{ fontSize: 11, fill: 'hsl(var(--muted-foreground))' }}
                 />
                 <YAxis 
                   yAxisId="price"
@@ -159,8 +159,8 @@ export function TokenPriceChart({ tokenAddress, className }: TokenPriceChartProp
                   tickFormatter={formatPrice}
                   axisLine={false}
                   tickLine={false}
-                  tick={{ fontSize: 12 }}
-                  domain={['dataMin * 0.98', 'dataMax * 1.02']}
+                  tick={{ fontSize: 11, fill: 'hsl(var(--muted-foreground))' }}
+                  domain={['dataMin * 0.995', 'dataMax * 1.005']}
                 />
                 <YAxis 
                   yAxisId="volume"
@@ -168,67 +168,42 @@ export function TokenPriceChart({ tokenAddress, className }: TokenPriceChartProp
                   tickFormatter={formatVolume}
                   axisLine={false}
                   tickLine={false}
-                  tick={{ fontSize: 12 }}
+                  tick={{ fontSize: 11, fill: 'hsl(var(--muted-foreground))' }}
+                  domain={[0, 'dataMax * 1.2']}
                 />
                 <Tooltip 
                   labelFormatter={(value) => formatTime(Number(value))}
                   formatter={(value: number, name: string) => [
-                    name === 'close' ? formatPrice(value) : 
-                    name === 'open' ? formatPrice(value) :
-                    name === 'high' ? formatPrice(value) :
-                    name === 'low' ? formatPrice(value) :
-                    formatVolume(value),
-                    name === 'close' ? 'Close' :
-                    name === 'open' ? 'Open' :
-                    name === 'high' ? 'High' :
-                    name === 'low' ? 'Low' : 'Volume'
+                    name === 'close' ? formatPrice(value) : formatVolume(value),
+                    name === 'close' ? 'Price' : 'Volume'
                   ]}
                   contentStyle={{
-                    backgroundColor: 'hsl(var(--background))',
+                    backgroundColor: 'hsl(var(--popover))',
                     border: '1px solid hsl(var(--border))',
-                    borderRadius: '8px'
+                    borderRadius: '8px',
+                    fontSize: '12px'
                   }}
                 />
                 
-                {/* Volume bars */}
+                {/* Volume bars at bottom */}
                 <Bar 
                   yAxisId="volume"
                   dataKey="volume" 
-                  fill="hsl(var(--muted))" 
-                  opacity={0.3}
+                  fill="hsl(var(--muted-foreground))"
+                  opacity={0.6}
                   name="Volume"
                 />
                 
-                {/* Candlestick implementation using multiple bars */}
-                {priceData.map((entry, index) => {
-                  const isGreen = entry.close >= entry.open;
-                  const bodyHeight = Math.abs(entry.close - entry.open);
-                  const bodyBottom = Math.min(entry.open, entry.close);
-                  
-                  return (
-                    <g key={`candle-${index}`}>
-                      {/* Wick lines */}
-                      <line
-                        x1={index * (100 / priceData.length) + '%'}
-                        x2={index * (100 / priceData.length) + '%'}
-                        y1={`${((entry.high - entry.low) / (Math.max(...priceData.map(p => p.high)) - Math.min(...priceData.map(p => p.low)))) * 100}%`}
-                        y2={`${((entry.low) / (Math.max(...priceData.map(p => p.high)) - Math.min(...priceData.map(p => p.low)))) * 100}%`}
-                        stroke={isGreen ? '#10B981' : '#EF4444'}
-                        strokeWidth={1}
-                      />
-                      {/* Body rectangle */}
-                      <rect
-                        x={`${index * (100 / priceData.length) - 2}%`}
-                        y={`${((Math.max(...priceData.map(p => p.high)) - Math.max(entry.open, entry.close)) / (Math.max(...priceData.map(p => p.high)) - Math.min(...priceData.map(p => p.low)))) * 100}%`}
-                        width="4%"
-                        height={`${(bodyHeight / (Math.max(...priceData.map(p => p.high)) - Math.min(...priceData.map(p => p.low)))) * 100}%`}
-                        fill={isGreen ? '#10B981' : '#EF4444'}
-                        stroke={isGreen ? '#10B981' : '#EF4444'}
-                        strokeWidth={1}
-                      />
-                    </g>
-                  );
-                })}
+                {/* Price line */}
+                <Line
+                  yAxisId="price"
+                  type="monotone"
+                  dataKey="close"
+                  stroke="hsl(var(--primary))"
+                  strokeWidth={2}
+                  dot={false}
+                  name="Price"
+                />
               </ComposedChart>
             </ResponsiveContainer>
           </div>

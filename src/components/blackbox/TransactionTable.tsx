@@ -26,7 +26,7 @@ export function TransactionTable({ tokenSymbol = "TOKEN", className }: Transacti
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [isLoading, setIsLoading] = useState(false);
 
-  // Generate sample transaction data that looks like DexScreener
+  // Generate more sample transaction data for a fuller table
   const generateSampleTransactions = () => {
     const sampleData: Transaction[] = [
       {
@@ -83,6 +83,61 @@ export function TransactionTable({ tokenSymbol = "TOKEN", className }: Transacti
         maker: "RtY8Qw",
         volume: 648,
         timeAgo: "3h 22m ago"
+      },
+      {
+        date: "4h 15m ago",
+        type: "Sell",
+        usdAmount: 23.89,
+        tokenAmount: 1345678,
+        solAmount: 0.1145,
+        price: 0.00001776,
+        maker: "Ab7Nx9",
+        volume: 648,
+        timeAgo: "4h 15m ago"
+      },
+      {
+        date: "4h 33m ago",
+        type: "Buy",
+        usdAmount: 156.78,
+        tokenAmount: 8821445,
+        solAmount: 0.7523,
+        price: 0.00001778,
+        maker: "Qp4Wr2",
+        volume: 648,
+        timeAgo: "4h 33m ago"
+      },
+      {
+        date: "5h 02m ago",
+        type: "Buy",
+        usdAmount: 67.34,
+        tokenAmount: 3789012,
+        solAmount: 0.3229,
+        price: 0.00001778,
+        maker: "Zx8Cv5",
+        volume: 648,
+        timeAgo: "5h 02m ago"
+      },
+      {
+        date: "5h 18m ago",
+        type: "Sell",
+        usdAmount: 91.23,
+        tokenAmount: 5134567,
+        solAmount: 0.4378,
+        price: 0.00001777,
+        maker: "Mn3Df6",
+        volume: 648,
+        timeAgo: "5h 18m ago"
+      },
+      {
+        date: "6h 07m ago",
+        type: "Buy",
+        usdAmount: 203.45,
+        tokenAmount: 11456789,
+        solAmount: 0.9767,
+        price: 0.00001776,
+        maker: "Lk9Hg2",
+        volume: 648,
+        timeAgo: "6h 07m ago"
       }
     ];
     
@@ -130,31 +185,31 @@ export function TransactionTable({ tokenSymbol = "TOKEN", className }: Transacti
           </Button>
         </div>
       </CardHeader>
-      <CardContent>
+      <CardContent className="p-3">
         <div className="rounded-md border">
           <Table>
             <TableHeader>
-              <TableRow className="bg-muted/50">
-                <TableHead className="w-[100px]">DATE</TableHead>
-                <TableHead className="w-[80px]">TYPE</TableHead>
-                <TableHead className="text-right w-[100px]">USD</TableHead>
-                <TableHead className="text-right w-[120px]">{tokenSymbol}</TableHead>
-                <TableHead className="text-right w-[100px]">SOL</TableHead>
-                <TableHead className="text-right w-[120px]">PRICE</TableHead>
-                <TableHead className="text-center w-[80px]">MAKER</TableHead>
-                <TableHead className="text-right w-[100px]">VOLUME</TableHead>
+              <TableRow className="bg-muted/50 h-8">
+                <TableHead className="w-[80px] text-xs font-medium py-1">DATE</TableHead>
+                <TableHead className="w-[60px] text-xs font-medium py-1">TYPE</TableHead>
+                <TableHead className="text-right w-[80px] text-xs font-medium py-1">USD</TableHead>
+                <TableHead className="text-right w-[100px] text-xs font-medium py-1">{tokenSymbol}</TableHead>
+                <TableHead className="text-right w-[80px] text-xs font-medium py-1">SOL</TableHead>
+                <TableHead className="text-right w-[100px] text-xs font-medium py-1">PRICE</TableHead>
+                <TableHead className="text-center w-[70px] text-xs font-medium py-1">MAKER</TableHead>
+                <TableHead className="text-right w-[80px] text-xs font-medium py-1">VOLUME</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {transactions.map((tx, index) => (
-                <TableRow key={index} className="hover:bg-muted/30">
-                  <TableCell className="font-mono text-xs text-muted-foreground">
+                <TableRow key={index} className="hover:bg-muted/20 h-8">
+                  <TableCell className="font-mono text-xs text-muted-foreground py-1">
                     {tx.timeAgo}
                   </TableCell>
-                  <TableCell>
+                  <TableCell className="py-1">
                     <Badge 
                       variant={tx.type === 'Buy' ? 'default' : 'destructive'}
-                      className={`min-w-[50px] justify-center ${
+                      className={`text-xs px-2 py-0 h-5 min-w-[40px] justify-center ${
                         tx.type === 'Buy' 
                           ? 'bg-green-500 hover:bg-green-600 text-white' 
                           : 'bg-red-500 hover:bg-red-600 text-white'
@@ -163,24 +218,24 @@ export function TransactionTable({ tokenSymbol = "TOKEN", className }: Transacti
                       {tx.type}
                     </Badge>
                   </TableCell>
-                  <TableCell className="text-right font-mono text-sm">
+                  <TableCell className="text-right font-mono text-xs py-1">
                     {formatNumber(tx.usdAmount)}
                   </TableCell>
-                  <TableCell className="text-right font-mono text-sm">
+                  <TableCell className="text-right font-mono text-xs py-1">
                     {formatNumber(tx.tokenAmount, 0)}
                   </TableCell>
-                  <TableCell className="text-right font-mono text-sm">
-                    {tx.solAmount.toFixed(6)}
+                  <TableCell className="text-right font-mono text-xs py-1">
+                    {tx.solAmount.toFixed(5)}
                   </TableCell>
-                  <TableCell className="text-right font-mono text-sm">
+                  <TableCell className="text-right font-mono text-xs py-1">
                     {formatPrice(tx.price)}
                   </TableCell>
-                  <TableCell className="text-center">
-                    <Badge variant="outline" className="font-mono text-xs">
+                  <TableCell className="text-center py-1">
+                    <Badge variant="outline" className="font-mono text-xs px-1 py-0 h-4">
                       {tx.maker}
                     </Badge>
                   </TableCell>
-                  <TableCell className="text-right font-mono text-sm">
+                  <TableCell className="text-right font-mono text-xs py-1">
                     ${formatNumber(tx.volume, 0)}
                   </TableCell>
                 </TableRow>
