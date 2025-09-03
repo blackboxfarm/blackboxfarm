@@ -98,6 +98,7 @@ serve(async (req) => {
       let description = null;
       let verified = false;
       
+      
       try {
         const heliosApiKey = Deno.env.get('HELIOS_API_KEY');
         
@@ -106,7 +107,7 @@ serve(async (req) => {
           throw new Error('Helius API key not configured');
         }
         
-        console.log('Using Helius RPC with API key');
+        console.log('Using Helius RPC with valid API key');
         
         // First get basic mint info from Helius RPC
         const rpcResponse = await fetch(`https://mainnet.helius-rpc.com/?api-key=${heliosApiKey}`, {
@@ -124,7 +125,12 @@ serve(async (req) => {
         });
         
         const rpcData = await rpcResponse.json();
-        console.log('Helius RPC response:', rpcData);
+        console.log('Helius RPC response status:', rpcResponse.status);
+        
+        if (rpcData.error) {
+          console.error('Helius RPC error:', rpcData.error);
+          throw new Error(`Helius RPC error: ${rpcData.error.message}`);
+        }
         
         if (rpcData.result?.value?.data?.parsed?.info) {
           const mintInfo = rpcData.result.value.data.parsed.info;
@@ -153,40 +159,89 @@ serve(async (req) => {
         
         if (metadataResponse.ok) {
           const metadataData = await metadataResponse.json();
-          console.log('Helius metadata response:', metadataData);
+          console.log('Helius DAS API response:', JSON.stringify(metadataData, null, 2));
           
           if (metadataData && metadataData.length > 0) {
             const tokenData = metadataData[0];
-            const metadata = tokenData.onChainMetadata?.metadata || tokenData.offChainMetadata || {};
+            
+            // Check both onChain and offChain metadata
+            const onChainMeta = tokenData.onChainMetadata?.metadata;
+            const offChainMeta = tokenData.offChainMetadata;
+            const metadata = onChainMeta || offChainMeta || {};
+            
+            console.log('Processing metadata:', {
+              hasOnChain: !!onChainMeta,
+              hasOffChain: !!offChainMeta,
+              metadata: metadata
+            });
             
             if (metadata.name) {
               tokenName = metadata.name.trim();
               verified = true;
-              console.log('Found token name:', tokenName);
+              console.log('✅ Found token name:', tokenName);
             }
             
             if (metadata.symbol) {
               tokenSymbol = metadata.symbol.trim();
-              console.log('Found token symbol:', tokenSymbol);
+              console.log('✅ Found token symbol:', tokenSymbol);
             }
             
             if (metadata.image) {
               logoUri = metadata.image;
-              console.log('Found token logo:', logoUri);
+              console.log('✅ Found token logo:', logoUri);
             }
             
             if (metadata.description) {
               description = metadata.description;
+              console.log('✅ Found token description:', description);
             }
           } else {
-            console.log('No metadata found in Helius response');
+            console.log('❌ No metadata found in Helius DAS response');
           }
         } else {
-          console.error('Helius metadata API failed:', metadataResponse.status, await metadataResponse.text());
+          const errorText = await metadataResponse.text();
+          console.error('Helius DAS API failed:', metadataResponse.status, errorText);
+          throw new Error(`Helius DAS API error: ${metadataResponse.status}`);
         }
         
       } catch (error) {
-        console.error('Error fetching from Helius:', error);
+        console.error('❌ Error fetching from Helius:', error);
+        
+        // Fallback to public Solana RPC
+        console.log('🔄 Trying fallback with public Solana RPC...');
+        try {
+          const fallbackResponse = await fetch('https://api.mainnet-beta.solana.com', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              jsonrpc: '2.0',
+              id: 1,
+              method: 'getAccountInfo',
+              params: [
+                tokenMint,
+                { encoding: 'jsonParsed', commitment: 'confirmed' }
+              ]
+            })
+          });
+          
+          const fallbackData = await fallbackResponse.json();
+          if (fallbackData.result?.value?.data?.parsed?.info) {
+            const mintInfo = fallbackData.result.value.data.parsed.info;
+            decimals = mintInfo.decimals || 9;
+            supply = parseInt(mintInfo.supply || '0');
+            mintAuthority = mintInfo.mintAuthority;
+            freezeAuthority = mintInfo.freezeAuthority;
+            
+            console.log('✅ Got fallback mint info:', {
+              decimals,
+              supply: supply.toString(),
+              mintAuthority,
+              freezeAuthority
+            });
+          }
+        } catch (fallbackError) {
+          console.error('❌ Fallback RPC also failed:', fallbackError);
+        }
       }
 
       // Calculate total supply properly
