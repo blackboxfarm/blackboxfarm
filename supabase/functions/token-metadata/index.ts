@@ -231,30 +231,114 @@ serve(async (req) => {
         }
       }
 
-      // Try getting metadata from Metaplex/NFT metadata if not found in token lists
+      // Try getting on-chain metadata from Metaplex if not found in token lists
       if (!verified) {
         try {
-          console.log('Trying metaplex metadata...');
-          const metaplexResponse = await fetch(rpcUrl, {
+          console.log('Fetching on-chain Metaplex metadata...');
+          
+          // Calculate Metaplex metadata PDA
+          const TOKEN_METADATA_PROGRAM_ID = 'metaqbxxUerdq28cj1RbAWkYQm3ybzjb6a8bt518x1s';
+          
+          // Get metadata account using getProgramAccounts
+          const metadataResponse = await fetch(rpcUrl, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
               jsonrpc: '2.0',
               id: 1,
-              method: 'getTokenSupply',
-              params: [tokenMint]
+              method: 'getProgramAccounts',
+              params: [
+                TOKEN_METADATA_PROGRAM_ID,
+                {
+                  filters: [
+                    {
+                      memcmp: {
+                        offset: 33, // Mint is at offset 33 in metadata account
+                        bytes: tokenMint
+                      }
+                    }
+                  ],
+                  encoding: 'base64',
+                  dataSlice: {
+                    offset: 0,
+                    length: 679 // Standard metadata account size
+                  }
+                }
+              ]
             })
           });
           
-          if (metaplexResponse.ok) {
-            const supplyData = await metaplexResponse.json();
-            if (supplyData.result?.value) {
-              supply = parseInt(supplyData.result.value.amount);
-              decimals = supplyData.result.value.decimals;
+          if (metadataResponse.ok) {
+            const metadataData = await metadataResponse.json();
+            
+            if (metadataData.result && metadataData.result.length > 0) {
+              const accountData = metadataData.result[0].account.data;
+              
+              try {
+                // Decode base64 data
+                const buffer = Uint8Array.from(atob(accountData), c => c.charCodeAt(0));
+                
+                // Parse Metaplex metadata structure
+                let offset = 69; // Skip metadata account header
+                
+                // Read name (first 4 bytes = length, then string)
+                const nameLen = new DataView(buffer.buffer).getUint32(offset, true);
+                offset += 4;
+                const nameBytes = buffer.slice(offset, offset + nameLen);
+                const name = new TextDecoder().decode(nameBytes).replace(/\0/g, '').trim();
+                offset += nameLen;
+                
+                // Read symbol
+                const symbolLen = new DataView(buffer.buffer).getUint32(offset, true);
+                offset += 4;
+                const symbolBytes = buffer.slice(offset, offset + symbolLen);
+                const symbol = new TextDecoder().decode(symbolBytes).replace(/\0/g, '').trim();
+                offset += symbolLen;
+                
+                // Read URI
+                const uriLen = new DataView(buffer.buffer).getUint32(offset, true);
+                offset += 4;
+                const uriBytes = buffer.slice(offset, offset + uriLen);
+                const uri = new TextDecoder().decode(uriBytes).replace(/\0/g, '').trim();
+                
+                if (name && name.length > 0) {
+                  console.log('Found on-chain metadata:', { name, symbol, uri });
+                  
+                  tokenName = name;
+                  tokenSymbol = symbol || tokenSymbol;
+                  
+                  // Try to fetch metadata from URI for logo
+                  if (uri && uri.startsWith('http')) {
+                    try {
+                      const uriResponse = await fetch(uri, { 
+                        signal: AbortSignal.timeout(5000),
+                        headers: { 'Accept': 'application/json' }
+                      });
+                      
+                      if (uriResponse.ok) {
+                        const uriData = await uriResponse.json();
+                        if (uriData.image) {
+                          logoUri = uriData.image;
+                          console.log('Found logo from URI metadata:', logoUri);
+                        }
+                        if (uriData.description) {
+                          description = uriData.description;
+                        }
+                      }
+                    } catch (uriError) {
+                      console.log('Failed to fetch URI metadata:', uriError.message);
+                    }
+                  }
+                  
+                  verified = true; // Mark as verified since we found on-chain metadata
+                }
+              } catch (parseError) {
+                console.log('Failed to parse Metaplex metadata:', parseError.message);
+              }
             }
           }
         } catch (error) {
-          console.log('Metaplex metadata fetch failed:', error);
+          console.log('Metaplex metadata fetch failed:', error.message);
         }
       }
 
