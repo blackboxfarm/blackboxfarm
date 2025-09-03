@@ -97,7 +97,9 @@ serve(async (req) => {
       console.log('Fetching fresh metadata for token:', tokenMint);
       
       const heliusApiKey = Deno.env.get('HELIUS_API_KEY');
+      console.log('Helius API key status:', heliusApiKey ? 'Found' : 'Missing', 'Length:', heliusApiKey?.length || 0);
       if (!heliusApiKey) {
+        console.error('Available env vars:', Object.keys(Deno.env.toObject()));
         throw new Error('Helius API key not configured - required for token metadata');
       }
       
