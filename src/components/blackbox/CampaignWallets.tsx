@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Plus, Wallet, Settings, Play, Pause, TestTube } from "lucide-react";
+import { Plus, Wallet, Settings, Play, Pause, TestTube, RefreshCw } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "@/hooks/use-toast";
 import { WalletCommands } from "./WalletCommands";
@@ -35,6 +35,7 @@ export function CampaignWallets({ campaign }: CampaignWalletsProps) {
   const [isGenerating, setIsGenerating] = useState(false);
   const [isDevMode, setIsDevMode] = useState(false);
   const [devBalances, setDevBalances] = useState<Record<string, number>>({});
+  const [isRefreshing, setIsRefreshing] = useState(false);
 
   useEffect(() => {
     loadWallets();
@@ -142,6 +143,43 @@ export function CampaignWallets({ campaign }: CampaignWalletsProps) {
     });
   };
 
+  const refreshWalletBalances = async () => {
+    if (isRefreshing) return;
+    
+    setIsRefreshing(true);
+    try {
+      toast({
+        title: "Refreshing balances...",
+        description: "Updating wallet balances from blockchain"
+      });
+
+      const { data, error } = await supabase.functions.invoke('refresh-wallet-balances');
+      
+      if (error) {
+        throw new Error(error.message);
+      }
+      
+      // Wait a moment for the database to update, then reload wallets
+      setTimeout(() => {
+        loadWallets();
+      }, 1000);
+      
+      toast({
+        title: "Balances updated",
+        description: `Successfully refreshed ${data?.updated || 'wallet'} balances`
+      });
+    } catch (error: any) {
+      console.error('Failed to refresh balances:', error);
+      toast({
+        title: "Refresh failed",
+        description: error.message || "Failed to refresh wallet balances",
+        variant: "destructive"
+      });
+    } finally {
+      setIsRefreshing(false);
+    }
+  };
+
   return (
     <div className="space-y-6">
       <Card>
@@ -199,10 +237,26 @@ export function CampaignWallets({ campaign }: CampaignWalletsProps) {
                           {wallet.is_active ? "Active" : "Inactive"}
                         </Badge>
                       </div>
-                      <p className="text-sm text-muted-foreground mt-1">
-                        Balance: {wallet.sol_balance.toFixed(4)} SOL
-                        {isDevMode && <span className="text-yellow-500 ml-2">(SIMULATED)</span>}
-                      </p>
+                      <div className="flex items-center gap-2 mt-1">
+                        <p className="text-sm text-muted-foreground">
+                          Balance: {wallet.sol_balance.toFixed(4)} SOL
+                          {isDevMode && <span className="text-yellow-500 ml-2">(SIMULATED)</span>}
+                        </p>
+                        {!isDevMode && (
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              refreshWalletBalances();
+                            }}
+                            disabled={isRefreshing}
+                            className="h-6 w-6 p-0"
+                          >
+                            <RefreshCw className={`h-3 w-3 ${isRefreshing ? 'animate-spin' : ''}`} />
+                          </Button>
+                        )}
+                      </div>
                     </div>
                     <div className="flex items-center gap-2">
                       {isDevMode && (
