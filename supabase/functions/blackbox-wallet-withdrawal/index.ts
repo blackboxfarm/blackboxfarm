@@ -1,7 +1,7 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.54.0";
 import { Connection, Keypair } from "https://esm.sh/@solana/web3.js@1.98.4";
-import { decode } from "https://esm.sh/bs58@6.0.0";
+import bs58 from "https://esm.sh/bs58@6.0.0";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -136,7 +136,7 @@ serve(async (req) => {
       if (decryptedSecret.startsWith('[') && decryptedSecret.endsWith(']')) {
         secretKey = new Uint8Array(JSON.parse(decryptedSecret));
       } else {
-        secretKey = decode(decryptedSecret);
+        secretKey = bs58.decode(decryptedSecret);
       }
     } catch (error) {
       throw new Error("Invalid private key format");
