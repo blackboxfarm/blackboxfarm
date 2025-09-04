@@ -1637,6 +1637,22 @@ export type Database = {
         Args: Record<PropertyKey, never>
         Returns: Json
       }
+      get_user_profile_safe: {
+        Args: { requesting_user_id: string }
+        Returns: {
+          avatar_url: string
+          created_at: string
+          display_name: string
+          email_verified: boolean
+          has_two_factor: boolean
+          id: string
+          phone_number_masked: string
+          phone_verified: boolean
+          two_factor_enabled: boolean
+          updated_at: string
+          user_id: string
+        }[]
+      }
       get_user_profile_secure: {
         Args: { requesting_user_id: string }
         Returns: {
