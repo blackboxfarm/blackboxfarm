@@ -157,60 +157,91 @@ serve(async (req) => {
       result = { signature, amount: buyAmount, type: "buy", revenue_collected: revenueCollected, signatures };
 
     } else if (action === "sell") {
-      // Execute REAL sell transaction using Jupiter/Raydium
-      const config = commandData.config;
-      const sellPercent = config.type === "simple" 
-        ? config.sellPercent 
-        : Math.random() * (config.sellPercent.max - config.sellPercent.min) + config.sellPercent.min;
+      // For sell, we need to check current token balance first
+      try {
+        // Get current token balance from wallet
+        const connection = new Connection(
+          Deno.env.get("SOLANA_RPC_URL") ?? "https://api.mainnet-beta.solana.com",
+          "confirmed"
+        );
+        
+        // Get token account for this wallet and token
+        const tokenAccounts = await connection.getTokenAccountsByOwner(
+          keypair.publicKey,
+          { mint: new PublicKey(campaign.token_address) }
+        );
 
-      // Get current token balance first (would need to implement this properly)
-      // For now, use a placeholder amount - in production this should check actual token balance
-      const sellAmount = 0.1; // Placeholder - should be calculated from actual token holdings
+        if (tokenAccounts.value.length === 0) {
+          console.log(`⚠️ No token balance found for ${campaign.token_address}, skipping sell`);
+          result = { message: "No tokens to sell", type: "sell" };
+        } else {
+          const tokenAccount = tokenAccounts.value[0];
+          const accountInfo = await connection.getTokenAccountBalance(tokenAccount.pubkey);
+          const tokenBalance = parseFloat(accountInfo.value.uiAmount || '0');
 
-      // Use raydium-swap function for REAL blockchain trades
-      const swapResponse = await supabaseClient.functions.invoke('raydium-swap', {
-        body: {
-          inputMint: campaign.token_address,
-          outputMint: 'So11111111111111111111111111111111111111112', // SOL
-          amount: sellAmount,
-          slippage: 5,
-          txVersion: 'v0',
-          confirmPolicy: 'confirm',
-          priorityFee: 'medium'
-        },
-        headers: {
-          'x-owner-secret': wallet.secret_key_encrypted,
-          'x-function-token': Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")
+          if (tokenBalance <= 0) {
+            console.log(`⚠️ Zero token balance, skipping sell`);
+            result = { message: "Zero token balance", type: "sell" };
+          } else {
+            // Calculate sell amount based on percentage
+            const config = commandData.config;
+            const sellPercent = config.type === "simple" 
+              ? config.sellPercent 
+              : Math.random() * (config.sellPercent.max - config.sellPercent.min) + config.sellPercent.min;
+            
+            const sellAmount = tokenBalance * (sellPercent / 100);
+
+            // Use raydium-swap function for REAL blockchain trades
+            const swapResponse = await supabaseClient.functions.invoke('raydium-swap', {
+              body: {
+                inputMint: campaign.token_address,
+                outputMint: 'So11111111111111111111111111111111111111112', // SOL
+                amount: sellAmount,
+                slippage: 5,
+                txVersion: 'v0',
+                confirmPolicy: 'confirm',
+                priorityFee: 'medium'
+              },
+              headers: {
+                'x-owner-secret': wallet.secret_key_encrypted,
+                'x-function-token': Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")
+              }
+            });
+
+            if (swapResponse.error) {
+              throw new Error(`Sell swap failed: ${swapResponse.error.message}`);
+            }
+
+            const signatures = swapResponse.data?.signatures || [];
+            const signature = signatures[0] || 'unknown';
+            const solReceived = swapResponse.data?.estimatedAmountOut || 0;
+
+            console.log(`✅ REAL SELL executed: ${sellAmount} tokens -> ${solReceived} SOL, signatures: ${signatures.join(', ')}`);
+
+            // Log transaction
+            await supabaseService
+              .from("blackbox_transactions")
+              .insert({
+                wallet_id: wallet.id,
+                command_code_id: command_code_id,
+                transaction_type: "sell",
+                amount_sol: solReceived,
+                gas_fee: 0.000005,
+                service_fee: solReceived * 0.35,
+                signature: signature,
+                status: "completed"
+              });
+
+            result = { amount: sellAmount, percent: sellPercent, type: "sell", signatures, solReceived };
+          }
         }
-      });
-
-      if (swapResponse.error) {
-        throw new Error(`Sell swap failed: ${swapResponse.error.message}`);
+      } catch (error) {
+        console.error(`❌ Sell failed: ${error.message}`);
+        throw error;
       }
-
-      const signatures = swapResponse.data?.signatures || [];
-      const signature = signatures[0] || 'unknown';
-
-      console.log(`✅ REAL SELL executed: ${sellAmount} tokens -> SOL, signatures: ${signatures.join(', ')}`);
-
-      // Log transaction
-      await supabaseService
-        .from("blackbox_transactions")
-        .insert({
-          wallet_id: wallet.id,
-          command_code_id: command_code_id,
-          transaction_type: "sell",
-          amount_sol: sellAmount,
-          gas_fee: 0.000005,
-          service_fee: sellAmount * 0.35,
-          signature: signature,
-          status: "completed"
-        });
-
-      result = { amount: sellAmount, percent: sellPercent, type: "sell", signatures };
     }
 
-    console.log(`Executed ${action} for command ${command_code_id}:`, result);
+    console.log(`✅ ${action.toUpperCase()} EXECUTION COMPLETED for command ${command_code_id}:`, JSON.stringify(result, null, 2));
 
     return new Response(
       JSON.stringify({ success: true, result }),
