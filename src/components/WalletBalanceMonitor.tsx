@@ -1,3 +1,4 @@
+import React from 'react';
 import { useRealtimeBalances } from '@/hooks/useRealtimeBalances';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -13,6 +14,11 @@ export function WalletBalanceMonitor() {
     lastUpdate, 
     refreshBalances 
   } = useRealtimeBalances();
+
+  // Auto-trigger refresh on mount to check for your testuser wallet
+  React.useEffect(() => {
+    refreshBalances();
+  }, []);
 
   return (
     <Card>
