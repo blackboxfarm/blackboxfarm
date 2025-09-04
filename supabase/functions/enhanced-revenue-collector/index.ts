@@ -30,6 +30,38 @@ serve(async (req) => {
       { auth: { persistSession: false } }
     );
 
+    // Check if this is a test account (skip fees for testing)
+    const { data: profileData } = await supabaseService
+      .from("profiles")
+      .select("display_name")
+      .eq("user_id", user_id)
+      .single();
+
+    const isTestAccount = profileData?.display_name?.toLowerCase().includes("test") || 
+                         profileData?.display_name?.toLowerCase().includes("admin") ||
+                         user_id === "YOUR_TEST_USER_ID_HERE"; // Replace with your actual test user ID
+
+    if (isTestAccount) {
+      console.log(`🧪 TEST ACCOUNT DETECTED: Skipping service fee collection for user ${user_id}`);
+      return new Response(
+        JSON.stringify({ 
+          success: true,
+          test_account: true,
+          message: "Service fees skipped for test account",
+          revenue_collected: {
+            amount_sol: 0,
+            amount_usd: 0,
+            platform_wallet: "test_mode",
+            revenue_id: null
+          }
+        }),
+        {
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+          status: 200,
+        }
+      );
+    }
+
     // Get current SOL price (simplified - you'd want real price feed)
     const solPriceUSD = 200; // You should fetch this from an API like CoinGecko
 

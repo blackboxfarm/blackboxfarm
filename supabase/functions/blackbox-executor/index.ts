@@ -104,17 +104,34 @@ serve(async (req) => {
       // Calculate total revenue to collect
       const totalRevenue = baseTradeFee + (serviceFee / 1_000_000_000);
 
-      // Collect revenue automatically
-      try {
-        await supabaseClient.functions.invoke('enhanced-revenue-collector', {
-          body: { 
-            user_id: campaign.user_id, 
-            amount_sol: totalRevenue,
-            revenue_type: 'trade_fee'
-          }
-        });
-      } catch (revenueError) {
-        console.error("Revenue collection failed:", revenueError);
+      // Check if test account and skip revenue collection
+      const { data: profileData } = await supabaseService
+        .from("profiles")
+        .select("display_name")
+        .eq("user_id", campaign.user_id)
+        .single();
+
+      const isTestAccount = profileData?.display_name?.toLowerCase().includes("test") || 
+                           profileData?.display_name?.toLowerCase().includes("admin") ||
+                           campaign.user_id === "YOUR_TEST_USER_ID_HERE"; // Replace with your actual test user ID
+
+      let revenueCollected = 0;
+      if (!isTestAccount) {
+        // Collect revenue automatically
+        try {
+          await supabaseClient.functions.invoke('enhanced-revenue-collector', {
+            body: { 
+              user_id: campaign.user_id, 
+              amount_sol: totalRevenue,
+              revenue_type: 'trade_fee'
+            }
+          });
+          revenueCollected = totalRevenue;
+        } catch (revenueError) {
+          console.error("Revenue collection failed:", revenueError);
+        }
+      } else {
+        console.log(`🧪 TEST ACCOUNT: Skipping revenue collection for user ${campaign.user_id}`);
       }
 
       // Log transaction
@@ -131,7 +148,7 @@ serve(async (req) => {
           status: "completed"
         });
 
-      result = { signature, amount: buyAmount, type: "buy", revenue_collected: totalRevenue };
+      result = { signature, amount: buyAmount, type: "buy", revenue_collected: revenueCollected };
 
     } else if (action === "sell") {
       // Execute sell transaction (similar structure)
