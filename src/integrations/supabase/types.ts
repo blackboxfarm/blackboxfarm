@@ -1005,6 +1005,54 @@ export type Database = {
         }
         Relationships: []
       }
+      token_metadata: {
+        Row: {
+          created_at: string | null
+          decimals: number | null
+          description: string | null
+          freeze_authority: string | null
+          id: string
+          logo_uri: string | null
+          mint_address: string
+          mint_authority: string | null
+          name: string | null
+          symbol: string | null
+          total_supply: number | null
+          updated_at: string | null
+          verified: boolean | null
+        }
+        Insert: {
+          created_at?: string | null
+          decimals?: number | null
+          description?: string | null
+          freeze_authority?: string | null
+          id?: string
+          logo_uri?: string | null
+          mint_address: string
+          mint_authority?: string | null
+          name?: string | null
+          symbol?: string | null
+          total_supply?: number | null
+          updated_at?: string | null
+          verified?: boolean | null
+        }
+        Update: {
+          created_at?: string | null
+          decimals?: number | null
+          description?: string | null
+          freeze_authority?: string | null
+          id?: string
+          logo_uri?: string | null
+          mint_address?: string
+          mint_authority?: string | null
+          name?: string | null
+          symbol?: string | null
+          total_supply?: number | null
+          updated_at?: string | null
+          verified?: boolean | null
+        }
+        Relationships: []
+      }
       token_watchlist: {
         Row: {
           current_price: number | null
@@ -1565,6 +1613,22 @@ export type Database = {
           user_id: string
         }[]
       }
+      get_profile_decrypted: {
+        Args: { user_id_param: string }
+        Returns: {
+          avatar_url: string
+          created_at: string
+          display_name: string
+          email_verified: boolean
+          id: string
+          phone_number: string
+          phone_verified: boolean
+          two_factor_enabled: boolean
+          two_factor_secret: string
+          updated_at: string
+          user_id: string
+        }[]
+      }
       get_security_config: {
         Args: { config_key_param: string }
         Returns: Json
@@ -1612,6 +1676,15 @@ export type Database = {
       }
       log_auth_failure: {
         Args: { client_info?: Json; failure_reason: string; user_email: string }
+        Returns: undefined
+      }
+      log_profile_security_event: {
+        Args: {
+          details_param?: Json
+          event_type_param: string
+          target_user_id_param: string
+          user_id_param: string
+        }
         Returns: undefined
       }
       log_wallet_operation: {
