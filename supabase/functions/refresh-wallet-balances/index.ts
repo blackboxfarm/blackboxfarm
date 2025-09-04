@@ -1,10 +1,21 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { Connection, PublicKey } from "https://esm.sh/@solana/web3.js@1.78.8";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
+import { Connection, PublicKey } from "npm:@solana/web3.js@1.95.3";
 
 const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+};
+
+interface WalletBalance {
+  pubkey: string;
+  balance: number;
+  lastUpdate: string;
+}
+
+const logStep = (step: string, details?: any) => {
+  const detailsStr = details ? ` - ${JSON.stringify(details)}` : '';
+  console.log(`[WALLET-BALANCES] ${step}${detailsStr}`);
 };
 
 serve(async (req) => {
@@ -13,128 +24,164 @@ serve(async (req) => {
   }
 
   try {
-    // Get user from auth token
-    const authHeader = req.headers.get('Authorization');
-    if (!authHeader) {
-      throw new Error('Missing authorization header');
-    }
+    logStep("Starting wallet balance refresh");
 
-    const supabase = createClient(
-      Deno.env.get('SUPABASE_URL') ?? '',
-      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
+    const supabaseServiceClient = createClient(
+      Deno.env.get("SUPABASE_URL") ?? "",
+      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "",
+      { auth: { persistSession: false } }
     );
 
-    const { data: { user }, error: authError } = await supabase.auth.getUser(
-      authHeader.replace('Bearer ', '')
-    );
+    const rpcUrl = Deno.env.get("SOLANA_RPC_URL") || "https://api.mainnet-beta.solana.com";
+    const connection = new Connection(rpcUrl, { commitment: "confirmed" });
+    logStep("Connected to Solana RPC", { rpcUrl });
 
-    if (authError || !user) {
-      throw new Error('Invalid authentication token');
+    // Get all active wallets from different pools
+    const { data: walletPools, error: poolError } = await supabaseServiceClient
+      .from("wallet_pools")
+      .select("pubkey")
+      .eq("is_active", true);
+
+    const { data: blackboxWallets, error: blackboxError } = await supabaseServiceClient
+      .from("blackbox_wallets")
+      .select("pubkey")
+      .eq("is_active", true);
+
+    const { data: superAdminWallets, error: adminError } = await supabaseServiceClient
+      .from("super_admin_wallets")
+      .select("pubkey")
+      .eq("is_active", true);
+
+    if (poolError || blackboxError || adminError) {
+      throw new Error(`Database query failed: ${JSON.stringify({ poolError, blackboxError, adminError })}`);
     }
 
-    // Get Solana RPC connection
-    const rpcUrl = Deno.env.get('SOLANA_RPC_URL') || 'https://api.mainnet-beta.solana.com';
-    const connection = new Connection(rpcUrl);
-
-    // Get all user's wallet pools
-    const { data: walletPools, error: poolError } = await supabase
-      .from('wallet_pools')
-      .select('id, pubkey')
-      .eq('user_id', user.id)
-      .eq('is_active', true);
-
-    if (poolError) throw poolError;
-
-    // Get all user's blackbox wallets
-    const { data: blackboxWallets, error: blackboxError } = await supabase
-      .from('blackbox_wallets')
-      .select(`
-        id, pubkey,
-        blackbox_campaigns!inner(user_id)
-      `)
-      .eq('blackbox_campaigns.user_id', user.id)
-      .eq('is_active', true);
-
-    if (blackboxError) throw blackboxError;
-
+    // Combine all wallet addresses
     const allWallets = [
-      ...(walletPools || []).map(w => ({ ...w, type: 'pool' })),
-      ...(blackboxWallets || []).map(w => ({ ...w, type: 'blackbox' }))
+      ...(walletPools || []).map(w => w.pubkey),
+      ...(blackboxWallets || []).map(w => w.pubkey),
+      ...(superAdminWallets || []).map(w => w.pubkey)
     ];
 
-    console.log(`Refreshing balances for ${allWallets.length} wallets`);
+    const uniqueWallets = [...new Set(allWallets)];
+    logStep("Found wallets to refresh", { count: uniqueWallets.length });
 
-    // Update balances in batches
+    if (uniqueWallets.length === 0) {
+      return new Response(JSON.stringify({ 
+        success: true, 
+        message: "No wallets to refresh",
+        updated: 0 
+      }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+        status: 200,
+      });
+    }
+
+    const balanceUpdates: WalletBalance[] = [];
+    const errors: Array<{ pubkey: string; error: string }> = [];
+
+    // Update balances in batches to avoid overwhelming the RPC
     const batchSize = 10;
-    for (let i = 0; i < allWallets.length; i += batchSize) {
-      const batch = allWallets.slice(i, i + batchSize);
+    for (let i = 0; i < uniqueWallets.length; i += batchSize) {
+      const batch = uniqueWallets.slice(i, i + batchSize);
       
-      await Promise.all(
-        batch.map(async (wallet) => {
-          try {
-            const pubkey = new PublicKey(wallet.pubkey);
-            const balance = await connection.getBalance(pubkey);
-            const solBalance = balance / 1e9; // Convert lamports to SOL
+      const batchPromises = batch.map(async (pubkey) => {
+        try {
+          const publicKey = new PublicKey(pubkey);
+          const balance = await connection.getBalance(publicKey);
+          const solBalance = balance / 1_000_000_000; // Convert lamports to SOL
+          
+          balanceUpdates.push({
+            pubkey,
+            balance: solBalance,
+            lastUpdate: new Date().toISOString()
+          });
+          
+          logStep("Updated wallet balance", { pubkey: pubkey.slice(0, 8) + "...", balance: solBalance });
+        } catch (error) {
+          const errorMsg = error instanceof Error ? error.message : String(error);
+          errors.push({ pubkey, error: errorMsg });
+          logStep("Failed to update wallet balance", { pubkey: pubkey.slice(0, 8) + "...", error: errorMsg });
+        }
+      });
 
-            if (wallet.type === 'pool') {
-              await supabase
-                .from('wallet_pools')
-                .update({
-                  sol_balance: solBalance,
-                  last_balance_check: new Date().toISOString()
-                })
-                .eq('id', wallet.id);
-            } else {
-              await supabase
-                .from('blackbox_wallets')
-                .update({
-                  sol_balance: solBalance
-                })
-                .eq('id', wallet.id);
-            }
-
-            console.log(`Updated balance for ${wallet.pubkey}: ${solBalance} SOL`);
-          } catch (error) {
-            console.error(`Failed to update balance for ${wallet.pubkey}:`, error);
-          }
-        })
-      );
-
-      // Small delay between batches to avoid rate limiting
-      if (i + batchSize < allWallets.length) {
+      await Promise.all(batchPromises);
+      
+      // Small delay between batches to be respectful to RPC
+      if (i + batchSize < uniqueWallets.length) {
         await new Promise(resolve => setTimeout(resolve, 100));
       }
     }
 
-    // Send notification about balance refresh
-    await supabase
-      .from('notifications')
-      .insert({
-        user_id: user.id,
-        title: 'Wallet Balances Updated',
-        message: `Successfully refreshed balances for ${allWallets.length} wallets.`,
-        type: 'info'
-      });
+    // Update database with new balances
+    let updatedCount = 0;
 
-    return new Response(
-      JSON.stringify({ 
-        success: true, 
-        message: `Updated ${allWallets.length} wallet balances`,
-        count: allWallets.length
-      }),
-      {
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        status: 200,
+    for (const update of balanceUpdates) {
+      try {
+        // Update wallet pools
+        const { error: poolUpdateError } = await supabaseServiceClient
+          .from("wallet_pools")
+          .update({ 
+            sol_balance: update.balance,
+            last_balance_check: update.lastUpdate 
+          })
+          .eq("pubkey", update.pubkey);
+
+        // Update blackbox wallets
+        const { error: blackboxUpdateError } = await supabaseServiceClient
+          .from("blackbox_wallets")
+          .update({ 
+            sol_balance: update.balance,
+            updated_at: update.lastUpdate 
+          })
+          .eq("pubkey", update.pubkey);
+
+        if (!poolUpdateError && !blackboxUpdateError) {
+          updatedCount++;
+        } else {
+          logStep("Database update failed", { 
+            pubkey: update.pubkey.slice(0, 8) + "...", 
+            poolUpdateError, 
+            blackboxUpdateError 
+          });
+        }
+      } catch (error) {
+        logStep("Database update error", { 
+          pubkey: update.pubkey.slice(0, 8) + "...", 
+          error: error instanceof Error ? error.message : String(error) 
+        });
       }
-    );
+    }
+
+    logStep("Balance refresh completed", { 
+      total: uniqueWallets.length,
+      successful: balanceUpdates.length,
+      updated: updatedCount,
+      errors: errors.length 
+    });
+
+    return new Response(JSON.stringify({ 
+      success: true,
+      total: uniqueWallets.length,
+      successful: balanceUpdates.length,
+      updated: updatedCount,
+      errors: errors.length > 0 ? errors : undefined,
+      timestamp: new Date().toISOString()
+    }), {
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+      status: 200,
+    });
   } catch (error) {
-    console.error('Error in refresh-wallet-balances:', error);
-    return new Response(
-      JSON.stringify({ error: error.message }),
-      {
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        status: 500,
-      }
-    );
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    logStep("ERROR in refresh-wallet-balances", { message: errorMessage });
+    
+    return new Response(JSON.stringify({ 
+      success: false,
+      error: errorMessage,
+      timestamp: new Date().toISOString()
+    }), {
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+      status: 500,
+    });
   }
 });

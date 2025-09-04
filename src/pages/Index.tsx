@@ -10,6 +10,7 @@ import WalletPoolManager from "@/components/WalletPoolManager";
 import { AgenticBrowser } from "@/components/AgenticBrowser";
 import { AnalyticsDashboard } from "@/components/AnalyticsDashboard";
 import { DashboardStatsWidget } from "@/components/DashboardStatsWidget";
+import { RealTimeTrading } from "@/components/trading/RealTimeTrading";
 
 import SecretsModal from "@/components/SecretsModal";
 import { PasswordLogin } from "@/components/PasswordLogin";
@@ -175,9 +176,12 @@ export default function Index() {
         <DashboardStatsWidget />
 
         <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
-          <TabsList className="grid w-full grid-cols-6 tech-border">
+          <TabsList className="grid w-full grid-cols-7 tech-border">
             <TabsTrigger value="server-control" className="text-xs">
               🤖 Server Control
+            </TabsTrigger>
+            <TabsTrigger value="live-trading" className="text-xs">
+              ⚡ Live Trading
             </TabsTrigger>
             <TabsTrigger value="live-runner" className="text-xs">
               🖥️ Browser Mode
@@ -198,6 +202,10 @@ export default function Index() {
 
           <TabsContent value="server-control">
             <ServerSideTradingControl />
+          </TabsContent>
+
+          <TabsContent value="live-trading">
+            <RealTimeTrading />
           </TabsContent>
 
           <TabsContent value="live-runner">
