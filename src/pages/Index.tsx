@@ -11,6 +11,7 @@ import { AgenticBrowser } from "@/components/AgenticBrowser";
 import { AnalyticsDashboard } from "@/components/AnalyticsDashboard";
 import { DashboardStatsWidget } from "@/components/DashboardStatsWidget";
 import { RealTimeTrading } from "@/components/trading/RealTimeTrading";
+import { WalletBalanceMonitor } from "@/components/WalletBalanceMonitor";
 
 import SecretsModal from "@/components/SecretsModal";
 import { PasswordLogin } from "@/components/PasswordLogin";
@@ -205,7 +206,10 @@ export default function Index() {
           </TabsContent>
 
           <TabsContent value="live-trading">
-            <RealTimeTrading />
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              <RealTimeTrading />
+              <WalletBalanceMonitor />
+            </div>
           </TabsContent>
 
           <TabsContent value="live-runner">

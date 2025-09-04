@@ -142,7 +142,7 @@ export function useRealtimeBalances() {
       blackboxSubscription.unsubscribe();
       clearInterval(autoRefreshInterval);
     };
-  }, [loadWalletBalances, refreshBalances]);
+  }, []);
 
   return {
     wallets: state.wallets,
