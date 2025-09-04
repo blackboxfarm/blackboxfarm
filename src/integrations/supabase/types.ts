@@ -1637,6 +1637,22 @@ export type Database = {
         Args: Record<PropertyKey, never>
         Returns: Json
       }
+      get_user_profile_secure: {
+        Args: { requesting_user_id: string }
+        Returns: {
+          avatar_url: string
+          created_at: string
+          display_name: string
+          email_verified: boolean
+          has_two_factor: boolean
+          id: string
+          phone_number_masked: string
+          phone_verified: boolean
+          two_factor_enabled: boolean
+          updated_at: string
+          user_id: string
+        }[]
+      }
       get_user_secrets_decrypted: {
         Args: { user_id_param: string }
         Returns: {
@@ -1706,6 +1722,10 @@ export type Database = {
       track_referral_signup: {
         Args: { new_user_id: string; referral_code_param: string }
         Returns: Json
+      }
+      validate_profile_access: {
+        Args: { target_user_id: string }
+        Returns: boolean
       }
       validate_secret_access: {
         Args: { requesting_user_id: string; target_user_id: string }
