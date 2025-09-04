@@ -3,7 +3,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { CheckCircle2, AlertTriangle, Wallet, DollarSign, Play, Info } from "lucide-react";
+import { CheckCircle2, AlertTriangle, Wallet, DollarSign, ToggleLeft, ToggleRight, Info } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "@/hooks/use-toast";
 
@@ -62,26 +62,30 @@ export function CampaignActivationGuide({ campaign }: CampaignActivationGuidePro
     }
   };
 
-  const activateCampaign = async () => {
+  const toggleCampaign = async () => {
     setLoading(true);
     try {
+      const newStatus = !campaign.is_active;
       const { error } = await supabase
         .from('blackbox_campaigns')
-        .update({ is_active: true })
+        .update({ is_active: newStatus })
         .eq('id', campaign.id);
 
       if (error) throw error;
 
       toast({
-        title: "Campaign Activated! 🚀",
-        description: "Your campaign is now live and trading will begin automatically."
+        title: newStatus ? "Campaign Started! 🚀" : "Campaign Stopped ⏹️",
+        description: newStatus 
+          ? "Your campaign is now live and trading will begin automatically."
+          : "Your campaign has been stopped and trading has been paused."
       });
 
       // Reload data to reflect changes
       loadCampaignData();
     } catch (error: any) {
+      const newStatus = !campaign.is_active;
       toast({
-        title: "Activation Failed",
+        title: newStatus ? "Start Failed" : "Stop Failed",
         description: error.message,
         variant: "destructive"
       });
@@ -90,11 +94,12 @@ export function CampaignActivationGuide({ campaign }: CampaignActivationGuidePro
     }
   };
 
-  // Check activation requirements
+  // Check requirements
   const hasWallets = wallets.length > 0;
+  const hasEnabledWallets = wallets.some(w => w.is_active);
   const hasFundedWallets = wallets.some(w => w.sol_balance > 0);
   const hasCommands = commands.length > 0;
-  const hasActiveCommands = commands.some(c => c.is_active);
+  const hasEnabledCommands = commands.some(c => c.is_active);
   
   const totalBalance = wallets.reduce((sum, w) => sum + w.sol_balance, 0);
   const estimatedDailyCost = commands.reduce((sum, cmd) => {
@@ -107,45 +112,52 @@ export function CampaignActivationGuide({ campaign }: CampaignActivationGuidePro
     return sum + 1; // Conservative estimate for complex commands
   }, 0);
 
-  const canActivate = hasWallets && hasFundedWallets && hasActiveCommands && !campaign.is_active;
+  const canStart = hasEnabledWallets && hasFundedWallets && hasEnabledCommands;
   const isReady = hasWallets && hasFundedWallets && hasCommands;
 
   const getStatusIcon = (condition: boolean) => 
     condition ? <CheckCircle2 className="h-5 w-5 text-green-500" /> : <AlertTriangle className="h-5 w-5 text-orange-500" />;
+  
+  const getToggleIcon = (enabled: boolean) =>
+    enabled ? <ToggleRight className="h-5 w-5 text-green-500" /> : <ToggleLeft className="h-5 w-5 text-gray-400" />;
 
   return (
     <Card>
       <CardHeader>
         <CardTitle className="flex items-center gap-2">
-          <Play className="h-5 w-5" />
-          Campaign Activation Status
+          {getToggleIcon(campaign.is_active)}
+          Campaign Status
         </CardTitle>
       </CardHeader>
       <CardContent className="space-y-6">
         {/* Current Status */}
         <div className="text-center p-4 border rounded-lg">
           <Badge variant={campaign.is_active ? "default" : "secondary"} className="text-lg px-4 py-2">
-            {campaign.is_active ? "🟢 ACTIVE" : "⏸️ PAUSED"}
+            {campaign.is_active ? "🟢 ENABLED" : "⚪ DISABLED"}
           </Badge>
           <p className="text-sm text-muted-foreground mt-2">
-            {campaign.is_active ? "Campaign is live and trading" : "Campaign is ready to activate"}
+            {campaign.is_active ? "Campaign is live and trading" : "Campaign is ready to start"}
           </p>
         </div>
 
-        {/* Activation Checklist */}
+        {/* Requirements Checklist */}
         <div className="space-y-3">
           <h3 className="font-medium flex items-center gap-2">
             <Info className="h-4 w-4" />
-            Activation Requirements
+            Campaign Requirements
           </h3>
           
           <div className="space-y-2">
             <div className="flex items-center gap-3 p-3 border rounded-lg">
-              {getStatusIcon(hasWallets)}
+              {getToggleIcon(hasEnabledWallets)}
               <div className="flex-1">
-                <p className="font-medium">Generate Wallets</p>
+                <p className="font-medium">Enabled Wallets</p>
                 <p className="text-sm text-muted-foreground">
-                  {hasWallets ? `✓ ${wallets.length} wallet(s) created` : "Create at least one wallet for trading"}
+                  {hasEnabledWallets 
+                    ? `✓ ${wallets.filter(w => w.is_active).length} of ${wallets.length} wallet(s) enabled` 
+                    : hasWallets 
+                      ? "Enable at least one wallet for trading"
+                      : "Create and enable at least one wallet for trading"}
                 </p>
               </div>
             </div>
@@ -166,15 +178,15 @@ export function CampaignActivationGuide({ campaign }: CampaignActivationGuidePro
             </div>
 
             <div className="flex items-center gap-3 p-3 border rounded-lg">
-              {getStatusIcon(hasActiveCommands)}
+              {getToggleIcon(hasEnabledCommands)}
               <div className="flex-1">
-                <p className="font-medium">Configure Commands</p>
+                <p className="font-medium">Enabled Commands</p>
                 <p className="text-sm text-muted-foreground">
-                  {hasActiveCommands 
-                    ? `✓ ${commands.filter(c => c.is_active).length} active command(s)` 
+                  {hasEnabledCommands 
+                    ? `✓ ${commands.filter(c => c.is_active).length} of ${commands.length} command(s) enabled` 
                     : hasCommands 
-                      ? "⚠️ Commands created but none are active"
-                      : "Create and activate trading commands"}
+                      ? "Enable at least one command for trading"
+                      : "Create and enable trading commands"}
                 </p>
               </div>
             </div>
@@ -228,26 +240,27 @@ export function CampaignActivationGuide({ campaign }: CampaignActivationGuidePro
           </Alert>
         )}
 
-        {/* Activation Button */}
+        {/* Campaign Control Button */}
         <div className="pt-4 border-t">
-          {campaign.is_active ? (
-            <div className="text-center text-muted-foreground">
-              <p>✅ Campaign is currently active and trading</p>
-            </div>
-          ) : (
-            <Button 
-              onClick={activateCampaign}
-              disabled={!canActivate || loading}
-              className="w-full"
-              size="lg"
-            >
-              {loading ? "Activating..." : canActivate ? "🚀 Activate Campaign" : "Complete Requirements to Activate"}
-            </Button>
-          )}
+          <Button 
+            onClick={toggleCampaign}
+            disabled={(!canStart && !campaign.is_active) || loading}
+            className="w-full"
+            size="lg"
+            variant={campaign.is_active ? "destructive" : "default"}
+          >
+            {loading 
+              ? (campaign.is_active ? "Stopping..." : "Starting...") 
+              : campaign.is_active 
+                ? "Stop Campaign" 
+                : canStart 
+                  ? "Start Campaign" 
+                  : "Complete Requirements to Start"}
+          </Button>
           
-          {!canActivate && !campaign.is_active && (
+          {!canStart && !campaign.is_active && (
             <p className="text-xs text-muted-foreground text-center mt-2">
-              Complete all requirements above to enable activation
+              Ensure you have at least 1 enabled wallet, funded wallet, and enabled command
             </p>
           )}
         </div>
