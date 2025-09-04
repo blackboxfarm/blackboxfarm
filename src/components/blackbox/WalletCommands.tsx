@@ -1096,13 +1096,13 @@ export function WalletCommands({ wallet, campaign, isDevMode = false, devBalance
                         id="buyAmount"
                         type="number"
                         step={buyAmountUnit === 'USD' ? "0.01" : "0.001"}
-                        value={buyAmountUnit === 'USD' ? Number(convertToUSD(newCommand.buyAmount)).toFixed(2) : newCommand.buyAmount}
+                        value={newCommand.buyAmount}
                         onChange={(e) => {
                           const value = e.target.value;
                           if (value === '' || !isNaN(Number(value))) {
                             setNewCommand(prev => ({ 
                               ...prev, 
-                              buyAmount: buyAmountUnit === 'USD' ? convertToSOL(value) : value 
+                              buyAmount: value 
                             }));
                           }
                         }}
