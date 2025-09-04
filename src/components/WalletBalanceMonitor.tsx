@@ -17,8 +17,18 @@ export function WalletBalanceMonitor() {
 
   // Auto-trigger refresh on mount to check for your testuser wallet
   React.useEffect(() => {
-    refreshBalances();
-  }, []);
+    const triggerRefresh = async () => {
+      console.log('🔄 Auto-refreshing wallet balances...');
+      await refreshBalances();
+    };
+    triggerRefresh();
+  }, [refreshBalances]);
+
+  // Manual refresh for testing
+  const handleManualRefresh = async () => {
+    console.log('🔄 Manual refresh triggered...');
+    await refreshBalances();
+  };
 
   return (
     <Card>
@@ -30,7 +40,7 @@ export function WalletBalanceMonitor() {
         <Button
           variant="outline"
           size="sm"
-          onClick={refreshBalances}
+          onClick={handleManualRefresh}
           disabled={isLoading}
         >
           <RefreshCw className={`h-4 w-4 ${isLoading ? 'animate-spin' : ''}`} />
