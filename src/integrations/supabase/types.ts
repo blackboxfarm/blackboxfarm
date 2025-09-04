@@ -1735,6 +1735,10 @@ export type Database = {
         Args: { input_text: string }
         Returns: string
       }
+      process_active_blackbox_commands: {
+        Args: Record<PropertyKey, never>
+        Returns: undefined
+      }
       track_referral_signup: {
         Args: { new_user_id: string; referral_code_param: string }
         Returns: Json
