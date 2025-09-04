@@ -30,19 +30,14 @@ serve(async (req) => {
       { auth: { persistSession: false } }
     );
 
-    // Check if this is a test account (skip fees for testing)
-    const { data: profileData } = await supabaseService
-      .from("profiles")
-      .select("display_name")
-      .eq("user_id", user_id)
-      .single();
-
-    const isTestAccount = profileData?.display_name?.toLowerCase().includes("test") || 
-                         profileData?.display_name?.toLowerCase().includes("admin") ||
-                         user_id === "YOUR_TEST_USER_ID_HERE"; // Replace with your actual test user ID
+    // Check if this is the testuser@blackbox.farm account (skip fees for testing)
+    const { data: userData } = await supabaseService.auth.admin.getUserById(user_id);
+    const userEmail = userData?.user?.email;
+    
+    const isTestAccount = userEmail === "testuser@blackbox.farm";
 
     if (isTestAccount) {
-      console.log(`🧪 TEST ACCOUNT DETECTED: Skipping service fee collection for user ${user_id}`);
+      console.log(`🧪 TEST ACCOUNT DETECTED (${userEmail}): Skipping service fee collection for user ${user_id}`);
       return new Response(
         JSON.stringify({ 
           success: true,

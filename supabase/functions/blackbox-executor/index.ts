@@ -104,16 +104,11 @@ serve(async (req) => {
       // Calculate total revenue to collect
       const totalRevenue = baseTradeFee + (serviceFee / 1_000_000_000);
 
-      // Check if test account and skip revenue collection
-      const { data: profileData } = await supabaseService
-        .from("profiles")
-        .select("display_name")
-        .eq("user_id", campaign.user_id)
-        .single();
-
-      const isTestAccount = profileData?.display_name?.toLowerCase().includes("test") || 
-                           profileData?.display_name?.toLowerCase().includes("admin") ||
-                           campaign.user_id === "YOUR_TEST_USER_ID_HERE"; // Replace with your actual test user ID
+      // Check if this is the testuser@blackbox.farm account (skip fees for testing)
+      const { data: userData } = await supabaseService.auth.admin.getUserById(campaign.user_id);
+      const userEmail = userData?.user?.email;
+      
+      const isTestAccount = userEmail === "testuser@blackbox.farm";
 
       let revenueCollected = 0;
       if (!isTestAccount) {
@@ -131,7 +126,7 @@ serve(async (req) => {
           console.error("Revenue collection failed:", revenueError);
         }
       } else {
-        console.log(`🧪 TEST ACCOUNT: Skipping revenue collection for user ${campaign.user_id}`);
+        console.log(`🧪 TEST ACCOUNT (${userEmail}): Skipping revenue collection for user ${campaign.user_id}`);
       }
 
       // Log transaction
