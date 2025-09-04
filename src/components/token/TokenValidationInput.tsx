@@ -1,10 +1,11 @@
 import { useState, useEffect } from "react";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Button } from "@/components/ui/button";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { TokenMetadataDisplay } from "./TokenMetadataDisplay";
 import { useTokenMetadata } from "@/hooks/useTokenMetadata";
-import { CheckCircle, XCircle, AlertCircle } from "lucide-react";
+import { CheckCircle, XCircle, AlertCircle, RefreshCw } from "lucide-react";
 
 interface TokenValidationInputProps {
   value: string;
@@ -21,8 +22,9 @@ export function TokenValidationInput({
   placeholder = "Enter Solana token address",
   onValidationChange 
 }: TokenValidationInputProps) {
-  const { tokenData, isLoading, error, fetchTokenMetadata, validateTokenAddress } = useTokenMetadata();
+  const { tokenData, isLoading, error, fetchTokenMetadata, refreshTokenMetadata, validateTokenAddress } = useTokenMetadata();
   const [validationState, setValidationState] = useState<'idle' | 'validating' | 'valid' | 'invalid'>('idle');
+  const [isRefreshing, setIsRefreshing] = useState(false);
 
   useEffect(() => {
     const validateToken = async () => {
@@ -73,6 +75,19 @@ export function TokenValidationInput({
     }
   };
 
+  const handleRefresh = async () => {
+    if (!value || !validateTokenAddress(value) || isRefreshing) return;
+    
+    setIsRefreshing(true);
+    try {
+      const isValid = await refreshTokenMetadata(value);
+      setValidationState(isValid ? 'valid' : 'invalid');
+      onValidationChange?.(isValid, tokenData);
+    } finally {
+      setIsRefreshing(false);
+    }
+  };
+
   return (
     <div className="space-y-3">
       <div>
@@ -96,13 +111,39 @@ export function TokenValidationInput({
       {error && (
         <Alert variant="destructive">
           <XCircle className="h-4 w-4" />
-          <AlertDescription>{error}</AlertDescription>
+          <AlertDescription>
+            {error}
+            {value && validateTokenAddress(value) && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleRefresh}
+                disabled={isRefreshing}
+                className="ml-2 h-6 text-xs"
+              >
+                <RefreshCw className={`h-3 w-3 mr-1 ${isRefreshing ? 'animate-spin' : ''}`} />
+                Retry
+              </Button>
+            )}
+          </AlertDescription>
         </Alert>
       )}
 
       {tokenData && validationState === 'valid' && (
         <div className="space-y-2">
-          <Label className="text-sm font-medium">Token Information</Label>
+          <div className="flex items-center justify-between">
+            <Label className="text-sm font-medium">Token Information</Label>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={handleRefresh}
+              disabled={isRefreshing}
+              className="h-6 text-xs"
+            >
+              <RefreshCw className={`h-3 w-3 mr-1 ${isRefreshing ? 'animate-spin' : ''}`} />
+              Refresh
+            </Button>
+          </div>
           <TokenMetadataDisplay 
             metadata={tokenData.metadata}
             priceInfo={tokenData.priceInfo}

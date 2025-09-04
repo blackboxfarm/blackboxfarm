@@ -16,6 +16,28 @@ interface TokenMetadata {
   verified?: boolean;
 }
 
+// Helper function to check if token is on pump.fun
+function isPumpFunToken(mintAddress: string): boolean {
+  // Pump.fun tokens typically have specific characteristics
+  // This is a simple heuristic - could be improved with more specific detection
+  return mintAddress.endsWith('pump') || mintAddress.length === 44;
+}
+
+// Memory-optimized API call with timeout
+async function fetchWithTimeout(url: string, timeout: number = 5000): Promise<Response> {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), timeout);
+  
+  try {
+    const response = await fetch(url, { signal: controller.signal });
+    clearTimeout(timeoutId);
+    return response;
+  } catch (error) {
+    clearTimeout(timeoutId);
+    throw error;
+  }
+}
+
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
@@ -23,23 +45,14 @@ serve(async (req) => {
 
   try {
     console.log('Token metadata request received');
-    console.log('Request URL:', req.url);
-    console.log('Request method:', req.method);
     
     const body = await req.json();
-    console.log('Raw request body:', JSON.stringify(body));
     const { tokenMint } = body;
-    console.log('Parsed request body:', { tokenMint });
+    console.log('Processing token:', tokenMint);
 
     if (!tokenMint) {
       throw new Error('Token mint address is required');
     }
-
-    // Use public RPC endpoint as fallback
-    const rpcUrl = Deno.env.get('SOLANA_RPC_URL') || 'https://api.mainnet-beta.solana.com';
-    console.log('Using RPC URL:', rpcUrl);
-    
-    const connection = new Connection(rpcUrl);
 
     // Validate mint address
     let mintPubkey: PublicKey;
@@ -49,43 +62,104 @@ serve(async (req) => {
       throw new Error('Invalid mint address');
     }
 
-    // Get mint info from Solana with timeout and retry
+    // Check if this is likely a pump.fun token
+    const isPumpFun = isPumpFunToken(tokenMint);
+    console.log('Is pump.fun token:', isPumpFun);
+
+    const rpcUrl = Deno.env.get('SOLANA_RPC_URL') || 'https://api.mainnet-beta.solana.com';
+    const connection = new Connection(rpcUrl);
+
+    // Get basic on-chain data with reduced timeout
     let mintInfo;
+    let decimals = 9;
+    let supply = 0;
+    
     try {
-      const timeout = new Promise((_, reject) => 
-        setTimeout(() => reject(new Error('RPC timeout')), 10000)
-      );
-      
       mintInfo = await Promise.race([
         connection.getParsedAccountInfo(mintPubkey),
-        timeout
+        new Promise((_, reject) => 
+          setTimeout(() => reject(new Error('RPC timeout')), 3000)
+        )
       ]);
       
-      if (!mintInfo.value) {
-        throw new Error('Token mint not found on chain');
+      if (mintInfo.value?.data) {
+        const parsedData = mintInfo.value.data as any;
+        decimals = parsedData.parsed?.info?.decimals || 9;
+        supply = parsedData.parsed?.info?.supply || 0;
       }
     } catch (error) {
-      console.log('RPC call failed, continuing with basic validation:', error);
-      // Continue with basic token validation
-      mintInfo = { value: { data: { parsed: { info: { decimals: 9, supply: 0 } } } } };
+      console.log('RPC call failed, using defaults:', error.message);
     }
 
-    const parsedData = mintInfo.value?.data as any;
-    const decimals = parsedData?.parsed?.info?.decimals || 9;
-    const supply = parsedData?.parsed?.info?.supply || 0;
-
-    // Try to fetch metadata from Jupiter API (public token list)
+    // Initialize basic metadata
     let metadata: TokenMetadata = {
       mint: tokenMint,
-      name: 'Unknown Token',
-      symbol: 'UNK',
+      name: isPumpFun ? 'Pump.fun Token' : 'Token',
+      symbol: isPumpFun ? 'PUMP' : 'TKN',
       decimals,
-      totalSupply: supply / Math.pow(10, decimals)
+      totalSupply: supply / Math.pow(10, decimals),
+      verified: false
     };
 
+    // For pump.fun tokens, use a lighter approach
+    if (isPumpFun) {
+      console.log('Using pump.fun optimized path');
+      
+      // Only try DexScreener for pump.fun tokens (lighter than Jupiter + CG)
+      let priceInfo = null;
+      try {
+        const dexResponse = await fetchWithTimeout(
+          `https://api.dexscreener.com/latest/dex/tokens/${tokenMint}`,
+          3000
+        );
+        
+        if (dexResponse.ok) {
+          const dexData = await dexResponse.json();
+          if (dexData.pairs && dexData.pairs.length > 0) {
+            const pair = dexData.pairs[0];
+            
+            // Update metadata from dex data
+            if (pair.baseToken?.name) {
+              metadata.name = pair.baseToken.name;
+              metadata.symbol = pair.baseToken.symbol || metadata.symbol;
+            }
+            
+            priceInfo = {
+              priceUsd: parseFloat(pair.priceUsd || '0'),
+              priceChange24h: parseFloat(pair.priceChange?.h24 || '0'),
+              volume24h: parseFloat(pair.volume?.h24 || '0'),
+              liquidity: parseFloat(pair.liquidity?.usd || '0'),
+              dexUrl: pair.url
+            };
+          }
+        }
+      } catch (error) {
+        console.log('DexScreener failed for pump.fun token:', error.message);
+      }
+
+      return new Response(
+        JSON.stringify({
+          success: true,
+          metadata: { ...metadata, isPumpFun: true },
+          priceInfo,
+          onChainData: {
+            decimals,
+            supply: supply.toString(),
+            isPumpFun: true
+          }
+        }),
+        {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          status: 200,
+        }
+      );
+    }
+
+    // For regular tokens, try Jupiter first (most reliable)
     try {
-      // Jupiter token list API
-      const jupiterResponse = await fetch('https://token.jup.ag/all');
+      console.log('Checking Jupiter token list...');
+      const jupiterResponse = await fetchWithTimeout('https://token.jup.ag/strict', 4000);
+      
       if (jupiterResponse.ok) {
         const tokens = await jupiterResponse.json();
         const tokenData = tokens.find((t: any) => t.address === tokenMint);
@@ -93,63 +167,47 @@ serve(async (req) => {
         if (tokenData) {
           metadata = {
             mint: tokenMint,
-            name: tokenData.name || 'Unknown Token',
-            symbol: tokenData.symbol || 'UNK',
+            name: tokenData.name || 'Token',
+            symbol: tokenData.symbol || 'TKN',
             decimals: tokenData.decimals || decimals,
             logoURI: tokenData.logoURI,
             totalSupply: supply / Math.pow(10, tokenData.decimals || decimals),
             verified: true
           };
+          
+          console.log('Found verified token in Jupiter');
         }
       }
     } catch (error) {
-      console.log('Jupiter API failed, using basic metadata:', error);
+      console.log('Jupiter API failed:', error.message);
     }
 
-    // Try CoinGecko as fallback
+    // Get price info if not found in Jupiter
+    let priceInfo = null;
     if (!metadata.verified) {
       try {
-        const cgResponse = await fetch(
-          `https://api.coingecko.com/api/v3/coins/solana/contract/${tokenMint}`
+        console.log('Checking DexScreener for price...');
+        const dexResponse = await fetchWithTimeout(
+          `https://api.dexscreener.com/latest/dex/tokens/${tokenMint}`,
+          3000
         );
         
-        if (cgResponse.ok) {
-          const cgData = await cgResponse.json();
-          metadata = {
-            ...metadata,
-            name: cgData.name || metadata.name,
-            symbol: cgData.symbol?.toUpperCase() || metadata.symbol,
-            logoURI: cgData.image?.small || metadata.logoURI,
-            verified: true
-          };
+        if (dexResponse.ok) {
+          const dexData = await dexResponse.json();
+          if (dexData.pairs && dexData.pairs.length > 0) {
+            const pair = dexData.pairs[0];
+            priceInfo = {
+              priceUsd: parseFloat(pair.priceUsd || '0'),
+              priceChange24h: parseFloat(pair.priceChange?.h24 || '0'),
+              volume24h: parseFloat(pair.volume?.h24 || '0'),
+              liquidity: parseFloat(pair.liquidity?.usd || '0'),
+              dexUrl: pair.url
+            };
+          }
         }
       } catch (error) {
-        console.log('CoinGecko API failed:', error);
+        console.log('DexScreener failed:', error.message);
       }
-    }
-
-    // Try to get current price from DexScreener
-    let priceInfo = null;
-    try {
-      const dexResponse = await fetch(
-        `https://api.dexscreener.com/latest/dex/tokens/${tokenMint}`
-      );
-      
-      if (dexResponse.ok) {
-        const dexData = await dexResponse.json();
-        if (dexData.pairs && dexData.pairs.length > 0) {
-          const pair = dexData.pairs[0];
-          priceInfo = {
-            priceUsd: parseFloat(pair.priceUsd || '0'),
-            priceChange24h: parseFloat(pair.priceChange?.h24 || '0'),
-            volume24h: parseFloat(pair.volume?.h24 || '0'),
-            liquidity: parseFloat(pair.liquidity?.usd || '0'),
-            dexUrl: pair.url
-          };
-        }
-      }
-    } catch (error) {
-      console.log('DexScreener API failed:', error);
     }
 
     return new Response(
@@ -160,8 +218,8 @@ serve(async (req) => {
         onChainData: {
           decimals,
           supply: supply.toString(),
-          mintAuthority: parsedData.parsed?.info?.mintAuthority,
-          freezeAuthority: parsedData.parsed?.info?.freezeAuthority
+          mintAuthority: mintInfo?.value?.data?.parsed?.info?.mintAuthority,
+          freezeAuthority: mintInfo?.value?.data?.parsed?.info?.freezeAuthority
         }
       }),
       {
@@ -171,11 +229,6 @@ serve(async (req) => {
     );
   } catch (error) {
     console.error('Error in token-metadata:', error);
-    console.error('Error details:', {
-      message: error.message,
-      name: error.name,
-      cause: error.cause
-    });
     return new Response(
       JSON.stringify({ 
         success: false,
@@ -187,7 +240,7 @@ serve(async (req) => {
       }),
       {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        status: 200, // Return 200 so frontend can handle the error gracefully
+        status: 200,
       }
     );
   }
