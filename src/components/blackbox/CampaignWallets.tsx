@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Plus, Wallet, Settings, Play, Pause, TestTube, RefreshCw } from "lucide-react";
+import { Plus, Wallet, Settings, Play, Pause, TestTube, RefreshCw, ArrowLeftRight } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "@/hooks/use-toast";
 import { WalletCommands } from "./WalletCommands";
@@ -36,6 +36,7 @@ export function CampaignWallets({ campaign }: CampaignWalletsProps) {
   const [isDevMode, setIsDevMode] = useState(false);
   const [devBalances, setDevBalances] = useState<Record<string, number>>({});
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [withdrawingWallets, setWithdrawingWallets] = useState<Set<string>>(new Set());
 
   useEffect(() => {
     loadWallets();
@@ -180,6 +181,70 @@ export function CampaignWallets({ campaign }: CampaignWalletsProps) {
     }
   };
 
+  const withdrawToDepositor = async (wallet: WalletData) => {
+    if (withdrawingWallets.has(wallet.id)) return;
+
+    // Confirmation dialog
+    const confirmed = window.confirm(
+      `Withdraw ALL SOL from wallet ${wallet.pubkey.slice(0, 8)}...${wallet.pubkey.slice(-8)} back to the original depositor?\n\nThis will return approximately ${wallet.sol_balance.toFixed(4)} SOL minus network fees.`
+    );
+    
+    if (!confirmed) return;
+
+    setWithdrawingWallets(prev => new Set(prev).add(wallet.id));
+    
+    try {
+      toast({
+        title: "Withdrawing funds...",
+        description: "Tracing original depositor and returning SOL"
+      });
+
+      const { data, error } = await supabase.functions.invoke('blackbox-wallet-withdrawal', {
+        body: { wallet_id: wallet.id }
+      });
+
+      if (error) {
+        throw new Error(error.message);
+      }
+
+      toast({
+        title: "Withdrawal successful! 🎉",
+        description: (
+          <div className="space-y-2">
+            <p>{data.message}</p>
+            <a 
+              href={data.explorerUrl} 
+              target="_blank" 
+              rel="noopener noreferrer"
+              className="text-blue-400 hover:text-blue-300 underline text-sm"
+            >
+              View on Solscan →
+            </a>
+          </div>
+        )
+      });
+
+      // Refresh wallet balances
+      setTimeout(() => {
+        loadWallets();
+      }, 1000);
+
+    } catch (error: any) {
+      console.error('Withdrawal failed:', error);
+      toast({
+        title: "Withdrawal failed",
+        description: error.message || "Failed to withdraw funds",
+        variant: "destructive"
+      });
+    } finally {
+      setWithdrawingWallets(prev => {
+        const newSet = new Set(prev);
+        newSet.delete(wallet.id);
+        return newSet;
+      });
+    }
+  };
+
   return (
     <div className="space-y-6">
       <Card>
@@ -259,6 +324,27 @@ export function CampaignWallets({ campaign }: CampaignWalletsProps) {
                       </div>
                     </div>
                     <div className="flex items-center gap-2">
+                      {!isDevMode && wallet.sol_balance > 0 && (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            withdrawToDepositor(wallet);
+                          }}
+                          disabled={withdrawingWallets.has(wallet.id)}
+                          className="text-xs"
+                        >
+                          {withdrawingWallets.has(wallet.id) ? (
+                            "Withdrawing..."
+                          ) : (
+                            <>
+                              <ArrowLeftRight className="h-3 w-3 mr-1" />
+                              Withdraw to Depositor
+                            </>
+                          )}
+                        </Button>
+                      )}
                       {isDevMode && (
                         <Button
                           size="sm"
