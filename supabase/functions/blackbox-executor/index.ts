@@ -12,6 +12,30 @@ interface DecryptionResponse {
   decryptedData: string;
 }
 
+// Token platform detection function
+function detectTokenPlatform(tokenAddress: string): string {
+  const address = tokenAddress.toLowerCase();
+  
+  // Platform detection by domain ending
+  if (address.endsWith('pump')) return 'pump.fun';
+  if (address.endsWith('bags')) return 'bags.fm';
+  if (address.endsWith('bonk')) return 'bonk.fun';
+  if (address.endsWith('moon')) return 'moonshot.cc';
+  if (address.endsWith('fun')) return 'fun.finance';
+  if (address.endsWith('dex')) return 'dexlab.space';
+  if (address.endsWith('launch')) return 'launch.pad';
+  
+  // Check for specific platform patterns
+  if (address.includes('ray') || address.includes('amm')) return 'raydium';
+  if (address.includes('orca')) return 'orca';
+  if (address.includes('jupiter') || address.includes('jup')) return 'jupiter';
+  if (address.includes('meteora')) return 'meteora';
+  if (address.includes('serum')) return 'serum';
+  
+  // Default to generic/unknown for standard SPL tokens
+  return 'spl-token';
+}
+
 serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
@@ -91,7 +115,14 @@ serve(async (req) => {
 
       console.log(`💰 Converting $${buyAmountUSD} USD to ${buyAmountSOL} SOL (SOL price: $${solPrice})`);
 
+      // Detect token platform by address pattern
+      const tokenAddress = campaign.token_address;
+      const platform = detectTokenPlatform(tokenAddress);
+      
+      console.log(`🔍 Detected platform: ${platform} for token: ${tokenAddress}`);
+
       // Use raydium-swap function for REAL blockchain trades
+      // The raydium-swap function already handles fallbacks to Jupiter for non-Raydium tokens
       const swapResponse = await supabaseClient.functions.invoke('raydium-swap', {
         body: {
           side: 'buy',
@@ -185,6 +216,11 @@ serve(async (req) => {
     } else if (action === "sell") {
       // For sell, we need to check current token balance first
       try {
+        // Detect token platform for logging
+        const tokenAddress = campaign.token_address;
+        const platform = detectTokenPlatform(tokenAddress);
+        console.log(`🔍 Detected platform for sell: ${platform} for token: ${tokenAddress}`);
+        
         // Get current token balance from wallet
         const connection = new Connection(
           Deno.env.get("SOLANA_RPC_URL") ?? "https://api.mainnet-beta.solana.com",
@@ -217,7 +253,10 @@ serve(async (req) => {
             
             const sellAmount = tokenBalance * (sellPercent / 100);
 
+            console.log(`💱 Selling ${sellAmount} tokens (${sellPercent}% of ${tokenBalance}) on ${platform}`);
+
             // Use raydium-swap function for REAL blockchain trades
+            // The raydium-swap function handles platform-specific routing internally
             const swapResponse = await supabaseClient.functions.invoke('raydium-swap', {
               body: {
                 side: 'sell',
