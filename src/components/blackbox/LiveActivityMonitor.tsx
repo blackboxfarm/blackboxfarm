@@ -168,6 +168,15 @@ export function LiveActivityMonitor({ campaignId }: LiveActivityMonitorProps) {
     }
   };
 
+  const getLogLevelBadgeVariant = (level: string) => {
+    switch (level) {
+      case 'info': return 'default';
+      case 'warning': return 'secondary';
+      case 'error': return 'destructive';
+      default: return 'outline';
+    }
+  };
+
   if (isLoading) {
     return (
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -193,6 +202,27 @@ export function LiveActivityMonitor({ campaignId }: LiveActivityMonitorProps) {
 
   return (
     <div className="space-y-6">
+      {/* Error Summary */}
+      {activityLogs.filter(log => log.log_level === 'error').length > 0 && (
+        <Card className="border-red-200 bg-red-50">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 text-red-700">
+              <Activity className="h-5 w-5" />
+              Execution Issues Detected
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="text-sm text-red-700 mb-3">
+              <strong>{activityLogs.filter(log => log.log_level === 'error').length}</strong> execution errors detected. 
+              Common causes: Invalid configuration, network issues, or insufficient funds.
+            </div>
+            <div className="text-xs text-red-600">
+              Recent error: {activityLogs.find(log => log.log_level === 'error')?.message}
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
       {/* Stats Grid */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         <Card>
@@ -264,6 +294,11 @@ export function LiveActivityMonitor({ campaignId }: LiveActivityMonitorProps) {
             <CardTitle className="flex items-center gap-2">
               <Activity className="h-5 w-5" />
               Live Activity Feed
+              {activityLogs.filter(log => log.log_level === 'error').length > 0 && (
+                <Badge variant="destructive" className="ml-2">
+                  {activityLogs.filter(log => log.log_level === 'error').length} Errors
+                </Badge>
+              )}
             </CardTitle>
           </CardHeader>
           <CardContent>
@@ -275,16 +310,28 @@ export function LiveActivityMonitor({ campaignId }: LiveActivityMonitorProps) {
                   </div>
                 ) : (
                   activityLogs.map((log) => (
-                    <div key={log.id} className="p-2 border rounded text-sm">
+                    <div key={log.id} className={`p-2 border rounded text-sm ${
+                      log.log_level === 'error' ? 'border-red-200 bg-red-50' : ''
+                    }`}>
                       <div className="flex items-center justify-between mb-1">
-                        <Badge variant="outline" className={getLogLevelColor(log.log_level)}>
-                          {log.log_level}
+                        <Badge variant={getLogLevelBadgeVariant(log.log_level)} className={getLogLevelColor(log.log_level)}>
+                          {log.log_level.toUpperCase()}
                         </Badge>
                         <span className="text-xs text-muted-foreground">
                           {formatTime(log.timestamp)}
                         </span>
                       </div>
                       <div className="text-sm break-words">{log.message}</div>
+                      {log.metadata && Object.keys(log.metadata).length > 0 && (
+                        <details className="mt-2">
+                          <summary className="text-xs cursor-pointer text-muted-foreground">
+                            View Details
+                          </summary>
+                          <pre className="text-xs mt-1 p-2 bg-muted rounded overflow-x-auto">
+                            {JSON.stringify(log.metadata, null, 2)}
+                          </pre>
+                        </details>
+                      )}
                     </div>
                   ))
                 )}
