@@ -50,6 +50,7 @@ interface CommandCode {
   name: string;
   config: any;
   is_active: boolean;
+  wallet_id: string;
 }
 
 interface CampaignActivationGuideProps {
@@ -353,7 +354,10 @@ export function CampaignActivationGuide({ campaign, onCampaignUpdate }: Campaign
   const hasEnabledWallets = wallets.some(w => w.is_active);
   const hasFundedWallets = wallets.some(w => w.sol_balance > 0);
   const hasCommands = commands.length > 0;
-  const hasEnabledCommands = commands.some(c => c.is_active);
+  
+  // Check if there are commands connected to enabled wallets
+  const enabledWalletIds = wallets.filter(w => w.is_active).map(w => w.id);
+  const hasEnabledCommands = commands.some(c => c.is_active && enabledWalletIds.includes(c.wallet_id));
   
   const totalBalance = wallets.reduce((sum, w) => sum + w.sol_balance, 0);
   const estimatedDailyCost = commands.reduce((sum, cmd) => {
@@ -564,11 +568,11 @@ export function CampaignActivationGuide({ campaign, onCampaignUpdate }: Campaign
             {/* Requirements Status Indicators */}
             <div className="flex justify-center items-center gap-6 p-4 border rounded-lg bg-muted/50">
               <div className="flex items-center gap-2">
-                <div className={`w-3 h-3 rounded-full ${hasEnabledWallets ? 'bg-green-500' : 'bg-red-500'}`} />
+                <div className={`w-3 h-3 rounded-full ${campaign.is_active ? 'bg-green-500' : 'bg-red-500'}`} />
                 <span className="text-sm font-medium">Campaign</span>
               </div>
               <div className="flex items-center gap-2">
-                <div className={`w-3 h-3 rounded-full ${hasFundedWallets ? 'bg-green-500' : 'bg-red-500'}`} />
+                <div className={`w-3 h-3 rounded-full ${hasEnabledWallets ? 'bg-green-500' : 'bg-red-500'}`} />
                 <span className="text-sm font-medium">Wallet</span>
               </div>
               <div className="flex items-center gap-2">
