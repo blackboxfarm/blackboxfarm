@@ -83,7 +83,8 @@ export function CampaignActivationGuide({ campaign, onCampaignUpdate }: Campaign
 
   useEffect(() => {
     loadCampaignData();
-    setContractActive(campaign.is_active);
+    // contractActive should be independent of campaign.is_active
+    // It tracks whether the contract is running in cron, not if campaign is enabled
     
     // Set up real-time subscriptions
     const campaignChannel = supabase
@@ -560,8 +561,8 @@ export function CampaignActivationGuide({ campaign, onCampaignUpdate }: Campaign
             >
               {buttonState === 'starting' && "Validating Campaign..."}
               {buttonState === 'stopping' && "Removing Campaign from Queue..."}
-              {buttonState === 'success' && !contractActive && "Campaign Added Successfully!"}
-              {buttonState === 'success' && contractActive && "Campaign Removed Successfully!"}
+              {buttonState === 'success' && contractActive && "Campaign Added Successfully!"}
+              {buttonState === 'success' && !contractActive && "Campaign Removed Successfully!"}
               {buttonState === 'idle' && contractActive && "STOP"}
               {buttonState === 'idle' && !contractActive && "START"}
             </Button>
