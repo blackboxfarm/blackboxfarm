@@ -133,7 +133,7 @@ export function CampaignActivationGuide({ campaign }: CampaignActivationGuidePro
         {/* Current Status */}
         <div className="text-center p-4 border rounded-lg">
           <Badge variant={campaign.is_active ? "default" : "secondary"} className="text-lg px-4 py-2">
-            {campaign.is_active ? "🟢 ENABLED" : "⚪ DISABLED"}
+            {campaign.is_active ? "🟢 ACTIVE" : "⚪ NOT ACTIVE"}
           </Badge>
           <p className="text-sm text-muted-foreground mt-2">
             {campaign.is_active ? "Campaign is live and trading" : "Campaign is ready to start"}
