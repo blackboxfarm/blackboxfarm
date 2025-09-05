@@ -81,7 +81,7 @@ serve(async (req) => {
       // Execute REAL buy transaction using Jupiter/Raydium
       const config = commandData.config;
       const buyAmount = config.type === "simple" 
-        ? config.buyAmount 
+        ? config.buyAmount  // This is in USD
         : Math.random() * (config.buyAmount.max - config.buyAmount.min) + config.buyAmount.min;
 
       // Use raydium-swap function for REAL blockchain trades

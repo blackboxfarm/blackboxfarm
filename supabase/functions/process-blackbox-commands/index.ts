@@ -83,8 +83,8 @@ serve(async (req) => {
         const config = command.config;
         
         // Check if it's time to execute based on intervals
-        const shouldExecuteBuy = shouldExecuteAction(config, 'buy', now);
-        const shouldExecuteSell = shouldExecuteAction(config, 'sell', now);
+        const shouldExecuteBuy = await shouldExecuteAction(supabaseService, command.id, 'buy', config);
+        const shouldExecuteSell = await shouldExecuteAction(supabaseService, command.id, 'sell', config);
 
         if (shouldExecuteBuy) {
           console.log(`🟢 Executing BUY for command ${command.name} (${command.id})`);
@@ -166,19 +166,30 @@ serve(async (req) => {
 });
 
 // Helper function to determine if an action should be executed
-function shouldExecuteAction(config: any, action: 'buy' | 'sell', now: number): boolean {
-  // Simple implementation - in production this would track last execution times
-  // For now, execute based on probability to simulate intervals
-  
-  const interval = action === 'buy' ? config.buyInterval : config.sellInterval;
-  const intervalMs = typeof interval === 'object' 
-    ? (interval.min + Math.random() * (interval.max - interval.min)) * 1000
-    : interval * 1000;
+async function shouldExecuteAction(supabaseService: any, commandId: string, action: 'buy' | 'sell', config: any): Promise<boolean> {
+  // Get the last transaction of this type for this command
+  const { data: lastTransaction } = await supabaseService
+    .from('blackbox_transactions')
+    .select('executed_at')
+    .eq('command_code_id', commandId)
+    .eq('transaction_type', action)
+    .order('executed_at', { ascending: false })
+    .limit(1)
+    .single();
 
-  // Use a random factor to simulate interval-based execution
-  // In production, you'd store last execution times in the database
-  const randomFactor = Math.random();
-  const executionProbability = 60000 / intervalMs; // Based on 1-minute cron cycle
-  
-  return randomFactor < executionProbability;
+  const interval = action === 'buy' ? config.buyInterval : config.sellInterval;
+  const intervalSeconds = typeof interval === 'object' 
+    ? Math.random() * (interval.max - interval.min) + interval.min
+    : interval;
+
+  if (!lastTransaction) {
+    // No previous transaction, execute immediately
+    return true;
+  }
+
+  const lastExecutionTime = new Date(lastTransaction.executed_at).getTime();
+  const now = Date.now();
+  const timeSinceLastExecution = (now - lastExecutionTime) / 1000;
+
+  return timeSinceLastExecution >= intervalSeconds;
 }

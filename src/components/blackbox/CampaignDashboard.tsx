@@ -48,6 +48,22 @@ export function CampaignDashboard() {
 
   useEffect(() => {
     loadCampaigns();
+    
+    // Set up real-time campaign updates  
+    const campaignChannel = supabase
+      .channel('campaign-changes')
+      .on('postgres_changes', {
+        event: '*',
+        schema: 'public',
+        table: 'blackbox_campaigns'
+      }, () => {
+        loadCampaigns(); // Refresh campaigns when there are changes
+      })
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(campaignChannel);
+    };
   }, []);
 
   useEffect(() => {
