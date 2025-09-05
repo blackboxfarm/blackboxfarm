@@ -312,6 +312,17 @@ serve(async (req) => {
 
     if (!inputMint || !outputMint || amount == null) return bad("Missing inputMint, outputMint, amount");
 
+    // Debug logging for token: 44qC6Zv9FEFE9g3eV4tSDaQk56YQHeAcWEhYQ9Lkpump
+    console.log("Debug swap params:", {
+      inputMint: String(inputMint),
+      outputMint: String(outputMint), 
+      amount: String(amount),
+      side,
+      tokenMint,
+      usdcAmount,
+      ownerPubkey: owner.publicKey.toBase58()
+    });
+
     // Get ATAs when not SOL
     let isInputSol = isSolMint(String(inputMint));
     let isOutputSol = isSolMint(String(outputMint));
@@ -697,6 +708,14 @@ serve(async (req) => {
     return ok({ signatures: sigs });
   } catch (e) {
     console.error("raydium-swap error", e);
+    console.error("Error details:", {
+      message: (e as Error).message,
+      stack: (e as Error).stack,
+      inputMint,
+      outputMint,
+      amount,
+      ownerPubkey: owner?.publicKey?.toBase58()
+    });
     return bad(`Unexpected error: ${(e as Error).message}`, 500);
   }
 });

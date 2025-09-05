@@ -87,13 +87,12 @@ serve(async (req) => {
       // Use raydium-swap function for REAL blockchain trades
       const swapResponse = await supabaseClient.functions.invoke('raydium-swap', {
         body: {
-          inputMint: 'So11111111111111111111111111111111111111112', // SOL
-          outputMint: campaign.token_address,
-          amount: buyAmount,
-          slippage: 5,
-          txVersion: 'v0',
-          confirmPolicy: 'confirm',
-          priorityFee: 'medium'
+          side: 'buy',
+          tokenMint: campaign.token_address,
+          usdcAmount: buyAmount,
+          slippageBps: 500, // 5% slippage
+          confirmPolicy: 'processed',
+          buyWithSol: true
         },
         headers: {
           'x-owner-secret': wallet.secret_key_encrypted,
@@ -102,59 +101,79 @@ serve(async (req) => {
       });
 
       if (swapResponse.error) {
-        throw new Error(`Buy swap failed: ${swapResponse.error.message}`);
-      }
-
-      const signatures = swapResponse.data?.signatures || [];
-      const signature = signatures[0] || 'unknown';
-
-      console.log(`✅ REAL BUY executed: ${buyAmount} SOL -> ${campaign.token_address}, signatures: ${signatures.join(', ')}`);
-
-      // Calculate fees for revenue collection
-      const baseTradeFee = 0.003;
-      const serviceFee = buyAmount * 0.35; // 35% markup
-      const totalRevenue = baseTradeFee + serviceFee;
-
-      // Check if this is the testuser@blackbox.farm account (skip fees for testing)
-      const { data: userData } = await supabaseService.auth.admin.getUserById(campaign.user_id);
-      const userEmail = userData?.user?.email;
-      
-      const isTestAccount = userEmail === "testuser@blackbox.farm";
-
-      let revenueCollected = 0;
-      if (!isTestAccount) {
-        // Collect revenue automatically
-        try {
-          await supabaseClient.functions.invoke('enhanced-revenue-collector', {
-            body: { 
-              user_id: campaign.user_id, 
-              amount_sol: totalRevenue,
-              revenue_type: 'trade_fee'
-            }
-          });
-          revenueCollected = totalRevenue;
-        } catch (revenueError) {
-          console.error("Revenue collection failed:", revenueError);
+        console.error('Buy swap failed:', {
+          error: swapResponse.error,
+          token: campaign.token_address,
+          buyAmount
+        });
+        
+        // For pump.fun tokens that may not have Raydium liquidity, skip but don't fail
+        const errorMessage = swapResponse.error.message || '';
+        if (errorMessage.includes('REQ_AMOUNT_ERROR') || errorMessage.includes('INSUFFICIENT_LIQUIDITY')) {
+          console.log(`⚠️ Token ${campaign.token_address} may not have Raydium liquidity, skipping buy`);
+          result = { 
+            message: 'Buy skipped - token may not have sufficient liquidity on Raydium',
+            token: campaign.token_address,
+            buyAmount,
+            type: 'buy',
+            skipped: true
+          };
+        } else {
+          throw new Error(`Buy swap failed: ${swapResponse.error.message}`);
         }
       } else {
-        console.log(`🧪 TEST ACCOUNT (${userEmail}): Skipping revenue collection for user ${campaign.user_id}`);
+
+        const signatures = swapResponse.data?.signatures || [];
+        const signature = signatures[0] || 'unknown';
+
+        console.log(`✅ REAL BUY executed: ${buyAmount} SOL -> ${campaign.token_address}, signatures: ${signatures.join(', ')}`);
+
+        // Calculate fees for revenue collection
+        const baseTradeFee = 0.003;
+        const serviceFee = buyAmount * 0.35; // 35% markup
+        const totalRevenue = baseTradeFee + serviceFee;
+
+        // Check if this is the testuser@blackbox.farm account (skip fees for testing)
+        const { data: userData } = await supabaseService.auth.admin.getUserById(campaign.user_id);
+        const userEmail = userData?.user?.email;
+        
+        const isTestAccount = userEmail === "testuser@blackbox.farm";
+
+        let revenueCollected = 0;
+        if (!isTestAccount) {
+          // Collect revenue automatically
+          try {
+            await supabaseClient.functions.invoke('enhanced-revenue-collector', {
+              body: { 
+                user_id: campaign.user_id, 
+                amount_sol: totalRevenue,
+                revenue_type: 'trade_fee'
+              }
+            });
+            revenueCollected = totalRevenue;
+          } catch (revenueError) {
+            console.error("Revenue collection failed:", revenueError);
+          }
+        } else {
+          console.log(`🧪 TEST ACCOUNT (${userEmail}): Skipping revenue collection for user ${campaign.user_id}`);
+        }
+
+        // Log transaction
+        await supabaseService
+          .from("blackbox_transactions")
+          .insert({
+            wallet_id: wallet.id,
+            command_code_id: command_code_id,
+            transaction_type: "buy",
+            amount_sol: buyAmount,
+            gas_fee: 0.000005, // Standard Solana gas
+            service_fee: serviceFee,
+            signature: signature,
+            status: "completed"
+          });
+
+        result = { signature, amount: buyAmount, type: "buy", revenue_collected: revenueCollected, signatures };
       }
-
-      // Log transaction
-      await supabaseService
-        .from("blackbox_transactions")
-        .insert({
-          wallet_id: wallet.id,
-          command_code_id: command_code_id,
-          transaction_type: "buy",
-          amount_sol: buyAmount,
-          gas_fee: 0.000005, // Standard Solana gas
-          service_fee: serviceFee,
-          signature: signature,
-          status: "completed"
-        });
-
-      result = { signature, amount: buyAmount, type: "buy", revenue_collected: revenueCollected, signatures };
 
     } else if (action === "sell") {
       // For sell, we need to check current token balance first
@@ -194,13 +213,11 @@ serve(async (req) => {
             // Use raydium-swap function for REAL blockchain trades
             const swapResponse = await supabaseClient.functions.invoke('raydium-swap', {
               body: {
-                inputMint: campaign.token_address,
-                outputMint: 'So11111111111111111111111111111111111111112', // SOL
+                side: 'sell',
+                tokenMint: campaign.token_address,
                 amount: sellAmount,
-                slippage: 5,
-                txVersion: 'v0',
-                confirmPolicy: 'confirm',
-                priorityFee: 'medium'
+                slippageBps: 500,
+                confirmPolicy: 'processed'
               },
               headers: {
                 'x-owner-secret': wallet.secret_key_encrypted,
@@ -209,30 +226,50 @@ serve(async (req) => {
             });
 
             if (swapResponse.error) {
-              throw new Error(`Sell swap failed: ${swapResponse.error.message}`);
-            }
-
-            const signatures = swapResponse.data?.signatures || [];
-            const signature = signatures[0] || 'unknown';
-            const solReceived = swapResponse.data?.estimatedAmountOut || 0;
-
-            console.log(`✅ REAL SELL executed: ${sellAmount} tokens -> ${solReceived} SOL, signatures: ${signatures.join(', ')}`);
-
-            // Log transaction
-            await supabaseService
-              .from("blackbox_transactions")
-              .insert({
-                wallet_id: wallet.id,
-                command_code_id: command_code_id,
-                transaction_type: "sell",
-                amount_sol: solReceived,
-                gas_fee: 0.000005,
-                service_fee: solReceived * 0.35,
-                signature: signature,
-                status: "completed"
+              console.error('Sell swap failed:', {
+                error: swapResponse.error,
+                token: campaign.token_address,
+                sellAmount
               });
+              
+              // For pump.fun tokens that may not have Raydium liquidity, skip but don't fail
+              const errorMessage = swapResponse.error.message || '';
+              if (errorMessage.includes('REQ_AMOUNT_ERROR') || errorMessage.includes('INSUFFICIENT_LIQUIDITY')) {
+                console.log(`⚠️ Token ${campaign.token_address} may not have Raydium liquidity, skipping sell`);
+                result = { 
+                  message: 'Sell skipped - token may not have sufficient liquidity on Raydium',
+                  token: campaign.token_address,
+                  sellAmount,
+                  type: 'sell',
+                  skipped: true
+                };
+              } else {
+                throw new Error(`Sell swap failed: ${swapResponse.error.message}`);
+              }
+            } else {
 
-            result = { amount: sellAmount, percent: sellPercent, type: "sell", signatures, solReceived };
+              const signatures = swapResponse.data?.signatures || [];
+              const signature = signatures[0] || 'unknown';
+              const solReceived = swapResponse.data?.estimatedAmountOut || 0;
+
+              console.log(`✅ REAL SELL executed: ${sellAmount} tokens -> ${solReceived} SOL, signatures: ${signatures.join(', ')}`);
+
+              // Log transaction
+              await supabaseService
+                .from("blackbox_transactions")
+                .insert({
+                  wallet_id: wallet.id,
+                  command_code_id: command_code_id,
+                  transaction_type: "sell",
+                  amount_sol: solReceived,
+                  gas_fee: 0.000005,
+                  service_fee: solReceived * 0.35,
+                  signature: signature,
+                  status: "completed"
+                });
+
+              result = { amount: sellAmount, percent: sellPercent, type: "sell", signatures, solReceived };
+            }
           }
         }
       } catch (error) {
