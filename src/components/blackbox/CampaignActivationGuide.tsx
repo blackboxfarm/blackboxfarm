@@ -505,8 +505,8 @@ export function CampaignActivationGuide({ campaign, onCampaignUpdate }: Campaign
         {/* CAMPAIGN CONTROL */}
         <div className="pt-4 border-t">
           <div className="text-center space-y-4">
-            {/* Validation Checklist - Show during validation or if there were errors */}
-            {(buttonState === 'starting' || validationErrors.length > 0) && (
+            {/* Validation Checklist - Always show when campaign has been started at least once */}
+            {(buttonState === 'starting' || validationErrors.length > 0 || contractActive || buttonState === 'success') && (
               <Card className="p-4 mb-4 bg-muted">
                 <h4 className="font-semibold mb-3">Contract Building Validation</h4>
                 <div className="space-y-2 text-sm">
