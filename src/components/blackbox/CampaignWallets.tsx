@@ -388,6 +388,7 @@ export function CampaignWallets({ campaign }: CampaignWalletsProps) {
                             toggleWallet(wallet);
                           }}
                           onClick={(e) => e.stopPropagation()}
+                          disabled={campaign.is_active}
                         />
                       </div>
                       <Button

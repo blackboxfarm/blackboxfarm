@@ -168,17 +168,6 @@ export function CampaignActivationGuide({ campaign, onCampaignUpdate }: Campaign
           <span className="flex items-center gap-2">
             Campaign Status
           </span>
-          <div className="flex items-center gap-2">
-            <Label htmlFor="campaign-enabled" className="text-sm">
-              {campaign.is_active ? "Enabled" : "Disabled"}
-            </Label>
-            <Switch
-              id="campaign-enabled"
-              checked={campaign.is_active}
-              onCheckedChange={toggleCampaign}
-              disabled={(!canEnable && !campaign.is_active) || loading}
-            />
-          </div>
         </CardTitle>
       </CardHeader>
       <CardContent className="space-y-6">

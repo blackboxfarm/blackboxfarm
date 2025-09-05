@@ -24,6 +24,7 @@ interface Campaign {
   id: string;
   nickname: string;
   token_address: string;
+  is_active: boolean;
 }
 
 interface CommandCode {
@@ -871,11 +872,12 @@ export function WalletCommands({ wallet, campaign, isDevMode = false, devBalance
                          <Label htmlFor={`command-${command.id}`} className="text-xs">
                            {command.is_active ? "Enabled" : "Disabled"}
                          </Label>
-                         <Switch
-                           id={`command-${command.id}`}
-                           checked={command.is_active}
-                           onCheckedChange={() => toggleCommand(command)}
-                         />
+                          <Switch
+                            id={`command-${command.id}`}
+                            checked={command.is_active}
+                            onCheckedChange={() => toggleCommand(command)}
+                            disabled={campaign.is_active}
+                          />
                        </div>
                      </div>
                   </div>
