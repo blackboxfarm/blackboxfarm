@@ -97,7 +97,7 @@ serve(async (req) => {
         },
         headers: {
           'x-owner-secret': wallet.secret_key_encrypted,
-          'x-function-token': Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")
+          'x-function-token': Deno.env.get("FUNCTION_TOKEN")
         }
       });
 
@@ -204,7 +204,7 @@ serve(async (req) => {
               },
               headers: {
                 'x-owner-secret': wallet.secret_key_encrypted,
-                'x-function-token': Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")
+                'x-function-token': Deno.env.get("FUNCTION_TOKEN")
               }
             });
 
