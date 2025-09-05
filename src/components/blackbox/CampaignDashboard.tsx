@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
-import { Plus, Settings, Play, Pause, Trash2, Bell } from "lucide-react";
+import { Plus, Settings, Bell } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "@/hooks/use-toast";
 import { CampaignWallets } from "./CampaignWallets";
@@ -14,6 +14,7 @@ import { TokenValidationInput } from "@/components/token/TokenValidationInput";
 import { TokenMetadataDisplay } from "@/components/token/TokenMetadataDisplay";
 import { TokenPriceDisplay } from "@/components/token/TokenPriceDisplay";
 import { useTokenMetadata } from "@/hooks/useTokenMetadata";
+import { Switch } from "@/components/ui/switch";
 
 interface Campaign {
   id: string;
@@ -141,8 +142,8 @@ export function CampaignDashboard() {
     }
 
     toast({ 
-      title: campaign.is_active ? "Campaign paused" : "Campaign started", 
-      description: `${campaign.nickname} is now ${campaign.is_active ? "inactive" : "active"}` 
+      title: campaign.is_active ? "Campaign disabled" : "Campaign enabled", 
+      description: `${campaign.nickname} is now ${campaign.is_active ? "disabled" : "enabled"}` 
     });
     loadCampaigns();
   };
@@ -202,9 +203,9 @@ export function CampaignDashboard() {
                         />
                       </div>
                     </div>
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-4">
                       <Badge variant={campaign.is_active ? "default" : "secondary"}>
-                        {campaign.is_active ? "Active" : "Paused"}
+                        {campaign.is_active ? "Enabled" : "Disabled"}
                       </Badge>
                       <Button
                         size="sm"
@@ -218,20 +219,17 @@ export function CampaignDashboard() {
                       >
                         <Bell className="h-4 w-4" />
                       </Button>
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          toggleCampaign(campaign);
-                        }}
-                      >
-                        {campaign.is_active ? (
-                          <Pause className="h-4 w-4" />
-                        ) : (
-                          <Play className="h-4 w-4" />
-                        )}
-                      </Button>
+                      <div className="flex items-center gap-2">
+                        <label className="text-sm font-medium">
+                          {campaign.is_active ? "Enabled" : "Disabled"}
+                        </label>
+                        <Switch
+                          checked={campaign.is_active}
+                          onCheckedChange={(checked) => {
+                            toggleCampaign(campaign);
+                          }}
+                        />
+                      </div>
                     </div>
                   </div>
                 </div>

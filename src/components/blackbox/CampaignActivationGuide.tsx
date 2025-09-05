@@ -292,25 +292,39 @@ export function CampaignActivationGuide({ campaign, onCampaignUpdate }: Campaign
           </Alert>
         )}
 
-        {/* CAMPAIGN REQUIREMENTS STATUS */}
+        {/* CAMPAIGN CONTROL */}
         <div className="pt-4 border-t">
-          <div className="text-center p-4 border rounded-lg bg-muted/50">
-            <p className="font-medium mb-2">Campaign Requirements Status</p>
-            {canEnable ? (
-              <div className="flex items-center justify-center gap-2 text-green-600">
-                <CheckCircle2 className="h-4 w-4" />
-                <span className="text-sm">All requirements met - Campaign can be enabled</span>
-              </div>
-            ) : (
-              <div className="flex items-center justify-center gap-2 text-orange-600">
-                <AlertTriangle className="h-4 w-4" />
-                <span className="text-sm">Complete all requirements to enable campaign</span>
-              </div>
-            )}
+          <div className="text-center space-y-4">
+            {/* Big START/STOP Button */}
+            <Button
+              size="lg"
+              className="w-32 h-12 text-lg font-bold"
+              variant={campaign.is_active ? "destructive" : "default"}
+              disabled={!canEnable && !campaign.is_active}
+              onClick={toggleCampaign}
+            >
+              {campaign.is_active ? "STOP" : "START"}
+            </Button>
             
-            {!canEnable && (
-              <p className="text-xs text-muted-foreground mt-2">
-                Required: ✓ At least 1 enabled wallet + ✓ At least 1 funded wallet + ✓ At least 1 enabled command
+            {/* Requirements Status Indicators */}
+            <div className="flex justify-center items-center gap-6 p-4 border rounded-lg bg-muted/50">
+              <div className="flex items-center gap-2">
+                <div className={`w-3 h-3 rounded-full ${hasEnabledWallets ? 'bg-green-500' : 'bg-red-500'}`} />
+                <span className="text-sm font-medium">Campaign</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <div className={`w-3 h-3 rounded-full ${hasFundedWallets ? 'bg-green-500' : 'bg-red-500'}`} />
+                <span className="text-sm font-medium">Wallet</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <div className={`w-3 h-3 rounded-full ${hasEnabledCommands ? 'bg-green-500' : 'bg-red-500'}`} />
+                <span className="text-sm font-medium">Commands</span>
+              </div>
+            </div>
+            
+            {!canEnable && !campaign.is_active && (
+              <p className="text-xs text-muted-foreground">
+                All three indicators must be green to start the campaign
               </p>
             )}
           </div>
