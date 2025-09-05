@@ -2,7 +2,9 @@ import { useState, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Plus, Wallet, Settings, Play, Pause, TestTube, RefreshCw, ArrowLeftRight } from "lucide-react";
+import { Plus, Wallet, Settings, TestTube, RefreshCw, ArrowLeftRight } from "lucide-react";
+import { Switch } from "@/components/ui/switch";
+import { Label } from "@/components/ui/label";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "@/hooks/use-toast";
 import { WalletCommands } from "./WalletCommands";
@@ -41,6 +43,23 @@ export function CampaignWallets({ campaign }: CampaignWalletsProps) {
   useEffect(() => {
     loadWallets();
     loadDevBalances();
+    
+    // Set up real-time subscriptions for wallet changes
+    const walletChannel = supabase
+      .channel('wallet-changes')
+      .on('postgres_changes', {
+        event: '*',
+        schema: 'public',
+        table: 'blackbox_wallets',
+        filter: `campaign_id=eq.${campaign.id}`
+      }, () => {
+        loadWallets();
+      })
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(walletChannel);
+    };
   }, [campaign.id]);
 
   const loadDevBalances = () => {
@@ -119,8 +138,8 @@ export function CampaignWallets({ campaign }: CampaignWalletsProps) {
     }
 
     toast({ 
-      title: wallet.is_active ? "Wallet deactivated" : "Wallet activated", 
-      description: `Wallet ${wallet.pubkey.slice(0, 8)}... updated` 
+      title: wallet.is_active ? "Wallet disabled" : "Wallet enabled", 
+      description: `Wallet ${wallet.pubkey.slice(0, 8)}... ${wallet.is_active ? 'disabled' : 'enabled'}` 
     });
     loadWallets();
   };
@@ -299,7 +318,7 @@ export function CampaignWallets({ campaign }: CampaignWalletsProps) {
                           {wallet.pubkey.slice(0, 12)}...{wallet.pubkey.slice(-8)}
                         </code>
                         <Badge variant={wallet.is_active ? "default" : "secondary"}>
-                          {wallet.is_active ? "Active" : "Inactive"}
+                          {wallet.is_active ? "Enabled" : "Disabled"}
                         </Badge>
                       </div>
                       <div className="flex items-center gap-2 mt-1">
@@ -358,20 +377,19 @@ export function CampaignWallets({ campaign }: CampaignWalletsProps) {
                           +5 SOL
                         </Button>
                       )}
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          toggleWallet(wallet);
-                        }}
-                      >
-                        {wallet.is_active ? (
-                          <Pause className="h-4 w-4" />
-                        ) : (
-                          <Play className="h-4 w-4" />
-                        )}
-                      </Button>
+                      <div className="flex items-center gap-2">
+                        <Label htmlFor={`wallet-${wallet.id}`} className="text-xs">
+                          {wallet.is_active ? "Enabled" : "Disabled"}
+                        </Label>
+                        <Switch
+                          id={`wallet-${wallet.id}`}
+                          checked={wallet.is_active}
+                          onCheckedChange={(checked) => {
+                            toggleWallet(wallet);
+                          }}
+                          onClick={(e) => e.stopPropagation()}
+                        />
+                      </div>
                       <Button
                         size="sm"
                         variant="outline"

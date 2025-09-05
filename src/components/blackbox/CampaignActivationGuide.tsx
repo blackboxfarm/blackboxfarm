@@ -3,7 +3,9 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { CheckCircle2, AlertTriangle, Wallet, DollarSign, ToggleLeft, ToggleRight, Info } from "lucide-react";
+import { CheckCircle2, AlertTriangle, Wallet, DollarSign, Info } from "lucide-react";
+import { Switch } from "@/components/ui/switch";
+import { Label } from "@/components/ui/label";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "@/hooks/use-toast";
 
@@ -40,6 +42,38 @@ export function CampaignActivationGuide({ campaign, onCampaignUpdate }: Campaign
 
   useEffect(() => {
     loadCampaignData();
+    
+    // Set up real-time subscriptions
+    const campaignChannel = supabase
+      .channel('campaign-changes')
+      .on('postgres_changes', {
+        event: '*',
+        schema: 'public',
+        table: 'blackbox_campaigns',
+        filter: `id=eq.${campaign.id}`
+      }, () => {
+        loadCampaignData();
+      })
+      .on('postgres_changes', {
+        event: '*',
+        schema: 'public',
+        table: 'blackbox_wallets',
+        filter: `campaign_id=eq.${campaign.id}`
+      }, () => {
+        loadCampaignData();
+      })
+      .on('postgres_changes', {
+        event: '*',
+        schema: 'public',
+        table: 'blackbox_command_codes'
+      }, () => {
+        loadCampaignData();
+      })
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(campaignChannel);
+    };
   }, [campaign.id]);
 
   const loadCampaignData = async () => {
@@ -78,10 +112,10 @@ export function CampaignActivationGuide({ campaign, onCampaignUpdate }: Campaign
       onCampaignUpdate?.({ ...campaign, is_active: newStatus });
 
       toast({
-        title: newStatus ? "Campaign Started! 🚀" : "Campaign Stopped ⏹️",
+        title: newStatus ? "Campaign Enabled! 🚀" : "Campaign Disabled ⏹️",
         description: newStatus 
-          ? "Your campaign is now live and trading will begin automatically."
-          : "Your campaign has been stopped and trading has been paused."
+          ? "Your campaign is now enabled and ready for trading."
+          : "Your campaign has been disabled and will not execute trades."
       });
 
       // Reload data to reflect changes
@@ -89,7 +123,7 @@ export function CampaignActivationGuide({ campaign, onCampaignUpdate }: Campaign
     } catch (error: any) {
       const newStatus = !campaign.is_active;
       toast({
-        title: newStatus ? "Start Failed" : "Stop Failed",
+        title: newStatus ? "Enable Failed" : "Disable Failed",
         description: error.message,
         variant: "destructive"
       });
@@ -116,26 +150,35 @@ export function CampaignActivationGuide({ campaign, onCampaignUpdate }: Campaign
     return sum + 1; // Conservative estimate for complex commands
   }, 0);
 
-  // CRITICAL: This button is the ONLY control that initiates/stops trading
+  // CRITICAL: Campaign status determines if it's added to the Cron Service
   // Trading will ONLY start when ALL three requirements are met:
   // 1. At least one enabled wallet
   // 2. At least one funded wallet  
   // 3. At least one enabled command
-  const canStart = hasEnabledWallets && hasFundedWallets && hasEnabledCommands;
+  const canEnable = hasEnabledWallets && hasFundedWallets && hasEnabledCommands;
   const isReady = hasWallets && hasFundedWallets && hasCommands;
 
   const getStatusIcon = (condition: boolean) => 
     condition ? <CheckCircle2 className="h-5 w-5 text-green-500" /> : <AlertTriangle className="h-5 w-5 text-orange-500" />;
-  
-  const getToggleIcon = (enabled: boolean) =>
-    enabled ? <ToggleRight className="h-5 w-5 text-green-500" /> : <ToggleLeft className="h-5 w-5 text-gray-400" />;
 
   return (
     <Card>
       <CardHeader>
-        <CardTitle className="flex items-center gap-2">
-          {getToggleIcon(campaign.is_active)}
-          Campaign Status
+        <CardTitle className="flex items-center justify-between">
+          <span className="flex items-center gap-2">
+            Campaign Status
+          </span>
+          <div className="flex items-center gap-2">
+            <Label htmlFor="campaign-enabled" className="text-sm">
+              {campaign.is_active ? "Enabled" : "Disabled"}
+            </Label>
+            <Switch
+              id="campaign-enabled"
+              checked={campaign.is_active}
+              onCheckedChange={toggleCampaign}
+              disabled={(!canEnable && !campaign.is_active) || loading}
+            />
+          </div>
         </CardTitle>
       </CardHeader>
       <CardContent className="space-y-6">
@@ -145,7 +188,7 @@ export function CampaignActivationGuide({ campaign, onCampaignUpdate }: Campaign
             {campaign.is_active ? "🟢 ACTIVE" : "⚪ NOT ACTIVE"}
           </Badge>
           <p className="text-sm text-muted-foreground mt-2">
-            {campaign.is_active ? "Campaign is live and trading" : "Campaign is ready to start"}
+            {campaign.is_active ? "Campaign is enabled and added to Cron Service" : "Campaign is disabled and not in Cron Service"}
           </p>
         </div>
 
@@ -158,7 +201,7 @@ export function CampaignActivationGuide({ campaign, onCampaignUpdate }: Campaign
           
           <div className="space-y-2">
             <div className="flex items-center gap-3 p-3 border rounded-lg">
-              {getToggleIcon(hasEnabledWallets)}
+              {getStatusIcon(hasEnabledWallets)}
               <div className="flex-1">
                 <p className="font-medium">Enabled Wallets</p>
                 <p className="text-sm text-muted-foreground">
@@ -187,7 +230,7 @@ export function CampaignActivationGuide({ campaign, onCampaignUpdate }: Campaign
             </div>
 
             <div className="flex items-center gap-3 p-3 border rounded-lg">
-              {getToggleIcon(hasEnabledCommands)}
+              {getStatusIcon(hasEnabledCommands)}
               <div className="flex-1">
                 <p className="font-medium">Enabled Commands</p>
                 <p className="text-sm text-muted-foreground">
@@ -249,30 +292,28 @@ export function CampaignActivationGuide({ campaign, onCampaignUpdate }: Campaign
           </Alert>
         )}
 
-        {/* TRADING CONTROL BUTTON - THE ONLY BUTTON THAT STARTS/STOPS TRADING */}
+        {/* CAMPAIGN REQUIREMENTS STATUS */}
         <div className="pt-4 border-t">
-          <Button 
-            onClick={toggleCampaign}
-            disabled={(!canStart && !campaign.is_active) || loading}
-            className="w-full"
-            size="lg"
-            variant={campaign.is_active ? "destructive" : "default"}
-          >
-            {loading 
-              ? (campaign.is_active ? "Stopping..." : "Starting...") 
-              : campaign.is_active 
-                ? "Stop Campaign" 
-                : canStart 
-                  ? "Start Campaign" 
-                  : "Complete Requirements to Start"}
-          </Button>
-          
-          {!canStart && !campaign.is_active && (
-            <p className="text-xs text-muted-foreground text-center mt-2">
-              This button will only be clickable when ALL three requirements are met:<br/>
-              ✓ At least 1 enabled wallet + ✓ At least 1 funded wallet + ✓ At least 1 enabled command
-            </p>
-          )}
+          <div className="text-center p-4 border rounded-lg bg-muted/50">
+            <p className="font-medium mb-2">Campaign Requirements Status</p>
+            {canEnable ? (
+              <div className="flex items-center justify-center gap-2 text-green-600">
+                <CheckCircle2 className="h-4 w-4" />
+                <span className="text-sm">All requirements met - Campaign can be enabled</span>
+              </div>
+            ) : (
+              <div className="flex items-center justify-center gap-2 text-orange-600">
+                <AlertTriangle className="h-4 w-4" />
+                <span className="text-sm">Complete all requirements to enable campaign</span>
+              </div>
+            )}
+            
+            {!canEnable && (
+              <p className="text-xs text-muted-foreground mt-2">
+                Required: ✓ At least 1 enabled wallet + ✓ At least 1 funded wallet + ✓ At least 1 enabled command
+              </p>
+            )}
+          </div>
         </div>
 
         {/* No Plan Required Notice */}

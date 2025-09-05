@@ -7,7 +7,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Slider } from "@/components/ui/slider";
-import { Plus, Play, Pause, Settings, AlertTriangle, DollarSign, BarChart3, TrendingUp, Info, Eye, EyeOff, Edit, Shuffle, RotateCcw } from "lucide-react";
+import { Plus, Settings, AlertTriangle, DollarSign, BarChart3, TrendingUp, Info, Eye, EyeOff, Edit, Shuffle, RotateCcw } from "lucide-react";
+import { Switch } from "@/components/ui/switch";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "@/hooks/use-toast";
@@ -107,6 +108,24 @@ export function WalletCommands({ wallet, campaign, isDevMode = false, devBalance
     loadCommands();
     loadCommandStats();
     setShowWalletAlert(!isDevMode); // Hide alert in dev mode
+    
+    // Set up real-time subscriptions for command changes
+    const commandChannel = supabase
+      .channel('command-changes')
+      .on('postgres_changes', {
+        event: '*',
+        schema: 'public',
+        table: 'blackbox_command_codes',
+        filter: `wallet_id=eq.${wallet.id}`
+      }, () => {
+        loadCommands();
+        loadCommandStats();
+      })
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(commandChannel);
+    };
   }, [wallet.id, isDevMode]);
 
   // Setup simulation intervals for active commands in dev mode
@@ -706,8 +725,8 @@ export function WalletCommands({ wallet, campaign, isDevMode = false, devBalance
     }
 
     toast({ 
-      title: command.is_active ? "Command stopped" : "Command started", 
-      description: `${command.name} is now ${command.is_active ? "inactive" : "active"}` 
+      title: command.is_active ? "Command disabled" : "Command enabled", 
+      description: `${command.name} is now ${command.is_active ? "disabled" : "enabled"}` 
     });
     loadCommands();
   };
@@ -820,7 +839,7 @@ export function WalletCommands({ wallet, campaign, isDevMode = false, devBalance
                       <div className="flex items-center gap-2">
                         <h4 className="font-medium">{command.name}</h4>
                         <Badge variant={command.is_active ? "default" : "secondary"}>
-                          {command.is_active ? "Running" : "Stopped"}
+                          {command.is_active ? "Enabled" : "Disabled"}
                         </Badge>
                         <Badge variant="outline">
                           {command.config.type || "simple"}
@@ -833,7 +852,7 @@ export function WalletCommands({ wallet, campaign, isDevMode = false, devBalance
                         }
                       </p>
                     </div>
-                     <div className="flex gap-2">
+                     <div className="flex items-center gap-2">
                        <Button
                          size="sm"
                          variant="outline"
@@ -848,17 +867,16 @@ export function WalletCommands({ wallet, campaign, isDevMode = false, devBalance
                        >
                          <Edit className="h-4 w-4" />
                        </Button>
-                       <Button
-                         size="sm"
-                         variant="outline"
-                         onClick={() => toggleCommand(command)}
-                       >
-                         {command.is_active ? (
-                           <Pause className="h-4 w-4" />
-                         ) : (
-                           <Play className="h-4 w-4" />
-                         )}
-                       </Button>
+                       <div className="flex items-center gap-2">
+                         <Label htmlFor={`command-${command.id}`} className="text-xs">
+                           {command.is_active ? "Enabled" : "Disabled"}
+                         </Label>
+                         <Switch
+                           id={`command-${command.id}`}
+                           checked={command.is_active}
+                           onCheckedChange={() => toggleCommand(command)}
+                         />
+                       </div>
                      </div>
                   </div>
 
