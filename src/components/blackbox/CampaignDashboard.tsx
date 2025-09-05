@@ -192,12 +192,14 @@ export function CampaignDashboard() {
       description: `${campaign.nickname} has been deleted. Wallets and commands are preserved for reuse.` 
     });
     
+    // Immediately update local state for responsive UI
+    setCampaigns(prevCampaigns => prevCampaigns.filter(c => c.id !== campaign.id));
+    
     // Reset selected campaign if it was the deleted one
     if (selectedCampaign?.id === campaign.id) {
-      setSelectedCampaign(null);
+      const remainingCampaigns = campaigns.filter(c => c.id !== campaign.id);
+      setSelectedCampaign(remainingCampaigns.length > 0 ? remainingCampaigns[0] : null);
     }
-    
-    loadCampaigns();
   };
 
   return (
