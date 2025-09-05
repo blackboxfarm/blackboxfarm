@@ -312,6 +312,9 @@ export function CampaignActivationGuide({ campaign, onCampaignUpdate }: Campaign
 
         if (error) throw error;
         
+        // Update local campaign state immediately
+        campaign.is_active = false;
+        
         await new Promise(resolve => setTimeout(resolve, 2000));
         setButtonState('success');
         
@@ -324,8 +327,13 @@ export function CampaignActivationGuide({ campaign, onCampaignUpdate }: Campaign
       // Update parent component
       onCampaignUpdate?.({ ...campaign, is_active: newStatus });
 
-      // Reset to idle after showing success
-      setTimeout(() => setButtonState('idle'), 2000);
+      // Reset to idle after showing success - but don't delay, do it immediately for stop
+      if (!newStatus) {
+        // For stop operations, immediately reset to show start button
+        setTimeout(() => setButtonState('idle'), 1000);
+      } else {
+        setTimeout(() => setButtonState('idle'), 2000);
+      }
       
       // Reload data to reflect changes
       loadCampaignData();
@@ -548,7 +556,7 @@ export function CampaignActivationGuide({ campaign, onCampaignUpdate }: Campaign
             {/* Big START/STOP Button */}
             <Button
               size="lg"
-              className="w-48 h-12 text-sm font-bold"
+              className="w-full max-w-md h-12 text-sm font-bold"
               variant={
                 buttonState === 'success' ? "default" :
                 campaign.is_active && buttonState === 'idle' ? "destructive" : "default"
