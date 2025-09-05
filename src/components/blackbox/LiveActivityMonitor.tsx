@@ -50,47 +50,67 @@ export function LiveActivityMonitor({ campaignId }: LiveActivityMonitorProps) {
 
   useEffect(() => {
     loadInitialData();
-    setupRealtimeSubscriptions();
+    const setupSubscriptions = async () => {
+      await setupRealtimeSubscriptions();
+    };
+    setupSubscriptions();
   }, [campaignId]);
 
   const loadInitialData = async () => {
     setIsLoading(true);
     
+    // First get wallet IDs for this campaign
+    const { data: walletIds } = await supabase
+      .from('blackbox_wallets')
+      .select('id')
+      .eq('campaign_id', campaignId);
+
+    if (!walletIds || walletIds.length === 0) {
+      setIsLoading(false);
+      return;
+    }
+
+    const walletIdArray = walletIds.map(w => w.id);
+
     // Load campaign stats
     const { data: wallets } = await supabase
       .from('blackbox_wallets')
       .select(`
         id,
-        blackbox_command_codes(id, is_active),
-        blackbox_transactions(id, transaction_type, amount_sol, status, executed_at, gas_fee, service_fee)
+        blackbox_command_codes(id, is_active)
       `)
       .eq('campaign_id', campaignId);
+
+    // Load transactions separately for better control
+    const { data: allTransactions } = await supabase
+      .from('blackbox_transactions')
+      .select('*')
+      .in('wallet_id', walletIdArray)
+      .order('executed_at', { ascending: false });
 
     if (wallets) {
       const totalCommands = wallets.reduce((acc, wallet) => acc + (wallet.blackbox_command_codes?.length || 0), 0);
       const activeCommands = wallets.reduce((acc, wallet) => 
         acc + (wallet.blackbox_command_codes?.filter((cmd: any) => cmd.is_active).length || 0), 0);
       
-      const allTransactions = wallets.flatMap(wallet => wallet.blackbox_transactions || []);
-      const buyCount = allTransactions.filter((tx: any) => tx.transaction_type === 'buy').length;
-      const sellCount = allTransactions.filter((tx: any) => tx.transaction_type === 'sell').length;
-      const totalFees = allTransactions.reduce((acc: number, tx: any) => 
-        acc + (Number(tx.gas_fee) || 0) + (Number(tx.service_fee) || 0), 0);
+      const buyCount = allTransactions?.filter((tx: any) => tx.transaction_type === 'buy').length || 0;
+      const sellCount = allTransactions?.filter((tx: any) => tx.transaction_type === 'sell').length || 0;
+      const totalFees = allTransactions?.reduce((acc: number, tx: any) => 
+        acc + (Number(tx.gas_fee) || 0) + (Number(tx.service_fee) || 0), 0) || 0;
 
       setStats({
         total_commands: totalCommands,
         active_commands: activeCommands,
-        total_transactions: allTransactions.length,
+        total_transactions: allTransactions?.length || 0,
         buy_count: buyCount,
         sell_count: sellCount,
         total_fees: totalFees,
       });
 
       // Set recent transactions
-      const recentTransactions = allTransactions
-        .sort((a: any, b: any) => new Date(b.executed_at).getTime() - new Date(a.executed_at).getTime())
-        .slice(0, 10);
-      setTransactions(recentTransactions);
+      if (allTransactions) {
+        setTransactions(allTransactions.slice(0, 10));
+      }
     }
 
     // Load recent activity logs
@@ -107,8 +127,16 @@ export function LiveActivityMonitor({ campaignId }: LiveActivityMonitorProps) {
     setIsLoading(false);
   };
 
-  const setupRealtimeSubscriptions = () => {
-    // Subscribe to new transactions
+  const setupRealtimeSubscriptions = async () => {
+    // Get wallet IDs for filtering real-time updates
+    const { data: walletIds } = await supabase
+      .from('blackbox_wallets')
+      .select('id')
+      .eq('campaign_id', campaignId);
+
+    if (!walletIds || walletIds.length === 0) return;
+
+    // Subscribe to new transactions for this campaign's wallets
     const transactionChannel = supabase
       .channel('transaction-changes')
       .on('postgres_changes', {
@@ -116,15 +144,18 @@ export function LiveActivityMonitor({ campaignId }: LiveActivityMonitorProps) {
         schema: 'public',
         table: 'blackbox_transactions'
       }, (payload) => {
-        setTransactions(prev => [payload.new as Transaction, ...prev.slice(0, 9)]);
-        // Update stats
-        setStats(prev => ({
-          ...prev,
-          total_transactions: prev.total_transactions + 1,
-          buy_count: payload.new.transaction_type === 'buy' ? prev.buy_count + 1 : prev.buy_count,
-          sell_count: payload.new.transaction_type === 'sell' ? prev.sell_count + 1 : prev.sell_count,
-          total_fees: prev.total_fees + (Number(payload.new.gas_fee) || 0) + (Number(payload.new.service_fee) || 0),
-        }));
+        // Only update if transaction belongs to one of this campaign's wallets
+        if (walletIds.some(w => w.id === payload.new.wallet_id)) {
+          setTransactions(prev => [payload.new as Transaction, ...prev.slice(0, 9)]);
+          // Update stats
+          setStats(prev => ({
+            ...prev,
+            total_transactions: prev.total_transactions + 1,
+            buy_count: payload.new.transaction_type === 'buy' ? prev.buy_count + 1 : prev.buy_count,
+            sell_count: payload.new.transaction_type === 'sell' ? prev.sell_count + 1 : prev.sell_count,
+            total_fees: prev.total_fees + (Number(payload.new.gas_fee) || 0) + (Number(payload.new.service_fee) || 0),
+          }));
+        }
       })
       .subscribe();
 
@@ -276,6 +307,15 @@ export function LiveActivityMonitor({ campaignId }: LiveActivityMonitorProps) {
                           {tx.transaction_type.toUpperCase()}
                         </Badge>
                         <span className="text-sm">{tx.amount_sol} SOL</span>
+                        {tx.signature && (
+                          <button
+                            onClick={() => navigator.clipboard.writeText(tx.signature!)}
+                            className="text-xs text-muted-foreground hover:text-foreground transition-colors font-mono cursor-pointer"
+                            title="Click to copy full signature"
+                          >
+                            {tx.signature}
+                          </button>
+                        )}
                       </div>
                       <div className="text-xs text-muted-foreground">
                         {formatTime(tx.executed_at)}

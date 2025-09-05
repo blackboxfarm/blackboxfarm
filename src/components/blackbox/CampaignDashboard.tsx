@@ -277,9 +277,13 @@ export function CampaignDashboard() {
                     <div className="flex-1 min-w-0">
                       <h3 className="font-medium mb-2">{campaign.nickname}</h3>
                       <div className="space-y-2">
-                        <p className="text-sm text-muted-foreground font-mono">
-                          {campaign.token_address.slice(0, 8)}...{campaign.token_address.slice(-6)}
-                        </p>
+                        <button
+                          onClick={() => navigator.clipboard.writeText(campaign.token_address)}
+                          className="text-sm text-muted-foreground font-mono hover:text-foreground transition-colors cursor-pointer"
+                          title="Click to copy full address"
+                        >
+                          {campaign.token_address}
+                        </button>
                         <TokenPriceDisplay 
                           tokenMint={campaign.token_address}
                           size="sm"

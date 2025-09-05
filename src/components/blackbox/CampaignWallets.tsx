@@ -314,9 +314,13 @@ export function CampaignWallets({ campaign }: CampaignWalletsProps) {
                   <div className="flex items-center justify-between">
                     <div>
                       <div className="flex items-center gap-2">
-                        <code className="text-sm bg-muted px-2 py-1 rounded">
-                          {wallet.pubkey.slice(0, 12)}...{wallet.pubkey.slice(-8)}
-                        </code>
+                        <button
+                          onClick={() => navigator.clipboard.writeText(wallet.pubkey)}
+                          className="text-sm bg-muted px-2 py-1 rounded font-mono hover:bg-muted/80 transition-colors cursor-pointer"
+                          title="Click to copy full address"
+                        >
+                          {wallet.pubkey}
+                        </button>
                         <Badge variant={wallet.is_active ? "default" : "secondary"}>
                           {wallet.is_active ? "Enabled" : "Disabled"}
                         </Badge>

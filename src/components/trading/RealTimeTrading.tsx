@@ -359,9 +359,13 @@ export function RealTimeTrading() {
                   <div key={wallet.pubkey} className="flex items-center justify-between p-2 border rounded">
                     <div className="flex items-center gap-2">
                       <Wallet className="h-4 w-4" />
-                      <span className="font-mono text-sm">
-                        {wallet.pubkey.slice(0, 8)}...{wallet.pubkey.slice(-8)}
-                      </span>
+                      <button
+                        onClick={() => navigator.clipboard.writeText(wallet.pubkey)}
+                        className="font-mono text-sm hover:text-muted-foreground transition-colors cursor-pointer"
+                        title="Click to copy full address"
+                      >
+                        {wallet.pubkey}
+                      </button>
                       <Badge variant="secondary" className="text-xs">
                         {wallet.wallet_type}
                       </Badge>

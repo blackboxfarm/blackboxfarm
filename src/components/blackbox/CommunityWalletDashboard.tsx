@@ -465,9 +465,13 @@ export default function CommunityWalletDashboard() {
                           {new Date(contribution.contribution_timestamp).toLocaleDateString()}
                         </div>
                         {contribution.transaction_signature && (
-                          <div className="text-xs text-muted-foreground">
-                            Tx: {contribution.transaction_signature.slice(0, 8)}...{contribution.transaction_signature.slice(-4)}
-                          </div>
+                          <button
+                            onClick={() => navigator.clipboard.writeText(contribution.transaction_signature!)}
+                            className="text-xs text-muted-foreground font-mono hover:text-foreground transition-colors cursor-pointer text-left"
+                            title="Click to copy full signature"
+                          >
+                            Tx: {contribution.transaction_signature}
+                          </button>
                         )}
                       </div>
                       <div className="text-right space-y-2">

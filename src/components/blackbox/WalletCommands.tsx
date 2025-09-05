@@ -762,7 +762,14 @@ export function WalletCommands({ wallet, campaign, isDevMode = false, devBalance
               )}
             </Button>
             <CardTitle>
-              Wallet Commands - {wallet.pubkey.slice(0, 8)}...{wallet.pubkey.slice(-6)}
+              Wallet Commands - 
+              <button
+                onClick={() => navigator.clipboard.writeText(wallet.pubkey)}
+                className="font-mono hover:text-muted-foreground transition-colors cursor-pointer ml-1"
+                title="Click to copy full address"
+              >
+                {wallet.pubkey}
+              </button>
             </CardTitle>
           </div>
           <Button onClick={() => setShowCreateForm(true)} size="sm">

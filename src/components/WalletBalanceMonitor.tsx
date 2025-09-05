@@ -71,9 +71,13 @@ export function WalletBalanceMonitor() {
               {wallets.map((wallet) => (
                 <div key={wallet.pubkey} className="flex justify-between items-center p-3 bg-muted/50 rounded-md">
                   <div>
-                    <div className="font-mono text-sm">
-                      {wallet.pubkey.slice(0, 8)}...{wallet.pubkey.slice(-8)}
-                    </div>
+                    <button
+                      onClick={() => navigator.clipboard.writeText(wallet.pubkey)}
+                      className="font-mono text-sm hover:text-muted-foreground transition-colors cursor-pointer text-left"
+                      title="Click to copy full address"
+                    >
+                      {wallet.pubkey}
+                    </button>
                     <div className="text-xs text-muted-foreground capitalize">
                       {wallet.wallet_type} wallet
                     </div>
