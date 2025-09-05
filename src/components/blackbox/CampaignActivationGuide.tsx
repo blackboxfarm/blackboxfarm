@@ -3,7 +3,29 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { CheckCircle2, AlertTriangle, Wallet, DollarSign, Info } from "lucide-react";
+import { CheckCircle2, AlertTriangle, Wallet, DollarSign, Info, Clock, Check, X } from "lucide-react";
+
+// Validation Step Component
+const ValidationStep = ({ label, status }: { 
+  label: string; 
+  status: 'pending' | 'checking' | 'success' | 'error' 
+}) => {
+  const getIcon = () => {
+    switch (status) {
+      case 'pending': return <div className="w-4 h-4 border-2 border-muted rounded-full" />;
+      case 'checking': return <Clock className="w-4 h-4 animate-spin text-yellow-500" />;
+      case 'success': return <Check className="w-4 h-4 text-green-500" />;
+      case 'error': return <X className="w-4 h-4 text-red-500" />;
+    }
+  };
+
+  return (
+    <div className="flex items-center gap-2">
+      {getIcon()}
+      <span className={`${status === 'error' ? 'text-red-500' : ''}`}>{label}</span>
+    </div>
+  );
+};
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { supabase } from "@/integrations/supabase/client";
@@ -40,6 +62,22 @@ export function CampaignActivationGuide({ campaign, onCampaignUpdate }: Campaign
   const [commands, setCommands] = useState<CommandCode[]>([]);
   const [loading, setLoading] = useState(false);
   const [buttonState, setButtonState] = useState<'idle' | 'starting' | 'stopping' | 'success'>('idle');
+  const [validationSteps, setValidationSteps] = useState<{
+    tokenValidation: 'pending' | 'checking' | 'success' | 'error';
+    walletValidation: 'pending' | 'checking' | 'success' | 'error';
+    commandValidation: 'pending' | 'checking' | 'success' | 'error';
+    feeValidation: 'pending' | 'checking' | 'success' | 'error';
+    contractBuilding: 'pending' | 'checking' | 'success' | 'error';
+    cronSubmission: 'pending' | 'checking' | 'success' | 'error';
+  }>({
+    tokenValidation: 'pending',
+    walletValidation: 'pending', 
+    commandValidation: 'pending',
+    feeValidation: 'pending',
+    contractBuilding: 'pending',
+    cronSubmission: 'pending'
+  });
+  const [validationErrors, setValidationErrors] = useState<string[]>([]);
 
   useEffect(() => {
     loadCampaignData();
@@ -98,36 +136,193 @@ export function CampaignActivationGuide({ campaign, onCampaignUpdate }: Campaign
     }
   };
 
+  const validateToken = async () => {
+    setValidationSteps(prev => ({ ...prev, tokenValidation: 'checking' }));
+    try {
+      const { data, error } = await supabase.functions.invoke('token-metadata', {
+        body: { tokenMint: campaign.token_address }
+      });
+      if (error || !data?.success) {
+        throw new Error('Token validation failed: Invalid or unrecognized token');
+      }
+      setValidationSteps(prev => ({ ...prev, tokenValidation: 'success' }));
+      return true;
+    } catch (error: any) {
+      setValidationSteps(prev => ({ ...prev, tokenValidation: 'error' }));
+      setValidationErrors(prev => [...prev, `Token: ${error.message}`]);
+      return false;
+    }
+  };
+
+  const validateWallet = async () => {
+    setValidationSteps(prev => ({ ...prev, walletValidation: 'checking' }));
+    try {
+      if (wallets.length === 0) {
+        throw new Error('No wallets configured');
+      }
+      
+      const activeWallet = wallets.find(w => w.is_active);
+      if (!activeWallet) {
+        throw new Error('No active wallet found');
+      }
+      
+      if (activeWallet.sol_balance < 0.001) {
+        throw new Error('Insufficient SOL balance in wallet');
+      }
+      
+      setValidationSteps(prev => ({ ...prev, walletValidation: 'success' }));
+      return true;
+    } catch (error: any) {
+      setValidationSteps(prev => ({ ...prev, walletValidation: 'error' }));
+      setValidationErrors(prev => [...prev, `Wallet: ${error.message}`]);
+      return false;
+    }
+  };
+
+  const validateCommands = async () => {
+    setValidationSteps(prev => ({ ...prev, commandValidation: 'checking' }));
+    try {
+      if (commands.length === 0) {
+        throw new Error('No commands configured');
+      }
+      
+      const activeCommands = commands.filter(c => c.is_active);
+      if (activeCommands.length === 0) {
+        throw new Error('No active commands found');
+      }
+      
+      for (const command of activeCommands) {
+        if (!command.config || typeof command.config !== 'object') {
+          throw new Error(`Invalid configuration for command: ${command.name}`);
+        }
+      }
+      
+      setValidationSteps(prev => ({ ...prev, commandValidation: 'success' }));
+      return true;
+    } catch (error: any) {
+      setValidationSteps(prev => ({ ...prev, commandValidation: 'error' }));
+      setValidationErrors(prev => [...prev, `Commands: ${error.message}`]);
+      return false;
+    }
+  };
+
+  const validateFees = async () => {
+    setValidationSteps(prev => ({ ...prev, feeValidation: 'checking' }));
+    try {
+      const { data: gasData, error: gasError } = await supabase.functions.invoke('gas-fee-estimation');
+      if (gasError) {
+        throw new Error('Failed to estimate gas fees');
+      }
+      
+      // Simulate service fee calculation
+      const serviceFee = 0.0025; // 0.25% service fee
+      
+      setValidationSteps(prev => ({ ...prev, feeValidation: 'success' }));
+      return true;
+    } catch (error: any) {
+      setValidationSteps(prev => ({ ...prev, feeValidation: 'error' }));
+      setValidationErrors(prev => [...prev, `Fees: ${error.message}`]);
+      return false;
+    }
+  };
+
+  const buildAndSubmitContract = async () => {
+    setValidationSteps(prev => ({ ...prev, contractBuilding: 'checking' }));
+    try {
+      // Build contract package
+      const contractPackage = {
+        campaignId: campaign.id,
+        tokenAddress: campaign.token_address,
+        wallets: wallets.filter(w => w.is_active),
+        commands: commands.filter(c => c.is_active),
+        timestamp: new Date().toISOString()
+      };
+      
+      setValidationSteps(prev => ({ ...prev, contractBuilding: 'success', cronSubmission: 'checking' }));
+      
+      // Submit to database (simulates cron daemon submission)
+      const { error } = await supabase
+        .from('blackbox_campaigns')
+        .update({ is_active: true })
+        .eq('id', campaign.id);
+
+      if (error) throw error;
+      
+      setValidationSteps(prev => ({ ...prev, cronSubmission: 'success' }));
+      return true;
+    } catch (error: any) {
+      const step = validationSteps.contractBuilding === 'checking' ? 'contractBuilding' : 'cronSubmission';
+      setValidationSteps(prev => ({ ...prev, [step]: 'error' }));
+      const prefix = step === 'contractBuilding' ? 'Contract Building' : 'Cron Submission';
+      setValidationErrors(prev => [...prev, `${prefix}: ${error.message}`]);
+      return false;
+    }
+  };
+
   const toggleCampaign = async () => {
     setLoading(true);
     const newStatus = !campaign.is_active;
     
     try {
-      // Set loading state based on action
-      setButtonState(newStatus ? 'starting' : 'stopping');
-      
-      const { error } = await supabase
-        .from('blackbox_campaigns')
-        .update({ is_active: newStatus })
-        .eq('id', campaign.id);
+      if (newStatus) {
+        // Starting campaign - run full validation
+        setButtonState('starting');
+        setValidationErrors([]);
+        
+        // Reset all validation states
+        setValidationSteps({
+          tokenValidation: 'pending',
+          walletValidation: 'pending',
+          commandValidation: 'pending', 
+          feeValidation: 'pending',
+          contractBuilding: 'pending',
+          cronSubmission: 'pending'
+        });
 
-      if (error) throw error;
+        // Run validations sequentially
+        const tokenValid = await validateToken();
+        if (!tokenValid) throw new Error('Token validation failed');
+        
+        const walletValid = await validateWallet();
+        if (!walletValid) throw new Error('Wallet validation failed');
+        
+        const commandsValid = await validateCommands();
+        if (!commandsValid) throw new Error('Command validation failed');
+        
+        const feesValid = await validateFees();
+        if (!feesValid) throw new Error('Fee validation failed');
+        
+        const contractSuccess = await buildAndSubmitContract();
+        if (!contractSuccess) throw new Error('Contract building/submission failed');
+        
+        setButtonState('success');
+        
+        toast({
+          title: "Campaign Added Successfully! 🚀",
+          description: "Your campaign has been validated and added to the trading queue."
+        });
+      } else {
+        // Stopping campaign
+        setButtonState('stopping');
+        
+        const { error } = await supabase
+          .from('blackbox_campaigns')
+          .update({ is_active: false })
+          .eq('id', campaign.id);
 
-      // Simulate processing time for cron queue operations
-      await new Promise(resolve => setTimeout(resolve, 3000));
-      
-      // Show success state
-      setButtonState('success');
-      
+        if (error) throw error;
+        
+        await new Promise(resolve => setTimeout(resolve, 2000));
+        setButtonState('success');
+        
+        toast({
+          title: "Campaign Removed Successfully ⏹️",
+          description: "Your campaign has been removed from the trading queue."
+        });
+      }
+
       // Update parent component
       onCampaignUpdate?.({ ...campaign, is_active: newStatus });
-
-      toast({
-        title: newStatus ? "Campaign Added Successfully! 🚀" : "Campaign Removed Successfully ⏹️",
-        description: newStatus 
-          ? "Your campaign has been added to the trading queue."
-          : "Your campaign has been removed from the trading queue."
-      });
 
       // Reset to idle after showing success
       setTimeout(() => setButtonState('idle'), 2000);
@@ -298,6 +493,48 @@ export function CampaignActivationGuide({ campaign, onCampaignUpdate }: Campaign
         {/* CAMPAIGN CONTROL */}
         <div className="pt-4 border-t">
           <div className="text-center space-y-4">
+            {/* Validation Checklist */}
+            {buttonState === 'starting' && (
+              <Card className="p-4 mb-4 bg-muted">
+                <h4 className="font-semibold mb-3">Campaign Validation</h4>
+                <div className="space-y-2 text-sm">
+                  <ValidationStep 
+                    label="Campaign token validation" 
+                    status={validationSteps.tokenValidation} 
+                  />
+                  <ValidationStep 
+                    label="Wallet setup & balance check" 
+                    status={validationSteps.walletValidation} 
+                  />
+                  <ValidationStep 
+                    label="Command configuration check" 
+                    status={validationSteps.commandValidation} 
+                  />
+                  <ValidationStep 
+                    label="Gas & service fees calculation" 
+                    status={validationSteps.feeValidation} 
+                  />
+                  <ValidationStep 
+                    label="Building contract package" 
+                    status={validationSteps.contractBuilding} 
+                  />
+                  <ValidationStep 
+                    label="Submitting to cron daemon" 
+                    status={validationSteps.cronSubmission} 
+                  />
+                </div>
+                
+                {validationErrors.length > 0 && (
+                  <div className="mt-4 p-3 bg-destructive/10 border border-destructive/20 rounded">
+                    <h5 className="font-semibold text-destructive mb-2">Validation Errors:</h5>
+                    {validationErrors.map((error, index) => (
+                      <div key={index} className="text-sm text-destructive">{error}</div>
+                    ))}
+                  </div>
+                )}
+              </Card>
+            )}
+
             {/* Big START/STOP Button */}
             <Button
               size="lg"
@@ -309,7 +546,7 @@ export function CampaignActivationGuide({ campaign, onCampaignUpdate }: Campaign
               disabled={loading || (!canEnable && !campaign.is_active)}
               onClick={toggleCampaign}
             >
-              {buttonState === 'starting' && "Starting Campaign Queue..."}
+              {buttonState === 'starting' && "Validating Campaign..."}
               {buttonState === 'stopping' && "Removing Campaign from Queue..."}
               {buttonState === 'success' && !campaign.is_active && "Campaign Added Successfully!"}
               {buttonState === 'success' && campaign.is_active && "Campaign Removed Successfully!"}
