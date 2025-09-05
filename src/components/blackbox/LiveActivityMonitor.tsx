@@ -310,7 +310,9 @@ export function LiveActivityMonitor({ campaignId }: LiveActivityMonitorProps) {
                           <Badge variant={tx.transaction_type === 'buy' ? 'default' : 'destructive'}>
                             {tx.transaction_type.toUpperCase()}
                           </Badge>
-                          <span className="text-sm font-mono">{Number(tx.amount_sol).toFixed(9)} SOL</span>
+                          <span className="text-sm font-mono">
+                            ${(Number(tx.amount_sol) * 150).toFixed(4)} USD ({Number(tx.amount_sol).toFixed(9)} SOL)
+                          </span>
                         </div>
                         <div className="text-xs text-muted-foreground">
                           {formatTime(tx.executed_at)}
