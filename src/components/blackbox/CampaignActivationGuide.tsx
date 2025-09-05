@@ -375,7 +375,7 @@ export function CampaignActivationGuide({ campaign, onCampaignUpdate }: Campaign
       <CardHeader>
         <CardTitle className="flex items-center justify-between">
           <span className="flex items-center gap-2">
-            Campaign Status
+            Campaign Contract Status
           </span>
         </CardTitle>
       </CardHeader>
@@ -386,7 +386,7 @@ export function CampaignActivationGuide({ campaign, onCampaignUpdate }: Campaign
             {campaign.is_active ? "🟢 ACTIVE" : "⚪ NOT ACTIVE"}
           </Badge>
           <p className="text-sm text-muted-foreground mt-2">
-            {campaign.is_active ? "Campaign is enabled and added to Cron Service" : "Campaign is disabled and not in Cron Service"}
+            {campaign.is_active ? "Contract is active and submitted to Cron Service" : "Contract is not active - requires campaign, wallet, and commands enabled"}
           </p>
         </div>
 
@@ -493,10 +493,10 @@ export function CampaignActivationGuide({ campaign, onCampaignUpdate }: Campaign
         {/* CAMPAIGN CONTROL */}
         <div className="pt-4 border-t">
           <div className="text-center space-y-4">
-            {/* Validation Checklist */}
-            {buttonState === 'starting' && (
+            {/* Validation Checklist - Show during validation or if there were errors */}
+            {(buttonState === 'starting' || validationErrors.length > 0) && (
               <Card className="p-4 mb-4 bg-muted">
-                <h4 className="font-semibold mb-3">Campaign Validation</h4>
+                <h4 className="font-semibold mb-3">Contract Building Validation</h4>
                 <div className="space-y-2 text-sm">
                   <ValidationStep 
                     label="Campaign token validation" 
