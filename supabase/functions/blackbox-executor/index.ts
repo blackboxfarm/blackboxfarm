@@ -80,16 +80,23 @@ serve(async (req) => {
     if (action === "buy") {
       // Execute REAL buy transaction using Jupiter/Raydium
       const config = commandData.config;
-      const buyAmount = config.type === "simple" 
+      const buyAmountUSD = config.type === "simple" 
         ? config.buyAmount  // This is in USD
         : Math.random() * (config.buyAmount.max - config.buyAmount.min) + config.buyAmount.min;
+
+      // Get current SOL price to convert USD to SOL
+      const { data: solPriceData } = await supabaseClient.functions.invoke('sol-price');
+      const solPrice = solPriceData?.price || 201; // Fallback price
+      const buyAmountSOL = buyAmountUSD / solPrice;
+
+      console.log(`💰 Converting $${buyAmountUSD} USD to ${buyAmountSOL} SOL (SOL price: $${solPrice})`);
 
       // Use raydium-swap function for REAL blockchain trades
       const swapResponse = await supabaseClient.functions.invoke('raydium-swap', {
         body: {
           side: 'buy',
           tokenMint: campaign.token_address,
-          usdcAmount: buyAmount,
+          usdcAmount: buyAmountSOL, // Now properly converted to SOL
           slippageBps: 500, // 5% slippage
           confirmPolicy: 'processed',
           buyWithSol: true
