@@ -30,9 +30,10 @@ interface CommandCode {
 
 interface CampaignActivationGuideProps {
   campaign: Campaign;
+  onCampaignUpdate?: (updatedCampaign: Campaign) => void;
 }
 
-export function CampaignActivationGuide({ campaign }: CampaignActivationGuideProps) {
+export function CampaignActivationGuide({ campaign, onCampaignUpdate }: CampaignActivationGuideProps) {
   const [wallets, setWallets] = useState<WalletData[]>([]);
   const [commands, setCommands] = useState<CommandCode[]>([]);
   const [loading, setLoading] = useState(false);
@@ -72,6 +73,9 @@ export function CampaignActivationGuide({ campaign }: CampaignActivationGuidePro
         .eq('id', campaign.id);
 
       if (error) throw error;
+
+      // Update parent component immediately
+      onCampaignUpdate?.({ ...campaign, is_active: newStatus });
 
       toast({
         title: newStatus ? "Campaign Started! 🚀" : "Campaign Stopped ⏹️",
