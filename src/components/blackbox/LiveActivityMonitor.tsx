@@ -20,6 +20,9 @@ interface Transaction {
   status: string;
   executed_at: string;
   signature?: string;
+  gas_fee?: number;
+  service_fee?: number;
+  platform_fee?: number;
 }
 
 interface CampaignStats {
@@ -84,7 +87,7 @@ export function LiveActivityMonitor({ campaignId }: LiveActivityMonitorProps) {
     // Load transactions separately for better control
     const { data: allTransactions } = await supabase
       .from('blackbox_transactions')
-      .select('*')
+      .select('id, transaction_type, amount_sol, status, executed_at, signature, gas_fee, service_fee')
       .in('wallet_id', walletIdArray)
       .order('executed_at', { ascending: false });
 
@@ -96,7 +99,7 @@ export function LiveActivityMonitor({ campaignId }: LiveActivityMonitorProps) {
       const buyCount = allTransactions?.filter((tx: any) => tx.transaction_type === 'buy').length || 0;
       const sellCount = allTransactions?.filter((tx: any) => tx.transaction_type === 'sell').length || 0;
       const totalFees = allTransactions?.reduce((acc: number, tx: any) => 
-        acc + (Number(tx.gas_fee) || 0) + (Number(tx.service_fee) || 0), 0) || 0;
+        acc + (Number(tx.gas_fee) || 0), 0) || 0;
 
       setStats({
         total_commands: totalCommands,
@@ -153,7 +156,7 @@ export function LiveActivityMonitor({ campaignId }: LiveActivityMonitorProps) {
             total_transactions: prev.total_transactions + 1,
             buy_count: payload.new.transaction_type === 'buy' ? prev.buy_count + 1 : prev.buy_count,
             sell_count: payload.new.transaction_type === 'sell' ? prev.sell_count + 1 : prev.sell_count,
-            total_fees: prev.total_fees + (Number(payload.new.gas_fee) || 0) + (Number(payload.new.service_fee) || 0),
+            total_fees: prev.total_fees + (Number(payload.new.gas_fee) || 0),
           }));
         }
       })
@@ -300,25 +303,38 @@ export function LiveActivityMonitor({ campaignId }: LiveActivityMonitorProps) {
                   </div>
                 ) : (
                   transactions.map((tx) => (
-                    <div key={tx.id} className="flex items-center justify-between p-2 border rounded">
-                      <div className="flex items-center gap-2">
-                        <div className={`w-2 h-2 rounded-full ${getStatusColor(tx.status)}`} />
-                        <Badge variant={tx.transaction_type === 'buy' ? 'default' : 'destructive'}>
-                          {tx.transaction_type.toUpperCase()}
-                        </Badge>
-                        <span className="text-sm">{tx.amount_sol} SOL</span>
+                    <div key={tx.id} className="p-3 border rounded space-y-2">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <div className={`w-2 h-2 rounded-full ${getStatusColor(tx.status)}`} />
+                          <Badge variant={tx.transaction_type === 'buy' ? 'default' : 'destructive'}>
+                            {tx.transaction_type.toUpperCase()}
+                          </Badge>
+                          <span className="text-sm font-mono">{Number(tx.amount_sol).toFixed(9)} SOL</span>
+                        </div>
+                        <div className="text-xs text-muted-foreground">
+                          {formatTime(tx.executed_at)}
+                        </div>
+                      </div>
+                      <div className="flex justify-between text-xs">
+                        <div className="space-y-1">
+                          <div className="text-muted-foreground">
+                            Blockchain Fee: <span className="font-mono">{Number(tx.gas_fee || 0).toFixed(9)} SOL</span>
+                          </div>
+                          <div className="text-muted-foreground">
+                            Service Fee (Normal): <span className="font-mono">{Number(tx.service_fee || 0).toFixed(9)} SOL</span>
+                            <span className="text-green-500 ml-1">(Waived for test)</span>
+                          </div>
+                        </div>
                         {tx.signature && (
                           <button
                             onClick={() => navigator.clipboard.writeText(tx.signature!)}
-                            className="text-xs text-muted-foreground hover:text-foreground transition-colors font-mono cursor-pointer"
-                            title="Click to copy full signature"
+                            className="text-xs text-muted-foreground hover:text-foreground transition-colors px-2 py-1 rounded border"
+                            title="Copy transaction signature"
                           >
-                            {tx.signature}
+                            Copy Sig
                           </button>
                         )}
-                      </div>
-                      <div className="text-xs text-muted-foreground">
-                        {formatTime(tx.executed_at)}
                       </div>
                     </div>
                   ))
