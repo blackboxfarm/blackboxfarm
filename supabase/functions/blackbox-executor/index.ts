@@ -78,7 +78,7 @@ serve(async (req) => {
     let result: any = {};
 
     if (action === "buy") {
-      // Execute REAL buy transaction using Jupiter/Raydium
+      // Execute REAL buy transaction
       const config = commandData.config;
       const buyAmountUSD = config.type === "simple" 
         ? config.buyAmount  // This is in USD
@@ -91,21 +91,37 @@ serve(async (req) => {
 
       console.log(`💰 Converting $${buyAmountUSD} USD to ${buyAmountSOL} SOL (SOL price: $${solPrice})`);
 
-      // Use raydium-swap function for REAL blockchain trades
-      const swapResponse = await supabaseClient.functions.invoke('raydium-swap', {
-        body: {
-          side: 'buy',
-          tokenMint: campaign.token_address,
-          usdcAmount: buyAmountSOL, // Now properly converted to SOL
-          slippageBps: 500, // 5% slippage
-          confirmPolicy: 'processed',
-          buyWithSol: true
-        },
-        headers: {
-          'x-owner-secret': wallet.secret_key_encrypted,
-          'x-function-token': Deno.env.get("FUNCTION_TOKEN")
-        }
-      });
+      // Check if this is a pump.fun token (ends with 'pump')
+      const isPumpFunToken = campaign.token_address.endsWith('pump');
+      
+      if (isPumpFunToken) {
+        console.log(`🚀 Detected pump.fun token: ${campaign.token_address}`);
+        
+        // For pump.fun tokens, skip trading since they haven't bonded to Raydium yet
+        // This prevents the "ROUTE_NOT_FOUND" errors
+        result = { 
+          message: 'Pump.fun token trading not yet implemented - waiting for Raydium bonding',
+          token: campaign.token_address,
+          buyAmountSOL,
+          type: 'buy',
+          skipped: true
+        };
+      } else {
+        // Use raydium-swap function for tokens that have bonded to Raydium
+        const swapResponse = await supabaseClient.functions.invoke('raydium-swap', {
+          body: {
+            side: 'buy',
+            tokenMint: campaign.token_address,
+            usdcAmount: buyAmountSOL,
+            slippageBps: 500, // 5% slippage
+            confirmPolicy: 'processed',
+            buyWithSol: true
+          },
+          headers: {
+            'x-owner-secret': wallet.secret_key_encrypted,
+            'x-function-token': Deno.env.get("FUNCTION_TOKEN")
+          }
+        });
 
       if (swapResponse.error) {
         console.error('Buy swap failed:', {
@@ -183,54 +199,66 @@ serve(async (req) => {
       }
 
     } else if (action === "sell") {
-      // For sell, we need to check current token balance first
-      try {
-        // Get current token balance from wallet
-        const connection = new Connection(
-          Deno.env.get("SOLANA_RPC_URL") ?? "https://api.mainnet-beta.solana.com",
-          "confirmed"
-        );
-        
-        // Get token account for this wallet and token
-        const tokenAccounts = await connection.getTokenAccountsByOwner(
-          keypair.publicKey,
-          { mint: new PublicKey(campaign.token_address) }
-        );
+      // Check if this is a pump.fun token first
+      const isPumpFunToken = campaign.token_address.endsWith('pump');
+      
+      if (isPumpFunToken) {
+        console.log(`🚀 Detected pump.fun token for sell: ${campaign.token_address}`);
+        result = { 
+          message: 'Pump.fun token selling not yet implemented - waiting for Raydium bonding',
+          token: campaign.token_address,
+          type: 'sell',
+          skipped: true
+        };
+      } else {
+        // For sell, we need to check current token balance first
+        try {
+          // Get current token balance from wallet
+          const connection = new Connection(
+            Deno.env.get("SOLANA_RPC_URL") ?? "https://api.mainnet-beta.solana.com",
+            "confirmed"
+          );
+          
+          // Get token account for this wallet and token
+          const tokenAccounts = await connection.getTokenAccountsByOwner(
+            keypair.publicKey,
+            { mint: new PublicKey(campaign.token_address) }
+          );
 
-        if (tokenAccounts.value.length === 0) {
-          console.log(`⚠️ No token balance found for ${campaign.token_address}, skipping sell`);
-          result = { message: "No tokens to sell", type: "sell" };
-        } else {
-          const tokenAccount = tokenAccounts.value[0];
-          const accountInfo = await connection.getTokenAccountBalance(tokenAccount.pubkey);
-          const tokenBalance = parseFloat(accountInfo.value.uiAmount || '0');
-
-          if (tokenBalance <= 0) {
-            console.log(`⚠️ Zero token balance, skipping sell`);
-            result = { message: "Zero token balance", type: "sell" };
+          if (tokenAccounts.value.length === 0) {
+            console.log(`⚠️ No token balance found for ${campaign.token_address}, skipping sell`);
+            result = { message: "No tokens to sell", type: "sell" };
           } else {
-            // Calculate sell amount based on percentage
-            const config = commandData.config;
-            const sellPercent = config.type === "simple" 
-              ? config.sellPercent 
-              : Math.random() * (config.sellPercent.max - config.sellPercent.min) + config.sellPercent.min;
-            
-            const sellAmount = tokenBalance * (sellPercent / 100);
+            const tokenAccount = tokenAccounts.value[0];
+            const accountInfo = await connection.getTokenAccountBalance(tokenAccount.pubkey);
+            const tokenBalance = parseFloat(accountInfo.value.uiAmount || '0');
 
-            // Use raydium-swap function for REAL blockchain trades
-            const swapResponse = await supabaseClient.functions.invoke('raydium-swap', {
-              body: {
-                side: 'sell',
-                tokenMint: campaign.token_address,
-                amount: sellAmount,
-                slippageBps: 500,
-                confirmPolicy: 'processed'
-              },
-              headers: {
-                'x-owner-secret': wallet.secret_key_encrypted,
-                'x-function-token': Deno.env.get("FUNCTION_TOKEN")
-              }
-            });
+            if (tokenBalance <= 0) {
+              console.log(`⚠️ Zero token balance, skipping sell`);
+              result = { message: "Zero token balance", type: "sell" };
+            } else {
+              // Calculate sell amount based on percentage
+              const config = commandData.config;
+              const sellPercent = config.type === "simple" 
+                ? config.sellPercent 
+                : Math.random() * (config.sellPercent.max - config.sellPercent.min) + config.sellPercent.min;
+              
+              const sellAmount = tokenBalance * (sellPercent / 100);
+
+              // Use raydium-swap function for REAL blockchain trades
+              const swapResponse = await supabaseClient.functions.invoke('raydium-swap', {
+                body: {
+                  side: 'sell',
+                  tokenMint: campaign.token_address,
+                  amount: sellAmount,
+                  slippageBps: 500,
+                  confirmPolicy: 'processed'
+                },
+                headers: {
+                  'x-owner-secret': wallet.secret_key_encrypted,
+                  'x-function-token': Deno.env.get("FUNCTION_TOKEN")
+                }
+              });
 
             if (swapResponse.error) {
               console.error('Sell swap failed:', {
