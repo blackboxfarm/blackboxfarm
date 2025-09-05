@@ -116,6 +116,11 @@ export function CampaignActivationGuide({ campaign, onCampaignUpdate }: Campaign
     return sum + 1; // Conservative estimate for complex commands
   }, 0);
 
+  // CRITICAL: This button is the ONLY control that initiates/stops trading
+  // Trading will ONLY start when ALL three requirements are met:
+  // 1. At least one enabled wallet
+  // 2. At least one funded wallet  
+  // 3. At least one enabled command
   const canStart = hasEnabledWallets && hasFundedWallets && hasEnabledCommands;
   const isReady = hasWallets && hasFundedWallets && hasCommands;
 
@@ -244,7 +249,7 @@ export function CampaignActivationGuide({ campaign, onCampaignUpdate }: Campaign
           </Alert>
         )}
 
-        {/* Campaign Control Button */}
+        {/* TRADING CONTROL BUTTON - THE ONLY BUTTON THAT STARTS/STOPS TRADING */}
         <div className="pt-4 border-t">
           <Button 
             onClick={toggleCampaign}
@@ -264,7 +269,8 @@ export function CampaignActivationGuide({ campaign, onCampaignUpdate }: Campaign
           
           {!canStart && !campaign.is_active && (
             <p className="text-xs text-muted-foreground text-center mt-2">
-              Ensure you have at least 1 enabled wallet, funded wallet, and enabled command
+              This button will only be clickable when ALL three requirements are met:<br/>
+              ✓ At least 1 enabled wallet + ✓ At least 1 funded wallet + ✓ At least 1 enabled command
             </p>
           )}
         </div>
