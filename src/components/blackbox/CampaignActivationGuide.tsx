@@ -330,7 +330,14 @@ export function CampaignActivationGuide({ campaign, onCampaignUpdate }: Campaign
       // Reload data to reflect changes
       loadCampaignData();
     } catch (error: any) {
-      setButtonState('idle');
+      // Keep validation window open when there are errors - don't reset to idle
+      if (newStatus) {
+        // For start failures, keep showing validation state with errors
+        setButtonState('idle'); // Still reset button for retry, but errors will keep validation visible
+      } else {
+        setButtonState('idle');
+      }
+      
       toast({
         title: newStatus ? "Failed to Start Campaign" : "Failed to Stop Campaign",
         description: error.message,
