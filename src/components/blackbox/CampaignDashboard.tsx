@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
-import { Plus, Settings, Bell } from "lucide-react";
+import { Plus, Settings, Bell, Trash2 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "@/hooks/use-toast";
 import { CampaignWallets } from "./CampaignWallets";
@@ -160,6 +160,46 @@ export function CampaignDashboard() {
     );
   };
 
+  const deleteCampaign = async (campaign: Campaign) => {
+    if (!confirm(`Are you sure you want to delete campaign "${campaign.nickname}"? The wallets and commands will be preserved for reuse.`)) {
+      return;
+    }
+
+    // First, detach wallets from the campaign by setting campaign_id to null
+    const { error: walletError } = await supabase
+      .from('blackbox_wallets')
+      .update({ campaign_id: null })
+      .eq('campaign_id', campaign.id);
+
+    if (walletError) {
+      toast({ title: "Error detaching wallets", description: walletError.message });
+      return;
+    }
+
+    // Then delete the campaign
+    const { error } = await supabase
+      .from('blackbox_campaigns')
+      .delete()
+      .eq('id', campaign.id);
+
+    if (error) {
+      toast({ title: "Error deleting campaign", description: error.message });
+      return;
+    }
+
+    toast({ 
+      title: "Campaign deleted", 
+      description: `${campaign.nickname} has been deleted. Wallets and commands are preserved for reuse.` 
+    });
+    
+    // Reset selected campaign if it was the deleted one
+    if (selectedCampaign?.id === campaign.id) {
+      setSelectedCampaign(null);
+    }
+    
+    loadCampaigns();
+  };
+
   return (
     <div className="space-y-6">
       {/* Campaign List */}
@@ -219,6 +259,17 @@ export function CampaignDashboard() {
                         title={getNotificationButtonText(campaign.id, campaign.is_active)}
                       >
                         <Bell className="h-4 w-4" />
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          deleteCampaign(campaign);
+                        }}
+                        title="Delete campaign (preserves wallets and commands)"
+                      >
+                        <Trash2 className="h-4 w-4" />
                       </Button>
                       <div className="flex items-center gap-2">
                         <label className="text-sm font-medium">
