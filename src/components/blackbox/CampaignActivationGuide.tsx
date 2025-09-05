@@ -63,6 +63,7 @@ export function CampaignActivationGuide({ campaign, onCampaignUpdate }: Campaign
   const [commands, setCommands] = useState<CommandCode[]>([]);
   const [loading, setLoading] = useState(false);
   const [buttonState, setButtonState] = useState<'idle' | 'starting' | 'stopping' | 'success'>('idle');
+  const [contractActive, setContractActive] = useState(false);
   const [validationSteps, setValidationSteps] = useState<{
     tokenValidation: 'pending' | 'checking' | 'success' | 'error';
     walletValidation: 'pending' | 'checking' | 'success' | 'error';
@@ -82,6 +83,7 @@ export function CampaignActivationGuide({ campaign, onCampaignUpdate }: Campaign
 
   useEffect(() => {
     loadCampaignData();
+    setContractActive(campaign.is_active);
     
     // Set up real-time subscriptions
     const campaignChannel = supabase
@@ -261,7 +263,7 @@ export function CampaignActivationGuide({ campaign, onCampaignUpdate }: Campaign
 
   const toggleCampaign = async () => {
     setLoading(true);
-    const newStatus = !campaign.is_active;
+    const newStatus = !contractActive;
     
     try {
       if (newStatus) {
@@ -295,6 +297,7 @@ export function CampaignActivationGuide({ campaign, onCampaignUpdate }: Campaign
         const contractSuccess = await buildAndSubmitContract();
         if (!contractSuccess) throw new Error('Contract building/submission failed');
         
+        setContractActive(true);
         setButtonState('success');
         
         toast({
@@ -306,6 +309,7 @@ export function CampaignActivationGuide({ campaign, onCampaignUpdate }: Campaign
         setButtonState('stopping');
         
         await new Promise(resolve => setTimeout(resolve, 2000));
+        setContractActive(false);
         setButtonState('success');
         
         toast({
@@ -390,11 +394,11 @@ export function CampaignActivationGuide({ campaign, onCampaignUpdate }: Campaign
       <CardContent className="space-y-6">
         {/* Current Status */}
         <div className="text-center p-4 border rounded-lg">
-          <Badge variant={campaign.is_active ? "default" : "secondary"} className="text-lg px-4 py-2">
-            {campaign.is_active ? "🟢 ACTIVE" : "⚪ NOT ACTIVE"}
+          <Badge variant={contractActive ? "default" : "secondary"} className="text-lg px-4 py-2">
+            {contractActive ? "🟢 ACTIVE" : "⚪ NOT ACTIVE"}
           </Badge>
           <p className="text-sm text-muted-foreground mt-2">
-            {campaign.is_active ? "Contract is active and submitted to Cron Service" : "Contract is not active - requires campaign, wallet, and commands enabled"}
+            {contractActive ? "Contract is active and submitted to Cron Service" : "Contract is not active - requires campaign, wallet, and commands enabled"}
           </p>
         </div>
 
@@ -549,17 +553,17 @@ export function CampaignActivationGuide({ campaign, onCampaignUpdate }: Campaign
               className="w-full max-w-md h-12 text-sm font-bold"
               variant={
                 buttonState === 'success' ? "default" :
-                campaign.is_active && buttonState === 'idle' ? "destructive" : "default"
+                contractActive && buttonState === 'idle' ? "destructive" : "default"
               }
-              disabled={loading || (!canEnable && !campaign.is_active)}
+              disabled={loading || (!canEnable && !contractActive)}
               onClick={toggleCampaign}
             >
               {buttonState === 'starting' && "Validating Campaign..."}
               {buttonState === 'stopping' && "Removing Campaign from Queue..."}
-              {buttonState === 'success' && !campaign.is_active && "Campaign Added Successfully!"}
-              {buttonState === 'success' && campaign.is_active && "Campaign Removed Successfully!"}
-              {buttonState === 'idle' && campaign.is_active && "STOP"}
-              {buttonState === 'idle' && !campaign.is_active && "START"}
+              {buttonState === 'success' && !contractActive && "Campaign Added Successfully!"}
+              {buttonState === 'success' && contractActive && "Campaign Removed Successfully!"}
+              {buttonState === 'idle' && contractActive && "STOP"}
+              {buttonState === 'idle' && !contractActive && "START"}
             </Button>
             
             {/* Requirements Status Indicators */}
@@ -578,7 +582,7 @@ export function CampaignActivationGuide({ campaign, onCampaignUpdate }: Campaign
               </div>
             </div>
             
-            {!canEnable && !campaign.is_active && (
+            {!canEnable && !contractActive && (
               <p className="text-xs text-muted-foreground">
                 All three indicators must be green to start the campaign
               </p>
