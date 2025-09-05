@@ -34,6 +34,7 @@ export function CampaignDashboard() {
   const [isValidToken, setIsValidToken] = useState(false);
   const [tokenData, setTokenData] = useState<any>(null);
   const [deletingCampaignId, setDeletingCampaignId] = useState<string | null>(null);
+  const [deletionCountdown, setDeletionCountdown] = useState<number>(20);
   
   const {
     sendCampaignNotification,
@@ -166,9 +167,23 @@ export function CampaignDashboard() {
       return;
     }
 
-    // Set loading state
+    // Set loading state and start countdown
     setDeletingCampaignId(campaign.id);
+    setDeletionCountdown(20);
+    
+    // Start countdown timer
+    const countdownInterval = setInterval(() => {
+      setDeletionCountdown(prev => {
+        if (prev <= 1) {
+          clearInterval(countdownInterval);
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
 
+    const startTime = Date.now();
+    
     try {
       // First, detach wallets from the campaign by setting campaign_id to null
       const { error: walletError } = await supabase
@@ -192,10 +207,16 @@ export function CampaignDashboard() {
         return;
       }
 
+      const endTime = Date.now();
+      const actualDuration = ((endTime - startTime) / 1000).toFixed(1);
+      
       toast({ 
         title: "Campaign deleted", 
-        description: `${campaign.nickname} has been deleted. Wallets and commands are preserved for reuse.` 
+        description: `${campaign.nickname} deleted in ${actualDuration}s. Wallets and commands preserved for reuse.` 
       });
+      
+      // Clear countdown interval
+      clearInterval(countdownInterval);
       
       // Immediately update local state for responsive UI
       setCampaigns(prevCampaigns => prevCampaigns.filter(c => c.id !== campaign.id));
@@ -208,6 +229,7 @@ export function CampaignDashboard() {
     } finally {
       // Clear loading state
       setDeletingCampaignId(null);
+      setDeletionCountdown(20);
     }
   };
 
@@ -244,8 +266,10 @@ export function CampaignDashboard() {
                   {deletingCampaignId === campaign.id && (
                     <div className="absolute inset-0 bg-background/80 backdrop-blur-sm rounded-lg flex items-center justify-center z-10">
                       <div className="text-center">
-                        <div className="animate-spin h-6 w-6 border-2 border-primary border-t-transparent rounded-full mx-auto mb-2"></div>
-                        <p className="text-sm text-muted-foreground">Deleting campaign...</p>
+                        <div className="animate-spin h-8 w-8 border-2 border-primary border-t-transparent rounded-full mx-auto mb-3"></div>
+                        <p className="text-lg font-semibold mb-1">Deleting campaign...</p>
+                        <p className="text-2xl font-bold text-primary">{deletionCountdown}</p>
+                        <p className="text-xs text-muted-foreground mt-1">seconds remaining</p>
                       </div>
                     </div>
                   )}
