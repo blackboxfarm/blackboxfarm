@@ -33,6 +33,7 @@ export function CampaignDashboard() {
   const [newCampaign, setNewCampaign] = useState({ nickname: "", token_address: "" });
   const [isValidToken, setIsValidToken] = useState(false);
   const [tokenData, setTokenData] = useState<any>(null);
+  const [deletingCampaignId, setDeletingCampaignId] = useState<string | null>(null);
   
   const {
     sendCampaignNotification,
@@ -165,40 +166,48 @@ export function CampaignDashboard() {
       return;
     }
 
-    // First, detach wallets from the campaign by setting campaign_id to null
-    const { error: walletError } = await supabase
-      .from('blackbox_wallets')
-      .update({ campaign_id: null })
-      .eq('campaign_id', campaign.id);
+    // Set loading state
+    setDeletingCampaignId(campaign.id);
 
-    if (walletError) {
-      toast({ title: "Error detaching wallets", description: walletError.message });
-      return;
-    }
+    try {
+      // First, detach wallets from the campaign by setting campaign_id to null
+      const { error: walletError } = await supabase
+        .from('blackbox_wallets')
+        .update({ campaign_id: null })
+        .eq('campaign_id', campaign.id);
 
-    // Then delete the campaign
-    const { error } = await supabase
-      .from('blackbox_campaigns')
-      .delete()
-      .eq('id', campaign.id);
+      if (walletError) {
+        toast({ title: "Error detaching wallets", description: walletError.message });
+        return;
+      }
 
-    if (error) {
-      toast({ title: "Error deleting campaign", description: error.message });
-      return;
-    }
+      // Then delete the campaign
+      const { error } = await supabase
+        .from('blackbox_campaigns')
+        .delete()
+        .eq('id', campaign.id);
 
-    toast({ 
-      title: "Campaign deleted", 
-      description: `${campaign.nickname} has been deleted. Wallets and commands are preserved for reuse.` 
-    });
-    
-    // Immediately update local state for responsive UI
-    setCampaigns(prevCampaigns => prevCampaigns.filter(c => c.id !== campaign.id));
-    
-    // Reset selected campaign if it was the deleted one
-    if (selectedCampaign?.id === campaign.id) {
-      const remainingCampaigns = campaigns.filter(c => c.id !== campaign.id);
-      setSelectedCampaign(remainingCampaigns.length > 0 ? remainingCampaigns[0] : null);
+      if (error) {
+        toast({ title: "Error deleting campaign", description: error.message });
+        return;
+      }
+
+      toast({ 
+        title: "Campaign deleted", 
+        description: `${campaign.nickname} has been deleted. Wallets and commands are preserved for reuse.` 
+      });
+      
+      // Immediately update local state for responsive UI
+      setCampaigns(prevCampaigns => prevCampaigns.filter(c => c.id !== campaign.id));
+      
+      // Reset selected campaign if it was the deleted one
+      if (selectedCampaign?.id === campaign.id) {
+        const remainingCampaigns = campaigns.filter(c => c.id !== campaign.id);
+        setSelectedCampaign(remainingCampaigns.length > 0 ? remainingCampaigns[0] : null);
+      }
+    } finally {
+      // Clear loading state
+      setDeletingCampaignId(null);
     }
   };
 
@@ -225,13 +234,21 @@ export function CampaignDashboard() {
               {campaigns.map((campaign) => (
                 <div
                   key={campaign.id}
-                  className={`p-4 border rounded-lg cursor-pointer transition-colors ${
+                  className={`relative p-4 border rounded-lg cursor-pointer transition-colors ${
                     selectedCampaign?.id === campaign.id 
                       ? "border-primary bg-primary/5" 
                       : "hover:border-primary/50"
-                  }`}
+                  } ${deletingCampaignId === campaign.id ? "pointer-events-none" : ""}`}
                   onClick={() => setSelectedCampaign(campaign)}
                 >
+                  {deletingCampaignId === campaign.id && (
+                    <div className="absolute inset-0 bg-background/80 backdrop-blur-sm rounded-lg flex items-center justify-center z-10">
+                      <div className="text-center">
+                        <div className="animate-spin h-6 w-6 border-2 border-primary border-t-transparent rounded-full mx-auto mb-2"></div>
+                        <p className="text-sm text-muted-foreground">Deleting campaign...</p>
+                      </div>
+                    </div>
+                  )}
                   <div className="flex items-center justify-between">
                     <div className="flex-1 min-w-0">
                       <h3 className="font-medium mb-2">{campaign.nickname}</h3>
@@ -269,6 +286,7 @@ export function CampaignDashboard() {
                           e.stopPropagation();
                           deleteCampaign(campaign);
                         }}
+                        disabled={deletingCampaignId === campaign.id}
                         title="Delete campaign (preserves wallets and commands)"
                       >
                         <Trash2 className="h-4 w-4" />
