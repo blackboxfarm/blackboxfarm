@@ -9,6 +9,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { toast } from "@/hooks/use-toast";
 import { CampaignWallets } from "./CampaignWallets";
 import { CampaignActivationGuide } from "./CampaignActivationGuide";
+import { LiveActivityMonitor } from "./LiveActivityMonitor";
 import { useCampaignNotifications } from "@/hooks/useCampaignNotifications";
 import { TokenValidationInput } from "@/components/token/TokenValidationInput";
 import { TokenMetadataDisplay } from "@/components/token/TokenMetadataDisplay";
@@ -290,6 +291,7 @@ export function CampaignDashboard() {
       {selectedCampaign && (
         <>
           <CampaignActivationGuide campaign={selectedCampaign} />
+          <LiveActivityMonitor campaignId={selectedCampaign.id} />
           <CampaignWallets campaign={selectedCampaign} />
         </>
       )}
