@@ -39,6 +39,7 @@ export function CampaignActivationGuide({ campaign, onCampaignUpdate }: Campaign
   const [wallets, setWallets] = useState<WalletData[]>([]);
   const [commands, setCommands] = useState<CommandCode[]>([]);
   const [loading, setLoading] = useState(false);
+  const [buttonState, setButtonState] = useState<'idle' | 'starting' | 'stopping' | 'success'>('idle');
 
   useEffect(() => {
     loadCampaignData();
@@ -99,8 +100,12 @@ export function CampaignActivationGuide({ campaign, onCampaignUpdate }: Campaign
 
   const toggleCampaign = async () => {
     setLoading(true);
+    const newStatus = !campaign.is_active;
+    
     try {
-      const newStatus = !campaign.is_active;
+      // Set loading state based on action
+      setButtonState(newStatus ? 'starting' : 'stopping');
+      
       const { error } = await supabase
         .from('blackbox_campaigns')
         .update({ is_active: newStatus })
@@ -108,22 +113,31 @@ export function CampaignActivationGuide({ campaign, onCampaignUpdate }: Campaign
 
       if (error) throw error;
 
-      // Update parent component immediately
+      // Simulate processing time for cron queue operations
+      await new Promise(resolve => setTimeout(resolve, 3000));
+      
+      // Show success state
+      setButtonState('success');
+      
+      // Update parent component
       onCampaignUpdate?.({ ...campaign, is_active: newStatus });
 
       toast({
-        title: newStatus ? "Campaign Enabled! 🚀" : "Campaign Disabled ⏹️",
+        title: newStatus ? "Campaign Added Successfully! 🚀" : "Campaign Removed Successfully ⏹️",
         description: newStatus 
-          ? "Your campaign is now enabled and ready for trading."
-          : "Your campaign has been disabled and will not execute trades."
+          ? "Your campaign has been added to the trading queue."
+          : "Your campaign has been removed from the trading queue."
       });
 
+      // Reset to idle after showing success
+      setTimeout(() => setButtonState('idle'), 2000);
+      
       // Reload data to reflect changes
       loadCampaignData();
     } catch (error: any) {
-      const newStatus = !campaign.is_active;
+      setButtonState('idle');
       toast({
-        title: newStatus ? "Enable Failed" : "Disable Failed",
+        title: newStatus ? "Failed to Start Campaign" : "Failed to Stop Campaign",
         description: error.message,
         variant: "destructive"
       });
@@ -287,12 +301,20 @@ export function CampaignActivationGuide({ campaign, onCampaignUpdate }: Campaign
             {/* Big START/STOP Button */}
             <Button
               size="lg"
-              className="w-32 h-12 text-lg font-bold"
-              variant={campaign.is_active ? "destructive" : "default"}
-              disabled={!canEnable && !campaign.is_active}
+              className="w-48 h-12 text-sm font-bold"
+              variant={
+                buttonState === 'success' ? "default" :
+                campaign.is_active && buttonState === 'idle' ? "destructive" : "default"
+              }
+              disabled={loading || (!canEnable && !campaign.is_active)}
               onClick={toggleCampaign}
             >
-              {campaign.is_active ? "STOP" : "START"}
+              {buttonState === 'starting' && "Starting Campaign Queue..."}
+              {buttonState === 'stopping' && "Removing Campaign from Queue..."}
+              {buttonState === 'success' && !campaign.is_active && "Campaign Added Successfully!"}
+              {buttonState === 'success' && campaign.is_active && "Campaign Removed Successfully!"}
+              {buttonState === 'idle' && campaign.is_active && "STOP"}
+              {buttonState === 'idle' && !campaign.is_active && "START"}
             </Button>
             
             {/* Requirements Status Indicators */}
