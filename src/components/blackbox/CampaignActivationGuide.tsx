@@ -302,18 +302,8 @@ export function CampaignActivationGuide({ campaign, onCampaignUpdate }: Campaign
           description: "Your campaign has been validated and added to the trading queue."
         });
       } else {
-        // Stopping campaign
+        // Stopping contract (not disabling campaign)
         setButtonState('stopping');
-        
-        const { error } = await supabase
-          .from('blackbox_campaigns')
-          .update({ is_active: false })
-          .eq('id', campaign.id);
-
-        if (error) throw error;
-        
-        // Update local campaign state immediately
-        campaign.is_active = false;
         
         await new Promise(resolve => setTimeout(resolve, 2000));
         setButtonState('success');
@@ -324,8 +314,8 @@ export function CampaignActivationGuide({ campaign, onCampaignUpdate }: Campaign
         });
       }
 
-      // Update parent component
-      onCampaignUpdate?.({ ...campaign, is_active: newStatus });
+      // Don't update campaign status when stopping contract
+      // Campaign enabled/disabled state is controlled by the toggle, not start/stop button
 
       // Reset to idle after showing success - but don't delay, do it immediately for stop
       if (!newStatus) {
