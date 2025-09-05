@@ -111,7 +111,7 @@ serve(async (req) => {
         console.error('Buy swap failed:', {
           error: swapResponse.error,
           token: campaign.token_address,
-          buyAmount
+          buyAmountSOL
         });
         
         // For pump.fun tokens that may not have Raydium liquidity, skip but don't fail
@@ -121,7 +121,7 @@ serve(async (req) => {
           result = { 
             message: 'Buy skipped - token may not have sufficient liquidity on Raydium',
             token: campaign.token_address,
-            buyAmount,
+            buyAmountSOL,
             type: 'buy',
             skipped: true
           };
@@ -133,11 +133,11 @@ serve(async (req) => {
         const signatures = swapResponse.data?.signatures || [];
         const signature = signatures[0] || 'unknown';
 
-        console.log(`✅ REAL BUY executed: ${buyAmount} SOL -> ${campaign.token_address}, signatures: ${signatures.join(', ')}`);
+        console.log(`✅ REAL BUY executed: ${buyAmountSOL} SOL -> ${campaign.token_address}, signatures: ${signatures.join(', ')}`);
 
         // Calculate fees for revenue collection
         const baseTradeFee = 0.003;
-        const serviceFee = buyAmount * 0.35; // 35% markup
+        const serviceFee = buyAmountSOL * 0.35; // 35% markup
         const totalRevenue = baseTradeFee + serviceFee;
 
         // Check if this is the testuser@blackbox.farm account (skip fees for testing)
@@ -172,14 +172,14 @@ serve(async (req) => {
             wallet_id: wallet.id,
             command_code_id: command_code_id,
             transaction_type: "buy",
-            amount_sol: buyAmount,
+            amount_sol: buyAmountSOL,
             gas_fee: 0.000005, // Standard Solana gas
             service_fee: serviceFee,
             signature: signature,
             status: "completed"
           });
 
-        result = { signature, amount: buyAmount, type: "buy", revenue_collected: revenueCollected, signatures };
+        result = { signature, amount: buyAmountSOL, type: "buy", revenue_collected: revenueCollected, signatures };
       }
 
     } else if (action === "sell") {
