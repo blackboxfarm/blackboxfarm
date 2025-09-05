@@ -81,10 +81,57 @@ export function CampaignActivationGuide({ campaign, onCampaignUpdate }: Campaign
   });
   const [validationErrors, setValidationErrors] = useState<string[]>([]);
 
+  // Helper functions for state persistence
+  const saveCampaignState = (campaignId: string, active: boolean) => {
+    localStorage.setItem(`campaign_active_${campaignId}`, active.toString());
+  };
+
+  const loadCampaignState = (campaignId: string) => {
+    const saved = localStorage.getItem(`campaign_active_${campaignId}`);
+    return saved === 'true';
+  };
+
+  // Check actual cron status from backend
+  const checkCronStatus = async (campaignId: string) => {
+    try {
+      const { data, error } = await supabase
+        .from('activity_logs')
+        .select('*')
+        .ilike('message', '%cron%')
+        .order('timestamp', { ascending: false })
+        .limit(10);
+      
+      if (error) throw error;
+      
+      // Check if campaign is actually running by looking for recent activity
+      const recentActivity = data?.some(log => 
+        log.message.includes(campaignId) && 
+        log.timestamp > new Date(Date.now() - 5 * 60 * 1000).toISOString() // Last 5 minutes
+      );
+      
+      return recentActivity || false;
+    } catch (error) {
+      console.error('Failed to check cron status:', error);
+      // Fallback to localStorage if backend check fails
+      return loadCampaignState(campaignId);
+    }
+  };
+
   useEffect(() => {
     loadCampaignData();
-    // contractActive should be independent of campaign.is_active
-    // It tracks whether the contract is running in cron, not if campaign is enabled
+    
+    // Load persisted state on component mount
+    const persistedState = loadCampaignState(campaign.id);
+    setContractActive(persistedState);
+    
+    // Check actual cron status from backend
+    checkCronStatus(campaign.id).then(cronStatus => {
+      if (cronStatus !== persistedState) {
+        // Sync local state with actual backend status
+        setContractActive(cronStatus);
+        saveCampaignState(campaign.id, cronStatus);
+      }
+    });
     
     // Set up real-time subscriptions
     const campaignChannel = supabase
@@ -299,6 +346,7 @@ export function CampaignActivationGuide({ campaign, onCampaignUpdate }: Campaign
         if (!contractSuccess) throw new Error('Contract building/submission failed');
         
         setContractActive(true);
+        saveCampaignState(campaign.id, true); // Persist state
         setButtonState('success');
         
         toast({
@@ -311,6 +359,7 @@ export function CampaignActivationGuide({ campaign, onCampaignUpdate }: Campaign
         
         await new Promise(resolve => setTimeout(resolve, 2000));
         setContractActive(false);
+        saveCampaignState(campaign.id, false); // Persist state
         setButtonState('success');
         
         toast({
