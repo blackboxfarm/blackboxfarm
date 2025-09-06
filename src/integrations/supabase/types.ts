@@ -141,6 +141,154 @@ export type Database = {
           },
         ]
       }
+      blackbox_contract_campaigns: {
+        Row: {
+          campaign_id: string
+          contract_id: string
+          created_at: string
+          id: string
+        }
+        Insert: {
+          campaign_id: string
+          contract_id: string
+          created_at?: string
+          id?: string
+        }
+        Update: {
+          campaign_id?: string
+          contract_id?: string
+          created_at?: string
+          id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "blackbox_contract_campaigns_campaign_id_fkey"
+            columns: ["campaign_id"]
+            isOneToOne: false
+            referencedRelation: "blackbox_campaigns"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "blackbox_contract_campaigns_contract_id_fkey"
+            columns: ["contract_id"]
+            isOneToOne: false
+            referencedRelation: "blackbox_contracts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      blackbox_contract_commands: {
+        Row: {
+          command_id: string
+          contract_id: string
+          created_at: string
+          id: string
+          wallet_id: string
+        }
+        Insert: {
+          command_id: string
+          contract_id: string
+          created_at?: string
+          id?: string
+          wallet_id: string
+        }
+        Update: {
+          command_id?: string
+          contract_id?: string
+          created_at?: string
+          id?: string
+          wallet_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "blackbox_contract_commands_command_id_fkey"
+            columns: ["command_id"]
+            isOneToOne: false
+            referencedRelation: "blackbox_command_codes"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "blackbox_contract_commands_contract_id_fkey"
+            columns: ["contract_id"]
+            isOneToOne: false
+            referencedRelation: "blackbox_contracts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "blackbox_contract_commands_wallet_id_fkey"
+            columns: ["wallet_id"]
+            isOneToOne: false
+            referencedRelation: "blackbox_wallets"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      blackbox_contract_wallets: {
+        Row: {
+          contract_id: string
+          created_at: string
+          id: string
+          wallet_id: string
+        }
+        Insert: {
+          contract_id: string
+          created_at?: string
+          id?: string
+          wallet_id: string
+        }
+        Update: {
+          contract_id?: string
+          created_at?: string
+          id?: string
+          wallet_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "blackbox_contract_wallets_contract_id_fkey"
+            columns: ["contract_id"]
+            isOneToOne: false
+            referencedRelation: "blackbox_contracts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "blackbox_contract_wallets_wallet_id_fkey"
+            columns: ["wallet_id"]
+            isOneToOne: false
+            referencedRelation: "blackbox_wallets"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      blackbox_contracts: {
+        Row: {
+          created_at: string
+          description: string | null
+          id: string
+          is_active: boolean | null
+          name: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          description?: string | null
+          id?: string
+          is_active?: boolean | null
+          name: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          description?: string | null
+          id?: string
+          is_active?: boolean | null
+          name?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       blackbox_transactions: {
         Row: {
           amount_sol: number
