@@ -1082,6 +1082,72 @@ export type Database = {
           },
         ]
       }
+      secret_access_audit: {
+        Row: {
+          access_timestamp: string | null
+          failure_reason: string | null
+          id: string
+          ip_address: unknown | null
+          metadata: Json | null
+          operation: string
+          secret_type: string
+          session_id: string | null
+          success: boolean | null
+          user_agent: string | null
+          user_id: string
+        }
+        Insert: {
+          access_timestamp?: string | null
+          failure_reason?: string | null
+          id?: string
+          ip_address?: unknown | null
+          metadata?: Json | null
+          operation: string
+          secret_type: string
+          session_id?: string | null
+          success?: boolean | null
+          user_agent?: string | null
+          user_id: string
+        }
+        Update: {
+          access_timestamp?: string | null
+          failure_reason?: string | null
+          id?: string
+          ip_address?: unknown | null
+          metadata?: Json | null
+          operation?: string
+          secret_type?: string
+          session_id?: string | null
+          success?: boolean | null
+          user_agent?: string | null
+          user_id?: string
+        }
+        Relationships: []
+      }
+      secret_encryption_keys: {
+        Row: {
+          created_at: string | null
+          id: string
+          is_active: boolean | null
+          key_fingerprint: string
+          key_version: number
+        }
+        Insert: {
+          created_at?: string | null
+          id?: string
+          is_active?: boolean | null
+          key_fingerprint: string
+          key_version?: number
+        }
+        Update: {
+          created_at?: string | null
+          id?: string
+          is_active?: boolean | null
+          key_fingerprint?: string
+          key_version?: number
+        }
+        Relationships: []
+      }
       security_audit_log: {
         Row: {
           created_at: string
@@ -1724,6 +1790,10 @@ export type Database = {
         Args: { encrypted_secret: string }
         Returns: string
       }
+      decrypt_secret_secure: {
+        Args: { encrypted_secret: string }
+        Returns: string
+      }
       decrypt_user_secret: {
         Args: { encrypted_secret: string }
         Returns: string
@@ -1733,6 +1803,10 @@ export type Database = {
         Returns: string
       }
       encrypt_owner_secret: {
+        Args: { input_secret: string }
+        Returns: string
+      }
+      encrypt_secret_secure: {
         Args: { input_secret: string }
         Returns: string
       }
@@ -1854,6 +1928,18 @@ export type Database = {
           user_id: string
         }[]
       }
+      get_user_secrets_secure: {
+        Args: { user_id_param: string }
+        Returns: {
+          created_at: string
+          function_token: string
+          id: string
+          rpc_url: string
+          trading_private_key: string
+          updated_at: string
+          user_id: string
+        }[]
+      }
       get_user_subscription: {
         Args: { user_id_param: string }
         Returns: {
@@ -1922,6 +2008,15 @@ export type Database = {
       }
       validate_secret_access: {
         Args: { requesting_user_id: string; target_user_id: string }
+        Returns: boolean
+      }
+      validate_secret_access_enhanced: {
+        Args: {
+          operation?: string
+          requesting_user_id: string
+          secret_type?: string
+          target_user_id: string
+        }
         Returns: boolean
       }
       verify_access_password: {
