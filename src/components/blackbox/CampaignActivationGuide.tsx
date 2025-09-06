@@ -28,8 +28,13 @@ const ValidationStep = ({ label, status }: {
 };
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
-import { supabase } from "@/integrations/supabase/client";
+import { createClient } from "@supabase/supabase-js";
+
+const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
+const supabaseClient = createClient(supabaseUrl, supabaseAnonKey);
 import { toast } from "@/hooks/use-toast";
+import type { Database } from "@/integrations/supabase/types";
 
 interface Campaign {
   id: string;
@@ -94,7 +99,7 @@ export function CampaignActivationGuide({ campaign, onCampaignUpdate }: Campaign
   // Check actual cron status from backend
   const checkCronStatus = async (campaignId: string) => {
     try {
-      const { data, error } = await supabase
+      const { data, error } = await supabaseClient
         .from('activity_logs')
         .select('*')
         .ilike('message', '%cron%')
@@ -134,7 +139,7 @@ export function CampaignActivationGuide({ campaign, onCampaignUpdate }: Campaign
     });
     
     // Set up real-time subscriptions
-    const campaignChannel = supabase
+    const campaignChannel = supabaseClient
       .channel('campaign-changes')
       .on('postgres_changes', {
         event: '*',
@@ -162,35 +167,68 @@ export function CampaignActivationGuide({ campaign, onCampaignUpdate }: Campaign
       .subscribe();
 
     return () => {
-      supabase.removeChannel(campaignChannel);
+      supabaseClient.removeChannel(campaignChannel);
     };
   }, [campaign.id]);
 
   const loadCampaignData = async () => {
-    // Load wallets
-    const { data: walletsData } = await supabase
-      .from('blackbox_wallets')
-      .select('*')
-      .eq('campaign_id', campaign.id);
+    try {
+      // Load wallets with explicit typing to avoid deep type inference
+      const { data: walletsData, error: walletsError } = await supabaseClient
+        .from('blackbox_wallets')
+        .select('id, pubkey, sol_balance, is_active')
+        .eq('campaign_id', campaign.id);
 
-    setWallets(walletsData || []);
+      if (walletsError) {
+        console.error('Error loading wallets:', walletsError);
+        return;
+      }
 
-    // Load commands for all wallets
-    if (walletsData && walletsData.length > 0) {
-      const walletIds = walletsData.map(w => w.id);
-      const { data: commandsData } = await supabase
-        .from('blackbox_command_codes')
-        .select('*')
-        .in('wallet_id', walletIds);
+      // Explicitly type the wallets data
+      const wallets: WalletData[] = walletsData ? walletsData.map((wallet: any) => ({
+        id: wallet.id,
+        pubkey: wallet.pubkey,
+        sol_balance: wallet.sol_balance,
+        is_active: wallet.is_active
+      })) : [];
 
-      setCommands(commandsData || []);
+      setWallets(wallets);
+
+      // Load commands if we have wallets
+      if (wallets.length > 0) {
+        const walletIds = wallets.map(w => w.id);
+        const { data: commandsData, error: commandsError } = await supabaseClient
+          .from('blackbox_command_codes')
+          .select('id, name, config, is_active, wallet_id')
+          .in('wallet_id', walletIds);
+
+        if (commandsError) {
+          console.error('Error loading commands:', commandsError);
+          return;
+        }
+
+        // Explicitly type the commands data
+        const commands: CommandCode[] = commandsData ? commandsData.map((command: any) => ({
+          id: command.id,
+          name: command.name,
+          config: command.config,
+          is_active: command.is_active,
+          wallet_id: command.wallet_id
+        })) : [];
+
+        setCommands(commands);
+      } else {
+        setCommands([]);
+      }
+    } catch (error) {
+      console.error('Error in loadCampaignData:', error);
     }
   };
 
   const validateToken = async () => {
     setValidationSteps(prev => ({ ...prev, tokenValidation: 'checking' }));
     try {
-      const { data, error } = await supabase.functions.invoke('token-metadata', {
+      const { data, error } = await supabaseClient.functions.invoke('token-metadata', {
         body: { tokenMint: campaign.token_address }
       });
       if (error || !data?.success) {
@@ -291,7 +329,7 @@ export function CampaignActivationGuide({ campaign, onCampaignUpdate }: Campaign
       setValidationSteps(prev => ({ ...prev, contractBuilding: 'success', cronSubmission: 'checking' }));
       
       // Submit to database (simulates cron daemon submission)
-      const { error } = await supabase
+      const { error } = await supabaseClient
         .from('blackbox_campaigns')
         .update({ is_active: true })
         .eq('id', campaign.id);
