@@ -308,6 +308,13 @@ export function CampaignDashboard() {
                         />
                       </div>
                     </div>
+                    
+                    {/* Inline Campaign Management - right after token info */}
+                    <InlineCampaignManagement 
+                      campaign={campaign} 
+                      onScrollToSection={scrollToSection}
+                    />
+                    
                     <div className="flex items-center gap-4">
                       <Badge variant={campaign.is_active ? "default" : "secondary"}>
                         {campaign.is_active ? "Enabled" : "Disabled"}
@@ -348,10 +355,6 @@ export function CampaignDashboard() {
                         />
                       </div>
                     </div>
-                    <InlineCampaignManagement 
-                      campaign={campaign} 
-                      onScrollToSection={scrollToSection}
-                    />
                   </div>
                 </div>
               ))}
