@@ -1743,6 +1743,15 @@ export type Database = {
       }
     }
     Views: {
+      security_summary: {
+        Row: {
+          encrypted_keys: number | null
+          encrypted_tokens: number | null
+          table_name: string | null
+          total_records: number | null
+        }
+        Relationships: []
+      }
       user_security_audit: {
         Row: {
           access_timestamp: string | null
