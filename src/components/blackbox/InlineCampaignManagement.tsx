@@ -5,6 +5,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Plus, Trash2, Play, Pause, ScrollText, Wallet } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "@/hooks/use-toast";
+import { CommandCreationDialog } from "./CommandCreationDialog";
 
 interface Campaign {
   id: string;
@@ -41,6 +42,7 @@ export function InlineCampaignManagement({ campaign, onScrollToSection }: Inline
   const [commands, setCommands] = useState<Command[]>([]);
   const [availableCommands, setAvailableCommands] = useState<Command[]>([]);
   const [loading, setLoading] = useState(true);
+  const [showCommandDialog, setShowCommandDialog] = useState(false);
 
   useEffect(() => {
     loadCampaignData();
@@ -380,7 +382,7 @@ export function InlineCampaignManagement({ campaign, onScrollToSection }: Inline
             <Button
               size="sm"
               variant="outline"
-              onClick={() => onScrollToSection?.('commands')}
+              onClick={() => setShowCommandDialog(true)}
               className="h-8 px-2 text-xs"
             >
               <ScrollText className="h-3 w-3 mr-1" />
@@ -433,6 +435,12 @@ export function InlineCampaignManagement({ campaign, onScrollToSection }: Inline
           </div>
         )}
       </div>
+
+      <CommandCreationDialog
+        open={showCommandDialog}
+        onOpenChange={setShowCommandDialog}
+        onCommandCreated={loadCampaignData}
+      />
     </div>
   );
 }

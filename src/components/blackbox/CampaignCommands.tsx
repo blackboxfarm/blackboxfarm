@@ -257,9 +257,9 @@ export function CampaignCommands({ campaign }: CampaignCommandsProps) {
           <h3 className="font-semibold mb-3">Commands</h3>
           {commands.length === 0 ? (
             <div className="border border-dashed rounded-lg p-4 text-center">
-              <p className="text-muted-foreground mb-3">No commands created yet</p>
+              <p className="text-muted-foreground mb-3">No commands assigned yet</p>
               <p className="text-sm text-muted-foreground">
-                Associate wallets with this campaign first, then create commands for those wallets
+                Create commands and assign them to campaign wallets
               </p>
             </div>
           ) : (
