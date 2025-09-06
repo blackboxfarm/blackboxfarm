@@ -11,6 +11,7 @@ import { CampaignWallets } from "./CampaignWallets";
 import { CampaignActivationGuide } from "./CampaignActivationGuide";
 import { LiveActivityMonitor } from "./LiveActivityMonitor";
 import { WalletRecovery } from "./WalletRecovery";
+import { CampaignCommands } from "./CampaignCommands";
 import { useCampaignNotifications } from "@/hooks/useCampaignNotifications";
 import { TokenValidationInput } from "@/components/token/TokenValidationInput";
 import { TokenMetadataDisplay } from "@/components/token/TokenMetadataDisplay";
@@ -242,17 +243,6 @@ export function CampaignDashboard() {
 
   return (
     <div className="space-y-6">
-      {/* Wallet Recovery */}
-      <WalletRecovery 
-        campaigns={campaigns} 
-        onWalletRecovered={() => {
-          if (selectedCampaign) {
-            // Refresh the selected campaign data if there is one
-            loadCampaigns();
-          }
-        }} 
-      />
-
       {/* Campaign List */}
       <Card>
         <CardHeader>
@@ -408,10 +398,21 @@ export function CampaignDashboard() {
       {selectedCampaign && (
         <>
           <CampaignActivationGuide campaign={selectedCampaign} />
+          <CampaignCommands campaign={selectedCampaign} />
           <LiveActivityMonitor campaignId={selectedCampaign.id} />
           <CampaignWallets campaign={selectedCampaign} />
         </>
       )}
+
+      {/* Wallet Recovery - moved to bottom */}
+      <WalletRecovery 
+        campaigns={campaigns} 
+        onWalletRecovered={() => {
+          if (selectedCampaign) {
+            loadCampaigns();
+          }
+        }} 
+      />
     </div>
   );
 }
