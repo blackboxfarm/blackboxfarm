@@ -41,10 +41,17 @@ export function CampaignCommands({ campaign }: CampaignCommandsProps) {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    loadCampaignData();
-  }, [campaign.id]);
+    if (campaign?.id) {
+      loadCampaignData();
+    }
+  }, [campaign?.id]);
 
   const loadCampaignData = async () => {
+    if (!campaign?.id) {
+      setLoading(false);
+      return;
+    }
+    
     try {
       // Load associated wallets for this campaign
       const { data: campaignWallets, error: walletError } = await supabase
@@ -175,6 +182,10 @@ export function CampaignCommands({ campaign }: CampaignCommandsProps) {
         </CardContent>
       </Card>
     );
+  }
+
+  if (!campaign) {
+    return null;
   }
 
   return (

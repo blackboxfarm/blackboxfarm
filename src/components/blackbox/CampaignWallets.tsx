@@ -41,26 +41,28 @@ export function CampaignWallets({ campaign }: CampaignWalletsProps) {
   const [withdrawingWallets, setWithdrawingWallets] = useState<Set<string>>(new Set());
 
   useEffect(() => {
-    loadWallets();
-    loadDevBalances();
-    
-    // Set up real-time subscriptions for wallet changes
-    const walletChannel = supabase
-      .channel('wallet-changes')
-      .on('postgres_changes', {
-        event: '*',
-        schema: 'public',
-        table: 'blackbox_wallets',
-        filter: `campaign_id=eq.${campaign.id}`
-      }, () => {
-        loadWallets();
-      })
-      .subscribe();
+    if (campaign?.id) {
+      loadWallets();
+      loadDevBalances();
+      
+      // Set up real-time subscriptions for wallet changes
+      const walletChannel = supabase
+        .channel('wallet-changes')
+        .on('postgres_changes', {
+          event: '*',
+          schema: 'public',
+          table: 'blackbox_wallets',
+          filter: `campaign_id=eq.${campaign.id}`
+        }, () => {
+          loadWallets();
+        })
+        .subscribe();
 
-    return () => {
-      supabase.removeChannel(walletChannel);
-    };
-  }, [campaign.id]);
+      return () => {
+        supabase.removeChannel(walletChannel);
+      };
+    }
+  }, [campaign?.id]);
 
   const loadDevBalances = () => {
     try {
@@ -83,6 +85,8 @@ export function CampaignWallets({ campaign }: CampaignWalletsProps) {
   };
 
   const loadWallets = async () => {
+    if (!campaign?.id) return;
+    
     const { data, error } = await supabase
       .from('campaign_wallets')
       .select(`
@@ -268,6 +272,10 @@ export function CampaignWallets({ campaign }: CampaignWalletsProps) {
       });
     }
   };
+
+  if (!campaign) {
+    return null;
+  }
 
   return (
     <div className="space-y-6">
