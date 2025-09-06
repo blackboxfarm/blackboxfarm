@@ -477,19 +477,19 @@ export type Database = {
       }
       campaign_wallets: {
         Row: {
-          campaign_id: string
+          campaign_id: string | null
           created_at: string
           id: string
           wallet_id: string
         }
         Insert: {
-          campaign_id: string
+          campaign_id?: string | null
           created_at?: string
           id?: string
           wallet_id: string
         }
         Update: {
-          campaign_id?: string
+          campaign_id?: string | null
           created_at?: string
           id?: string
           wallet_id?: string
