@@ -4,6 +4,15 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { CheckCircle2, AlertTriangle, Wallet, DollarSign, Info, Clock, Check, X } from "lucide-react";
+import { Switch } from "@/components/ui/switch";
+import { Label } from "@/components/ui/label";
+import { createClient } from "@supabase/supabase-js";
+import { toast } from "@/hooks/use-toast";
+import type { Database } from "@/integrations/supabase/types";
+
+const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
+const supabaseClient = createClient(supabaseUrl, supabaseAnonKey);
 
 // Validation Step Component
 const ValidationStep = ({ label, status }: { 
@@ -26,15 +35,6 @@ const ValidationStep = ({ label, status }: {
     </div>
   );
 };
-import { Switch } from "@/components/ui/switch";
-import { Label } from "@/components/ui/label";
-import { createClient } from "@supabase/supabase-js";
-
-const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
-const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
-const supabaseClient = createClient(supabaseUrl, supabaseAnonKey);
-import { toast } from "@/hooks/use-toast";
-import type { Database } from "@/integrations/supabase/types";
 
 interface Campaign {
   id: string;
