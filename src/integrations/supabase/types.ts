@@ -1743,7 +1743,36 @@ export type Database = {
       }
     }
     Views: {
-      [_ in never]: never
+      user_security_audit: {
+        Row: {
+          access_timestamp: string | null
+          id: string | null
+          operation: string | null
+          result: string | null
+          secret_type: string | null
+          success: boolean | null
+          summary: Json | null
+        }
+        Insert: {
+          access_timestamp?: string | null
+          id?: string | null
+          operation?: string | null
+          result?: never
+          secret_type?: string | null
+          success?: boolean | null
+          summary?: never
+        }
+        Update: {
+          access_timestamp?: string | null
+          id?: string | null
+          operation?: string | null
+          result?: never
+          secret_type?: string | null
+          success?: boolean | null
+          summary?: never
+        }
+        Relationships: []
+      }
     }
     Functions: {
       apply_referral_discount: {
