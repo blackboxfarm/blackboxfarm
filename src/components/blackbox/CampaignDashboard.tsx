@@ -290,72 +290,74 @@ export function CampaignDashboard() {
                       </div>
                     </div>
                   )}
-                  <div className="flex items-center justify-between">
-                    <div className="flex-1 min-w-0">
-                      <h3 className="font-medium mb-2">{campaign.nickname}</h3>
-                      <div className="space-y-2">
-                        <button
-                          onClick={() => navigator.clipboard.writeText(campaign.token_address)}
-                          className="text-sm text-muted-foreground font-mono hover:text-foreground transition-colors cursor-pointer"
-                          title="Click to copy full address"
-                        >
-                          {campaign.token_address}
-                        </button>
-                        <TokenPriceDisplay 
-                          tokenMint={campaign.token_address}
-                          size="sm"
-                          showDetails={true}
-                        />
-                      </div>
-                    </div>
-                    
-                    {/* Inline Campaign Management - right after token info */}
-                    <InlineCampaignManagement 
-                      campaign={campaign} 
-                      onScrollToSection={scrollToSection}
-                    />
-                    
-                    <div className="flex items-center gap-4">
-                      <Badge variant={campaign.is_active ? "default" : "secondary"}>
-                        {campaign.is_active ? "Enabled" : "Disabled"}
-                      </Badge>
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          handleNotifyDonors(campaign);
-                        }}
-                        disabled={!canSendNotification(campaign.id) || isNotificationLoading}
-                        title={getNotificationButtonText(campaign.id, campaign.is_active)}
-                      >
-                        <Bell className="h-4 w-4" />
-                      </Button>
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          deleteCampaign(campaign);
-                        }}
-                        disabled={deletingCampaignId === campaign.id}
-                        title="Delete campaign (preserves wallets and commands)"
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
-                      <div className="flex items-center gap-2">
-                        <label className="text-sm font-medium">
-                          {campaign.is_active ? "Enabled" : "Disabled"}
-                        </label>
-                        <Switch
-                          checked={campaign.is_active}
-                          onCheckedChange={(checked) => {
-                            toggleCampaign(campaign);
-                          }}
-                        />
-                      </div>
-                    </div>
-                  </div>
+                   <div className="space-y-4">
+                     <div className="flex items-center justify-between">
+                       <div className="flex-1 min-w-0">
+                         <h3 className="font-medium mb-2">{campaign.nickname}</h3>
+                         <div className="space-y-2">
+                           <button
+                             onClick={() => navigator.clipboard.writeText(campaign.token_address)}
+                             className="text-sm text-muted-foreground font-mono hover:text-foreground transition-colors cursor-pointer"
+                             title="Click to copy full address"
+                           >
+                             {campaign.token_address}
+                           </button>
+                           <TokenPriceDisplay 
+                             tokenMint={campaign.token_address}
+                             size="sm"
+                             showDetails={true}
+                           />
+                         </div>
+                       </div>
+                       
+                       <div className="flex items-center gap-4">
+                         <Badge variant={campaign.is_active ? "default" : "secondary"}>
+                           {campaign.is_active ? "Enabled" : "Disabled"}
+                         </Badge>
+                         <Button
+                           size="sm"
+                           variant="outline"
+                           onClick={(e) => {
+                             e.stopPropagation();
+                             handleNotifyDonors(campaign);
+                           }}
+                           disabled={!canSendNotification(campaign.id) || isNotificationLoading}
+                           title={getNotificationButtonText(campaign.id, campaign.is_active)}
+                         >
+                           <Bell className="h-4 w-4" />
+                         </Button>
+                         <Button
+                           size="sm"
+                           variant="outline"
+                           onClick={(e) => {
+                             e.stopPropagation();
+                             deleteCampaign(campaign);
+                           }}
+                           disabled={deletingCampaignId === campaign.id}
+                           title="Delete campaign (preserves wallets and commands)"
+                         >
+                           <Trash2 className="h-4 w-4" />
+                         </Button>
+                         <div className="flex items-center gap-2">
+                           <label className="text-sm font-medium">
+                             {campaign.is_active ? "Enabled" : "Disabled"}
+                           </label>
+                           <Switch
+                             checked={campaign.is_active}
+                             onCheckedChange={(checked) => {
+                               toggleCampaign(campaign);
+                             }}
+                           />
+                         </div>
+                       </div>
+                     </div>
+                     
+                     {/* Wallet and Command Management sections underneath token info */}
+                     <InlineCampaignManagement 
+                       campaign={campaign} 
+                       onScrollToSection={scrollToSection}
+                     />
+                   </div>
                 </div>
               ))}
             </div>
