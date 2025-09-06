@@ -111,6 +111,7 @@ export type Database = {
           is_active: boolean | null
           name: string
           updated_at: string | null
+          user_id: string | null
           wallet_id: string | null
         }
         Insert: {
@@ -120,6 +121,7 @@ export type Database = {
           is_active?: boolean | null
           name: string
           updated_at?: string | null
+          user_id?: string | null
           wallet_id?: string | null
         }
         Update: {
@@ -129,6 +131,7 @@ export type Database = {
           is_active?: boolean | null
           name?: string
           updated_at?: string | null
+          user_id?: string | null
           wallet_id?: string | null
         }
         Relationships: [
