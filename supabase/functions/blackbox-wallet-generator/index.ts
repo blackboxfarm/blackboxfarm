@@ -65,10 +65,10 @@ serve(async (req) => {
       { auth: { persistSession: false } }
     );
 
+    // First create the wallet
     const { data: wallet, error: insertError } = await supabaseService
       .from("blackbox_wallets")
       .insert({
-        campaign_id: campaign_id,
         pubkey: publicKey,
         secret_key_encrypted: encryptedSecret,
         sol_balance: 0
@@ -78,6 +78,18 @@ serve(async (req) => {
 
     if (insertError) {
       throw insertError;
+    }
+
+    // Then link it to the campaign
+    const { error: linkError } = await supabaseService
+      .from("campaign_wallets")
+      .insert({
+        campaign_id: campaign_id,
+        wallet_id: wallet.id
+      });
+
+    if (linkError) {
+      throw linkError;
     }
 
     console.log(`Generated wallet ${publicKey} for campaign ${campaign_id}`);

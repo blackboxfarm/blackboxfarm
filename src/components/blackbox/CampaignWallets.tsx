@@ -84,8 +84,10 @@ export function CampaignWallets({ campaign }: CampaignWalletsProps) {
 
   const loadWallets = async () => {
     const { data, error } = await supabase
-      .from('blackbox_wallets')
-      .select('*')
+      .from('campaign_wallets')
+      .select(`
+        wallet:blackbox_wallets(*)
+      `)
       .eq('campaign_id', campaign.id)
       .order('created_at', { ascending: false });
 
@@ -94,12 +96,15 @@ export function CampaignWallets({ campaign }: CampaignWalletsProps) {
       return;
     }
 
-    const walletsWithDevBalances = (data || []).map(wallet => ({
-      ...wallet,
-      sol_balance: isDevMode && devBalances[wallet.pubkey] !== undefined 
-        ? devBalances[wallet.pubkey] 
-        : wallet.sol_balance
-    }));
+    const walletsWithDevBalances = (data || []).map(item => {
+      const wallet = item.wallet;
+      return {
+        ...wallet,
+        sol_balance: isDevMode && devBalances[wallet.pubkey] !== undefined 
+          ? devBalances[wallet.pubkey] 
+          : wallet.sol_balance
+      };
+    });
     
     setWallets(walletsWithDevBalances);
     if (walletsWithDevBalances.length > 0 && !selectedWallet) {

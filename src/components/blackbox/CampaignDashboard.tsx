@@ -201,17 +201,7 @@ export function CampaignDashboard() {
     const startTime = Date.now();
     
     try {
-      // First, detach wallets from the campaign by setting campaign_id to null
-      const { error: walletError } = await supabase
-        .from('blackbox_wallets')
-        .update({ campaign_id: null })
-        .eq('campaign_id', campaign.id);
-
-      if (walletError) {
-        toast({ title: "Error detaching wallets", description: walletError.message });
-        return;
-      }
-
+      // Delete campaign-wallet relationships first (cascade will handle this automatically)
       // Then delete the campaign
       const { error } = await supabase
         .from('blackbox_campaigns')
