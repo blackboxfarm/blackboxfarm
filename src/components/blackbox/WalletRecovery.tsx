@@ -127,24 +127,24 @@ export function WalletRecovery({ campaigns, onWalletRecovered }: WalletRecoveryP
   }
 
   return (
-    <Card className="border-orange-200 bg-orange-50/50">
+    <Card className="border-destructive/20 bg-destructive/5">
       <CardHeader>
-        <CardTitle className="flex items-center gap-2 text-orange-700">
+        <CardTitle className="flex items-center gap-2 text-destructive">
           <Wallet className="h-5 w-5" />
           Wallet Recovery - {orphanedWallets.length} Orphaned Wallet(s)
         </CardTitle>
-        <p className="text-sm text-orange-600">
+        <p className="text-sm text-muted-foreground">
           These wallets were disconnected from campaigns but still contain funds. 
           Associate them with your campaigns to recover access.
         </p>
       </CardHeader>
       <CardContent className="space-y-4">
         {orphanedWallets.map((wallet) => (
-          <div key={wallet.id} className="p-4 border rounded-lg bg-white">
+          <div key={wallet.id} className="p-4 border rounded-lg bg-card">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
               <div className="space-y-2">
                 <div className="flex items-center gap-2">
-                  <code className="text-sm font-mono bg-gray-100 px-2 py-1 rounded">
+                  <code className="text-sm font-mono bg-muted px-2 py-1 rounded">
                     {wallet.pubkey.slice(0, 8)}...{wallet.pubkey.slice(-8)}
                   </code>
                   <Badge variant={wallet.is_active ? "default" : "secondary"}>
@@ -152,7 +152,7 @@ export function WalletRecovery({ campaigns, onWalletRecovered }: WalletRecoveryP
                   </Badge>
                 </div>
                 <div className="text-sm text-muted-foreground">
-                  Balance: <span className="font-semibold text-orange-600">
+                  Balance: <span className="font-semibold text-primary">
                     {wallet.sol_balance.toFixed(6)} SOL
                   </span>
                 </div>
