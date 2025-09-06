@@ -12,6 +12,9 @@ interface TokenMetadata {
   logoURI?: string;
   totalSupply?: number;
   verified?: boolean;
+  image?: string;
+  description?: string;
+  uri?: string;
   isPumpFun?: boolean;
 }
 
@@ -67,11 +70,11 @@ export function TokenMetadataDisplay({
           </Alert>
         )}
         <div className="flex items-center gap-3">
-          {metadata.logoURI && (
+          {(metadata.image || metadata.logoURI) && (
             <img 
-              src={metadata.logoURI} 
+              src={metadata.image || metadata.logoURI} 
               alt={metadata.symbol}
-              className="w-8 h-8 rounded-full"
+              className="w-8 h-8 rounded-full object-cover"
               onError={(e) => {
                 e.currentTarget.style.display = 'none';
               }}
@@ -134,11 +137,11 @@ export function TokenMetadataDisplay({
           )}
           
           <div className="flex items-start gap-4">
-            {metadata.logoURI && (
+            {(metadata.image || metadata.logoURI) && (
               <img 
-                src={metadata.logoURI} 
+                src={metadata.image || metadata.logoURI} 
                 alt={metadata.symbol}
-                className="w-12 h-12 rounded-full flex-shrink-0"
+                className="w-12 h-12 rounded-full flex-shrink-0 object-cover"
                 onError={(e) => {
                   e.currentTarget.style.display = 'none';
                 }}
@@ -168,6 +171,13 @@ export function TokenMetadataDisplay({
                   {metadata.mint}
                 </p>
               </div>
+
+              {metadata.description && (
+                <div className="space-y-1">
+                  <p className="text-sm font-medium text-muted-foreground">Description</p>
+                  <p className="text-sm leading-relaxed">{metadata.description}</p>
+                </div>
+              )}
 
               {priceInfo && (
               <div className="grid grid-cols-2 md:grid-cols-4 gap-4">

@@ -10,6 +10,10 @@ interface TokenMetadata {
   logoURI?: string;
   totalSupply?: number;
   verified?: boolean;
+  image?: string;
+  description?: string;
+  uri?: string;
+  isPumpFun?: boolean;
 }
 
 interface PriceInfo {

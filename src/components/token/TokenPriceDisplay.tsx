@@ -56,11 +56,11 @@ export function TokenPriceDisplay({
   return (
     <div className={cn('flex items-center gap-2', className)}>
       {/* Token Icon */}
-      {tokenData?.metadata?.logoURI ? (
+      {(tokenData?.metadata?.image || tokenData?.metadata?.logoURI) ? (
         <img 
-          src={tokenData.metadata.logoURI}
+          src={tokenData.metadata.image || tokenData.metadata.logoURI}
           alt={tokenData.metadata.name}
-          className={cn('rounded-full bg-muted',
+          className={cn('rounded-full bg-muted object-cover',
             size === 'sm' ? 'h-4 w-4' : size === 'lg' ? 'h-6 w-6' : 'h-5 w-5'
           )}
           onError={(e) => {
