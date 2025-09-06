@@ -18,6 +18,7 @@ import { TokenMetadataDisplay } from "@/components/token/TokenMetadataDisplay";
 import { TokenPriceDisplay } from "@/components/token/TokenPriceDisplay";
 import { useTokenMetadata } from "@/hooks/useTokenMetadata";
 import { Switch } from "@/components/ui/switch";
+import { InlineCampaignManagement } from "./InlineCampaignManagement";
 
 interface Campaign {
   id: string;
@@ -180,6 +181,14 @@ export function CampaignDashboard() {
     );
   };
 
+  const scrollToSection = (section: 'wallets' | 'commands') => {
+    const targetId = section === 'wallets' ? 'premium-wallet-generator' : 'campaign-commands';
+    const element = document.getElementById(targetId);
+    if (element) {
+      element.scrollIntoView({ behavior: 'smooth' });
+    }
+  };
+
   const deleteCampaign = async (campaign: Campaign) => {
     if (!confirm(`Are you sure you want to delete campaign "${campaign.nickname}"? The wallets and commands will be preserved for reuse.`)) {
       return;
@@ -339,6 +348,10 @@ export function CampaignDashboard() {
                         />
                       </div>
                     </div>
+                    <InlineCampaignManagement 
+                      campaign={campaign} 
+                      onScrollToSection={scrollToSection}
+                    />
                   </div>
                 </div>
               ))}
@@ -398,11 +411,18 @@ export function CampaignDashboard() {
       {selectedCampaign && (
         <>
           <CampaignActivationGuide campaign={selectedCampaign} />
-          <CampaignCommands campaign={selectedCampaign} />
           <LiveActivityMonitor campaignId={selectedCampaign.id} />
-          <CampaignWallets campaign={selectedCampaign} />
         </>
       )}
+
+      {/* Separate Command and Wallet Management Sections */}
+      <div id="campaign-commands">
+        <CampaignCommands campaign={selectedCampaign || campaigns[0]} />
+      </div>
+      
+      <div id="premium-wallet-generator">
+        <CampaignWallets campaign={selectedCampaign || campaigns[0]} />
+      </div>
 
       {/* Wallet Recovery - moved to bottom */}
       <WalletRecovery 
