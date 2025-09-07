@@ -40,10 +40,10 @@ export function WalletInvestigator() {
   const [result, setResult] = useState<InvestigationResult | null>(null);
   const { toast } = useToast();
 
-  // Auto-investigate on component mount
-  useEffect(() => {
-    investigate();
-  }, []);
+  // Remove auto-investigation to prevent crashes
+  // useEffect(() => {
+  //   investigate();
+  // }, []);
 
   const investigate = async () => {
     if (!childWallet || !parentWallet || !tokenMint) {
@@ -56,7 +56,10 @@ export function WalletInvestigator() {
     }
 
     setIsInvestigating(true);
+    setResult(null); // Clear previous results
+    
     try {
+      console.log('Starting investigation...');
       const { data, error } = await supabase.functions.invoke('bagless-investigation', {
         body: {
           childWallet: childWallet.trim(),
@@ -65,18 +68,23 @@ export function WalletInvestigator() {
         }
       });
 
-      if (error) throw error;
+      if (error) {
+        console.error('Investigation error:', error);
+        throw new Error(error.message || 'Investigation failed');
+      }
 
+      console.log('Investigation completed:', data);
       setResult(data);
+      
       toast({
         title: "Investigation Complete",
-        description: `Found ${data.totalTransactions} token transactions`,
+        description: `Found ${data.totalTransactions || 0} token transactions`,
       });
     } catch (error) {
       console.error('Investigation failed:', error);
       toast({
         title: "Investigation Failed",
-        description: error.message || "Failed to investigate wallets",
+        description: error instanceof Error ? error.message : "Failed to investigate wallets",
         variant: "destructive"
       });
     } finally {
@@ -154,25 +162,25 @@ export function WalletInvestigator() {
               <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-4">
                 <div className="text-center p-4 bg-muted rounded-lg">
                   <div className="text-2xl font-bold text-green-600">
-                    {formatTokenAmount(result.totalTokensBought)}
+                    {formatTokenAmount(result.totalTokensBought || 0)}
                   </div>
                   <div className="text-sm text-muted-foreground">Total Tokens Bought</div>
                 </div>
                 <div className="text-center p-4 bg-muted rounded-lg">
                   <div className="text-2xl font-bold text-red-600">
-                    {formatTokenAmount(result.totalTokensSold)}
+                    {formatTokenAmount(result.totalTokensSold || 0)}
                   </div>
                   <div className="text-sm text-muted-foreground">Total Tokens Sold</div>
                 </div>
                 <div className="text-center p-4 bg-muted rounded-lg">
                   <div className="text-2xl font-bold">
-                    {result.totalTransactions}
+                    {result.totalTransactions || 0}
                   </div>
                   <div className="text-sm text-muted-foreground">Total Transactions</div>
                 </div>
                 <div className="text-center p-4 bg-muted rounded-lg">
                   <div className="text-2xl font-bold">
-                    {result.tokenOrigins.length}
+                    {result.tokenOrigins?.length || 0}
                   </div>
                   <div className="text-sm text-muted-foreground">Token Sources</div>
                 </div>
