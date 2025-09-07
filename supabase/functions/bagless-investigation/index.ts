@@ -11,177 +11,80 @@ serve(async (req) => {
   }
 
   try {
-    // Hard-coded investigation for the specific wallets
-    const childWallet = 'AovoyjWR6iwzPSZEMjUfKeDtXhS71kq74gkFNyMLomjU';
-    const parentWallet = 'AbFwiFMeVaUyUDGfNJ1HhoBBbnFcjncq5twrk6HrqdxP';
-    const tokenMint = 'GvkxeDmoghdjdrmMtc7EZQVobTgV7JiBLEkmPdVyBAGS';
-
-    console.log('Running direct investigation with Helius RPC...');
-
-    // Use public Helius endpoint for investigation
-    const heliusUrl = `https://api.helius.xyz/v0`;
-    const publicKey = 'e60bf1c7-ebde-4b82-a8a7-2e62c6ad97a3'; // Public key for basic access
-
-    // Get transactions using public API
-    const getAllTransactions = async (address: string): Promise<any[]> => {
-      let allTransactions: any[] = [];
-      let before = '';
-      
-      for (let page = 0; page < 10; page++) { // Limit to 10 pages for now
-        const url = `${heliusUrl}/addresses/${address}/transactions?api-key=${publicKey}&limit=1000${before ? `&before=${before}` : ''}`;
-        
-        const response = await fetch(url);
-        if (!response.ok) {
-          console.error(`Failed to fetch transactions: ${response.status}`);
-          break;
-        }
-        
-        const transactions = await response.json();
-        if (!transactions || transactions.length === 0) break;
-        
-        allTransactions = allTransactions.concat(transactions);
-        
-        if (transactions.length < 1000) break;
-        before = transactions[transactions.length - 1].signature;
-        
-        await new Promise(resolve => setTimeout(resolve, 200));
-      }
-      
-      return allTransactions;
-    };
-
-    console.log('Fetching transactions...');
-    const allTransactions = await getAllTransactions(childWallet);
-    console.log(`Found ${allTransactions.length} total transactions`);
-
-    // Analyze token transfers
-    let totalTokensBought = 0;
-    let totalTokensSold = 0;
-    let totalTokenTransfers = 0;
-    let firstTokenReceived = null;
-    const tokenOrigins = new Set();
-    const allTransfers: any[] = [];
-
-    console.log(`Analyzing transactions for token ${tokenMint}...`);
-
-    for (const tx of allTransactions) {
-      if (!tx.tokenTransfers || tx.tokenTransfers.length === 0) continue;
-      
-      for (const transfer of tx.tokenTransfers) {
-        if (transfer.mint !== tokenMint) continue;
-        
-        console.log(`Found token transfer:`, {
-          signature: tx.signature,
-          from: transfer.fromUserAccount,
-          to: transfer.toUserAccount,
-          amount: transfer.tokenAmount
-        });
-        
-        totalTokenTransfers++;
-        
-        // Check if child wallet is receiving tokens
-        const isReceiving = transfer.toUserAccount === childWallet;
-        // Check if child wallet is sending tokens  
-        const isSending = transfer.fromUserAccount === childWallet;
-        
-        if (!isReceiving && !isSending) continue;
-        
-        const amount = transfer.tokenAmount || 0;
-        
-        // Add to allTransfers array
-        allTransfers.push({
-          signature: tx.signature,
-          timestamp: tx.timestamp,
-          type: isReceiving ? 'receive' : 'send',
-          amount: amount,
-          fromAddress: transfer.fromUserAccount || '',
-          toAddress: transfer.toUserAccount || '',
-          slot: tx.slot || 0,
-          blockTime: tx.timestamp
-        });
-        
-        if (isReceiving) {
-          totalTokensBought += amount;
-          if (transfer.fromUserAccount) {
-            tokenOrigins.add(transfer.fromUserAccount);
-          }
-          if (!firstTokenReceived || tx.timestamp < firstTokenReceived.timestamp) {
-            firstTokenReceived = {
-              signature: tx.signature,
-              timestamp: tx.timestamp,
-              amount: amount,
-              fromAddress: transfer.fromUserAccount || '',
-              toAddress: transfer.toUserAccount || '',
-              type: 'receive',
-              slot: tx.slot || 0,
-              blockTime: tx.timestamp
-            };
-          }
-        } else if (isSending) {
-          totalTokensSold += amount;
-        }
-      }
+    const { childWallet, tokenMint } = await req.json();
+    
+    if (!childWallet || !tokenMint) {
+      return new Response(
+        JSON.stringify({ error: 'Missing required parameters: childWallet, tokenMint' }),
+        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
     }
 
-    console.log(`Analysis complete:`, {
-      totalTokensBought,
-      totalTokensSold,
-      totalTokenTransfers,
-      tokenOrigins: Array.from(tokenOrigins)
+    // Get Helius API key from environment
+    const heliusApiKey = Deno.env.get('HELIUS_API_KEY');
+    if (!heliusApiKey) {
+      return new Response(
+        JSON.stringify({ error: 'Helius API key not configured' }),
+        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    console.log(`Checking current Bagless token balance for wallet: ${childWallet}`);
+    console.log(`Token mint: ${tokenMint}`);
+
+    // Get current token balance using Helius RPC
+    const rpcUrl = `https://rpc.helius.xyz/?api-key=${heliusApiKey}`;
+    
+    const response = await fetch(rpcUrl, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        jsonrpc: '2.0',
+        id: 1,
+        method: 'getTokenAccountsByOwner',
+        params: [
+          childWallet,
+          {
+            mint: tokenMint
+          },
+          {
+            encoding: 'jsonParsed'
+          }
+        ]
+      })
     });
 
-    const parentRelated = Array.from(tokenOrigins).includes(parentWallet);
+    if (!response.ok) {
+      throw new Error(`RPC request failed: ${response.status}`);
+    }
+
+    const data = await response.json();
+    
+    if (data.error) {
+      throw new Error(`RPC error: ${data.error.message}`);
+    }
+
+    let currentBalance = 0;
+    
+    if (data.result && data.result.value && data.result.value.length > 0) {
+      // Get the token account balance
+      const tokenAccount = data.result.value[0];
+      const balanceInfo = tokenAccount.account.data.parsed.info;
+      currentBalance = parseFloat(balanceInfo.tokenAmount.uiAmount || 0);
+    }
+
+    console.log(`Current Bagless token balance: ${currentBalance}`);
 
     const result = {
       childWallet,
-      parentWallet,
       tokenMint,
-      totalTokensBought,
-      totalTokensSold,
-      totalTransactions: totalTokenTransfers,
-      firstTokenReceived,
-      allTransfers: allTransfers.sort((a, b) => b.timestamp - a.timestamp),
-      tokenOrigins: Array.from(tokenOrigins),
-      parentRelationship: parentRelated,
-      investigationSummary: `
-INVESTIGATION COMPLETE - BAGLESS TOKEN ANALYSIS
-
-🔍 CHILD WALLET: ${childWallet}
-🔍 PARENT WALLET: ${parentWallet}
-🔍 TOKEN: ${tokenMint} (Bagless)
-
-🚨 CRITICAL FINDINGS:
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-💰 TOTAL BAGLESS TOKENS BOUGHT: ${totalTokensBought.toLocaleString()}
-💸 TOTAL BAGLESS TOKENS SOLD: ${totalTokensSold.toLocaleString()}
-📊 TOTAL TOKEN TRANSACTIONS: ${totalTokenTransfers}
-🔗 TOKEN SOURCES: ${tokenOrigins.size} different addresses
-🔗 PARENT WALLET CONNECTION: ${parentRelated ? '⚠️ DIRECT TRANSFERS DETECTED' : '❌ No direct transfers found'}
-
-${firstTokenReceived ? `
-📅 FIRST TOKENS RECEIVED:
-   Date: ${new Date(firstTokenReceived.timestamp * 1000).toLocaleString()}
-   Amount: ${firstTokenReceived.amount.toLocaleString()}
-   From: ${firstTokenReceived.fromAddress}
-   TX: ${firstTokenReceived.signature}
-` : ''}
-
-🎯 TOKEN ORIGIN ADDRESSES:
-${Array.from(tokenOrigins).map(addr => `   • ${addr}${addr === parentWallet ? ' ⚠️ [PARENT WALLET]' : ''}`).join('\n')}
-
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-ANSWER: The child wallet has bought ${totalTokensBought.toLocaleString()} Bagless tokens and sold ${totalTokensSold.toLocaleString()} tokens.
-${parentRelated ? 'SUSPICIOUS: Tokens came directly from the parent wallet!' : 'Tokens came from multiple sources.'}
-      `
+      currentBalance,
+      balanceRaw: data.result?.value?.[0]?.account?.data?.parsed?.info?.tokenAmount?.amount || '0',
+      summary: `The wallet ${childWallet} currently holds ${currentBalance.toLocaleString()} Bagless tokens.`,
+      hasTokens: currentBalance > 0
     };
-
-    console.log('\n🎯 INVESTIGATION COMPLETE!');
-    console.log(`Total Bagless tokens bought: ${totalTokensBought.toLocaleString()}`);
-    console.log(`Total Bagless tokens sold: ${totalTokensSold.toLocaleString()}`);
-    console.log(`From ${tokenOrigins.size} different sources`);
-    console.log(`Parent wallet involved: ${parentRelated}`);
 
     return new Response(
       JSON.stringify(result),
@@ -189,12 +92,11 @@ ${parentRelated ? 'SUSPICIOUS: Tokens came directly from the parent wallet!' : '
     );
 
   } catch (error) {
-    console.error('Investigation error:', error);
+    console.error('Balance check error:', error);
     return new Response(
       JSON.stringify({ 
-        error: 'Investigation failed', 
-        details: error.message,
-        summary: 'Unable to complete Bagless token investigation. Please check Helius API access.'
+        error: 'Balance check failed', 
+        details: error.message 
       }),
       { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );

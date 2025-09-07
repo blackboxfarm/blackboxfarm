@@ -21,20 +21,15 @@ interface TokenTransfer {
 
 interface InvestigationResult {
   childWallet: string;
-  parentWallet: string;
   tokenMint: string;
-  totalTokensBought: number;
-  totalTokensSold: number;
-  totalTransactions: number;
-  firstTokenReceived: TokenTransfer | null;
-  allTransfers: TokenTransfer[];
-  tokenOrigins: string[];
-  investigationSummary: string;
+  currentBalance: number;
+  balanceRaw: string;
+  summary: string;
+  hasTokens: boolean;
 }
 
 export function WalletInvestigator() {
   const [childWallet, setChildWallet] = useState('AovoyjWR6iwzPSZEMjUfKeDtXhS71kq74gkFNyMLomjU');
-  const [parentWallet, setParentWallet] = useState('AbFwiFMeVaUyUDGfNJ1HhoBBbnFcjncq5twrk6HrqdxP');
   const [tokenMint, setTokenMint] = useState('GvkxeDmoghdjdrmMtc7EZQVobTgV7JiBLEkmPdVyBAGS');
   const [isInvestigating, setIsInvestigating] = useState(false);
   const [result, setResult] = useState<InvestigationResult | null>(null);
@@ -46,45 +41,44 @@ export function WalletInvestigator() {
   // }, []);
 
   const investigate = async () => {
-    if (!childWallet || !parentWallet || !tokenMint) {
+    if (!childWallet || !tokenMint) {
       toast({
         title: "Missing Information",
-        description: "Please fill in all wallet addresses and token mint",
+        description: "Please fill in wallet address and token mint",
         variant: "destructive"
       });
       return;
     }
 
     setIsInvestigating(true);
-    setResult(null); // Clear previous results
+    setResult(null);
     
     try {
-      console.log('Starting investigation...');
+      console.log('Checking token balance...');
       const { data, error } = await supabase.functions.invoke('bagless-investigation', {
         body: {
           childWallet: childWallet.trim(),
-          parentWallet: parentWallet.trim(),
           tokenMint: tokenMint.trim()
         }
       });
 
       if (error) {
-        console.error('Investigation error:', error);
-        throw new Error(error.message || 'Investigation failed');
+        console.error('Balance check error:', error);
+        throw new Error(error.message || 'Balance check failed');
       }
 
-      console.log('Investigation completed:', data);
+      console.log('Balance check completed:', data);
       setResult(data);
       
       toast({
-        title: "Investigation Complete",
-        description: `Found ${data.totalTransactions || 0} token transactions`,
+        title: "Balance Check Complete",
+        description: `Current balance: ${data.currentBalance || 0} Bagless tokens`,
       });
     } catch (error) {
-      console.error('Investigation failed:', error);
+      console.error('Balance check failed:', error);
       toast({
-        title: "Investigation Failed",
-        description: error instanceof Error ? error.message : "Failed to investigate wallets",
+        title: "Balance Check Failed",
+        description: error instanceof Error ? error.message : "Failed to check token balance",
         variant: "destructive"
       });
     } finally {
@@ -104,28 +98,17 @@ export function WalletInvestigator() {
     <div className="space-y-6">
       <Card>
         <CardHeader>
-          <CardTitle>Blockchain Wallet Investigator</CardTitle>
+          <CardTitle>Bagless Token Balance Checker</CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div>
-              <Label htmlFor="childWallet">Child Wallet</Label>
-              <Input
-                id="childWallet"
-                value={childWallet}
-                onChange={(e) => setChildWallet(e.target.value)}
-                placeholder="Child wallet address"
-              />
-            </div>
-            <div>
-              <Label htmlFor="parentWallet">Parent Wallet</Label>
-              <Input
-                id="parentWallet"
-                value={parentWallet}
-                onChange={(e) => setParentWallet(e.target.value)}
-                placeholder="Parent wallet address"
-              />
-            </div>
+          <div>
+            <Label htmlFor="childWallet">Wallet Address</Label>
+            <Input
+              id="childWallet"
+              value={childWallet}
+              onChange={(e) => setChildWallet(e.target.value)}
+              placeholder="Wallet address to check"
+            />
           </div>
           
           <div>
@@ -143,137 +126,42 @@ export function WalletInvestigator() {
             disabled={isInvestigating}
             className="w-full"
           >
-            {isInvestigating ? 'Investigating...' : 'Start Investigation'}
+            {isInvestigating ? 'Checking Balance...' : 'Check Current Balance'}
           </Button>
         </CardContent>
       </Card>
 
       {result && (
-        <div className="space-y-6">
-          {/* Summary Card */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                Investigation Results 
-                <Badge variant="outline">{result.totalTransactions} Transactions</Badge>
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-4">
-                <div className="text-center p-4 bg-muted rounded-lg">
-                  <div className="text-2xl font-bold text-green-600">
-                    {formatTokenAmount(result.totalTokensBought || 0)}
-                  </div>
-                  <div className="text-sm text-muted-foreground">Total Tokens Bought</div>
-                </div>
-                <div className="text-center p-4 bg-muted rounded-lg">
-                  <div className="text-2xl font-bold text-red-600">
-                    {formatTokenAmount(result.totalTokensSold || 0)}
-                  </div>
-                  <div className="text-sm text-muted-foreground">Total Tokens Sold</div>
-                </div>
-                <div className="text-center p-4 bg-muted rounded-lg">
-                  <div className="text-2xl font-bold">
-                    {result.totalTransactions || 0}
-                  </div>
-                  <div className="text-sm text-muted-foreground">Total Transactions</div>
-                </div>
-                <div className="text-center p-4 bg-muted rounded-lg">
-                  <div className="text-2xl font-bold">
-                    {result.tokenOrigins?.length || 0}
-                  </div>
-                  <div className="text-sm text-muted-foreground">Token Sources</div>
-                </div>
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              Current Balance Results
+              <Badge variant={result.hasTokens ? "default" : "secondary"}>
+                {result.hasTokens ? "Has Tokens" : "No Tokens"}
+              </Badge>
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="text-center p-8 bg-muted rounded-lg mb-4">
+              <div className="text-4xl font-bold mb-2">
+                {formatTokenAmount(result.currentBalance)}
               </div>
-
-              <div>
-                <Label>Investigation Summary</Label>
-                <Textarea
-                  value={result.investigationSummary}
-                  readOnly
-                  className="mt-2 min-h-[300px] font-mono text-sm"
-                />
+              <div className="text-lg text-muted-foreground">Bagless Tokens Currently Held</div>
+              <div className="text-sm text-muted-foreground mt-2">
+                Raw Balance: {result.balanceRaw}
               </div>
-            </CardContent>
-          </Card>
+            </div>
 
-          {/* First Token Receipt */}
-          {result.firstTokenReceived && (
-            <Card>
-              <CardHeader>
-                <CardTitle>First Token Receipt</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-2">
-                  <div><strong>Date:</strong> {formatDate(result.firstTokenReceived.timestamp)}</div>
-                  <div><strong>Amount:</strong> {formatTokenAmount(result.firstTokenReceived.amount)}</div>
-                  <div><strong>From:</strong> {result.firstTokenReceived.fromAddress}</div>
-                  <div><strong>Transaction:</strong> 
-                    <a 
-                      href={`https://solscan.io/tx/${result.firstTokenReceived.signature}`}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="text-blue-600 hover:underline ml-2"
-                    >
-                      {result.firstTokenReceived.signature.slice(0, 20)}...
-                    </a>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-          )}
-
-          {/* Token Origins */}
-          <Card>
-            <CardHeader>
-              <CardTitle>Token Origins ({result.tokenOrigins.length} sources)</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-2">
-                {result.tokenOrigins.map((origin, index) => (
-                  <div key={index} className="p-2 bg-muted rounded font-mono text-sm">
-                    {origin}
-                    {origin === result.parentWallet && (
-                      <Badge variant="destructive" className="ml-2">PARENT WALLET</Badge>
-                    )}
-                  </div>
-                ))}
-              </div>
-            </CardContent>
-          </Card>
-
-          {/* Recent Transactions */}
-          <Card>
-            <CardHeader>
-              <CardTitle>Recent Bagless Transactions (Last 10)</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-2">
-                {result.allTransfers && result.allTransfers.length > 0 ? (
-                  result.allTransfers.slice(-10).reverse().map((transfer, index) => (
-                    <div key={index} className="flex items-center justify-between p-3 bg-muted rounded">
-                      <div>
-                        <Badge variant={transfer.type === 'send' ? 'destructive' : 'default'}>
-                          {transfer.type.toUpperCase()}
-                        </Badge>
-                        <span className="ml-2 font-mono text-sm">
-                          {formatTokenAmount(transfer.amount)} tokens
-                        </span>
-                      </div>
-                      <div className="text-sm text-muted-foreground">
-                        {formatDate(transfer.timestamp)}
-                      </div>
-                    </div>
-                  ))
-                ) : (
-                  <div className="text-center py-8 text-muted-foreground">
-                    No Bagless token transactions found for this wallet
-                  </div>
-                )}
-              </div>
-            </CardContent>
-          </Card>
-        </div>
+            <div>
+              <Label>Summary</Label>
+              <Textarea
+                value={result.summary}
+                readOnly
+                className="mt-2 min-h-[100px] font-mono text-sm"
+              />
+            </div>
+          </CardContent>
+        </Card>
       )}
     </div>
   );
