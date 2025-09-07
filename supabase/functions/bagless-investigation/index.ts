@@ -55,26 +55,36 @@ serve(async (req) => {
     console.log(`Found ${allTransactions.length} total transactions`);
 
     // Analyze token transfers
+    let totalTokensBought = 0;
     let totalTokensSold = 0;
     let totalTokenTransfers = 0;
     let firstTokenReceived = null;
     const tokenOrigins = new Set();
     const allTransfers: any[] = [];
 
+    console.log(`Analyzing transactions for token ${tokenMint}...`);
+
     for (const tx of allTransactions) {
-      if (!tx.tokenTransfers) continue;
+      if (!tx.tokenTransfers || tx.tokenTransfers.length === 0) continue;
       
       for (const transfer of tx.tokenTransfers) {
         if (transfer.mint !== tokenMint) continue;
         
+        console.log(`Found token transfer:`, {
+          signature: tx.signature,
+          from: transfer.fromUserAccount,
+          to: transfer.toUserAccount,
+          amount: transfer.tokenAmount
+        });
+        
         totalTokenTransfers++;
         
-        const isReceive = transfer.toTokenAccount && 
-          (transfer.toTokenAccount.includes(childWallet) || transfer.toUserAccount === childWallet);
-        const isSend = transfer.fromTokenAccount && 
-          (transfer.fromTokenAccount.includes(childWallet) || transfer.fromUserAccount === childWallet);
+        // Check if child wallet is receiving tokens
+        const isReceiving = transfer.toUserAccount === childWallet;
+        // Check if child wallet is sending tokens  
+        const isSending = transfer.fromUserAccount === childWallet;
         
-        if (!isReceive && !isSend) continue;
+        if (!isReceiving && !isSending) continue;
         
         const amount = transfer.tokenAmount || 0;
         
@@ -82,7 +92,7 @@ serve(async (req) => {
         allTransfers.push({
           signature: tx.signature,
           timestamp: tx.timestamp,
-          type: isReceive ? 'receive' : 'send',
+          type: isReceiving ? 'receive' : 'send',
           amount: amount,
           fromAddress: transfer.fromUserAccount || '',
           toAddress: transfer.toUserAccount || '',
@@ -90,7 +100,8 @@ serve(async (req) => {
           blockTime: tx.timestamp
         });
         
-        if (isReceive) {
+        if (isReceiving) {
+          totalTokensBought += amount;
           if (transfer.fromUserAccount) {
             tokenOrigins.add(transfer.fromUserAccount);
           }
@@ -100,14 +111,24 @@ serve(async (req) => {
               timestamp: tx.timestamp,
               amount: amount,
               fromAddress: transfer.fromUserAccount || '',
-              toAddress: transfer.toUserAccount || ''
+              toAddress: transfer.toUserAccount || '',
+              type: 'receive',
+              slot: tx.slot || 0,
+              blockTime: tx.timestamp
             };
           }
-        } else if (isSend) {
+        } else if (isSending) {
           totalTokensSold += amount;
         }
       }
     }
+
+    console.log(`Analysis complete:`, {
+      totalTokensBought,
+      totalTokensSold,
+      totalTokenTransfers,
+      tokenOrigins: Array.from(tokenOrigins)
+    });
 
     const parentRelated = Array.from(tokenOrigins).includes(parentWallet);
 
@@ -115,6 +136,7 @@ serve(async (req) => {
       childWallet,
       parentWallet,
       tokenMint,
+      totalTokensBought,
       totalTokensSold,
       totalTransactions: totalTokenTransfers,
       firstTokenReceived,
@@ -131,7 +153,8 @@ INVESTIGATION COMPLETE - BAGLESS TOKEN ANALYSIS
 🚨 CRITICAL FINDINGS:
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-💰 TOTAL BAGLESS TOKENS SOLD: ${totalTokensSold.toLocaleString()}
+💰 TOTAL BAGLESS TOKENS BOUGHT: ${totalTokensBought.toLocaleString()}
+💸 TOTAL BAGLESS TOKENS SOLD: ${totalTokensSold.toLocaleString()}
 📊 TOTAL TOKEN TRANSACTIONS: ${totalTokenTransfers}
 🔗 TOKEN SOURCES: ${tokenOrigins.size} different addresses
 🔗 PARENT WALLET CONNECTION: ${parentRelated ? '⚠️ DIRECT TRANSFERS DETECTED' : '❌ No direct transfers found'}
@@ -149,12 +172,13 @@ ${Array.from(tokenOrigins).map(addr => `   • ${addr}${addr === parentWallet ? 
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-ANSWER: The child wallet has sold ${totalTokensSold.toLocaleString()} Bagless tokens total.
+ANSWER: The child wallet has bought ${totalTokensBought.toLocaleString()} Bagless tokens and sold ${totalTokensSold.toLocaleString()} tokens.
 ${parentRelated ? 'SUSPICIOUS: Tokens came directly from the parent wallet!' : 'Tokens came from multiple sources.'}
       `
     };
 
     console.log('\n🎯 INVESTIGATION COMPLETE!');
+    console.log(`Total Bagless tokens bought: ${totalTokensBought.toLocaleString()}`);
     console.log(`Total Bagless tokens sold: ${totalTokensSold.toLocaleString()}`);
     console.log(`From ${tokenOrigins.size} different sources`);
     console.log(`Parent wallet involved: ${parentRelated}`);

@@ -23,6 +23,7 @@ interface InvestigationResult {
   childWallet: string;
   parentWallet: string;
   tokenMint: string;
+  totalTokensBought: number;
   totalTokensSold: number;
   totalTransactions: number;
   firstTokenReceived: TokenTransfer | null;
@@ -150,7 +151,13 @@ export function WalletInvestigator() {
               </CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
+              <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-4">
+                <div className="text-center p-4 bg-muted rounded-lg">
+                  <div className="text-2xl font-bold text-green-600">
+                    {formatTokenAmount(result.totalTokensBought)}
+                  </div>
+                  <div className="text-sm text-muted-foreground">Total Tokens Bought</div>
+                </div>
                 <div className="text-center p-4 bg-muted rounded-lg">
                   <div className="text-2xl font-bold text-red-600">
                     {formatTokenAmount(result.totalTokensSold)}
