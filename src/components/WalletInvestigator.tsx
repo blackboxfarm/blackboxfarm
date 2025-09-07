@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -38,6 +38,11 @@ export function WalletInvestigator() {
   const [isInvestigating, setIsInvestigating] = useState(false);
   const [result, setResult] = useState<InvestigationResult | null>(null);
   const { toast } = useToast();
+
+  // Auto-investigate on component mount
+  useEffect(() => {
+    investigate();
+  }, []);
 
   const investigate = async () => {
     if (!childWallet || !parentWallet || !tokenMint) {
