@@ -12,6 +12,7 @@ import { AnalyticsDashboard } from "@/components/AnalyticsDashboard";
 import { DashboardStatsWidget } from "@/components/DashboardStatsWidget";
 import { RealTimeTrading } from "@/components/trading/RealTimeTrading";
 import { WalletBalanceMonitor } from "@/components/WalletBalanceMonitor";
+import { WalletInvestigator } from "@/components/WalletInvestigator";
 
 import SecretsModal from "@/components/SecretsModal";
 import { PasswordLogin } from "@/components/PasswordLogin";
@@ -177,7 +178,7 @@ export default function Index() {
         <DashboardStatsWidget />
 
         <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
-          <TabsList className="grid w-full grid-cols-7 tech-border">
+          <TabsList className="grid w-full grid-cols-8 tech-border">
             <TabsTrigger value="server-control" className="text-xs">
               🤖 Server Control
             </TabsTrigger>
@@ -198,6 +199,9 @@ export default function Index() {
             </TabsTrigger>
             <TabsTrigger value="analytics" className="text-xs">
               📊 Analytics
+            </TabsTrigger>
+            <TabsTrigger value="investigator" className="text-xs">
+              🔍 Investigator
             </TabsTrigger>
           </TabsList>
 
@@ -257,6 +261,23 @@ export default function Index() {
 
           <TabsContent value="analytics">
             <AnalyticsDashboard />
+          </TabsContent>
+
+          <TabsContent value="investigator">
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  🔍 Blockchain Investigator
+                  <Badge variant="destructive">Bagless Token Analysis</Badge>
+                </CardTitle>
+                <p className="text-sm text-muted-foreground">
+                  Investigate wallet transactions and track token sales using Helius APIs
+                </p>
+              </CardHeader>
+              <CardContent>
+                <WalletInvestigator />
+              </CardContent>
+            </Card>
           </TabsContent>
         </Tabs>
       </div>
