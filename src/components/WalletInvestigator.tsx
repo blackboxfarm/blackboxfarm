@@ -234,7 +234,7 @@ export function WalletInvestigator() {
             </CardHeader>
             <CardContent>
               <div className="space-y-2">
-                {result.allTransfers.slice(-10).reverse().map((transfer, index) => (
+                {result.allTransfers?.slice(-10).reverse().map((transfer, index) => (
                   <div key={index} className="flex items-center justify-between p-3 bg-muted rounded">
                     <div>
                       <Badge variant={transfer.type === 'send' ? 'destructive' : 'default'}>
