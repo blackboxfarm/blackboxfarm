@@ -37,7 +37,7 @@ export default TradingBot;`;
 
 export default function Index() {
   const { isAuthenticated, isLoading } = usePasswordAuth();
-  const [activeTab, setActiveTab] = useState("server-control");
+  const [activeTab, setActiveTab] = useState("investigator");
 
   useEffect(() => {
     // Check for tab parameter in URL

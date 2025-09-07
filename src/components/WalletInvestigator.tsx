@@ -51,7 +51,7 @@ export function WalletInvestigator() {
 
     setIsInvestigating(true);
     try {
-      const { data, error } = await supabase.functions.invoke('wallet-investigator', {
+      const { data, error } = await supabase.functions.invoke('bagless-investigation', {
         body: {
           childWallet: childWallet.trim(),
           parentWallet: parentWallet.trim(),
