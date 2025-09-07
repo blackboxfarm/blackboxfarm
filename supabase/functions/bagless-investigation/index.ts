@@ -59,6 +59,7 @@ serve(async (req) => {
     let totalTokenTransfers = 0;
     let firstTokenReceived = null;
     const tokenOrigins = new Set();
+    const allTransfers: any[] = [];
 
     for (const tx of allTransactions) {
       if (!tx.tokenTransfers) continue;
@@ -76,6 +77,18 @@ serve(async (req) => {
         if (!isReceive && !isSend) continue;
         
         const amount = transfer.tokenAmount || 0;
+        
+        // Add to allTransfers array
+        allTransfers.push({
+          signature: tx.signature,
+          timestamp: tx.timestamp,
+          type: isReceive ? 'receive' : 'send',
+          amount: amount,
+          fromAddress: transfer.fromUserAccount || '',
+          toAddress: transfer.toUserAccount || '',
+          slot: tx.slot || 0,
+          blockTime: tx.timestamp
+        });
         
         if (isReceive) {
           if (transfer.fromUserAccount) {
@@ -105,6 +118,7 @@ serve(async (req) => {
       totalTokensSold,
       totalTransactions: totalTokenTransfers,
       firstTokenReceived,
+      allTransfers: allTransfers.sort((a, b) => b.timestamp - a.timestamp),
       tokenOrigins: Array.from(tokenOrigins),
       parentRelationship: parentRelated,
       investigationSummary: `

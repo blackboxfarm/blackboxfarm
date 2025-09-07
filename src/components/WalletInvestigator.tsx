@@ -234,21 +234,27 @@ export function WalletInvestigator() {
             </CardHeader>
             <CardContent>
               <div className="space-y-2">
-                {result.allTransfers?.slice(-10).reverse().map((transfer, index) => (
-                  <div key={index} className="flex items-center justify-between p-3 bg-muted rounded">
-                    <div>
-                      <Badge variant={transfer.type === 'send' ? 'destructive' : 'default'}>
-                        {transfer.type.toUpperCase()}
-                      </Badge>
-                      <span className="ml-2 font-mono text-sm">
-                        {formatTokenAmount(transfer.amount)} tokens
-                      </span>
+                {result.allTransfers && result.allTransfers.length > 0 ? (
+                  result.allTransfers.slice(-10).reverse().map((transfer, index) => (
+                    <div key={index} className="flex items-center justify-between p-3 bg-muted rounded">
+                      <div>
+                        <Badge variant={transfer.type === 'send' ? 'destructive' : 'default'}>
+                          {transfer.type.toUpperCase()}
+                        </Badge>
+                        <span className="ml-2 font-mono text-sm">
+                          {formatTokenAmount(transfer.amount)} tokens
+                        </span>
+                      </div>
+                      <div className="text-sm text-muted-foreground">
+                        {formatDate(transfer.timestamp)}
+                      </div>
                     </div>
-                    <div className="text-sm text-muted-foreground">
-                      {formatDate(transfer.timestamp)}
-                    </div>
+                  ))
+                ) : (
+                  <div className="text-center py-8 text-muted-foreground">
+                    No Bagless token transactions found for this wallet
                   </div>
-                ))}
+                )}
               </div>
             </CardContent>
           </Card>
