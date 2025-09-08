@@ -7,6 +7,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "@/hooks/use-toast";
+import { useSolPrice } from "@/hooks/useSolPrice";
 
 interface CommandCreationDialogProps {
   open: boolean;
@@ -22,6 +23,8 @@ export function CommandCreationDialog({ open, onOpenChange, onCommandCreated }: 
   const [buyIntervalRange, setBuyIntervalRange] = useState({ min: "180", max: "420" });
   const [sellIntervalRange, setSellIntervalRange] = useState({ min: "480", max: "720" });
   const [loading, setLoading] = useState(false);
+  
+  const { price: solPrice, isLoading: priceLoading } = useSolPrice();
 
   const resetForm = () => {
     setCommandName("");
@@ -100,6 +103,19 @@ export function CommandCreationDialog({ open, onOpenChange, onCommandCreated }: 
         </DialogHeader>
 
         <div className="space-y-4">
+          {/* SOL Price Display */}
+          <div className="bg-muted/50 p-3 rounded-lg border">
+            <div className="flex items-center justify-between">
+              <span className="text-sm font-medium">Current SOL Price:</span>
+              <span className="text-lg font-bold text-primary">
+                {priceLoading ? (
+                  <span className="animate-pulse">Loading...</span>
+                ) : (
+                  `$${solPrice.toFixed(2)} USD`
+                )}
+              </span>
+            </div>
+          </div>
           <div>
             <Label htmlFor="commandName">Command Name</Label>
             <Input
