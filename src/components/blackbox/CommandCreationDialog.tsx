@@ -22,6 +22,7 @@ export function CommandCreationDialog({ open, onOpenChange, onCommandCreated }: 
   const [sellInterval, setSellInterval] = useState("600");
   const [buyIntervalRange, setBuyIntervalRange] = useState({ min: "180", max: "420" });
   const [sellIntervalRange, setSellIntervalRange] = useState({ min: "480", max: "720" });
+  const [usdAmount, setUsdAmount] = useState("0.01");
   const [loading, setLoading] = useState(false);
   
   const { price: solPrice, isLoading: priceLoading } = useSolPrice();
@@ -33,6 +34,7 @@ export function CommandCreationDialog({ open, onOpenChange, onCommandCreated }: 
     setSellInterval("600");
     setBuyIntervalRange({ min: "180", max: "420" });
     setSellIntervalRange({ min: "480", max: "720" });
+    setUsdAmount("0.01");
   };
 
   const createCommand = async () => {
@@ -51,7 +53,8 @@ export function CommandCreationDialog({ open, onOpenChange, onCommandCreated }: 
       const config = mode === "simple" ? {
         type: "simple",
         buyInterval: parseInt(buyInterval),
-        sellInterval: parseInt(sellInterval)
+        sellInterval: parseInt(sellInterval),
+        usdAmount: parseFloat(usdAmount)
       } : {
         type: "complex",
         buyInterval: {
@@ -61,7 +64,8 @@ export function CommandCreationDialog({ open, onOpenChange, onCommandCreated }: 
         sellInterval: {
           min: parseInt(sellIntervalRange.min),
           max: parseInt(sellIntervalRange.max)
-        }
+        },
+        usdAmount: parseFloat(usdAmount)
       };
 
       const { error } = await supabase
@@ -124,6 +128,20 @@ export function CommandCreationDialog({ open, onOpenChange, onCommandCreated }: 
               onChange={(e) => setCommandName(e.target.value)}
               placeholder="e.g., Quick Scalp 5c/10s"
             />
+          </div>
+
+          <div>
+            <Label htmlFor="usdAmount">USD Amount per Buy</Label>
+            <Input
+              id="usdAmount"
+              type="number"
+              value={usdAmount}
+              onChange={(e) => setUsdAmount(e.target.value)}
+              placeholder="0.01"
+              step="0.01"
+              min="0.01"
+            />
+            <p className="text-xs text-muted-foreground mt-1">Amount in USD to spend on each buy transaction</p>
           </div>
 
           <Tabs value={mode} onValueChange={(v) => setMode(v as "simple" | "complex")}>
