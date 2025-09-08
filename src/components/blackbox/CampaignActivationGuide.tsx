@@ -660,21 +660,40 @@ export function CampaignActivationGuide({ campaign, onCampaignUpdate }: Campaign
               <div className="flex items-center gap-2">
                 <div className={`w-3 h-3 rounded-full ${campaign.is_active ? 'bg-green-500' : 'bg-red-500'}`} />
                 <span className="text-sm font-medium">Campaign</span>
+                <span className="text-xs text-muted-foreground">
+                  ({campaign.is_active ? 'Ready' : 'Not Ready'})
+                </span>
               </div>
               <div className="flex items-center gap-2">
                 <div className={`w-3 h-3 rounded-full ${hasEnabledWallets ? 'bg-green-500' : 'bg-red-500'}`} />
                 <span className="text-sm font-medium">Wallet</span>
+                <span className="text-xs text-muted-foreground">
+                  ({hasEnabledWallets ? 'Ready' : 'Not Ready'})
+                </span>
               </div>
               <div className="flex items-center gap-2">
                 <div className={`w-3 h-3 rounded-full ${hasEnabledCommands ? 'bg-green-500' : 'bg-red-500'}`} />
                 <span className="text-sm font-medium">Commands</span>
+                <span className="text-xs text-muted-foreground">
+                  ({hasEnabledCommands ? 'Ready' : 'Not Ready'})
+                </span>
               </div>
             </div>
             
             {!canEnable && !contractActive && (
-              <p className="text-xs text-muted-foreground">
-                All three indicators must be green to start the campaign
-              </p>
+              <div className="text-center">
+                <p className="text-sm font-medium text-muted-foreground mb-2">
+                  🔴 Campaign cannot start - Missing requirements:
+                </p>
+                <div className="text-xs space-y-1">
+                  {!hasEnabledWallets && <p className="text-red-500">• Enable at least one wallet</p>}
+                  {!hasEnabledCommands && <p className="text-red-500">• Enable at least one command</p>}
+                  {!hasFundedWallets && <p className="text-red-500">• Fund your wallets with SOL</p>}
+                </div>
+                <p className="text-xs text-muted-foreground mt-2">
+                  All indicators must be green (Ready) to start
+                </p>
+              </div>
             )}
           </div>
         </div>
