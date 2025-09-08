@@ -136,7 +136,7 @@ serve(async (req) => {
       });
 
       // Use raydium-swap function for REAL blockchain trades
-      // The raydium-swap function already handles fallbacks to Jupiter for non-Raydium tokens
+      // The raydium-swap function already handles fallbacks to Jupiter and pump.fun tokens
       const swapResponse = await supabaseClient.functions.invoke('raydium-swap', {
         body: {
           side: 'buy',
@@ -153,13 +153,6 @@ serve(async (req) => {
       });
 
       if (swapResponse.error) {
-        console.error('Buy swap failed:', {
-          error: swapResponse.error,
-          token: campaign.token_address,
-          buyAmountSOL
-        });
-        
-        // For pump.fun tokens that may not have Raydium liquidity, skip but don't fail
         const errorMessage = swapResponse.error.message || '';
         console.error(`❌ BUY FAILED for token ${campaign.token_address}:`, {
           error: swapResponse.error,
@@ -169,18 +162,24 @@ serve(async (req) => {
           fullResponse: swapResponse
         });
         
-        if (errorMessage.includes('REQ_AMOUNT_ERROR') || errorMessage.includes('INSUFFICIENT_LIQUIDITY') || errorMessage.includes('ROUTE_NOT_FOUND')) {
-          console.log(`⚠️ Token ${campaign.token_address} may not have Raydium liquidity, skipping buy`);
+        // Only skip if it's truly a liquidity/routing issue, not platform-based assumptions
+        if (errorMessage.includes('INSUFFICIENT_LIQUIDITY') || 
+            errorMessage.includes('ROUTE_NOT_FOUND') || 
+            errorMessage.includes('No token balance') ||
+            errorMessage.includes('Not enough SOL balance')) {
+          console.log(`⚠️ Token ${campaign.token_address} has no available liquidity or routing, skipping buy`);
           result = { 
-            message: 'Buy skipped - token may not have sufficient liquidity on Raydium',
+            message: 'Buy skipped - insufficient liquidity or no route found',
             token: campaign.token_address,
             buyAmountSOL,
             type: 'buy',
             skipped: true,
-            platform
+            platform,
+            error: errorMessage
           };
         } else {
-          throw new Error(`Buy swap failed: ${swapResponse.error.message}`);
+          // For other errors, fail the execution to surface the issue
+          throw new Error(`Buy swap failed: ${errorMessage}`);
         }
       } else {
 
@@ -306,13 +305,6 @@ serve(async (req) => {
             });
 
             if (swapResponse.error) {
-              console.error('Sell swap failed:', {
-                error: swapResponse.error,
-                token: campaign.token_address,
-                sellAmount
-              });
-              
-              // For pump.fun tokens that may not have Raydium liquidity, skip but don't fail
               const errorMessage = swapResponse.error.message || '';
               console.error(`❌ SELL FAILED for token ${campaign.token_address}:`, {
                 error: swapResponse.error,
@@ -322,18 +314,24 @@ serve(async (req) => {
                 fullResponse: swapResponse
               });
               
-              if (errorMessage.includes('REQ_AMOUNT_ERROR') || errorMessage.includes('INSUFFICIENT_LIQUIDITY') || errorMessage.includes('ROUTE_NOT_FOUND')) {
-                console.log(`⚠️ Token ${campaign.token_address} may not have Raydium liquidity, skipping sell`);
+              // Only skip if it's truly a liquidity/routing issue, not platform-based assumptions
+              if (errorMessage.includes('INSUFFICIENT_LIQUIDITY') || 
+                  errorMessage.includes('ROUTE_NOT_FOUND') || 
+                  errorMessage.includes('No token balance') ||
+                  errorMessage.includes('Not enough SOL balance')) {
+                console.log(`⚠️ Token ${campaign.token_address} has no available liquidity or routing, skipping sell`);
                 result = { 
-                  message: 'Sell skipped - token may not have sufficient liquidity on Raydium',
+                  message: 'Sell skipped - insufficient liquidity or no route found',
                   token: campaign.token_address,
                   sellAmount,
                   type: 'sell',
                   skipped: true,
-                  platform
+                  platform,
+                  error: errorMessage
                 };
               } else {
-                throw new Error(`Sell swap failed: ${swapResponse.error.message}`);
+                // For other errors, fail the execution to surface the issue
+                throw new Error(`Sell swap failed: ${errorMessage}`);
               }
             } else {
 
