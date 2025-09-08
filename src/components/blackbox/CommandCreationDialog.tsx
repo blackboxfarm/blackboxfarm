@@ -68,13 +68,20 @@ export function CommandCreationDialog({ open, onOpenChange, onCommandCreated }: 
         usdAmount: parseFloat(usdAmount)
       };
 
+      const { data: { user } } = await supabase.auth.getUser();
+      
+      if (!user) {
+        throw new Error('User not authenticated');
+      }
+
       const { error } = await supabase
         .from('blackbox_command_codes')
         .insert({
           name: commandName.trim(),
           config,
           is_active: false,
-          wallet_id: null // Created as unassigned command
+          wallet_id: null, // Created as unassigned command
+          user_id: user.id
         });
 
       if (error) throw error;
