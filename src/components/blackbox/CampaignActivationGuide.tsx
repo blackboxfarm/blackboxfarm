@@ -49,6 +49,7 @@ interface WalletData {
   pubkey: string;
   sol_balance: number;
   is_active: boolean;
+  campaign_id: string;
 }
 
 interface CommandCode {
@@ -254,32 +255,45 @@ export function CampaignActivationGuide({ campaign, onCampaignUpdate }: Campaign
         throw new Error('No wallets configured');
       }
       
-      const activeWallet = wallets.find(w => w.is_active);
-      if (!activeWallet) {
-        throw new Error('No active wallet found');
-      }
-      
       console.log('🔍 WALLET VALIDATION DEBUG:');
-      console.log('Active wallet object:', activeWallet);
-      console.log('Wallet address:', activeWallet.pubkey);
-      console.log('Raw balance value:', activeWallet.sol_balance);
-      console.log('Balance type:', typeof activeWallet.sol_balance);
+      console.log('Campaign ID:', campaign.id);
       console.log('All available wallets:', wallets);
       
+      // Find wallet specifically linked to this campaign
+      const campaignWallet = wallets.find(w => w.campaign_id === campaign.id);
+      if (!campaignWallet) {
+        console.error('❌ No wallet found for campaign:', campaign.id);
+        console.error('Available wallets:', wallets.map(w => ({ id: w.id, campaign_id: w.campaign_id, pubkey: w.pubkey })));
+        throw new Error(`No wallet configured for this campaign (${campaign.id})`);
+      }
+      
+      console.log('Campaign wallet found:', {
+        id: campaignWallet.id,
+        pubkey: campaignWallet.pubkey,
+        campaign_id: campaignWallet.campaign_id,
+        balance: campaignWallet.sol_balance,
+        is_active: campaignWallet.is_active
+      });
+      
+      // Check if the campaign wallet is active
+      if (!campaignWallet.is_active) {
+        throw new Error(`Campaign wallet ${campaignWallet.pubkey} is not active`);
+      }
+      
       // Convert to number and check if we have enough for basic transactions (0.001 SOL minimum)
-      const balance = Number(activeWallet.sol_balance);
+      const balance = Number(campaignWallet.sol_balance);
       console.log('Converted balance:', balance);
       
       if (isNaN(balance) || balance < 0.001) {
         console.error('❌ WALLET VALIDATION FAILED:');
-        console.error('Wallet Address:', activeWallet.pubkey);
+        console.error('Campaign Wallet Address:', campaignWallet.pubkey);
         console.error('Current Balance:', balance, 'SOL');
         console.error('Required Minimum:', 0.001, 'SOL');
-        console.error('Full wallet object:', JSON.stringify(activeWallet, null, 2));
-        throw new Error(`Insufficient SOL balance in wallet ${activeWallet.pubkey}. Current: ${balance} SOL, Required: 0.001 SOL minimum`);
+        console.error('Full wallet object:', JSON.stringify(campaignWallet, null, 2));
+        throw new Error(`Insufficient SOL balance in campaign wallet ${campaignWallet.pubkey}. Current: ${balance} SOL, Required: 0.001 SOL minimum`);
       }
       
-      console.log('✅ Wallet validation passed for:', activeWallet.pubkey, 'Balance:', balance, 'SOL');
+      console.log('✅ Wallet validation passed for campaign wallet:', campaignWallet.pubkey, 'Balance:', balance, 'SOL');
       
       setValidationSteps(prev => ({ ...prev, walletValidation: 'success' }));
       return true;
