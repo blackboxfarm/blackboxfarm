@@ -279,7 +279,7 @@ export function CampaignActivationGuide({ campaign, onCampaignUpdate }: Campaign
     setTokenBalances(balances);
   };
 
-  const handleSellAll = async () => {
+  const handleSellAllForWallet = async (wallet: any) => {
     if (!campaign?.token_address || wallets.length === 0) {
       toast({
         title: "Error",
@@ -917,18 +917,6 @@ export function CampaignActivationGuide({ campaign, onCampaignUpdate }: Campaign
               {buttonState === 'idle' && !contractActive && "START CONTRACT"}
             </Button>
             
-            {/* Manual Sell All Button */}
-            {wallets.length > 0 && (
-              <Button
-                size="sm"
-                variant="outline"
-                className="w-full"
-                disabled={loading || sellAllLoading}
-                onClick={handleSellAll}
-              >
-                {sellAllLoading ? `Selling ${campaign.token_address.slice(0, 6)}...` : `Sell All ${campaign.token_address.slice(0, 6)}... Tokens`}
-              </Button>
-            )}
             
             {/* Status Summary */}
             <div className="grid grid-cols-3 gap-4 text-center">
