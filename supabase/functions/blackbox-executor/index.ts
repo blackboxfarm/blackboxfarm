@@ -55,14 +55,17 @@ serve(async (req) => {
       { auth: { persistSession: false } }
     );
 
-    // Get command code with wallet and campaign info
+    // Get command code with wallet and campaign info using many-to-many relationship
     const { data: commandData, error: commandError } = await supabaseService
       .from("blackbox_command_codes")
       .select(`
         *,
-        blackbox_wallets (
+        blackbox_wallets!inner (
           *,
-          blackbox_campaigns (*)
+          campaign_wallets!inner (
+            campaign_id,
+            blackbox_campaigns!inner (*)
+          )
         )
       `)
       .eq("id", command_code_id)
@@ -73,7 +76,7 @@ serve(async (req) => {
     }
 
     const wallet = commandData.blackbox_wallets;
-    const campaign = wallet.blackbox_campaigns;
+    const campaign = wallet.campaign_wallets[0]?.blackbox_campaigns;
 
     // Decrypt wallet secret key
     const supabaseClient = createClient(

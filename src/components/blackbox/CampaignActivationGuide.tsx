@@ -704,7 +704,7 @@ export function CampaignActivationGuide({ campaign, onCampaignUpdate }: Campaign
                 </SelectTrigger>
                 <SelectContent>
                   {allCommands
-                    .filter(cmd => !wallets.map(w => w.id).includes(cmd.wallet_id))
+                    .filter(cmd => cmd.wallet_id === null)
                     .map((command) => (
                     <SelectItem key={command.id} value={command.id}>
                       {command.name} ({command.config?.type || 'simple'})
