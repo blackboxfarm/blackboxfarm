@@ -89,6 +89,7 @@ export function CampaignActivationGuide({ campaign, onCampaignUpdate }: Campaign
     cronSubmission: 'pending'
   });
   const [validationErrors, setValidationErrors] = useState<string[]>([]);
+  const [sellAllLoading, setSellAllLoading] = useState(false);
 
   // Helper functions for state persistence
   const saveCampaignState = (campaignId: string, active: boolean) => {
@@ -245,6 +246,77 @@ export function CampaignActivationGuide({ campaign, onCampaignUpdate }: Campaign
       }
     } catch (error) {
       console.error('Error in loadCampaignData:', error);
+    }
+  };
+
+  const handleSellAll = async () => {
+    if (!campaign?.token_address || wallets.length === 0) {
+      toast({
+        title: "Error",
+        description: "No wallets or token address found",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    setSellAllLoading(true);
+    const successfulSells: string[] = [];
+    const failedSells: string[] = [];
+
+    try {
+      // Get all commands for the wallets in this campaign
+      for (const command of commands) {
+        if (!command.is_active) continue;
+
+        try {
+          const { data, error } = await supabase.functions.invoke('blackbox-executor', {
+            body: {
+              command_code_id: command.id,
+              action: 'sell'
+            }
+          });
+
+          if (error) {
+            console.error(`Sell failed for command ${command.name}:`, error);
+            failedSells.push(command.name);
+          } else {
+            console.log(`Sell successful for command ${command.name}:`, data);
+            successfulSells.push(command.name);
+          }
+        } catch (error) {
+          console.error(`Sell error for command ${command.name}:`, error);
+          failedSells.push(command.name);
+        }
+      }
+
+      // Show results
+      if (successfulSells.length > 0) {
+        toast({
+          title: "Sell All Completed",
+          description: `Successfully sold tokens for: ${successfulSells.join(', ')}${failedSells.length > 0 ? `. Failed: ${failedSells.join(', ')}` : ''}`,
+          variant: successfulSells.length > failedSells.length ? "default" : "destructive"
+        });
+      } else if (failedSells.length > 0) {
+        toast({
+          title: "Sell All Failed",
+          description: `Failed to sell tokens for: ${failedSells.join(', ')}`,
+          variant: "destructive"
+        });
+      } else {
+        toast({
+          title: "No Tokens to Sell",
+          description: "No active commands found or no tokens available to sell",
+        });
+      }
+    } catch (error: any) {
+      console.error('Sell all error:', error);
+      toast({
+        title: "Sell All Error",
+        description: error.message,
+        variant: "destructive"
+      });
+    } finally {
+      setSellAllLoading(false);
     }
   };
 
@@ -809,6 +881,19 @@ export function CampaignActivationGuide({ campaign, onCampaignUpdate }: Campaign
               {buttonState === 'idle' && contractActive && "STOP CONTRACT"}
               {buttonState === 'idle' && !contractActive && "START CONTRACT"}
             </Button>
+            
+            {/* Manual Sell All Button */}
+            {wallets.length > 0 && (
+              <Button
+                size="sm"
+                variant="outline"
+                className="w-full"
+                disabled={loading || sellAllLoading}
+                onClick={handleSellAll}
+              >
+                {sellAllLoading ? "Selling All Tokens..." : "Sell All Tokens"}
+              </Button>
+            )}
             
             {/* Status Summary */}
             <div className="grid grid-cols-3 gap-4 text-center">
