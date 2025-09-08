@@ -90,6 +90,7 @@ export function CampaignActivationGuide({ campaign, onCampaignUpdate }: Campaign
   });
   const [validationErrors, setValidationErrors] = useState<string[]>([]);
   const [sellAllLoading, setSellAllLoading] = useState(false);
+  const [tokenBalances, setTokenBalances] = useState<Record<string, number>>({});
 
   // Helper functions for state persistence
   const saveCampaignState = (campaignId: string, active: boolean) => {
@@ -247,6 +248,35 @@ export function CampaignActivationGuide({ campaign, onCampaignUpdate }: Campaign
     } catch (error) {
       console.error('Error in loadCampaignData:', error);
     }
+  };
+
+  const loadTokenBalances = async (walletsList: any[], tokenAddress: string) => {
+    const balances: Record<string, number> = {};
+    
+    for (const wallet of walletsList) {
+      try {
+        const { data, error } = await supabase.functions.invoke('trader-wallet', {
+          headers: {
+            'x-owner-secret': wallet.secret_key_encrypted,
+          },
+          body: JSON.stringify({
+            tokenMint: tokenAddress
+          })
+        });
+
+        if (error) {
+          console.error(`Error fetching token balance for wallet ${wallet.pubkey}:`, error);
+          balances[wallet.id] = 0;
+        } else {
+          balances[wallet.id] = data?.tokenUiAmount || 0;
+        }
+      } catch (error) {
+        console.error(`Error fetching token balance for wallet ${wallet.pubkey}:`, error);
+        balances[wallet.id] = 0;
+      }
+    }
+    
+    setTokenBalances(balances);
   };
 
   const handleSellAll = async () => {
@@ -731,8 +761,13 @@ export function CampaignActivationGuide({ campaign, onCampaignUpdate }: Campaign
                     <div className="font-mono text-sm">
                       {wallet.pubkey.slice(0, 6)}...{wallet.pubkey.slice(-6)}
                     </div>
-                    <div className="text-sm">
-                      {wallet.sol_balance.toFixed(4)} SOL
+                    <div className="text-sm space-y-1">
+                      <div>{wallet.sol_balance.toFixed(4)} SOL</div>
+                      <div className="text-xs text-muted-foreground">
+                        {tokenBalances[wallet.id] !== undefined 
+                          ? `${tokenBalances[wallet.id].toFixed(2)} ${campaign.token_address.slice(0, 6)}...`
+                          : 'Loading tokens...'}
+                      </div>
                     </div>
                     <Badge variant={wallet.is_active ? "default" : "secondary"}>
                       {wallet.is_active ? "Active" : "Inactive"}
@@ -891,7 +926,7 @@ export function CampaignActivationGuide({ campaign, onCampaignUpdate }: Campaign
                 disabled={loading || sellAllLoading}
                 onClick={handleSellAll}
               >
-                {sellAllLoading ? "Selling All Tokens..." : "Sell All Tokens"}
+                {sellAllLoading ? `Selling ${campaign.token_address.slice(0, 6)}...` : `Sell All ${campaign.token_address.slice(0, 6)}... Tokens`}
               </Button>
             )}
             
