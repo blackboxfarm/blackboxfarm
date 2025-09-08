@@ -21,14 +21,21 @@ serve(async (req) => {
       { auth: { persistSession: false } }
     );
 
-    // Get all active command codes with campaign and wallet info
+    // Get all active command codes with campaign and wallet info through junction table
     const { data: commands, error } = await supabaseService
       .from("blackbox_command_codes")
       .select(`
         *,
-        blackbox_wallets (
-          *,
-          blackbox_campaigns (*)
+        blackbox_wallets!inner (
+          id,
+          pubkey,
+          secret_key_encrypted,
+          sol_balance,
+          is_active,
+          campaign_wallets!inner (
+            campaign_id,
+            blackbox_campaigns!inner (*)
+          )
         )
       `)
       .eq("is_active", true);
@@ -63,7 +70,7 @@ serve(async (req) => {
     for (const command of commands) {
       try {
         const wallet = command.blackbox_wallets;
-        const campaign = wallet?.blackbox_campaigns;
+        const campaign = wallet?.campaign_wallets?.[0]?.blackbox_campaigns;
 
         if (!wallet || !campaign) {
           console.log(`⚠️ Command ${command.id} missing wallet or campaign data`);

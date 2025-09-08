@@ -296,10 +296,10 @@ export function CampaignActivationGuide({ campaign, onCampaignUpdate }: Campaign
         console.error('Current Balance:', balance, 'SOL');
         console.error('Required Minimum:', 0.001, 'SOL');
         console.error('Full wallet object:', JSON.stringify(campaignWallet, null, 2));
-        throw new Error(`Insufficient SOL balance in campaign wallet ${campaignWallet.pubkey}. Current: ${balance} SOL, Required: 0.001 SOL minimum`);
+        throw new Error(`Insufficient SOL balance in wallet ${campaignWallet.pubkey}. Current: ${balance} SOL, Required: 0.001 SOL minimum`);
       }
       
-      console.log('✅ Wallet validation passed for campaign wallet:', campaignWallet.pubkey, 'Balance:', balance, 'SOL');
+      console.log('✅ Wallet validation passed for:', campaignWallet.pubkey, 'Balance:', balance, 'SOL');
       
       setValidationSteps(prev => ({ ...prev, walletValidation: 'success' }));
       return true;
