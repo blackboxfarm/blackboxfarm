@@ -3,6 +3,7 @@ import { SuperAdminWallets } from "@/components/SuperAdminWallets";
 import { AdminWalletRecovery } from "@/components/AdminWalletRecovery";
 import { SecurityDashboard } from "@/components/security/SecurityDashboard";
 import { AccountViewer } from "@/components/AccountViewer";
+import { BaglessHoldersReport } from "@/components/BaglessHoldersReport";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
@@ -29,11 +30,12 @@ export default function SuperAdmin() {
         </div>
         
         <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
-          <TabsList className="grid w-full grid-cols-4">
+          <TabsList className="grid w-full grid-cols-5">
             <TabsTrigger value="wallets">Wallet Management</TabsTrigger>
             <TabsTrigger value="recovery">Wallet Recovery</TabsTrigger>
             <TabsTrigger value="security">Security Dashboard</TabsTrigger>
             <TabsTrigger value="accounts">Account Directory</TabsTrigger>
+            <TabsTrigger value="holders">Bagless Holders</TabsTrigger>
           </TabsList>
           
           <TabsContent value="wallets">
@@ -50,6 +52,10 @@ export default function SuperAdmin() {
           
           <TabsContent value="accounts">
             <AccountViewer />
+          </TabsContent>
+          
+          <TabsContent value="holders">
+            <BaglessHoldersReport />
           </TabsContent>
         </Tabs>
       </div>
