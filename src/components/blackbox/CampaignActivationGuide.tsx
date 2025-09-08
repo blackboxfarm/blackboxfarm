@@ -66,6 +66,7 @@ interface CampaignActivationGuideProps {
 
 export function CampaignActivationGuide({ campaign, onCampaignUpdate }: CampaignActivationGuideProps) {
   const [wallets, setWallets] = useState<WalletData[]>([]);
+  const [availableWallets, setAvailableWallets] = useState<WalletData[]>([]);
   const [commands, setCommands] = useState<CommandCode[]>([]);
   const [loading, setLoading] = useState(false);
   const [buttonState, setButtonState] = useState<'idle' | 'starting' | 'stopping' | 'success'>('idle');
@@ -174,7 +175,7 @@ export function CampaignActivationGuide({ campaign, onCampaignUpdate }: Campaign
 
   const loadCampaignData = async () => {
     try {
-      // Load wallets through the junction table
+      // Load wallets assigned to this campaign through the junction table
       const { data: walletsData, error: walletsError }: { data: any, error: any } = await supabase
         .from('campaign_wallets')
         .select(`
@@ -193,19 +194,31 @@ export function CampaignActivationGuide({ campaign, onCampaignUpdate }: Campaign
         return;
       }
 
-      // Explicitly type the wallets data
-      const wallets: WalletData[] = walletsData ? walletsData.map((cw: any) => ({
+      // Get assigned wallets for this campaign
+      const assignedWallets: WalletData[] = walletsData ? walletsData.map((cw: any) => ({
         id: cw.blackbox_wallets.id,
         pubkey: cw.blackbox_wallets.pubkey,
         sol_balance: cw.blackbox_wallets.sol_balance,
         is_active: cw.blackbox_wallets.is_active
       })) : [];
 
-      setWallets(wallets);
+      setWallets(assignedWallets);
 
-      // Load commands if we have wallets
-      if (wallets.length > 0) {
-        const walletIds = wallets.map(w => w.id);
+      // Load available wallets not assigned to this campaign
+      const { data: allWalletsData, error: allWalletsError } = await supabase
+        .from('blackbox_wallets')
+        .select('id, pubkey, sol_balance, is_active')
+        .order('created_at', { ascending: false });
+
+      if (!allWalletsError && allWalletsData) {
+        const assignedWalletIds = new Set(assignedWallets.map(w => w.id));
+        const availableWallets = allWalletsData.filter(wallet => !assignedWalletIds.has(wallet.id));
+        setAvailableWallets(availableWallets);
+      }
+
+      // Load commands for wallets assigned to this campaign
+      if (assignedWallets.length > 0) {
+        const walletIds = assignedWallets.map(w => w.id);
         const { data: commandsData, error: commandsError } = await supabase
           .from('blackbox_command_codes')
           .select('id, name, config, is_active, wallet_id')
@@ -231,6 +244,57 @@ export function CampaignActivationGuide({ campaign, onCampaignUpdate }: Campaign
       }
     } catch (error) {
       console.error('Error in loadCampaignData:', error);
+    }
+  };
+
+  const assignWalletToCampaign = async (walletId: string) => {
+    try {
+      const { error } = await supabase
+        .from('campaign_wallets')
+        .insert({
+          campaign_id: campaign.id,
+          wallet_id: walletId
+        });
+
+      if (error) throw error;
+      
+      toast({
+        title: "Wallet Assigned",
+        description: "Wallet has been assigned to this campaign successfully."
+      });
+      
+      loadCampaignData();
+    } catch (error: any) {
+      toast({
+        title: "Error Assigning Wallet",
+        description: error.message,
+        variant: "destructive"
+      });
+    }
+  };
+
+  const removeWalletFromCampaign = async (walletId: string) => {
+    try {
+      const { error } = await supabase
+        .from('campaign_wallets')
+        .delete()
+        .eq('campaign_id', campaign.id)
+        .eq('wallet_id', walletId);
+
+      if (error) throw error;
+      
+      toast({
+        title: "Wallet Removed",
+        description: "Wallet has been removed from this campaign."
+      });
+      
+      loadCampaignData();
+    } catch (error: any) {
+      toast({
+        title: "Error Removing Wallet",
+        description: error.message,
+        variant: "destructive"
+      });
     }
   };
 
@@ -520,130 +584,124 @@ export function CampaignActivationGuide({ campaign, onCampaignUpdate }: Campaign
     condition ? <CheckCircle2 className="h-5 w-5 text-green-500" /> : <AlertTriangle className="h-5 w-5 text-orange-500" />;
 
   return (
-    <Card>
+    <Card className="border-2">
       <CardHeader>
         <CardTitle className="flex items-center justify-between">
-          <span className="flex items-center gap-2">
-            Campaign Contract Status
-          </span>
+          <div>
+            <h3 className="text-xl font-bold">{campaign.nickname}</h3>
+            <p className="text-sm text-muted-foreground">{campaign.token_address}</p>
+          </div>
+          <div className="flex items-center gap-2">
+            <Badge variant={contractActive ? "default" : "secondary"}>
+              {contractActive ? "🟢 ACTIVE" : "⚪ INACTIVE"}
+            </Badge>
+            <Label className="text-sm">Enabled</Label>
+            <Switch checked={campaign.is_active} disabled />
+          </div>
         </CardTitle>
       </CardHeader>
       <CardContent className="space-y-6">
-        {/* Current Status */}
-        <div className="text-center p-4 border rounded-lg">
-          <Badge variant={contractActive ? "default" : "secondary"} className="text-lg px-4 py-2">
-            {contractActive ? "🟢 ACTIVE" : "⚪ NOT ACTIVE"}
-          </Badge>
-          <p className="text-sm text-muted-foreground mt-2">
-            {contractActive ? "Contract is active and submitted to Cron Service" : "Contract is not active - requires campaign, wallet, and commands enabled"}
-          </p>
-        </div>
-
-        {/* Requirements Checklist */}
+        {/* Wallets Section */}
         <div className="space-y-3">
-          <h3 className="font-medium flex items-center gap-2">
-            <Info className="h-4 w-4" />
-            Campaign Requirements
-          </h3>
-          
-          <div className="space-y-2">
-            <div className="flex items-center gap-3 p-3 border rounded-lg">
-              {getStatusIcon(hasEnabledWallets)}
-              <div className="flex-1">
-                <p className="font-medium">Enabled Wallets</p>
-                <p className="text-sm text-muted-foreground">
-                  {hasEnabledWallets 
-                    ? `✓ ${wallets.filter(w => w.is_active).length} of ${wallets.length} wallet(s) enabled` 
-                    : hasWallets 
-                      ? "Enable at least one wallet for trading"
-                      : "Create and enable at least one wallet for trading"}
-                </p>
-              </div>
-            </div>
-
-            <div className="flex items-center gap-3 p-3 border rounded-lg">
-              {getStatusIcon(hasFundedWallets)}
-              <div className="flex-1">
-                <div className="flex items-center gap-2">
-                  <Wallet className="h-4 w-4" />
-                  <p className="font-medium">Fund Wallets</p>
-                </div>
-                <p className="text-sm text-muted-foreground">
-                  {hasFundedWallets 
-                    ? `✓ Total balance: ${totalBalance.toFixed(4)} SOL` 
-                    : "⚠️ No funds detected - transfer SOL to your wallets"}
-                </p>
-              </div>
-            </div>
-
-            <div className="flex items-center gap-3 p-3 border rounded-lg">
-              {getStatusIcon(hasEnabledCommands)}
-              <div className="flex-1">
-                <p className="font-medium">Enabled Commands</p>
-                <p className="text-sm text-muted-foreground">
-                  {hasEnabledCommands 
-                    ? `✓ ${commands.filter(c => c.is_active).length} of ${commands.length} command(s) enabled` 
-                    : hasCommands 
-                      ? "Enable at least one command for trading"
-                      : "Create and enable trading commands"}
-                </p>
-              </div>
-            </div>
+          <div className="flex items-center justify-between">
+            <h4 className="font-semibold">Wallets</h4>
+            <Button variant="outline" size="sm" onClick={() => {
+              // Show available wallets to assign
+              if (availableWallets.length === 0) {
+                toast({
+                  title: "No Available Wallets",
+                  description: "Create some wallets first in the wallet management section.",
+                  variant: "destructive"
+                });
+                return;
+              }
+              
+              // For now, assign the first available wallet
+              if (availableWallets[0]) {
+                assignWalletToCampaign(availableWallets[0].id);
+              }
+            }}>
+              Create New
+            </Button>
           </div>
+          
+          {wallets.length === 0 ? (
+            <div className="text-center py-8 text-muted-foreground">
+              No wallets assigned
+            </div>
+          ) : (
+            <div className="space-y-2">
+              {wallets.map((wallet) => (
+                <div key={wallet.id} className="flex items-center justify-between p-3 border rounded-lg">
+                  <div className="flex items-center gap-3">
+                    <div className="font-mono text-sm">
+                      {wallet.pubkey.slice(0, 6)}...{wallet.pubkey.slice(-6)}
+                    </div>
+                    <div className="text-sm">
+                      {wallet.sol_balance.toFixed(4)} SOL
+                    </div>
+                    <Badge variant={wallet.is_active ? "default" : "secondary"}>
+                      {wallet.is_active ? "Active" : "Inactive"}
+                    </Badge>
+                  </div>
+                  <Button 
+                    variant="outline" 
+                    size="sm"
+                    onClick={() => removeWalletFromCampaign(wallet.id)}
+                  >
+                    Remove
+                  </Button>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
 
-        {/* Cost Estimation */}
-        {estimatedDailyCost > 0 && (
-          <Alert>
-            <DollarSign className="h-4 w-4" />
-            <AlertDescription>
-              <div className="space-y-1">
-                <p className="font-medium">Estimated Daily Trading Cost</p>
-                <p>~{estimatedDailyCost.toFixed(4)} SOL per day based on current active commands</p>
-                <p className="text-xs text-muted-foreground">
-                  This estimate assumes commands run continuously. Actual costs may vary based on market conditions.
-                </p>
-              </div>
-            </AlertDescription>
-          </Alert>
-        )}
-
-        {/* Balance Warning */}
-        {hasWallets && !hasFundedWallets && (
-          <Alert variant="destructive">
-            <AlertTriangle className="h-4 w-4" />
-            <AlertDescription>
-              <div className="space-y-2">
-                <p className="font-medium">⚠️ No Funds Detected</p>
-                <p>Your wallets have 0 SOL balance. Transfer funds to start trading:</p>
-                <div className="space-y-1 font-mono text-xs">
-                  {wallets.map(wallet => (
-                    <div key={wallet.id} className="p-2 bg-muted rounded">
-                      {wallet.pubkey}
+        {/* Commands Section */}
+        <div className="space-y-3">
+          <div className="flex items-center justify-between">
+            <h4 className="font-semibold">Commands</h4>
+            <Button variant="outline" size="sm" disabled={wallets.length === 0}>
+              Create New
+            </Button>
+          </div>
+          
+          {commands.length === 0 ? (
+            <div className="text-center py-8 text-muted-foreground">
+              No commands assigned
+            </div>
+          ) : (
+            <div className="space-y-2">
+              {commands.map((command) => (
+                <div key={command.id} className="flex items-center justify-between p-3 border rounded-lg">
+                  <div className="flex items-center gap-3">
+                    <div className="font-medium">{command.name}</div>
+                    <div className="text-sm text-muted-foreground">
+                      {command.config?.type || 'simple'}
                     </div>
-                  ))}
+                    <Badge variant={command.is_active ? "default" : "secondary"}>
+                      {command.is_active ? "Active" : "Inactive"}
+                    </Badge>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Button variant="outline" size="sm">
+                      ⚙️
+                    </Button>
+                    <Button variant="outline" size="sm">
+                      🗑️
+                    </Button>
+                  </div>
                 </div>
-              </div>
-            </AlertDescription>
-          </Alert>
-        )}
+              ))}
+            </div>
+          )}
+        </div>
 
-        {/* Low Balance Warning */}
-        {hasFundedWallets && estimatedDailyCost > 0 && totalBalance < estimatedDailyCost * 2 && (
-          <Alert variant="destructive">
-            <AlertTriangle className="h-4 w-4" />
-            <AlertDescription>
-              <p className="font-medium">⚠️ Low Balance Warning</p>
-              <p>Current balance ({totalBalance.toFixed(4)} SOL) may only last ~{(totalBalance / estimatedDailyCost).toFixed(1)} days based on your trading configuration.</p>
-            </AlertDescription>
-          </Alert>
-        )}
-
-        {/* CAMPAIGN CONTROL */}
+        {/* Start/Stop Contract Button */}
         <div className="pt-4 border-t">
           <div className="text-center space-y-4">
-            {/* Validation Checklist - Always show when campaign has been started at least once */}
-            {(buttonState === 'starting' || validationErrors.length > 0 || contractActive || buttonState === 'success') && (
+            {/* Validation Checklist - Show when starting contract */}
+            {(buttonState === 'starting' || validationErrors.length > 0) && (
               <Card className="p-4 mb-4 bg-muted">
                 <h4 className="font-semibold mb-3">Contract Building Validation</h4>
                 <div className="space-y-2 text-sm">
@@ -684,10 +742,10 @@ export function CampaignActivationGuide({ campaign, onCampaignUpdate }: Campaign
               </Card>
             )}
 
-            {/* Big START/STOP Button */}
+            {/* Individual Start/Stop Button for this Campaign */}
             <Button
               size="lg"
-              className="w-full max-w-md h-12 text-sm font-bold"
+              className="w-full h-12 text-sm font-bold"
               variant={
                 buttonState === 'success' ? "default" :
                 contractActive && buttonState === 'idle' ? "destructive" : "default"
@@ -695,65 +753,53 @@ export function CampaignActivationGuide({ campaign, onCampaignUpdate }: Campaign
               disabled={loading || (!canEnable && !contractActive)}
               onClick={toggleCampaign}
             >
-              {buttonState === 'starting' && "Validating Campaign..."}
-              {buttonState === 'stopping' && "Removing Campaign from Queue..."}
-              {buttonState === 'success' && contractActive && "Contract Started Successfully!"}
-              {buttonState === 'success' && !contractActive && "Contract Stopped Successfully!"}
+              {buttonState === 'starting' && "Validating Contract..."}
+              {buttonState === 'stopping' && "Stopping Contract..."}
+              {buttonState === 'success' && contractActive && "Contract Started!"}
+              {buttonState === 'success' && !contractActive && "Contract Stopped!"}
               {buttonState === 'idle' && contractActive && "STOP CONTRACT"}
               {buttonState === 'idle' && !contractActive && "START CONTRACT"}
             </Button>
             
-            {/* Requirements Status Indicators */}
-            <div className="flex justify-center items-center gap-6 p-4 border rounded-lg bg-muted/50">
-              <div className="flex items-center gap-2">
-                <div className={`w-3 h-3 rounded-full ${campaign.is_active ? 'bg-green-500' : 'bg-red-500'}`} />
-                <span className="text-sm font-medium">Campaign</span>
-                <span className="text-xs text-muted-foreground">
-                  ({campaign.is_active ? 'Ready' : 'Not Ready'})
-                </span>
+            {/* Status Summary */}
+            <div className="grid grid-cols-3 gap-4 text-center">
+              <div className="p-2 border rounded">
+                <div className={`w-3 h-3 rounded-full mx-auto mb-1 ${hasEnabledWallets ? 'bg-green-500' : 'bg-red-500'}`} />
+                <div className="text-xs font-medium">Wallets</div>
+                <div className="text-xs text-muted-foreground">
+                  {hasEnabledWallets ? 'Ready' : 'Not Ready'}
+                </div>
               </div>
-              <div className="flex items-center gap-2">
-                <div className={`w-3 h-3 rounded-full ${hasEnabledWallets ? 'bg-green-500' : 'bg-red-500'}`} />
-                <span className="text-sm font-medium">Wallet</span>
-                <span className="text-xs text-muted-foreground">
-                  ({hasEnabledWallets ? 'Ready' : 'Not Ready'})
-                </span>
+              <div className="p-2 border rounded">
+                <div className={`w-3 h-3 rounded-full mx-auto mb-1 ${hasEnabledCommands ? 'bg-green-500' : 'bg-red-500'}`} />
+                <div className="text-xs font-medium">Commands</div>
+                <div className="text-xs text-muted-foreground">
+                  {hasEnabledCommands ? 'Ready' : 'Not Ready'}
+                </div>
               </div>
-              <div className="flex items-center gap-2">
-                <div className={`w-3 h-3 rounded-full ${hasEnabledCommands ? 'bg-green-500' : 'bg-red-500'}`} />
-                <span className="text-sm font-medium">Commands</span>
-                <span className="text-xs text-muted-foreground">
-                  ({hasEnabledCommands ? 'Ready' : 'Not Ready'})
-                </span>
+              <div className="p-2 border rounded">
+                <div className={`w-3 h-3 rounded-full mx-auto mb-1 ${hasFundedWallets ? 'bg-green-500' : 'bg-red-500'}`} />
+                <div className="text-xs font-medium">Funds</div>
+                <div className="text-xs text-muted-foreground">
+                  {hasFundedWallets ? `${totalBalance.toFixed(2)} SOL` : 'No Funds'}
+                </div>
               </div>
             </div>
             
             {!canEnable && !contractActive && (
               <div className="text-center">
-                <p className="text-sm font-medium text-muted-foreground mb-2">
-                  🔴 Contract cannot start - Missing requirements:
+                <p className="text-sm font-medium text-red-500 mb-2">
+                  🔴 Contract cannot start - Missing requirements
                 </p>
-                <div className="text-xs space-y-1">
-                  {!hasEnabledWallets && <p className="text-red-500">• Enable at least one wallet</p>}
-                  {!hasEnabledCommands && <p className="text-red-500">• Enable at least one command</p>}
-                  {!hasFundedWallets && <p className="text-red-500">• Fund your wallets with SOL</p>}
+                <div className="text-xs space-y-1 text-red-500">
+                  {!hasEnabledWallets && <p>• Enable at least one wallet</p>}
+                  {!hasEnabledCommands && <p>• Create and enable at least one command</p>}
+                  {!hasFundedWallets && <p>• Fund your wallets with SOL</p>}
                 </div>
-                <p className="text-xs text-muted-foreground mt-2">
-                  All indicators must be green (Ready) to start this contract
-                </p>
               </div>
             )}
           </div>
         </div>
-
-        {/* No Plan Required Notice */}
-        <Alert>
-          <Info className="h-4 w-4" />
-          <AlertDescription>
-            <p className="font-medium">💡 No Subscription Required</p>
-            <p>BlackBox operates on a pay-per-trade model. You only pay small fees for executed trades - no monthly subscriptions needed!</p>
-          </AlertDescription>
-        </Alert>
       </CardContent>
     </Card>
   );
