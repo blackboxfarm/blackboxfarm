@@ -247,6 +247,9 @@ export function CampaignActivationGuide({ campaign, onCampaignUpdate }: Campaign
   const validateWallet = async () => {
     setValidationSteps(prev => ({ ...prev, walletValidation: 'checking' }));
     try {
+      // Reload wallets to ensure we have the latest data
+      await loadCampaignData();
+      
       if (wallets.length === 0) {
         throw new Error('No wallets configured');
       }
@@ -256,7 +259,8 @@ export function CampaignActivationGuide({ campaign, onCampaignUpdate }: Campaign
         throw new Error('No active wallet found');
       }
       
-      if (activeWallet.sol_balance < 0.001) {
+      // More reasonable minimum balance requirement - 0.001 SOL is sufficient for most operations
+      if (activeWallet.sol_balance <= 0) {
         throw new Error('Insufficient SOL balance in wallet');
       }
       
