@@ -3,9 +3,10 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { CheckCircle2, AlertTriangle, Wallet, DollarSign, Info, Clock, Check, X } from "lucide-react";
+import { CheckCircle2, AlertTriangle, Wallet, DollarSign, Info, Clock, Check, X, Plus } from "lucide-react";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { createClient } from "@supabase/supabase-js";
 import { toast } from "@/hooks/use-toast";
 
@@ -67,6 +68,7 @@ interface CampaignActivationGuideProps {
 export function CampaignActivationGuide({ campaign, onCampaignUpdate }: CampaignActivationGuideProps) {
   const [wallets, setWallets] = useState<WalletData[]>([]);
   const [availableWallets, setAvailableWallets] = useState<WalletData[]>([]);
+  const [allCommands, setAllCommands] = useState<CommandCode[]>([]);
   const [commands, setCommands] = useState<CommandCode[]>([]);
   const [loading, setLoading] = useState(false);
   const [buttonState, setButtonState] = useState<'idle' | 'starting' | 'stopping' | 'success'>('idle');
@@ -216,31 +218,30 @@ export function CampaignActivationGuide({ campaign, onCampaignUpdate }: Campaign
         setAvailableWallets(availableWallets);
       }
 
-      // Load commands for wallets assigned to this campaign
-      if (assignedWallets.length > 0) {
-        const walletIds = assignedWallets.map(w => w.id);
-        const { data: commandsData, error: commandsError } = await supabase
-          .from('blackbox_command_codes')
-          .select('id, name, config, is_active, wallet_id')
-          .in('wallet_id', walletIds);
+      // Load all commands for selection
+      const { data: allCommandsData, error: allCommandsError } = await supabase
+        .from('blackbox_command_codes')
+        .select('id, name, config, is_active, wallet_id')
+        .order('created_at', { ascending: false });
 
-        if (commandsError) {
-          console.error('Error loading commands:', commandsError);
-          return;
-        }
-
-        // Explicitly type the commands data
-        const commands: CommandCode[] = commandsData ? commandsData.map((command: any) => ({
+      if (!allCommandsError && allCommandsData) {
+        const allCommands: CommandCode[] = allCommandsData.map((command: any) => ({
           id: command.id,
           name: command.name,
           config: command.config,
           is_active: command.is_active,
           wallet_id: command.wallet_id
-        })) : [];
+        }));
+        setAllCommands(allCommands);
 
-        setCommands(commands);
-      } else {
-        setCommands([]);
+        // Filter commands for wallets assigned to this campaign
+        if (assignedWallets.length > 0) {
+          const walletIds = assignedWallets.map(w => w.id);
+          const campaignCommands = allCommands.filter(command => walletIds.includes(command.wallet_id));
+          setCommands(campaignCommands);
+        } else {
+          setCommands([]);
+        }
       }
     } catch (error) {
       console.error('Error in loadCampaignData:', error);
@@ -292,6 +293,30 @@ export function CampaignActivationGuide({ campaign, onCampaignUpdate }: Campaign
     } catch (error: any) {
       toast({
         title: "Error Removing Wallet",
+        description: error.message,
+        variant: "destructive"
+      });
+    }
+  };
+
+  const assignCommandToWallet = async (commandId: string, walletId: string) => {
+    try {
+      const { error } = await supabase
+        .from('blackbox_command_codes')
+        .update({ wallet_id: walletId })
+        .eq('id', commandId);
+
+      if (error) throw error;
+      
+      toast({
+        title: "Command Assigned",
+        description: "Command has been assigned to the selected wallet."
+      });
+      
+      loadCampaignData();
+    } catch (error: any) {
+      toast({
+        title: "Error Assigning Command",
         description: error.message,
         variant: "destructive"
       });
@@ -604,36 +629,33 @@ export function CampaignActivationGuide({ campaign, onCampaignUpdate }: Campaign
         {/* Wallets Section */}
         <div className="space-y-3">
           <div className="flex items-center justify-between">
-            <h4 className="font-semibold">Wallets</h4>
-            <Button variant="outline" size="sm" onClick={() => {
-              // Show available wallets to assign
-              if (availableWallets.length === 0) {
-                toast({
-                  title: "No Available Wallets",
-                  description: "Create some wallets first in the wallet management section.",
-                  variant: "destructive"
-                });
-                return;
-              }
-              
-              // For now, assign the first available wallet
-              if (availableWallets[0]) {
-                assignWalletToCampaign(availableWallets[0].id);
-              }
-            }}>
-              Create New
-            </Button>
+            <h4 className="font-semibold">Wallets in Use</h4>
+            <div className="flex gap-2">
+              <Select onValueChange={assignWalletToCampaign}>
+                <SelectTrigger className="w-48">
+                  <SelectValue placeholder="Add wallet..." />
+                </SelectTrigger>
+                <SelectContent>
+                  {availableWallets.map((wallet) => (
+                    <SelectItem key={wallet.id} value={wallet.id}>
+                      {wallet.pubkey.slice(0, 6)}...{wallet.pubkey.slice(-6)} ({wallet.sol_balance.toFixed(4)} SOL)
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
           </div>
           
           {wallets.length === 0 ? (
             <div className="text-center py-8 text-muted-foreground">
-              No wallets assigned
+              No wallets assigned to this campaign
             </div>
           ) : (
             <div className="space-y-2">
               {wallets.map((wallet) => (
                 <div key={wallet.id} className="flex items-center justify-between p-3 border rounded-lg">
                   <div className="flex items-center gap-3">
+                    <Wallet className="h-4 w-4" />
                     <div className="font-mono text-sm">
                       {wallet.pubkey.slice(0, 6)}...{wallet.pubkey.slice(-6)}
                     </div>
@@ -660,39 +682,66 @@ export function CampaignActivationGuide({ campaign, onCampaignUpdate }: Campaign
         {/* Commands Section */}
         <div className="space-y-3">
           <div className="flex items-center justify-between">
-            <h4 className="font-semibold">Commands</h4>
-            <Button variant="outline" size="sm" disabled={wallets.length === 0}>
-              Create New
-            </Button>
+            <h4 className="font-semibold">Commands in Use</h4>
+            <div className="flex gap-2">
+              <Select 
+                onValueChange={(commandId) => {
+                  const selectedWallet = wallets.find(w => w.is_active);
+                  if (selectedWallet && commandId) {
+                    assignCommandToWallet(commandId, selectedWallet.id);
+                  } else {
+                    toast({
+                      title: "No Active Wallet",
+                      description: "Please add and activate a wallet first.",
+                      variant: "destructive"
+                    });
+                  }
+                }}
+                disabled={wallets.length === 0}
+              >
+                <SelectTrigger className="w-48">
+                  <SelectValue placeholder="Add command..." />
+                </SelectTrigger>
+                <SelectContent>
+                  {allCommands
+                    .filter(cmd => !wallets.map(w => w.id).includes(cmd.wallet_id))
+                    .map((command) => (
+                    <SelectItem key={command.id} value={command.id}>
+                      {command.name} ({command.config?.type || 'simple'})
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
           </div>
           
           {commands.length === 0 ? (
             <div className="text-center py-8 text-muted-foreground">
-              No commands assigned
+              No commands assigned to this campaign
             </div>
           ) : (
             <div className="space-y-2">
-              {commands.map((command) => (
-                <div key={command.id} className="flex items-center justify-between p-3 border rounded-lg">
-                  <div className="flex items-center gap-3">
-                    <div className="font-medium">{command.name}</div>
-                    <div className="text-sm text-muted-foreground">
-                      {command.config?.type || 'simple'}
+              {commands.map((command) => {
+                const assignedWallet = wallets.find(w => w.id === command.wallet_id);
+                return (
+                  <div key={command.id} className="flex items-center justify-between p-3 border rounded-lg">
+                    <div className="flex items-center gap-3">
+                      <div className="font-medium">{command.name}</div>
+                      <div className="text-sm text-muted-foreground">
+                        on {assignedWallet ? `${assignedWallet.pubkey.slice(0, 6)}...${assignedWallet.pubkey.slice(-6)}` : 'unknown wallet'}
+                      </div>
+                      <Badge variant={command.is_active ? "default" : "secondary"}>
+                        {command.is_active ? "Active" : "Inactive"}
+                      </Badge>
                     </div>
-                    <Badge variant={command.is_active ? "default" : "secondary"}>
-                      {command.is_active ? "Active" : "Inactive"}
-                    </Badge>
+                    <div className="flex items-center gap-2">
+                      <div className="text-xs text-muted-foreground">
+                        {command.config?.type || 'simple'}
+                      </div>
+                    </div>
                   </div>
-                  <div className="flex items-center gap-2">
-                    <Button variant="outline" size="sm">
-                      ⚙️
-                    </Button>
-                    <Button variant="outline" size="sm">
-                      🗑️
-                    </Button>
-                  </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           )}
         </div>
