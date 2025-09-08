@@ -430,48 +430,55 @@ export function CampaignActivationGuide({ campaign, onCampaignUpdate }: Campaign
         setButtonState('success');
         
         toast({
-          title: "Campaign Added Successfully! 🚀",
-          description: "Your campaign has been validated and added to the trading queue."
+          title: "Contract Started Successfully! 🚀",
+          description: `Campaign "${campaign.nickname}" contract is now active and running in the queue.`
         });
       } else {
-        // Stopping contract (not disabling campaign)
+        // Stopping contract 
         setButtonState('stopping');
         
-        await new Promise(resolve => setTimeout(resolve, 2000));
+        // Update campaign status to inactive
+        const { error } = await supabase
+          .from('blackbox_campaigns')
+          .update({ is_active: false })
+          .eq('id', campaign.id);
+
+        if (error) throw error;
+        
         setContractActive(false);
         saveCampaignState(campaign.id, false); // Persist state
         setButtonState('success');
         
         toast({
-          title: "Campaign Removed Successfully ⏹️",
-          description: "Your campaign has been removed from the trading queue."
+          title: "Contract Stopped Successfully ⏹️",
+          description: `Campaign "${campaign.nickname}" contract has been stopped and removed from the queue.`
         });
       }
 
-      // Don't update campaign status when stopping contract
-      // Campaign enabled/disabled state is controlled by the toggle, not start/stop button
-
-      // Reset to idle after showing success - but don't delay, do it immediately for stop
+      // Reset to idle after showing success
       if (!newStatus) {
-        // For stop operations, immediately reset to show start button
         setTimeout(() => setButtonState('idle'), 1000);
       } else {
         setTimeout(() => setButtonState('idle'), 2000);
       }
       
+      // Update parent component if callback provided
+      if (onCampaignUpdate) {
+        onCampaignUpdate({ ...campaign, is_active: newStatus });
+      }
+      
       // Reload data to reflect changes
       loadCampaignData();
     } catch (error: any) {
-      // Keep validation window open when there are errors - don't reset to idle
+      // Keep validation window open when there are errors
       if (newStatus) {
-        // For start failures, keep showing validation state with errors
-        setButtonState('idle'); // Still reset button for retry, but errors will keep validation visible
+        setButtonState('idle');
       } else {
         setButtonState('idle');
       }
       
       toast({
-        title: newStatus ? "Failed to Start Campaign" : "Failed to Stop Campaign",
+        title: newStatus ? "Failed to Start Contract" : "Failed to Stop Contract",
         description: error.message,
         variant: "destructive"
       });
@@ -690,10 +697,10 @@ export function CampaignActivationGuide({ campaign, onCampaignUpdate }: Campaign
             >
               {buttonState === 'starting' && "Validating Campaign..."}
               {buttonState === 'stopping' && "Removing Campaign from Queue..."}
-              {buttonState === 'success' && contractActive && "Campaign Added Successfully!"}
-              {buttonState === 'success' && !contractActive && "Campaign Removed Successfully!"}
-              {buttonState === 'idle' && contractActive && "STOP"}
-              {buttonState === 'idle' && !contractActive && "START"}
+              {buttonState === 'success' && contractActive && "Contract Started Successfully!"}
+              {buttonState === 'success' && !contractActive && "Contract Stopped Successfully!"}
+              {buttonState === 'idle' && contractActive && "STOP CONTRACT"}
+              {buttonState === 'idle' && !contractActive && "START CONTRACT"}
             </Button>
             
             {/* Requirements Status Indicators */}
@@ -724,7 +731,7 @@ export function CampaignActivationGuide({ campaign, onCampaignUpdate }: Campaign
             {!canEnable && !contractActive && (
               <div className="text-center">
                 <p className="text-sm font-medium text-muted-foreground mb-2">
-                  🔴 Campaign cannot start - Missing requirements:
+                  🔴 Contract cannot start - Missing requirements:
                 </p>
                 <div className="text-xs space-y-1">
                   {!hasEnabledWallets && <p className="text-red-500">• Enable at least one wallet</p>}
@@ -732,7 +739,7 @@ export function CampaignActivationGuide({ campaign, onCampaignUpdate }: Campaign
                   {!hasFundedWallets && <p className="text-red-500">• Fund your wallets with SOL</p>}
                 </div>
                 <p className="text-xs text-muted-foreground mt-2">
-                  All indicators must be green (Ready) to start
+                  All indicators must be green (Ready) to start this contract
                 </p>
               </div>
             )}
