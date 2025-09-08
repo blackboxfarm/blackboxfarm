@@ -123,6 +123,17 @@ serve(async (req) => {
       const platform = detectTokenPlatform(tokenAddress);
       
       console.log(`🔍 Detected platform: ${platform} for token: ${tokenAddress}`);
+      
+      // Log detailed execution info
+      console.log(`🚀 EXECUTING BUY:`, {
+        tokenAddress,
+        platform,
+        buyAmountUSD,
+        buyAmountSOL,
+        solPrice,
+        commandId: command_code_id,
+        walletPubkey: keypair.publicKey.toString()
+      });
 
       // Use raydium-swap function for REAL blockchain trades
       // The raydium-swap function already handles fallbacks to Jupiter for non-Raydium tokens
@@ -150,14 +161,23 @@ serve(async (req) => {
         
         // For pump.fun tokens that may not have Raydium liquidity, skip but don't fail
         const errorMessage = swapResponse.error.message || '';
-        if (errorMessage.includes('REQ_AMOUNT_ERROR') || errorMessage.includes('INSUFFICIENT_LIQUIDITY')) {
+        console.error(`❌ BUY FAILED for token ${campaign.token_address}:`, {
+          error: swapResponse.error,
+          buyAmountSOL,
+          platform,
+          errorMessage,
+          fullResponse: swapResponse
+        });
+        
+        if (errorMessage.includes('REQ_AMOUNT_ERROR') || errorMessage.includes('INSUFFICIENT_LIQUIDITY') || errorMessage.includes('ROUTE_NOT_FOUND')) {
           console.log(`⚠️ Token ${campaign.token_address} may not have Raydium liquidity, skipping buy`);
           result = { 
             message: 'Buy skipped - token may not have sufficient liquidity on Raydium',
             token: campaign.token_address,
             buyAmountSOL,
             type: 'buy',
-            skipped: true
+            skipped: true,
+            platform
           };
         } else {
           throw new Error(`Buy swap failed: ${swapResponse.error.message}`);
@@ -257,6 +277,17 @@ serve(async (req) => {
             const sellAmount = tokenBalance * (sellPercent / 100);
 
             console.log(`💱 Selling ${sellAmount} tokens (${sellPercent}% of ${tokenBalance}) on ${platform}`);
+            
+            // Log detailed execution info
+            console.log(`🚀 EXECUTING SELL:`, {
+              tokenAddress: campaign.token_address,
+              platform,
+              sellAmount,
+              sellPercent,
+              tokenBalance,
+              commandId: command_code_id,
+              walletPubkey: keypair.publicKey.toString()
+            });
 
             // Use raydium-swap function for REAL blockchain trades
             // The raydium-swap function handles platform-specific routing internally
@@ -283,14 +314,23 @@ serve(async (req) => {
               
               // For pump.fun tokens that may not have Raydium liquidity, skip but don't fail
               const errorMessage = swapResponse.error.message || '';
-              if (errorMessage.includes('REQ_AMOUNT_ERROR') || errorMessage.includes('INSUFFICIENT_LIQUIDITY')) {
+              console.error(`❌ SELL FAILED for token ${campaign.token_address}:`, {
+                error: swapResponse.error,
+                sellAmount,
+                platform,
+                errorMessage,
+                fullResponse: swapResponse
+              });
+              
+              if (errorMessage.includes('REQ_AMOUNT_ERROR') || errorMessage.includes('INSUFFICIENT_LIQUIDITY') || errorMessage.includes('ROUTE_NOT_FOUND')) {
                 console.log(`⚠️ Token ${campaign.token_address} may not have Raydium liquidity, skipping sell`);
                 result = { 
                   message: 'Sell skipped - token may not have sufficient liquidity on Raydium',
                   token: campaign.token_address,
                   sellAmount,
                   type: 'sell',
-                  skipped: true
+                  skipped: true,
+                  platform
                 };
               } else {
                 throw new Error(`Sell swap failed: ${swapResponse.error.message}`);
