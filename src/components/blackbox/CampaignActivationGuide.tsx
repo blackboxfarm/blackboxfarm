@@ -49,7 +49,6 @@ interface WalletData {
   pubkey: string;
   sol_balance: number;
   is_active: boolean;
-  campaign_id: string;
 }
 
 interface CommandCode {
@@ -154,7 +153,7 @@ export function CampaignActivationGuide({ campaign, onCampaignUpdate }: Campaign
       .on('postgres_changes', {
         event: '*',
         schema: 'public',
-        table: 'blackbox_wallets',
+        table: 'campaign_wallets',
         filter: `campaign_id=eq.${campaign.id}`
       }, () => {
         loadCampaignData();
@@ -175,10 +174,18 @@ export function CampaignActivationGuide({ campaign, onCampaignUpdate }: Campaign
 
   const loadCampaignData = async () => {
     try {
-      // Load wallets with explicit typing to avoid deep type inference
+      // Load wallets through the junction table
       const { data: walletsData, error: walletsError }: { data: any, error: any } = await supabase
-        .from('blackbox_wallets')
-        .select('id, pubkey, sol_balance, is_active')
+        .from('campaign_wallets')
+        .select(`
+          wallet_id,
+          blackbox_wallets!inner (
+            id,
+            pubkey,
+            sol_balance,
+            is_active
+          )
+        `)
         .eq('campaign_id', campaign.id);
 
       if (walletsError) {
@@ -187,11 +194,11 @@ export function CampaignActivationGuide({ campaign, onCampaignUpdate }: Campaign
       }
 
       // Explicitly type the wallets data
-      const wallets: WalletData[] = walletsData ? walletsData.map((wallet: any) => ({
-        id: wallet.id,
-        pubkey: wallet.pubkey,
-        sol_balance: wallet.sol_balance,
-        is_active: wallet.is_active
+      const wallets: WalletData[] = walletsData ? walletsData.map((cw: any) => ({
+        id: cw.blackbox_wallets.id,
+        pubkey: cw.blackbox_wallets.pubkey,
+        sol_balance: cw.blackbox_wallets.sol_balance,
+        is_active: cw.blackbox_wallets.is_active
       })) : [];
 
       setWallets(wallets);
@@ -259,18 +266,17 @@ export function CampaignActivationGuide({ campaign, onCampaignUpdate }: Campaign
       console.log('Campaign ID:', campaign.id);
       console.log('All available wallets:', wallets);
       
-      // Find wallet specifically linked to this campaign
-      const campaignWallet = wallets.find(w => w.campaign_id === campaign.id);
+      // Since we now load wallets through the junction table, all loaded wallets are for this campaign
+      const campaignWallet = wallets.find(w => w.is_active);
       if (!campaignWallet) {
-        console.error('❌ No wallet found for campaign:', campaign.id);
-        console.error('Available wallets:', wallets.map(w => ({ id: w.id, campaign_id: w.campaign_id, pubkey: w.pubkey })));
-        throw new Error(`No wallet configured for this campaign (${campaign.id})`);
+        console.error('❌ No active wallet found for campaign:', campaign.id);
+        console.error('Available wallets:', wallets.map(w => ({ id: w.id, pubkey: w.pubkey, is_active: w.is_active })));
+        throw new Error(`No active wallet configured for this campaign (${campaign.id})`);
       }
       
       console.log('Campaign wallet found:', {
         id: campaignWallet.id,
         pubkey: campaignWallet.pubkey,
-        campaign_id: campaignWallet.campaign_id,
         balance: campaignWallet.sol_balance,
         is_active: campaignWallet.is_active
       });

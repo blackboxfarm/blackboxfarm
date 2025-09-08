@@ -378,7 +378,6 @@ export type Database = {
       }
       blackbox_wallets: {
         Row: {
-          campaign_id: string | null
           created_at: string | null
           id: string
           is_active: boolean | null
@@ -388,7 +387,6 @@ export type Database = {
           updated_at: string | null
         }
         Insert: {
-          campaign_id?: string | null
           created_at?: string | null
           id?: string
           is_active?: boolean | null
@@ -398,7 +396,6 @@ export type Database = {
           updated_at?: string | null
         }
         Update: {
-          campaign_id?: string | null
           created_at?: string | null
           id?: string
           is_active?: boolean | null
@@ -407,15 +404,7 @@ export type Database = {
           sol_balance?: number | null
           updated_at?: string | null
         }
-        Relationships: [
-          {
-            foreignKeyName: "blackbox_wallets_campaign_id_fkey"
-            columns: ["campaign_id"]
-            isOneToOne: false
-            referencedRelation: "blackbox_campaigns"
-            referencedColumns: ["id"]
-          },
-        ]
+        Relationships: []
       }
       campaign_notifications: {
         Row: {
