@@ -259,9 +259,12 @@ export function CampaignActivationGuide({ campaign, onCampaignUpdate }: Campaign
         throw new Error('No active wallet found');
       }
       
-      // More reasonable minimum balance requirement - 0.001 SOL is sufficient for most operations
-      if (activeWallet.sol_balance <= 0) {
-        throw new Error('Insufficient SOL balance in wallet');
+      console.log('Active wallet balance:', activeWallet.sol_balance, typeof activeWallet.sol_balance);
+      
+      // Convert to number and check if we have enough for basic transactions (0.001 SOL minimum)
+      const balance = Number(activeWallet.sol_balance);
+      if (isNaN(balance) || balance < 0.001) {
+        throw new Error(`Insufficient SOL balance in wallet. Current: ${balance} SOL, Required: 0.001 SOL minimum`);
       }
       
       setValidationSteps(prev => ({ ...prev, walletValidation: 'success' }));
