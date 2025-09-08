@@ -245,6 +245,11 @@ export function CampaignActivationGuide({ campaign, onCampaignUpdate }: Campaign
           setCommands([]);
         }
       }
+
+      // Load token balances for assigned wallets
+      if (assignedWallets.length > 0 && campaign.token_address) {
+        await loadTokenBalances(assignedWallets, campaign.token_address);
+      }
     } catch (error) {
       console.error('Error in loadCampaignData:', error);
     }
@@ -255,9 +260,22 @@ export function CampaignActivationGuide({ campaign, onCampaignUpdate }: Campaign
     
     for (const wallet of walletsList) {
       try {
+        // Get wallet with secret key for token balance check
+        const { data: walletData, error: walletError } = await supabase
+          .from('blackbox_wallets')
+          .select('id, pubkey, secret_key_encrypted')
+          .eq('id', wallet.id)
+          .single();
+
+        if (walletError || !walletData) {
+          console.error(`Error fetching wallet data for ${wallet.pubkey}:`, walletError);
+          balances[wallet.id] = 0;
+          continue;
+        }
+
         const { data, error } = await supabase.functions.invoke('trader-wallet', {
           headers: {
-            'x-owner-secret': wallet.secret_key_encrypted,
+            'x-owner-secret': walletData.secret_key_encrypted,
           },
           body: JSON.stringify({
             tokenMint: tokenAddress
@@ -280,10 +298,10 @@ export function CampaignActivationGuide({ campaign, onCampaignUpdate }: Campaign
   };
 
   const handleSellAllForWallet = async (wallet: any) => {
-    if (!campaign?.token_address || wallets.length === 0) {
+    if (!campaign?.token_address || !tokenBalances[wallet.id] || tokenBalances[wallet.id] === 0) {
       toast({
         title: "Error",
-        description: "No wallets or token address found",
+        description: "No tokens to sell for this wallet",
         variant: "destructive"
       });
       return;
@@ -294,10 +312,23 @@ export function CampaignActivationGuide({ campaign, onCampaignUpdate }: Campaign
     const failedSells: string[] = [];
 
     try {
-      // Get all commands for the wallets in this campaign
-      for (const command of commands) {
-        if (!command.is_active) continue;
+      // Get commands specifically for this wallet
+      const walletCommands = commands.filter(command => 
+        command.wallet_id === wallet.id && command.is_active
+      );
 
+      if (walletCommands.length === 0) {
+        toast({
+          title: "Error", 
+          description: "No active commands found for this wallet",
+          variant: "destructive"
+        });
+        setSellAllLoading(false);
+        return;
+      }
+
+      // Execute sell for all commands on this specific wallet
+      for (const command of walletCommands) {
         try {
           const { data, error } = await supabase.functions.invoke('blackbox-executor', {
             body: {
@@ -778,7 +809,7 @@ export function CampaignActivationGuide({ campaign, onCampaignUpdate }: Campaign
                       size="sm"
                       variant="outline"
                       className="text-xs"
-                      disabled={sellAllLoading || !tokenBalances[wallet.id] || tokenBalances[wallet.id] === 0}
+                      disabled={sellAllLoading || tokenBalances[wallet.id] === undefined || tokenBalances[wallet.id] === 0}
                       onClick={() => handleSellAllForWallet(wallet)}
                     >
                       {sellAllLoading ? 'Selling...' : 'Sell All'}
