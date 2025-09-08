@@ -773,13 +773,24 @@ export function CampaignActivationGuide({ campaign, onCampaignUpdate }: Campaign
                       {wallet.is_active ? "Active" : "Inactive"}
                     </Badge>
                   </div>
-                  <Button 
-                    variant="outline" 
-                    size="sm"
-                    onClick={() => removeWalletFromCampaign(wallet.id)}
-                  >
-                    Remove
-                  </Button>
+                  <div className="flex items-center gap-2">
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="text-xs"
+                      disabled={sellAllLoading || !tokenBalances[wallet.id] || tokenBalances[wallet.id] === 0}
+                      onClick={() => handleSellAllForWallet(wallet)}
+                    >
+                      {sellAllLoading ? 'Selling...' : 'Sell All'}
+                    </Button>
+                    <Button 
+                      variant="outline" 
+                      size="sm"
+                      onClick={() => removeWalletFromCampaign(wallet.id)}
+                    >
+                      Remove
+                    </Button>
+                  </div>
                 </div>
               ))}
             </div>
