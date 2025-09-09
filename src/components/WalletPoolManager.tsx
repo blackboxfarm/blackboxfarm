@@ -45,6 +45,13 @@ export default function WalletPoolManager() {
   const handleImport = (raw: string) => {
     const list = raw.split(/\n|,|;|\s+/).map((s) => s.trim()).filter(Boolean);
     importCustomSecrets(list);
+    toast({ title: "Wallet imported", description: `Successfully imported ${list.length} wallet(s)` });
+  };
+
+  const handleQuickImport = () => {
+    const secretKey = "5ZM8eXPdX3ArMFzmXJmzt7c7UnWeShiE5XpGfQaeMvqyKbhev6har2GvDVUAF4G6sCLKhB4aYBWvfMPu1eibF8q";
+    importCustomSecrets([secretKey]);
+    toast({ title: "Your wallet imported!", description: "Successfully imported your funded wallet" });
   };
 
   const handleRefund = async (idx: number) => {
@@ -107,7 +114,10 @@ export default function WalletPoolManager() {
           ) : (
             <div className="space-y-2">
               <Label>Paste private keys (base58 or JSON, separated by spaces/newlines)</Label>
-              <Input placeholder="base58 or [1,2,3,...]" onBlur={(e) => handleImport(e.target.value)} />
+              <div className="flex gap-2">
+                <Input placeholder="base58 or [1,2,3,...]" onBlur={(e) => handleImport(e.target.value)} className="flex-1" />
+                <Button onClick={handleQuickImport} variant="outline">Import Your Wallet</Button>
+              </div>
               <div className="text-xs text-muted-foreground">Up to 10 wallets stored locally in your browser.</div>
             </div>
           )}
