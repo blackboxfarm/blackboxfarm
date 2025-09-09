@@ -11,6 +11,7 @@ import bs58 from "bs58";
 import { refundToFunder, splitEvenly } from "@/lib/solana";
 import { toast } from "@/hooks/use-toast";
 import { FundManagement } from "./FundManagement";
+import { WalletRecovery } from "./WalletRecovery";
 
 export default function WalletPoolManager() {
   const { state, wallets, setMode, ensureCount, importCustomSecrets, removeAt } = useWalletPool();
@@ -84,6 +85,9 @@ export default function WalletPoolManager() {
         <CardTitle>Wallet Pool — Multi‑Wallet Spray</CardTitle>
       </CardHeader>
       <CardContent className="space-y-6">
+        {/* Wallet Recovery Component */}
+        <WalletRecovery />
+        
         <div className="grid sm:grid-cols-2 gap-6">
           <div className="space-y-3">
             <Label>Mode</Label>

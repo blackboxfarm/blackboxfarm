@@ -36,17 +36,33 @@ function genKeypair(): StoredWallet {
 }
 
 // Database operations
-async function saveWalletToDatabase(wallet: StoredWallet) {
+async function saveWalletToDatabase(wallet: StoredWallet): Promise<boolean> {
   try {
     const { data: { user } } = await supabase.auth.getUser();
-    await supabase.from('wallet_pools').insert({
+    if (!user?.id) {
+      throw new Error('User not authenticated');
+    }
+    
+    const { error } = await supabase.from('wallet_pools').insert({
       secret_key: wallet.secretBase58, // Will be encrypted by the database trigger
       pubkey: wallet.pubkey,
-      user_id: user?.id,
+      user_id: user.id,
       is_active: true
     });
+    
+    if (error) {
+      throw error;
+    }
+    
+    console.log('✅ Wallet saved to database:', wallet.pubkey);
+    return true;
   } catch (error) {
-    console.warn('Failed to save wallet to database:', error);
+    console.error('❌ Failed to save wallet to database:', error);
+    // Show user-friendly error
+    if (error instanceof Error) {
+      alert(`Failed to save wallet to database: ${error.message}. The wallet is saved locally but may disappear on refresh.`);
+    }
+    return false;
   }
 }
 
@@ -188,5 +204,29 @@ export function useWalletPool() {
     });
   }, []);
 
-  return { state, wallets, setMode, ensureCount, importCustomSecrets, removeAt } as const;
+  const recoverWallet = useCallback(async (wallet: StoredWallet): Promise<boolean> => {
+    console.log('🔄 Attempting to recover wallet:', wallet.pubkey);
+    return await saveWalletToDatabase(wallet);
+  }, []);
+
+  const recoverAllLocalWallets = useCallback(async (): Promise<number> => {
+    let recovered = 0;
+    for (const wallet of state.generated) {
+      const success = await recoverWallet(wallet);
+      if (success) recovered++;
+    }
+    console.log(`✅ Recovered ${recovered} wallets to database`);
+    return recovered;
+  }, [state.generated, recoverWallet]);
+
+  return { 
+    state, 
+    wallets, 
+    setMode, 
+    ensureCount, 
+    importCustomSecrets, 
+    removeAt, 
+    recoverWallet, 
+    recoverAllLocalWallets 
+  } as const;
 }
