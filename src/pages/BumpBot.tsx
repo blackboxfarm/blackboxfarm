@@ -125,14 +125,19 @@ const BumpBot = () => {
   const bumpBotRunning = useRef(false);
 
   const refresh = useCallback(async () => {
-    if (!conn || !displayPubkey) return;
+    if (!conn || !displayPubkey) {
+      console.log("Refresh blocked - Missing:", { conn: !!conn, displayPubkey: !!displayPubkey });
+      return;
+    }
     setLoading(true);
     try {
       const ownerPk = new PublicKey(displayPubkey);
+      console.log("Refreshing balance for:", displayPubkey);
       const [lam, solPrice] = await Promise.all([
         conn.getBalance(ownerPk),
         JUP_PRICE("SOL"),
       ]);
+      console.log("Balance fetched:", { lam, solPrice });
       setSol(lam / 1_000_000_000);
       setSolUsd(solPrice);
 
@@ -167,6 +172,14 @@ const BumpBot = () => {
       toast.error("No wallet secret found. Add a wallet in Wallet Pool.");
       return { error: "no-owner" } as const;
     }
+    if (!secrets?.functionToken) {
+      toast.error("Function token missing. Please configure in Secrets.");
+      return { error: "no-function-token" } as const;
+    }
+    console.log("Invoking swap with:", { 
+      body: { ...body, ownerSecret: ownerSecret.slice(0, 8) + "..." }, 
+      hasFunctionToken: !!secrets?.functionToken 
+    });
     try {
       const headers: Record<string, string> = {};
       if (secrets?.functionToken) headers["x-function-token"] = secrets.functionToken;
@@ -175,11 +188,14 @@ const BumpBot = () => {
         headers,
       });
       if (error) {
+        console.error("Swap error:", error);
         toast.error(error.message || "Swap failed");
         return { error } as const;
       }
+      console.log("Swap success:", data);
       return { data } as const;
     } catch (e: any) {
+      console.error("Swap exception:", e);
       toast.error(String(e?.message || e) || "Swap error");
       return { error: e } as const;
     }
@@ -415,7 +431,23 @@ const BumpBot = () => {
                 </div>
                 <div className="flex items-end gap-2">
                   <Button 
-                    onClick={() => setRunning(true)} 
+                    onClick={() => {
+                      console.log("Load Live Data clicked", { conn: !!conn, displayPubkey, secrets: !!secrets });
+                      if (!secrets) {
+                        toast.error("Please configure secrets first");
+                        return;
+                      }
+                      if (!conn) {
+                        toast.error("RPC connection not available. Check your RPC URL in secrets.");
+                        return;
+                      }
+                      if (!displayPubkey) {
+                        toast.error("No wallet available. Import a wallet first.");
+                        return;
+                      }
+                      setRunning(true);
+                      refresh();
+                    }} 
                     disabled={running || !conn || !displayPubkey}
                     className="bg-primary text-primary-foreground hover:bg-primary/90"
                   >
