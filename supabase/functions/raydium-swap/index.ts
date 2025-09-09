@@ -200,6 +200,17 @@ serve(async (req) => {
       }
     }
     
+    // Handle base64 encoded secrets (from user_secrets table)
+    if (secretToUse && secretToUse.includes('\n')) {
+      try {
+        // This looks like a base64 encoded secret, decode it
+        const decoded = atob(secretToUse.replace(/\s/g, ''));
+        secretToUse = decoded;
+      } catch (error) {
+        console.log('Base64 decode failed, trying as-is:', error);
+      }
+    }
+    
     const owner = parseKeypair(secretToUse);
     const connection = new Connection(rpcUrl, { commitment: "confirmed" });
 
@@ -711,10 +722,10 @@ serve(async (req) => {
     console.error("Error details:", {
       message: (e as Error).message,
       stack: (e as Error).stack,
-      inputMint,
-      outputMint,
-      amount,
-      ownerPubkey: owner?.publicKey?.toBase58()
+      inputMint: inputMint || 'undefined',
+      outputMint: outputMint || 'undefined', 
+      amount: amount || 'undefined',
+      ownerPubkey: owner?.publicKey?.toBase58() || 'undefined'
     });
     return bad(`Unexpected error: ${(e as Error).message}`, 500);
   }
