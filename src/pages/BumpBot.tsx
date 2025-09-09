@@ -160,11 +160,20 @@ const BumpBot = () => {
         setTokenUi(null);
         setTokenUsd(null);
       }
-    } catch {}
+    } catch (e) {
+      console.error("Refresh error:", e);
+    }
     finally {
       setLoading(false);
     }
   }, [conn, displayPubkey, tokenMint]);
+
+  // Auto-refresh when wallet and connection are ready
+  useEffect(() => {
+    if (conn && displayPubkey && secrets?.rpcUrl) {
+      refresh();
+    }
+  }, [conn, displayPubkey, secrets?.rpcUrl, refresh]);
 
   // Swap actions
   const invokeSwap = useCallback(async (body: any) => {
