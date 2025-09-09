@@ -72,6 +72,8 @@ export function useUserSecrets() {
           rpc_url: newSecrets.rpcUrl,
           trading_private_key: newSecrets.tradingPrivateKey,
           function_token: newSecrets.functionToken || null,
+        }, {
+          onConflict: 'user_id'
         });
 
       if (error) throw error;
