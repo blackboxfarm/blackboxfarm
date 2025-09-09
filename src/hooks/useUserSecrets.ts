@@ -25,8 +25,8 @@ export function useUserSecrets() {
         return;
       }
 
-      // Use the new secure function for fetching secrets
-      const { data, error } = await supabase.rpc('get_user_secrets_secure', {
+      // Use the decrypted function for fetching secrets
+      const { data, error } = await supabase.rpc('get_user_secrets_decrypted', {
         user_id_param: user.id
       });
 
