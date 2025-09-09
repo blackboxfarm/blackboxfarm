@@ -155,6 +155,12 @@ serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
   if (req.method !== "POST") return bad("Use POST", 405);
 
+  // Declare variables at function scope for error handling
+  let inputMint: string | undefined;
+  let outputMint: string | undefined;
+  let amount: number | string | undefined;
+  let owner: Keypair | undefined;
+
   try {
     // Simple token guard (no Supabase Auth required). Provide x-function-token header to call.
     const fnToken = Deno.env.get("FUNCTION_TOKEN");
@@ -211,7 +217,7 @@ serve(async (req) => {
       }
     }
     
-    const owner = parseKeypair(secretToUse);
+    owner = parseKeypair(secretToUse);
     const connection = new Connection(rpcUrl, { commitment: "confirmed" });
 
     const confirmPolicy = String(_confirmPolicy ?? "processed").toLowerCase();
@@ -272,9 +278,9 @@ serve(async (req) => {
     }
 
     // Resolve low-level params
-    let inputMint = _inputMint as string | undefined;
-    let outputMint = _outputMint as string | undefined;
-    let amount = _amount as number | string | undefined;
+    inputMint = _inputMint as string | undefined;
+    outputMint = _outputMint as string | undefined;
+    amount = _amount as number | string | undefined;
 
     if (side && tokenMint) {
       if (side === "buy") {
