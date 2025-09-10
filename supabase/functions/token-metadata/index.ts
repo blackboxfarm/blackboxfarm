@@ -70,55 +70,25 @@ serve(async (req) => {
       throw new Error('Invalid mint address format');
     }
 
-    // Initialize response data
-    let metadata: TokenMetadata = {
+    // Initialize response data - minimal memory usage
+    const metadata: TokenMetadata = {
       mint: tokenMint,
       name: 'Unknown Token',
       symbol: 'UNK',
       decimals: 9,
-      verified: false
+      verified: false,
+      isPumpFun: isPumpFunToken(tokenMint)
     };
     
     let priceInfo = null;
-    let onChainData = {
-      decimals: 9,
-      supply: '0',
-      isPumpFun: isPumpFunToken(tokenMint)
-    };
 
-    // Skip complex on-chain lookups, focus on API data sources for speed
-    console.log('Checking Jupiter token list...');
+    console.log('Checking DexScreener for token data...');
 
-    // Try Jupiter token list first (faster and more reliable)
-    try {
-      const jupiterResponse = await fetchWithTimeout('https://token.jup.ag/all', 3000);
-      
-      if (jupiterResponse.ok) {
-        const tokens = await jupiterResponse.json();
-        const tokenData = tokens.find((t: any) => t.address === tokenMint);
-        
-        if (tokenData) {
-          metadata = {
-            mint: tokenMint,
-            name: tokenData.name || 'Unknown Token',
-            symbol: tokenData.symbol || 'UNK',
-            decimals: tokenData.decimals || 9,
-            logoURI: tokenData.logoURI,
-            verified: true
-          };
-          onChainData.decimals = tokenData.decimals || 9;
-          console.log('Found verified token in Jupiter list');
-        }
-      }
-    } catch (error) {
-      console.log('Jupiter fetch failed:', error.message);
-    }
-
-    // Try DexScreener for price data and token info if not found in Jupiter
+    // Only use DexScreener for simplicity and memory efficiency
     try {
       const dexResponse = await fetchWithTimeout(
         `https://api.dexscreener.com/latest/dex/tokens/${tokenMint}`,
-        4000
+        3000
       );
       
       if (dexResponse.ok) {
@@ -127,11 +97,12 @@ serve(async (req) => {
         if (dexData?.pairs && dexData.pairs.length > 0) {
           const pair = dexData.pairs[0];
           
-          // Update metadata if we didn't find it in Jupiter
-          if (!metadata.verified && pair.baseToken) {
+          // Update metadata from DexScreener
+          if (pair.baseToken) {
             metadata.name = pair.baseToken.name || metadata.name;
             metadata.symbol = pair.baseToken.symbol || metadata.symbol;
             metadata.image = pair.baseToken.logoURI;
+            metadata.verified = true;
           }
           
           // Set price info
@@ -143,25 +114,22 @@ serve(async (req) => {
             dexUrl: pair.url
           };
           
-          console.log('Found price data on DexScreener');
+          console.log('Found token data on DexScreener');
         }
       }
     } catch (error) {
       console.log('DexScreener fetch failed:', error.message);
     }
 
-    // Mark pump.fun tokens
-    if (isPumpFunToken(tokenMint)) {
-      metadata.isPumpFun = true;
-      onChainData.isPumpFun = true;
-      console.log('Detected pump.fun token pattern');
-    }
-
     const response = {
       success: true,
       metadata,
       priceInfo,
-      onChainData
+      onChainData: {
+        decimals: metadata.decimals,
+        supply: '0',
+        isPumpFun: metadata.isPumpFun
+      }
     };
 
     return new Response(
@@ -177,9 +145,12 @@ serve(async (req) => {
       JSON.stringify({ 
         success: false,
         error: error.message,
-        debug: {
-          timestamp: new Date().toISOString(),
-          error_type: error.name
+        metadata: {
+          mint: tokenMint || 'unknown',
+          name: 'Unknown Token',
+          symbol: 'UNK',
+          decimals: 9,
+          verified: false
         }
       }),
       {
