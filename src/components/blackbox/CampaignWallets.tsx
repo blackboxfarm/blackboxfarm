@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Plus, Wallet, Settings, TestTube, RefreshCw, ArrowLeftRight } from "lucide-react";
+import { Plus, Wallet, Settings, TestTube, RefreshCw, ArrowLeftRight, TrendingDown } from "lucide-react";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { supabase } from "@/integrations/supabase/client";
@@ -39,6 +39,8 @@ export function CampaignWallets({ campaign }: CampaignWalletsProps) {
   const [devBalances, setDevBalances] = useState<Record<string, number>>({});
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [withdrawingWallets, setWithdrawingWallets] = useState<Set<string>>(new Set());
+  const [tokenBalances, setTokenBalances] = useState<Record<string, number>>({});
+  const [sellingWallets, setSellingWallets] = useState<Set<string>>(new Set());
 
   useEffect(() => {
     if (campaign?.id) {
@@ -112,6 +114,11 @@ export function CampaignWallets({ campaign }: CampaignWalletsProps) {
     setWallets(walletsWithDevBalances);
     if (walletsWithDevBalances.length > 0 && !selectedWallet) {
       setSelectedWallet(walletsWithDevBalances[0]);
+    }
+    
+    // Load token balances for campaign token
+    if (walletsWithDevBalances.length > 0 && campaign?.token_address) {
+      loadTokenBalances(walletsWithDevBalances);
     }
   };
 
@@ -272,6 +279,158 @@ export function CampaignWallets({ campaign }: CampaignWalletsProps) {
     }
   };
 
+  const loadTokenBalances = async (walletsList: WalletData[]) => {
+    if (!campaign?.token_address) return;
+    
+    const balances: Record<string, number> = {};
+    
+    for (const wallet of walletsList) {
+      try {
+        // Get wallet with secret key for token balance check
+        const { data: walletData, error: walletError } = await supabase
+          .from('blackbox_wallets')
+          .select('id, pubkey, secret_key_encrypted')
+          .eq('id', wallet.id)
+          .single();
+
+        if (walletError || !walletData) {
+          console.error(`Error fetching wallet data for ${wallet.pubkey}:`, walletError);
+          balances[wallet.id] = 0;
+          continue;
+        }
+
+        // Construct URL with token mint parameter
+        const url = `https://apxauapuusmgwbbzjgfl.supabase.co/functions/v1/trader-wallet?tokenMint=${encodeURIComponent(campaign.token_address)}`;
+        
+        const response = await fetch(url, {
+          method: 'GET',
+          headers: {
+            'Authorization': `Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFweGF1YXB1dXNtZ3diYnpqZ2ZsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTQ1OTEzMDUsImV4cCI6MjA3MDE2NzMwNX0.w8IrKq4YVStF3TkdEcs5mCSeJsxjkaVq2NFkypYOXHU`,
+            'x-owner-secret': walletData.secret_key_encrypted,
+            'Content-Type': 'application/json'
+          }
+        });
+
+        const data = await response.json();
+        const error = response.ok ? null : data;
+
+        if (error) {
+          console.error(`Error fetching token balance for wallet ${wallet.pubkey}:`, error);
+          balances[wallet.id] = 0;
+        } else {
+          balances[wallet.id] = data?.tokenUiAmount || 0;
+        }
+      } catch (error) {
+        console.error(`Error fetching token balance for wallet ${wallet.pubkey}:`, error);
+        balances[wallet.id] = 0;
+      }
+    }
+    
+    setTokenBalances(balances);
+  };
+
+  const sellAllTokensForWallet = async (wallet: WalletData) => {
+    if (!campaign?.token_address || !tokenBalances[wallet.id] || tokenBalances[wallet.id] === 0) {
+      toast({
+        title: "Error",
+        description: "No tokens to sell for this wallet",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    // Confirmation dialog
+    const confirmed = window.confirm(
+      `Sell ALL ${tokenBalances[wallet.id].toFixed(6)} tokens from wallet ${wallet.pubkey.slice(0, 8)}...${wallet.pubkey.slice(-8)} for campaign "${campaign.nickname}"?`
+    );
+    
+    if (!confirmed) return;
+
+    setSellingWallets(prev => new Set(prev).add(wallet.id));
+
+    try {
+      // Get commands specifically for this wallet
+      const { data: commandsData, error: commandsError } = await supabase
+        .from('blackbox_command_codes')
+        .select('id, name, is_active')
+        .eq('wallet_id', wallet.id)
+        .eq('is_active', true);
+
+      if (commandsError) {
+        throw new Error(`Failed to fetch commands: ${commandsError.message}`);
+      }
+
+      if (!commandsData || commandsData.length === 0) {
+        toast({
+          title: "Error", 
+          description: "No active commands found for this wallet",
+          variant: "destructive"
+        });
+        return;
+      }
+
+      const successfulSells: string[] = [];
+      const failedSells: string[] = [];
+
+      // Execute sell for all commands on this specific wallet
+      for (const command of commandsData) {
+        try {
+          const { data, error } = await supabase.functions.invoke('blackbox-executor', {
+            body: {
+              command_code_id: command.id,
+              action: 'sell'
+            }
+          });
+
+          if (error) {
+            console.error(`Sell failed for command ${command.name}:`, error);
+            failedSells.push(command.name);
+          } else {
+            console.log(`Sell successful for command ${command.name}:`, data);
+            successfulSells.push(command.name);
+          }
+        } catch (error) {
+          console.error(`Sell error for command ${command.name}:`, error);
+          failedSells.push(command.name);
+        }
+      }
+
+      // Show results
+      if (successfulSells.length > 0) {
+        toast({
+          title: "Sell All Completed",
+          description: `Successfully sold tokens for: ${successfulSells.join(', ')}${failedSells.length > 0 ? `. Failed: ${failedSells.join(', ')}` : ''}`,
+          variant: successfulSells.length > failedSells.length ? "default" : "destructive"
+        });
+      } else if (failedSells.length > 0) {
+        toast({
+          title: "Sell All Failed",
+          description: `Failed to sell tokens for: ${failedSells.join(', ')}`,
+          variant: "destructive"
+        });
+      }
+
+      // Refresh balances after selling
+      setTimeout(() => {
+        loadWallets();
+      }, 2000);
+
+    } catch (error: any) {
+      console.error('Sell all error:', error);
+      toast({
+        title: "Sell All Error",
+        description: error.message,
+        variant: "destructive"
+      });
+    } finally {
+      setSellingWallets(prev => {
+        const newSet = new Set(prev);
+        newSet.delete(wallet.id);
+        return newSet;
+      });
+    }
+  };
+
   if (!campaign) {
     return null;
   }
@@ -342,6 +501,11 @@ export function CampaignWallets({ campaign }: CampaignWalletsProps) {
                           Balance: {wallet.sol_balance.toFixed(4)} SOL
                           {isDevMode && <span className="text-yellow-500 ml-2">(SIMULATED)</span>}
                         </p>
+                        {campaign?.token_address && (
+                          <p className="text-sm text-muted-foreground">
+                            • Tokens: {(tokenBalances[wallet.id] || 0).toFixed(6)}
+                          </p>
+                        )}
                         {!isDevMode && (
                           <Button
                             size="sm"
@@ -359,6 +523,27 @@ export function CampaignWallets({ campaign }: CampaignWalletsProps) {
                       </div>
                     </div>
                     <div className="flex items-center gap-2">
+                      {!isDevMode && tokenBalances[wallet.id] > 0 && (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            sellAllTokensForWallet(wallet);
+                          }}
+                          disabled={sellingWallets.has(wallet.id)}
+                          className="text-xs"
+                        >
+                          {sellingWallets.has(wallet.id) ? (
+                            "Selling..."
+                          ) : (
+                            <>
+                              <TrendingDown className="h-3 w-3 mr-1" />
+                              Sell All Tokens
+                            </>
+                          )}
+                        </Button>
+                      )}
                       {!isDevMode && wallet.sol_balance > 0 && (
                         <Button
                           size="sm"
