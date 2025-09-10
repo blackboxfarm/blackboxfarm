@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Plus, Wallet, Settings, TestTube, RefreshCw, ArrowLeftRight, TrendingDown } from "lucide-react";
+import { Plus, Wallet, Settings, TestTube, RefreshCw, ArrowLeftRight, TrendingDown, Coins } from "lucide-react";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { supabase } from "@/integrations/supabase/client";
@@ -329,19 +329,29 @@ export function CampaignWallets({ campaign }: CampaignWalletsProps) {
     setTokenBalances(balances);
   };
 
-  const sellAllTokensForWallet = async (wallet: WalletData) => {
-    if (!campaign?.token_address || !tokenBalances[wallet.id] || tokenBalances[wallet.id] === 0) {
+  const sellAllTokensForWallet = async (wallet: WalletData, forceSell = false) => {
+    const tokenBalance = tokenBalances[wallet.id] || 0;
+    
+    if (!campaign?.token_address) {
       toast({
         title: "Error",
-        description: "No tokens to sell for this wallet",
+        description: "No token address set for this campaign",
         variant: "destructive"
       });
       return;
     }
 
+    if (!forceSell && tokenBalance === 0) {
+      const confirmForce = window.confirm(
+        `No token balance detected for wallet ${wallet.pubkey.slice(0, 8)}...${wallet.pubkey.slice(-8)}. This might be due to balance loading issues. Force sell anyway?`
+      );
+      if (!confirmForce) return;
+    }
+
     // Confirmation dialog
+    const balanceText = tokenBalance > 0 ? `${tokenBalance.toFixed(6)} tokens` : 'all available tokens';
     const confirmed = window.confirm(
-      `Sell ALL ${tokenBalances[wallet.id].toFixed(6)} tokens from wallet ${wallet.pubkey.slice(0, 8)}...${wallet.pubkey.slice(-8)} for campaign "${campaign.nickname}"?`
+      `Sell ${balanceText} from wallet ${wallet.pubkey.slice(0, 8)}...${wallet.pubkey.slice(-8)} for campaign "${campaign.nickname}"?`
     );
     
     if (!confirmed) return;
@@ -565,6 +575,25 @@ export function CampaignWallets({ campaign }: CampaignWalletsProps) {
                           )}
                         </Button>
                       )}
+                      <Button
+                        size="sm"
+                        variant="destructive"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          sellAllTokensForWallet(wallet);
+                        }}
+                        disabled={sellingWallets.has(wallet.id)}
+                        className="text-xs"
+                      >
+                        {sellingWallets.has(wallet.id) ? (
+                          "Selling..."
+                        ) : (
+                          <>
+                            <Coins className="h-3 w-3 mr-1" />
+                            Sell All ({tokenBalances[wallet.id]?.toFixed(2) || '?'})
+                          </>
+                        )}
+                      </Button>
                       {isDevMode && (
                         <Button
                           size="sm"
