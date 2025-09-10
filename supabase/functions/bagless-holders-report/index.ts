@@ -33,41 +33,88 @@ serve(async (req) => {
 
     const rpcUrl = `https://rpc.helius.xyz/?api-key=${heliusApiKey}`;
     
-    // Use manual price if provided, otherwise try to fetch from APIs
+    // Use manual price if provided, otherwise try multiple APIs
     let tokenPriceUSD = manualPrice || 0;
     
     if (!manualPrice || manualPrice === 0) {
-      console.log('No manual price provided, trying to fetch from APIs...');
-      try {
-        // Try Jupiter v6 first
-        const priceResponse = await fetch(`https://price.jup.ag/v6/price?ids=${tokenMint}`);
-        if (priceResponse.ok) {
-          const priceData = await priceResponse.json();
-          tokenPriceUSD = priceData.data?.[tokenMint]?.price || 0;
-          console.log(`Token price from Jupiter v6: $${tokenPriceUSD}`);
-        }
-        
-        // If Jupiter fails or returns 0, try DexScreener as fallback
-        if (tokenPriceUSD === 0) {
-          console.log('Jupiter failed, trying DexScreener...');
-          const dexResponse = await fetch(`https://api.dexscreener.com/latest/dex/tokens/${tokenMint}`);
-          if (dexResponse.ok) {
-            const dexData = await dexResponse.json();
-            if (dexData.pairs && dexData.pairs.length > 0) {
-              tokenPriceUSD = parseFloat(dexData.pairs[0].priceUsd) || 0;
-              console.log(`Token price from DexScreener: $${tokenPriceUSD}`);
+      console.log('No manual price provided, trying multiple price sources...');
+      
+      // Try multiple price sources in order of reliability
+      const priceAPIs = [
+        {
+          name: 'CoinGecko',
+          url: `https://api.coingecko.com/api/v3/simple/token_price/solana?contract_addresses=${tokenMint}&vs_currencies=usd`,
+          parser: (data: any) => data[tokenMint]?.usd || 0
+        },
+        {
+          name: 'Jupiter v4',
+          url: `https://price.jup.ag/v4/price?ids=${tokenMint}`,
+          parser: (data: any) => data.data?.[tokenMint]?.price || 0
+        },
+        {
+          name: 'Jupiter v6',
+          url: `https://price.jup.ag/v6/price?ids=${tokenMint}`,
+          parser: (data: any) => data.data?.[tokenMint]?.price || 0
+        },
+        {
+          name: 'DexScreener',
+          url: `https://api.dexscreener.com/latest/dex/tokens/${tokenMint}`,
+          parser: (data: any) => {
+            if (data.pairs && data.pairs.length > 0) {
+              return parseFloat(data.pairs[0].priceUsd) || 0;
             }
+            return 0;
           }
+        },
+        {
+          name: 'Birdeye',
+          url: `https://public-api.birdeye.so/defi/price?address=${tokenMint}`,
+          parser: (data: any) => data.value || 0
         }
-      } catch (e) {
-        console.warn('Could not fetch token price from any source:', e);
+      ];
+      
+      for (const api of priceAPIs) {
+        try {
+          console.log(`Trying ${api.name}...`);
+          
+          const controller = new AbortController();
+          const timeoutId = setTimeout(() => controller.abort(), 10000); // 10 second timeout
+          
+          const response = await fetch(api.url, {
+            signal: controller.signal,
+            headers: {
+              'User-Agent': 'Supabase Edge Function',
+              'Accept': 'application/json'
+            }
+          });
+          
+          clearTimeout(timeoutId);
+          
+          if (response.ok) {
+            const data = await response.json();
+            const price = api.parser(data);
+            
+            if (price > 0) {
+              tokenPriceUSD = price;
+              console.log(`✅ Got price from ${api.name}: $${tokenPriceUSD}`);
+              break;
+            } else {
+              console.log(`⚠️ ${api.name} returned 0 price`);
+            }
+          } else {
+            console.log(`❌ ${api.name} HTTP error: ${response.status}`);
+          }
+        } catch (error) {
+          console.log(`❌ ${api.name} failed:`, error.message);
+          continue;
+        }
       }
     } else {
       console.log(`Using manual price: $${tokenPriceUSD}`);
     }
     
     if (tokenPriceUSD === 0) {
-      console.warn('WARNING: Token price is $0 - USD calculations will be incorrect');
+      console.warn('⚠️ WARNING: All price sources failed or returned $0 - USD calculations will be incorrect');
     }
     
     // Get all token accounts for this mint
