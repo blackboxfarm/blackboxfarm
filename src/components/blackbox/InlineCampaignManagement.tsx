@@ -400,7 +400,13 @@ export function InlineCampaignManagement({ campaign, onScrollToSection }: Inline
               <div key={wallet.id} className="flex items-center justify-between p-2 border rounded text-xs">
                 <div className="flex items-center gap-2">
                   <code className="font-mono">
-                    {wallet.pubkey.slice(0, 6)}...{wallet.pubkey.slice(-4)}
+                  <button
+                    onClick={() => navigator.clipboard.writeText(wallet.pubkey)}
+                    className="font-mono hover:text-muted-foreground transition-colors cursor-pointer break-all"
+                    title="Click to copy full address"
+                  >
+                    {wallet.pubkey}
+                  </button>
                   </code>
                   <span className="text-muted-foreground">
                     {wallet.sol_balance.toFixed(3)} SOL

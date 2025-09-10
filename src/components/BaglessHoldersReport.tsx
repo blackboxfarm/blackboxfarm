@@ -468,9 +468,15 @@ export function BaglessHoldersReport() {
                     {filteredHolders.map((holder) => (
                       <TableRow key={holder.owner}>
                         <TableCell className="font-mono">#{holder.rank}</TableCell>
-                        <TableCell className="font-mono">
-                          {truncateAddress(holder.owner)}
-                        </TableCell>
+                         <TableCell className="font-mono">
+                           <button
+                             onClick={() => navigator.clipboard.writeText(holder.owner)}
+                             className="hover:text-muted-foreground transition-colors cursor-pointer break-all text-left"
+                             title="Click to copy full address"
+                           >
+                             {holder.owner}
+                           </button>
+                         </TableCell>
                         <TableCell className="font-mono">
                           {formatBalance(holder.balance)}
                         </TableCell>

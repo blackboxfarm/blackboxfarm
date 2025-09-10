@@ -207,10 +207,12 @@ export function CampaignCommands({ campaign }: CampaignCommandsProps) {
                   </SelectTrigger>
                   <SelectContent>
                     {availableWallets.map((wallet) => (
-                      <SelectItem key={wallet.id} value={wallet.id}>
-                        {wallet.pubkey.slice(0, 8)}...{wallet.pubkey.slice(-8)} 
-                        ({wallet.sol_balance.toFixed(6)} SOL)
-                      </SelectItem>
+                       <SelectItem key={wallet.id} value={wallet.id}>
+                         <span className="font-mono break-all">
+                           {wallet.pubkey}
+                         </span>
+                         ({wallet.sol_balance.toFixed(6)} SOL)
+                       </SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
@@ -222,7 +224,13 @@ export function CampaignCommands({ campaign }: CampaignCommandsProps) {
                 <div key={wallet.id} className="flex items-center justify-between p-3 border rounded-lg">
                   <div>
                     <code className="text-sm font-mono">
-                      {wallet.pubkey.slice(0, 8)}...{wallet.pubkey.slice(-8)}
+                      <button
+                        onClick={() => navigator.clipboard.writeText(wallet.pubkey)}
+                        className="font-mono hover:text-muted-foreground transition-colors cursor-pointer break-all"
+                        title="Click to copy full address"
+                      >
+                        {wallet.pubkey}
+                      </button>
                     </code>
                     <span className="ml-2 text-sm text-muted-foreground">
                       {wallet.sol_balance.toFixed(6)} SOL
@@ -241,7 +249,9 @@ export function CampaignCommands({ campaign }: CampaignCommandsProps) {
                   <SelectContent>
                     {availableWallets.map((wallet) => (
                       <SelectItem key={wallet.id} value={wallet.id}>
-                        {wallet.pubkey.slice(0, 8)}...{wallet.pubkey.slice(-8)} 
+                         <span className="font-mono break-all">
+                           {wallet.pubkey}
+                         </span>
                         ({wallet.sol_balance.toFixed(6)} SOL)
                       </SelectItem>
                     ))}

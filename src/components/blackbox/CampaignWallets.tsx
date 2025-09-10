@@ -781,7 +781,7 @@ export function CampaignWallets({ campaign }: CampaignWalletsProps) {
                         className="text-sm bg-muted px-2 py-1 rounded font-mono hover:bg-muted/80 transition-colors cursor-pointer"
                         title="Click to copy full address"
                       >
-                        {wallet.pubkey.slice(0, 8)}...{wallet.pubkey.slice(-8)}
+                        {wallet.pubkey}
                       </button>
                       <Badge variant="outline">Orphaned</Badge>
                     </div>

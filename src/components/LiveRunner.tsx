@@ -1859,10 +1859,14 @@ export default function LiveRunner() {
                 </div>
               ) : wallet ? (
                 <div className="space-y-2">
-                  <div className="flex items-center justify-between gap-2">
-                    <span className="truncate" title={wallet.address}>
-                      {wallet.address.slice(0, 4)}…{wallet.address.slice(-4)}
-                    </span>
+                   <div className="flex items-center justify-between gap-2">
+                     <button
+                       onClick={() => navigator.clipboard.writeText(wallet.address)}
+                       className="font-mono break-all hover:text-muted-foreground transition-colors cursor-pointer text-left flex-1"
+                       title="Click to copy full address"
+                     >
+                       {wallet.address}
+                     </button>
                     <div className="flex items-center gap-2">
                       <Button size="sm" variant="secondary" onClick={() => navigator.clipboard.writeText(wallet.address)}>Copy</Button>
                       <a className="underline text-sm" href={`https://solscan.io/account/${wallet.address}`} target="_blank" rel="noreferrer noopener">View</a>

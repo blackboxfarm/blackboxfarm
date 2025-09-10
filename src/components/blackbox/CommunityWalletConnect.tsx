@@ -179,9 +179,13 @@ export default function CommunityWalletConnect({
                 <div className="p-3 bg-muted rounded-lg">
                   <p className="text-sm">
                     <span className="font-medium">Connected:</span>{' '}
-                    <span className="font-mono text-xs">
-                      {publicKey?.toBase58().slice(0, 8)}...{publicKey?.toBase58().slice(-8)}
-                    </span>
+                    <button
+                      onClick={() => navigator.clipboard.writeText(publicKey?.toBase58() || '')}
+                      className="font-mono text-xs hover:text-muted-foreground transition-colors cursor-pointer break-all"
+                      title="Click to copy full address"
+                    >
+                      {publicKey?.toBase58()}
+                    </button>
                   </p>
                 </div>
 
