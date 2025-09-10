@@ -27,12 +27,17 @@ serve(async (req) => {
     let result = {
       tokenMint,
       isLocked: false,
-      lockPercentage: 0,
+      lockPercentage: null, // null = no data, 0 = confirmed 0%
       lockMechanism: 'unknown',
+      lockDuration: null, // actual lock duration if available
+      lockExpiry: null, // when lock expires if available
       dexInfo: 'unknown',
       tokenInfo: null,
       error: null,
-      checkedMethods: []
+      checkedMethods: [],
+      dataQuality: 'unverified', // 'verified', 'estimated', 'unverified', 'failed'
+      actualData: {}, // store the raw data we got
+      assumptions: [] // track what we assumed vs verified
     };
 
     // Method 1: Get token info and DEX liquidity data from DexScreener
@@ -88,44 +93,55 @@ serve(async (req) => {
         if (dexId === 'meteora') {
           console.log(`🌊 Meteora pool detected: ${pairAddress}`);
           
-          // Get real Meteora pool data
+          // Get real Meteora pool data - NO ASSUMPTIONS
           try {
             const meteoraResponse = await fetch(`https://app.meteora.ag/dlmm-api/pair/${pairAddress}`);
             if (meteoraResponse.ok) {
               const meteoraData = await meteoraResponse.json();
+              result.actualData.meteora = meteoraData;
               
-              if (meteoraData.pair_data) {
+              if (meteoraData.pair_data && meteoraData.pair_data.lock_end_timestamp) {
                 const lockEndTime = meteoraData.pair_data.lock_end_timestamp;
                 const currentTime = Math.floor(Date.now() / 1000);
                 
-                if (lockEndTime && lockEndTime > currentTime) {
+                if (lockEndTime > currentTime) {
                   const lockDurationDays = Math.floor((lockEndTime - currentTime) / (24 * 60 * 60));
-                  result.lockMechanism = `meteora_time_lock_${lockDurationDays}d`;
+                  result.lockMechanism = 'meteora_time_lock';
+                  result.lockDuration = `${lockDurationDays} days`;
+                  result.lockExpiry = new Date(lockEndTime * 1000).toISOString();
                   result.isLocked = true;
-                  result.lockPercentage = 100; // Meteora locks are typically 100% when active
-                  console.log(`🔒 Meteora pool locked for ${lockDurationDays} more days (until ${new Date(lockEndTime * 1000).toISOString()})`);
+                  result.dataQuality = 'verified';
+                  
+                  // Try to get actual percentage if available in the data
+                  if (meteoraData.pair_data.locked_percentage !== undefined) {
+                    result.lockPercentage = meteoraData.pair_data.locked_percentage;
+                  } else {
+                    result.lockPercentage = null;
+                    result.assumptions.push('Lock percentage not provided by Meteora API');
+                  }
+                  
+                  console.log(`🔒 VERIFIED: Meteora pool locked until ${result.lockExpiry} (${lockDurationDays} days)`);
                 } else {
-                  console.log(`⚠️ Meteora pool lock expired or no lock found`);
+                  result.lockMechanism = 'meteora_lock_expired';
+                  result.isLocked = false;
+                  result.dataQuality = 'verified';
+                  console.log(`❌ VERIFIED: Meteora lock expired on ${new Date(lockEndTime * 1000).toISOString()}`);
                 }
               } else {
-                // Fallback to checking if it's a DLMM pool (usually locked)
-                result.lockMechanism = 'meteora_dlmm_pool';
-                result.isLocked = true;
-                result.lockPercentage = 95; // Conservative estimate for DLMM pools
-                console.log(`✅ Meteora DLMM pool detected - likely locked`);
+                result.lockMechanism = 'meteora_no_lock_data';
+                result.dataQuality = 'failed';
+                result.assumptions.push('Meteora API returned data but no lock information found');
+                console.log(`❌ NO DATA: Meteora API response missing lock data`);
               }
             } else {
-              // API failed, fall back to general check
-              result.lockMechanism = 'meteora_pool_unverified';
-              result.isLocked = true;
-              result.lockPercentage = 85; // Conservative when we can't verify
-              console.log(`⚠️ Meteora API failed, assuming locked but marking as unverified`);
+              result.error = `Meteora API failed with status ${meteoraResponse.status}`;
+              result.dataQuality = 'failed';
+              console.log(`❌ API FAILED: Meteora API returned ${meteoraResponse.status}`);
             }
           } catch (e) {
-            console.log(`⚠️ Failed to check Meteora lock details: ${e.message}`);
-            result.lockMechanism = 'meteora_pool_check_failed';
-            result.isLocked = true;
-            result.lockPercentage = 80; // Very conservative when check fails
+            result.error = `Meteora API error: ${e.message}`;
+            result.dataQuality = 'failed';
+            console.log(`❌ ERROR: Failed to check Meteora: ${e.message}`);
           }
         } else if (dexId === 'raydium') {
           console.log(`💧 Raydium pool detected: ${pairAddress}`);
