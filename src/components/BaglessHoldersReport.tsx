@@ -38,6 +38,7 @@ interface HoldersReport {
 
 export function BaglessHoldersReport() {
   const [tokenMint, setTokenMint] = useState('GvkxeDmoghdjdrmMtc7EZQVobTgV7JiBLEkmPdVyBAGS');
+  const [tokenPrice, setTokenPrice] = useState('0.001');
   const [isLoading, setIsLoading] = useState(false);
   const [report, setReport] = useState<HoldersReport | null>(null);
   const [filteredHolders, setFilteredHolders] = useState<TokenHolder[]>([]);
@@ -85,7 +86,8 @@ export function BaglessHoldersReport() {
       console.log('Generating holders report...');
       const { data, error } = await supabase.functions.invoke('bagless-holders-report', {
         body: {
-          tokenMint: tokenMint.trim()
+          tokenMint: tokenMint.trim(),
+          manualPrice: parseFloat(tokenPrice) || 0
         }
       });
 
@@ -159,6 +161,18 @@ export function BaglessHoldersReport() {
               value={tokenMint}
               onChange={(e) => setTokenMint(e.target.value)}
               placeholder="Token mint address"
+            />
+          </div>
+          
+          <div>
+            <Label htmlFor="tokenPrice">Token Price (USD)</Label>
+            <Input
+              id="tokenPrice"
+              type="number"
+              step="0.0001"
+              value={tokenPrice}
+              onChange={(e) => setTokenPrice(e.target.value)}
+              placeholder="0.001"
             />
           </div>
 
