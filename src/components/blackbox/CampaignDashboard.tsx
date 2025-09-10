@@ -159,34 +159,65 @@ export function CampaignDashboard() {
       return;
     }
 
-    const { data, error } = await supabase
-      .from('blackbox_campaigns')
-      .insert({
-        user_id: user.id,
-        nickname: newCampaign.nickname,
-        token_address: newCampaign.token_address
-      })
-      .select()
-      .single();
+    try {
+      // Validate token first with optimized timeout
+      console.log('Validating token:', newCampaign.token_address);
+      
+      const validationStartTime = Date.now();
+      const { data: tokenValidation, error: tokenError } = await supabase.functions.invoke('token-metadata', {
+        body: { tokenMint: newCampaign.token_address }
+      });
+      
+      const validationTime = Date.now() - validationStartTime;
+      console.log(`Token validation completed in ${validationTime}ms`);
 
-    if (error) {
-      toast({ title: "Error creating campaign", description: error.message });
-      return;
+      if (tokenError) {
+        console.error('Token validation error:', tokenError);
+        throw new Error(`Token validation failed: ${tokenError.message}`);
+      }
+
+      if (!tokenValidation?.success) {
+        console.error('Token metadata error:', tokenValidation?.error);
+        throw new Error(tokenValidation?.error || 'Invalid token address');
+      }
+
+      console.log('Token validated successfully:', tokenValidation);
+
+      // Create campaign
+      const { data, error } = await supabase
+        .from('blackbox_campaigns')
+        .insert({
+          user_id: user.id,
+          nickname: newCampaign.nickname,
+          token_address: newCampaign.token_address
+        })
+        .select()
+        .single();
+
+      if (error) {
+        throw error;
+      }
+
+      // Add token metadata to the created campaign
+      const campaignWithMetadata = {
+        ...data,
+        token_metadata: tokenValidation
+      };
+
+      toast({ title: "Campaign created", description: `${newCampaign.nickname} is ready` });
+      setNewCampaign({ nickname: "", token_address: "" });
+      setIsValidToken(false);
+      setTokenData(null);
+      setShowCreateForm(false);
+      loadCampaigns();
+      setSelectedCampaign(campaignWithMetadata);
+    } catch (error: any) {
+      console.error('Error creating campaign:', error);
+      toast({ 
+        title: "Error creating campaign", 
+        description: error.message || "Failed to create campaign"
+      });
     }
-
-    // Add token metadata to the created campaign
-    const campaignWithMetadata = {
-      ...data,
-      token_metadata: tokenData
-    };
-
-    toast({ title: "Campaign created", description: `${newCampaign.nickname} is ready` });
-    setNewCampaign({ nickname: "", token_address: "" });
-    setIsValidToken(false);
-    setTokenData(null);
-    setShowCreateForm(false);
-    loadCampaigns();
-    setSelectedCampaign(campaignWithMetadata);
   };
 
   const toggleCampaign = async (campaign: Campaign) => {

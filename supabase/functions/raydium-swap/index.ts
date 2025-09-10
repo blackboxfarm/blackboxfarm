@@ -329,7 +329,7 @@ serve(async (req) => {
 
     if (!inputMint || !outputMint || amount == null) return bad("Missing inputMint, outputMint, amount");
 
-    // Debug logging for token: 44qC6Zv9FEFE9g3eV4tSDaQk56YQHeAcWEhYQ9Lkpump
+    // Debug logging
     console.log("Debug swap params:", {
       inputMint: String(inputMint),
       outputMint: String(outputMint), 
@@ -339,6 +339,20 @@ serve(async (req) => {
       usdcAmount,
       ownerPubkey: owner.publicKey.toBase58()
     });
+
+    // For pump.fun tokens or tokens with routing issues, use Jupiter directly
+    const isPumpFunToken = (mintAddress: string) => {
+      return mintAddress.endsWith('pump') || mintAddress.length === 44;
+    };
+    
+    const shouldUseJupiter = isPumpFunToken(String(tokenMint)) || 
+                            (tokenMint && String(tokenMint).includes('pump'));
+    
+    if (shouldUseJupiter) {
+      console.log('Detected pump.fun or problematic token, using Jupiter directly');
+      needJupiter = true;
+      jupReason = 'Pump.fun token detected - using Jupiter for better routing';
+    }
 
     // Get ATAs when not SOL
     let isInputSol = isSolMint(String(inputMint));
