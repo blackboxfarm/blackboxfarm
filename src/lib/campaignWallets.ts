@@ -66,6 +66,7 @@ export async function getAllUserWallets(): Promise<WalletData[]> {
 
 /**
  * Get wallets that are NOT currently assigned to a specific campaign
+ * (Now allows sharing - returns all wallets except those already assigned to THIS campaign)
  */
 export async function getAvailableWalletsForCampaign(campaignId: string): Promise<WalletData[]> {
   // Get all user wallets
@@ -75,12 +76,12 @@ export async function getAvailableWalletsForCampaign(campaignId: string): Promis
   const assignedWallets = await getCampaignWallets(campaignId);
   const assignedWalletIds = new Set(assignedWallets.map(w => w.id));
   
-  // Return wallets not assigned to this campaign
+  // Return wallets not assigned to this campaign (but may be assigned to others)
   return allWallets.filter(wallet => !assignedWalletIds.has(wallet.id));
 }
 
 /**
- * Add a wallet to a campaign
+ * Add a wallet to a campaign (handles duplicates gracefully)
  */
 export async function addWalletToCampaign(campaignId: string, walletId: string): Promise<void> {
   const { error } = await supabase
@@ -91,6 +92,10 @@ export async function addWalletToCampaign(campaignId: string, walletId: string):
     });
 
   if (error) {
+    // Handle duplicate key constraint error gracefully
+    if (error.code === '23505') {
+      throw new Error('Wallet is already assigned to this campaign');
+    }
     throw new Error(`Failed to add wallet to campaign: ${error.message}`);
   }
 }

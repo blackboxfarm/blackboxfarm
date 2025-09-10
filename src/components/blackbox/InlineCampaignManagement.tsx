@@ -20,6 +20,7 @@ interface WalletData {
   sol_balance: number;
   is_active: boolean;
   nickname?: string;
+  campaigns?: Array<{ id: string; nickname: string }>;
 }
 
 interface Command {
@@ -71,7 +72,7 @@ export function InlineCampaignManagement({ campaign, onScrollToSection }: Inline
         .filter(Boolean) as WalletData[];
       setAssociatedWallets(associated);
 
-      // Load available (unassociated) wallets
+      // Load available wallets (now includes all wallets except those already assigned to THIS campaign)
       const associatedWalletIds = associated.map(w => w.id);
       let availableQuery = supabase.from('blackbox_wallets').select('*');
       
@@ -82,17 +83,25 @@ export function InlineCampaignManagement({ campaign, onScrollToSection }: Inline
       const { data: allWallets, error: allWalletsError } = await availableQuery;
       if (allWalletsError) throw allWalletsError;
 
-      // Filter out wallets associated with other campaigns
-      const { data: otherAssociations, error: otherError } = await supabase
-        .from('campaign_wallets')
-        .select('wallet_id')
-        .neq('campaign_id', campaign.id);
+      // Get campaign info for each available wallet to show sharing status
+      const walletsWithCampaigns = await Promise.all((allWallets || []).map(async (wallet) => {
+        const { data: campaigns } = await supabase
+          .from('campaign_wallets')
+          .select(`
+            blackbox_campaigns!inner (
+              id,
+              nickname
+            )
+          `)
+          .eq('wallet_id', wallet.id);
+        
+        return {
+          ...wallet,
+          campaigns: campaigns?.map(c => c.blackbox_campaigns) || []
+        };
+      }));
 
-      if (otherError) throw otherError;
-
-      const otherAssociatedIds = new Set(otherAssociations?.map(a => a.wallet_id) || []);
-      const available = (allWallets || []).filter(w => !otherAssociatedIds.has(w.id));
-      setAvailableWallets(available);
+      setAvailableWallets(walletsWithCampaigns);
 
       // Load commands for associated wallets
       const walletIds = associated.map(w => w.id);
@@ -147,7 +156,18 @@ export function InlineCampaignManagement({ campaign, onScrollToSection }: Inline
           wallet_id: walletId
         });
 
-      if (error) throw error;
+      if (error) {
+        // Handle duplicate assignment gracefully
+        if (error.code === '23505') {
+          toast({
+            title: "Already assigned",
+            description: "This wallet is already assigned to this campaign",
+            variant: "destructive",
+          });
+          return;
+        }
+        throw error;
+      }
 
       toast({
         title: "Success",
@@ -297,13 +317,20 @@ export function InlineCampaignManagement({ campaign, onScrollToSection }: Inline
                 <SelectContent>
                   {availableWallets.map((wallet) => (
                     <SelectItem key={wallet.id} value={wallet.id}>
-                      <div className="flex items-center justify-between w-full">
-                        <span className="font-mono text-xs">
-                          {wallet.pubkey.slice(0, 6)}...{wallet.pubkey.slice(-4)}
-                        </span>
-                        <span className="text-xs text-muted-foreground ml-2">
-                          {wallet.sol_balance.toFixed(3)} SOL
-                        </span>
+                      <div className="flex flex-col items-start w-full">
+                        <div className="flex items-center justify-between w-full">
+                          <span className="font-mono text-xs">
+                            {wallet.pubkey.slice(0, 6)}...{wallet.pubkey.slice(-4)}
+                          </span>
+                          <span className="text-xs text-muted-foreground ml-2">
+                            {wallet.sol_balance.toFixed(3)} SOL
+                          </span>
+                        </div>
+                        {wallet.campaigns && wallet.campaigns.length > 0 && (
+                          <div className="text-xs text-muted-foreground mt-1">
+                            Also in: {wallet.campaigns.map(c => c.nickname).join(', ')}
+                          </div>
+                        )}
                       </div>
                     </SelectItem>
                   ))}
