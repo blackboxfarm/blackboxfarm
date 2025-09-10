@@ -2,7 +2,8 @@ import { useState, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Coins, DollarSign, Trash2, RefreshCw } from "lucide-react";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
+import { Coins, DollarSign, Trash2, RefreshCw, ArrowLeftRight } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "@/hooks/use-toast";
 import { useSolPrice } from "@/hooks/useSolPrice";
@@ -33,6 +34,7 @@ export function WalletTokenManager({
   const [tokens, setTokens] = useState<TokenBalance[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [sellLoading, setSellLoading] = useState<Set<string>>(new Set());
+  const [convertLoading, setConvertLoading] = useState(false);
   const { price: solPrice } = useSolPrice();
 
   const loadTokenBalances = async () => {
@@ -220,6 +222,68 @@ export function WalletTokenManager({
     return `$${(solAmount * solPrice).toFixed(2)}`;
   };
 
+  const convertSolToUsd = async () => {
+    const solToken = tokens.find(t => t.symbol === 'SOL');
+    if (!solToken || solToken.uiAmount <= 0) {
+      toast({
+        title: "No SOL to convert",
+        description: "This wallet doesn't have SOL balance to convert",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    setConvertLoading(true);
+    try {
+      // Here you would implement SOL to USD conversion logic
+      // This could involve using a DEX aggregator like Jupiter
+      toast({
+        title: "SOL to USD conversion",
+        description: "SOL to USD conversion is not yet implemented. This would require integration with a USD stablecoin DEX.",
+        variant: "destructive"
+      });
+    } catch (error: any) {
+      toast({
+        title: "Conversion failed",
+        description: error.message,
+        variant: "destructive"
+      });
+    } finally {
+      setConvertLoading(false);
+    }
+  };
+
+  const convertUsdToSol = async () => {
+    // Find USD stablecoins (USDC, USDT, etc.)
+    const usdTokens = tokens.filter(t => ['USDC', 'USDT', 'BUSD', 'DAI'].includes(t.symbol));
+    if (usdTokens.length === 0) {
+      toast({
+        title: "No USD tokens to convert",
+        description: "This wallet doesn't have USD stablecoins to convert to SOL",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    setConvertLoading(true);
+    try {
+      // Here you would implement USD to SOL conversion logic
+      toast({
+        title: "USD to SOL conversion",
+        description: "USD to SOL conversion is not yet implemented. This would require integration with a DEX.",
+        variant: "destructive"
+      });
+    } catch (error: any) {
+      toast({
+        title: "Conversion failed",
+        description: error.message,
+        variant: "destructive"
+      });
+    } finally {
+      setConvertLoading(false);
+    }
+  };
+
   return (
     <Card className="mt-4">
       <CardHeader>
@@ -229,14 +293,36 @@ export function WalletTokenManager({
             Token Holdings
             {isOrphaned && <Badge variant="outline" className="text-xs">Orphaned</Badge>}
           </CardTitle>
-          <Button 
-            onClick={loadTokenBalances} 
-            variant="outline" 
-            size="sm"
-            disabled={isLoading}
-          >
-            <RefreshCw className={`h-4 w-4 ${isLoading ? 'animate-spin' : ''}`} />
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button 
+              onClick={convertSolToUsd} 
+              variant="outline" 
+              size="sm"
+              disabled={convertLoading || !tokens.find(t => t.symbol === 'SOL' && t.uiAmount > 0)}
+              title="Convert SOL to USD stablecoin"
+            >
+              <ArrowLeftRight className="h-4 w-4" />
+              SOL→USD
+            </Button>
+            <Button 
+              onClick={convertUsdToSol} 
+              variant="outline" 
+              size="sm"
+              disabled={convertLoading || !tokens.some(t => ['USDC', 'USDT', 'BUSD', 'DAI'].includes(t.symbol) && t.uiAmount > 0)}
+              title="Convert USD stablecoins to SOL"
+            >
+              <ArrowLeftRight className="h-4 w-4" />
+              USD→SOL
+            </Button>
+            <Button 
+              onClick={loadTokenBalances} 
+              variant="outline" 
+              size="sm"
+              disabled={isLoading}
+            >
+              <RefreshCw className={`h-4 w-4 ${isLoading ? 'animate-spin' : ''}`} />
+            </Button>
+          </div>
         </div>
       </CardHeader>
       <CardContent>
@@ -282,19 +368,50 @@ export function WalletTokenManager({
                   )}
                 </div>
                 
-                <Button
-                  onClick={() => sellAllTokens(token)}
-                  variant="destructive"
-                  size="sm"
-                  disabled={sellLoading.has(token.mint) || token.symbol === 'SOL'}
-                  title={token.symbol === 'SOL' ? 'Use withdraw function for SOL' : `Sell all ${token.symbol}`}
-                >
-                  {sellLoading.has(token.mint) ? (
-                    <RefreshCw className="h-4 w-4 animate-spin" />
-                  ) : (
-                    <Trash2 className="h-4 w-4" />
+                <div className="flex gap-2">
+                  {/* Show USD value for all tokens */}
+                  {token.symbol !== 'SOL' && ['USDC', 'USDT', 'BUSD', 'DAI'].includes(token.symbol) && (
+                    <div className="text-xs text-muted-foreground flex items-center gap-1">
+                      <DollarSign className="h-3 w-3" />
+                      ~${token.uiAmount.toFixed(2)}
+                    </div>
                   )}
-                </Button>
+                  
+                  <AlertDialog>
+                    <AlertDialogTrigger asChild>
+                      <Button
+                        variant="destructive"
+                        size="sm"
+                        disabled={sellLoading.has(token.mint) || token.symbol === 'SOL'}
+                        title={token.symbol === 'SOL' ? 'Use withdraw function for SOL' : `Sell all ${token.symbol}`}
+                      >
+                        {sellLoading.has(token.mint) ? (
+                          <RefreshCw className="h-4 w-4 animate-spin" />
+                        ) : (
+                          <Trash2 className="h-4 w-4" />
+                        )}
+                      </Button>
+                    </AlertDialogTrigger>
+                    <AlertDialogContent>
+                      <AlertDialogHeader>
+                        <AlertDialogTitle>Sell All {token.symbol}?</AlertDialogTitle>
+                        <AlertDialogDescription>
+                          Are you sure you want to sell all {token.uiAmount.toFixed(6)} {token.symbol} tokens from this wallet?
+                          This action cannot be undone.
+                        </AlertDialogDescription>
+                      </AlertDialogHeader>
+                      <AlertDialogFooter>
+                        <AlertDialogCancel>Cancel</AlertDialogCancel>
+                        <AlertDialogAction
+                          onClick={() => sellAllTokens(token)}
+                          className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                        >
+                          Sell All
+                        </AlertDialogAction>
+                      </AlertDialogFooter>
+                    </AlertDialogContent>
+                  </AlertDialog>
+                </div>
               </div>
             ))}
           </div>

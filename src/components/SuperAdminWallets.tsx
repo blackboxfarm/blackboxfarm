@@ -5,12 +5,14 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
-import { Copy, Plus, Shield, Wallet, AlertTriangle, Key, DollarSign } from "lucide-react";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
+import { Copy, Plus, Shield, Wallet, AlertTriangle, Key, DollarSign, ChevronDown, ChevronUp } from "lucide-react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Keypair } from "@solana/web3.js";
 import bs58 from "bs58";
 import { toast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
+import { WalletTokenManager } from "@/components/blackbox/WalletTokenManager";
 
 interface SuperAdminWallet {
   id: string;
@@ -29,6 +31,7 @@ export function SuperAdminWallets() {
     wallet_type: "treasury" as const
   });
   const [isGenerating, setIsGenerating] = useState(false);
+  const [expandedWallets, setExpandedWallets] = useState<Set<string>>(new Set());
 
   const walletTypes = [
     {
@@ -63,6 +66,27 @@ export function SuperAdminWallets() {
 
   useEffect(() => {
     loadSuperAdminWallets();
+    
+    // Set up real-time subscription for wallet updates
+    const channel = supabase
+      .channel('super_admin_wallets_changes')
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'super_admin_wallets'
+        },
+        () => {
+          console.log('Super admin wallets updated, reloading...');
+          loadSuperAdminWallets();
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
   }, []);
 
   const loadSuperAdminWallets = async () => {
@@ -172,6 +196,18 @@ export function SuperAdminWallets() {
     return walletTypes.find(t => t.value === type) || walletTypes[0];
   };
 
+  const toggleWalletExpansion = (walletId: string) => {
+    setExpandedWallets(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(walletId)) {
+        newSet.delete(walletId);
+      } else {
+        newSet.add(walletId);
+      }
+      return newSet;
+    });
+  };
+
   return (
     <div className="space-y-6">
       <Card>
@@ -255,9 +291,10 @@ export function SuperAdminWallets() {
               <p className="text-sm">Create platform wallets for treasury, funding, and emergency operations.</p>
             </div>
           ) : (
-            <div className="space-y-4 max-h-96 overflow-y-auto pr-2">
+            <div className="space-y-4 max-h-[600px] overflow-y-auto pr-2">
               {wallets.map((wallet) => {
                 const typeInfo = getWalletTypeInfo(wallet.wallet_type);
+                const isExpanded = expandedWallets.has(wallet.id);
                 return (
                   <Card key={wallet.id} className="border">
                     <CardContent className="p-4">
@@ -277,9 +314,13 @@ export function SuperAdminWallets() {
                           <div className="space-y-2">
                             <div className="flex items-center gap-2">
                               <span className="text-sm text-muted-foreground">Public Key:</span>
-                              <code className="text-sm bg-muted px-2 py-1 rounded flex-1">
+                              <button
+                                onClick={() => copyToClipboard(wallet.pubkey, "Public key")}
+                                className="font-mono text-sm bg-muted px-2 py-1 rounded hover:bg-muted/80 transition-colors cursor-pointer text-left flex-1"
+                                title="Click to copy full address"
+                              >
                                 {wallet.pubkey}
-                              </code>
+                              </button>
                               <Button
                                 size="sm"
                                 variant="outline"
@@ -299,12 +340,36 @@ export function SuperAdminWallets() {
                           <Button
                             size="sm"
                             variant="outline"
+                            onClick={() => toggleWalletExpansion(wallet.id)}
+                          >
+                            {isExpanded ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+                            Tokens
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="outline"
                             onClick={() => toggleWalletStatus(wallet)}
                           >
                             {wallet.is_active ? "Deactivate" : "Activate"}
                           </Button>
                         </div>
                       </div>
+                      
+                      <Collapsible open={isExpanded}>
+                        <CollapsibleContent className="mt-4 border-t pt-4">
+                          <WalletTokenManager
+                            walletId={wallet.id}
+                            walletPubkey={wallet.pubkey}
+                            onTokensSold={() => {
+                              // Optional callback when tokens are sold
+                              toast({
+                                title: "Tokens sold",
+                                description: "Wallet tokens have been processed"
+                              });
+                            }}
+                          />
+                        </CollapsibleContent>
+                      </Collapsible>
                     </CardContent>
                   </Card>
                 );
