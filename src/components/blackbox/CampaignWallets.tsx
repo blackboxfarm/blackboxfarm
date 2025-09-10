@@ -8,6 +8,7 @@ import { Label } from "@/components/ui/label";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "@/hooks/use-toast";
 import { WalletCommands } from "./WalletCommands";
+import { WalletTokenManager } from "./WalletTokenManager";
 
 interface Campaign {
   id: string;
@@ -55,6 +56,15 @@ export function CampaignWallets({ campaign }: CampaignWalletsProps) {
           schema: 'public',
           table: 'campaign_wallets'
         }, () => {
+          console.log('Campaign wallets changed, reloading...');
+          loadWallets();
+        })
+        .on('postgres_changes', {
+          event: '*',
+          schema: 'public',
+          table: 'blackbox_wallets'
+        }, () => {
+          console.log('Blackbox wallets changed, reloading...');
           loadWallets();
         })
         .subscribe();
@@ -631,29 +641,168 @@ export function CampaignWallets({ campaign }: CampaignWalletsProps) {
                       >
                         <Settings className="h-4 w-4" />
                       </Button>
+                        </div>
+                      </div>
+                      
+                      {/* Token Manager for each wallet */}
+                      <WalletTokenManager 
+                        walletId={wallet.id}
+                        walletPubkey={wallet.pubkey}
+                        onTokensSold={() => {
+                          loadWallets();
+                          loadTokenBalances([wallet]);
+                        }}
+                      />
+                    </div>
+                  ))}
+                </div>
+              )}
+              
+              {wallets.length >= 10 && (
+                <p className="text-sm text-muted-foreground mt-4 text-center">
+                  Maximum 10 wallets per campaign reached.
+                </p>
+              )}
+            </CardContent>
+          </Card>
+
+          {/* Orphaned Wallets Section */}
+          <OrphanedWallets onWalletAction={loadWallets} />
+
+          {selectedWallet && (
+            <WalletCommands 
+              wallet={selectedWallet} 
+              campaign={campaign} 
+              isDevMode={isDevMode}
+              devBalance={devBalances[selectedWallet.pubkey]}
+            />
+          )}
+        </div>
+      );
+    }
+
+    // Orphaned Wallets Component
+    function OrphanedWallets({ onWalletAction }: { onWalletAction: () => void }) {
+      const [orphanedWallets, setOrphanedWallets] = useState<WalletData[]>([]);
+      const [isLoading, setIsLoading] = useState(false);
+
+      const loadOrphanedWallets = async () => {
+        setIsLoading(true);
+        try {
+          // Get all wallets that are not assigned to any campaign
+          const { data, error } = await supabase
+            .from('blackbox_wallets')
+            .select(`
+              *,
+              campaign_wallets!left(campaign_id)
+            `)
+            .is('campaign_wallets.campaign_id', null)
+            .eq('is_active', true)
+            .order('created_at', { ascending: false });
+
+          if (error) {
+            console.error('Error loading orphaned wallets:', error);
+            return;
+          }
+
+          setOrphanedWallets(data || []);
+        } catch (error) {
+          console.error('Error loading orphaned wallets:', error);
+        } finally {
+          setIsLoading(false);
+        }
+      };
+
+      useEffect(() => {
+        loadOrphanedWallets();
+        
+        // Set up real-time updates for orphaned wallets
+        const orphanChannel = supabase
+          .channel('orphan-wallet-changes')
+          .on('postgres_changes', {
+            event: '*',
+            schema: 'public',
+            table: 'campaign_wallets'
+          }, () => {
+            console.log('Campaign wallets changed, refreshing orphaned wallets...');
+            loadOrphanedWallets();
+          })
+          .on('postgres_changes', {
+            event: '*',
+            schema: 'public',
+            table: 'blackbox_wallets'
+          }, () => {
+            console.log('Blackbox wallets changed, refreshing orphaned wallets...');
+            loadOrphanedWallets();
+          })
+          .subscribe();
+
+        return () => {
+          supabase.removeChannel(orphanChannel);
+        };
+      }, []);
+
+      if (isLoading) {
+        return (
+          <Card>
+            <CardHeader>
+              <CardTitle>Orphaned Wallets</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="text-center py-4">
+                <RefreshCw className="h-4 w-4 animate-spin mx-auto mb-2" />
+                Loading orphaned wallets...
+              </div>
+            </CardContent>
+          </Card>
+        );
+      }
+
+      if (orphanedWallets.length === 0) {
+        return null;
+      }
+
+      return (
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Wallet className="h-5 w-5" />
+              Orphaned Wallets ({orphanedWallets.length})
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-3">
+              {orphanedWallets.map((wallet) => (
+                <div key={wallet.id} className="p-4 border rounded-lg">
+                  <div className="flex items-center justify-between mb-2">
+                    <div className="flex items-center gap-2">
+                      <button
+                        onClick={() => navigator.clipboard.writeText(wallet.pubkey)}
+                        className="text-sm bg-muted px-2 py-1 rounded font-mono hover:bg-muted/80 transition-colors cursor-pointer"
+                        title="Click to copy full address"
+                      >
+                        {wallet.pubkey.slice(0, 8)}...{wallet.pubkey.slice(-8)}
+                      </button>
+                      <Badge variant="outline">Orphaned</Badge>
+                    </div>
+                    <div className="text-sm text-muted-foreground">
+                      {wallet.sol_balance.toFixed(4)} SOL
                     </div>
                   </div>
+                  
+                  <WalletTokenManager 
+                    walletId={wallet.id}
+                    walletPubkey={wallet.pubkey}
+                    isOrphaned={true}
+                    onTokensSold={() => {
+                      onWalletAction();
+                      loadOrphanedWallets();
+                    }}
+                  />
                 </div>
               ))}
             </div>
-          )}
-          
-          {wallets.length >= 10 && (
-            <p className="text-sm text-muted-foreground mt-4 text-center">
-              Maximum 10 wallets per campaign reached.
-            </p>
-          )}
-        </CardContent>
-      </Card>
-
-      {selectedWallet && (
-        <WalletCommands 
-          wallet={selectedWallet} 
-          campaign={campaign} 
-          isDevMode={isDevMode}
-          devBalance={devBalances[selectedWallet.pubkey]}
-        />
-      )}
-    </div>
-  );
-}
+          </CardContent>
+        </Card>
+      );
+    }

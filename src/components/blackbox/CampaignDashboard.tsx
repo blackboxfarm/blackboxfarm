@@ -59,8 +59,17 @@ export function CampaignDashboard() {
         event: '*',
         schema: 'public',
         table: 'blackbox_campaigns'
-      }, () => {
+      }, (payload) => {
+        console.log('Campaign change detected:', payload);
         loadCampaigns(); // Refresh campaigns when there are changes
+      })
+      .on('postgres_changes', {
+        event: '*',
+        schema: 'public',
+        table: 'campaign_wallets'
+      }, (payload) => {
+        console.log('Campaign wallet change detected:', payload);
+        loadCampaigns(); // Refresh campaigns when wallet assignments change
       })
       .subscribe();
 
