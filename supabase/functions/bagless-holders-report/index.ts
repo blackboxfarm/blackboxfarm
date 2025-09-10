@@ -126,8 +126,8 @@ serve(async (req) => {
             // Categorize wallets
             const isDustWallet = balance < 1;
             const isSmallWallet = balance >= 1 && usdValue < 1; // Between 1 token and $1 USD
-            const isMediumWallet = balance >= 1 && usdValue >= 1 && usdValue < 5; // $1-$5 USD
-            const isLargeWallet = balance >= 1 && usdValue >= 10 && usdValue < 50; // $10-$50 USD
+            const isMediumWallet = usdValue >= 1 && usdValue < 5; // $1-$5 USD
+            const isLargeWallet = usdValue >= 5 && usdValue < 50; // $5-$50 USD
             
             holders.push({
               owner,
@@ -177,7 +177,7 @@ serve(async (req) => {
       totalBalance,
       tokenPriceUSD,
       holders: rankedHolders,
-      summary: `Found ${rankedHolders.length} total holders. ${realWallets} real wallets (≥$50), ${largeWallets} large wallets ($10-$50), ${mediumWallets} medium wallets ($1-$5), ${smallWallets} small wallets (<$1), ${dustWallets} dust wallets (<1 token). Total tokens distributed: ${totalBalance.toLocaleString()}`
+      summary: `Found ${rankedHolders.length} total holders. ${realWallets} real wallets (≥$50), ${largeWallets} large wallets ($5-$50), ${mediumWallets} medium wallets ($1-$5), ${smallWallets} small wallets (<$1), ${dustWallets} dust wallets (<1 token). Total tokens distributed: ${totalBalance.toLocaleString()}`
     };
 
     return new Response(
