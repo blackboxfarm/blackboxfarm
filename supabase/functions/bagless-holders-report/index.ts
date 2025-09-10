@@ -35,6 +35,8 @@ serve(async (req) => {
     
     // Use manual price if provided, otherwise try multiple APIs
     let tokenPriceUSD = manualPrice || 0;
+    let priceSource = '';
+    let priceDiscoveryFailed = false;
     
     if (!manualPrice || manualPrice === 0) {
       console.log('No manual price provided, trying multiple price sources...');
@@ -96,6 +98,7 @@ serve(async (req) => {
             
             if (price > 0) {
               tokenPriceUSD = price;
+              priceSource = api.name;
               console.log(`✅ Got price from ${api.name}: $${tokenPriceUSD}`);
               break;
             } else {
@@ -109,8 +112,13 @@ serve(async (req) => {
           continue;
         }
       }
+      
+      if (tokenPriceUSD === 0) {
+        priceDiscoveryFailed = true;
+      }
     } else {
       console.log(`Using manual price: $${tokenPriceUSD}`);
+      priceSource = 'Manual';
     }
     
     if (tokenPriceUSD === 0) {
@@ -223,8 +231,10 @@ serve(async (req) => {
       dustWallets,
       totalBalance,
       tokenPriceUSD,
+      priceSource,
+      priceDiscoveryFailed,
       holders: rankedHolders,
-      summary: `Found ${rankedHolders.length} total holders. ${realWallets} real wallets (≥$50), ${largeWallets} large wallets ($5-$50), ${mediumWallets} medium wallets ($1-$5), ${smallWallets} small wallets (<$1), ${dustWallets} dust wallets (<1 token). Total tokens distributed: ${totalBalance.toLocaleString()}`
+      summary: `Found ${rankedHolders.length} total holders. ${realWallets} real wallets (≥$50), ${largeWallets} large wallets ($5-$50), ${mediumWallets} medium wallets ($1-$5), ${smallWallets} small wallets (<$1), ${dustWallets} dust wallets (<1 token). Total tokens distributed: ${totalBalance.toLocaleString()}${priceSource ? ` (Price from ${priceSource})` : ''}`
     };
 
     return new Response(
