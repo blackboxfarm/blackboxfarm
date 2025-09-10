@@ -33,17 +33,35 @@ serve(async (req) => {
 
     const rpcUrl = `https://rpc.helius.xyz/?api-key=${heliusApiKey}`;
     
-    // Get token price in USD from Jupiter API
+    // Get token price in USD from Jupiter API (try multiple endpoints)
     let tokenPriceUSD = 0;
     try {
-      const priceResponse = await fetch(`https://price.jup.ag/v4/price?ids=${tokenMint}`);
+      // Try Jupiter v6 first
+      const priceResponse = await fetch(`https://price.jup.ag/v6/price?ids=${tokenMint}`);
       if (priceResponse.ok) {
         const priceData = await priceResponse.json();
         tokenPriceUSD = priceData.data?.[tokenMint]?.price || 0;
-        console.log(`Token price: $${tokenPriceUSD}`);
+        console.log(`Token price from Jupiter v6: $${tokenPriceUSD}`);
+      }
+      
+      // If Jupiter fails or returns 0, try DexScreener as fallback
+      if (tokenPriceUSD === 0) {
+        console.log('Jupiter failed, trying DexScreener...');
+        const dexResponse = await fetch(`https://api.dexscreener.com/latest/dex/tokens/${tokenMint}`);
+        if (dexResponse.ok) {
+          const dexData = await dexResponse.json();
+          if (dexData.pairs && dexData.pairs.length > 0) {
+            tokenPriceUSD = parseFloat(dexData.pairs[0].priceUsd) || 0;
+            console.log(`Token price from DexScreener: $${tokenPriceUSD}`);
+          }
+        }
       }
     } catch (e) {
-      console.warn('Could not fetch token price, using $0:', e);
+      console.warn('Could not fetch token price from any source:', e);
+    }
+    
+    if (tokenPriceUSD === 0) {
+      console.warn('WARNING: Token price is $0 - USD calculations will be incorrect');
     }
     
     // Get all token accounts for this mint
