@@ -51,8 +51,7 @@ export function CampaignWallets({ campaign }: CampaignWalletsProps) {
         .on('postgres_changes', {
           event: '*',
           schema: 'public',
-          table: 'blackbox_wallets',
-          filter: `campaign_id=eq.${campaign.id}`
+          table: 'campaign_wallets'
         }, () => {
           loadWallets();
         })

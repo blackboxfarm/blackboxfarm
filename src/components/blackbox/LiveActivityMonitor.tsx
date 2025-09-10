@@ -68,11 +68,13 @@ export function LiveActivityMonitor({ campaignId }: LiveActivityMonitorProps) {
   const loadInitialData = async () => {
     setIsLoading(true);
     
-    // First get wallet IDs for this campaign
-    const { data: walletIds } = await supabase
-      .from('blackbox_wallets')
-      .select('id')
+    // First get wallet IDs for this campaign through the junction table
+    const { data: campaignWallets } = await supabase
+      .from('campaign_wallets')
+      .select('wallet_id')
       .eq('campaign_id', campaignId);
+
+    const walletIds = campaignWallets?.map(cw => cw.wallet_id) || [];
 
     if (!walletIds || walletIds.length === 0) {
       setIsLoading(false);
@@ -81,12 +83,14 @@ export function LiveActivityMonitor({ campaignId }: LiveActivityMonitorProps) {
 
     const walletIdArray = walletIds.map(w => w.id);
 
-    // Load campaign stats
+    // Load campaign stats using junction table
     const { data: wallets } = await supabase
-      .from('blackbox_wallets')
+      .from('campaign_wallets')
       .select(`
-        id,
-        blackbox_command_codes(id, is_active)
+        blackbox_wallets!inner(
+          id,
+          blackbox_command_codes(id, is_active)
+        )
       `)
       .eq('campaign_id', campaignId);
 
@@ -98,8 +102,11 @@ export function LiveActivityMonitor({ campaignId }: LiveActivityMonitorProps) {
       .order('executed_at', { ascending: false });
 
     if (wallets) {
-      const totalCommands = wallets.reduce((acc, wallet) => acc + (wallet.blackbox_command_codes?.length || 0), 0);
-      const activeCommands = wallets.reduce((acc, wallet) => 
+      // Extract wallet data from the junction table result
+      const walletData = wallets.map((cw: any) => cw.blackbox_wallets).filter(Boolean);
+      
+      const totalCommands = walletData.reduce((acc: number, wallet: any) => acc + (wallet.blackbox_command_codes?.length || 0), 0);
+      const activeCommands = walletData.reduce((acc: number, wallet: any) => 
         acc + (wallet.blackbox_command_codes?.filter((cmd: any) => cmd.is_active).length || 0), 0);
       
       const buyCount = allTransactions?.filter((tx: any) => tx.transaction_type === 'buy').length || 0;
@@ -137,11 +144,13 @@ export function LiveActivityMonitor({ campaignId }: LiveActivityMonitorProps) {
   };
 
   const setupRealtimeSubscriptions = async () => {
-    // Get wallet IDs for filtering real-time updates
-    const { data: walletIds } = await supabase
-      .from('blackbox_wallets')
-      .select('id')
+    // Get wallet IDs for filtering real-time updates through junction table
+    const { data: campaignWallets } = await supabase
+      .from('campaign_wallets')
+      .select('wallet_id')
       .eq('campaign_id', campaignId);
+
+    const walletIds = campaignWallets?.map(cw => cw.wallet_id) || [];
 
     if (!walletIds || walletIds.length === 0) return;
 
