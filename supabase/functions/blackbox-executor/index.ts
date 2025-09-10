@@ -107,16 +107,18 @@ serve(async (req) => {
     if (action === "buy") {
       // Execute REAL buy transaction using Jupiter/Raydium
       const config = commandData.config;
-      const buyAmountUSD = config.type === "simple" 
-        ? config.buyAmount  // This is in USD
-        : Math.random() * (config.buyAmount.max - config.buyAmount.min) + config.buyAmount.min;
+      
+      // buyAmount is configured in SOL, not USD
+      const buyAmountSOL = config.type === "simple" 
+        ? config.buyAmount || 0.01  // This is in SOL
+        : Math.random() * ((config.buyAmount?.max || 0.02) - (config.buyAmount?.min || 0.005)) + (config.buyAmount?.min || 0.005);
 
-      // Get current SOL price to convert USD to SOL
+      // Get current SOL price for logging purposes
       const { data: solPriceData } = await supabaseClient.functions.invoke('sol-price');
       const solPrice = solPriceData?.price || 201; // Fallback price
-      const buyAmountSOL = buyAmountUSD / solPrice;
+      const buyAmountUSD = buyAmountSOL * solPrice;
 
-      console.log(`💰 Converting $${buyAmountUSD} USD to ${buyAmountSOL} SOL (SOL price: $${solPrice})`);
+      console.log(`💰 Buying ${buyAmountSOL} SOL ($${buyAmountUSD.toFixed(2)} USD at $${solPrice}/SOL)`);
 
       // Detect token platform by address pattern
       const tokenAddress = campaign.token_address;

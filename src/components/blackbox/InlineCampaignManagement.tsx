@@ -302,6 +302,47 @@ export function InlineCampaignManagement({ campaign, onScrollToSection }: Inline
     return <div className="text-sm text-muted-foreground">Loading campaign details...</div>;
   }
 
+  // Function to check if campaign is ready to start
+  const canStartCampaign = () => {
+    return associatedWallets.length > 0 && commands.length > 0 && commands.some(c => c.is_active);
+  };
+
+  // Function to start/stop campaign contract
+  const toggleCampaignContract = async () => {
+    if (!canStartCampaign()) {
+      toast({
+        title: "Cannot start",
+        description: "Campaign needs at least one wallet and one active command",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    try {
+      const { error } = await supabase
+        .from('blackbox_campaigns')
+        .update({ is_active: !campaign.is_active })
+        .eq('id', campaign.id);
+
+      if (error) throw error;
+
+      toast({
+        title: "Success",
+        description: `Campaign ${campaign.is_active ? 'stopped' : 'started'}`,
+      });
+
+      // Reload the parent component's data
+      loadCampaignData();
+    } catch (error) {
+      console.error('Error toggling campaign:', error);
+      toast({
+        title: "Error",
+        description: "Failed to toggle campaign",
+        variant: "destructive",
+      });
+    }
+  };
+
   return (
     <div className="mt-4 space-y-4 border-t pt-4">
       {/* Wallets Section */}
@@ -461,6 +502,51 @@ export function InlineCampaignManagement({ campaign, onScrollToSection }: Inline
             ))}
           </div>
         )}
+      </div>
+
+      {/* Campaign Control Section */}
+      <div className="border-t pt-4">
+        <div className="flex items-center justify-between">
+          <div className="space-y-1">
+            <div className="flex items-center gap-4 text-sm">
+              <div className="flex items-center gap-2">
+                <div className={`w-2 h-2 rounded-full ${associatedWallets.length > 0 ? 'bg-green-500' : 'bg-gray-300'}`} />
+                <span className="text-xs">Wallets Ready</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <div className={`w-2 h-2 rounded-full ${commands.some(c => c.is_active) ? 'bg-green-500' : 'bg-gray-300'}`} />
+                <span className="text-xs">Commands Ready</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <div className={`w-2 h-2 rounded-full ${associatedWallets.reduce((sum, w) => sum + w.sol_balance, 0) >= 0.01 ? 'bg-green-500' : 'bg-gray-300'}`} />
+                <span className="text-xs">Funds Ready</span>
+                <span className="text-xs text-muted-foreground">
+                  ({associatedWallets.reduce((sum, w) => sum + w.sol_balance, 0).toFixed(3)} SOL)
+                </span>
+              </div>
+            </div>
+          </div>
+          
+          <Button
+            onClick={toggleCampaignContract}
+            variant={campaign.is_active ? "destructive" : "default"}
+            size="sm"
+            disabled={!canStartCampaign() && !campaign.is_active}
+            className="min-w-[100px]"
+          >
+            {campaign.is_active ? (
+              <>
+                <Pause className="h-4 w-4 mr-2" />
+                Stop Contract
+              </>
+            ) : (
+              <>
+                <Play className="h-4 w-4 mr-2" />
+                Start Contract
+              </>
+            )}
+          </Button>
+        </div>
       </div>
 
       <CommandCreationDialog
