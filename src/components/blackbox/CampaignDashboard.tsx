@@ -77,36 +77,73 @@ export function CampaignDashboard() {
   }, [campaigns, checkNotificationCooldown]);
 
   const loadCampaigns = async () => {
-    const { data, error } = await supabase
-      .from('blackbox_campaigns')
-      .select('*')
-      .order('created_at', { ascending: false });
+    try {
+      const { data, error } = await supabase
+        .from('blackbox_campaigns')
+        .select('*')
+        .order('created_at', { ascending: false });
 
-    if (error) {
-      toast({ title: "Error loading campaigns", description: error.message });
-      return;
-    }
+      if (error) {
+        toast({ title: "Error loading campaigns", description: error.message });
+        return;
+      }
 
-    // Fetch token metadata for each campaign
-    const campaignsWithMetadata = await Promise.all(
-      (data || []).map(async (campaign) => {
-        try {
-          const { data: tokenInfo } = await supabase.functions.invoke('token-metadata', {
-            body: { tokenMint: campaign.token_address }
-          });
-          return {
-            ...campaign,
-            token_metadata: tokenInfo?.success ? tokenInfo : null
-          };
-        } catch (error) {
-          return campaign;
+      // Clear any stale localStorage campaign references
+      const storedCampaignKeys = Object.keys(localStorage).filter(key => 
+        key.startsWith('campaign_active_') || key.startsWith('campaign_state_')
+      );
+      
+      const existingCampaignIds = new Set((data || []).map(c => c.id));
+      
+      // Remove stale campaign data from localStorage
+      storedCampaignKeys.forEach(key => {
+        const campaignId = key.split('_').pop();
+        if (campaignId && !existingCampaignIds.has(campaignId)) {
+          localStorage.removeItem(key);
+          console.log(`🧹 Cleaned up stale campaign data: ${key}`);
         }
-      })
-    );
+      });
 
-    setCampaigns(campaignsWithMetadata);
-    if (campaignsWithMetadata && campaignsWithMetadata.length > 0 && !selectedCampaign) {
-      setSelectedCampaign(campaignsWithMetadata[0]);
+      // Fetch token metadata for each campaign
+      const campaignsWithMetadata = await Promise.all(
+        (data || []).map(async (campaign) => {
+          try {
+            const { data: tokenInfo } = await supabase.functions.invoke('token-metadata', {
+              body: { tokenMint: campaign.token_address }
+            });
+            return {
+              ...campaign,
+              token_metadata: tokenInfo?.success ? tokenInfo : null
+            };
+          } catch (error) {
+            return campaign;
+          }
+        })
+      );
+
+      setCampaigns(campaignsWithMetadata);
+      
+      // Validate current selected campaign still exists
+      if (selectedCampaign && !campaignsWithMetadata.find(c => c.id === selectedCampaign.id)) {
+        console.log(`🚨 Selected campaign ${selectedCampaign.id} no longer exists, clearing selection`);
+        setSelectedCampaign(null);
+        toast({
+          title: "Campaign Not Found",
+          description: `Campaign "${selectedCampaign.nickname}" no longer exists and has been cleared from view.`,
+          variant: "destructive"
+        });
+      }
+      
+      if (campaignsWithMetadata && campaignsWithMetadata.length > 0 && !selectedCampaign) {
+        setSelectedCampaign(campaignsWithMetadata[0]);
+      }
+    } catch (error: any) {
+      console.error('Error in loadCampaigns:', error);
+      toast({ 
+        title: "Critical Error", 
+        description: "Failed to load campaigns. Please refresh the page.",
+        variant: "destructive"
+      });
     }
   };
 
@@ -250,6 +287,48 @@ export function CampaignDashboard() {
     }
   };
 
+  // Add campaign existence validator
+  const validateCampaignExists = async (campaign: Campaign): Promise<boolean> => {
+    try {
+      const { data, error } = await supabase
+        .from('blackbox_campaigns')
+        .select('id')
+        .eq('id', campaign.id)
+        .single();
+      
+      if (error || !data) {
+        console.error(`Campaign ${campaign.id} does not exist in database`);
+        return false;
+      }
+      return true;
+    } catch (error) {
+      console.error('Error validating campaign existence:', error);
+      return false;
+    }
+  };
+
+  // Add force refresh function
+  const forceRefreshCampaigns = async () => {
+    // Clear all campaign-related cache
+    const allKeys = Object.keys(localStorage);
+    allKeys.forEach(key => {
+      if (key.startsWith('campaign_') || key.startsWith('wallet_') || key.startsWith('command_')) {
+        localStorage.removeItem(key);
+      }
+    });
+    
+    // Clear selected campaign
+    setSelectedCampaign(null);
+    
+    // Reload campaigns
+    await loadCampaigns();
+    
+    toast({
+      title: "Data Refreshed",
+      description: "All campaign data has been refreshed from the database."
+    });
+  };
+
   return (
     <div className="space-y-6">
       {/* Campaign List */}
@@ -257,10 +336,15 @@ export function CampaignDashboard() {
         <CardHeader>
           <div className="flex items-center justify-between">
             <CardTitle>Your Campaigns</CardTitle>
-            <Button onClick={() => setShowCreateForm(true)} size="sm">
-              <Plus className="h-4 w-4 mr-2" />
-              New Campaign
-            </Button>
+            <div className="flex gap-2">
+              <Button onClick={forceRefreshCampaigns} variant="outline" size="sm">
+                Force Refresh
+              </Button>
+              <Button onClick={() => setShowCreateForm(true)} size="sm">
+                <Plus className="h-4 w-4 mr-2" />
+                New Campaign
+              </Button>
+            </div>
           </div>
         </CardHeader>
         <CardContent>

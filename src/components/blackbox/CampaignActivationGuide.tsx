@@ -179,6 +179,33 @@ export function CampaignActivationGuide({ campaign, onCampaignUpdate }: Campaign
 
   const loadCampaignData = async () => {
     try {
+      // First validate campaign exists
+      const { data: campaignExists, error: campaignError } = await supabase
+        .from('blackbox_campaigns')
+        .select('id')
+        .eq('id', campaign.id)
+        .single();
+      
+      if (campaignError || !campaignExists) {
+        console.error(`🚨 Campaign ${campaign.id} does not exist in database`);
+        setValidationErrors(['Campaign not found in database - this may be stale data']);
+        setValidationSteps(prev => ({ 
+          ...prev, 
+          tokenValidation: 'error',
+          walletValidation: 'error',
+          commandValidation: 'error',
+          feeValidation: 'error',
+          contractBuilding: 'error',
+          cronSubmission: 'error'
+        }));
+        toast({
+          title: "Campaign Missing",
+          description: "This campaign no longer exists in the database. Please refresh the page.",
+          variant: "destructive"
+        });
+        return;
+      }
+
       // Load wallets assigned to this campaign through the junction table
       const { data: walletsData, error: walletsError }: { data: any, error: any } = await supabase
         .from('campaign_wallets')
@@ -195,6 +222,7 @@ export function CampaignActivationGuide({ campaign, onCampaignUpdate }: Campaign
 
       if (walletsError) {
         console.error('Error loading wallets:', walletsError);
+        setValidationErrors(prev => [...prev, `Wallet loading failed: ${walletsError.message}`]);
         return;
       }
 
@@ -465,6 +493,21 @@ export function CampaignActivationGuide({ campaign, onCampaignUpdate }: Campaign
   const validateToken = async () => {
     setValidationSteps(prev => ({ ...prev, tokenValidation: 'checking' }));
     try {
+      // First check if campaign still exists
+      const { data: campaignExists } = await supabase
+        .from('blackbox_campaigns')
+        .select('id, token_address')
+        .eq('id', campaign.id)
+        .single();
+      
+      if (!campaignExists) {
+        throw new Error('Campaign no longer exists in database');
+      }
+      
+      if (campaignExists.token_address !== campaign.token_address) {
+        throw new Error('Token address mismatch - campaign data may be stale');
+      }
+
       const { data, error } = await supabase.functions.invoke('token-metadata', {
         body: { tokenMint: campaign.token_address }
       });
@@ -483,11 +526,22 @@ export function CampaignActivationGuide({ campaign, onCampaignUpdate }: Campaign
   const validateWallet = async () => {
     setValidationSteps(prev => ({ ...prev, walletValidation: 'checking' }));
     try {
+      // First check if campaign still exists
+      const { data: campaignExists } = await supabase
+        .from('blackbox_campaigns')
+        .select('id')
+        .eq('id', campaign.id)
+        .single();
+      
+      if (!campaignExists) {
+        throw new Error('Campaign no longer exists in database');
+      }
+
       // Reload wallets to ensure we have the latest data
       await loadCampaignData();
       
       if (wallets.length === 0) {
-        throw new Error('No wallets configured');
+        throw new Error('No wallets configured for this campaign');
       }
       
       console.log('🔍 WALLET VALIDATION DEBUG:');
@@ -910,6 +964,10 @@ export function CampaignActivationGuide({ campaign, onCampaignUpdate }: Campaign
                 <h4 className="font-semibold mb-3">Contract Building Validation</h4>
                 <div className="space-y-2 text-sm">
                   <ValidationStep 
+                    label="Campaign existence check" 
+                    status={validationErrors.some(e => e.includes('Campaign not found') || e.includes('does not exist')) ? 'error' : 'success'} 
+                  />
+                  <ValidationStep 
                     label="Campaign token validation" 
                     status={validationSteps.tokenValidation} 
                   />
@@ -939,8 +997,32 @@ export function CampaignActivationGuide({ campaign, onCampaignUpdate }: Campaign
                   <div className="mt-4 p-3 bg-destructive/10 border border-destructive/20 rounded">
                     <h5 className="font-semibold text-destructive mb-2">Validation Errors:</h5>
                     {validationErrors.map((error, index) => (
-                      <div key={index} className="text-sm text-destructive">{error}</div>
+                      <div key={index} className="text-sm text-destructive mb-1">• {error}</div>
                     ))}
+                    <div className="mt-3 pt-2 border-t border-destructive/20">
+                      <div className="flex gap-2">
+                        <Button 
+                          size="sm" 
+                          variant="outline"
+                          onClick={async () => {
+                            setValidationErrors([]);
+                            await loadCampaignData();
+                          }}
+                        >
+                          Retry Validation
+                        </Button>
+                        <Button 
+                          size="sm" 
+                          variant="outline"
+                          onClick={() => {
+                            setValidationErrors([]);
+                            window.location.reload();
+                          }}
+                        >
+                          Force Refresh Page
+                        </Button>
+                      </div>
+                    </div>
                   </div>
                 )}
               </Card>
