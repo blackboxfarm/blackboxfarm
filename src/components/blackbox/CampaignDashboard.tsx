@@ -257,7 +257,17 @@ export function CampaignDashboard() {
         .eq('id', campaign.id);
 
       if (error) {
-        toast({ title: "Error deleting campaign", description: error.message });
+        console.error('Campaign deletion failed:', error);
+        toast({ 
+          title: "Error deleting campaign", 
+          description: error.message,
+          variant: "destructive" 
+        });
+        // Clear countdown interval on error
+        clearInterval(countdownInterval);
+        // Clear loading state on error
+        setDeletingCampaignId(null);
+        setDeletionCountdown(20);
         return;
       }
 
@@ -269,7 +279,7 @@ export function CampaignDashboard() {
         description: `${campaign.nickname} deleted in ${actualDuration}s. Wallets and commands preserved for reuse.` 
       });
       
-      // Clear countdown interval
+      // Clear countdown interval on success
       clearInterval(countdownInterval);
       
       // Immediately update local state for responsive UI
@@ -280,8 +290,20 @@ export function CampaignDashboard() {
         const remainingCampaigns = campaigns.filter(c => c.id !== campaign.id);
         setSelectedCampaign(remainingCampaigns.length > 0 ? remainingCampaigns[0] : null);
       }
-    } finally {
-      // Clear loading state
+      
+      // Clear loading state on success
+      setDeletingCampaignId(null);
+      setDeletionCountdown(20);
+    } catch (error: any) {
+      console.error('Campaign deletion exception:', error);
+      toast({ 
+        title: "Failed to delete campaign", 
+        description: error.message || "An unexpected error occurred",
+        variant: "destructive" 
+      });
+      // Clear countdown interval on exception
+      clearInterval(countdownInterval);
+      // Clear loading state on exception
       setDeletingCampaignId(null);
       setDeletionCountdown(20);
     }
