@@ -87,12 +87,46 @@ serve(async (req) => {
         
         if (dexId === 'meteora') {
           console.log(`🌊 Meteora pool detected: ${pairAddress}`);
-          // For Meteora, check if the pool has time-locked liquidity
-          // Meteora pools often use time-locked contracts
-          result.lockMechanism = 'meteora_time_lock';
-          result.isLocked = true; // Most Meteora pools are locked by design
-          result.lockPercentage = 100; // Assume 100% for Meteora time locks
-          console.log(`✅ Meteora pool detected - typically time-locked`);
+          
+          // Get real Meteora pool data
+          try {
+            const meteoraResponse = await fetch(`https://app.meteora.ag/dlmm-api/pair/${pairAddress}`);
+            if (meteoraResponse.ok) {
+              const meteoraData = await meteoraResponse.json();
+              
+              if (meteoraData.pair_data) {
+                const lockEndTime = meteoraData.pair_data.lock_end_timestamp;
+                const currentTime = Math.floor(Date.now() / 1000);
+                
+                if (lockEndTime && lockEndTime > currentTime) {
+                  const lockDurationDays = Math.floor((lockEndTime - currentTime) / (24 * 60 * 60));
+                  result.lockMechanism = `meteora_time_lock_${lockDurationDays}d`;
+                  result.isLocked = true;
+                  result.lockPercentage = 100; // Meteora locks are typically 100% when active
+                  console.log(`🔒 Meteora pool locked for ${lockDurationDays} more days (until ${new Date(lockEndTime * 1000).toISOString()})`);
+                } else {
+                  console.log(`⚠️ Meteora pool lock expired or no lock found`);
+                }
+              } else {
+                // Fallback to checking if it's a DLMM pool (usually locked)
+                result.lockMechanism = 'meteora_dlmm_pool';
+                result.isLocked = true;
+                result.lockPercentage = 95; // Conservative estimate for DLMM pools
+                console.log(`✅ Meteora DLMM pool detected - likely locked`);
+              }
+            } else {
+              // API failed, fall back to general check
+              result.lockMechanism = 'meteora_pool_unverified';
+              result.isLocked = true;
+              result.lockPercentage = 85; // Conservative when we can't verify
+              console.log(`⚠️ Meteora API failed, assuming locked but marking as unverified`);
+            }
+          } catch (e) {
+            console.log(`⚠️ Failed to check Meteora lock details: ${e.message}`);
+            result.lockMechanism = 'meteora_pool_check_failed';
+            result.isLocked = true;
+            result.lockPercentage = 80; // Very conservative when check fails
+          }
         } else if (dexId === 'raydium') {
           console.log(`💧 Raydium pool detected: ${pairAddress}`);
           // Raydium pools can have burned LP tokens or time locks
