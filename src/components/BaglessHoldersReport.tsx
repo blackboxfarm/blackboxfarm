@@ -14,6 +14,7 @@ interface TokenHolder {
   balance: number;
   balanceRaw: string;
   isDustWallet: boolean;
+  isSmallWallet: boolean;
   tokenAccount: string;
   rank: number;
 }
@@ -22,6 +23,7 @@ interface HoldersReport {
   tokenMint: string;
   totalHolders: number;
   realWallets: number;
+  smallWallets: number;
   dustWallets: number;
   totalBalance: number;
   holders: TokenHolder[];
@@ -34,6 +36,7 @@ export function BaglessHoldersReport() {
   const [report, setReport] = useState<HoldersReport | null>(null);
   const [filteredHolders, setFilteredHolders] = useState<TokenHolder[]>([]);
   const [showDustOnly, setShowDustOnly] = useState(false);
+  const [showSmallOnly, setShowSmallOnly] = useState(false);
   const [showRealOnly, setShowRealOnly] = useState(false);
   const { toast } = useToast();
 
@@ -43,13 +46,15 @@ export function BaglessHoldersReport() {
       
       if (showDustOnly) {
         filtered = filtered.filter(h => h.isDustWallet);
+      } else if (showSmallOnly) {
+        filtered = filtered.filter(h => h.isSmallWallet);
       } else if (showRealOnly) {
-        filtered = filtered.filter(h => !h.isDustWallet);
+        filtered = filtered.filter(h => !h.isDustWallet && !h.isSmallWallet);
       }
       
       setFilteredHolders(filtered);
     }
-  }, [report, showDustOnly, showRealOnly]);
+  }, [report, showDustOnly, showSmallOnly, showRealOnly]);
 
   const generateReport = async () => {
     if (!tokenMint) {
@@ -82,7 +87,7 @@ export function BaglessHoldersReport() {
       
       toast({
         title: "Report Generated",
-        description: `Found ${data.totalHolders} total holders (${data.realWallets} real, ${data.dustWallets} dust)`,
+        description: `Found ${data.totalHolders} total holders (${data.realWallets} real, ${data.smallWallets} small, ${data.dustWallets} dust)`,
       });
     } catch (error) {
       console.error('Report generation failed:', error);
@@ -105,7 +110,7 @@ export function BaglessHoldersReport() {
         holder.rank,
         holder.owner,
         holder.balance,
-        holder.isDustWallet ? 'Dust' : 'Real',
+        holder.isDustWallet ? 'Dust' : holder.isSmallWallet ? 'Small' : 'Real',
         holder.tokenAccount
       ].join(','))
     ].join('\n');
@@ -179,18 +184,22 @@ export function BaglessHoldersReport() {
               </CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
+              <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mb-4">
                 <div className="text-center">
                   <div className="text-2xl font-bold">{report.totalHolders}</div>
                   <div className="text-sm text-muted-foreground">Total Holders</div>
                 </div>
                 <div className="text-center">
                   <div className="text-2xl font-bold text-green-500">{report.realWallets}</div>
-                  <div className="text-sm text-muted-foreground">Real Wallets</div>
+                  <div className="text-sm text-muted-foreground">Real Wallets (≥50)</div>
+                </div>
+                <div className="text-center">
+                  <div className="text-2xl font-bold text-blue-500">{report.smallWallets}</div>
+                  <div className="text-sm text-muted-foreground">Small Wallets (1-49)</div>
                 </div>
                 <div className="text-center">
                   <div className="text-2xl font-bold text-yellow-500">{report.dustWallets}</div>
-                  <div className="text-sm text-muted-foreground">Dust Wallets</div>
+                  <div className="text-sm text-muted-foreground">Dust Wallets (&lt;1)</div>
                 </div>
                 <div className="text-center">
                   <div className="text-2xl font-bold">{formatBalance(report.totalBalance)}</div>
@@ -198,12 +207,13 @@ export function BaglessHoldersReport() {
                 </div>
               </div>
               
-              <div className="flex gap-2 mb-4">
+              <div className="flex gap-2 mb-4 flex-wrap">
                 <Button
-                  variant={!showDustOnly && !showRealOnly ? "default" : "outline"}
+                  variant={!showDustOnly && !showSmallOnly && !showRealOnly ? "default" : "outline"}
                   size="sm"
                   onClick={() => {
                     setShowDustOnly(false);
+                    setShowSmallOnly(false);
                     setShowRealOnly(false);
                   }}
                 >
@@ -214,20 +224,33 @@ export function BaglessHoldersReport() {
                   size="sm"
                   onClick={() => {
                     setShowRealOnly(true);
+                    setShowSmallOnly(false);
                     setShowDustOnly(false);
                   }}
                 >
-                  Real Wallets Only
+                  Real Wallets (≥50)
+                </Button>
+                <Button
+                  variant={showSmallOnly ? "default" : "outline"}
+                  size="sm"
+                  onClick={() => {
+                    setShowSmallOnly(true);
+                    setShowRealOnly(false);
+                    setShowDustOnly(false);
+                  }}
+                >
+                  Small Wallets (1-49)
                 </Button>
                 <Button
                   variant={showDustOnly ? "default" : "outline"}
                   size="sm"
                   onClick={() => {
                     setShowDustOnly(true);
+                    setShowSmallOnly(false);
                     setShowRealOnly(false);
                   }}
                 >
-                  Dust Wallets Only
+                  Dust Wallets (&lt;1)
                 </Button>
               </div>
               
@@ -261,8 +284,11 @@ export function BaglessHoldersReport() {
                           {formatBalance(holder.balance)}
                         </TableCell>
                         <TableCell>
-                          <Badge variant={holder.isDustWallet ? "secondary" : "default"}>
-                            {holder.isDustWallet ? "Dust" : "Real"}
+                          <Badge variant={
+                            holder.isDustWallet ? "secondary" : 
+                            holder.isSmallWallet ? "outline" : "default"
+                          }>
+                            {holder.isDustWallet ? "Dust" : holder.isSmallWallet ? "Small" : "Real"}
                           </Badge>
                         </TableCell>
                       </TableRow>

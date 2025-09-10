@@ -83,14 +83,16 @@ serve(async (req) => {
           const owner = parsedInfo.owner;
           
           if (balance > 0) {
-            // Determine if it's a dust wallet (less than 1 token)
+            // Categorize wallets
             const isDustWallet = balance < 1;
+            const isSmallWallet = balance >= 1 && balance < 50; // Between 1-49 tokens
             
             holders.push({
               owner,
               balance,
               balanceRaw: parsedInfo.tokenAmount.amount,
               isDustWallet,
+              isSmallWallet,
               tokenAccount: account.pubkey
             });
           }
@@ -110,20 +112,22 @@ serve(async (req) => {
     }));
 
     const dustWallets = rankedHolders.filter(h => h.isDustWallet).length;
-    const realWallets = rankedHolders.filter(h => !h.isDustWallet).length;
+    const smallWallets = rankedHolders.filter(h => h.isSmallWallet).length;
+    const realWallets = rankedHolders.filter(h => !h.isDustWallet && !h.isSmallWallet).length;
     const totalBalance = rankedHolders.reduce((sum, h) => sum + h.balance, 0);
 
     console.log(`Found ${rankedHolders.length} token holders`);
-    console.log(`Real wallets: ${realWallets}, Dust wallets: ${dustWallets}`);
+    console.log(`Real wallets: ${realWallets}, Small wallets: ${smallWallets}, Dust wallets: ${dustWallets}`);
 
     const result = {
       tokenMint,
       totalHolders: rankedHolders.length,
       realWallets,
+      smallWallets,
       dustWallets,
       totalBalance,
       holders: rankedHolders,
-      summary: `Found ${rankedHolders.length} total holders. ${realWallets} real wallets (≥1 token), ${dustWallets} dust wallets (<1 token). Total tokens distributed: ${totalBalance.toLocaleString()}`
+      summary: `Found ${rankedHolders.length} total holders. ${realWallets} real wallets (≥50 tokens), ${smallWallets} small wallets (1-49 tokens), ${dustWallets} dust wallets (<1 token). Total tokens distributed: ${totalBalance.toLocaleString()}`
     };
 
     return new Response(
