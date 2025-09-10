@@ -112,7 +112,7 @@ export function BaglessHoldersReport() {
         holder.rank,
         holder.owner,
         holder.balance,
-        holder.usdValue.toFixed(4),
+        (holder.usdValue || 0).toFixed(4),
         holder.isDustWallet ? 'Dust' : holder.isSmallWallet ? 'Small' : 'Real',
         holder.tokenAccount
       ].join(','))
@@ -288,7 +288,7 @@ export function BaglessHoldersReport() {
                           {formatBalance(holder.balance)}
                         </TableCell>
                         <TableCell className="font-mono">
-                          ${holder.usdValue.toFixed(4)}
+                          ${(holder.usdValue || 0).toFixed(4)}
                         </TableCell>
                         <TableCell>
                           <Badge variant={
