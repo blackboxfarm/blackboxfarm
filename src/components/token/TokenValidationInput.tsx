@@ -27,28 +27,34 @@ export function TokenValidationInput({
   const [isRefreshing, setIsRefreshing] = useState(false);
 
   useEffect(() => {
-    const validateToken = async () => {
-      if (!value) {
-        setValidationState('idle');
-        onValidationChange?.(false);
-        return;
-      }
+    if (!value) {
+      setValidationState('idle');
+      onValidationChange?.(false);
+      return;
+    }
 
-      if (!validateTokenAddress(value)) {
-        setValidationState('invalid');
-        onValidationChange?.(false);
-        return;
-      }
+    if (!validateTokenAddress(value)) {
+      setValidationState('invalid');
+      onValidationChange?.(false);
+      return;
+    }
 
+    // Prevent spam validation - only validate if token changed
+    const currentToken = value.trim();
+    if (tokenData?.metadata?.mint === currentToken && validationState === 'valid') {
+      onValidationChange?.(true, tokenData);
+      return;
+    }
+
+    const timeoutId = setTimeout(async () => {
       setValidationState('validating');
-      const isValid = await fetchTokenMetadata(value);
+      const isValid = await fetchTokenMetadata(currentToken);
       setValidationState(isValid ? 'valid' : 'invalid');
       onValidationChange?.(isValid, tokenData);
-    };
+    }, 1000); // Increased debounce
 
-    const timeoutId = setTimeout(validateToken, 500);
     return () => clearTimeout(timeoutId);
-  }, [value, validateTokenAddress, fetchTokenMetadata, onValidationChange, tokenData]);
+  }, [value, validateTokenAddress, fetchTokenMetadata]);
 
   const getValidationIcon = () => {
     switch (validationState) {

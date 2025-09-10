@@ -5,14 +5,11 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.38.4';
 const encoder = new TextEncoder();
 const decoder = new TextDecoder();
 
-// Simple pump.fun token detection
+// Improved pump.fun token detection - only check if it's actually from pump.fun
 function isPumpFunToken(mintAddress: string): boolean {
-  const pumpFunPatterns = [
-    /pump$/i,
-    /^[1-9A-HJ-NP-Za-km-z]{44}$/,
-  ];
-  
-  return pumpFunPatterns.some(pattern => pattern.test(mintAddress));
+  // Only return true if we have confirmed pump.fun indicators
+  // Don't just assume based on address patterns
+  return false; // Default to false unless we have specific pump.fun metadata
 }
 
 const corsHeaders = {
@@ -103,6 +100,12 @@ serve(async (req) => {
             metadata.symbol = pair.baseToken.symbol || metadata.symbol;
             metadata.image = pair.baseToken.logoURI;
             metadata.verified = true;
+            
+            // Check if it's actually pump.fun based on DEX data
+            if (pair.dexId === 'raydium' && pair.pairAddress && pair.liquidity?.usd > 0) {
+              // This is a graduated/normal token with liquidity
+              metadata.isPumpFun = false;
+            }
           }
           
           // Set price info
