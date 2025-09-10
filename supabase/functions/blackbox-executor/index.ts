@@ -162,6 +162,20 @@ serve(async (req) => {
           fullResponse: swapResponse
         });
         
+        // Log failed transaction
+        await supabaseService
+          .from("blackbox_transactions")
+          .insert({
+            wallet_id: wallet.id,
+            command_code_id: command_code_id,
+            transaction_type: "buy",
+            amount_sol: buyAmountSOL,
+            gas_fee: 0,
+            service_fee: 0,
+            signature: null,
+            status: "failed"
+          });
+        
         // Only skip if it's truly a liquidity/routing issue, not platform-based assumptions
         if (errorMessage.includes('INSUFFICIENT_LIQUIDITY') || 
             errorMessage.includes('ROUTE_NOT_FOUND') || 
@@ -313,6 +327,20 @@ serve(async (req) => {
                 errorMessage,
                 fullResponse: swapResponse
               });
+              
+              // Log failed transaction
+              await supabaseService
+                .from("blackbox_transactions")
+                .insert({
+                  wallet_id: wallet.id,
+                  command_code_id: command_code_id,
+                  transaction_type: "sell",
+                  amount_sol: sellAmount,
+                  gas_fee: 0,
+                  service_fee: 0,
+                  signature: null,
+                  status: "failed"
+                });
               
               // Only skip if it's truly a liquidity/routing issue, not platform-based assumptions
               if (errorMessage.includes('INSUFFICIENT_LIQUIDITY') || 

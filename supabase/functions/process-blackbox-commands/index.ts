@@ -174,10 +174,10 @@ serve(async (req) => {
 
 // Helper function to determine if an action should be executed
 async function shouldExecuteAction(supabaseService: any, commandId: string, action: 'buy' | 'sell', config: any): Promise<boolean> {
-  // Get the last transaction of this type for this command
+  // Get the last transaction attempt (successful or failed) of this type for this command
   const { data: lastTransaction } = await supabaseService
     .from('blackbox_transactions')
-    .select('executed_at')
+    .select('executed_at, status')
     .eq('command_code_id', commandId)
     .eq('transaction_type', action)
     .order('executed_at', { ascending: false })
@@ -190,7 +190,7 @@ async function shouldExecuteAction(supabaseService: any, commandId: string, acti
     : interval;
 
   if (!lastTransaction) {
-    // No previous transaction, execute immediately
+    // No previous transaction attempt, execute immediately
     return true;
   }
 
@@ -198,5 +198,6 @@ async function shouldExecuteAction(supabaseService: any, commandId: string, acti
   const now = Date.now();
   const timeSinceLastExecution = (now - lastExecutionTime) / 1000;
 
+  // Respect interval regardless of success/failure status
   return timeSinceLastExecution >= intervalSeconds;
 }
