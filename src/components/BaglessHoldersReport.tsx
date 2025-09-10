@@ -12,6 +12,7 @@ import { Loader2, Download } from 'lucide-react';
 interface TokenHolder {
   owner: string;
   balance: number;
+  usdValue: number;
   balanceRaw: string;
   isDustWallet: boolean;
   isSmallWallet: boolean;
@@ -26,6 +27,7 @@ interface HoldersReport {
   smallWallets: number;
   dustWallets: number;
   totalBalance: number;
+  tokenPriceUSD: number;
   holders: TokenHolder[];
   summary: string;
 }
@@ -105,11 +107,12 @@ export function BaglessHoldersReport() {
     if (!report) return;
     
     const csvContent = [
-      ['Rank', 'Wallet Address', 'Token Balance', 'Wallet Type', 'Token Account'].join(','),
+      ['Rank', 'Wallet Address', 'Token Balance', 'USD Value', 'Wallet Type', 'Token Account'].join(','),
       ...filteredHolders.map(holder => [
         holder.rank,
         holder.owner,
         holder.balance,
+        holder.usdValue.toFixed(4),
         holder.isDustWallet ? 'Dust' : holder.isSmallWallet ? 'Small' : 'Real',
         holder.tokenAccount
       ].join(','))
@@ -191,11 +194,11 @@ export function BaglessHoldersReport() {
                 </div>
                 <div className="text-center">
                   <div className="text-2xl font-bold text-green-500">{report.realWallets}</div>
-                  <div className="text-sm text-muted-foreground">Real Wallets (≥50)</div>
+                  <div className="text-sm text-muted-foreground">Real Wallets (≥$1)</div>
                 </div>
                 <div className="text-center">
                   <div className="text-2xl font-bold text-blue-500">{report.smallWallets}</div>
-                  <div className="text-sm text-muted-foreground">Small Wallets (1-49)</div>
+                  <div className="text-sm text-muted-foreground">Small Wallets (&lt;$1)</div>
                 </div>
                 <div className="text-center">
                   <div className="text-2xl font-bold text-yellow-500">{report.dustWallets}</div>
@@ -228,7 +231,7 @@ export function BaglessHoldersReport() {
                     setShowDustOnly(false);
                   }}
                 >
-                  Real Wallets (≥50)
+                  Real Wallets (≥$1)
                 </Button>
                 <Button
                   variant={showSmallOnly ? "default" : "outline"}
@@ -239,7 +242,7 @@ export function BaglessHoldersReport() {
                     setShowDustOnly(false);
                   }}
                 >
-                  Small Wallets (1-49)
+                  Small Wallets (&lt;$1)
                 </Button>
                 <Button
                   variant={showDustOnly ? "default" : "outline"}
@@ -264,15 +267,16 @@ export function BaglessHoldersReport() {
             </CardHeader>
             <CardContent>
               <div className="max-h-96 overflow-auto">
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Rank</TableHead>
-                      <TableHead>Wallet Address</TableHead>
-                      <TableHead>Token Balance</TableHead>
-                      <TableHead>Type</TableHead>
-                    </TableRow>
-                  </TableHeader>
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Rank</TableHead>
+                        <TableHead>Wallet Address</TableHead>
+                        <TableHead>Token Balance</TableHead>
+                        <TableHead>USD Value</TableHead>
+                        <TableHead>Type</TableHead>
+                      </TableRow>
+                    </TableHeader>
                   <TableBody>
                     {filteredHolders.map((holder) => (
                       <TableRow key={holder.owner}>
@@ -282,6 +286,9 @@ export function BaglessHoldersReport() {
                         </TableCell>
                         <TableCell className="font-mono">
                           {formatBalance(holder.balance)}
+                        </TableCell>
+                        <TableCell className="font-mono">
+                          ${holder.usdValue.toFixed(4)}
                         </TableCell>
                         <TableCell>
                           <Badge variant={

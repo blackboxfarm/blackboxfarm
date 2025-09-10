@@ -33,6 +33,19 @@ serve(async (req) => {
 
     const rpcUrl = `https://rpc.helius.xyz/?api-key=${heliusApiKey}`;
     
+    // Get token price in USD from Jupiter API
+    let tokenPriceUSD = 0;
+    try {
+      const priceResponse = await fetch(`https://price.jup.ag/v4/price?ids=${tokenMint}`);
+      if (priceResponse.ok) {
+        const priceData = await priceResponse.json();
+        tokenPriceUSD = priceData.data?.[tokenMint]?.price || 0;
+        console.log(`Token price: $${tokenPriceUSD}`);
+      }
+    } catch (e) {
+      console.warn('Could not fetch token price, using $0:', e);
+    }
+    
     // Get all token accounts for this mint
     const response = await fetch(rpcUrl, {
       method: 'POST',
@@ -83,13 +96,17 @@ serve(async (req) => {
           const owner = parsedInfo.owner;
           
           if (balance > 0) {
+            // Calculate USD value
+            const usdValue = balance * tokenPriceUSD;
+            
             // Categorize wallets
             const isDustWallet = balance < 1;
-            const isSmallWallet = balance >= 1 && balance < 50; // Between 1-49 tokens
+            const isSmallWallet = balance >= 1 && usdValue < 1; // Between 1 token and $1 USD
             
             holders.push({
               owner,
               balance,
+              usdValue,
               balanceRaw: parsedInfo.tokenAmount.amount,
               isDustWallet,
               isSmallWallet,
@@ -126,8 +143,9 @@ serve(async (req) => {
       smallWallets,
       dustWallets,
       totalBalance,
+      tokenPriceUSD,
       holders: rankedHolders,
-      summary: `Found ${rankedHolders.length} total holders. ${realWallets} real wallets (≥50 tokens), ${smallWallets} small wallets (1-49 tokens), ${dustWallets} dust wallets (<1 token). Total tokens distributed: ${totalBalance.toLocaleString()}`
+      summary: `Found ${rankedHolders.length} total holders. ${realWallets} real wallets (≥$1), ${smallWallets} small wallets (≥1 token, <$1), ${dustWallets} dust wallets (<1 token). Total tokens distributed: ${totalBalance.toLocaleString()}`
     };
 
     return new Response(
