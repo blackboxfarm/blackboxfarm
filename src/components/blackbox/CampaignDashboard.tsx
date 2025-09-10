@@ -18,7 +18,7 @@ import { TokenMetadataDisplay } from "@/components/token/TokenMetadataDisplay";
 import { TokenPriceDisplay } from "@/components/token/TokenPriceDisplay";
 import { useTokenMetadata } from "@/hooks/useTokenMetadata";
 import { Switch } from "@/components/ui/switch";
-import { InlineCampaignManagement } from "./InlineCampaignManagement";
+
 
 interface Campaign {
   id: string;
@@ -497,12 +497,6 @@ export function CampaignDashboard() {
                          </div>
                        </div>
                      </div>
-                     
-                     {/* Wallet and Command Management sections underneath token info */}
-                     <InlineCampaignManagement 
-                       campaign={campaign} 
-                       onScrollToSection={scrollToSection}
-                     />
                    </div>
                 </div>
               ))}

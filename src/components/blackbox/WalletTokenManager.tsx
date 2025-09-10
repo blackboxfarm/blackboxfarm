@@ -53,24 +53,20 @@ export function WalletTokenManager({
         throw new Error('Failed to get wallet credentials');
       }
 
-      // Fetch all token balances for this wallet
-      const response = await fetch(
-        `https://apxauapuusmgwbbzjgfl.supabase.co/functions/v1/trader-wallet`, 
-        {
-          method: 'GET',
-          headers: {
-            'Authorization': `Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFweGF1YXB1dXNtZ3diYnpqZ2ZsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTQ1OTEzMDUsImV4cCI6MjA3MDE2NzMwNX0.w8IrKq4YVStF3TkdEcs5mCSeJsxjkaVq2NFkypYOXHU`,
-            'x-owner-secret': walletData.secret_key_encrypted,
-            'Content-Type': 'application/json'
-          }
+      // Fetch wallet balances including all tokens
+      const { data: balanceData, error: balanceError } = await supabase.functions.invoke('refresh-wallet-balances', {
+        body: { 
+          walletId: walletId,
+          walletPubkey: walletPubkey,
+          fetchTokens: true
         }
-      );
+      });
 
-      const data = await response.json();
-      
-      if (!response.ok) {
-        throw new Error(data.error || 'Failed to fetch token balances');
+      if (balanceError) {
+        throw new Error(balanceError.message || 'Failed to fetch token balances');
       }
+
+      const data = balanceData;
 
       // For now, just track SOL balance as a "token"
       const tokenList: TokenBalance[] = [];
