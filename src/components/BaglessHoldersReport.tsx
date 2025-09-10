@@ -16,6 +16,8 @@ interface TokenHolder {
   balanceRaw: string;
   isDustWallet: boolean;
   isSmallWallet: boolean;
+  isMediumWallet: boolean;
+  isLargeWallet: boolean;
   tokenAccount: string;
   rank: number;
 }
@@ -24,6 +26,8 @@ interface HoldersReport {
   tokenMint: string;
   totalHolders: number;
   realWallets: number;
+  largeWallets: number;
+  mediumWallets: number;
   smallWallets: number;
   dustWallets: number;
   totalBalance: number;
@@ -39,6 +43,8 @@ export function BaglessHoldersReport() {
   const [filteredHolders, setFilteredHolders] = useState<TokenHolder[]>([]);
   const [showDustOnly, setShowDustOnly] = useState(false);
   const [showSmallOnly, setShowSmallOnly] = useState(false);
+  const [showMediumOnly, setShowMediumOnly] = useState(false);
+  const [showLargeOnly, setShowLargeOnly] = useState(false);
   const [showRealOnly, setShowRealOnly] = useState(false);
   const { toast } = useToast();
 
@@ -50,13 +56,17 @@ export function BaglessHoldersReport() {
         filtered = filtered.filter(h => h.isDustWallet);
       } else if (showSmallOnly) {
         filtered = filtered.filter(h => h.isSmallWallet);
+      } else if (showMediumOnly) {
+        filtered = filtered.filter(h => h.isMediumWallet);
+      } else if (showLargeOnly) {
+        filtered = filtered.filter(h => h.isLargeWallet);
       } else if (showRealOnly) {
-        filtered = filtered.filter(h => !h.isDustWallet && !h.isSmallWallet);
+        filtered = filtered.filter(h => !h.isDustWallet && !h.isSmallWallet && !h.isMediumWallet && !h.isLargeWallet);
       }
       
       setFilteredHolders(filtered);
     }
-  }, [report, showDustOnly, showSmallOnly, showRealOnly]);
+  }, [report, showDustOnly, showSmallOnly, showMediumOnly, showLargeOnly, showRealOnly]);
 
   const generateReport = async () => {
     if (!tokenMint) {
@@ -89,7 +99,7 @@ export function BaglessHoldersReport() {
       
       toast({
         title: "Report Generated",
-        description: `Found ${data.totalHolders} total holders (${data.realWallets} real, ${data.smallWallets} small, ${data.dustWallets} dust)`,
+        description: `Found ${data.totalHolders} total holders (${data.realWallets} real, ${data.largeWallets} large, ${data.mediumWallets} medium, ${data.smallWallets} small, ${data.dustWallets} dust)`,
       });
     } catch (error) {
       console.error('Report generation failed:', error);
@@ -113,7 +123,7 @@ export function BaglessHoldersReport() {
         holder.owner,
         holder.balance,
         (holder.usdValue || 0).toFixed(4),
-        holder.isDustWallet ? 'Dust' : holder.isSmallWallet ? 'Small' : 'Real',
+        holder.isDustWallet ? 'Dust' : holder.isSmallWallet ? 'Small' : holder.isMediumWallet ? 'Medium' : holder.isLargeWallet ? 'Large' : 'Real',
         holder.tokenAccount
       ].join(','))
     ].join('\n');
@@ -187,22 +197,30 @@ export function BaglessHoldersReport() {
               </CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mb-4">
+              <div className="grid grid-cols-2 md:grid-cols-7 gap-4 mb-4">
                 <div className="text-center">
                   <div className="text-2xl font-bold">{report.totalHolders}</div>
                   <div className="text-sm text-muted-foreground">Total Holders</div>
                 </div>
                 <div className="text-center">
                   <div className="text-2xl font-bold text-green-500">{report.realWallets}</div>
-                  <div className="text-sm text-muted-foreground">Real Wallets (≥$1)</div>
+                  <div className="text-sm text-muted-foreground">Real (≥$50)</div>
                 </div>
                 <div className="text-center">
-                  <div className="text-2xl font-bold text-blue-500">{report.smallWallets}</div>
-                  <div className="text-sm text-muted-foreground">Small Wallets (&lt;$1)</div>
+                  <div className="text-2xl font-bold text-emerald-500">{report.largeWallets}</div>
+                  <div className="text-sm text-muted-foreground">Large ($10-$50)</div>
+                </div>
+                <div className="text-center">
+                  <div className="text-2xl font-bold text-blue-500">{report.mediumWallets}</div>
+                  <div className="text-sm text-muted-foreground">Medium ($1-$5)</div>
+                </div>
+                <div className="text-center">
+                  <div className="text-2xl font-bold text-orange-500">{report.smallWallets}</div>
+                  <div className="text-sm text-muted-foreground">Small (&lt;$1)</div>
                 </div>
                 <div className="text-center">
                   <div className="text-2xl font-bold text-yellow-500">{report.dustWallets}</div>
-                  <div className="text-sm text-muted-foreground">Dust Wallets (&lt;1)</div>
+                  <div className="text-sm text-muted-foreground">Dust (&lt;1)</div>
                 </div>
                 <div className="text-center">
                   <div className="text-2xl font-bold">{formatBalance(report.totalBalance)}</div>
@@ -212,11 +230,13 @@ export function BaglessHoldersReport() {
               
               <div className="flex gap-2 mb-4 flex-wrap">
                 <Button
-                  variant={!showDustOnly && !showSmallOnly && !showRealOnly ? "default" : "outline"}
+                  variant={!showDustOnly && !showSmallOnly && !showMediumOnly && !showLargeOnly && !showRealOnly ? "default" : "outline"}
                   size="sm"
                   onClick={() => {
                     setShowDustOnly(false);
                     setShowSmallOnly(false);
+                    setShowMediumOnly(false);
+                    setShowLargeOnly(false);
                     setShowRealOnly(false);
                   }}
                 >
@@ -227,22 +247,52 @@ export function BaglessHoldersReport() {
                   size="sm"
                   onClick={() => {
                     setShowRealOnly(true);
+                    setShowLargeOnly(false);
+                    setShowMediumOnly(false);
                     setShowSmallOnly(false);
                     setShowDustOnly(false);
                   }}
                 >
-                  Real Wallets (≥$1)
+                  Real (≥$50)
+                </Button>
+                <Button
+                  variant={showLargeOnly ? "default" : "outline"}
+                  size="sm"
+                  onClick={() => {
+                    setShowLargeOnly(true);
+                    setShowRealOnly(false);
+                    setShowMediumOnly(false);
+                    setShowSmallOnly(false);
+                    setShowDustOnly(false);
+                  }}
+                >
+                  Large ($10-$50)
+                </Button>
+                <Button
+                  variant={showMediumOnly ? "default" : "outline"}
+                  size="sm"
+                  onClick={() => {
+                    setShowMediumOnly(true);
+                    setShowLargeOnly(false);
+                    setShowRealOnly(false);
+                    setShowSmallOnly(false);
+                    setShowDustOnly(false);
+                  }}
+                >
+                  Medium ($1-$5)
                 </Button>
                 <Button
                   variant={showSmallOnly ? "default" : "outline"}
                   size="sm"
                   onClick={() => {
                     setShowSmallOnly(true);
+                    setShowMediumOnly(false);
+                    setShowLargeOnly(false);
                     setShowRealOnly(false);
                     setShowDustOnly(false);
                   }}
                 >
-                  Small Wallets (&lt;$1)
+                  Small (&lt;$1)
                 </Button>
                 <Button
                   variant={showDustOnly ? "default" : "outline"}
@@ -250,10 +300,12 @@ export function BaglessHoldersReport() {
                   onClick={() => {
                     setShowDustOnly(true);
                     setShowSmallOnly(false);
+                    setShowMediumOnly(false);
+                    setShowLargeOnly(false);
                     setShowRealOnly(false);
                   }}
                 >
-                  Dust Wallets (&lt;1)
+                  Dust (&lt;1)
                 </Button>
               </div>
               
@@ -290,12 +342,14 @@ export function BaglessHoldersReport() {
                         <TableCell className="font-mono">
                           ${(holder.usdValue || 0).toFixed(4)}
                         </TableCell>
-                        <TableCell>
-                          <Badge variant={
-                            holder.isDustWallet ? "secondary" : 
-                            holder.isSmallWallet ? "outline" : "default"
-                          }>
-                            {holder.isDustWallet ? "Dust" : holder.isSmallWallet ? "Small" : "Real"}
+                         <TableCell>
+                           <Badge variant={
+                             holder.isDustWallet ? "secondary" : 
+                             holder.isSmallWallet ? "outline" : 
+                             holder.isMediumWallet ? "outline" :
+                             holder.isLargeWallet ? "outline" : "default"
+                           }>
+                             {holder.isDustWallet ? "Dust" : holder.isSmallWallet ? "Small" : holder.isMediumWallet ? "Medium" : holder.isLargeWallet ? "Large" : "Real"}
                           </Badge>
                         </TableCell>
                       </TableRow>

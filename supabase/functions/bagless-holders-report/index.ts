@@ -102,6 +102,8 @@ serve(async (req) => {
             // Categorize wallets
             const isDustWallet = balance < 1;
             const isSmallWallet = balance >= 1 && usdValue < 1; // Between 1 token and $1 USD
+            const isMediumWallet = balance >= 1 && usdValue >= 1 && usdValue < 5; // $1-$5 USD
+            const isLargeWallet = balance >= 1 && usdValue >= 10 && usdValue < 50; // $10-$50 USD
             
             holders.push({
               owner,
@@ -110,6 +112,8 @@ serve(async (req) => {
               balanceRaw: parsedInfo.tokenAmount.amount,
               isDustWallet,
               isSmallWallet,
+              isMediumWallet,
+              isLargeWallet,
               tokenAccount: account.pubkey
             });
           }
@@ -130,22 +134,26 @@ serve(async (req) => {
 
     const dustWallets = rankedHolders.filter(h => h.isDustWallet).length;
     const smallWallets = rankedHolders.filter(h => h.isSmallWallet).length;
-    const realWallets = rankedHolders.filter(h => !h.isDustWallet && !h.isSmallWallet).length;
+    const mediumWallets = rankedHolders.filter(h => h.isMediumWallet).length;
+    const largeWallets = rankedHolders.filter(h => h.isLargeWallet).length;
+    const realWallets = rankedHolders.filter(h => !h.isDustWallet && !h.isSmallWallet && !h.isMediumWallet && !h.isLargeWallet).length;
     const totalBalance = rankedHolders.reduce((sum, h) => sum + h.balance, 0);
 
     console.log(`Found ${rankedHolders.length} token holders`);
-    console.log(`Real wallets: ${realWallets}, Small wallets: ${smallWallets}, Dust wallets: ${dustWallets}`);
+    console.log(`Real wallets: ${realWallets}, Large wallets: ${largeWallets}, Medium wallets: ${mediumWallets}, Small wallets: ${smallWallets}, Dust wallets: ${dustWallets}`);
 
     const result = {
       tokenMint,
       totalHolders: rankedHolders.length,
       realWallets,
+      largeWallets,
+      mediumWallets,
       smallWallets,
       dustWallets,
       totalBalance,
       tokenPriceUSD,
       holders: rankedHolders,
-      summary: `Found ${rankedHolders.length} total holders. ${realWallets} real wallets (≥$1), ${smallWallets} small wallets (≥1 token, <$1), ${dustWallets} dust wallets (<1 token). Total tokens distributed: ${totalBalance.toLocaleString()}`
+      summary: `Found ${rankedHolders.length} total holders. ${realWallets} real wallets (≥$50), ${largeWallets} large wallets ($10-$50), ${mediumWallets} medium wallets ($1-$5), ${smallWallets} small wallets (<$1), ${dustWallets} dust wallets (<1 token). Total tokens distributed: ${totalBalance.toLocaleString()}`
     };
 
     return new Response(
