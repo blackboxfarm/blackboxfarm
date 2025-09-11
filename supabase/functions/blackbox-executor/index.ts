@@ -346,7 +346,8 @@ serve(async (req) => {
               const errorMessage = swapResponse.error.message || '';
               console.error(`❌ SELL FAILED for token ${campaign.token_address}:`, {
                 error: swapResponse.error,
-                sellAmount,
+                sellPercent,
+                tokenBalance,
                 platform,
                 errorMessage,
                 fullResponse: swapResponse
