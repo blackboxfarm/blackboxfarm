@@ -13,6 +13,7 @@ import { Connection, PublicKey, Keypair } from "@solana/web3.js";
 import bs58 from "bs58";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "@/components/ui/sonner";
+import { BumpBotStatus } from "@/components/blackbox/BumpBotStatus";
 
 const JUP_PRICE = async (id: string): Promise<number | null> => {
   try {
@@ -706,6 +707,9 @@ const BumpBot = () => {
           </div>
         </section>
       </main>
+      
+      {/* Bump Bot Status - only shown on this page */}
+      <BumpBotStatus />
     </div>
   );
 };

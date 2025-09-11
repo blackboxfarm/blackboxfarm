@@ -8,7 +8,7 @@ import { LiquidityLockChecker } from "@/components/LiquidityLockChecker";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import TransactionHistoryWindow from "@/components/blackbox/TransactionHistoryWindow";
-import { BumpBotStatus } from "@/components/blackbox/BumpBotStatus";
+
 
 export default function SuperAdmin() {
   const [activeTab, setActiveTab] = useState("wallets");
@@ -68,8 +68,6 @@ export default function SuperAdmin() {
         </Tabs>
         {/* Floating live transaction history window - right side */}
         <TransactionHistoryWindow />
-        {/* Bump bot status monitor - left side */}
-        <BumpBotStatus />
       </div>
     </div>
   );
