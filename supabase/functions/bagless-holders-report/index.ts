@@ -183,6 +183,7 @@ serve(async (req) => {
             const isSmallWallet = balance >= 1 && usdValue < 1; // Between 1 token and $1 USD
             const isMediumWallet = usdValue >= 1 && usdValue < 5; // $1-$5 USD
             const isLargeWallet = usdValue >= 5 && usdValue < 50; // $5-$50 USD
+            const isBossWallet = usdValue >= 200; // $200+ USD
             
             holders.push({
               owner,
@@ -193,6 +194,7 @@ serve(async (req) => {
               isSmallWallet,
               isMediumWallet,
               isLargeWallet,
+              isBossWallet,
               tokenAccount: account.pubkey
             });
           }
@@ -215,16 +217,18 @@ serve(async (req) => {
     const smallWallets = rankedHolders.filter(h => h.isSmallWallet).length;
     const mediumWallets = rankedHolders.filter(h => h.isMediumWallet).length;
     const largeWallets = rankedHolders.filter(h => h.isLargeWallet).length;
-    const realWallets = rankedHolders.filter(h => !h.isDustWallet && !h.isSmallWallet && !h.isMediumWallet && !h.isLargeWallet).length;
+    const bossWallets = rankedHolders.filter(h => h.isBossWallet).length;
+    const realWallets = rankedHolders.filter(h => !h.isDustWallet && !h.isSmallWallet && !h.isMediumWallet && !h.isLargeWallet && !h.isBossWallet).length;
     const totalBalance = rankedHolders.reduce((sum, h) => sum + h.balance, 0);
 
     console.log(`Found ${rankedHolders.length} token holders`);
-    console.log(`Real wallets: ${realWallets}, Large wallets: ${largeWallets}, Medium wallets: ${mediumWallets}, Small wallets: ${smallWallets}, Dust wallets: ${dustWallets}`);
+    console.log(`Real wallets: ${realWallets}, Boss wallets: ${bossWallets}, Large wallets: ${largeWallets}, Medium wallets: ${mediumWallets}, Small wallets: ${smallWallets}, Dust wallets: ${dustWallets}`);
 
     const result = {
       tokenMint,
       totalHolders: rankedHolders.length,
       realWallets,
+      bossWallets,
       largeWallets,
       mediumWallets,
       smallWallets,
@@ -234,7 +238,7 @@ serve(async (req) => {
       priceSource,
       priceDiscoveryFailed,
       holders: rankedHolders,
-      summary: `Found ${rankedHolders.length} total holders. ${realWallets} real wallets (≥$50), ${largeWallets} large wallets ($5-$50), ${mediumWallets} medium wallets ($1-$5), ${smallWallets} small wallets (<$1), ${dustWallets} dust wallets (<1 token). Total tokens distributed: ${totalBalance.toLocaleString()}${priceSource ? ` (Price from ${priceSource})` : ''}`
+      summary: `Found ${rankedHolders.length} total holders. ${bossWallets} boss wallets (≥$200), ${realWallets} real wallets ($50-$199), ${largeWallets} large wallets ($5-$49), ${mediumWallets} medium wallets ($1-$4), ${smallWallets} small wallets (<$1), ${dustWallets} dust wallets (<1 token). Total tokens distributed: ${totalBalance.toLocaleString()}${priceSource ? ` (Price from ${priceSource})` : ''}`
     };
 
     return new Response(
