@@ -5,6 +5,7 @@ import { SecurityDashboard } from "@/components/security/SecurityDashboard";
 import { AccountViewer } from "@/components/AccountViewer";
 import { BaglessHoldersReport } from "@/components/BaglessHoldersReport";
 import { LiquidityLockChecker } from "@/components/LiquidityLockChecker";
+import { AllWalletsTokenView } from "@/components/AllWalletsTokenView";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import TransactionHistoryWindow from "@/components/blackbox/TransactionHistoryWindow";
@@ -33,13 +34,14 @@ export default function SuperAdmin() {
         </div>
         
         <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
-          <TabsList className="grid w-full grid-cols-6">
+          <TabsList className="grid w-full grid-cols-7">
             <TabsTrigger value="wallets">Wallet Management</TabsTrigger>
             <TabsTrigger value="recovery">Wallet Recovery</TabsTrigger>
             <TabsTrigger value="security">Security Dashboard</TabsTrigger>
             <TabsTrigger value="accounts">Account Directory</TabsTrigger>
             <TabsTrigger value="holders">Bagless Holders</TabsTrigger>
             <TabsTrigger value="liquidity">Liquidity Checker</TabsTrigger>
+            <TabsTrigger value="tokens">All Tokens</TabsTrigger>
           </TabsList>
           
           <TabsContent value="wallets">
@@ -64,6 +66,10 @@ export default function SuperAdmin() {
           
           <TabsContent value="liquidity">
             <LiquidityLockChecker />
+          </TabsContent>
+          
+          <TabsContent value="tokens">
+            <AllWalletsTokenView />
           </TabsContent>
         </Tabs>
         {/* Floating live transaction history window - right side */}

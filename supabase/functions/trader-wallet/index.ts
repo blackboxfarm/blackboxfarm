@@ -86,6 +86,8 @@ serve(async (req) => {
     // Optional token balance query
     const url = new URL(req.url);
     const tokenMint = url.searchParams.get("tokenMint");
+    const getAllTokens = url.searchParams.get("getAllTokens") === "true";
+    
     let tokenInfo: Record<string, unknown> = {};
     if (tokenMint) {
       try {
@@ -108,10 +110,52 @@ serve(async (req) => {
       }
     }
 
+    // Get all tokens if requested
+    let allTokens: any[] = [];
+    if (getAllTokens) {
+      try {
+        const tokenAccounts = await connection.getTokenAccountsByOwner(pub, {
+          programId: TOKEN_PROGRAM_ID
+        });
+        
+        for (const tokenAccount of tokenAccounts.value) {
+          try {
+            const accountInfo = await connection.getTokenAccountBalance(tokenAccount.pubkey);
+            if (accountInfo?.value?.amount && accountInfo.value.amount !== "0") {
+              // Parse the account data to get mint
+              const accountData = tokenAccount.account.data;
+              let mint = "";
+              
+              // Token account structure: mint (32 bytes) + owner (32 bytes) + amount (8 bytes) + ...
+              if (accountData.length >= 32) {
+                const mintBytes = accountData.slice(0, 32);
+                mint = new PublicKey(mintBytes).toBase58();
+              }
+              
+              if (mint) {
+                allTokens.push({
+                  mint,
+                  account: tokenAccount.pubkey.toBase58(),
+                  amount: accountInfo.value.amount,
+                  uiAmount: Number(accountInfo.value.uiAmountString ?? accountInfo.value.uiAmount ?? 0),
+                  decimals: accountInfo.value.decimals
+                });
+              }
+            }
+          } catch (err) {
+            console.error("Error processing token account:", err);
+          }
+        }
+      } catch (err) {
+        console.error("Error fetching all tokens:", err);
+      }
+    }
+
     return ok({
       publicKey: pub.toBase58(),
       solBalanceLamports: lamports,
       solBalance: lamports / 1_000_000_000,
+      tokens: allTokens,
       ...tokenInfo,
     });
   } catch (e) {
