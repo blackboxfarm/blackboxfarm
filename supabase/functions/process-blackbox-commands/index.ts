@@ -185,12 +185,20 @@ async function shouldExecuteAction(supabaseService: any, commandId: string, acti
     .single();
 
   const interval = action === 'buy' ? config.buyInterval : config.sellInterval;
-  const intervalSeconds = typeof interval === 'object' 
-    ? Math.random() * (interval.max - interval.min) + interval.min
-    : interval;
+  
+  let intervalSeconds: number;
+  if (typeof interval === 'object' && interval.min !== undefined && interval.max !== undefined) {
+    // Complex mode: random interval between min and max
+    intervalSeconds = Math.random() * (interval.max - interval.min) + interval.min;
+    console.log(`📊 ${action.toUpperCase()} interval (complex): ${intervalSeconds}s (range: ${interval.min}-${interval.max}s)`);
+  } else {
+    // Simple mode: fixed interval
+    intervalSeconds = interval || (action === 'buy' ? 300 : 900); // Default fallbacks
+    console.log(`📊 ${action.toUpperCase()} interval (simple): ${intervalSeconds}s`);
+  }
 
   if (!lastTransaction) {
-    // No previous transaction attempt, execute immediately
+    console.log(`✅ ${action.toUpperCase()} decision: EXECUTE (no previous transaction)`);
     return true;
   }
 
@@ -198,6 +206,8 @@ async function shouldExecuteAction(supabaseService: any, commandId: string, acti
   const now = Date.now();
   const timeSinceLastExecution = (now - lastExecutionTime) / 1000;
 
-  // Respect interval regardless of success/failure status
-  return timeSinceLastExecution >= intervalSeconds;
+  const shouldExecute = timeSinceLastExecution >= intervalSeconds;
+  console.log(`📊 ${action.toUpperCase()} decision: ${shouldExecute ? 'EXECUTE' : 'WAIT'} (${timeSinceLastExecution.toFixed(0)}s since last, need ${intervalSeconds.toFixed(0)}s)`);
+
+  return shouldExecute;
 }

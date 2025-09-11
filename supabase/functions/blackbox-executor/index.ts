@@ -289,31 +289,53 @@ serve(async (req) => {
               ? config.sellPercent 
               : Math.random() * (config.sellPercent.max - config.sellPercent.min) + config.sellPercent.min;
             
-            const sellAmount = tokenBalance * (sellPercent / 100);
-
-            console.log(`💱 Selling ${sellAmount} tokens (${sellPercent}% of ${tokenBalance}) on ${platform}`);
+            console.log(`💱 Token balance: ${tokenBalance}, decimals: ${accountInfo.value.decimals}, raw amount: ${accountInfo.value.amount}`);
+            
+            let swapBody: any;
+            if (sellPercent >= 100) {
+              // Sell all tokens
+              console.log(`💱 Selling ALL tokens (${sellPercent}% = sell all) on ${platform}`);
+              swapBody = {
+                side: 'sell',
+                tokenMint: campaign.token_address,
+                sellAll: true,
+                slippageBps: 500,
+                confirmPolicy: 'processed'
+              };
+            } else {
+              // Sell percentage - use raw token amount (integer base units)
+              const rawTokenBalance = BigInt(accountInfo.value.amount);
+              const rawSellAmount = rawTokenBalance * BigInt(Math.floor(sellPercent * 100)) / BigInt(10000);
+              const sellAmountInteger = Number(rawSellAmount);
+              
+              console.log(`💱 Selling ${sellPercent}% = ${sellAmountInteger} raw tokens (${tokenBalance} UI tokens) on ${platform}`);
+              console.log(`📊 Raw calculation: ${rawTokenBalance} * ${Math.floor(sellPercent * 100)} / 10000 = ${rawSellAmount}`);
+              
+              swapBody = {
+                side: 'sell',
+                tokenMint: campaign.token_address,
+                amount: sellAmountInteger, // Use integer amount for raw token units
+                slippageBps: 500,
+                confirmPolicy: 'processed'
+              };
+            }
             
             // Log detailed execution info
             console.log(`🚀 EXECUTING SELL:`, {
               tokenAddress: campaign.token_address,
               platform,
-              sellAmount,
               sellPercent,
               tokenBalance,
+              rawBalance: accountInfo.value.amount,
+              decimals: accountInfo.value.decimals,
+              swapBody,
               commandId: command_code_id,
               walletPubkey: keypair.publicKey.toString()
             });
 
             // Use raydium-swap function for REAL blockchain trades
-            // The raydium-swap function handles platform-specific routing internally
             const swapResponse = await supabaseClient.functions.invoke('raydium-swap', {
-              body: {
-                side: 'sell',
-                tokenMint: campaign.token_address,
-                amount: sellAmount,
-                slippageBps: 500,
-                confirmPolicy: 'processed'
-              },
+              body: swapBody,
               headers: {
                 'x-owner-secret': wallet.secret_key_encrypted,
                 'x-function-token': Deno.env.get("FUNCTION_TOKEN")
