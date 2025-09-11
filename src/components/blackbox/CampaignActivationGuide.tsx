@@ -650,15 +650,41 @@ export function CampaignActivationGuide({ campaign, onCampaignUpdate }: Campaign
         timestamp: new Date().toISOString()
       };
       
+      console.log('📦 Built contract package:', contractPackage);
+      
       setValidationSteps(prev => ({ ...prev, contractBuilding: 'success', cronSubmission: 'checking' }));
       
+      console.log('💾 Updating campaign status to active in database...');
       // Submit to database (simulates cron daemon submission)
       const { error } = await supabase
         .from('blackbox_campaigns')
         .update({ is_active: true })
         .eq('id', campaign.id);
 
-      if (error) throw error;
+      if (error) {
+        console.error('❌ Database update failed:', error);
+        throw error;
+      }
+      
+      console.log('✅ Campaign marked as active in database');
+      
+      // Test the blackbox command processor
+      console.log('🔄 Testing blackbox command processor...');
+      try {
+        const { data: testResult, error: testError } = await supabase.functions.invoke('process-blackbox-commands', {
+          body: { test: true }
+        });
+        
+        if (testError) {
+          console.error('⚠️ Command processor test failed:', testError);
+          // Don't fail the activation, just warn
+        } else {
+          console.log('✅ Command processor test successful:', testResult);
+        }
+      } catch (processorError) {
+        console.error('⚠️ Error testing command processor:', processorError);
+        // Don't fail the activation, just warn
+      }
       
       setValidationSteps(prev => ({ ...prev, cronSubmission: 'success' }));
       return true;
@@ -675,9 +701,18 @@ export function CampaignActivationGuide({ campaign, onCampaignUpdate }: Campaign
     setLoading(true);
     const newStatus = !contractActive;
     
+    console.log('🎯 Campaign Toggle Started:', {
+      campaignId: campaign.id,
+      campaignName: campaign.nickname,
+      currentStatus: contractActive,
+      targetStatus: newStatus,
+      timestamp: new Date().toISOString()
+    });
+    
     try {
       if (newStatus) {
         // Starting campaign - run full validation
+        console.log('📋 Starting campaign activation sequence...');
         setButtonState('starting');
         setValidationErrors([]);
         
@@ -692,20 +727,45 @@ export function CampaignActivationGuide({ campaign, onCampaignUpdate }: Campaign
         });
 
         // Run validations sequentially
+        console.log('🔍 Step 1: Token validation...');
         const tokenValid = await validateToken();
-        if (!tokenValid) throw new Error('Token validation failed');
+        if (!tokenValid) {
+          console.error('❌ Token validation failed');
+          throw new Error('Token validation failed');
+        }
+        console.log('✅ Token validation passed');
         
+        console.log('🔍 Step 2: Wallet validation...');
         const walletValid = await validateWallet();
-        if (!walletValid) throw new Error('Wallet validation failed');
+        if (!walletValid) {
+          console.error('❌ Wallet validation failed');
+          throw new Error('Wallet validation failed');
+        }
+        console.log('✅ Wallet validation passed');
         
+        console.log('🔍 Step 3: Command validation...');
         const commandsValid = await validateCommands();
-        if (!commandsValid) throw new Error('Command validation failed');
+        if (!commandsValid) {
+          console.error('❌ Command validation failed');
+          throw new Error('Command validation failed');
+        }
+        console.log('✅ Command validation passed');
         
+        console.log('🔍 Step 4: Fee validation...');
         const feesValid = await validateFees();
-        if (!feesValid) throw new Error('Fee validation failed');
+        if (!feesValid) {
+          console.error('❌ Fee validation failed');
+          throw new Error('Fee validation failed');
+        }
+        console.log('✅ Fee validation passed');
         
+        console.log('🔍 Step 5: Contract building and submission...');
         const contractSuccess = await buildAndSubmitContract();
-        if (!contractSuccess) throw new Error('Contract building/submission failed');
+        if (!contractSuccess) {
+          console.error('❌ Contract building/submission failed');
+          throw new Error('Contract building/submission failed');
+        }
+        console.log('✅ Contract building and submission passed');
         
         setContractActive(true);
         saveCampaignState(campaign.id, true); // Persist state

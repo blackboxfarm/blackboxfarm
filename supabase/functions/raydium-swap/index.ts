@@ -340,6 +340,10 @@ serve(async (req) => {
       ownerPubkey: owner.publicKey.toBase58()
     });
 
+    // Initialize Jupiter routing variables first
+    let needJupiter = false;
+    let jupReason: string | undefined;
+
     // For pump.fun tokens or tokens with routing issues, use Jupiter directly
     const isPumpFunToken = (mintAddress: string) => {
       return mintAddress.endsWith('pump') || mintAddress.length === 44;
@@ -364,8 +368,6 @@ serve(async (req) => {
     // Compute route (with SOL fallback for buys if USDC route lacks liquidity)
     let usedFallbackToSOL = false;
     let swapResponse: any;
-    let needJupiter = false;
-    let jupReason: string | undefined;
     {
       const computeUrl = `${SWAP_HOST}/compute/swap-base-in?inputMint=${inputMint}&outputMint=${outputMint}&amount=${amount}&slippageBps=${slippageBps}&txVersion=${txVersion}`;
       const computeRes = await fetch(computeUrl);
