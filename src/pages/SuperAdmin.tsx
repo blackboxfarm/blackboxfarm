@@ -7,6 +7,7 @@ import { BaglessHoldersReport } from "@/components/BaglessHoldersReport";
 import { LiquidityLockChecker } from "@/components/LiquidityLockChecker";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import TransactionHistoryWindow from "@/components/blackbox/TransactionHistoryWindow";
 
 export default function SuperAdmin() {
   const [activeTab, setActiveTab] = useState("wallets");
@@ -64,6 +65,8 @@ export default function SuperAdmin() {
             <LiquidityLockChecker />
           </TabsContent>
         </Tabs>
+        {/* Floating live transaction history window */}
+        <TransactionHistoryWindow />
       </div>
     </div>
   );
