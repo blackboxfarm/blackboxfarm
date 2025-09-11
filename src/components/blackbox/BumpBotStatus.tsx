@@ -37,12 +37,12 @@ export function BumpBotStatus() {
 
       setTransactions(data || []);
       
-      // Check for stalled scheduler - if no transactions in last 10 minutes
+      // Check for stalled scheduler - if no transactions in last 5 minutes (scheduler runs every minute)
       if (data && data.length > 0) {
         const latestTx = new Date(data[0].executed_at);
         setLastActivity(latestTx);
-        const tenMinutesAgo = new Date(Date.now() - 10 * 60 * 1000);
-        setIsSchedulerStalled(latestTx < tenMinutesAgo);
+        const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000);
+        setIsSchedulerStalled(latestTx < fiveMinutesAgo);
       } else {
         setIsSchedulerStalled(true);
       }
@@ -97,7 +97,7 @@ export function BumpBotStatus() {
   };
 
   return (
-    <div className="fixed bottom-4 right-4 w-96 z-50">
+    <div className="fixed bottom-4 left-4 w-96 z-50">
       <Card className="bg-background/95 backdrop-blur-sm border">
         <CardHeader 
           className="pb-2 cursor-pointer"
@@ -117,7 +117,7 @@ export function BumpBotStatus() {
           </div>
           {isSchedulerStalled && (
             <div className="text-xs text-destructive font-medium">
-              ⚠️ Scheduler stalled - No activity in 10+ minutes
+              ⚠️ Scheduler stalled - No activity in 5+ minutes
             </div>
           )}
           {lastActivity && (

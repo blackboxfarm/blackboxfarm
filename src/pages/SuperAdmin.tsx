@@ -66,9 +66,9 @@ export default function SuperAdmin() {
             <LiquidityLockChecker />
           </TabsContent>
         </Tabs>
-        {/* Floating live transaction history window */}
+        {/* Floating live transaction history window - right side */}
         <TransactionHistoryWindow />
-        {/* Bump bot status monitor */}
+        {/* Bump bot status monitor - left side */}
         <BumpBotStatus />
       </div>
     </div>
