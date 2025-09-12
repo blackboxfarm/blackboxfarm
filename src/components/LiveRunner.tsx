@@ -655,17 +655,12 @@ export default function LiveRunner() {
       if (!poolWallets.length) { if (!cancelled) setFunded([]); return; }
       const results = await Promise.all(poolWallets.map(async (w) => {
         try {
-          const r = await fetch(`${SB_PROJECT_URL}/functions/v1/trader-wallet`, {
-            headers: {
-              apikey: SB_ANON_KEY,
-              Authorization: `Bearer ${SB_ANON_KEY}`,
-              ...(secrets?.functionToken ? { 'x-function-token': secrets.functionToken } : {}),
-              'x-owner-secret': w.secretBase58,
-            },
+          const { data, error } = await supabase.functions.invoke('trader-wallet', {
+            body: { debug: false },
+            headers: { 'x-owner-secret': w.secretBase58 },
           });
-          if (!r.ok) return null;
-          const j = await r.json();
-          const sol = Number(j?.solBalance ?? 0);
+          if (error) return null;
+          const sol = Number(data?.solBalance ?? 0);
           return { secret: w.secretBase58, pubkey: w.pubkey, sol };
         } catch { return null; }
       }));
@@ -688,20 +683,13 @@ export default function LiveRunner() {
   const loadWallet = React.useCallback(async (ownerSecret?: string) => {
     setWalletLoading(true);
     try {
-      const res = await fetch(`${SB_PROJECT_URL}/functions/v1/trader-wallet`, {
-        headers: {
-          apikey: SB_ANON_KEY,
-          Authorization: `Bearer ${SB_ANON_KEY}`,
-          ...(secrets?.functionToken ? { 'x-function-token': secrets.functionToken } : {}),
-          ...(ownerSecret ? { 'x-owner-secret': ownerSecret } : {}),
-        },
+      const { data, error } = await supabase.functions.invoke('trader-wallet', {
+        headers: { ...(ownerSecret ? { 'x-owner-secret': ownerSecret } : {}) },
       });
-      if (res.ok) {
-        const j = await res.json();
-        const addr = j?.publicKey as string | undefined;
-        const sol = Number(j?.solBalance);
+      if (!error) {
+        const addr = data?.publicKey as string | undefined;
+        const sol = Number(data?.solBalance);
         if (addr && Number.isFinite(sol)) setWallet({ address: addr, sol });
-        
         else if (addr) setWallet({ address: addr, sol: NaN });
       }
     } catch {}
@@ -718,21 +706,16 @@ export default function LiveRunner() {
   const loadHoldings = React.useCallback(async (ownerSecret?: string) => {
     if (!cfg.tokenMint) return;
     try {
-      const res = await fetch(`${SB_PROJECT_URL}/functions/v1/trader-wallet?tokenMint=${encodeURIComponent(cfg.tokenMint)}` , {
-        headers: {
-          apikey: SB_ANON_KEY,
-          Authorization: `Bearer ${SB_ANON_KEY}`,
-          ...(secrets?.functionToken ? { 'x-function-token': secrets.functionToken } : {}),
-          ...(ownerSecret ? { 'x-owner-secret': ownerSecret } : {}),
-        },
+      const { data, error } = await supabase.functions.invoke('trader-wallet', {
+        body: { tokenMint: cfg.tokenMint },
+        headers: { ...(ownerSecret ? { 'x-owner-secret': ownerSecret } : {}) },
       });
-      if (res.ok) {
-        const j = await res.json();
-        const dec = Number(j?.tokenDecimals);
-        const raw = String(j?.tokenBalanceRaw ?? "0");
-        const ui = Number(j?.tokenUiAmount ?? (Number(raw) / Math.pow(10, Number.isFinite(dec) ? dec : 0)));
-        if (j?.tokenMint) {
-          setHolding({ mint: j.tokenMint, amountRaw: raw, decimals: Number.isFinite(dec) ? dec : 0, uiAmount: Number.isFinite(ui) ? ui : 0 });
+      if (!error && data) {
+        const dec = Number(data?.tokenDecimals);
+        const raw = String(data?.tokenBalanceRaw ?? "0");
+        const ui = Number(data?.tokenUiAmount ?? (Number(raw) / Math.pow(10, Number.isFinite(dec) ? dec : 0)));
+        if (data?.tokenMint) {
+          setHolding({ mint: data.tokenMint, amountRaw: raw, decimals: Number.isFinite(dec) ? dec : 0, uiAmount: Number.isFinite(ui) ? ui : 0 });
         } else {
           setHolding(null);
         }
@@ -771,16 +754,11 @@ export default function LiveRunner() {
       
       // Check USDC
       try {
-        const usdcRes = await fetch(`${SB_PROJECT_URL}/functions/v1/trader-wallet?tokenMint=${encodeURIComponent('EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v')}`, {
-          headers: {
-            apikey: SB_ANON_KEY,
-            Authorization: `Bearer ${SB_ANON_KEY}`,
-            ...(secrets?.functionToken ? { 'x-function-token': secrets.functionToken } : {}),
-            ...(ownerSecret ? { 'x-owner-secret': ownerSecret } : {}),
-          },
+        const { data: usdcData, error: usdcErr } = await supabase.functions.invoke('trader-wallet', {
+          body: { tokenMint: 'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v' },
+          headers: { ...(ownerSecret ? { 'x-owner-secret': ownerSecret } : {}) },
         });
-        if (usdcRes.ok) {
-          const usdcData = await usdcRes.json();
+        if (!usdcErr && usdcData) {
           if (usdcData.tokenUiAmount > 0) {
             tokens.push({
               mint: 'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v',
@@ -799,17 +777,12 @@ export default function LiveRunner() {
           cfg.tokenMint !== 'So11111111111111111111111111111111111111112' && 
           cfg.tokenMint !== 'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v') {
         try {
-          const tokenRes = await fetch(`${SB_PROJECT_URL}/functions/v1/trader-wallet?tokenMint=${encodeURIComponent(cfg.tokenMint)}`, {
-            headers: {
-              apikey: SB_ANON_KEY,
-              Authorization: `Bearer ${SB_ANON_KEY}`,
-              ...(secrets?.functionToken ? { 'x-function-token': secrets.functionToken } : {}),
-              ...(ownerSecret ? { 'x-owner-secret': ownerSecret } : {}),
-            },
-          });
-          if (tokenRes.ok) {
-            const tokenData = await tokenRes.json();
-            if (tokenData.tokenUiAmount > 0) {
+        const { data: tokenData, error: tokenErr } = await supabase.functions.invoke('trader-wallet', {
+          body: { tokenMint: cfg.tokenMint },
+          headers: { ...(ownerSecret ? { 'x-owner-secret': ownerSecret } : {}) },
+        });
+        if (!tokenErr && tokenData) {
+          if (tokenData.tokenUiAmount > 0) {
               tokens.push({
                 mint: cfg.tokenMint,
                 symbol: tokenInfo?.symbol || `${cfg.tokenMint.slice(0,4)}…${cfg.tokenMint.slice(-4)}`,
@@ -929,12 +902,12 @@ export default function LiveRunner() {
     const ownerHeaders = opts?.ownerSecret ? { 'x-owner-secret': opts.ownerSecret } : {};
     const getRawBalance = async (): Promise<{ raw: number; decimals: number } | null> => {
       try {
-        const res = await fetch(`${SB_PROJECT_URL}/functions/v1/trader-wallet?tokenMint=${encodeURIComponent(cfg.tokenMint)}` , {
-          headers: { apikey: SB_ANON_KEY, Authorization: `Bearer ${SB_ANON_KEY}`, ...(secrets?.functionToken ? { 'x-function-token': secrets.functionToken } : {}), ...ownerHeaders },
+        const { data, error } = await supabase.functions.invoke('trader-wallet', {
+          body: { tokenMint: cfg.tokenMint },
+          headers: ownerHeaders,
         });
-        if (res.ok) {
-          const j = await res.json();
-          return { raw: Number(j?.tokenBalanceRaw ?? 0), decimals: Number(j?.tokenDecimals ?? 0) };
+        if (!error && data) {
+          return { raw: Number(data?.tokenBalanceRaw ?? 0), decimals: Number(data?.tokenDecimals ?? 0) };
         }
       } catch {}
       return null;
@@ -991,12 +964,12 @@ export default function LiveRunner() {
             // sell all
             let raw = 0;
             try {
-              const res = await fetch(`${SB_PROJECT_URL}/functions/v1/trader-wallet?tokenMint=${encodeURIComponent(cfg.tokenMint)}`, {
-                headers: { apikey: SB_ANON_KEY, Authorization: `Bearer ${SB_ANON_KEY}`, ...(secrets?.functionToken ? { 'x-function-token': secrets.functionToken } : {}), ...ownerHeaders },
+              const { data, error } = await supabase.functions.invoke('trader-wallet', {
+                body: { tokenMint: cfg.tokenMint },
+                headers: ownerHeaders,
               });
-              if (res.ok) {
-                const j = await res.json();
-                raw = Number(j?.tokenBalanceRaw ?? 0);
+              if (!error && data) {
+                raw = Number(data?.tokenBalanceRaw ?? 0);
               }
             } catch {}
             if (!Number.isFinite(raw) || raw <= 0) throw new Error('No token balance to sell');
@@ -1107,16 +1080,11 @@ export default function LiveRunner() {
       // Get USDC balance (raw) via wallet function
       let raw = 0;
       try {
-        const res = await fetch(`${SB_PROJECT_URL}/functions/v1/trader-wallet?tokenMint=${encodeURIComponent(USDC_MINT)}` , {
-          headers: {
-            apikey: SB_ANON_KEY,
-            Authorization: `Bearer ${SB_ANON_KEY}`,
-            ...(secrets?.functionToken ? { 'x-function-token': secrets.functionToken } : {}),
-          },
+        const { data, error } = await supabase.functions.invoke('trader-wallet', {
+          body: { tokenMint: USDC_MINT },
         });
-        if (res.ok) {
-          const j = await res.json();
-          raw = Number(j?.tokenBalanceRaw ?? 0);
+        if (!error && data) {
+          raw = Number(data?.tokenBalanceRaw ?? 0);
         }
       } catch {}
       if (!Number.isFinite(raw) || raw <= 0) {

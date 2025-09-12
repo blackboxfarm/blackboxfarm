@@ -301,20 +301,11 @@ export function CampaignActivationGuide({ campaign, onCampaignUpdate }: Campaign
           continue;
         }
 
-        // Construct URL with token mint parameter
-        const url = `https://apxauapuusmgwbbzjgfl.supabase.co/functions/v1/trader-wallet?tokenMint=${encodeURIComponent(tokenAddress)}`;
-        
-        const response = await fetch(url, {
-          method: 'GET',
-          headers: {
-            'Authorization': `Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFweGF1YXB1dXNtZ3diYnpqZ2ZsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTQ1OTEzMDUsImV4cCI6MjA3MDE2NzMwNX0.w8IrKq4YVStF3TkdEcs5mCSeJsxjkaVq2NFkypYOXHU`,
-            'x-owner-secret': walletData.secret_key_encrypted,
-            'Content-Type': 'application/json'
-          }
+        // Invoke via Supabase client to include required headers automatically
+        const { data, error } = await supabase.functions.invoke('trader-wallet', {
+          body: { tokenMint: tokenAddress },
+          headers: { 'x-owner-secret': walletData.secret_key_encrypted },
         });
-
-        const data = await response.json();
-        const error = response.ok ? null : data;
 
         if (error) {
           console.error(`Error fetching token balance for wallet ${wallet.pubkey}:`, error);
