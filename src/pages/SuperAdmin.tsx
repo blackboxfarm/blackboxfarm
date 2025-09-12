@@ -9,6 +9,7 @@ import { AllWalletsTokenView } from "@/components/AllWalletsTokenView";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import TransactionHistoryWindow from "@/components/blackbox/TransactionHistoryWindow";
+import { WalletBalanceMonitor } from "@/components/WalletBalanceMonitor";
 
 
 export default function SuperAdmin() {
@@ -32,7 +33,9 @@ export default function SuperAdmin() {
             Manage platform wallets and administrative functions
           </p>
         </div>
-        
+        <div className="mb-6">
+          <WalletBalanceMonitor />
+        </div>
         <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
           <TabsList className="grid w-full grid-cols-7">
             <TabsTrigger value="wallets">Wallet Management</TabsTrigger>
