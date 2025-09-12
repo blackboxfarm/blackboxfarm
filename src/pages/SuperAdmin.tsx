@@ -39,7 +39,7 @@ export default function SuperAdmin() {
             <TabsTrigger value="recovery">Wallet Recovery</TabsTrigger>
             <TabsTrigger value="security">Security Dashboard</TabsTrigger>
             <TabsTrigger value="accounts">Account Directory</TabsTrigger>
-            <TabsTrigger value="holders">Bagless Holders</TabsTrigger>
+            <TabsTrigger value="holders">Token Holders</TabsTrigger>
             <TabsTrigger value="liquidity">Liquidity Checker</TabsTrigger>
             <TabsTrigger value="tokens">All Tokens</TabsTrigger>
           </TabsList>

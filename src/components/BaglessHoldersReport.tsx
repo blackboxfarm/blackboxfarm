@@ -20,6 +20,10 @@ interface TokenHolder {
   isMediumWallet: boolean;
   isLargeWallet: boolean;
   isBossWallet: boolean;
+  isKingpinWallet: boolean;
+  isSuperBossWallet: boolean;
+  isBabyWhaleWallet: boolean;
+  isTrueWhaleWallet: boolean;
   tokenAccount: string;
   rank: number;
 }
@@ -29,6 +33,10 @@ interface HoldersReport {
   totalHolders: number;
   realWallets: number;
   bossWallets: number;
+  kingpinWallets: number;
+  superBossWallets: number;
+  babyWhaleWallets: number;
+  trueWhaleWallets: number;
   largeWallets: number;
   mediumWallets: number;
   smallWallets: number;
@@ -57,6 +65,10 @@ export function BaglessHoldersReport() {
   const [showLargeOnly, setShowLargeOnly] = useState(false);
   const [showRealOnly, setShowRealOnly] = useState(false);
   const [showBossOnly, setShowBossOnly] = useState(false);
+  const [showKingpinOnly, setShowKingpinOnly] = useState(false);
+  const [showSuperBossOnly, setShowSuperBossOnly] = useState(false);
+  const [showBabyWhaleOnly, setShowBabyWhaleOnly] = useState(false);
+  const [showTrueWhaleOnly, setShowTrueWhaleOnly] = useState(false);
   const { toast } = useToast();
 
   useEffect(() => {
@@ -72,14 +84,22 @@ export function BaglessHoldersReport() {
       } else if (showLargeOnly) {
         filtered = filtered.filter(h => h.isLargeWallet);
       } else if (showRealOnly) {
-        filtered = filtered.filter(h => !h.isDustWallet && !h.isSmallWallet && !h.isMediumWallet && !h.isLargeWallet && !h.isBossWallet);
+        filtered = filtered.filter(h => !h.isDustWallet && !h.isSmallWallet && !h.isMediumWallet && !h.isLargeWallet && !h.isBossWallet && !h.isKingpinWallet && !h.isSuperBossWallet && !h.isBabyWhaleWallet && !h.isTrueWhaleWallet);
       } else if (showBossOnly) {
         filtered = filtered.filter(h => h.isBossWallet);
+      } else if (showKingpinOnly) {
+        filtered = filtered.filter(h => h.isKingpinWallet);
+      } else if (showSuperBossOnly) {
+        filtered = filtered.filter(h => h.isSuperBossWallet);
+      } else if (showBabyWhaleOnly) {
+        filtered = filtered.filter(h => h.isBabyWhaleWallet);
+      } else if (showTrueWhaleOnly) {
+        filtered = filtered.filter(h => h.isTrueWhaleWallet);
       }
       
       setFilteredHolders(filtered);
     }
-  }, [report, showDustOnly, showSmallOnly, showMediumOnly, showLargeOnly, showRealOnly, showBossOnly]);
+  }, [report, showDustOnly, showSmallOnly, showMediumOnly, showLargeOnly, showRealOnly, showBossOnly, showKingpinOnly, showSuperBossOnly, showBabyWhaleOnly, showTrueWhaleOnly]);
 
   const fetchTokenPrice = async () => {
     if (!tokenMint.trim()) return;
@@ -193,7 +213,7 @@ export function BaglessHoldersReport() {
         holder.owner,
         holder.balance,
         (holder.usdValue || 0).toFixed(4),
-        holder.isDustWallet ? 'Dust' : holder.isSmallWallet ? 'Small' : holder.isMediumWallet ? 'Medium' : holder.isLargeWallet ? 'Large' : holder.isBossWallet ? 'Boss' : 'Real',
+        holder.isDustWallet ? 'Dust' : holder.isSmallWallet ? 'Small' : holder.isMediumWallet ? 'Medium' : holder.isLargeWallet ? 'Large' : holder.isBossWallet ? 'Boss' : holder.isKingpinWallet ? 'Kingpin' : holder.isSuperBossWallet ? 'Super Boss' : holder.isBabyWhaleWallet ? 'Baby Whale' : holder.isTrueWhaleWallet ? 'True Whale' : 'Real',
         holder.tokenAccount
       ].join(','))
     ].join('\n');
@@ -202,7 +222,7 @@ export function BaglessHoldersReport() {
     const url = window.URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `bagless-holders-report-${new Date().toISOString().split('T')[0]}.csv`;
+    a.download = `token-holders-report-${new Date().toISOString().split('T')[0]}.csv`;
     a.click();
     window.URL.revokeObjectURL(url);
   };
@@ -219,7 +239,7 @@ export function BaglessHoldersReport() {
     <div className="space-y-6">
       <Card>
         <CardHeader>
-          <CardTitle>Bagless Token Holders Report</CardTitle>
+          <CardTitle>Token Holders Report</CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
           <div>
@@ -337,44 +357,52 @@ export function BaglessHoldersReport() {
                 </div>
               )}
               
-              <div className="grid grid-cols-2 md:grid-cols-8 gap-4 mb-4">
+              <div className="grid grid-cols-2 md:grid-cols-5 gap-3 mb-4">
                 <div className="text-center">
                   <div className="text-2xl font-bold">{report.totalHolders}</div>
-                  <div className="text-sm text-muted-foreground">Total Holders</div>
+                  <div className="text-xs text-muted-foreground">Total Holders</div>
                 </div>
                 <div className="text-center">
-                  <div className="text-2xl font-bold text-purple-500">{report.bossWallets}</div>
-                  <div className="text-sm text-muted-foreground">Bosses (≥$200)</div>
+                  <div className="text-2xl font-bold text-red-500">{report.trueWhaleWallets || 0}</div>
+                  <div className="text-xs text-muted-foreground">True Whale (≥$5K)</div>
+                </div>
+                <div className="text-center">
+                  <div className="text-2xl font-bold text-purple-500">{report.babyWhaleWallets || 0}</div>
+                  <div className="text-xs text-muted-foreground">Baby Whale ($2K-$5K)</div>
+                </div>
+                <div className="text-center">
+                  <div className="text-2xl font-bold text-indigo-500">{report.superBossWallets || 0}</div>
+                  <div className="text-xs text-muted-foreground">Super Boss ($1K-$2K)</div>
+                </div>
+                <div className="text-center">
+                  <div className="text-2xl font-bold text-cyan-500">{report.kingpinWallets || 0}</div>
+                  <div className="text-xs text-muted-foreground">Kingpin ($500-$1K)</div>
+                </div>
+                <div className="text-center">
+                  <div className="text-2xl font-bold text-orange-500">{report.bossWallets}</div>
+                  <div className="text-xs text-muted-foreground">Boss ($200-$500)</div>
                 </div>
                 <div className="text-center">
                   <div className="text-2xl font-bold text-green-500">{report.realWallets}</div>
-                  <div className="text-sm text-muted-foreground">Real ($50-$199)</div>
+                  <div className="text-xs text-muted-foreground">Real ($50-$199)</div>
                 </div>
                 <div className="text-center">
                   <div className="text-2xl font-bold text-emerald-500">{report.largeWallets}</div>
-                  <div className="text-sm text-muted-foreground">Large ($5-$49)</div>
+                  <div className="text-xs text-muted-foreground">Large ($5-$49)</div>
                 </div>
                 <div className="text-center">
                   <div className="text-2xl font-bold text-blue-500">{report.mediumWallets}</div>
-                  <div className="text-sm text-muted-foreground">Medium ($1-$4)</div>
-                </div>
-                <div className="text-center">
-                  <div className="text-2xl font-bold text-orange-500">{report.smallWallets}</div>
-                  <div className="text-sm text-muted-foreground">Small (&lt;$1)</div>
-                </div>
-                <div className="text-center">
-                  <div className="text-2xl font-bold text-yellow-500">{report.dustWallets}</div>
-                  <div className="text-sm text-muted-foreground">Dust (&lt;1)</div>
+                  <div className="text-xs text-muted-foreground">Medium ($1-$4)</div>
                 </div>
                 <div className="text-center">
                   <div className="text-2xl font-bold">{formatBalance(report.totalBalance)}</div>
-                  <div className="text-sm text-muted-foreground">Total Tokens</div>
+                  <div className="text-xs text-muted-foreground">Total Tokens</div>
                 </div>
               </div>
               
-              <div className="flex gap-2 mb-4 flex-wrap">
+              <div className="flex gap-1 mb-4 flex-wrap text-sm">
                 <Button
-                  variant={!showDustOnly && !showSmallOnly && !showMediumOnly && !showLargeOnly && !showRealOnly && !showBossOnly ? "default" : "outline"}
+                  variant={!showDustOnly && !showSmallOnly && !showMediumOnly && !showLargeOnly && !showRealOnly && !showBossOnly && !showKingpinOnly && !showSuperBossOnly && !showBabyWhaleOnly && !showTrueWhaleOnly ? "default" : "outline"}
                   size="sm"
                   onClick={() => {
                     setShowDustOnly(false);
@@ -383,15 +411,23 @@ export function BaglessHoldersReport() {
                     setShowLargeOnly(false);
                     setShowRealOnly(false);
                     setShowBossOnly(false);
+                    setShowKingpinOnly(false);
+                    setShowSuperBossOnly(false);
+                    setShowBabyWhaleOnly(false);
+                    setShowTrueWhaleOnly(false);
                   }}
                 >
-                  All Wallets
+                  All
                 </Button>
                 <Button
-                  variant={showBossOnly ? "default" : "outline"}
+                  variant={showTrueWhaleOnly ? "default" : "outline"}
                   size="sm"
                   onClick={() => {
-                    setShowBossOnly(true);
+                    setShowTrueWhaleOnly(true);
+                    setShowBabyWhaleOnly(false);
+                    setShowSuperBossOnly(false);
+                    setShowKingpinOnly(false);
+                    setShowBossOnly(false);
                     setShowRealOnly(false);
                     setShowLargeOnly(false);
                     setShowMediumOnly(false);
@@ -399,7 +435,79 @@ export function BaglessHoldersReport() {
                     setShowDustOnly(false);
                   }}
                 >
-                  Bosses (≥$200)
+                  True Whale (≥$5K)
+                </Button>
+                <Button
+                  variant={showBabyWhaleOnly ? "default" : "outline"}
+                  size="sm"
+                  onClick={() => {
+                    setShowBabyWhaleOnly(true);
+                    setShowTrueWhaleOnly(false);
+                    setShowSuperBossOnly(false);
+                    setShowKingpinOnly(false);
+                    setShowBossOnly(false);
+                    setShowRealOnly(false);
+                    setShowLargeOnly(false);
+                    setShowMediumOnly(false);
+                    setShowSmallOnly(false);
+                    setShowDustOnly(false);
+                  }}
+                >
+                  Baby Whale ($2K-$5K)
+                </Button>
+                <Button
+                  variant={showSuperBossOnly ? "default" : "outline"}
+                  size="sm"
+                  onClick={() => {
+                    setShowSuperBossOnly(true);
+                    setShowBabyWhaleOnly(false);
+                    setShowTrueWhaleOnly(false);
+                    setShowKingpinOnly(false);
+                    setShowBossOnly(false);
+                    setShowRealOnly(false);
+                    setShowLargeOnly(false);
+                    setShowMediumOnly(false);
+                    setShowSmallOnly(false);
+                    setShowDustOnly(false);
+                  }}
+                >
+                  Super Boss ($1K-$2K)
+                </Button>
+                <Button
+                  variant={showKingpinOnly ? "default" : "outline"}
+                  size="sm"
+                  onClick={() => {
+                    setShowKingpinOnly(true);
+                    setShowSuperBossOnly(false);
+                    setShowBabyWhaleOnly(false);
+                    setShowTrueWhaleOnly(false);
+                    setShowBossOnly(false);
+                    setShowRealOnly(false);
+                    setShowLargeOnly(false);
+                    setShowMediumOnly(false);
+                    setShowSmallOnly(false);
+                    setShowDustOnly(false);
+                  }}
+                >
+                  Kingpin ($500-$1K)
+                </Button>
+                <Button
+                  variant={showBossOnly ? "default" : "outline"}
+                  size="sm"
+                  onClick={() => {
+                    setShowBossOnly(true);
+                    setShowKingpinOnly(false);
+                    setShowSuperBossOnly(false);
+                    setShowBabyWhaleOnly(false);
+                    setShowTrueWhaleOnly(false);
+                    setShowRealOnly(false);
+                    setShowLargeOnly(false);
+                    setShowMediumOnly(false);
+                    setShowSmallOnly(false);
+                    setShowDustOnly(false);
+                  }}
+                >
+                  Boss ($200-$500)
                 </Button>
                 <Button
                   variant={showRealOnly ? "default" : "outline"}
@@ -407,6 +515,10 @@ export function BaglessHoldersReport() {
                   onClick={() => {
                     setShowRealOnly(true);
                     setShowBossOnly(false);
+                    setShowKingpinOnly(false);
+                    setShowSuperBossOnly(false);
+                    setShowBabyWhaleOnly(false);
+                    setShowTrueWhaleOnly(false);
                     setShowLargeOnly(false);
                     setShowMediumOnly(false);
                     setShowSmallOnly(false);
@@ -421,6 +533,10 @@ export function BaglessHoldersReport() {
                   onClick={() => {
                     setShowLargeOnly(true);
                     setShowBossOnly(false);
+                    setShowKingpinOnly(false);
+                    setShowSuperBossOnly(false);
+                    setShowBabyWhaleOnly(false);
+                    setShowTrueWhaleOnly(false);
                     setShowRealOnly(false);
                     setShowMediumOnly(false);
                     setShowSmallOnly(false);
@@ -435,6 +551,10 @@ export function BaglessHoldersReport() {
                   onClick={() => {
                     setShowMediumOnly(true);
                     setShowBossOnly(false);
+                    setShowKingpinOnly(false);
+                    setShowSuperBossOnly(false);
+                    setShowBabyWhaleOnly(false);
+                    setShowTrueWhaleOnly(false);
                     setShowLargeOnly(false);
                     setShowRealOnly(false);
                     setShowSmallOnly(false);
@@ -442,34 +562,6 @@ export function BaglessHoldersReport() {
                   }}
                 >
                   Medium ($1-$4)
-                </Button>
-                <Button
-                  variant={showSmallOnly ? "default" : "outline"}
-                  size="sm"
-                  onClick={() => {
-                    setShowSmallOnly(true);
-                    setShowBossOnly(false);
-                    setShowMediumOnly(false);
-                    setShowLargeOnly(false);
-                    setShowRealOnly(false);
-                    setShowDustOnly(false);
-                  }}
-                >
-                  Small (&lt;$1)
-                </Button>
-                <Button
-                  variant={showDustOnly ? "default" : "outline"}
-                  size="sm"
-                  onClick={() => {
-                    setShowDustOnly(true);
-                    setShowBossOnly(false);
-                    setShowSmallOnly(false);
-                    setShowMediumOnly(false);
-                    setShowLargeOnly(false);
-                    setShowRealOnly(false);
-                  }}
-                >
-                  Dust (&lt;1)
                 </Button>
               </div>
               
@@ -513,15 +605,29 @@ export function BaglessHoldersReport() {
                           ${(holder.usdValue || 0).toFixed(4)}
                         </TableCell>
                          <TableCell>
-                           <Badge variant={
-                             holder.isDustWallet ? "secondary" : 
-                             holder.isSmallWallet ? "outline" : 
-                             holder.isMediumWallet ? "outline" :
-                             holder.isLargeWallet ? "outline" : 
-                             holder.isBossWallet ? "default" : "default"
-                           }>
-                             {holder.isDustWallet ? "Dust" : holder.isSmallWallet ? "Small" : holder.isMediumWallet ? "Medium" : holder.isLargeWallet ? "Large" : holder.isBossWallet ? "Boss" : "Real"}
-                          </Badge>
+                            <Badge variant={
+                              holder.isDustWallet ? "secondary" : 
+                              holder.isSmallWallet ? "outline" : 
+                              holder.isMediumWallet ? "outline" : 
+                              holder.isLargeWallet ? "outline" : 
+                              holder.isBossWallet ? "destructive" : 
+                              holder.isKingpinWallet ? "destructive" : 
+                              holder.isSuperBossWallet ? "destructive" : 
+                              holder.isBabyWhaleWallet ? "destructive" : 
+                              holder.isTrueWhaleWallet ? "destructive" : 
+                              "default"
+                            }>
+                              {holder.isDustWallet ? 'Dust' : 
+                               holder.isSmallWallet ? 'Small' : 
+                               holder.isMediumWallet ? 'Medium' : 
+                               holder.isLargeWallet ? 'Large' : 
+                               holder.isBossWallet ? 'Boss' : 
+                               holder.isKingpinWallet ? 'Kingpin' : 
+                               holder.isSuperBossWallet ? 'Super Boss' : 
+                               holder.isBabyWhaleWallet ? 'Baby Whale' : 
+                               holder.isTrueWhaleWallet ? 'True Whale' : 
+                               'Real'}
+                           </Badge>
                         </TableCell>
                       </TableRow>
                     ))}

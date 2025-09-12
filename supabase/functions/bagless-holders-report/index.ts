@@ -183,7 +183,11 @@ serve(async (req) => {
             const isSmallWallet = balance >= 1 && usdValue < 1; // Between 1 token and $1 USD
             const isMediumWallet = usdValue >= 1 && usdValue < 5; // $1-$5 USD
             const isLargeWallet = usdValue >= 5 && usdValue < 50; // $5-$50 USD
-            const isBossWallet = usdValue >= 200; // $200+ USD
+            const isBossWallet = usdValue >= 200 && usdValue < 500; // $200-$500 USD
+            const isKingpinWallet = usdValue >= 500 && usdValue < 1000; // $500-$1K USD
+            const isSuperBossWallet = usdValue >= 1000 && usdValue < 2000; // $1K-$2K USD
+            const isBabyWhaleWallet = usdValue >= 2000 && usdValue < 5000; // $2K-$5K USD
+            const isTrueWhaleWallet = usdValue >= 5000; // $5K+ USD
             
             holders.push({
               owner,
@@ -195,6 +199,10 @@ serve(async (req) => {
               isMediumWallet,
               isLargeWallet,
               isBossWallet,
+              isKingpinWallet,
+              isSuperBossWallet,
+              isBabyWhaleWallet,
+              isTrueWhaleWallet,
               tokenAccount: account.pubkey
             });
           }
@@ -218,17 +226,25 @@ serve(async (req) => {
     const mediumWallets = rankedHolders.filter(h => h.isMediumWallet).length;
     const largeWallets = rankedHolders.filter(h => h.isLargeWallet).length;
     const bossWallets = rankedHolders.filter(h => h.isBossWallet).length;
-    const realWallets = rankedHolders.filter(h => !h.isDustWallet && !h.isSmallWallet && !h.isMediumWallet && !h.isLargeWallet && !h.isBossWallet).length;
+    const kingpinWallets = rankedHolders.filter(h => h.isKingpinWallet).length;
+    const superBossWallets = rankedHolders.filter(h => h.isSuperBossWallet).length;
+    const babyWhaleWallets = rankedHolders.filter(h => h.isBabyWhaleWallet).length;
+    const trueWhaleWallets = rankedHolders.filter(h => h.isTrueWhaleWallet).length;
+    const realWallets = rankedHolders.filter(h => !h.isDustWallet && !h.isSmallWallet && !h.isMediumWallet && !h.isLargeWallet && !h.isBossWallet && !h.isKingpinWallet && !h.isSuperBossWallet && !h.isBabyWhaleWallet && !h.isTrueWhaleWallet).length;
     const totalBalance = rankedHolders.reduce((sum, h) => sum + h.balance, 0);
 
     console.log(`Found ${rankedHolders.length} token holders`);
-    console.log(`Real wallets: ${realWallets}, Boss wallets: ${bossWallets}, Large wallets: ${largeWallets}, Medium wallets: ${mediumWallets}, Small wallets: ${smallWallets}, Dust wallets: ${dustWallets}`);
+    console.log(`Real wallets: ${realWallets}, Boss wallets: ${bossWallets}, Kingpin wallets: ${kingpinWallets}, Super Boss wallets: ${superBossWallets}, Baby Whale wallets: ${babyWhaleWallets}, True Whale wallets: ${trueWhaleWallets}, Large wallets: ${largeWallets}, Medium wallets: ${mediumWallets}, Small wallets: ${smallWallets}, Dust wallets: ${dustWallets}`);
 
     const result = {
       tokenMint,
       totalHolders: rankedHolders.length,
       realWallets,
       bossWallets,
+      kingpinWallets,
+      superBossWallets,
+      babyWhaleWallets,
+      trueWhaleWallets,
       largeWallets,
       mediumWallets,
       smallWallets,
@@ -238,7 +254,7 @@ serve(async (req) => {
       priceSource,
       priceDiscoveryFailed,
       holders: rankedHolders,
-      summary: `Found ${rankedHolders.length} total holders. ${bossWallets} boss wallets (≥$200), ${realWallets} real wallets ($50-$199), ${largeWallets} large wallets ($5-$49), ${mediumWallets} medium wallets ($1-$4), ${smallWallets} small wallets (<$1), ${dustWallets} dust wallets (<1 token). Total tokens distributed: ${totalBalance.toLocaleString()}${priceSource ? ` (Price from ${priceSource})` : ''}`
+      summary: `Found ${rankedHolders.length} total holders. ${trueWhaleWallets} true whale wallets (≥$5K), ${babyWhaleWallets} baby whale wallets ($2K-$5K), ${superBossWallets} super boss wallets ($1K-$2K), ${kingpinWallets} kingpin wallets ($500-$1K), ${bossWallets} boss wallets ($200-$500), ${realWallets} real wallets ($50-$199), ${largeWallets} large wallets ($5-$49), ${mediumWallets} medium wallets ($1-$4), ${smallWallets} small wallets (<$1), ${dustWallets} dust wallets (<1 token). Total tokens distributed: ${totalBalance.toLocaleString()}${priceSource ? ` (Price from ${priceSource})` : ''}`
     };
 
     return new Response(
