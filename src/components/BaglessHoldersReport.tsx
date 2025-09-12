@@ -393,7 +393,7 @@ export function BaglessHoldersReport() {
                 </div>
               )}
 
-              <div className="grid grid-cols-2 md:grid-cols-5 gap-3 mb-4">
+              <div className="grid grid-cols-2 md:grid-cols-5 gap-3 mb-6">
                 <div className="text-center">
                   <div className="text-2xl font-bold">{report.totalHolders}</div>
                   <div className="text-xs text-muted-foreground">Total Holders</div>
@@ -433,6 +433,132 @@ export function BaglessHoldersReport() {
                 <div className="text-center">
                   <div className="text-2xl font-bold">{formatBalance(report.totalBalance)}</div>
                   <div className="text-xs text-muted-foreground">Total Tokens</div>
+                </div>
+              </div>
+
+              {/* Sediment Layer Chart */}
+              <div className="mb-6">
+                <h3 className="text-lg font-semibold mb-4">Wallet Distribution (Sediment Layers)</h3>
+                <div className="flex gap-6">
+                  {/* Chart */}
+                  <div className="flex-1">
+                    <div className="bg-muted/30 rounded-lg p-4 h-80 flex flex-col justify-end">
+                      {(() => {
+                        const totalRealWallets = (report.trueWhaleWallets || 0) + 
+                                                (report.babyWhaleWallets || 0) + 
+                                                (report.superBossWallets || 0) + 
+                                                (report.kingpinWallets || 0) + 
+                                                (report.bossWallets || 0) + 
+                                                (report.realWallets || 0) + 
+                                                (report.largeWallets || 0);
+                        
+                        const layers = [
+                          { name: 'True Whale', count: report.trueWhaleWallets || 0, color: 'bg-red-500', textColor: 'text-red-500' },
+                          { name: 'Super Boss', count: report.superBossWallets || 0, color: 'bg-indigo-500', textColor: 'text-indigo-500' },
+                          { name: 'Baby Whale', count: report.babyWhaleWallets || 0, color: 'bg-purple-500', textColor: 'text-purple-500' },
+                          { name: 'Kingpin', count: report.kingpinWallets || 0, color: 'bg-cyan-500', textColor: 'text-cyan-500' },
+                          { name: 'Boss', count: report.bossWallets || 0, color: 'bg-orange-500', textColor: 'text-orange-500' },
+                          { name: 'Real', count: report.realWallets || 0, color: 'bg-green-500', textColor: 'text-green-500' },
+                          { name: 'Large', count: report.largeWallets || 0, color: 'bg-emerald-500', textColor: 'text-emerald-500' }
+                        ];
+
+                        return layers.map((layer, index) => {
+                          const percentage = totalRealWallets > 0 ? (layer.count / totalRealWallets) * 100 : 0;
+                          const minHeight = percentage > 0 ? Math.max(percentage * 2.5, 8) : 0; // Minimum 8px height if any wallets
+                          
+                          return (
+                            <div
+                              key={layer.name}
+                              className={`${layer.color} border border-white/20 flex items-center justify-center text-white text-xs font-medium transition-all duration-300 hover:opacity-80`}
+                              style={{ 
+                                height: `${minHeight}px`,
+                                minHeight: percentage > 0 ? '8px' : '0px'
+                              }}
+                              title={`${layer.name}: ${layer.count} wallets (${percentage.toFixed(1)}%)`}
+                            >
+                              {percentage > 3 && ( // Only show text if layer is thick enough
+                                <span className="text-center px-2">
+                                  {layer.count} ({percentage.toFixed(1)}%)
+                                </span>
+                              )}
+                            </div>
+                          );
+                        });
+                      })()}
+                    </div>
+                  </div>
+                  
+                  {/* Legend and Analysis */}
+                  <div className="w-64 space-y-4">
+                    <div>
+                      <h4 className="font-medium mb-2">Layer Analysis</h4>
+                      <div className="space-y-2 text-sm">
+                        <div className="p-2 bg-green-500/10 border border-green-500/20 rounded">
+                          <div className="font-medium text-green-700 dark:text-green-300">Floor (Stable)</div>
+                          <div className="text-xs text-muted-foreground">
+                            True Whale + Super Boss + Baby Whale
+                          </div>
+                          <div className="text-xs">
+                            {((report.trueWhaleWallets || 0) + (report.superBossWallets || 0) + (report.babyWhaleWallets || 0))} wallets
+                          </div>
+                        </div>
+                        
+                        <div className="p-2 bg-yellow-500/10 border border-yellow-500/20 rounded">
+                          <div className="font-medium text-yellow-700 dark:text-yellow-300">Ceiling (Volatile)</div>
+                          <div className="text-xs text-muted-foreground">
+                            Kingpin + Boss
+                          </div>
+                          <div className="text-xs">
+                            {((report.kingpinWallets || 0) + (report.bossWallets || 0))} wallets
+                          </div>
+                        </div>
+                        
+                        <div className="p-2 bg-red-500/10 border border-red-500/20 rounded">
+                          <div className="font-medium text-red-700 dark:text-red-300">Surface (Unstable)</div>
+                          <div className="text-xs text-muted-foreground">
+                            Real + Large
+                          </div>
+                          <div className="text-xs">
+                            {((report.realWallets || 0) + (report.largeWallets || 0))} wallets
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                    
+                    <div>
+                      <h4 className="font-medium mb-2">Layer Legend</h4>
+                      <div className="space-y-1 text-xs">
+                        <div className="flex items-center gap-2">
+                          <div className="w-3 h-3 bg-red-500 rounded"></div>
+                          <span>True Whale (≥$5K)</span>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <div className="w-3 h-3 bg-indigo-500 rounded"></div>
+                          <span>Super Boss ($1K-$2K)</span>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <div className="w-3 h-3 bg-purple-500 rounded"></div>
+                          <span>Baby Whale ($2K-$5K)</span>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <div className="w-3 h-3 bg-cyan-500 rounded"></div>
+                          <span>Kingpin ($500-$1K)</span>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <div className="w-3 h-3 bg-orange-500 rounded"></div>
+                          <span>Boss ($200-$500)</span>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <div className="w-3 h-3 bg-green-500 rounded"></div>
+                          <span>Real ($50-$199)</span>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <div className="w-3 h-3 bg-emerald-500 rounded"></div>
+                          <span>Large ($5-$49)</span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
                 </div>
               </div>
               
