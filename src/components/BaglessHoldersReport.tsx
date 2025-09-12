@@ -15,6 +15,11 @@ interface TokenHolder {
   balance: number;
   usdValue: number;
   balanceRaw: string;
+  percentageOfSupply: number;
+  isLiquidityPool: boolean;
+  lpDetectionReason: string;
+  lpConfidence: number;
+  detectedPlatform: string;
   isDustWallet: boolean;
   isSmallWallet: boolean;
   isMediumWallet: boolean;
@@ -31,6 +36,11 @@ interface TokenHolder {
 interface HoldersReport {
   tokenMint: string;
   totalHolders: number;
+  liquidityPoolsDetected: number;
+  lpBalance: number;
+  lpPercentageOfSupply: number;
+  nonLpHolders: number;
+  nonLpBalance: number;
   realWallets: number;
   bossWallets: number;
   kingpinWallets: number;
@@ -46,6 +56,7 @@ interface HoldersReport {
   priceSource?: string;
   priceDiscoveryFailed?: boolean;
   holders: TokenHolder[];
+  liquidityPools: TokenHolder[];
   summary: string;
 }
 
@@ -69,37 +80,49 @@ export function BaglessHoldersReport() {
   const [showSuperBossOnly, setShowSuperBossOnly] = useState(false);
   const [showBabyWhaleOnly, setShowBabyWhaleOnly] = useState(false);
   const [showTrueWhaleOnly, setShowTrueWhaleOnly] = useState(false);
+  const [showLPOnly, setShowLPOnly] = useState(false);
+  const [excludeLPs, setExcludeLPs] = useState(false);
   const { toast } = useToast();
 
   useEffect(() => {
     if (report) {
       let filtered = report.holders;
       
-      if (showDustOnly) {
-        filtered = filtered.filter(h => h.isDustWallet);
-      } else if (showSmallOnly) {
-        filtered = filtered.filter(h => h.isSmallWallet);
-      } else if (showMediumOnly) {
-        filtered = filtered.filter(h => h.isMediumWallet);
-      } else if (showLargeOnly) {
-        filtered = filtered.filter(h => h.isLargeWallet);
-      } else if (showRealOnly) {
-        filtered = filtered.filter(h => !h.isDustWallet && !h.isSmallWallet && !h.isMediumWallet && !h.isLargeWallet && !h.isBossWallet && !h.isKingpinWallet && !h.isSuperBossWallet && !h.isBabyWhaleWallet && !h.isTrueWhaleWallet);
-      } else if (showBossOnly) {
-        filtered = filtered.filter(h => h.isBossWallet);
-      } else if (showKingpinOnly) {
-        filtered = filtered.filter(h => h.isKingpinWallet);
-      } else if (showSuperBossOnly) {
-        filtered = filtered.filter(h => h.isSuperBossWallet);
-      } else if (showBabyWhaleOnly) {
-        filtered = filtered.filter(h => h.isBabyWhaleWallet);
-      } else if (showTrueWhaleOnly) {
-        filtered = filtered.filter(h => h.isTrueWhaleWallet);
+      // Apply LP filtering first
+      if (excludeLPs) {
+        filtered = filtered.filter(h => !h.isLiquidityPool);
+      } else if (showLPOnly) {
+        filtered = filtered.filter(h => h.isLiquidityPool);
+      }
+      
+      // Apply category filtering (only if not showing LP only)
+      if (!showLPOnly) {
+        if (showDustOnly) {
+          filtered = filtered.filter(h => h.isDustWallet);
+        } else if (showSmallOnly) {
+          filtered = filtered.filter(h => h.isSmallWallet);
+        } else if (showMediumOnly) {
+          filtered = filtered.filter(h => h.isMediumWallet);
+        } else if (showLargeOnly) {
+          filtered = filtered.filter(h => h.isLargeWallet);
+        } else if (showRealOnly) {
+          filtered = filtered.filter(h => !h.isDustWallet && !h.isSmallWallet && !h.isMediumWallet && !h.isLargeWallet && !h.isBossWallet && !h.isKingpinWallet && !h.isSuperBossWallet && !h.isBabyWhaleWallet && !h.isTrueWhaleWallet && !h.isLiquidityPool);
+        } else if (showBossOnly) {
+          filtered = filtered.filter(h => h.isBossWallet);
+        } else if (showKingpinOnly) {
+          filtered = filtered.filter(h => h.isKingpinWallet);
+        } else if (showSuperBossOnly) {
+          filtered = filtered.filter(h => h.isSuperBossWallet);
+        } else if (showBabyWhaleOnly) {
+          filtered = filtered.filter(h => h.isBabyWhaleWallet);
+        } else if (showTrueWhaleOnly) {
+          filtered = filtered.filter(h => h.isTrueWhaleWallet);
+        }
       }
       
       setFilteredHolders(filtered);
     }
-  }, [report, showDustOnly, showSmallOnly, showMediumOnly, showLargeOnly, showRealOnly, showBossOnly, showKingpinOnly, showSuperBossOnly, showBabyWhaleOnly, showTrueWhaleOnly]);
+  }, [report, showDustOnly, showSmallOnly, showMediumOnly, showLargeOnly, showRealOnly, showBossOnly, showKingpinOnly, showSuperBossOnly, showBabyWhaleOnly, showTrueWhaleOnly, showLPOnly, excludeLPs]);
 
   const fetchTokenPrice = async () => {
     if (!tokenMint.trim()) return;
@@ -213,7 +236,7 @@ export function BaglessHoldersReport() {
         holder.owner,
         holder.balance,
         (holder.usdValue || 0).toFixed(4),
-        holder.isDustWallet ? 'Dust' : holder.isSmallWallet ? 'Small' : holder.isMediumWallet ? 'Medium' : holder.isLargeWallet ? 'Large' : holder.isBossWallet ? 'Boss' : holder.isKingpinWallet ? 'Kingpin' : holder.isSuperBossWallet ? 'Super Boss' : holder.isBabyWhaleWallet ? 'Baby Whale' : holder.isTrueWhaleWallet ? 'True Whale' : 'Real',
+        holder.isLiquidityPool ? `LP (${holder.detectedPlatform || 'Unknown'})` : holder.isDustWallet ? 'Dust' : holder.isSmallWallet ? 'Small' : holder.isMediumWallet ? 'Medium' : holder.isLargeWallet ? 'Large' : holder.isBossWallet ? 'Boss' : holder.isKingpinWallet ? 'Kingpin' : holder.isSuperBossWallet ? 'Super Boss' : holder.isBabyWhaleWallet ? 'Baby Whale' : holder.isTrueWhaleWallet ? 'True Whale' : 'Real',
         holder.tokenAccount
       ].join(','))
     ].join('\n');
@@ -357,10 +380,27 @@ export function BaglessHoldersReport() {
                 </div>
               )}
               
+              {/* LP Detection Summary */}
+              {report.liquidityPoolsDetected > 0 && (
+                <div className="mb-4 p-3 bg-blue-500/10 border border-blue-500/20 rounded-lg">
+                  <div className="text-sm font-medium text-blue-700 dark:text-blue-300 mb-2">
+                    🔍 LP Detection Results
+                  </div>
+                  <div className="text-xs text-blue-600 dark:text-blue-400">
+                    Detected {report.liquidityPoolsDetected} liquidity pool wallet{report.liquidityPoolsDetected > 1 ? 's' : ''} 
+                    ({report.lpPercentageOfSupply.toFixed(1)}% of total supply)
+                  </div>
+                </div>
+              )}
+
               <div className="grid grid-cols-2 md:grid-cols-5 gap-3 mb-4">
                 <div className="text-center">
                   <div className="text-2xl font-bold">{report.totalHolders}</div>
                   <div className="text-xs text-muted-foreground">Total Holders</div>
+                </div>
+                <div className="text-center">
+                  <div className="text-2xl font-bold text-yellow-500">{report.liquidityPoolsDetected || 0}</div>
+                  <div className="text-xs text-muted-foreground">LP Detected</div>
                 </div>
                 <div className="text-center">
                   <div className="text-2xl font-bold text-red-500">{report.trueWhaleWallets || 0}</div>
@@ -391,18 +431,38 @@ export function BaglessHoldersReport() {
                   <div className="text-xs text-muted-foreground">Large ($5-$49)</div>
                 </div>
                 <div className="text-center">
-                  <div className="text-2xl font-bold text-blue-500">{report.mediumWallets}</div>
-                  <div className="text-xs text-muted-foreground">Medium ($1-$4)</div>
-                </div>
-                <div className="text-center">
                   <div className="text-2xl font-bold">{formatBalance(report.totalBalance)}</div>
                   <div className="text-xs text-muted-foreground">Total Tokens</div>
                 </div>
               </div>
               
+              {/* LP Filter Controls */}
+              <div className="flex gap-2 mb-3 flex-wrap text-sm">
+                <Button
+                  variant={excludeLPs ? "default" : "outline"}
+                  size="sm"
+                  onClick={() => {
+                    setExcludeLPs(!excludeLPs);
+                    setShowLPOnly(false);
+                  }}
+                >
+                  Exclude LPs
+                </Button>
+                <Button
+                  variant={showLPOnly ? "default" : "outline"}
+                  size="sm"
+                  onClick={() => {
+                    setShowLPOnly(!showLPOnly);
+                    setExcludeLPs(false);
+                  }}
+                >
+                  Show LPs Only ({report.liquidityPoolsDetected})
+                </Button>
+              </div>
+
               <div className="flex gap-1 mb-4 flex-wrap text-sm">
                 <Button
-                  variant={!showDustOnly && !showSmallOnly && !showMediumOnly && !showLargeOnly && !showRealOnly && !showBossOnly && !showKingpinOnly && !showSuperBossOnly && !showBabyWhaleOnly && !showTrueWhaleOnly ? "default" : "outline"}
+                  variant={!showDustOnly && !showSmallOnly && !showMediumOnly && !showLargeOnly && !showRealOnly && !showBossOnly && !showKingpinOnly && !showSuperBossOnly && !showBabyWhaleOnly && !showTrueWhaleOnly && !showLPOnly ? "default" : "outline"}
                   size="sm"
                   onClick={() => {
                     setShowDustOnly(false);
@@ -415,9 +475,10 @@ export function BaglessHoldersReport() {
                     setShowSuperBossOnly(false);
                     setShowBabyWhaleOnly(false);
                     setShowTrueWhaleOnly(false);
+                    setShowLPOnly(false);
                   }}
                 >
-                  All
+                  All Categories
                 </Button>
                 <Button
                   variant={showTrueWhaleOnly ? "default" : "outline"}
@@ -576,10 +637,11 @@ export function BaglessHoldersReport() {
             <CardContent>
               <div className="max-h-96 overflow-auto">
                   <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>Rank</TableHead>
-                        <TableHead>Wallet Address</TableHead>
+                     <TableHeader>
+                       <TableRow>
+                         <TableHead>Rank</TableHead>
+                         <TableHead>Wallet Address</TableHead>
+                         <TableHead>% of Supply</TableHead>
                         <TableHead>Token Balance</TableHead>
                         <TableHead>USD Value</TableHead>
                         <TableHead>Type</TableHead>
@@ -588,47 +650,64 @@ export function BaglessHoldersReport() {
                   <TableBody>
                     {filteredHolders.map((holder) => (
                       <TableRow key={holder.owner}>
-                        <TableCell className="font-mono">#{holder.rank}</TableCell>
-                         <TableCell className="font-mono">
-                           <button
-                             onClick={() => navigator.clipboard.writeText(holder.owner)}
-                             className="hover:text-muted-foreground transition-colors cursor-pointer break-all text-left"
-                             title="Click to copy full address"
-                           >
-                             {holder.owner}
-                           </button>
+                         <TableCell className="font-mono">#{holder.rank}</TableCell>
+                          <TableCell className="font-mono">
+                            <button
+                              onClick={() => navigator.clipboard.writeText(holder.owner)}
+                              className="hover:text-muted-foreground transition-colors cursor-pointer break-all text-left"
+                              title="Click to copy full address"
+                            >
+                              {holder.owner}
+                            </button>
+                          </TableCell>
+                         <TableCell className="font-mono text-xs">
+                           {holder.percentageOfSupply?.toFixed(2)}%
                          </TableCell>
-                        <TableCell className="font-mono">
-                          {formatBalance(holder.balance)}
-                        </TableCell>
-                        <TableCell className="font-mono">
-                          ${(holder.usdValue || 0).toFixed(4)}
-                        </TableCell>
-                         <TableCell>
-                            <Badge variant={
-                              holder.isDustWallet ? "secondary" : 
-                              holder.isSmallWallet ? "outline" : 
-                              holder.isMediumWallet ? "outline" : 
-                              holder.isLargeWallet ? "outline" : 
-                              holder.isBossWallet ? "destructive" : 
-                              holder.isKingpinWallet ? "destructive" : 
-                              holder.isSuperBossWallet ? "destructive" : 
-                              holder.isBabyWhaleWallet ? "destructive" : 
-                              holder.isTrueWhaleWallet ? "destructive" : 
-                              "default"
-                            }>
-                              {holder.isDustWallet ? 'Dust' : 
-                               holder.isSmallWallet ? 'Small' : 
-                               holder.isMediumWallet ? 'Medium' : 
-                               holder.isLargeWallet ? 'Large' : 
-                               holder.isBossWallet ? 'Boss' : 
-                               holder.isKingpinWallet ? 'Kingpin' : 
-                               holder.isSuperBossWallet ? 'Super Boss' : 
-                               holder.isBabyWhaleWallet ? 'Baby Whale' : 
-                               holder.isTrueWhaleWallet ? 'True Whale' : 
-                               'Real'}
-                           </Badge>
-                        </TableCell>
+                         <TableCell className="font-mono">
+                           {formatBalance(holder.balance)}
+                         </TableCell>
+                         <TableCell className="font-mono">
+                           ${(holder.usdValue || 0).toFixed(4)}
+                         </TableCell>
+                          <TableCell>
+                            {holder.isLiquidityPool ? (
+                              <div className="space-y-1">
+                                <Badge variant="destructive" className="bg-yellow-500 hover:bg-yellow-600">
+                                  LP ({holder.lpConfidence}%)
+                                </Badge>
+                                <div className="text-xs text-muted-foreground">
+                                  {holder.detectedPlatform && (
+                                    <div>Platform: {holder.detectedPlatform}</div>
+                                  )}
+                                  <div>Reason: {holder.lpDetectionReason}</div>
+                                </div>
+                              </div>
+                            ) : (
+                              <Badge variant={
+                                holder.isDustWallet ? "secondary" : 
+                                holder.isSmallWallet ? "outline" : 
+                                holder.isMediumWallet ? "outline" : 
+                                holder.isLargeWallet ? "outline" : 
+                                holder.isBossWallet ? "destructive" : 
+                                holder.isKingpinWallet ? "destructive" : 
+                                holder.isSuperBossWallet ? "destructive" : 
+                                holder.isBabyWhaleWallet ? "destructive" : 
+                                holder.isTrueWhaleWallet ? "destructive" : 
+                                "default"
+                              }>
+                                {holder.isDustWallet ? 'Dust' : 
+                                 holder.isSmallWallet ? 'Small' : 
+                                 holder.isMediumWallet ? 'Medium' : 
+                                 holder.isLargeWallet ? 'Large' : 
+                                 holder.isBossWallet ? 'Boss' : 
+                                 holder.isKingpinWallet ? 'Kingpin' : 
+                                 holder.isSuperBossWallet ? 'Super Boss' : 
+                                 holder.isBabyWhaleWallet ? 'Baby Whale' : 
+                                 holder.isTrueWhaleWallet ? 'True Whale' : 
+                                 'Real'}
+                              </Badge>
+                            )}
+                         </TableCell>
                       </TableRow>
                     ))}
                   </TableBody>

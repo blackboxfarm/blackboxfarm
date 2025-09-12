@@ -166,8 +166,22 @@ serve(async (req) => {
     }
 
     const holders = [];
+    let totalSupply = 0;
     
     if (data.result && data.result.length > 0) {
+      // Calculate total supply first
+      for (const account of data.result) {
+        try {
+          const parsedInfo = account.account.data.parsed.info;
+          const balance = parseFloat(parsedInfo.tokenAmount.uiAmount || 0);
+          if (balance > 0) {
+            totalSupply += balance;
+          }
+        } catch (e) {
+          // Skip invalid accounts
+        }
+      }
+      
       for (const account of data.result) {
         try {
           const parsedInfo = account.account.data.parsed.info;
@@ -178,22 +192,93 @@ serve(async (req) => {
             // Calculate USD value
             const usdValue = balance * tokenPriceUSD;
             
-            // Categorize wallets
-            const isDustWallet = balance < 1;
-            const isSmallWallet = balance >= 1 && usdValue < 1; // Between 1 token and $1 USD
-            const isMediumWallet = usdValue >= 1 && usdValue < 5; // $1-$5 USD
-            const isLargeWallet = usdValue >= 5 && usdValue < 50; // $5-$50 USD
-            const isBossWallet = usdValue >= 200 && usdValue < 500; // $200-$500 USD
-            const isKingpinWallet = usdValue >= 500 && usdValue < 1000; // $500-$1K USD
-            const isSuperBossWallet = usdValue >= 1000 && usdValue < 2000; // $1K-$2K USD
-            const isBabyWhaleWallet = usdValue >= 2000 && usdValue < 5000; // $2K-$5K USD
-            const isTrueWhaleWallet = usdValue >= 5000; // $5K+ USD
+            // Calculate percentage of total supply
+            const percentageOfSupply = (balance / totalSupply) * 100;
+            
+            // LP Detection Logic
+            let isLiquidityPool = false;
+            let lpDetectionReason = '';
+            let lpConfidence = 0;
+            let detectedPlatform = '';
+            
+            // Detection 1: Large percentage ownership (likely LP)
+            if (percentageOfSupply > 20) {
+              isLiquidityPool = true;
+              lpDetectionReason = 'Large percentage ownership';
+              lpConfidence += 40;
+            }
+            
+            // Detection 2: Check if address looks like a PDA (starts with specific patterns)
+            const isPotentialPDA = !owner.match(/^[1-9A-HJ-NP-Za-km-z]{44}$/) || 
+                                   owner.length !== 44 ||
+                                   owner.startsWith('11111') ||
+                                   owner.includes('aaaa') ||
+                                   owner.includes('1111');
+            
+            if (isPotentialPDA) {
+              lpConfidence += 20;
+              if (!isLiquidityPool) {
+                lpDetectionReason = 'PDA-like address pattern';
+              }
+            }
+            
+            // Detection 3: Known DEX program patterns (simplified heuristics)
+            const knownDEXPatterns = {
+              'raydium': /^5Q544fKrFoe6tsEbD7S8EmxGTJYAKtTVhAW5Q5pge4j1$/,
+              'orca': /^whirLbMiicVdio4qvUfM5KAg6Ct8VwpYzGff3uctyCc$/,
+              'meteora': /^Eo7WjKq67rjJQSZxS6z3YkapzY3eMj6Xy8X5EQVn5UaB$/,
+              'jupiter': /^JUP6LkbZbjS1jKKwapdHNy74zcZ3tLUZoi5QNyVTaV4$/,
+              'pump_fun': /^6EF8rrecthR5Dkzon8Nwu78hRvfCKubJ14M5uBEwF6P$/
+            };
+            
+            for (const [platform, pattern] of Object.entries(knownDEXPatterns)) {
+              if (pattern.test(owner)) {
+                isLiquidityPool = true;
+                detectedPlatform = platform;
+                lpDetectionReason = `Known ${platform} program address`;
+                lpConfidence = 90;
+                break;
+              }
+            }
+            
+            // Detection 4: Very high token balance combined with round numbers (LP characteristics)
+            if (balance > 1000000 && (balance % 1000000 === 0 || balance % 100000 === 0)) {
+              lpConfidence += 15;
+              if (!isLiquidityPool && lpConfidence > 30) {
+                isLiquidityPool = true;
+                lpDetectionReason = 'Large round number balance';
+              }
+            }
+            
+            // Final confidence adjustment
+            if (isLiquidityPool && lpConfidence > 50) {
+              lpConfidence = Math.min(95, lpConfidence);
+            } else if (lpConfidence > 30) {
+              isLiquidityPool = true;
+              lpConfidence = Math.min(75, lpConfidence);
+            }
+            
+            // Categorize wallets (excluding confirmed LPs from main categories)
+            const isDustWallet = !isLiquidityPool && balance < 1;
+            const isSmallWallet = !isLiquidityPool && balance >= 1 && usdValue < 1; // Between 1 token and $1 USD
+            const isMediumWallet = !isLiquidityPool && usdValue >= 1 && usdValue < 5; // $1-$5 USD
+            const isLargeWallet = !isLiquidityPool && usdValue >= 5 && usdValue < 50; // $5-$50 USD
+            const isBossWallet = !isLiquidityPool && usdValue >= 200 && usdValue < 500; // $200-$500 USD
+            const isKingpinWallet = !isLiquidityPool && usdValue >= 500 && usdValue < 1000; // $500-$1K USD
+            const isSuperBossWallet = !isLiquidityPool && usdValue >= 1000 && usdValue < 2000; // $1K-$2K USD
+            const isBabyWhaleWallet = !isLiquidityPool && usdValue >= 2000 && usdValue < 5000; // $2K-$5K USD
+            const isTrueWhaleWallet = !isLiquidityPool && usdValue >= 5000; // $5K+ USD
             
             holders.push({
               owner,
               balance,
               usdValue,
               balanceRaw: parsedInfo.tokenAmount.amount,
+              percentageOfSupply,
+              isLiquidityPool,
+              lpDetectionReason,
+              lpConfidence,
+              detectedPlatform,
               isDustWallet,
               isSmallWallet,
               isMediumWallet,
@@ -221,6 +306,10 @@ serve(async (req) => {
       rank: index + 1
     }));
 
+    // Separate LP and non-LP wallets
+    const lpWallets = rankedHolders.filter(h => h.isLiquidityPool);
+    const nonLpHolders = rankedHolders.filter(h => !h.isLiquidityPool);
+    
     const dustWallets = rankedHolders.filter(h => h.isDustWallet).length;
     const smallWallets = rankedHolders.filter(h => h.isSmallWallet).length;
     const mediumWallets = rankedHolders.filter(h => h.isMediumWallet).length;
@@ -230,15 +319,23 @@ serve(async (req) => {
     const superBossWallets = rankedHolders.filter(h => h.isSuperBossWallet).length;
     const babyWhaleWallets = rankedHolders.filter(h => h.isBabyWhaleWallet).length;
     const trueWhaleWallets = rankedHolders.filter(h => h.isTrueWhaleWallet).length;
-    const realWallets = rankedHolders.filter(h => !h.isDustWallet && !h.isSmallWallet && !h.isMediumWallet && !h.isLargeWallet && !h.isBossWallet && !h.isKingpinWallet && !h.isSuperBossWallet && !h.isBabyWhaleWallet && !h.isTrueWhaleWallet).length;
+    const realWallets = rankedHolders.filter(h => !h.isDustWallet && !h.isSmallWallet && !h.isMediumWallet && !h.isLargeWallet && !h.isBossWallet && !h.isKingpinWallet && !h.isSuperBossWallet && !h.isBabyWhaleWallet && !h.isTrueWhaleWallet && !h.isLiquidityPool).length;
     const totalBalance = rankedHolders.reduce((sum, h) => sum + h.balance, 0);
+    const lpBalance = lpWallets.reduce((sum, h) => sum + h.balance, 0);
+    const nonLpBalance = nonLpHolders.reduce((sum, h) => sum + h.balance, 0);
 
     console.log(`Found ${rankedHolders.length} token holders`);
+    console.log(`LP wallets detected: ${lpWallets.length} (${(lpBalance/totalBalance*100).toFixed(1)}% of supply)`);
     console.log(`Real wallets: ${realWallets}, Boss wallets: ${bossWallets}, Kingpin wallets: ${kingpinWallets}, Super Boss wallets: ${superBossWallets}, Baby Whale wallets: ${babyWhaleWallets}, True Whale wallets: ${trueWhaleWallets}, Large wallets: ${largeWallets}, Medium wallets: ${mediumWallets}, Small wallets: ${smallWallets}, Dust wallets: ${dustWallets}`);
 
     const result = {
       tokenMint,
       totalHolders: rankedHolders.length,
+      liquidityPoolsDetected: lpWallets.length,
+      lpBalance,
+      lpPercentageOfSupply: lpWallets.length > 0 ? (lpBalance / totalBalance * 100) : 0,
+      nonLpHolders: nonLpHolders.length,
+      nonLpBalance,
       realWallets,
       bossWallets,
       kingpinWallets,
@@ -254,7 +351,8 @@ serve(async (req) => {
       priceSource,
       priceDiscoveryFailed,
       holders: rankedHolders,
-      summary: `Found ${rankedHolders.length} total holders. ${trueWhaleWallets} true whale wallets (≥$5K), ${babyWhaleWallets} baby whale wallets ($2K-$5K), ${superBossWallets} super boss wallets ($1K-$2K), ${kingpinWallets} kingpin wallets ($500-$1K), ${bossWallets} boss wallets ($200-$500), ${realWallets} real wallets ($50-$199), ${largeWallets} large wallets ($5-$49), ${mediumWallets} medium wallets ($1-$4), ${smallWallets} small wallets (<$1), ${dustWallets} dust wallets (<1 token). Total tokens distributed: ${totalBalance.toLocaleString()}${priceSource ? ` (Price from ${priceSource})` : ''}`
+      liquidityPools: lpWallets,
+      summary: `Found ${rankedHolders.length} total holders (${lpWallets.length} LP detected). ${trueWhaleWallets} true whale wallets (≥$5K), ${babyWhaleWallets} baby whale wallets ($2K-$5K), ${superBossWallets} super boss wallets ($1K-$2K), ${kingpinWallets} kingpin wallets ($500-$1K), ${bossWallets} boss wallets ($200-$500), ${realWallets} real wallets ($50-$199), ${largeWallets} large wallets ($5-$49), ${mediumWallets} medium wallets ($1-$4), ${smallWallets} small wallets (<$1), ${dustWallets} dust wallets (<1 token). Total tokens distributed: ${totalBalance.toLocaleString()}${priceSource ? ` (Price from ${priceSource})` : ''}`
     };
 
     return new Response(
