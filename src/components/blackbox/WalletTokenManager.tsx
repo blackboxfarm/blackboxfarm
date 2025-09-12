@@ -2,8 +2,10 @@ import { useState, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Input } from "@/components/ui/input";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
-import { Coins, DollarSign, Trash2, RefreshCw, ArrowLeftRight } from "lucide-react";
+import { Coins, DollarSign, Trash2, RefreshCw, ArrowLeftRight, Percent, Hash } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "@/hooks/use-toast";
 import { useSolPrice } from "@/hooks/useSolPrice";
@@ -16,6 +18,7 @@ interface TokenBalance {
   uiAmount: number;
   decimals: number;
   logoUri?: string;
+  usdValue?: number;
 }
 
 interface WalletTokenManagerProps {
@@ -35,6 +38,8 @@ export function WalletTokenManager({
   const [isLoading, setIsLoading] = useState(false);
   const [sellLoading, setSellLoading] = useState<Set<string>>(new Set());
   const [convertLoading, setConvertLoading] = useState(false);
+  const [sellAmounts, setSellAmounts] = useState<Record<string, string>>({});
+  const [sellTypes, setSellTypes] = useState<Record<string, 'all' | 'percentage' | 'amount' | 'tokens'>>({});
   const { price: solPrice } = useSolPrice();
 
   const loadTokenBalances = async () => {
@@ -79,7 +84,8 @@ export function WalletTokenManager({
           balance: data.solBalance * 1e9, // Convert to lamports
           uiAmount: data.solBalance,
           decimals: 9,
-          logoUri: 'https://raw.githubusercontent.com/solana-labs/token-list/main/assets/mainnet/So11111111111111111111111111111111111111112/logo.png'
+          logoUri: 'https://raw.githubusercontent.com/solana-labs/token-list/main/assets/mainnet/So11111111111111111111111111111111111111112/logo.png',
+          usdValue: data.solBalance * solPrice
         });
       }
 
@@ -91,6 +97,7 @@ export function WalletTokenManager({
             body: { tokenMint: data.tokenMint }
           });
           
+          const isStablecoin = ['USDC', 'USDT', 'BUSD', 'DAI', 'PYUSD'].includes(tokenMetadata?.symbol || '');
           tokenList.push({
             mint: data.tokenMint,
             symbol: tokenMetadata?.symbol || 'UNK',
@@ -98,7 +105,8 @@ export function WalletTokenManager({
             balance: data.tokenBalance,
             uiAmount: data.tokenUiAmount,
             decimals: tokenMetadata?.decimals || 6,
-            logoUri: tokenMetadata?.logoUri
+            logoUri: tokenMetadata?.logoUri,
+            usdValue: isStablecoin ? data.tokenUiAmount : undefined
           });
         } catch (error) {
           // Add token with minimal data if metadata fetch fails
@@ -108,7 +116,8 @@ export function WalletTokenManager({
             name: 'Unknown Token',
             balance: data.tokenBalance,
             uiAmount: data.tokenUiAmount,
-            decimals: 6
+            decimals: 6,
+            usdValue: undefined
           });
         }
       }
@@ -126,7 +135,7 @@ export function WalletTokenManager({
     }
   };
 
-  const sellAllTokens = async (token: TokenBalance) => {
+  const sellTokens = async (token: TokenBalance, sellType: string, amount?: string) => {
     if (token.mint === 'So11111111111111111111111111111111111111112') {
       toast({
         title: "Cannot sell SOL",
@@ -136,11 +145,57 @@ export function WalletTokenManager({
       return;
     }
 
-    const confirmed = window.confirm(
-      `Are you sure you want to sell ALL ${token.uiAmount.toFixed(6)} ${token.symbol} tokens from this wallet?\n\nThis action cannot be undone.`
-    );
-    
-    if (!confirmed) return;
+    let sellAmount = 0;
+    let description = '';
+
+    if (sellType === 'all') {
+      sellAmount = token.uiAmount;
+      description = `ALL ${token.uiAmount.toFixed(6)} ${token.symbol}`;
+    } else if (sellType === 'percentage' && amount) {
+      const percentage = parseFloat(amount);
+      if (percentage <= 0 || percentage > 100) {
+        toast({
+          title: "Invalid percentage",
+          description: "Please enter a percentage between 1 and 100",
+          variant: "destructive"
+        });
+        return;
+      }
+      sellAmount = (token.uiAmount * percentage) / 100;
+      description = `${percentage}% (${sellAmount.toFixed(6)} ${token.symbol})`;
+    } else if (sellType === 'amount' && amount) {
+      const usdAmount = parseFloat(amount);
+      if (usdAmount <= 0 || !token.usdValue || usdAmount > token.usdValue) {
+        toast({
+          title: "Invalid USD amount",
+          description: "Please enter a valid USD amount within available balance",
+          variant: "destructive"
+        });
+        return;
+      }
+      sellAmount = token.usdValue > 0 ? (token.uiAmount * usdAmount) / token.usdValue : 0;
+      description = `$${usdAmount} worth (${sellAmount.toFixed(6)} ${token.symbol})`;
+    } else if (sellType === 'tokens' && amount) {
+      sellAmount = parseFloat(amount);
+      if (sellAmount <= 0 || sellAmount > token.uiAmount) {
+        toast({
+          title: "Invalid token amount",
+          description: "Please enter a valid token amount within available balance",
+          variant: "destructive"
+        });
+        return;
+      }
+      description = `${sellAmount.toFixed(6)} ${token.symbol}`;
+    }
+
+    if (sellAmount <= 0) {
+      toast({
+        title: "Invalid amount",
+        description: "Please enter a valid amount to sell",
+        variant: "destructive"
+      });
+      return;
+    }
 
     setSellLoading(prev => new Set(prev).add(token.mint));
 
@@ -175,7 +230,8 @@ export function WalletTokenManager({
       const { data, error } = await supabase.functions.invoke('blackbox-executor', {
         body: {
           command_code_id: relevantCommand.id,
-          action: 'sell'
+          action: 'sell',
+          amount: sellType === 'all' ? undefined : sellAmount
         }
       });
 
@@ -185,8 +241,12 @@ export function WalletTokenManager({
 
       toast({
         title: "Sell order executed",
-        description: `Successfully executed sell order for ${token.symbol}`,
+        description: `Successfully executed sell order for ${description}`,
       });
+
+      // Clear the input for this token
+      setSellAmounts(prev => ({ ...prev, [token.mint]: '' }));
+      setSellTypes(prev => ({ ...prev, [token.mint]: 'all' }));
 
       // Refresh token balances
       setTimeout(() => {
@@ -214,8 +274,20 @@ export function WalletTokenManager({
     loadTokenBalances();
   }, [walletId]);
 
-  const formatUsdValue = (solAmount: number) => {
-    return `$${(solAmount * solPrice).toFixed(2)}`;
+  const formatUsdValue = (amount: number, isSOL = false) => {
+    if (isSOL) {
+      return `$${(amount * solPrice).toFixed(2)}`;
+    }
+    return `$${amount.toFixed(2)}`;
+  };
+
+  const getTotalUsdValue = () => {
+    return tokens.reduce((total, token) => {
+      if (token.symbol === 'SOL') {
+        return total + (token.uiAmount * solPrice);
+      }
+      return total + (token.usdValue || 0);
+    }, 0);
   };
 
   const convertSolToUsd = async () => {
@@ -332,84 +404,123 @@ export function WalletTokenManager({
             <p>No tokens found in this wallet</p>
           </div>
         ) : (
-          <div className="space-y-2">
-            {tokens.map((token) => (
-              <div key={token.mint} className="flex items-center justify-between p-3 border rounded-lg">
-                <div className="flex items-center gap-3">
-                  {token.logoUri && (
-                    <img 
-                      src={token.logoUri} 
-                      alt={token.symbol}
-                      className="w-6 h-6 rounded-full"
-                      onError={(e) => {
-                        e.currentTarget.style.display = 'none';
-                      }}
-                    />
-                  )}
-                  <div>
-                    <div className="font-medium text-sm">{token.symbol}</div>
-                    <div className="text-xs text-muted-foreground">{token.name}</div>
-                  </div>
-                </div>
-                
-                <div className="text-right">
-                  <div className="font-medium text-sm">
-                    {token.uiAmount.toFixed(6)} {token.symbol}
-                  </div>
-                  {token.symbol === 'SOL' && (
-                    <div className="text-xs text-muted-foreground flex items-center gap-1">
-                      <DollarSign className="h-3 w-3" />
-                      {formatUsdValue(token.uiAmount)}
+          <div className="space-y-4">
+            <div className="p-3 bg-muted/50 rounded-lg border">
+              <div className="text-sm font-medium">Total Portfolio Value</div>
+              <div className="text-lg font-bold text-primary">{formatUsdValue(getTotalUsdValue())}</div>
+            </div>
+            
+            <div className="space-y-3">
+              {tokens.map((token) => (
+                <div key={token.mint} className="p-4 border rounded-lg space-y-3">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      {token.logoUri && (
+                        <img 
+                          src={token.logoUri} 
+                          alt={token.symbol}
+                          className="w-8 h-8 rounded-full"
+                          onError={(e) => {
+                            e.currentTarget.style.display = 'none';
+                          }}
+                        />
+                      )}
+                      <div>
+                        <div className="font-medium">{token.symbol}</div>
+                        <div className="text-sm text-muted-foreground">{token.name}</div>
+                      </div>
                     </div>
-                  )}
-                </div>
-                
-                <div className="flex gap-2">
-                  {/* Show USD value for all tokens */}
-                  {token.symbol !== 'SOL' && ['USDC', 'USDT', 'BUSD', 'DAI'].includes(token.symbol) && (
-                    <div className="text-xs text-muted-foreground flex items-center gap-1">
-                      <DollarSign className="h-3 w-3" />
-                      ~${token.uiAmount.toFixed(2)}
+                    
+                    <div className="text-right">
+                      <div className="font-medium">
+                        {token.uiAmount.toFixed(6)} {token.symbol}
+                      </div>
+                      <div className="text-sm text-muted-foreground flex items-center gap-1">
+                        <DollarSign className="h-3 w-3" />
+                        {token.symbol === 'SOL' ? formatUsdValue(token.uiAmount, true) : formatUsdValue(token.usdValue || 0)}
+                      </div>
+                    </div>
+                  </div>
+                  
+                  {token.symbol !== 'SOL' && (
+                    <div className="space-y-2">
+                      <div className="flex items-center gap-2">
+                        <Select 
+                          value={sellTypes[token.mint] || 'all'} 
+                          onValueChange={(value: any) => setSellTypes(prev => ({ ...prev, [token.mint]: value }))}
+                        >
+                          <SelectTrigger className="w-32">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="all">Sell All</SelectItem>
+                            <SelectItem value="percentage">Percentage</SelectItem>
+                            {token.usdValue && <SelectItem value="amount">USD Amount</SelectItem>}
+                            <SelectItem value="tokens">Token Amount</SelectItem>
+                          </SelectContent>
+                        </Select>
+                        
+                        {sellTypes[token.mint] !== 'all' && (
+                          <div className="flex items-center gap-2 flex-1">
+                            <Input
+                              type="number"
+                              placeholder={
+                                sellTypes[token.mint] === 'percentage' ? '0-100' :
+                                sellTypes[token.mint] === 'amount' ? '0.00' :
+                                '0.000000'
+                              }
+                              value={sellAmounts[token.mint] || ''}
+                              onChange={(e) => setSellAmounts(prev => ({ ...prev, [token.mint]: e.target.value }))}
+                              className="flex-1"
+                              step={
+                                sellTypes[token.mint] === 'percentage' ? '1' :
+                                sellTypes[token.mint] === 'amount' ? '0.01' :
+                                '0.000001'
+                              }
+                              min="0"
+                              max={
+                                sellTypes[token.mint] === 'percentage' ? '100' :
+                                sellTypes[token.mint] === 'amount' ? (token.usdValue || 0).toString() :
+                                token.uiAmount.toString()
+                              }
+                            />
+                            <div className="text-sm text-muted-foreground min-w-fit">
+                              {sellTypes[token.mint] === 'percentage' && <Percent className="h-4 w-4" />}
+                              {sellTypes[token.mint] === 'amount' && <DollarSign className="h-4 w-4" />}
+                              {sellTypes[token.mint] === 'tokens' && <Hash className="h-4 w-4" />}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                      
+                      <div className="flex gap-2">
+                        <Button
+                          variant="destructive"
+                          size="sm"
+                          disabled={sellLoading.has(token.mint)}
+                          onClick={() => sellTokens(token, sellTypes[token.mint] || 'all', sellAmounts[token.mint])}
+                          className="flex-1"
+                        >
+                          {sellLoading.has(token.mint) ? (
+                            <RefreshCw className="h-4 w-4 animate-spin mr-2" />
+                          ) : (
+                            <Trash2 className="h-4 w-4 mr-2" />
+                          )}
+                          {sellTypes[token.mint] === 'all' ? 'Sell All' : 'Sell'}
+                          {sellTypes[token.mint] === 'all' && ` (${formatUsdValue(token.usdValue || 0)})`}
+                        </Button>
+                      </div>
                     </div>
                   )}
                   
-                  <AlertDialog>
-                    <AlertDialogTrigger asChild>
-                      <Button
-                        variant="destructive"
-                        size="sm"
-                        disabled={sellLoading.has(token.mint) || token.symbol === 'SOL'}
-                        title={token.symbol === 'SOL' ? 'Use withdraw function for SOL' : `Sell all ${token.symbol}`}
-                      >
-                        {sellLoading.has(token.mint) ? (
-                          <RefreshCw className="h-4 w-4 animate-spin" />
-                        ) : (
-                          <Trash2 className="h-4 w-4" />
-                        )}
-                      </Button>
-                    </AlertDialogTrigger>
-                    <AlertDialogContent>
-                      <AlertDialogHeader>
-                        <AlertDialogTitle>Sell All {token.symbol}?</AlertDialogTitle>
-                        <AlertDialogDescription>
-                          Are you sure you want to sell all {token.uiAmount.toFixed(6)} {token.symbol} tokens from this wallet?
-                          This action cannot be undone.
-                        </AlertDialogDescription>
-                      </AlertDialogHeader>
-                      <AlertDialogFooter>
-                        <AlertDialogCancel>Cancel</AlertDialogCancel>
-                        <AlertDialogAction
-                          onClick={() => sellAllTokens(token)}
-                          className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-                        >
-                          Sell All
-                        </AlertDialogAction>
-                      </AlertDialogFooter>
-                    </AlertDialogContent>
-                  </AlertDialog>
+                  {token.symbol === 'SOL' && (
+                    <div className="text-sm text-muted-foreground">
+                      Use the withdraw function to move SOL from this wallet
+                    </div>
+                  )}
                 </div>
-              </div>
-            ))}
+              ))}
+            </div>
           </div>
         )}
       </CardContent>
