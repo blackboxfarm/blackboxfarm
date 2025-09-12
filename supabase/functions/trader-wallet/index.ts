@@ -6,10 +6,11 @@ import bs58 from "npm:bs58@5.0.0";
 
 // Lightweight ATA helper
 const TOKEN_PROGRAM_ID = new PublicKey("TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA");
+const TOKEN_2022_PROGRAM_ID = new PublicKey("TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb");
 const ASSOCIATED_TOKEN_PROGRAM_ID = new PublicKey("ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL");
-function getAssociatedTokenAddress(mint: PublicKey, owner: PublicKey): PublicKey {
+function getAssociatedTokenAddress(mint: PublicKey, owner: PublicKey, tokenProgramId: PublicKey = TOKEN_PROGRAM_ID): PublicKey {
   const [addr] = PublicKey.findProgramAddressSync(
-    [owner.toBuffer(), TOKEN_PROGRAM_ID.toBuffer(), mint.toBuffer()],
+    [owner.toBuffer(), tokenProgramId.toBuffer(), mint.toBuffer()],
     ASSOCIATED_TOKEN_PROGRAM_ID
   );
   return addr;
@@ -55,58 +56,113 @@ serve(async (req) => {
   if (req.method !== "GET") return bad("Use GET", 405);
 
   try {
+    // Setup debug logging
+    const url = new URL(req.url);
+    const debug = url.searchParams.get("debug") === "true";
+    const logs: string[] = [];
+    const slog = (msg: string) => {
+      const line = `${new Date().toISOString()} ${msg}`;
+      logs.push(line);
+      console.log(`[trader-wallet] ${msg}`);
+    };
+
+    slog(`Request start: method=${req.method}`);
+
     // Optional token guard
     const fnToken = Deno.env.get("FUNCTION_TOKEN");
     if (fnToken) {
       const headerToken = req.headers.get("x-function-token") || (req.headers.get("authorization")?.replace(/^Bearer\s+/i, "") ?? "");
-      if (headerToken !== fnToken) return bad("Unauthorized", 401);
+      if (headerToken !== fnToken) {
+        slog("Unauthorized: function token mismatch");
+        return ok({ error: "Unauthorized" , ...(debug ? { debugLogs: logs } : {}) }, 401);
+      }
+      slog("Function token validated");
     }
 
     const rpcUrl = Deno.env.get("SOLANA_RPC_URL");
     const headerSecret = req.headers.get("x-owner-secret");
     const envSecret = Deno.env.get("TRADER_PRIVATE_KEY");
-    if (!rpcUrl) return bad("Missing secret: SOLANA_RPC_URL", 500);
-    if (!headerSecret && !envSecret) return bad("Missing secret: TRADER_PRIVATE_KEY or x-owner-secret", 500);
+    if (!rpcUrl) {
+      slog("Missing SOLANA_RPC_URL");
+      return ok({ error: "Missing secret: SOLANA_RPC_URL", ...(debug ? { debugLogs: logs } : {}) }, 500);
+    }
+    if (!headerSecret && !envSecret) {
+      slog("Missing both x-owner-secret and TRADER_PRIVATE_KEY");
+      return ok({ error: "Missing secret: TRADER_PRIVATE_KEY or x-owner-secret", ...(debug ? { debugLogs: logs } : {}) }, 500);
+    }
 
     // Decrypt if it's from header (encrypted from database)
     let secretToUse = envSecret!;
     if (headerSecret) {
       try {
+        slog("Decrypting owner secret from header");
         secretToUse = await SecureStorage.decryptWalletSecret(headerSecret);
+        slog("Owner secret decrypted (length: " + secretToUse.length + ")");
       } catch (error) {
-        return bad(`Failed to decrypt wallet secret: ${error.message}`, 400);
+        slog("Failed to decrypt wallet secret: " + (error as Error)?.message);
+        return ok({ error: `Failed to decrypt wallet secret: ${(error as Error).message}`, ...(debug ? { debugLogs: logs } : {}) }, 400);
       }
+    } else {
+      slog("Using TRADER_PRIVATE_KEY from env");
     }
 
     const kp = parseKeypair(secretToUse);
     const pub = kp.publicKey;
+    slog("Parsed keypair. publicKey=" + pub.toBase58());
     const connection = new Connection(rpcUrl, { commitment: "confirmed" });
-    const lamports = await connection.getBalance(pub).catch(() => 0);
+    slog("Connecting to RPC: " + rpcUrl);
+    const lamports = await connection.getBalance(pub).catch((e) => {
+      slog("getBalance failed: " + (e as Error)?.message);
+      return 0;
+    });
+    slog(`SOL balance (lamports): ${lamports}`);
 
     // Optional token balance query
-    const url = new URL(req.url);
     const tokenMint = url.searchParams.get("tokenMint");
     const getAllTokens = url.searchParams.get("getAllTokens") === "true";
+    slog(`Params: tokenMint=${tokenMint ?? 'none'} getAllTokens=${getAllTokens}`);
     
     let tokenInfo: Record<string, unknown> = {};
     if (tokenMint) {
       try {
         const mintPk = new PublicKey(tokenMint);
-        const ata = getAssociatedTokenAddress(mintPk, pub);
-        const bal = await connection.getTokenAccountBalance(ata).catch(() => null);
-        if (bal?.value) {
+        const ataClassic = getAssociatedTokenAddress(mintPk, pub, TOKEN_PROGRAM_ID);
+        const ata2022 = getAssociatedTokenAddress(mintPk, pub, TOKEN_2022_PROGRAM_ID);
+        slog(`Derived ATA (classic)=${ataClassic.toBase58()} (2022)=${ata2022.toBase58()}`);
+
+        let chosen: { account: PublicKey; program: 'classic' | 'token-2022'; bal: Awaited<ReturnType<typeof connection.getTokenAccountBalance>> | null } | null = null;
+        // Try classic first
+        const balClassic = await connection.getTokenAccountBalance(ataClassic).catch((e) => { slog(`Classic ATA balance fetch error: ${(e as Error)?.message}`); return null; });
+        if (balClassic?.value) {
+          chosen = { account: ataClassic, program: 'classic', bal: balClassic };
+          slog(`Found classic balance: raw=${balClassic.value.amount} decimals=${balClassic.value.decimals}`);
+        }
+        // Try 2022 if nothing found
+        if (!chosen) {
+          const bal22 = await connection.getTokenAccountBalance(ata2022).catch((e) => { slog(`2022 ATA balance fetch error: ${(e as Error)?.message}`); return null; });
+          if (bal22?.value) {
+            chosen = { account: ata2022, program: 'token-2022', bal: bal22 };
+            slog(`Found token-2022 balance: raw=${bal22.value.amount} decimals=${bal22.value.decimals}`);
+          }
+        }
+
+        if (chosen?.bal?.value) {
           tokenInfo = {
             tokenMint,
-            tokenAccount: ata.toBase58(),
-            tokenBalanceRaw: bal.value.amount,
-            tokenDecimals: bal.value.decimals,
-            tokenUiAmount: Number(bal.value.uiAmountString ?? bal.value.uiAmount ?? 0),
+            tokenProgram: chosen.program,
+            tokenAccount: chosen.account.toBase58(),
+            tokenBalanceRaw: chosen.bal.value.amount,
+            tokenDecimals: chosen.bal.value.decimals,
+            tokenUiAmount: Number(chosen.bal.value.uiAmountString ?? chosen.bal.value.uiAmount ?? 0),
           };
         } else {
-          tokenInfo = { tokenMint, tokenAccount: ata.toBase58(), tokenBalanceRaw: "0", tokenDecimals: 0, tokenUiAmount: 0 };
+          tokenInfo = { tokenMint, tokenAccount: ataClassic.toBase58(), tokenBalanceRaw: "0", tokenDecimals: 0, tokenUiAmount: 0 };
+          slog("No balance found for provided tokenMint on either program");
         }
       } catch (err) {
-        tokenInfo = { tokenMint, tokenError: String((err as Error)?.message || err) };
+        const msg = String((err as Error)?.message || err);
+        slog("tokenMint processing error: " + msg);
+        tokenInfo = { tokenMint, tokenError: msg };
       }
     }
 
@@ -114,20 +170,27 @@ serve(async (req) => {
     let allTokens: any[] = [];
     if (getAllTokens) {
       try {
-        const tokenAccounts = await connection.getTokenAccountsByOwner(pub, {
+        slog("Fetching token accounts (classic)");
+        const classicAccounts = await connection.getTokenAccountsByOwner(pub, {
           programId: TOKEN_PROGRAM_ID
         });
+        slog(`Found ${classicAccounts.value.length} classic token accounts`);
+
+        slog("Fetching token accounts (token-2022)");
+        const v22Accounts = await connection.getTokenAccountsByOwner(pub, {
+          programId: TOKEN_2022_PROGRAM_ID
+        });
+        slog(`Found ${v22Accounts.value.length} token-2022 accounts`);
         
-        for (const tokenAccount of tokenAccounts.value) {
+        const processAccount = async (acc: typeof classicAccounts.value[number], program: 'classic' | 'token-2022') => {
           try {
-            const accountInfo = await connection.getTokenAccountBalance(tokenAccount.pubkey);
+            const accountInfo = await connection.getTokenAccountBalance(acc.pubkey);
             if (accountInfo?.value?.amount && accountInfo.value.amount !== "0") {
               // Parse the account data to get mint
-              const accountData = tokenAccount.account.data;
+              const accountData: any = (acc.account as any).data;
               let mint = "";
-              
               // Token account structure: mint (32 bytes) + owner (32 bytes) + amount (8 bytes) + ...
-              if (accountData.length >= 32) {
+              if (accountData && accountData.length >= 32) {
                 const mintBytes = accountData.slice(0, 32);
                 mint = new PublicKey(mintBytes).toBase58();
               }
@@ -135,19 +198,28 @@ serve(async (req) => {
               if (mint) {
                 allTokens.push({
                   mint,
-                  account: tokenAccount.pubkey.toBase58(),
+                  account: acc.pubkey.toBase58(),
                   amount: accountInfo.value.amount,
                   uiAmount: Number(accountInfo.value.uiAmountString ?? accountInfo.value.uiAmount ?? 0),
-                  decimals: accountInfo.value.decimals
+                  decimals: accountInfo.value.decimals,
+                  program
                 });
               }
             }
           } catch (err) {
-            console.error("Error processing token account:", err);
+            slog(`Error processing token account ${acc.pubkey.toBase58()}: ${String((err as Error)?.message || err)}`);
           }
+        };
+
+        for (const acc of classicAccounts.value) {
+          await processAccount(acc, 'classic');
         }
+        for (const acc of v22Accounts.value) {
+          await processAccount(acc, 'token-2022');
+        }
+        slog(`Total non-zero token accounts found: ${allTokens.length}`);
       } catch (err) {
-        console.error("Error fetching all tokens:", err);
+        slog("Error fetching all tokens: " + String((err as Error)?.message || err));
       }
     }
 
@@ -157,6 +229,7 @@ serve(async (req) => {
       solBalance: lamports / 1_000_000_000,
       tokens: allTokens,
       ...tokenInfo,
+      ...(debug ? { debugLogs: logs } : {}),
     });
   } catch (e) {
     console.error("trader-wallet error", e);

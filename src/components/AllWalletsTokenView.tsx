@@ -26,12 +26,14 @@ interface WalletWithTokens {
   sol_balance: number;
   tokens: TokenBalance[];
   isLoading: boolean;
+  debugLogs?: string[];
 }
 
 export function AllWalletsTokenView() {
   const [wallets, setWallets] = useState<WalletWithTokens[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
+  const [showDebug, setShowDebug] = useState(false);
   const { price: solPrice } = useSolPrice();
 
   const loadAllWallets = async () => {
@@ -149,7 +151,7 @@ export function AllWalletsTokenView() {
       }
 
       // Call the trader-wallet function with the encrypted secret and getAllTokens parameter
-      const url = `https://apxauapuusmgwbbzjgfl.supabase.co/functions/v1/trader-wallet?getAllTokens=true`;
+      const url = `https://apxauapuusmgwbbzjgfl.supabase.co/functions/v1/trader-wallet?getAllTokens=true${showDebug ? '&debug=true' : ''}`;
       const response = await fetch(url, {
         method: 'GET',
         headers: {
@@ -161,7 +163,15 @@ export function AllWalletsTokenView() {
 
       if (!response.ok) {
         const errorText = await response.text();
-        throw new Error(`HTTP ${response.status}: ${errorText}`);
+        try {
+          const parsed = JSON.parse(errorText);
+          setWallets(prev => prev.map(w => 
+            w.pubkey === pubkey ? { ...w, debugLogs: parsed.debugLogs, isLoading: false } : w
+          ));
+          throw new Error(`HTTP ${response.status}: ${parsed.error || 'Unknown error'}`);
+        } catch {
+          throw new Error(`HTTP ${response.status}: ${errorText}`);
+        }
       }
 
       const data = await response.json();
@@ -257,10 +267,15 @@ export function AllWalletsTokenView() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <h2 className="text-2xl font-bold">All Wallet Tokens</h2>
-        <Button onClick={loadAllWallets} disabled={isLoading}>
-          <RefreshCw className={`h-4 w-4 mr-2 ${isLoading ? 'animate-spin' : ''}`} />
-          Refresh All
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button variant={showDebug ? 'destructive' : 'outline'} onClick={() => setShowDebug((v) => !v)}>
+            {showDebug ? 'Debug: ON' : 'Debug'}
+          </Button>
+          <Button onClick={loadAllWallets} disabled={isLoading}>
+            <RefreshCw className={`h-4 w-4 mr-2 ${isLoading ? 'animate-spin' : ''}`} />
+            Refresh All
+          </Button>
+        </div>
       </div>
 
       <div className="relative">
