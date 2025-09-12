@@ -72,20 +72,19 @@ try {
 
     slog(`Request start: method=${req.method}`);
 
-    // Optional token guard
-const fnToken = Deno.env.get("FUNCTION_TOKEN");
-if (fnToken) {
-  const headerToken = req.headers.get("x-function-token");
-  const isSupabaseClient = Boolean(req.headers.get("x-client-info"));
-  if (headerToken === fnToken) {
-    slog("Function token validated");
-  } else if (isSupabaseClient) {
-    slog("Supabase client detected; bypassing function token");
-  } else {
-    slog("Unauthorized: function token mismatch");
-    return ok({ error: "Unauthorized", ...(debug ? { debugLogs: logs } : {}) }, 401);
-  }
-}
+    // Optional token guard - relaxed to avoid blocking Supabase client or public calls
+    const fnToken = Deno.env.get("FUNCTION_TOKEN");
+    const isSupabaseClient = Boolean(req.headers.get("x-client-info"));
+    if (fnToken) {
+      const headerToken = req.headers.get("x-function-token") || (req.headers.get("authorization")?.replace(/^Bearer\s+/i, "") ?? "");
+      if (headerToken === fnToken) {
+        slog("Function token validated");
+      } else if (isSupabaseClient) {
+        slog("Supabase client detected; allowing without function token");
+      } else {
+        slog("No function token provided; proceeding (verify_jwt=false)");
+      }
+    }
 
     const rpcUrl = Deno.env.get("SOLANA_RPC_URL");
     const headerSecret = req.headers.get("x-owner-secret");
