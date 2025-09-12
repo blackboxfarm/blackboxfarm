@@ -72,8 +72,6 @@ export default function SuperAdmin() {
             <AllWalletsTokenView />
           </TabsContent>
         </Tabs>
-        {/* Floating live transaction history window - right side */}
-        <TransactionHistoryWindow />
       </div>
     </div>
   );

@@ -14,6 +14,7 @@ import bs58 from "bs58";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "@/components/ui/sonner";
 import { BumpBotStatus } from "@/components/blackbox/BumpBotStatus";
+import TransactionHistoryWindow from "@/components/blackbox/TransactionHistoryWindow";
 
 const JUP_PRICE = async (id: string): Promise<number | null> => {
   try {
@@ -710,6 +711,9 @@ const BumpBot = () => {
       
       {/* Bump Bot Status - only shown on this page */}
       <BumpBotStatus />
+      
+      {/* Transaction History - moved from SuperAdmin */}
+      <TransactionHistoryWindow />
     </div>
   );
 };
