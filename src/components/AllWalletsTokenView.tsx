@@ -150,31 +150,22 @@ export function AllWalletsTokenView() {
         secretKeyEncrypted = walletData.secret_key_encrypted;
       }
 
-      // Call the trader-wallet function with the encrypted secret and getAllTokens parameter
-      const url = `https://apxauapuusmgwbbzjgfl.supabase.co/functions/v1/trader-wallet?getAllTokens=true${showDebug ? '&debug=true' : ''}`;
-      const response = await fetch(url, {
-        method: 'GET',
-        headers: {
-          'Authorization': `Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFweGF1YXB1dXNtZ3diYnpqZ2ZsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTQ1OTEzMDUsImV4cCI6MjA3MDE2NzMwNX0.w8IrKq4YVStF3TkdEcs5mCSeJsxjkaVq2NFkypYOXHU`,
-          'apikey': 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFweGF1YXB1dXNtZ3diYnpqZ2ZsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTQ1OTEzMDUsImV4cCI6MjA3MDE2NzMwNX0.w8IrKq4YVStF3TkdEcs5mCSeJsxjkaVq2NFkypYOXHU',
-          'x-owner-secret': secretKeyEncrypted
-        }
-      });
-
-      if (!response.ok) {
-        const errorText = await response.text();
-        try {
-          const parsed = JSON.parse(errorText);
-          setWallets(prev => prev.map(w => 
-            w.pubkey === pubkey ? { ...w, debugLogs: parsed.debugLogs, isLoading: false } : w
-          ));
-          throw new Error(`HTTP ${response.status}: ${parsed.error || 'Unknown error'}`);
-        } catch {
-          throw new Error(`HTTP ${response.status}: ${errorText}`);
-        }
-      }
-
-      const data = await response.json();
+// Call the trader-wallet function via Supabase client (POST) so JWT is included
+const { data, error } = await supabase.functions.invoke('trader-wallet', {
+  body: { getAllTokens: true, debug: showDebug },
+  headers: { 'x-owner-secret': secretKeyEncrypted }
+});
+if (error) {
+  setWallets(prev => prev.map(w => 
+    w.pubkey === pubkey ? { ...w, debugLogs: (error as any)?.context?.debugLogs, isLoading: false } : w
+  ));
+  throw new Error(error.message || 'Failed to fetch wallet tokens');
+}
+if (data?.debugLogs) {
+  setWallets(prev => prev.map(w => 
+    w.pubkey === pubkey ? { ...w, debugLogs: data.debugLogs } : w
+  ));
+}
 
       const tokens: TokenBalance[] = [];
 

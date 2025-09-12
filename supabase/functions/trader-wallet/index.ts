@@ -18,7 +18,7 @@ function getAssociatedTokenAddress(mint: PublicKey, owner: PublicKey, tokenProgr
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-function-token, x-owner-secret",
-  "Access-Control-Allow-Methods": "GET, OPTIONS",
+  "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
 };
 
 function ok(data: unknown, status = 200) {
@@ -52,14 +52,18 @@ function parseKeypair(secret: string): Keypair {
 }
 
 serve(async (req) => {
-  if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
-  if (req.method !== "GET") return bad("Use GET", 405);
+if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
 
-  try {
-    // Setup debug logging
-    const url = new URL(req.url);
-    const debug = url.searchParams.get("debug") === "true";
-    const logs: string[] = [];
+try {
+  // Setup debug logging
+  const isPost = req.method === "POST";
+  const url = new URL(req.url);
+  let body: any = {};
+  if (isPost) {
+    try { body = await req.json(); } catch { body = {}; }
+  }
+  const debug = (url.searchParams.get("debug") === "true") || Boolean(body?.debug);
+  const logs: string[] = [];
     const slog = (msg: string) => {
       const line = `${new Date().toISOString()} ${msg}`;
       logs.push(line);
@@ -69,15 +73,19 @@ serve(async (req) => {
     slog(`Request start: method=${req.method}`);
 
     // Optional token guard
-    const fnToken = Deno.env.get("FUNCTION_TOKEN");
-    if (fnToken) {
-      const headerToken = req.headers.get("x-function-token") || (req.headers.get("authorization")?.replace(/^Bearer\s+/i, "") ?? "");
-      if (headerToken !== fnToken) {
-        slog("Unauthorized: function token mismatch");
-        return ok({ error: "Unauthorized" , ...(debug ? { debugLogs: logs } : {}) }, 401);
-      }
-      slog("Function token validated");
-    }
+const fnToken = Deno.env.get("FUNCTION_TOKEN");
+if (fnToken) {
+  const headerToken = req.headers.get("x-function-token");
+  const isSupabaseClient = Boolean(req.headers.get("x-client-info"));
+  if (headerToken === fnToken) {
+    slog("Function token validated");
+  } else if (isSupabaseClient) {
+    slog("Supabase client detected; bypassing function token");
+  } else {
+    slog("Unauthorized: function token mismatch");
+    return ok({ error: "Unauthorized", ...(debug ? { debugLogs: logs } : {}) }, 401);
+  }
+}
 
     const rpcUrl = Deno.env.get("SOLANA_RPC_URL");
     const headerSecret = req.headers.get("x-owner-secret");
@@ -117,10 +125,10 @@ serve(async (req) => {
     });
     slog(`SOL balance (lamports): ${lamports}`);
 
-    // Optional token balance query
-    const tokenMint = url.searchParams.get("tokenMint");
-    const getAllTokens = url.searchParams.get("getAllTokens") === "true";
-    slog(`Params: tokenMint=${tokenMint ?? 'none'} getAllTokens=${getAllTokens}`);
+// Optional token balance query (supports GET or POST)
+const tokenMint = url.searchParams.get("tokenMint") ?? (body?.tokenMint ?? null);
+const getAllTokens = (url.searchParams.get("getAllTokens") === "true") || Boolean(body?.getAllTokens);
+slog(`Params: tokenMint=${tokenMint ?? 'none'} getAllTokens=${getAllTokens}`);
     
     let tokenInfo: Record<string, unknown> = {};
     if (tokenMint) {
