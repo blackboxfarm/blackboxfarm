@@ -7,7 +7,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Slider } from "@/components/ui/slider";
-import { Plus, Settings, AlertTriangle, DollarSign, BarChart3, TrendingUp, Info, Eye, EyeOff, Edit, Shuffle, RotateCcw } from "lucide-react";
+import { Plus, Settings, AlertTriangle, DollarSign, BarChart3, TrendingUp, Info, Eye, EyeOff, Edit, Shuffle, RotateCcw, Trash2 } from "lucide-react";
 import { Switch } from "@/components/ui/switch";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { supabase } from "@/integrations/supabase/client";
@@ -730,6 +730,38 @@ export function WalletCommands({ wallet, campaign, isDevMode = false, devBalance
       description: `${command.name} is now ${command.is_active ? "disabled" : "enabled"}` 
     });
     loadCommands();
+};
+
+  const deleteCommand = async (id: string) => {
+    const confirmed = window.confirm('Delete this command? This action cannot be undone.');
+    if (!confirmed) return;
+
+    // Clear any simulation intervals for this command (dev mode)
+    if (activeIntervals[id]) {
+      clearInterval(activeIntervals[id]);
+    }
+    if (activeIntervals[`${id}_sell`]) {
+      clearInterval(activeIntervals[`${id}_sell`]);
+    }
+
+    const { error } = await supabase
+      .from('blackbox_command_codes')
+      .delete()
+      .eq('id', id);
+
+    if (error) {
+      toast({ title: 'Error deleting command', description: error.message, variant: 'destructive' });
+      return;
+    }
+
+    setCommands(prev => prev.filter(c => c.id !== id));
+    setCommandStats(prev => {
+      const clone = { ...prev };
+      delete clone[id];
+      return clone;
+    });
+
+    toast({ title: 'Command deleted', description: 'The command has been removed.' });
   };
 
   return (
@@ -874,6 +906,14 @@ export function WalletCommands({ wallet, campaign, isDevMode = false, devBalance
                          onClick={() => startEditing(command)}
                        >
                          <Edit className="h-4 w-4" />
+                       </Button>
+                       <Button
+                         size="sm"
+                         variant="destructive"
+                         onClick={() => deleteCommand(command.id)}
+                         aria-label="Delete command"
+                       >
+                         <Trash2 className="h-4 w-4" />
                        </Button>
                        <div className="flex items-center gap-2">
                          <Label htmlFor={`command-${command.id}`} className="text-xs">

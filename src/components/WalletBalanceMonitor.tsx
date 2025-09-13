@@ -67,7 +67,7 @@ export function WalletBalanceMonitor() {
 
           {wallets.length > 0 ? (
             <div className="space-y-2">
-              <div className="text-sm font-medium">Individual Wallets</div>
+              <div className="text-sm font-medium">Individual Wallets ({wallets.length})</div>
               {wallets.map((wallet) => (
                 <div key={wallet.pubkey} className="flex justify-between items-center p-3 bg-muted/50 rounded-md">
                   <div className="flex-1">

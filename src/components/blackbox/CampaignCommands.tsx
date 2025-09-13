@@ -3,7 +3,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Plus, Settings, Play, Pause } from "lucide-react";
+import { Plus, Settings, Play, Pause, Trash2 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "@/hooks/use-toast";
 
@@ -169,6 +169,23 @@ export function CampaignCommands({ campaign }: CampaignCommandsProps) {
         variant: "destructive",
       });
     }
+};
+
+  const deleteCommand = async (commandId: string) => {
+    const ok = window.confirm('Delete this command? This action cannot be undone.');
+    if (!ok) return;
+    try {
+      const { error } = await supabase
+        .from('blackbox_command_codes')
+        .delete()
+        .eq('id', commandId);
+      if (error) throw error;
+      toast({ title: 'Deleted', description: 'Command removed successfully.' });
+      loadCampaignData();
+    } catch (error) {
+      console.error('Error deleting command:', error);
+      toast({ title: 'Error', description: 'Failed to delete command', variant: 'destructive' });
+    }
   };
 
   if (loading) {
@@ -302,6 +319,14 @@ export function CampaignCommands({ campaign }: CampaignCommandsProps) {
                           Start
                         </>
                       )}
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="destructive"
+                      onClick={() => deleteCommand(command.id)}
+                      aria-label="Delete command"
+                    >
+                      <Trash2 className="h-4 w-4" />
                     </Button>
                   </div>
                 </div>
