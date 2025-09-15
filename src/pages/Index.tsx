@@ -179,7 +179,7 @@ export default function Index() {
         <DashboardStatsWidget />
 
         <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
-          <TabsList className="grid w-full grid-cols-9 tech-border">
+          <TabsList className="grid w-full grid-cols-5 lg:grid-cols-9 tech-border">
             <TabsTrigger value="server-control" className="text-xs">
               🤖 Server Control
             </TabsTrigger>
