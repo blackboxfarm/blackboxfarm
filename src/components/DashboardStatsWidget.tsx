@@ -6,9 +6,10 @@ import { Activity, TrendingUp, Target, DollarSign, RefreshCw } from 'lucide-reac
 import { useRealtimeDashboard } from '@/hooks/useRealtimeDashboard';
 
 export function DashboardStatsWidget() {
-  const { stats, isLoading, refreshStats } = useRealtimeDashboard();
+  try {
+    const { stats, isLoading, refreshStats } = useRealtimeDashboard();
 
-  if (isLoading) {
+    if (isLoading) {
     return (
       <div className="grid gap-4 md:grid-cols-4">
         {[1, 2, 3, 4].map((i) => (
@@ -134,4 +135,61 @@ export function DashboardStatsWidget() {
       </Card>
     </div>
   );
+  } catch (error) {
+    console.error('DashboardStatsWidget error:', error);
+    return (
+      <div className="space-y-4">
+        <div className="flex items-center justify-between">
+          <h2 className="text-xl font-semibold">Dashboard Overview</h2>
+          <Button variant="outline" size="sm" disabled>
+            <RefreshCw className="h-4 w-4 mr-2" />
+            Refresh
+          </Button>
+        </div>
+        
+        <div className="grid gap-4 md:grid-cols-4">
+          {[
+            { title: 'Active Campaigns', value: '0', icon: Target },
+            { title: 'Total Trades', value: '0', icon: Activity },
+            { title: 'Success Rate', value: '0%', icon: TrendingUp },
+            { title: 'Daily Revenue', value: '$0.00', icon: DollarSign }
+          ].map((stat, index) => {
+            const IconComponent = stat.icon;
+            return (
+              <Card key={index}>
+                <CardContent className="p-6">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-sm font-medium text-muted-foreground">
+                        {stat.title}
+                      </p>
+                      <p className="text-2xl font-bold">
+                        {stat.value}
+                      </p>
+                      <p className="text-xs text-muted-foreground">
+                        Loading...
+                      </p>
+                    </div>
+                    <IconComponent className="h-8 w-8 text-muted-foreground" />
+                  </div>
+                </CardContent>
+              </Card>
+            );
+          })}
+        </div>
+
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-lg">Recent Activity</CardTitle>
+            <CardDescription>Live updates from your trading operations</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <p className="text-sm text-muted-foreground text-center py-4">
+              Dashboard temporarily unavailable - please refresh page
+            </p>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
 }
