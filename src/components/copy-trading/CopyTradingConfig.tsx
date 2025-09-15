@@ -68,14 +68,18 @@ export function CopyTradingConfig() {
       
       // Load monitored wallets (supports preview mode)
       if (!user) {
-        console.log('Loading monitored wallets via edge function (preview mode)')
-        const { data, error } = await supabase.functions.invoke('get-monitored-wallets')
-        if (error) {
-          console.error('get-monitored-wallets error:', error)
-        }
-        setMonitoredWallets(data?.wallets || [])
-        setCopyConfigs([])
-        setFantasyWallet(null)
+        console.log('Loading monitored wallets via edge functions (preview mode)')
+        const { data: mwResp, error: mwErr } = await supabase.functions.invoke('get-monitored-wallets')
+        if (mwErr) console.error('get-monitored-wallets error:', mwErr)
+        setMonitoredWallets(mwResp?.wallets || [])
+
+        const { data: cfgResp, error: cfgErr } = await supabase.functions.invoke('get-copy-configs')
+        if (cfgErr) console.error('get-copy-configs error:', cfgErr)
+        setCopyConfigs(cfgResp?.configs || [])
+
+        const { data: fwResp, error: fwErr } = await supabase.functions.invoke('get-fantasy-wallet')
+        if (fwErr) console.error('get-fantasy-wallet error:', fwErr)
+        setFantasyWallet(fwResp?.fantasy_wallet || null)
       } else {
         console.log('Loading monitored wallets for user:', user?.id)
         const { data: wallets, error: walletsError } = await supabase
@@ -130,94 +134,53 @@ export function CopyTradingConfig() {
   }
 
   const createOrUpdateConfig = async (walletId: string, config: Partial<CopyConfig>) => {
-    if (!user) {
-      toast({
-        title: "Authentication Required",
-        description: "Please sign in to modify copy trading settings.",
-        variant: "destructive",
-      })
-      return
-    }
-    
     try {
       setSaving(true)
-      
-      const existingConfig = copyConfigs.find(c => c.monitored_wallet_id === walletId)
-      
-      if (existingConfig) {
-        const { error } = await supabase
-          .from('wallet_copy_configs')
-          .update(config)
-          .eq('id', existingConfig.id)
 
-        if (error) throw error
+      if (user) {
+        const existingConfig = copyConfigs.find(c => c.monitored_wallet_id === walletId)
+        if (existingConfig) {
+          const { error } = await supabase
+            .from('wallet_copy_configs')
+            .update(config)
+            .eq('id', existingConfig.id)
+          if (error) throw error
+        } else {
+          const { error } = await supabase
+            .from('wallet_copy_configs')
+            .insert({ user_id: user.id, monitored_wallet_id: walletId, ...config })
+          if (error) throw error
+        }
       } else {
-        const { error } = await supabase
-          .from('wallet_copy_configs')
-          .insert({
-            user_id: user?.id,
-            monitored_wallet_id: walletId,
-            ...config
-          })
-
+        // Preview mode: persist via Edge Function
+        const { error } = await supabase.functions.invoke('upsert-copy-config', {
+          body: { monitored_wallet_id: walletId, ...config },
+        })
         if (error) throw error
       }
 
       await loadData()
-      toast({
-        title: "Success",
-        description: "Copy configuration updated successfully"
-      })
-
+      toast({ title: 'Success', description: 'Copy configuration updated successfully' })
     } catch (error) {
       console.error('Error updating copy config:', error)
-      toast({
-        title: "Error",
-        description: "Failed to update copy configuration",
-        variant: "destructive"
-      })
+      toast({ title: 'Error', description: 'Failed to update copy configuration', variant: 'destructive' })
     } finally {
       setSaving(false)
     }
   }
 
   const createFantasyWallet = async () => {
-    if (!user) {
-      toast({
-        title: "Authentication Required", 
-        description: "Please sign in to create fantasy wallets.",
-        variant: "destructive",
-      })
-      return
-    }
-    
     try {
       setSaving(true)
-      
-      const { data, error } = await supabase
-        .from('fantasy_wallets')
-        .insert({
-          user_id: user?.id,
-          balance_usd: 10000
-        })
-        .select()
-        .single()
-
-      if (error) throw error
-      setFantasyWallet(data)
-      
-      toast({
-        title: "Fantasy Wallet Created",
-        description: "Your fantasy wallet has been created with $10,000 starting balance"
+      const { data, error } = await supabase.functions.invoke('ensure-fantasy-wallet', {
+        body: { initial_balance_usd: 10000 },
       })
-
+      if (error) throw error
+      setFantasyWallet(data?.fantasy_wallet || null)
+      toast({ title: 'Fantasy Wallet Ready', description: 'Fantasy wallet ensured with $10,000 starting balance.' })
     } catch (error) {
       console.error('Error creating fantasy wallet:', error)
-      toast({
-        title: "Error",
-        description: "Failed to create fantasy wallet",
-        variant: "destructive"
-      })
+      toast({ title: 'Error', description: 'Failed to create fantasy wallet', variant: 'destructive' })
     } finally {
       setSaving(false)
     }
@@ -269,7 +232,26 @@ export function CopyTradingConfig() {
       })
       if (addErr) throw addErr
 
-      // 2) Backfill last 24h to initialize transactions and trigger copy logic
+      // 2) Create a default copy config for this wallet
+      const newWallet: any = addResp?.wallet || addResp?.data || addResp
+      const newWalletId: string | undefined = newWallet?.id
+      if (newWalletId) {
+        const { error: cfgErr } = await supabase.functions.invoke('upsert-copy-config', {
+          body: {
+            monitored_wallet_id: newWalletId,
+            is_enabled: true,
+            is_fantasy_mode: true,
+            new_buy_amount_usd: 100,
+            rebuy_amount_usd: 10,
+            copy_sell_percentage: true,
+            max_daily_trades: 50,
+            max_position_size_usd: 1000,
+          }
+        })
+        if (cfgErr) console.error('Default config creation failed:', cfgErr)
+      }
+
+      // 3) Backfill last 24h to initialize transactions and trigger copy logic
       await supabase.functions.invoke('backfill-wallet-transactions', {
         body: { wallet_address: walletAddress.trim(), hours: 24 }
       })
@@ -305,7 +287,7 @@ export function CopyTradingConfig() {
         </div>
         
         {!fantasyWallet && (
-          <Button onClick={createFantasyWallet} disabled={saving || !user}>
+          <Button onClick={createFantasyWallet} disabled={saving}>
             {saving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
             <DollarSign className="mr-2 h-4 w-4" />
             Create Fantasy Wallet
@@ -421,7 +403,7 @@ export function CopyTradingConfig() {
                         variant="outline"
                         size="sm"
                         onClick={() => runBackfillAnalysis(wallet.wallet_address)}
-                        disabled={saving || !user}
+                        disabled={saving}
                       >
                         {saving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                         Run 24h Analysis
@@ -442,7 +424,7 @@ export function CopyTradingConfig() {
                            <Switch
                             id={`enabled-${wallet.id}`}
                             checked={config?.is_enabled || false}
-                            disabled={!user}
+                            disabled={saving}
                             onCheckedChange={(checked) => 
                               createOrUpdateConfig(wallet.id, { is_enabled: checked })
                             }
@@ -454,7 +436,7 @@ export function CopyTradingConfig() {
                            <Switch
                             id={`fantasy-${wallet.id}`}
                             checked={config?.is_fantasy_mode || false}
-                            disabled={!user}
+                            disabled={saving}
                             onCheckedChange={(checked) => 
                               createOrUpdateConfig(wallet.id, { is_fantasy_mode: checked })
                             }
@@ -464,11 +446,11 @@ export function CopyTradingConfig() {
 
                       <div className="grid grid-cols-2 gap-4">
                         <div>
-                          <Label htmlFor={`new-buy-${wallet.id}`}>New Buy Amount (USD)</Label>
+                           <Label htmlFor={`new-buy-${wallet.id}`}>New Buy Amount (USD)</Label>
                            <Input
                             id={`new-buy-${wallet.id}`}
                             type="number"
-                            disabled={!user}
+                            disabled={saving}
                             value={config?.new_buy_amount_usd || 100}
                             onChange={(e) => 
                               createOrUpdateConfig(wallet.id, { 
@@ -481,11 +463,11 @@ export function CopyTradingConfig() {
                         </div>
                         
                         <div>
-                          <Label htmlFor={`rebuy-${wallet.id}`}>Re-buy Amount (USD)</Label>
+                           <Label htmlFor={`rebuy-${wallet.id}`}>Re-buy Amount (USD)</Label>
                            <Input
                             id={`rebuy-${wallet.id}`}
                             type="number"
-                            disabled={!user}
+                            disabled={saving}
                             value={config?.rebuy_amount_usd || 10}
                             onChange={(e) => 
                               createOrUpdateConfig(wallet.id, { 
@@ -503,7 +485,7 @@ export function CopyTradingConfig() {
                          <Switch
                           id={`copy-sells-${wallet.id}`}
                           checked={config?.copy_sell_percentage !== false}
-                          disabled={!user}
+                          disabled={saving}
                           onCheckedChange={(checked) => 
                             createOrUpdateConfig(wallet.id, { copy_sell_percentage: checked })
                           }
@@ -514,11 +496,11 @@ export function CopyTradingConfig() {
                     <TabsContent value="advanced" className="space-y-4">
                       <div className="grid grid-cols-2 gap-4">
                         <div>
-                          <Label htmlFor={`max-trades-${wallet.id}`}>Max Daily Trades</Label>
+                           <Label htmlFor={`max-trades-${wallet.id}`}>Max Daily Trades</Label>
                            <Input
                             id={`max-trades-${wallet.id}`}
                             type="number"
-                            disabled={!user}
+                            disabled={saving}
                             value={config?.max_daily_trades || 50}
                             onChange={(e) => 
                               createOrUpdateConfig(wallet.id, { 
@@ -531,11 +513,11 @@ export function CopyTradingConfig() {
                         </div>
                         
                         <div>
-                          <Label htmlFor={`max-position-${wallet.id}`}>Max Position Size (USD)</Label>
+                           <Label htmlFor={`max-position-${wallet.id}`}>Max Position Size (USD)</Label>
                            <Input
                             id={`max-position-${wallet.id}`}
                             type="number"
-                            disabled={!user}
+                            disabled={saving}
                             value={config?.max_position_size_usd || 1000}
                             onChange={(e) => 
                               createOrUpdateConfig(wallet.id, { 

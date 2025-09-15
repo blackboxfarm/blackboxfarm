@@ -50,3 +50,19 @@ verify_jwt = false
 
 [functions.ensure-super-admin]
 verify_jwt = false
+
+# Newly added functions for copy trading persistence
+[functions.ensure-fantasy-wallet]
+verify_jwt = false
+
+[functions.get-fantasy-wallet]
+verify_jwt = false
+
+[functions.get-copy-configs]
+verify_jwt = false
+
+[functions.upsert-copy-config]
+verify_jwt = false
+
+[functions.claim-preview-data]
+verify_jwt = true
