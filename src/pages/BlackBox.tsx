@@ -17,7 +17,8 @@ import { ReferralDashboard } from "@/components/blackbox/ReferralDashboard";
 import CommunityWalletDashboard from "@/components/blackbox/CommunityWalletDashboard";
 import { CommunityWalletPublic } from "@/components/blackbox/CommunityWalletPublic";
 import { OverviewTab } from "@/components/blackbox/OverviewTab";
-import { useSuperAdminAuth } from "@/hooks/useSuperAdminAuth";
+import { useAuth } from "@/hooks/useAuth";
+import { usePreviewSuperAdmin } from "@/hooks/usePreviewSuperAdmin";
 import { Button } from "@/components/ui/button";
 import { useNavigate } from "react-router-dom";
 import { Shield } from "lucide-react";
@@ -25,7 +26,9 @@ import { SolPriceDisplay } from "@/components/SolPriceDisplay";
 
 export default function BlackBox() {
   const [activeTab, setActiveTab] = useState("overview");
-  const { user } = useSuperAdminAuth();
+  const { user } = useAuth();
+  const isPreviewSuperAdmin = usePreviewSuperAdmin();
+  const isAdminView = !!user || isPreviewSuperAdmin;
   const navigate = useNavigate();
 
   return (
@@ -55,7 +58,7 @@ export default function BlackBox() {
             </div>
           </div>
           <div className="hidden md:flex flex-shrink-0 items-center gap-3">
-            {user && (
+            {isAdminView && (
               <Button 
                 onClick={() => navigate("/super-admin")}
                 variant="outline"
@@ -73,15 +76,15 @@ export default function BlackBox() {
 
         {/* Main Navigation */}
         <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-          <TabsList className={`grid w-full ${user ? 'grid-cols-8' : 'grid-cols-5'}`}>
+          <TabsList className={`grid w-full ${isAdminView ? 'grid-cols-8' : 'grid-cols-5'}`}>
             <TabsTrigger value="overview">Overview</TabsTrigger>
-            {user && <TabsTrigger value="dashboard">Dashboard</TabsTrigger>}
+            {isAdminView && <TabsTrigger value="dashboard">Dashboard</TabsTrigger>}
             <TabsTrigger value="community">Community</TabsTrigger>
             <TabsTrigger value="simulator">Simulator</TabsTrigger>
             <TabsTrigger value="fees">Calculator</TabsTrigger>
             <TabsTrigger value="analytics">Analytics</TabsTrigger>
-            {user && <TabsTrigger value="referrals">Referrals</TabsTrigger>}
-            {user && <TabsTrigger value="security">Security</TabsTrigger>}
+            {isAdminView && <TabsTrigger value="referrals">Referrals</TabsTrigger>}
+            {isAdminView && <TabsTrigger value="security">Security</TabsTrigger>}
           </TabsList>
 
           <TabsContent value="overview" className="space-y-6">
