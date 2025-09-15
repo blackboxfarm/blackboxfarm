@@ -17,7 +17,7 @@ import { ReferralDashboard } from "@/components/blackbox/ReferralDashboard";
 import CommunityWalletDashboard from "@/components/blackbox/CommunityWalletDashboard";
 import { CommunityWalletPublic } from "@/components/blackbox/CommunityWalletPublic";
 import { OverviewTab } from "@/components/blackbox/OverviewTab";
-import { useAuth } from "@/hooks/useAuth";
+import { useSuperAdminAuth } from "@/hooks/useSuperAdminAuth";
 import { Button } from "@/components/ui/button";
 import { useNavigate } from "react-router-dom";
 import { Shield } from "lucide-react";
@@ -25,7 +25,7 @@ import { SolPriceDisplay } from "@/components/SolPriceDisplay";
 
 export default function BlackBox() {
   const [activeTab, setActiveTab] = useState("overview");
-  const { user } = useAuth();
+  const { user } = useSuperAdminAuth();
   const navigate = useNavigate();
 
   return (
