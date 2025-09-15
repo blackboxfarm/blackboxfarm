@@ -139,7 +139,17 @@ export function BaglessHoldersReport() {
         }
       });
 
-      if (error) throw error;
+      if (error) {
+        const ctx = (error as any)?.context?.body;
+        let message = (error as any)?.message || 'Price discovery failed';
+        if (ctx) {
+          try {
+            const parsed = JSON.parse(ctx);
+            message = parsed?.details || parsed?.error || message;
+          } catch {}
+        }
+        throw new Error(message);
+      }
       
       if (data.tokenPriceUSD > 0) {
         setDiscoveredPrice(data.tokenPriceUSD);
@@ -153,9 +163,10 @@ export function BaglessHoldersReport() {
       }
     } catch (error) {
       console.error('Price discovery failed:', error);
+      const msg = error instanceof Error ? error.message : 'Could not fetch token price automatically. Please enter manually.';
       toast({
         title: "Price Discovery Failed",
-        description: "Could not fetch token price automatically. Please enter manually.",
+        description: msg,
         variant: "destructive"
       });
     } finally {
@@ -193,7 +204,15 @@ export function BaglessHoldersReport() {
 
       if (error) {
         console.error('Report generation error:', error);
-        throw new Error(error.message || 'Report generation failed');
+        let message = (error as any)?.message || 'Report generation failed';
+        const ctx = (error as any)?.context?.body;
+        if (ctx) {
+          try {
+            const parsed = JSON.parse(ctx);
+            message = parsed?.details || parsed?.error || message;
+          } catch {}
+        }
+        throw new Error(message);
       }
 
       console.log('Report generated:', data);

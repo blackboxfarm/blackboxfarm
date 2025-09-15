@@ -20,19 +20,17 @@ serve(async (req) => {
       );
     }
 
-    // Get Helius API key from environment
+    // Get Helius API key from environment (optional)
     const heliusApiKey = Deno.env.get('HELIUS_API_KEY');
-    if (!heliusApiKey) {
-      return new Response(
-        JSON.stringify({ error: 'Helius API key not configured' }),
-        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
-    }
 
     console.log(`Fetching all token holders for: ${tokenMint}`);
 
-    const rpcUrl = `https://rpc.helius.xyz/?api-key=${heliusApiKey}`;
-    
+    const rpcEndpoints = heliusApiKey
+      ? [`https://rpc.helius.xyz/?api-key=${heliusApiKey}`, 'https://api.mainnet-beta.solana.com', 'https://solana-api.projectserum.com']
+      : ['https://api.mainnet-beta.solana.com', 'https://solana-api.projectserum.com'];
+
+    let usedRpc = '';
+    const rpcErrors: string[] = [];
     // Use manual price if provided, otherwise try multiple APIs
     let tokenPriceUSD = manualPrice || 0;
     let priceSource = '';
@@ -125,44 +123,55 @@ serve(async (req) => {
       console.warn('⚠️ WARNING: All price sources failed or returned $0 - USD calculations will be incorrect');
     }
     
-    // Get all token accounts for this mint
-    const response = await fetch(rpcUrl, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        jsonrpc: '2.0',
-        id: 1,
-        method: 'getProgramAccounts',
-        params: [
-          'TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA', // SPL Token Program ID
-          {
-            encoding: 'jsonParsed',
-            filters: [
+    // Get all token accounts for this mint (try multiple RPCs)
+    let data: any = null;
+    for (const url of rpcEndpoints) {
+      try {
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 15000);
+        const resp = await fetch(url, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            jsonrpc: '2.0',
+            id: 1,
+            method: 'getProgramAccounts',
+            params: [
+              'TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA',
               {
-                dataSize: 165, // Size of token account
-              },
-              {
-                memcmp: {
-                  offset: 0,
-                  bytes: tokenMint,
-                },
-              },
-            ],
-          },
-        ],
-      })
-    });
-
-    if (!response.ok) {
-      throw new Error(`RPC request failed: ${response.status}`);
+                encoding: 'jsonParsed',
+                filters: [
+                  { dataSize: 165 },
+                  { memcmp: { offset: 0, bytes: tokenMint } }
+                ]
+              }
+            ]
+          }),
+          signal: controller.signal
+        });
+        clearTimeout(timeoutId);
+        if (!resp.ok) {
+          const msg = `RPC ${url.includes('helius') ? 'Helius' : url} failed: ${resp.status}`;
+          rpcErrors.push(msg);
+          continue;
+        }
+        const json = await resp.json();
+        if (json.error) {
+          const msg = `RPC ${url.includes('helius') ? 'Helius' : url} error: ${json.error.message}`;
+          rpcErrors.push(msg);
+          continue;
+        }
+        data = json;
+        usedRpc = url;
+        break;
+      } catch (e) {
+        rpcErrors.push(`RPC ${url.includes('helius') ? 'Helius' : url} exception: ${e?.message || e}`);
+        continue;
+      }
     }
 
-    const data = await response.json();
-    
-    if (data.error) {
-      throw new Error(`RPC error: ${data.error.message}`);
+    if (!data) {
+      throw new Error(`All RPC endpoints failed. ${rpcErrors.join(' | ')}`);
     }
 
     const holders = [];
@@ -349,6 +358,7 @@ serve(async (req) => {
       totalBalance,
       tokenPriceUSD,
       priceSource,
+      rpcSource: usedRpc,
       priceDiscoveryFailed,
       holders: rankedHolders,
       liquidityPools: lpWallets,
