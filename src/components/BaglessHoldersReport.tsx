@@ -508,7 +508,7 @@ export function BaglessHoldersReport() {
                         { name: 'Dust', count: report.dustWallets || 0, balance: dustBalance, color: 'bg-slate-500', textColor: 'text-slate-500' }
                       ];
 
-                      return layers.map((layer, index) => {
+                      return [...layers].reverse().map((layer, index) => {
                         // Calculate percentage based on token balance, not holder count
                         const percentage = totalTokenBalance > 0 ? (layer.balance / totalTokenBalance) * 100 : 0;
                         const minHeight = percentage > 0 ? Math.max(percentage * 2.5, 8) : 0; // Minimum 8px height if any tokens
@@ -542,44 +542,44 @@ export function BaglessHoldersReport() {
                     <h4 className="font-medium mb-2">Layer Legend</h4>
                     <div className="space-y-1 text-xs">
                       <div className="flex items-center gap-2">
-                        <div className="w-3 h-3 bg-red-500 rounded"></div>
-                        <span>True Whale (≥$5K) - Top Layer</span>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <div className="w-3 h-3 bg-purple-500 rounded"></div>
-                        <span>Baby Whale ($2K-$5K)</span>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <div className="w-3 h-3 bg-indigo-500 rounded"></div>
-                        <span>Super Boss ($1K-$2K)</span>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <div className="w-3 h-3 bg-cyan-500 rounded"></div>
-                        <span>Kingpin ($500-$1K)</span>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <div className="w-3 h-3 bg-orange-500 rounded"></div>
-                        <span>Boss ($200-$500)</span>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <div className="w-3 h-3 bg-green-500 rounded"></div>
-                        <span>Real ($50-$199)</span>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <div className="w-3 h-3 bg-emerald-500 rounded"></div>
-                        <span>Large ($25-$49)</span>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <div className="w-3 h-3 bg-blue-500 rounded"></div>
-                        <span>Medium ($12-$25)</span>
+                        <div className="w-3 h-3 bg-slate-500 rounded"></div>
+                        <span>Dust (&lt;$1) - Top Layer</span>
                       </div>
                       <div className="flex items-center gap-2">
                         <div className="w-3 h-3 bg-gray-500 rounded"></div>
                         <span>Small ($1-$12)</span>
                       </div>
                       <div className="flex items-center gap-2">
-                        <div className="w-3 h-3 bg-slate-500 rounded"></div>
-                        <span>Dust (&lt;$1) - Bottom Layer</span>
+                        <div className="w-3 h-3 bg-blue-500 rounded"></div>
+                        <span>Medium ($12-$25)</span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <div className="w-3 h-3 bg-emerald-500 rounded"></div>
+                        <span>Large ($25-$49)</span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <div className="w-3 h-3 bg-green-500 rounded"></div>
+                        <span>Real ($50-$199)</span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <div className="w-3 h-3 bg-orange-500 rounded"></div>
+                        <span>Boss ($200-$500)</span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <div className="w-3 h-3 bg-cyan-500 rounded"></div>
+                        <span>Kingpin ($500-$1K)</span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <div className="w-3 h-3 bg-indigo-500 rounded"></div>
+                        <span>Super Boss ($1K-$2K)</span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <div className="w-3 h-3 bg-purple-500 rounded"></div>
+                        <span>Baby Whale ($2K-$5K)</span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <div className="w-3 h-3 bg-red-500 rounded"></div>
+                        <span>True Whale (≥$5K) - Bottom Layer</span>
                       </div>
                     </div>
                   </div>
