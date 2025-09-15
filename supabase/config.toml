@@ -33,3 +33,5 @@ verify_jwt = false
 [functions.process-blackbox-commands]
 verify_jwt = false
 
+[functions.add-monitored-wallet]
+verify_jwt = false
