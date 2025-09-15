@@ -268,10 +268,10 @@ serve(async (req) => {
             }
             
             // Categorize wallets (excluding confirmed LPs from main categories)
-            const isDustWallet = !isLiquidityPool && balance < 1;
-            const isSmallWallet = !isLiquidityPool && balance >= 1 && usdValue < 1; // Between 1 token and $1 USD
-            const isMediumWallet = !isLiquidityPool && usdValue >= 1 && usdValue < 5; // $1-$5 USD
-            const isLargeWallet = !isLiquidityPool && usdValue >= 5 && usdValue < 50; // $5-$50 USD
+            const isDustWallet = !isLiquidityPool && usdValue < 1; // Less than $1 USD
+            const isSmallWallet = !isLiquidityPool && usdValue >= 1 && usdValue < 12; // $1-$12 USD
+            const isMediumWallet = !isLiquidityPool && usdValue >= 12 && usdValue < 25; // $12-$25 USD
+            const isLargeWallet = !isLiquidityPool && usdValue >= 25 && usdValue < 49; // $25-$49 USD
             const isBossWallet = !isLiquidityPool && usdValue >= 200 && usdValue < 500; // $200-$500 USD
             const isKingpinWallet = !isLiquidityPool && usdValue >= 500 && usdValue < 1000; // $500-$1K USD
             const isSuperBossWallet = !isLiquidityPool && usdValue >= 1000 && usdValue < 2000; // $1K-$2K USD

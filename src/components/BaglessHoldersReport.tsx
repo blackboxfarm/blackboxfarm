@@ -447,7 +447,19 @@ export function BaglessHoldersReport() {
                 </div>
                 <div className="text-center">
                   <div className="text-2xl font-bold text-emerald-500">{report.largeWallets}</div>
-                  <div className="text-xs text-muted-foreground">Large ($5-$49)</div>
+                  <div className="text-xs text-muted-foreground">Large ($25-$49)</div>
+                </div>
+                <div className="text-center">
+                  <div className="text-2xl font-bold text-blue-500">{report.mediumWallets || 0}</div>
+                  <div className="text-xs text-muted-foreground">Medium ($12-$25)</div>
+                </div>
+                <div className="text-center">
+                  <div className="text-2xl font-bold text-gray-500">{report.smallWallets || 0}</div>
+                  <div className="text-xs text-muted-foreground">Small ($1-$12)</div>
+                </div>
+                <div className="text-center">
+                  <div className="text-2xl font-bold text-slate-500">{report.dustWallets || 0}</div>
+                  <div className="text-xs text-muted-foreground">Dust (&lt;$1)</div>
                 </div>
                 <div className="text-center">
                   <div className="text-2xl font-bold">{formatBalance(report.totalBalance)}</div>
@@ -469,16 +481,23 @@ export function BaglessHoldersReport() {
                                               (report.kingpinWallets || 0) + 
                                               (report.bossWallets || 0) + 
                                               (report.realWallets || 0) + 
-                                              (report.largeWallets || 0);
+                                              (report.largeWallets || 0) + 
+                                              (report.mediumWallets || 0) + 
+                                              (report.smallWallets || 0) + 
+                                              (report.dustWallets || 0);
                       
+                      // Layers ordered bottom to top (foundation to surface)
                       const layers = [
                         { name: 'True Whale', count: report.trueWhaleWallets || 0, color: 'bg-red-500', textColor: 'text-red-500' },
-                        { name: 'Super Boss', count: report.superBossWallets || 0, color: 'bg-indigo-500', textColor: 'text-indigo-500' },
                         { name: 'Baby Whale', count: report.babyWhaleWallets || 0, color: 'bg-purple-500', textColor: 'text-purple-500' },
+                        { name: 'Super Boss', count: report.superBossWallets || 0, color: 'bg-indigo-500', textColor: 'text-indigo-500' },
                         { name: 'Kingpin', count: report.kingpinWallets || 0, color: 'bg-cyan-500', textColor: 'text-cyan-500' },
                         { name: 'Boss', count: report.bossWallets || 0, color: 'bg-orange-500', textColor: 'text-orange-500' },
                         { name: 'Real', count: report.realWallets || 0, color: 'bg-green-500', textColor: 'text-green-500' },
-                        { name: 'Large', count: report.largeWallets || 0, color: 'bg-emerald-500', textColor: 'text-emerald-500' }
+                        { name: 'Large', count: report.largeWallets || 0, color: 'bg-emerald-500', textColor: 'text-emerald-500' },
+                        { name: 'Medium', count: report.mediumWallets || 0, color: 'bg-blue-500', textColor: 'text-blue-500' },
+                        { name: 'Small', count: report.smallWallets || 0, color: 'bg-gray-500', textColor: 'text-gray-500' },
+                        { name: 'Dust', count: report.dustWallets || 0, color: 'bg-slate-500', textColor: 'text-slate-500' }
                       ];
 
                       return layers.map((layer, index) => {
@@ -514,8 +533,32 @@ export function BaglessHoldersReport() {
                     <h4 className="font-medium mb-2">Layer Legend</h4>
                     <div className="space-y-1 text-xs">
                       <div className="flex items-center gap-2">
-                        <div className="w-3 h-3 bg-red-500 rounded"></div>
-                        <span>True Whale (≥$5K)</span>
+                        <div className="w-3 h-3 bg-slate-500 rounded"></div>
+                        <span>Dust (&lt;$1) - Top Layer</span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <div className="w-3 h-3 bg-gray-500 rounded"></div>
+                        <span>Small ($1-$12)</span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <div className="w-3 h-3 bg-blue-500 rounded"></div>
+                        <span>Medium ($12-$25)</span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <div className="w-3 h-3 bg-emerald-500 rounded"></div>
+                        <span>Large ($25-$49)</span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <div className="w-3 h-3 bg-green-500 rounded"></div>
+                        <span>Real ($50-$199)</span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <div className="w-3 h-3 bg-orange-500 rounded"></div>
+                        <span>Boss ($200-$500)</span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <div className="w-3 h-3 bg-cyan-500 rounded"></div>
+                        <span>Kingpin ($500-$1K)</span>
                       </div>
                       <div className="flex items-center gap-2">
                         <div className="w-3 h-3 bg-indigo-500 rounded"></div>
@@ -526,20 +569,8 @@ export function BaglessHoldersReport() {
                         <span>Baby Whale ($2K-$5K)</span>
                       </div>
                       <div className="flex items-center gap-2">
-                        <div className="w-3 h-3 bg-cyan-500 rounded"></div>
-                        <span>Kingpin ($500-$1K)</span>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <div className="w-3 h-3 bg-orange-500 rounded"></div>
-                        <span>Boss ($200-$500)</span>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <div className="w-3 h-3 bg-green-500 rounded"></div>
-                        <span>Real ($50-$199)</span>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <div className="w-3 h-3 bg-emerald-500 rounded"></div>
-                        <span>Large ($5-$49)</span>
+                        <div className="w-3 h-3 bg-red-500 rounded"></div>
+                        <span>True Whale (≥$5K) - Foundation</span>
                       </div>
                     </div>
                   </div>
