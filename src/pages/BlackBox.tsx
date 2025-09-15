@@ -23,6 +23,7 @@ import { Button } from "@/components/ui/button";
 import { useNavigate } from "react-router-dom";
 import { Shield } from "lucide-react";
 import { SolPriceDisplay } from "@/components/SolPriceDisplay";
+import { WalletMonitor } from "@/components/WalletMonitor";
 
 export default function BlackBox() {
   const [activeTab, setActiveTab] = useState("overview");
@@ -76,9 +77,10 @@ export default function BlackBox() {
 
         {/* Main Navigation */}
         <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-          <TabsList className={`grid w-full ${isAdminView ? 'grid-cols-8' : 'grid-cols-5'}`}>
+          <TabsList className={`grid w-full ${isAdminView ? 'grid-cols-9' : 'grid-cols-5'}`}>
             <TabsTrigger value="overview">Overview</TabsTrigger>
             {isAdminView && <TabsTrigger value="dashboard">Dashboard</TabsTrigger>}
+            {isAdminView && <TabsTrigger value="watcher">Watcher</TabsTrigger>}
             <TabsTrigger value="community">Community</TabsTrigger>
             <TabsTrigger value="simulator">Simulator</TabsTrigger>
             <TabsTrigger value="fees">Calculator</TabsTrigger>
@@ -96,6 +98,10 @@ export default function BlackBox() {
               <CampaignDashboard />
               <WalletGenerator />
             </RequireAuth>
+          </TabsContent>
+
+          <TabsContent value="watcher" className="space-y-6">
+            <WalletMonitor />
           </TabsContent>
 
           <TabsContent value="community" className="space-y-6">

@@ -8,6 +8,7 @@ import { Plus, Trash2, Activity, TrendingUp, TrendingDown } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/hooks/useAuth';
+import { usePreviewSuperAdmin } from '@/hooks/usePreviewSuperAdmin';
 
 interface MonitoredWallet {
   id: string;
@@ -40,11 +41,15 @@ export const WalletMonitor = () => {
   const [isConnected, setIsConnected] = useState(false);
   const { toast } = useToast();
   const { user } = useAuth();
+  const isPreviewSuperAdmin = usePreviewSuperAdmin();
   const wsRef = useRef<WebSocket | null>(null);
+  
+  // Check if user has access (either authenticated or preview super admin)
+  const hasAccess = !!user || isPreviewSuperAdmin;
 
   // Load monitored wallets
   const loadWallets = async () => {
-    if (!user) return;
+    if (!hasAccess) return;
 
     const { data, error } = await supabase
       .from('monitored_wallets')
@@ -61,7 +66,7 @@ export const WalletMonitor = () => {
 
   // Load transaction history
   const loadTransactions = async () => {
-    if (!user) return;
+    if (!hasAccess) return;
 
     const { data, error } = await supabase
       .from('wallet_transactions')
@@ -82,12 +87,12 @@ export const WalletMonitor = () => {
 
   // Add new wallet
   const addWallet = async () => {
-    if (!user || !newWalletAddress.trim()) return;
+    if (!hasAccess || !newWalletAddress.trim()) return;
 
     const { error } = await supabase
       .from('monitored_wallets')
       .insert([{
-        user_id: user.id,
+        user_id: user?.id || 'preview-super-admin',
         wallet_address: newWalletAddress.trim(),
         label: newWalletLabel.trim() || newWalletAddress.substring(0, 8) + '...',
         is_active: true
@@ -166,7 +171,7 @@ export const WalletMonitor = () => {
 
   // Setup realtime subscription for new transactions
   useEffect(() => {
-    if (!user) return;
+    if (!hasAccess) return;
 
     const channel = supabase
       .channel('wallet-transactions')
@@ -187,11 +192,11 @@ export const WalletMonitor = () => {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [user]);
+  }, [hasAccess]);
 
   // Initialize
   useEffect(() => {
-    if (user) {
+    if (hasAccess) {
       loadWallets();
       loadTransactions();
       setupWebSocket();
@@ -202,7 +207,7 @@ export const WalletMonitor = () => {
         wsRef.current.close();
       }
     };
-  }, [user]);
+  }, [hasAccess]);
 
   const formatTime = (timestamp: string) => {
     return new Date(timestamp).toLocaleTimeString();
@@ -219,7 +224,7 @@ export const WalletMonitor = () => {
     return address.substring(0, 8) + '...' + address.substring(address.length - 8);
   };
 
-  if (!user) {
+  if (!hasAccess) {
     return (
       <Card>
         <CardContent className="p-6">

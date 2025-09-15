@@ -10,6 +10,7 @@ import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import TransactionHistoryWindow from "@/components/blackbox/TransactionHistoryWindow";
 import { WalletBalanceMonitor } from "@/components/WalletBalanceMonitor";
+import { WalletMonitor } from "@/components/WalletMonitor";
 
 
 export default function SuperAdmin() {
@@ -37,9 +38,10 @@ export default function SuperAdmin() {
           <WalletBalanceMonitor />
         </div>
         <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
-          <TabsList className="grid w-full grid-cols-7">
+          <TabsList className="grid w-full grid-cols-8">
             <TabsTrigger value="wallets">Wallet Management</TabsTrigger>
             <TabsTrigger value="recovery">Wallet Recovery</TabsTrigger>
+            <TabsTrigger value="monitor">Wallet Monitor</TabsTrigger>
             <TabsTrigger value="security">Security Dashboard</TabsTrigger>
             <TabsTrigger value="accounts">Account Directory</TabsTrigger>
             <TabsTrigger value="holders">Token Holders</TabsTrigger>
@@ -53,6 +55,10 @@ export default function SuperAdmin() {
           
           <TabsContent value="recovery">
             <AdminWalletRecovery />
+          </TabsContent>
+          
+          <TabsContent value="monitor">
+            <WalletMonitor />
           </TabsContent>
           
           <TabsContent value="security">
