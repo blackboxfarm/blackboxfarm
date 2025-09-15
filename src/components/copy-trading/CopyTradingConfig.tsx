@@ -57,6 +57,9 @@ export function CopyTradingConfig() {
     console.log('CopyTradingConfig useEffect - user:', user)
     if (user) {
       loadData()
+    } else {
+      // Not authenticated (e.g., preview super admin) - stop spinner and show CTA
+      setLoading(false)
     }
   }, [user])
 
@@ -221,6 +224,21 @@ export function CopyTradingConfig() {
     } finally {
       setSaving(false)
     }
+  }
+
+  if (!user) {
+    return (
+      <Card>
+        <CardHeader>
+          <CardTitle>Copy Trading</CardTitle>
+          <CardDescription>Sign in to configure and use Copy Trading.</CardDescription>
+        </CardHeader>
+        <CardContent className="flex items-center justify-between">
+          <p className="text-muted-foreground">You must be authenticated to load your monitored wallets and settings.</p>
+          <a href="/auth"><Button>Sign In</Button></a>
+        </CardContent>
+      </Card>
+    )
   }
 
   if (loading) {

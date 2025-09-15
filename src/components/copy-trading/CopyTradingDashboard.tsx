@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react'
 import { supabase } from '@/integrations/supabase/client'
 import { useAuth } from '@/hooks/useAuth'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { ScrollArea } from '@/components/ui/scroll-area'
@@ -69,6 +70,8 @@ export function CopyTradingDashboard() {
       return () => {
         tradesSubscription.unsubscribe()
       }
+    } else {
+      setLoading(false)
     }
   }, [user])
 
@@ -150,6 +153,21 @@ export function CopyTradingDashboard() {
       case 'sell': return 'Sell'
       default: return type
     }
+  }
+
+  if (!user) {
+    return (
+      <Card>
+        <CardHeader>
+          <CardTitle>Copy Trading Dashboard</CardTitle>
+          <CardDescription>Sign in to view your copy trades and positions.</CardDescription>
+        </CardHeader>
+        <CardContent className="flex items-center justify-between">
+          <p className="text-muted-foreground">Authentication is required to load your data.</p>
+          <a href="/auth"><Button>Sign In</Button></a>
+        </CardContent>
+      </Card>
+    )
   }
 
   if (loading) {
