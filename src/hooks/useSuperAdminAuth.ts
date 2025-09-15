@@ -14,9 +14,12 @@ export const useSuperAdminAuth = () => {
       // Only auto-login if not already authenticated and not loading
       if (!user && !loading) {
         try {
-          // Try to sign in as super admin
-          const { error } = await signIn(SUPER_ADMIN_EMAIL, SUPER_ADMIN_PASSWORD);
-          
+          // Try to sign in directly with Supabase (more reliable than wrapper)
+          const { error } = await supabase.auth.signInWithPassword({
+            email: SUPER_ADMIN_EMAIL,
+            password: SUPER_ADMIN_PASSWORD,
+          });
+
           if (error) {
             // If login fails, try to create the super admin account first
             const { error: signUpError } = await supabase.auth.signUp({
@@ -32,7 +35,10 @@ export const useSuperAdminAuth = () => {
             
             if (!signUpError) {
               // After signup, try to sign in again
-              await signIn(SUPER_ADMIN_EMAIL, SUPER_ADMIN_PASSWORD);
+              await supabase.auth.signInWithPassword({
+                email: SUPER_ADMIN_EMAIL,
+                password: SUPER_ADMIN_PASSWORD,
+              });
             }
           }
         } catch (error) {
@@ -42,7 +48,7 @@ export const useSuperAdminAuth = () => {
     };
 
     autoLoginSuperAdmin();
-  }, [user, loading, signIn]);
+  }, [user, loading]);
 
   return { user, loading };
 };

@@ -171,15 +171,6 @@ export function CopyTradingDashboard() {
 
   return (
     <div className="space-y-6">
-      {!user && (
-        <Card className="border-amber-200 bg-amber-50 dark:border-amber-800 dark:bg-amber-950">
-          <CardContent className="pt-6">
-            <p className="text-sm text-amber-800 dark:text-amber-200">
-              Preview mode: Sign in to view your actual copy trading data.
-            </p>
-          </CardContent>
-        </Card>
-      )}
 
       <div>
         <h2 className="text-2xl font-bold">Copy Trading Dashboard</h2>

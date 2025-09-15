@@ -264,16 +264,6 @@ export function CopyTradingConfig() {
 
   return (
     <div className="space-y-6">
-      {!user && (
-        <Card className="border-amber-200 bg-amber-50 dark:border-amber-800 dark:bg-amber-950">
-          <CardContent className="pt-6">
-            <p className="text-sm text-amber-800 dark:text-amber-200">
-              Preview mode: Sign in to modify settings and access full functionality.
-            </p>
-          </CardContent>
-        </Card>
-      )}
-      
       <div className="flex items-center justify-between">
         <div>
           <h2 className="text-2xl font-bold">Copy Trading Configuration</h2>
