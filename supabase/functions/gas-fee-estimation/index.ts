@@ -53,12 +53,12 @@ serve(async (req) => {
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
     );
 
-    // Get current Solana network fees from Helios RPC
-    const heliosResponse = await fetch(`${Deno.env.get('SOLANA_RPC_URL')}`, {
+    // Get current Solana network fees from Helius RPC
+    const heliusResponse = await fetch(`${Deno.env.get('SOLANA_RPC_URL')}`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': `Bearer ${Deno.env.get('HELIOS_API_KEY')}`,
+        'Authorization': `Bearer ${Deno.env.get('HELIUS_API_KEY')}`,
       },
       body: JSON.stringify({
         jsonrpc: '2.0',
@@ -70,7 +70,7 @@ serve(async (req) => {
       })
     });
 
-    const feeData = await heliosResponse.json();
+    const feeData = await heliusResponse.json();
     
     // Get SOL price for USD conversion
     const priceResponse = await fetch('https://api.coingecko.com/api/v3/simple/price?ids=solana&vs_currencies=usd');

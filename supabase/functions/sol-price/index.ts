@@ -11,16 +11,16 @@ serve(async (req) => {
   }
 
   try {
-    const heliosRpcUrl = Deno.env.get('SOLANA_RPC_URL');
+    const heliusRpcUrl = Deno.env.get('SOLANA_RPC_URL');
     
     let solPrice = null;
     
-    // Try Helios RPC first if available
-    if (heliosRpcUrl) {
+    // Try Helius RPC first if available
+    if (heliusRpcUrl) {
       try {
-        console.log('Fetching SOL price from Helios RPC...');
+        console.log('Fetching SOL price from Helius RPC...');
         
-        // Use Jupiter's price API with Helios as backup
+        // Use Jupiter's price API with Helius as backup
         const jupiterResponse = await fetch('https://price.jup.ag/v6/price?ids=So11111111111111111111111111111111111111112');
         
         if (jupiterResponse.ok) {
@@ -33,7 +33,7 @@ serve(async (req) => {
           }
         }
       } catch (error) {
-        console.log('Helios/Jupiter fetch failed:', error.message);
+        console.log('Helius/Jupiter fetch failed:', error.message);
       }
     }
     
@@ -69,7 +69,7 @@ serve(async (req) => {
       JSON.stringify({ 
         price: solPrice,
         timestamp: new Date().toISOString(),
-        source: heliosRpcUrl ? 'helios/jupiter' : 'coingecko'
+        source: heliusRpcUrl ? 'helius/jupiter' : 'coingecko'
       }),
       { 
         headers: { 

@@ -40,7 +40,7 @@ serve(async (req) => {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': `Bearer ${Deno.env.get('HELIOS_API_KEY')}`,
+        'Authorization': `Bearer ${Deno.env.get('HELIUS_API_KEY')}`,
       },
       body: JSON.stringify({
         jsonrpc: '2.0',
@@ -60,7 +60,7 @@ serve(async (req) => {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${Deno.env.get('HELIOS_API_KEY')}`,
+          'Authorization': `Bearer ${Deno.env.get('HELIUS_API_KEY')}`,
         },
         body: JSON.stringify({
           jsonrpc: '2.0',
@@ -87,7 +87,7 @@ serve(async (req) => {
       actualFee: detailedTx?.result?.meta?.fee ? detailedTx.result.meta.fee / 1_000_000_000 : 0,
       slippage: 0, // Would need to calculate from pre/post token amounts
       priceImpact: 0, // Would need price data before/after
-      mevProtected: true, // Assume true for Helios
+      mevProtected: true, // Assume true for Helius
       retryCount: 0,
       errorReason: txStatus?.err ? JSON.stringify(txStatus.err) : undefined
     };
