@@ -2,8 +2,10 @@ import React from 'react'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { CopyTradingConfig } from '@/components/copy-trading/CopyTradingConfig'
 import { CopyTradingDashboard } from '@/components/copy-trading/CopyTradingDashboard'
+import { useSuperAdminAuth } from '@/hooks/useSuperAdminAuth'
 
 export default function CopyTrading() {
+  useSuperAdminAuth();
   return (
     <div className="container mx-auto p-6">
       <Tabs defaultValue="config" className="w-full">

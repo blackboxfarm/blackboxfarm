@@ -26,11 +26,14 @@ import { SolPriceDisplay } from "@/components/SolPriceDisplay";
 import { WalletMonitor } from "@/components/WalletMonitor";
 import { CopyTradingConfig } from "@/components/copy-trading/CopyTradingConfig";
 import { CopyTradingDashboard } from "@/components/copy-trading/CopyTradingDashboard";
+import { useSuperAdminAuth } from "@/hooks/useSuperAdminAuth";
 
 export default function BlackBox() {
   const [activeTab, setActiveTab] = useState("overview");
   const { user } = useAuth();
   const isPreviewSuperAdmin = usePreviewSuperAdmin();
+  // Auto-login as Super Admin when not authenticated
+  useSuperAdminAuth();
   const isAdminView = !!user || isPreviewSuperAdmin;
   const navigate = useNavigate();
 
@@ -108,22 +111,20 @@ export default function BlackBox() {
           </TabsContent>
 
           <TabsContent value="copy-trading" className="space-y-6">
-            <RequireAuth>
-              <Tabs defaultValue="config" className="w-full">
-                <TabsList className="grid w-full grid-cols-2">
-                  <TabsTrigger value="config">Configuration</TabsTrigger>
-                  <TabsTrigger value="dashboard">Dashboard</TabsTrigger>
-                </TabsList>
-                
-                <TabsContent value="config" className="mt-6">
-                  <CopyTradingConfig />
-                </TabsContent>
-                
-                <TabsContent value="dashboard" className="mt-6">
-                  <CopyTradingDashboard />
-                </TabsContent>
-              </Tabs>
-            </RequireAuth>
+            <Tabs defaultValue="config" className="w-full">
+              <TabsList className="grid w-full grid-cols-2">
+                <TabsTrigger value="config">Configuration</TabsTrigger>
+                <TabsTrigger value="dashboard">Dashboard</TabsTrigger>
+              </TabsList>
+              
+              <TabsContent value="config" className="mt-6">
+                <CopyTradingConfig />
+              </TabsContent>
+              
+              <TabsContent value="dashboard" className="mt-6">
+                <CopyTradingDashboard />
+              </TabsContent>
+            </Tabs>
           </TabsContent>
 
           <TabsContent value="community" className="space-y-6">
