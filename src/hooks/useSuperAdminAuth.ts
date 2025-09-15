@@ -14,6 +14,13 @@ export const useSuperAdminAuth = () => {
       // Only auto-login if not already authenticated and not loading
       if (!user && !loading) {
         try {
+          // Ensure super admin exists and is confirmed before attempting sign-in
+          try {
+            await supabase.functions.invoke('ensure-super-admin', { body: {} });
+          } catch (e) {
+            console.warn('ensure-super-admin invocation failed (continuing):', e);
+          }
+
           // Try to sign in directly with Supabase (more reliable than wrapper)
           const { error } = await supabase.auth.signInWithPassword({
             email: SUPER_ADMIN_EMAIL,

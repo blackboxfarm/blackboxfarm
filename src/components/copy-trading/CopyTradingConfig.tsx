@@ -52,15 +52,13 @@ export function CopyTradingConfig() {
   const [fantasyWallet, setFantasyWallet] = useState<FantasyWallet | null>(null)
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
+  const [walletAddress, setWalletAddress] = useState('')
+  const [walletLabel, setWalletLabel] = useState('')
+  const [adding, setAdding] = useState(false)
 
   useEffect(() => {
     console.log('CopyTradingConfig useEffect - user:', user)
-    if (user) {
-      loadData()
-    } else {
-      // Not authenticated (e.g., preview super admin) - stop spinner and show CTA
-      setLoading(false)
-    }
+    loadData()
   }, [user])
 
   const loadData = async () => {
@@ -68,44 +66,55 @@ export function CopyTradingConfig() {
       console.log('CopyTradingConfig loadData starting')
       setLoading(true)
       
-      // Load monitored wallets
-      console.log('Loading monitored wallets for user:', user?.id)
-      const { data: wallets, error: walletsError } = await supabase
-        .from('monitored_wallets')
-        .select('*')
-        .eq('user_id', user?.id)
-        .eq('is_active', true)
-
-      if (walletsError) {
-        console.error('Wallets error:', walletsError)
-        throw walletsError
-      }
-      console.log('Loaded wallets:', wallets)
-      setMonitoredWallets(wallets || [])
-
-      // Load copy configs
-      const { data: configs, error: configsError } = await supabase
-        .from('wallet_copy_configs')
-        .select(`
-          *,
-          monitored_wallets!inner(wallet_address, label)
-        `)
-        .eq('user_id', user?.id)
-
-      if (configsError) throw configsError
-      setCopyConfigs(configs || [])
-
-      // Load fantasy wallet
-      const { data: fantasy, error: fantasyError } = await supabase
-        .from('fantasy_wallets')
-        .select('*')
-        .eq('user_id', user?.id)
-        .single()
-
-      if (fantasyError && fantasyError.code !== 'PGRST116') {
-        console.error('Error loading fantasy wallet:', fantasyError)
+      // Load monitored wallets (supports preview mode)
+      if (!user) {
+        console.log('Loading monitored wallets via edge function (preview mode)')
+        const { data, error } = await supabase.functions.invoke('get-monitored-wallets')
+        if (error) {
+          console.error('get-monitored-wallets error:', error)
+        }
+        setMonitoredWallets(data?.wallets || [])
+        setCopyConfigs([])
+        setFantasyWallet(null)
       } else {
-        setFantasyWallet(fantasy)
+        console.log('Loading monitored wallets for user:', user?.id)
+        const { data: wallets, error: walletsError } = await supabase
+          .from('monitored_wallets')
+          .select('*')
+          .eq('user_id', user?.id)
+          .eq('is_active', true)
+
+        if (walletsError) {
+          console.error('Wallets error:', walletsError)
+          throw walletsError
+        }
+        console.log('Loaded wallets:', wallets)
+        setMonitoredWallets(wallets || [])
+
+        // Load copy configs
+        const { data: configs, error: configsError } = await supabase
+          .from('wallet_copy_configs')
+          .select(`
+            *,
+            monitored_wallets!inner(wallet_address, label)
+          `)
+          .eq('user_id', user?.id)
+
+        if (configsError) throw configsError
+        setCopyConfigs(configs || [])
+
+        // Load fantasy wallet
+        const { data: fantasy, error: fantasyError } = await supabase
+          .from('fantasy_wallets')
+          .select('*')
+          .eq('user_id', user?.id)
+          .single()
+
+        if (fantasyError && fantasyError.code !== 'PGRST116') {
+          console.error('Error loading fantasy wallet:', fantasyError)
+        } else {
+          setFantasyWallet(fantasy)
+        }
       }
 
     } catch (error) {
@@ -215,15 +224,6 @@ export function CopyTradingConfig() {
   }
 
   const runBackfillAnalysis = async (walletAddress: string) => {
-    if (!user) {
-      toast({
-        title: "Authentication Required",
-        description: "Please sign in to run backfill analysis.",
-        variant: "destructive", 
-      })
-      return
-    }
-    
     try {
       setSaving(true)
       
@@ -252,7 +252,39 @@ export function CopyTradingConfig() {
       setSaving(false)
     }
   }
+  const addWalletAndAnalyze = async () => {
+    if (!walletAddress || walletAddress.trim().length < 8) {
+      toast({ title: 'Invalid address', description: 'Enter a valid wallet address', variant: 'destructive' })
+      return
+    }
+    try {
+      setAdding(true)
+      // 1) Add monitored wallet via Edge Function (works in preview mode too)
+      const { data: addResp, error: addErr } = await supabase.functions.invoke('add-monitored-wallet', {
+        body: {
+          wallet_address: walletAddress.trim(),
+          label: walletLabel?.trim() || 'Monitored Wallet',
+          is_active: true,
+        }
+      })
+      if (addErr) throw addErr
 
+      // 2) Backfill last 24h to initialize transactions and trigger copy logic
+      await supabase.functions.invoke('backfill-wallet-transactions', {
+        body: { wallet_address: walletAddress.trim(), hours: 24 }
+      })
+
+      setWalletAddress('')
+      setWalletLabel('')
+      await loadData()
+      toast({ title: 'Wallet added', description: 'Backfilled last 24h and loaded config.' })
+    } catch (e) {
+      console.error('addWalletAndAnalyze error:', e)
+      toast({ title: 'Failed to add wallet', description: 'Please try again.', variant: 'destructive' })
+    } finally {
+      setAdding(false)
+    }
+  }
 
   if (loading) {
     return (
@@ -280,6 +312,42 @@ export function CopyTradingConfig() {
           </Button>
         )}
       </div>
+      <Card>
+        <CardHeader>
+          <CardTitle>Add Wallet to Mirror</CardTitle>
+          <CardDescription>
+            Enter a wallet to monitor. We'll backfill the last 24h and start tracking.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="grid grid-cols-1 md:grid-cols-6 gap-3">
+            <div className="md:col-span-4">
+              <Label htmlFor="walletAddress">Wallet Address</Label>
+              <Input
+                id="walletAddress"
+                placeholder="Enter wallet address to copy"
+                value={walletAddress}
+                onChange={(e) => setWalletAddress(e.target.value)}
+              />
+            </div>
+            <div className="md:col-span-2">
+              <Label htmlFor="walletLabel">Label (optional)</Label>
+              <Input
+                id="walletLabel"
+                placeholder="e.g., Whale #1"
+                value={walletLabel}
+                onChange={(e) => setWalletLabel(e.target.value)}
+              />
+            </div>
+            <div className="md:col-span-6 flex justify-end">
+              <Button onClick={addWalletAndAnalyze} disabled={adding}>
+                {adding && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                Add & Analyze 24h
+              </Button>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
 
       {fantasyWallet && (
         <Card>

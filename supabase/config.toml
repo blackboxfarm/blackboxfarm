@@ -44,3 +44,9 @@ verify_jwt = false
 
 [functions.get-wallet-transactions]
 verify_jwt = false
+
+[functions.backfill-wallet-transactions]
+verify_jwt = false
+
+[functions.ensure-super-admin]
+verify_jwt = false
