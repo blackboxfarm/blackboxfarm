@@ -24,6 +24,8 @@ import { useNavigate } from "react-router-dom";
 import { Shield } from "lucide-react";
 import { SolPriceDisplay } from "@/components/SolPriceDisplay";
 import { WalletMonitor } from "@/components/WalletMonitor";
+import { CopyTradingConfig } from "@/components/copy-trading/CopyTradingConfig";
+import { CopyTradingDashboard } from "@/components/copy-trading/CopyTradingDashboard";
 
 export default function BlackBox() {
   const [activeTab, setActiveTab] = useState("overview");
@@ -77,10 +79,11 @@ export default function BlackBox() {
 
         {/* Main Navigation */}
         <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-          <TabsList className={`grid w-full ${isAdminView ? 'grid-cols-9' : 'grid-cols-5'}`}>
+          <TabsList className={`grid w-full ${isAdminView ? 'grid-cols-10' : 'grid-cols-5'}`}>
             <TabsTrigger value="overview">Overview</TabsTrigger>
             {isAdminView && <TabsTrigger value="dashboard">Dashboard</TabsTrigger>}
             {isAdminView && <TabsTrigger value="watcher">Watcher</TabsTrigger>}
+            {isAdminView && <TabsTrigger value="copy-trading">Copy Trading</TabsTrigger>}
             <TabsTrigger value="community">Community</TabsTrigger>
             <TabsTrigger value="simulator">Simulator</TabsTrigger>
             <TabsTrigger value="fees">Calculator</TabsTrigger>
@@ -102,6 +105,25 @@ export default function BlackBox() {
 
           <TabsContent value="watcher" className="space-y-6">
             <WalletMonitor />
+          </TabsContent>
+
+          <TabsContent value="copy-trading" className="space-y-6">
+            <RequireAuth>
+              <Tabs defaultValue="config" className="w-full">
+                <TabsList className="grid w-full grid-cols-2">
+                  <TabsTrigger value="config">Configuration</TabsTrigger>
+                  <TabsTrigger value="dashboard">Dashboard</TabsTrigger>
+                </TabsList>
+                
+                <TabsContent value="config" className="mt-6">
+                  <CopyTradingConfig />
+                </TabsContent>
+                
+                <TabsContent value="dashboard" className="mt-6">
+                  <CopyTradingDashboard />
+                </TabsContent>
+              </Tabs>
+            </RequireAuth>
           </TabsContent>
 
           <TabsContent value="community" className="space-y-6">
