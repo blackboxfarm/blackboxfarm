@@ -475,34 +475,44 @@ export function BaglessHoldersReport() {
                 <div className="mb-4">
                   <div className="bg-muted/30 rounded-lg p-4 h-80 flex flex-col justify-end">
                     {(() => {
-                      const totalRealWallets = (report.trueWhaleWallets || 0) + 
-                                              (report.babyWhaleWallets || 0) + 
-                                              (report.superBossWallets || 0) + 
-                                              (report.kingpinWallets || 0) + 
-                                              (report.bossWallets || 0) + 
-                                              (report.realWallets || 0) + 
-                                              (report.largeWallets || 0) + 
-                                              (report.mediumWallets || 0) + 
-                                              (report.smallWallets || 0) + 
-                                              (report.dustWallets || 0);
+                      // Calculate token balance for each category from holders data
+                      const getTokenBalanceForCategory = (categoryFilter: (holder: TokenHolder) => boolean) => {
+                        return report.holders
+                          .filter(categoryFilter)
+                          .reduce((sum, holder) => sum + holder.balance, 0);
+                      };
+
+                      const trueWhaleBalance = getTokenBalanceForCategory(h => h.isTrueWhaleWallet);
+                      const babyWhaleBalance = getTokenBalanceForCategory(h => h.isBabyWhaleWallet);
+                      const superBossBalance = getTokenBalanceForCategory(h => h.isSuperBossWallet);
+                      const kingpinBalance = getTokenBalanceForCategory(h => h.isKingpinWallet);
+                      const bossBalance = getTokenBalanceForCategory(h => h.isBossWallet);
+                      const realBalance = getTokenBalanceForCategory(h => !h.isDustWallet && !h.isSmallWallet && !h.isMediumWallet && !h.isLargeWallet && !h.isBossWallet && !h.isKingpinWallet && !h.isSuperBossWallet && !h.isBabyWhaleWallet && !h.isTrueWhaleWallet && !h.isLiquidityPool);
+                      const largeBalance = getTokenBalanceForCategory(h => h.isLargeWallet);
+                      const mediumBalance = getTokenBalanceForCategory(h => h.isMediumWallet);
+                      const smallBalance = getTokenBalanceForCategory(h => h.isSmallWallet);
+                      const dustBalance = getTokenBalanceForCategory(h => h.isDustWallet);
+
+                      const totalTokenBalance = trueWhaleBalance + babyWhaleBalance + superBossBalance + kingpinBalance + bossBalance + realBalance + largeBalance + mediumBalance + smallBalance + dustBalance;
                       
-                      // Layers ordered bottom to top (foundation to surface)
+                      // Layers ordered top to bottom (largest holders at top, smallest at bottom) - REVERSED ORDER
                       const layers = [
-                        { name: 'True Whale', count: report.trueWhaleWallets || 0, color: 'bg-red-500', textColor: 'text-red-500' },
-                        { name: 'Baby Whale', count: report.babyWhaleWallets || 0, color: 'bg-purple-500', textColor: 'text-purple-500' },
-                        { name: 'Super Boss', count: report.superBossWallets || 0, color: 'bg-indigo-500', textColor: 'text-indigo-500' },
-                        { name: 'Kingpin', count: report.kingpinWallets || 0, color: 'bg-cyan-500', textColor: 'text-cyan-500' },
-                        { name: 'Boss', count: report.bossWallets || 0, color: 'bg-orange-500', textColor: 'text-orange-500' },
-                        { name: 'Real', count: report.realWallets || 0, color: 'bg-green-500', textColor: 'text-green-500' },
-                        { name: 'Large', count: report.largeWallets || 0, color: 'bg-emerald-500', textColor: 'text-emerald-500' },
-                        { name: 'Medium', count: report.mediumWallets || 0, color: 'bg-blue-500', textColor: 'text-blue-500' },
-                        { name: 'Small', count: report.smallWallets || 0, color: 'bg-gray-500', textColor: 'text-gray-500' },
-                        { name: 'Dust', count: report.dustWallets || 0, color: 'bg-slate-500', textColor: 'text-slate-500' }
+                        { name: 'True Whale', count: report.trueWhaleWallets || 0, balance: trueWhaleBalance, color: 'bg-red-500', textColor: 'text-red-500' },
+                        { name: 'Baby Whale', count: report.babyWhaleWallets || 0, balance: babyWhaleBalance, color: 'bg-purple-500', textColor: 'text-purple-500' },
+                        { name: 'Super Boss', count: report.superBossWallets || 0, balance: superBossBalance, color: 'bg-indigo-500', textColor: 'text-indigo-500' },
+                        { name: 'Kingpin', count: report.kingpinWallets || 0, balance: kingpinBalance, color: 'bg-cyan-500', textColor: 'text-cyan-500' },
+                        { name: 'Boss', count: report.bossWallets || 0, balance: bossBalance, color: 'bg-orange-500', textColor: 'text-orange-500' },
+                        { name: 'Real', count: report.realWallets || 0, balance: realBalance, color: 'bg-green-500', textColor: 'text-green-500' },
+                        { name: 'Large', count: report.largeWallets || 0, balance: largeBalance, color: 'bg-emerald-500', textColor: 'text-emerald-500' },
+                        { name: 'Medium', count: report.mediumWallets || 0, balance: mediumBalance, color: 'bg-blue-500', textColor: 'text-blue-500' },
+                        { name: 'Small', count: report.smallWallets || 0, balance: smallBalance, color: 'bg-gray-500', textColor: 'text-gray-500' },
+                        { name: 'Dust', count: report.dustWallets || 0, balance: dustBalance, color: 'bg-slate-500', textColor: 'text-slate-500' }
                       ];
 
                       return layers.map((layer, index) => {
-                        const percentage = totalRealWallets > 0 ? (layer.count / totalRealWallets) * 100 : 0;
-                        const minHeight = percentage > 0 ? Math.max(percentage * 2.5, 8) : 0; // Minimum 8px height if any wallets
+                        // Calculate percentage based on token balance, not holder count
+                        const percentage = totalTokenBalance > 0 ? (layer.balance / totalTokenBalance) * 100 : 0;
+                        const minHeight = percentage > 0 ? Math.max(percentage * 2.5, 8) : 0; // Minimum 8px height if any tokens
                         
                         return (
                           <div
@@ -512,7 +522,7 @@ export function BaglessHoldersReport() {
                               height: `${minHeight}px`,
                               minHeight: percentage > 0 ? '8px' : '0px'
                             }}
-                            title={`${layer.name}: ${layer.count} wallets (${percentage.toFixed(1)}%)`}
+                            title={`${layer.name}: ${layer.count} wallets (${percentage.toFixed(1)}% of tokens)`}
                           >
                             {percentage > 3 && ( // Only show text if layer is thick enough
                               <span className="text-center px-2">
@@ -533,44 +543,44 @@ export function BaglessHoldersReport() {
                     <h4 className="font-medium mb-2">Layer Legend</h4>
                     <div className="space-y-1 text-xs">
                       <div className="flex items-center gap-2">
-                        <div className="w-3 h-3 bg-slate-500 rounded"></div>
-                        <span>Dust (&lt;$1) - Top Layer</span>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <div className="w-3 h-3 bg-gray-500 rounded"></div>
-                        <span>Small ($1-$12)</span>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <div className="w-3 h-3 bg-blue-500 rounded"></div>
-                        <span>Medium ($12-$25)</span>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <div className="w-3 h-3 bg-emerald-500 rounded"></div>
-                        <span>Large ($25-$49)</span>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <div className="w-3 h-3 bg-green-500 rounded"></div>
-                        <span>Real ($50-$199)</span>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <div className="w-3 h-3 bg-orange-500 rounded"></div>
-                        <span>Boss ($200-$500)</span>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <div className="w-3 h-3 bg-cyan-500 rounded"></div>
-                        <span>Kingpin ($500-$1K)</span>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <div className="w-3 h-3 bg-indigo-500 rounded"></div>
-                        <span>Super Boss ($1K-$2K)</span>
+                        <div className="w-3 h-3 bg-red-500 rounded"></div>
+                        <span>True Whale (≥$5K) - Top Layer</span>
                       </div>
                       <div className="flex items-center gap-2">
                         <div className="w-3 h-3 bg-purple-500 rounded"></div>
                         <span>Baby Whale ($2K-$5K)</span>
                       </div>
                       <div className="flex items-center gap-2">
-                        <div className="w-3 h-3 bg-red-500 rounded"></div>
-                        <span>True Whale (≥$5K) - Foundation</span>
+                        <div className="w-3 h-3 bg-indigo-500 rounded"></div>
+                        <span>Super Boss ($1K-$2K)</span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <div className="w-3 h-3 bg-cyan-500 rounded"></div>
+                        <span>Kingpin ($500-$1K)</span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <div className="w-3 h-3 bg-orange-500 rounded"></div>
+                        <span>Boss ($200-$500)</span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <div className="w-3 h-3 bg-green-500 rounded"></div>
+                        <span>Real ($50-$199)</span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <div className="w-3 h-3 bg-emerald-500 rounded"></div>
+                        <span>Large ($25-$49)</span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <div className="w-3 h-3 bg-blue-500 rounded"></div>
+                        <span>Medium ($12-$25)</span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <div className="w-3 h-3 bg-gray-500 rounded"></div>
+                        <span>Small ($1-$12)</span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <div className="w-3 h-3 bg-slate-500 rounded"></div>
+                        <span>Dust (&lt;$1) - Bottom Layer</span>
                       </div>
                     </div>
                   </div>
