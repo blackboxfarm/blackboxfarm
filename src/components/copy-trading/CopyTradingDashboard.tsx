@@ -155,20 +155,6 @@ export function CopyTradingDashboard() {
     }
   }
 
-  if (!user) {
-    return (
-      <Card>
-        <CardHeader>
-          <CardTitle>Copy Trading Dashboard</CardTitle>
-          <CardDescription>Sign in to view your copy trades and positions.</CardDescription>
-        </CardHeader>
-        <CardContent className="flex items-center justify-between">
-          <p className="text-muted-foreground">Authentication is required to load your data.</p>
-          <a href="/auth"><Button>Sign In</Button></a>
-        </CardContent>
-      </Card>
-    )
-  }
 
   if (loading) {
     return (
@@ -185,6 +171,16 @@ export function CopyTradingDashboard() {
 
   return (
     <div className="space-y-6">
+      {!user && (
+        <Card className="border-amber-200 bg-amber-50 dark:border-amber-800 dark:bg-amber-950">
+          <CardContent className="pt-6">
+            <p className="text-sm text-amber-800 dark:text-amber-200">
+              Preview mode: Sign in to view your actual copy trading data.
+            </p>
+          </CardContent>
+        </Card>
+      )}
+
       <div>
         <h2 className="text-2xl font-bold">Copy Trading Dashboard</h2>
         <p className="text-muted-foreground">
@@ -200,7 +196,7 @@ export function CopyTradingDashboard() {
               <Copy className="h-4 w-4 text-muted-foreground" />
               <div>
                 <p className="text-sm text-muted-foreground">Total Trades</p>
-                <p className="text-lg font-semibold">{totalTrades}</p>
+                <p className="text-lg font-semibold">{user ? totalTrades : 0}</p>
               </div>
             </div>
           </CardContent>
@@ -212,7 +208,7 @@ export function CopyTradingDashboard() {
               <DollarSign className="h-4 w-4 text-muted-foreground" />
               <div>
                 <p className="text-sm text-muted-foreground">Fantasy Trades</p>
-                <p className="text-lg font-semibold">{fantasyTrades.length}</p>
+                <p className="text-lg font-semibold">{user ? fantasyTrades.length : 0}</p>
               </div>
             </div>
           </CardContent>
@@ -224,7 +220,7 @@ export function CopyTradingDashboard() {
               <TrendingUp className="h-4 w-4 text-muted-foreground" />
               <div>
                 <p className="text-sm text-muted-foreground">Real Trades</p>
-                <p className="text-lg font-semibold">{realTrades.length}</p>
+                <p className="text-lg font-semibold">{user ? realTrades.length : 0}</p>
               </div>
             </div>
           </CardContent>
@@ -240,7 +236,7 @@ export function CopyTradingDashboard() {
               <div>
                 <p className="text-sm text-muted-foreground">Total P&L</p>
                 <p className={`text-lg font-semibold ${totalProfitLoss >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                  {formatCurrency(totalProfitLoss)}
+                  {user ? formatCurrency(totalProfitLoss) : '$0.00'}
                 </p>
               </div>
             </div>
@@ -265,7 +261,7 @@ export function CopyTradingDashboard() {
             <CardContent>
               <ScrollArea className="h-96">
                 <div className="space-y-3">
-                  {copyTrades.map((trade) => (
+                  {user && copyTrades.map((trade) => (
                     <div key={trade.id} className="flex items-center justify-between p-3 border rounded-lg">
                       <div className="flex items-center gap-3">
                         <div className={`w-2 h-2 rounded-full ${getTradeTypeColor(trade.trade_type)}`} />
@@ -309,11 +305,11 @@ export function CopyTradingDashboard() {
                     </div>
                   ))}
 
-                  {copyTrades.length === 0 && (
+                  {(!user || copyTrades.length === 0) && (
                     <div className="text-center p-8 text-muted-foreground">
                       <Copy className="h-12 w-12 mx-auto mb-4 opacity-50" />
-                      <p>No copy trades found.</p>
-                      <p className="text-sm">Configure copy trading to start automatically copying trades.</p>
+                      <p>{!user ? "Sign in to view your copy trades" : "No copy trades found."}</p>
+                      <p className="text-sm">{!user ? "Authentication required to load your data." : "Configure copy trading to start automatically copying trades."}</p>
                     </div>
                   )}
                 </div>
@@ -332,7 +328,7 @@ export function CopyTradingDashboard() {
             </CardHeader>
             <CardContent>
               <div className="space-y-3">
-                {fantasyPositions.map((position) => (
+                {user && fantasyPositions.map((position) => (
                   <div key={position.id} className="flex items-center justify-between p-3 border rounded-lg">
                     <div>
                       <div className="font-medium">
@@ -365,11 +361,11 @@ export function CopyTradingDashboard() {
                   </div>
                 ))}
 
-                {fantasyPositions.length === 0 && (
+                {(!user || fantasyPositions.length === 0) && (
                   <div className="text-center p-8 text-muted-foreground">
                     <TrendingUp className="h-12 w-12 mx-auto mb-4 opacity-50" />
-                    <p>No fantasy positions found.</p>
-                    <p className="text-sm">Start copy trading in fantasy mode to build positions.</p>
+                    <p>{!user ? "Sign in to view your fantasy positions" : "No fantasy positions found."}</p>
+                    <p className="text-sm">{!user ? "Authentication required to load your data." : "Start copy trading in fantasy mode to build positions."}</p>
                   </div>
                 )}
               </div>

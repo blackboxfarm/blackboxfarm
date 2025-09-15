@@ -121,6 +121,15 @@ export function CopyTradingConfig() {
   }
 
   const createOrUpdateConfig = async (walletId: string, config: Partial<CopyConfig>) => {
+    if (!user) {
+      toast({
+        title: "Authentication Required",
+        description: "Please sign in to modify copy trading settings.",
+        variant: "destructive",
+      })
+      return
+    }
+    
     try {
       setSaving(true)
       
@@ -164,6 +173,15 @@ export function CopyTradingConfig() {
   }
 
   const createFantasyWallet = async () => {
+    if (!user) {
+      toast({
+        title: "Authentication Required", 
+        description: "Please sign in to create fantasy wallets.",
+        variant: "destructive",
+      })
+      return
+    }
+    
     try {
       setSaving(true)
       
@@ -197,6 +215,15 @@ export function CopyTradingConfig() {
   }
 
   const runBackfillAnalysis = async (walletAddress: string) => {
+    if (!user) {
+      toast({
+        title: "Authentication Required",
+        description: "Please sign in to run backfill analysis.",
+        variant: "destructive", 
+      })
+      return
+    }
+    
     try {
       setSaving(true)
       
@@ -226,20 +253,6 @@ export function CopyTradingConfig() {
     }
   }
 
-  if (!user) {
-    return (
-      <Card>
-        <CardHeader>
-          <CardTitle>Copy Trading</CardTitle>
-          <CardDescription>Sign in to configure and use Copy Trading.</CardDescription>
-        </CardHeader>
-        <CardContent className="flex items-center justify-between">
-          <p className="text-muted-foreground">You must be authenticated to load your monitored wallets and settings.</p>
-          <a href="/auth"><Button>Sign In</Button></a>
-        </CardContent>
-      </Card>
-    )
-  }
 
   if (loading) {
     return (
@@ -251,6 +264,16 @@ export function CopyTradingConfig() {
 
   return (
     <div className="space-y-6">
+      {!user && (
+        <Card className="border-amber-200 bg-amber-50 dark:border-amber-800 dark:bg-amber-950">
+          <CardContent className="pt-6">
+            <p className="text-sm text-amber-800 dark:text-amber-200">
+              Preview mode: Sign in to modify settings and access full functionality.
+            </p>
+          </CardContent>
+        </Card>
+      )}
+      
       <div className="flex items-center justify-between">
         <div>
           <h2 className="text-2xl font-bold">Copy Trading Configuration</h2>
@@ -260,7 +283,7 @@ export function CopyTradingConfig() {
         </div>
         
         {!fantasyWallet && (
-          <Button onClick={createFantasyWallet} disabled={saving}>
+          <Button onClick={createFantasyWallet} disabled={saving || !user}>
             {saving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
             <DollarSign className="mr-2 h-4 w-4" />
             Create Fantasy Wallet
@@ -336,11 +359,11 @@ export function CopyTradingConfig() {
                     </div>
                     
                     <div className="flex items-center gap-2">
-                      <Button
+                       <Button
                         variant="outline"
                         size="sm"
                         onClick={() => runBackfillAnalysis(wallet.wallet_address)}
-                        disabled={saving}
+                        disabled={saving || !user}
                       >
                         {saving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                         Run 24h Analysis
@@ -358,9 +381,10 @@ export function CopyTradingConfig() {
                       <div className="grid grid-cols-2 gap-4">
                         <div className="flex items-center justify-between">
                           <Label htmlFor={`enabled-${wallet.id}`}>Enable Copying</Label>
-                          <Switch
+                           <Switch
                             id={`enabled-${wallet.id}`}
                             checked={config?.is_enabled || false}
+                            disabled={!user}
                             onCheckedChange={(checked) => 
                               createOrUpdateConfig(wallet.id, { is_enabled: checked })
                             }
@@ -369,9 +393,10 @@ export function CopyTradingConfig() {
                         
                         <div className="flex items-center justify-between">
                           <Label htmlFor={`fantasy-${wallet.id}`}>Fantasy Mode</Label>
-                          <Switch
+                           <Switch
                             id={`fantasy-${wallet.id}`}
                             checked={config?.is_fantasy_mode || false}
+                            disabled={!user}
                             onCheckedChange={(checked) => 
                               createOrUpdateConfig(wallet.id, { is_fantasy_mode: checked })
                             }
@@ -382,9 +407,10 @@ export function CopyTradingConfig() {
                       <div className="grid grid-cols-2 gap-4">
                         <div>
                           <Label htmlFor={`new-buy-${wallet.id}`}>New Buy Amount (USD)</Label>
-                          <Input
+                           <Input
                             id={`new-buy-${wallet.id}`}
                             type="number"
+                            disabled={!user}
                             value={config?.new_buy_amount_usd || 100}
                             onChange={(e) => 
                               createOrUpdateConfig(wallet.id, { 
@@ -398,9 +424,10 @@ export function CopyTradingConfig() {
                         
                         <div>
                           <Label htmlFor={`rebuy-${wallet.id}`}>Re-buy Amount (USD)</Label>
-                          <Input
+                           <Input
                             id={`rebuy-${wallet.id}`}
                             type="number"
+                            disabled={!user}
                             value={config?.rebuy_amount_usd || 10}
                             onChange={(e) => 
                               createOrUpdateConfig(wallet.id, { 
@@ -415,9 +442,10 @@ export function CopyTradingConfig() {
 
                       <div className="flex items-center justify-between">
                         <Label htmlFor={`copy-sells-${wallet.id}`}>Copy Sells (Same %)</Label>
-                        <Switch
+                         <Switch
                           id={`copy-sells-${wallet.id}`}
                           checked={config?.copy_sell_percentage !== false}
+                          disabled={!user}
                           onCheckedChange={(checked) => 
                             createOrUpdateConfig(wallet.id, { copy_sell_percentage: checked })
                           }
@@ -429,9 +457,10 @@ export function CopyTradingConfig() {
                       <div className="grid grid-cols-2 gap-4">
                         <div>
                           <Label htmlFor={`max-trades-${wallet.id}`}>Max Daily Trades</Label>
-                          <Input
+                           <Input
                             id={`max-trades-${wallet.id}`}
                             type="number"
+                            disabled={!user}
                             value={config?.max_daily_trades || 50}
                             onChange={(e) => 
                               createOrUpdateConfig(wallet.id, { 
@@ -445,9 +474,10 @@ export function CopyTradingConfig() {
                         
                         <div>
                           <Label htmlFor={`max-position-${wallet.id}`}>Max Position Size (USD)</Label>
-                          <Input
+                           <Input
                             id={`max-position-${wallet.id}`}
                             type="number"
+                            disabled={!user}
                             value={config?.max_position_size_usd || 1000}
                             onChange={(e) => 
                               createOrUpdateConfig(wallet.id, { 
