@@ -476,12 +476,11 @@ export function BaglessHoldersReport() {
                   <div className="bg-muted/30 rounded-lg p-4 h-80 flex flex-col justify-end">
                     {(() => {
                       // Calculate token balance for each category from holders data
-                      const getTokenBalanceForCategory = (categoryFilter: (holder: TokenHolder) => boolean) => {
-                        return report.holders
-                          .filter(categoryFilter)
-                          .reduce((sum, holder) => sum + holder.balance, 0);
-                      };
-
+                        const getTokenBalanceForCategory = (categoryFilter: (holder: TokenHolder) => boolean) => {
+                          return report.holders
+                            .filter(h => !h.isLiquidityPool && categoryFilter(h))
+                            .reduce((sum, holder) => sum + holder.balance, 0);
+                        };
                       const trueWhaleBalance = getTokenBalanceForCategory(h => h.isTrueWhaleWallet);
                       const babyWhaleBalance = getTokenBalanceForCategory(h => h.isBabyWhaleWallet);
                       const superBossBalance = getTokenBalanceForCategory(h => h.isSuperBossWallet);
