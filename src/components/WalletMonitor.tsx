@@ -51,38 +51,52 @@ export const WalletMonitor = () => {
   const loadWallets = async () => {
     if (!hasAccess) return;
 
-    const { data, error } = await supabase
-      .from('monitored_wallets')
-      .select('*')
-      .order('created_at', { ascending: false });
+    try {
+      if (isPreviewSuperAdmin && !user?.id) {
+        const { data, error } = await supabase.functions.invoke('get-monitored-wallets', { body: {} });
+        if (error) throw error;
+        setWallets((data as any)?.wallets || []);
+        return;
+      }
 
-    if (error) {
-      toast({ title: 'Error loading wallets', description: error.message, variant: 'destructive' });
-      return;
+      const { data, error } = await supabase
+        .from('monitored_wallets')
+        .select('*')
+        .order('created_at', { ascending: false });
+
+      if (error) throw error;
+      setWallets(data || []);
+    } catch (err: any) {
+      toast({ title: 'Error loading wallets', description: err?.message || 'Failed to load wallets', variant: 'destructive' });
     }
-
-    setWallets(data || []);
   };
 
   // Load transaction history
   const loadTransactions = async () => {
     if (!hasAccess) return;
 
-    const { data, error } = await supabase
-      .from('wallet_transactions')
-      .select(`
-        *,
-        monitored_wallets!inner(wallet_address, label)
-      `)
-      .order('timestamp', { ascending: false })
-      .limit(100);
+    try {
+      if (isPreviewSuperAdmin && !user?.id) {
+        const { data, error } = await supabase.functions.invoke('get-wallet-transactions', { body: {} });
+        if (error) throw error;
+        setTransactions(((data as any)?.transactions || []) as WalletTransaction[]);
+        return;
+      }
 
-    if (error) {
-      toast({ title: 'Error loading transactions', description: error.message, variant: 'destructive' });
-      return;
+      const { data, error } = await supabase
+        .from('wallet_transactions')
+        .select(`
+          *,
+          monitored_wallets!inner(wallet_address, label)
+        `)
+        .order('timestamp', { ascending: false })
+        .limit(100);
+
+      if (error) throw error;
+      setTransactions((data || []) as WalletTransaction[]);
+    } catch (err: any) {
+      toast({ title: 'Error loading transactions', description: err?.message || 'Failed to load transactions', variant: 'destructive' });
     }
-
-    setTransactions((data || []) as WalletTransaction[]);
   };
 
   // Add new wallet
@@ -167,6 +181,7 @@ export const WalletMonitor = () => {
     ws.onopen = () => {
       console.log('Connected to wallet monitor');
       setIsConnected(true);
+      try { ws.send(JSON.stringify({ type: 'refresh_wallets' })); } catch {}
     };
 
     ws.onclose = () => {

@@ -35,3 +35,12 @@ verify_jwt = false
 
 [functions.add-monitored-wallet]
 verify_jwt = false
+
+[functions.wallet-monitor]
+verify_jwt = false
+
+[functions.get-monitored-wallets]
+verify_jwt = false
+
+[functions.get-wallet-transactions]
+verify_jwt = false
