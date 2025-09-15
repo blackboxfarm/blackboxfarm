@@ -47,6 +47,7 @@ export function CopyTradingDashboard() {
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
+    console.log('CopyTradingDashboard useEffect - user:', user)
     if (user) {
       loadData()
       
@@ -73,9 +74,11 @@ export function CopyTradingDashboard() {
 
   const loadData = async () => {
     try {
+      console.log('CopyTradingDashboard loadData starting')
       setLoading(true)
       
       // Load copy trades
+      console.log('Loading copy trades for user:', user?.id)
       const { data: trades, error: tradesError } = await supabase
         .from('copy_trades')
         .select('*')
@@ -83,7 +86,11 @@ export function CopyTradingDashboard() {
         .order('created_at', { ascending: false })
         .limit(50)
 
-      if (tradesError) throw tradesError
+      if (tradesError) {
+        console.error('Trades error:', tradesError)
+        throw tradesError
+      }
+      console.log('Loaded trades:', trades)
       setCopyTrades(trades || [])
 
       // Load fantasy positions

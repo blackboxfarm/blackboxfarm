@@ -54,6 +54,7 @@ export function CopyTradingConfig() {
   const [saving, setSaving] = useState(false)
 
   useEffect(() => {
+    console.log('CopyTradingConfig useEffect - user:', user)
     if (user) {
       loadData()
     }
@@ -61,16 +62,22 @@ export function CopyTradingConfig() {
 
   const loadData = async () => {
     try {
+      console.log('CopyTradingConfig loadData starting')
       setLoading(true)
       
       // Load monitored wallets
+      console.log('Loading monitored wallets for user:', user?.id)
       const { data: wallets, error: walletsError } = await supabase
         .from('monitored_wallets')
         .select('*')
         .eq('user_id', user?.id)
         .eq('is_active', true)
 
-      if (walletsError) throw walletsError
+      if (walletsError) {
+        console.error('Wallets error:', walletsError)
+        throw walletsError
+      }
+      console.log('Loaded wallets:', wallets)
       setMonitoredWallets(wallets || [])
 
       // Load copy configs
