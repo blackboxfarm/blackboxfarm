@@ -83,12 +83,12 @@ Deno.serve(async (req) => {
   }
 
   // Function to check if it's first purchase
-  const isFirstPurchase = async (walletAddress: string, tokenMint: string): Promise<boolean> => {
+  const isFirstPurchase = async (monitoredWalletId: string, tokenMint: string): Promise<boolean> => {
     try {
       const { data, error } = await supabase
         .from('wallet_transactions')
         .select('id')
-        .eq('monitored_wallet_id', walletAddress)
+        .eq('monitored_wallet_id', monitoredWalletId)
         .eq('token_mint', tokenMint)
         .eq('transaction_type', 'buy')
         .limit(1)
@@ -98,7 +98,7 @@ Deno.serve(async (req) => {
         return false
       }
 
-      return data?.length === 0
+      return (data?.length || 0) === 0
     } catch (err) {
       console.error('Failed to check first purchase:', err)
       return false
@@ -185,7 +185,7 @@ Deno.serve(async (req) => {
         const solPrice = await getSolPrice()
         const amountUsd = amountSol * solPrice
         const platform = await detectPlatform(signature)
-        const firstPurchase = transactionType === 'buy' ? await isFirstPurchase(feePayer, tokenMint) : false
+        const firstPurchase = transactionType === 'buy' ? await isFirstPurchase(walletData.id, tokenMint) : false
         
         // Check if meets criteria: new + >$1000 + raydium
         const meetsCriteria = transactionType === 'buy' && 
@@ -296,12 +296,18 @@ Deno.serve(async (req) => {
   socket.onmessage = async (event) => {
     try {
       const message = JSON.parse(event.data)
-      
+
       if (message.type === 'refresh_wallets') {
         await loadMonitoredWallets()
-        if (heliusSocket) {
-          heliusSocket.close()
-        }
+        if (heliusSocket) heliusSocket.close()
+        setupHeliusSocket()
+      } else if (message.type === 'add_wallet' && message.address) {
+        monitoredWallets.add(message.address)
+        if (heliusSocket) heliusSocket.close()
+        setupHeliusSocket()
+      } else if (message.type === 'remove_wallet' && message.address) {
+        monitoredWallets.delete(message.address)
+        if (heliusSocket) heliusSocket.close()
         setupHeliusSocket()
       }
     } catch (err) {

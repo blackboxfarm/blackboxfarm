@@ -89,26 +89,56 @@ export const WalletMonitor = () => {
   const addWallet = async () => {
     if (!hasAccess || !newWalletAddress.trim()) return;
 
-    // For preview super admin, don't save to database, just add to local state
+    // For preview super admin, prefer saving to DB so the monitor function can track it
     if (isPreviewSuperAdmin && !user?.id) {
+      // Try DB insert without a user_id. If it fails, fall back to local-only + instruct server to watch dynamically.
+      const { error: previewInsertError } = await (supabase
+        .from('monitored_wallets')
+        // Insert without user_id; rely on defaults/nullables
+        .insert(
+          [
+            {
+              wallet_address: newWalletAddress.trim(),
+              label: newWalletLabel.trim() || newWalletAddress.substring(0, 8) + '...',
+              is_active: true,
+            } as any,
+          ] as any,
+          { defaultToNull: true } as any
+        ));
+
+      if (!previewInsertError) {
+        await loadWallets();
+        await loadTransactions();
+        if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
+          wsRef.current.send(JSON.stringify({ type: 'refresh_wallets' }));
+        }
+        setNewWalletAddress('');
+        setNewWalletLabel('');
+        toast({ title: 'Wallet added', description: 'Now monitoring wallet transactions' });
+        return;
+      }
+
+      // Fall back to local-only monitoring for preview sessions
       const newWallet = {
         id: crypto.randomUUID(),
         user_id: 'preview',
         wallet_address: newWalletAddress.trim(),
         label: newWalletLabel.trim() || newWalletAddress.substring(0, 8) + '...',
-        is_active: true
-      };
-      
-      setWallets(prev => [...prev, newWallet]);
+        is_active: true,
+      } as any;
+
+      setWallets((prev) => [...prev, newWallet]);
       setNewWalletAddress('');
       setNewWalletLabel('');
-      
-      // Notify websocket to refresh
+
+      // Ask server to temporarily watch this wallet too
       if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
-        wsRef.current.send(JSON.stringify({ type: 'refresh_wallets' }));
+        wsRef.current.send(
+          JSON.stringify({ type: 'add_wallet', address: newWallet.wallet_address })
+        );
       }
-      
-      toast({ title: 'Wallet added', description: 'Now monitoring wallet transactions' });
+
+      toast({ title: 'Wallet added (preview)', description: 'Temporarily monitoring this wallet' });
       return;
     }
 
@@ -143,6 +173,17 @@ export const WalletMonitor = () => {
     const confirmed = window.confirm('Remove this wallet from monitoring?');
     if (!confirmed) return;
 
+    // Preview mode: remove locally and tell server to stop watching
+    if (isPreviewSuperAdmin && !user?.id) {
+      const w = wallets.find((x) => x.id === walletId);
+      setWallets((prev) => prev.filter((x) => x.id !== walletId));
+      if (w && wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
+        wsRef.current.send(JSON.stringify({ type: 'remove_wallet', address: w.wallet_address }));
+      }
+      toast({ title: 'Wallet removed', description: 'Stopped monitoring this wallet' });
+      return;
+    }
+
     const { error } = await supabase
       .from('monitored_wallets')
       .delete()
@@ -170,7 +211,7 @@ export const WalletMonitor = () => {
       wsRef.current.close();
     }
 
-    const ws = new WebSocket('wss://apxauapuusmgwbbzjgfl.functions.supabase.co/functions/v1/wallet-monitor');
+    const ws = new WebSocket('wss://apxauapuusmgwbbzjgfl.functions.supabase.co/wallet-monitor');
     
     ws.onopen = () => {
       console.log('Connected to wallet monitor');
