@@ -112,10 +112,15 @@ export const WalletMonitor = () => {
       },
     });
 
+    let duplicateHandled = false;
     if (error || (data && (data as any).error)) {
       const errMsg = error?.message || (data as any)?.error || 'Failed to add wallet';
-      toast({ title: 'Error adding wallet', description: errMsg, variant: 'destructive' });
-      return;
+      if (errMsg.toLowerCase().includes('duplicate') || errMsg.toLowerCase().includes('already exists')) {
+        duplicateHandled = true; // treat as success
+      } else {
+        toast({ title: 'Error adding wallet', description: errMsg, variant: 'destructive' });
+        return;
+      }
     }
 
     setNewWalletAddress('');
@@ -130,7 +135,11 @@ export const WalletMonitor = () => {
       wsRef.current.send(JSON.stringify({ type: 'refresh_wallets' }));
     }
 
-    toast({ title: 'Wallet added', description: 'Now monitoring wallet transactions' });
+    const status = (data as any)?.status;
+    toast({ 
+      title: duplicateHandled || status === 'already_exists' ? 'Wallet already monitored' : 'Wallet added',
+      description: 'Monitoring wallet transactions'
+    });
   };
 
   // Remove wallet
