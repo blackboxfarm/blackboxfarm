@@ -89,10 +89,33 @@ export const WalletMonitor = () => {
   const addWallet = async () => {
     if (!hasAccess || !newWalletAddress.trim()) return;
 
+    // For preview super admin, don't save to database, just add to local state
+    if (isPreviewSuperAdmin && !user?.id) {
+      const newWallet = {
+        id: crypto.randomUUID(),
+        user_id: 'preview',
+        wallet_address: newWalletAddress.trim(),
+        label: newWalletLabel.trim() || newWalletAddress.substring(0, 8) + '...',
+        is_active: true
+      };
+      
+      setWallets(prev => [...prev, newWallet]);
+      setNewWalletAddress('');
+      setNewWalletLabel('');
+      
+      // Notify websocket to refresh
+      if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
+        wsRef.current.send(JSON.stringify({ type: 'refresh_wallets' }));
+      }
+      
+      toast({ title: 'Wallet added', description: 'Now monitoring wallet transactions' });
+      return;
+    }
+
     const { error } = await supabase
       .from('monitored_wallets')
       .insert([{
-        user_id: user?.id || 'preview-super-admin',
+        user_id: user?.id,
         wallet_address: newWalletAddress.trim(),
         label: newWalletLabel.trim() || newWalletAddress.substring(0, 8) + '...',
         is_active: true
