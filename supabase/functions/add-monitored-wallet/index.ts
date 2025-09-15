@@ -65,11 +65,29 @@ Deno.serve(async (req) => {
       .single()
 
     if (error) {
+      // Handle duplicates gracefully: return the existing row instead of 400
+      const errAny: any = error as any
+      if (errAny?.code === '23505' || errAny?.message?.toLowerCase().includes('duplicate key')) {
+        const { data: existing, error: fetchErr } = await supabase
+          .from('monitored_wallets')
+          .select('*')
+          .eq('user_id', insertPayload.user_id)
+          .eq('wallet_address', wallet_address)
+          .single()
+
+        if (!fetchErr && existing) {
+          return new Response(
+            JSON.stringify({ wallet: existing, status: 'already_exists' }),
+            { status: 200, headers: corsHeaders }
+          )
+        }
+      }
+
       console.error('Failed to insert monitored wallet:', error)
       return new Response(JSON.stringify({ error: error.message }), { status: 400, headers: corsHeaders })
     }
 
-    return new Response(JSON.stringify({ wallet: data }), { status: 200, headers: corsHeaders })
+    return new Response(JSON.stringify({ wallet: data, status: 'created' }), { status: 200, headers: corsHeaders })
   } catch (e) {
     console.error('add-monitored-wallet unexpected error:', e)
     return new Response(JSON.stringify({ error: 'internal_error' }), { status: 500, headers: corsHeaders })
