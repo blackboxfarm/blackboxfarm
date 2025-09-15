@@ -481,6 +481,10 @@ export function BaglessHoldersReport() {
                             .filter(h => !h.isLiquidityPool && categoryFilter(h))
                             .reduce((sum, holder) => sum + holder.balance, 0);
                         };
+                      
+                      // Calculate LP balance from liquidity pools
+                      const lpBalance = report.liquidityPools?.reduce((sum, lp) => sum + lp.balance, 0) || 0;
+                      
                       const trueWhaleBalance = getTokenBalanceForCategory(h => h.isTrueWhaleWallet);
                       const babyWhaleBalance = getTokenBalanceForCategory(h => h.isBabyWhaleWallet);
                       const superBossBalance = getTokenBalanceForCategory(h => h.isSuperBossWallet);
@@ -492,10 +496,13 @@ export function BaglessHoldersReport() {
                       const smallBalance = getTokenBalanceForCategory(h => h.isSmallWallet);
                       const dustBalance = getTokenBalanceForCategory(h => h.isDustWallet);
 
-                      const totalTokenBalance = trueWhaleBalance + babyWhaleBalance + superBossBalance + kingpinBalance + bossBalance + realBalance + largeBalance + mediumBalance + smallBalance + dustBalance;
+                      // Include LP balance in total for proper percentage calculations
+                      const totalTokenBalance = lpBalance + trueWhaleBalance + babyWhaleBalance + superBossBalance + kingpinBalance + bossBalance + realBalance + largeBalance + mediumBalance + smallBalance + dustBalance;
                       
                       // Layers ordered top to bottom (largest holders at top, smallest at bottom) - REVERSED ORDER
+                      // LP is added as the foundational layer (bottom/largest)
                       const layers = [
+                        { name: 'Liquidity Pool', count: report.liquidityPoolsDetected || 0, balance: lpBalance, color: 'bg-yellow-600', textColor: 'text-yellow-600' },
                         { name: 'True Whale', count: report.trueWhaleWallets || 0, balance: trueWhaleBalance, color: 'bg-red-500', textColor: 'text-red-500' },
                         { name: 'Baby Whale', count: report.babyWhaleWallets || 0, balance: babyWhaleBalance, color: 'bg-purple-500', textColor: 'text-purple-500' },
                         { name: 'Super Boss', count: report.superBossWallets || 0, balance: superBossBalance, color: 'bg-indigo-500', textColor: 'text-indigo-500' },
@@ -579,7 +586,11 @@ export function BaglessHoldersReport() {
                       </div>
                       <div className="flex items-center gap-2">
                         <div className="w-3 h-3 bg-red-500 rounded"></div>
-                        <span>True Whale (≥$5K) - Bottom Layer</span>
+                        <span>True Whale (≥$5K)</span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <div className="w-3 h-3 bg-yellow-600 rounded"></div>
+                        <span>Liquidity Pool - Foundation Layer</span>
                       </div>
                     </div>
                   </div>
@@ -615,6 +626,16 @@ export function BaglessHoldersReport() {
                         </div>
                         <div className="text-xs">
                           {((report.trueWhaleWallets || 0) + (report.superBossWallets || 0) + (report.babyWhaleWallets || 0))} wallets
+                        </div>
+                      </div>
+                      
+                      <div className="p-2 bg-yellow-500/10 border border-yellow-500/20 rounded">
+                        <div className="font-medium text-yellow-700 dark:text-yellow-300">Foundation (LP)</div>
+                        <div className="text-xs text-muted-foreground">
+                          Liquidity Pool - Price Stability Base
+                        </div>
+                        <div className="text-xs">
+                          {report.liquidityPoolsDetected || 0} pool{(report.liquidityPoolsDetected || 0) !== 1 ? 's' : ''}
                         </div>
                       </div>
                     </div>
