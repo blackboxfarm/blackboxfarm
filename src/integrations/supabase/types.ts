@@ -759,6 +759,36 @@ export type Database = {
           },
         ]
       }
+      monitored_wallets: {
+        Row: {
+          created_at: string
+          id: string
+          is_active: boolean
+          label: string | null
+          updated_at: string
+          user_id: string
+          wallet_address: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          is_active?: boolean
+          label?: string | null
+          updated_at?: string
+          user_id: string
+          wallet_address: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          is_active?: boolean
+          label?: string | null
+          updated_at?: string
+          user_id?: string
+          wallet_address?: string
+        }
+        Relationships: []
+      }
       notifications: {
         Row: {
           created_at: string
@@ -1743,6 +1773,65 @@ export type Database = {
           wallet_type?: string
         }
         Relationships: []
+      }
+      wallet_transactions: {
+        Row: {
+          amount_sol: number
+          amount_usd: number | null
+          created_at: string
+          id: string
+          is_first_purchase: boolean
+          meets_criteria: boolean
+          monitored_wallet_id: string
+          platform: string | null
+          signature: string
+          timestamp: string
+          token_mint: string
+          token_name: string | null
+          token_symbol: string | null
+          transaction_type: string
+        }
+        Insert: {
+          amount_sol: number
+          amount_usd?: number | null
+          created_at?: string
+          id?: string
+          is_first_purchase?: boolean
+          meets_criteria?: boolean
+          monitored_wallet_id: string
+          platform?: string | null
+          signature: string
+          timestamp: string
+          token_mint: string
+          token_name?: string | null
+          token_symbol?: string | null
+          transaction_type: string
+        }
+        Update: {
+          amount_sol?: number
+          amount_usd?: number | null
+          created_at?: string
+          id?: string
+          is_first_purchase?: boolean
+          meets_criteria?: boolean
+          monitored_wallet_id?: string
+          platform?: string | null
+          signature?: string
+          timestamp?: string
+          token_mint?: string
+          token_name?: string | null
+          token_symbol?: string | null
+          transaction_type?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "wallet_transactions_monitored_wallet_id_fkey"
+            columns: ["monitored_wallet_id"]
+            isOneToOne: false
+            referencedRelation: "monitored_wallets"
+            referencedColumns: ["id"]
+          },
+        ]
       }
     }
     Views: {

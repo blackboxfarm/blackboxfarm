@@ -13,6 +13,7 @@ import { DashboardStatsWidget } from "@/components/DashboardStatsWidget";
 import { RealTimeTrading } from "@/components/trading/RealTimeTrading";
 import { WalletBalanceMonitor } from "@/components/WalletBalanceMonitor";
 import { WalletInvestigator } from "@/components/WalletInvestigator";
+import { WalletMonitor } from "@/components/WalletMonitor";
 
 import SecretsModal from "@/components/SecretsModal";
 import { PasswordLogin } from "@/components/PasswordLogin";
@@ -178,7 +179,7 @@ export default function Index() {
         <DashboardStatsWidget />
 
         <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
-          <TabsList className="grid w-full grid-cols-8 tech-border">
+          <TabsList className="grid w-full grid-cols-9 tech-border">
             <TabsTrigger value="server-control" className="text-xs">
               🤖 Server Control
             </TabsTrigger>
@@ -202,6 +203,9 @@ export default function Index() {
             </TabsTrigger>
             <TabsTrigger value="investigator" className="text-xs">
               🔍 Investigator
+            </TabsTrigger>
+            <TabsTrigger value="wallet-monitor" className="text-xs">
+              👁️ Wallet Monitor
             </TabsTrigger>
           </TabsList>
 
@@ -278,6 +282,10 @@ export default function Index() {
                 <WalletInvestigator />
               </CardContent>
             </Card>
+          </TabsContent>
+
+          <TabsContent value="wallet-monitor">
+            <WalletMonitor />
           </TabsContent>
         </Tabs>
       </div>
