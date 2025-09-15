@@ -36,11 +36,11 @@ Deno.serve(async (req) => {
 
   const supabaseUrl = Deno.env.get('SUPABASE_URL')!
   const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
-  const heliusApiKey = Deno.env.get('HELIUS_API_KEY') || Deno.env.get('HELIOS_API_KEY')
+  const heliusApiKey = Deno.env.get('HELIOS_API_KEY')
 
   if (!heliusApiKey) {
-    console.error('Helius/Helios API key not configured (set HELIUS_API_KEY or HELIOS_API_KEY)')
-    socket.close(1008, 'Server configuration error: missing Helius API key')
+    console.error('HELIOS_API_KEY not configured')
+    socket.close(1008, 'Server configuration error')
     return response
   }
 
