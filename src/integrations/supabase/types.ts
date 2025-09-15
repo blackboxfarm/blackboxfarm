@@ -679,6 +679,90 @@ export type Database = {
           },
         ]
       }
+      copy_trades: {
+        Row: {
+          amount_sol: number | null
+          amount_usd: number
+          copy_config_id: string
+          created_at: string
+          error_message: string | null
+          executed_at: string | null
+          id: string
+          is_fantasy: boolean
+          original_transaction_id: string | null
+          original_wallet_address: string
+          price_per_token: number | null
+          profit_loss_usd: number | null
+          sell_percentage: number | null
+          status: string
+          token_amount: number | null
+          token_mint: string
+          token_symbol: string | null
+          trade_type: string
+          transaction_signature: string | null
+          user_id: string
+        }
+        Insert: {
+          amount_sol?: number | null
+          amount_usd: number
+          copy_config_id: string
+          created_at?: string
+          error_message?: string | null
+          executed_at?: string | null
+          id?: string
+          is_fantasy?: boolean
+          original_transaction_id?: string | null
+          original_wallet_address: string
+          price_per_token?: number | null
+          profit_loss_usd?: number | null
+          sell_percentage?: number | null
+          status?: string
+          token_amount?: number | null
+          token_mint: string
+          token_symbol?: string | null
+          trade_type: string
+          transaction_signature?: string | null
+          user_id: string
+        }
+        Update: {
+          amount_sol?: number | null
+          amount_usd?: number
+          copy_config_id?: string
+          created_at?: string
+          error_message?: string | null
+          executed_at?: string | null
+          id?: string
+          is_fantasy?: boolean
+          original_transaction_id?: string | null
+          original_wallet_address?: string
+          price_per_token?: number | null
+          profit_loss_usd?: number | null
+          sell_percentage?: number | null
+          status?: string
+          token_amount?: number | null
+          token_mint?: string
+          token_symbol?: string | null
+          trade_type?: string
+          transaction_signature?: string | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "copy_trades_copy_config_id_fkey"
+            columns: ["copy_config_id"]
+            isOneToOne: false
+            referencedRelation: "wallet_copy_configs"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "copy_trades_original_transaction_id_fkey"
+            columns: ["original_transaction_id"]
+            isOneToOne: false
+            referencedRelation: "wallet_transactions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       development_ideas: {
         Row: {
           category: string
@@ -758,6 +842,104 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      fantasy_positions: {
+        Row: {
+          average_buy_price: number | null
+          balance: number
+          created_at: string
+          current_value_usd: number | null
+          fantasy_wallet_id: string
+          first_purchase_at: string | null
+          id: string
+          last_transaction_at: string
+          profit_loss_percentage: number | null
+          profit_loss_usd: number | null
+          token_mint: string
+          token_name: string | null
+          token_symbol: string | null
+          total_invested_usd: number
+          updated_at: string
+        }
+        Insert: {
+          average_buy_price?: number | null
+          balance?: number
+          created_at?: string
+          current_value_usd?: number | null
+          fantasy_wallet_id: string
+          first_purchase_at?: string | null
+          id?: string
+          last_transaction_at?: string
+          profit_loss_percentage?: number | null
+          profit_loss_usd?: number | null
+          token_mint: string
+          token_name?: string | null
+          token_symbol?: string | null
+          total_invested_usd?: number
+          updated_at?: string
+        }
+        Update: {
+          average_buy_price?: number | null
+          balance?: number
+          created_at?: string
+          current_value_usd?: number | null
+          fantasy_wallet_id?: string
+          first_purchase_at?: string | null
+          id?: string
+          last_transaction_at?: string
+          profit_loss_percentage?: number | null
+          profit_loss_usd?: number | null
+          token_mint?: string
+          token_name?: string | null
+          token_symbol?: string | null
+          total_invested_usd?: number
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "fantasy_positions_fantasy_wallet_id_fkey"
+            columns: ["fantasy_wallet_id"]
+            isOneToOne: false
+            referencedRelation: "fantasy_wallets"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      fantasy_wallets: {
+        Row: {
+          balance_usd: number
+          created_at: string
+          id: string
+          total_invested: number
+          total_profit_loss: number
+          total_trades: number
+          updated_at: string
+          user_id: string
+          win_rate: number | null
+        }
+        Insert: {
+          balance_usd?: number
+          created_at?: string
+          id?: string
+          total_invested?: number
+          total_profit_loss?: number
+          total_trades?: number
+          updated_at?: string
+          user_id: string
+          win_rate?: number | null
+        }
+        Update: {
+          balance_usd?: number
+          created_at?: string
+          id?: string
+          total_invested?: number
+          total_profit_loss?: number
+          total_trades?: number
+          updated_at?: string
+          user_id?: string
+          win_rate?: number | null
+        }
+        Relationships: []
       }
       monitored_wallets: {
         Row: {
@@ -1685,6 +1867,59 @@ export type Database = {
         }
         Relationships: []
       }
+      wallet_copy_configs: {
+        Row: {
+          copy_sell_percentage: boolean
+          created_at: string
+          id: string
+          is_enabled: boolean
+          is_fantasy_mode: boolean
+          max_daily_trades: number | null
+          max_position_size_usd: number | null
+          monitored_wallet_id: string
+          new_buy_amount_usd: number
+          rebuy_amount_usd: number
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          copy_sell_percentage?: boolean
+          created_at?: string
+          id?: string
+          is_enabled?: boolean
+          is_fantasy_mode?: boolean
+          max_daily_trades?: number | null
+          max_position_size_usd?: number | null
+          monitored_wallet_id: string
+          new_buy_amount_usd?: number
+          rebuy_amount_usd?: number
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          copy_sell_percentage?: boolean
+          created_at?: string
+          id?: string
+          is_enabled?: boolean
+          is_fantasy_mode?: boolean
+          max_daily_trades?: number | null
+          max_position_size_usd?: number | null
+          monitored_wallet_id?: string
+          new_buy_amount_usd?: number
+          rebuy_amount_usd?: number
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "wallet_copy_configs_monitored_wallet_id_fkey"
+            columns: ["monitored_wallet_id"]
+            isOneToOne: false
+            referencedRelation: "monitored_wallets"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       wallet_pools: {
         Row: {
           created_at: string | null
@@ -1728,6 +1963,45 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      wallet_positions: {
+        Row: {
+          average_buy_price: number | null
+          balance: number
+          created_at: string
+          first_purchase_at: string | null
+          id: string
+          last_transaction_at: string
+          token_mint: string
+          total_invested_usd: number
+          updated_at: string
+          wallet_address: string
+        }
+        Insert: {
+          average_buy_price?: number | null
+          balance?: number
+          created_at?: string
+          first_purchase_at?: string | null
+          id?: string
+          last_transaction_at?: string
+          token_mint: string
+          total_invested_usd?: number
+          updated_at?: string
+          wallet_address: string
+        }
+        Update: {
+          average_buy_price?: number | null
+          balance?: number
+          created_at?: string
+          first_purchase_at?: string | null
+          id?: string
+          last_transaction_at?: string
+          token_mint?: string
+          total_invested_usd?: number
+          updated_at?: string
+          wallet_address?: string
+        }
+        Relationships: []
       }
       wallet_security_audit: {
         Row: {
