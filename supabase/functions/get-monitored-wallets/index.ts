@@ -31,6 +31,7 @@ Deno.serve(async (req) => {
       .from('monitored_wallets')
       .select('*')
       .eq('user_id', targetUserId)
+      .eq('is_active', true)
       .order('created_at', { ascending: false })
 
     if (error) {

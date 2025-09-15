@@ -61,6 +61,17 @@ export function CopyTradingConfig() {
     loadData()
   }, [user])
 
+  // Listen for preview data claim events to reload data
+  useEffect(() => {
+    const handlePreviewDataClaimed = () => {
+      console.log('Preview data claimed event received, reloading data...')
+      loadData()
+    }
+
+    window.addEventListener('preview-data-claimed', handlePreviewDataClaimed)
+    return () => window.removeEventListener('preview-data-claimed', handlePreviewDataClaimed)
+  }, [])
+
   const loadData = async () => {
     try {
       console.log('CopyTradingConfig loadData starting')
@@ -160,7 +171,7 @@ export function CopyTradingConfig() {
       }
 
       await loadData()
-      toast({ title: 'Success', description: 'Copy configuration updated successfully' })
+      toast({ title: 'Success', description: 'Copy configuration updated successfully. Saved to cloud!' })
     } catch (error) {
       console.error('Error updating copy config:', error)
       toast({ title: 'Error', description: 'Failed to update copy configuration', variant: 'destructive' })
@@ -259,7 +270,7 @@ export function CopyTradingConfig() {
       setWalletAddress('')
       setWalletLabel('')
       await loadData()
-      toast({ title: 'Wallet added', description: 'Backfilled last 24h and loaded config.' })
+      toast({ title: 'Wallet added', description: 'Backfilled last 24h and loaded config. Saved to cloud!' })
     } catch (e) {
       console.error('addWalletAndAnalyze error:', e)
       toast({ title: 'Failed to add wallet', description: 'Please try again.', variant: 'destructive' })
