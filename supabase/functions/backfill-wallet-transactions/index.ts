@@ -342,7 +342,7 @@ async function getWalletTransactions(address: string, heliusApiKey: string, hour
   const results: any[] = [];
   let before: string | null = null;
 
-  let remaining: number | null = (typeof limit === 'number' && limit > 0) ? limit : 500;
+  let remaining: number | null = (typeof limit === 'number' && limit > 0) ? Math.max(limit, 500) : 500;
 
   while (true) {
     const pageLimit = remaining != null ? Math.min(100, remaining) : 100;
