@@ -66,13 +66,19 @@ Deno.serve(async (req) => {
 
     console.log(`Successfully processed ${processedTransactions.length} transactions`)
 
+    const monitoredTransactions = processedTransactions.filter(tx => tx.isMonitored)
+    
     return new Response(JSON.stringify({
       success: true,
       wallet_address,
       hours_backfilled: hours,
       transactions_found: transactions.length,
       transactions_processed: processedTransactions.length,
-      copy_trades_triggered: processedTransactions.length,
+      copy_trades_triggered: monitoredTransactions.length,
+      monitored_wallet: monitoredTransactions.length > 0,
+      message: processedTransactions.length > 0 
+        ? `Successfully analyzed ${processedTransactions.length} swap transactions${monitoredTransactions.length > 0 ? ` and triggered ${monitoredTransactions.length} copy trades` : ''}.`
+        : 'No swap transactions found in the specified time period.',
       transactions: processedTransactions
     }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' }
@@ -209,8 +215,8 @@ async function processTransaction(supabase: any, txData: any, walletAddress: str
     const solPrice = solPriceResponse?.price || 233
     const amountUsd = (parseFloat(amountSol) / 1e9) * solPrice
 
-    // Determine trade type
-    let tradeType = 'buy'
+    // Determine trade type for copy trading system
+    let tradeType = 'new_buy'  // Map to copy trading system format
     if (isSell) {
       tradeType = 'sell'
     } else if (isBuy && !isFirstPurchase) {
@@ -226,7 +232,7 @@ async function processTransaction(supabase: any, txData: any, walletAddress: str
     const transactionData = {
       monitored_wallet_id: null, // Will be set if this wallet is being monitored
       signature,
-      transaction_type: isBuy ? 'buy' : 'sell',
+      transaction_type: isBuy ? 'buy' : 'sell', // Keep database format as 'buy'/'sell'
       token_mint: tokenMint,
       token_symbol: tokenMetadata?.symbol,
       token_name: tokenMetadata?.name,
@@ -267,7 +273,8 @@ async function processTransaction(supabase: any, txData: any, walletAddress: str
       ...transactionData,
       trade_type: tradeType,
       sell_percentage: position.sell_percentage,
-      wallet_address: walletAddress
+      wallet_address: walletAddress,
+      isMonitored: !!monitoredWallet
     }
   }
 

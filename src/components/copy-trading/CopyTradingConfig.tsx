@@ -216,9 +216,11 @@ export function CopyTradingConfig() {
 
       if (error) throw error
 
+      const message = data.message || `Found ${data.transactions_processed || 0} transactions in last 24 hours.`
+      
       toast({
         title: "Analysis Complete",
-        description: `Found ${data.transactions_processed} transactions in last 24 hours. Copy trades have been simulated.`
+        description: `${message}${data.copy_trades_triggered > 0 ? ` Triggered ${data.copy_trades_triggered} copy trades.` : ''}`
       })
 
     } catch (error) {
@@ -269,14 +271,19 @@ export function CopyTradingConfig() {
       }
 
       // 3) Backfill last 24h to initialize transactions and trigger copy logic
-      await supabase.functions.invoke('backfill-wallet-transactions', {
+      const { data: backfillData, error: backfillError } = await supabase.functions.invoke('backfill-wallet-transactions', {
         body: { wallet_address: walletAddress.trim(), hours: 24 }
       })
 
       setWalletAddress('')
       setWalletLabel('')
       await loadData()
-      toast({ title: 'Wallet added', description: 'Backfilled last 24h and loaded config. Saved to cloud!' })
+      
+      const backfillMessage = backfillData?.message || `Found ${backfillData?.transactions_processed || 0} transactions`
+      toast({ 
+        title: 'Wallet added successfully', 
+        description: `${backfillMessage}. Configuration saved and ready for copy trading!` 
+      })
     } catch (e) {
       console.error('addWalletAndAnalyze error:', e)
       toast({ title: 'Failed to add wallet', description: 'Please try again.', variant: 'destructive' })
