@@ -1,4 +1,4 @@
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.54.0'
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -6,67 +6,53 @@ const corsHeaders = {
 }
 
 interface BackfillRequest {
-  wallet_address: string;
-  hours?: number; // Default 24 hours
+  wallet_address: string
+  hours: number
 }
 
 Deno.serve(async (req) => {
+  // Handle CORS preflight requests
   if (req.method === 'OPTIONS') {
-    return new Response(null, { headers: corsHeaders })
+    return new Response(null, { headers: corsHeaders });
   }
 
   try {
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!
-    const serviceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
-    const heliusApiKey = Deno.env.get('HELIUS_API_KEY')
-    const supabase = createClient(supabaseUrl, serviceKey)
+    const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
+    const heliusApiKey = Deno.env.get('HELIUS_API_KEY')!
 
-    if (!heliusApiKey) {
-      return new Response(JSON.stringify({ 
-        error: 'HELIUS_API_KEY not configured',
-        message: 'Please add the HELIUS_API_KEY secret in Supabase Functions settings'
-      }), {
-        status: 400,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
-      })
-    }
+    const supabase = createClient(supabaseUrl, supabaseServiceKey)
 
-    const { wallet_address, hours = 24 }: BackfillRequest = await req.json()
+    const { wallet_address, hours }: BackfillRequest = await req.json()
 
     console.log(`Starting backfill for wallet ${wallet_address} for last ${hours} hours`)
 
-    // Calculate the time range
-    const endTime = new Date()
-    const startTime = new Date(endTime.getTime() - (hours * 60 * 60 * 1000))
-
-    // Get transactions from Helius
-    const transactions = await getWalletTransactions(heliusApiKey, wallet_address, startTime, endTime)
-    
+    const transactions = await getWalletTransactions(wallet_address, hours, heliusApiKey)
     console.log(`Found ${transactions.length} transactions to analyze`)
 
+    // Process each transaction and trigger copy trades if applicable
     const processedTransactions = []
-    const walletPositions = new Map<string, any>()
-
-    // Process transactions in chronological order
-    transactions.sort((a, b) => a.timestamp - b.timestamp)
-
-    for (const tx of transactions) {
+    const totalTransactions = transactions.length
+    for (const txData of transactions) {
       try {
-        const processedTx = await processTransaction(supabase, tx, wallet_address, walletPositions)
-        if (processedTx) {
-          processedTransactions.push(processedTx)
+        const result = await processTransaction(txData, wallet_address, supabase)
+        if (result) {
+          processedTransactions.push(result)
           
-          // Trigger copy trades for this transaction
-          await triggerCopyTrades(supabase, processedTx)
+          // Trigger copy trades if this wallet is monitored
+          if (result.isMonitored) {
+            await triggerCopyTrades([result], supabase)
+          }
         }
       } catch (error) {
-        console.error(`Error processing transaction ${tx.signature}:`, error)
+        console.error(`Error processing transaction ${txData.signature}:`, error)
       }
     }
 
     console.log(`Successfully processed ${processedTransactions.length} transactions`)
 
     const monitoredTransactions = processedTransactions.filter(tx => tx.isMonitored)
+    const errorCount = totalTransactions - processedTransactions.length
     
     return new Response(JSON.stringify({
       success: true,
@@ -74,44 +60,53 @@ Deno.serve(async (req) => {
       hours_backfilled: hours,
       transactions_found: transactions.length,
       transactions_processed: processedTransactions.length,
+      error_count: errorCount,
       copy_trades_triggered: monitoredTransactions.length,
       monitored_wallet: monitoredTransactions.length > 0,
-      message: processedTransactions.length > 0 
-        ? `Successfully analyzed ${processedTransactions.length} swap transactions${monitoredTransactions.length > 0 ? ` and triggered ${monitoredTransactions.length} copy trades` : ''}.`
-        : 'No swap transactions found in the specified time period.',
+      message: transactions.length > 0 
+        ? `Found ${transactions.length} transactions, processed ${processedTransactions.length} swaps${errorCount > 0 ? ` (${errorCount} parsing errors)` : ''}${monitoredTransactions.length > 0 ? `, triggered ${monitoredTransactions.length} copy trades` : ''}.`
+        : 'No transactions found in the specified time period.',
       transactions: processedTransactions
     }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' }
     })
 
   } catch (error) {
-    console.error('Error in backfill-wallet-transactions:', error)
-    return new Response(JSON.stringify({ error: error.message }), {
+    console.error('Backfill error:', error)
+    return new Response(JSON.stringify({
+      success: false,
+      error: error.message
+    }), {
       status: 500,
       headers: { ...corsHeaders, 'Content-Type': 'application/json' }
     })
   }
 })
 
-async function getWalletTransactions(apiKey: string, walletAddress: string, startTime: Date, endTime: Date) {
-  const transactions = []
-  let before = undefined
+async function getWalletTransactions(address: string, hours: number, heliusApiKey: string) {
+  const endTime = new Date()
+  const startTime = new Date(endTime.getTime() - (hours * 60 * 60 * 1000))
   
-  while (true) {
-    const url = `https://api.helius.xyz/v0/addresses/${walletAddress}/transactions`
-    const params = new URLSearchParams({
-      'api-key': apiKey,
-      limit: '100',
+  let transactions = []
+  let before = null
+
+  for (let page = 0; page < 10; page++) { // Limit to 10 pages max
+    const requestBody = {
+      address,
+      before,
+      limit: 50,
       type: 'SWAP'
-    })
-    
-    if (before) {
-      params.append('before', before)
     }
 
-    const response = await fetch(`${url}?${params}`)
+    const response = await fetch(`https://api.helius.xyz/v0/addresses/${address}/transactions?api-key=${heliusApiKey}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(requestBody)
+    })
+
     if (!response.ok) {
-      throw new Error(`Helius API error: ${response.status} ${response.statusText}`)
+      console.error('Helius API error:', response.status, await response.text())
+      break
     }
 
     const data = await response.json()
@@ -144,32 +139,47 @@ async function getWalletTransactions(apiKey: string, walletAddress: string, star
   return transactions
 }
 
-async function processTransaction(supabase: any, txData: any, walletAddress: string, walletPositions: Map<string, any>) {
-  // Similar to the wallet-monitor processTransaction but for historical data
+async function processTransaction(txData: any, walletAddress: string, supabase: any) {
   const signature = txData.signature
-  const timestamp = new Date(txData.timestamp * 1000)
+  const timestamp = new Date(txData.timestamp * 1000).toISOString()
 
-  // Look for swap events in the transaction
-  const swapEvents = []
-  
-  if (txData.events?.swap) {
-    swapEvents.push(...txData.events.swap)
+  // Process swap events - handle both array and single object formats
+  const swapData = txData.events?.swap
+  if (!swapData) {
+    return null // Skip non-swap transactions
   }
-
-  if (swapEvents.length === 0) {
+  
+  // Normalize to array format
+  const events = Array.isArray(swapData) ? swapData : [swapData]
+  if (events.length === 0) {
     return null
   }
 
-  for (const swap of swapEvents) {
+  for (const swapEvent of events) {
+    // Safely handle token inputs/outputs - they might be arrays or single objects
+    const tokenInputsRaw = swapEvent.tokenInputs || []
+    const tokenOutputsRaw = swapEvent.tokenOutputs || []
+    
+    const tokenInputs = Array.isArray(tokenInputsRaw) ? tokenInputsRaw : (tokenInputsRaw ? [tokenInputsRaw] : [])
+    const tokenOutputs = Array.isArray(tokenOutputsRaw) ? tokenOutputsRaw : (tokenOutputsRaw ? [tokenOutputsRaw] : [])
+    
+    if (tokenInputs.length === 0 && tokenOutputs.length === 0) {
+      continue // Skip if no token data
+    }
+
+    const swap = swapEvent
+    const isSol = (mint: string) => mint === 'So11111111111111111111111111111111111111112'
+    
     // Determine if this is a buy or sell
-    const isBuy = swap.tokenInputs?.[0]?.mint === 'So11111111111111111111111111111111111111112' // SOL
-    const isSell = swap.tokenOutputs?.[0]?.mint === 'So11111111111111111111111111111111111111112' // SOL
-
-    if (!isBuy && !isSell) continue
-
+    const isBuy = swap.tokenInputs?.some((input: any) => isSol(input.mint))
+    const isSell = swap.tokenOutputs?.some((output: any) => isSol(output.mint))
+    
+    if (!isBuy && !isSell) continue // Skip if neither buy nor sell
+    
+    // Get the token mint (the non-SOL token)
     const tokenMint = isBuy ? 
-      swap.tokenOutputs?.[0]?.mint : 
-      swap.tokenInputs?.[0]?.mint
+      swap.tokenOutputs?.find((output: any) => !isSol(output.mint))?.mint :
+      swap.tokenInputs?.find((input: any) => !isSol(input.mint))?.mint
 
     if (!tokenMint) continue
 
@@ -188,30 +198,34 @@ async function processTransaction(supabase: any, txData: any, walletAddress: str
       .eq('mint_address', tokenMint)
       .single()
 
-    // Determine if this is a first purchase
-    const position = walletPositions.get(tokenMint) || { balance: 0 }
-    const isFirstPurchase = isBuy && position.balance === 0
+    // Check if wallet is being monitored
+    const { data: monitoredWallet } = await supabase
+      .from('monitored_wallets')
+      .select('id')
+      .eq('wallet_address', walletAddress)
+      .eq('is_active', true)
+      .single()
 
-    // Update position tracking
-    if (isBuy) {
-      position.balance += parseFloat(tokenAmount)
-      position.last_buy_time = timestamp
-      if (!position.first_buy_time) {
-        position.first_buy_time = timestamp
-      }
-    } else {
-      const sellPercentage = position.balance > 0 ? (parseFloat(tokenAmount) / position.balance) * 100 : 100
-      position.balance = Math.max(0, position.balance - parseFloat(tokenAmount))
-      position.sell_percentage = sellPercentage
-    }
-    
-    walletPositions.set(tokenMint, position)
+    // Update wallet position
+    await updateWalletPosition(tokenMint, walletAddress, tokenAmount, isBuy, supabase)
 
-    // Detect platform
-    const platform = await detectPlatform(txData.signature)
+    // Get position data for trade classification
+    const { data: position } = await supabase
+      .from('wallet_positions')
+      .select('balance, first_purchase_at')
+      .eq('wallet_address', walletAddress)
+      .eq('token_mint', tokenMint)
+      .single()
 
-    // Get current price for USD calculations
-    const { data: solPriceResponse } = await supabase.functions.invoke('sol-price')
+    const isFirstPurchase = isBuy && (!position || position.balance === 0)
+
+    // Get SOL price at time of transaction
+    const solPriceResponse = await fetch(`https://api.helius.xyz/v0/tokens/metadata?api-key=${Deno.env.get('HELIUS_API_KEY')!}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ mintAccounts: ['So11111111111111111111111111111111111111112'] })
+    }).then(r => r.json()).then(data => data[0]).catch(() => null)
+
     const solPrice = solPriceResponse?.price || 233
     const amountUsd = (parseFloat(amountSol) / 1e9) * solPrice
 
@@ -220,15 +234,12 @@ async function processTransaction(supabase: any, txData: any, walletAddress: str
     if (isSell) {
       tradeType = 'sell'
     } else if (isBuy && !isFirstPurchase) {
-      // Check if this is within a reasonable time frame of the first buy to be considered a rebuy
-      const timeSinceFirstBuy = timestamp.getTime() - (position.first_buy_time?.getTime() || 0)
-      const isRecentRebuy = timeSinceFirstBuy < (24 * 60 * 60 * 1000) // Within 24 hours
-      if (isRecentRebuy) {
-        tradeType = 'rebuy'
-      }
+      tradeType = 'add_buy'
     }
 
-    // Create the transaction record
+    const platform = detectPlatform(signature)
+
+    // If this wallet is monitored, insert the transaction
     const transactionData = {
       monitored_wallet_id: null, // Will be set if this wallet is being monitored
       signature,
@@ -239,40 +250,28 @@ async function processTransaction(supabase: any, txData: any, walletAddress: str
       amount_sol: parseFloat(amountSol) / 1e9,
       amount_usd: amountUsd,
       is_first_purchase: isFirstPurchase,
-      meets_criteria: amountUsd >= 100, // Basic criteria
-      platform,
-      timestamp: timestamp.toISOString(),
-      created_at: new Date().toISOString()
+      meets_criteria: true,
+      timestamp: timestamp,
+      platform: platform
     }
-
-    // Check if this wallet is being monitored
-    const { data: monitoredWallet } = await supabase
-      .from('monitored_wallets')
-      .select('id')
-      .eq('wallet_address', walletAddress)
-      .eq('is_active', true)
-      .single()
 
     if (monitoredWallet) {
       transactionData.monitored_wallet_id = monitoredWallet.id
-
-      // Store in wallet_transactions table
-      const { error: insertError } = await supabase
+      
+      const { error } = await supabase
         .from('wallet_transactions')
         .insert(transactionData)
 
-      if (insertError && !insertError.message.includes('duplicate key')) {
-        console.error('Error inserting transaction:', insertError)
+      if (error) {
+        console.error('Error inserting transaction:', error)
       }
     }
 
-    // Update wallet positions table
-    await updateWalletPosition(supabase, walletAddress, tokenMint, position, tokenMetadata)
-
+    // Return transaction data for copy trading analysis
     return {
       ...transactionData,
       trade_type: tradeType,
-      sell_percentage: position.sell_percentage,
+      sell_percentage: position?.sell_percentage,
       wallet_address: walletAddress,
       isMonitored: !!monitoredWallet
     }
@@ -281,57 +280,36 @@ async function processTransaction(supabase: any, txData: any, walletAddress: str
   return null
 }
 
-async function updateWalletPosition(supabase: any, walletAddress: string, tokenMint: string, position: any, tokenMetadata: any) {
-  const { error } = await supabase
-    .from('wallet_positions')
-    .upsert({
-      wallet_address: walletAddress,
-      token_mint: tokenMint,
-      balance: position.balance,
-      first_purchase_at: position.first_buy_time?.toISOString(),
-      last_transaction_at: new Date().toISOString()
-    }, {
-      onConflict: 'wallet_address,token_mint'
-    })
+async function updateWalletPosition(tokenMint: string, walletAddress: string, tokenAmount: string, isBuy: boolean, supabase: any) {
+  const amount = parseFloat(tokenAmount) / 1e9 // Convert from raw amount
 
-  if (error) {
-    console.error('Error updating wallet position:', error)
-  }
+  await supabase.rpc('upsert_wallet_position', {
+    p_wallet_address: walletAddress,
+    p_token_mint: tokenMint,
+    p_balance_change: isBuy ? amount : -amount,
+    p_is_first_purchase: isBuy
+  })
 }
 
-async function detectPlatform(signature: string): Promise<string> {
-  // Simplified platform detection - in reality would examine program IDs
-  return 'Unknown'
+function detectPlatform(signature: string): string {
+  // Placeholder - could analyze transaction to detect DEX
+  return 'unknown'
 }
 
-async function triggerCopyTrades(supabase: any, transactionData: any) {
-  // Trigger copy trades for this historical transaction
-  if (!transactionData.monitored_wallet_id) return
-
-  const copyTradeRequest = {
-    original_transaction_id: transactionData.signature,
-    original_wallet_address: transactionData.wallet_address,
-    token_mint: transactionData.token_mint,
-    token_symbol: transactionData.token_symbol,
-    token_name: transactionData.token_name,
-    trade_type: transactionData.trade_type,
-    amount_sol: transactionData.amount_sol,
-    amount_usd: transactionData.amount_usd,
-    sell_percentage: transactionData.sell_percentage,
-    price_per_token: transactionData.amount_usd / (transactionData.amount_sol * 233) // Rough price calculation
-  }
-
+async function triggerCopyTrades(transactions: any[], supabase: any) {
   try {
-    console.log('Triggering copy trade for:', copyTradeRequest)
-    const { data, error } = await supabase.functions.invoke('execute-copy-trade', {
-      body: copyTradeRequest
-    })
-    if (error) {
-      console.error('Copy trade invocation error:', error)
-    } else {
-      console.log('Copy trade triggered successfully:', data)
+    for (const tx of transactions) {
+      const { error } = await supabase.functions.invoke('execute-copy-trade', {
+        body: tx
+      })
+      
+      if (error) {
+        console.error('Error triggering copy trade:', error)
+      } else {
+        console.log('Copy trade triggered successfully for transaction:', tx.signature)
+      }
     }
   } catch (error) {
-    console.error('Error triggering copy trade:', error)
+    console.error('Error in triggerCopyTrades:', error)
   }
 }

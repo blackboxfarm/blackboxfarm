@@ -57,6 +57,7 @@ export function CopyTradingConfig() {
   const [walletAddress, setWalletAddress] = useState('')
   const [walletLabel, setWalletLabel] = useState('')
   const [adding, setAdding] = useState(false)
+  const [analyzing, setAnalyzing] = useState<Record<string, boolean>>({})
 
   useEffect(() => {
     console.log('CopyTradingConfig useEffect - user:', user, 'authReady:', authReady)
@@ -204,34 +205,32 @@ export function CopyTradingConfig() {
   }
 
   const runBackfillAnalysis = async (walletAddress: string) => {
+    const walletId = walletAddress
+    setAnalyzing(prev => ({ ...prev, [walletId]: true }))
+    
     try {
-      setSaving(true)
-      
       const { data, error } = await supabase.functions.invoke('backfill-wallet-transactions', {
-        body: {
-          wallet_address: walletAddress,
-          hours: 24
-        }
+        body: { wallet_address: walletAddress, hours: 24 }
       })
 
       if (error) throw error
 
-      const message = data.message || `Found ${data.transactions_processed || 0} transactions in last 24 hours.`
+      const message = data?.message || `Found ${data?.transactions_processed || 0} transactions in last 24 hours.`
       
       toast({
-        title: "Analysis Complete",
-        description: `${message}${data.copy_trades_triggered > 0 ? ` Triggered ${data.copy_trades_triggered} copy trades.` : ''}`
+        title: "24h Analysis Complete",
+        description: message
       })
 
     } catch (error) {
-      console.error('Error running backfill analysis:', error)
+      console.error('Backfill analysis error:', error)
       toast({
-        title: "Error",
-        description: "Failed to run 24-hour analysis",
+        title: "Analysis Failed",
+        description: "Unable to analyze wallet transactions. Please try again.",
         variant: "destructive"
       })
     } finally {
-      setSaving(false)
+      setAnalyzing(prev => ({ ...prev, [walletId]: false }))
     }
   }
   const addWalletAndAnalyze = async () => {
@@ -427,10 +426,16 @@ export function CopyTradingConfig() {
                         variant="outline"
                         size="sm"
                         onClick={() => runBackfillAnalysis(wallet.wallet_address)}
-                        disabled={saving}
+                        disabled={analyzing[wallet.wallet_address]}
                       >
-                        {saving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                        Run 24h Analysis
+                        {analyzing[wallet.wallet_address] ? (
+                          <>
+                            <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                            Analyzing...
+                          </>
+                        ) : (
+                          "Run 24h Analysis"
+                        )}
                       </Button>
                     </div>
                   </div>
