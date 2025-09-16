@@ -117,14 +117,32 @@ Deno.serve(async (req) => {
         : 'No transactions found in the specified time period.',
       // Visibility into fetched txs even if not parsed as swaps
       raw_signatures: transactions.map((t: any) => t.signature),
-      tx_debug_sample: transactions.slice(-Math.min(10, transactions.length)).map((t: any) => ({
-        signature: t.signature,
-        has_swap_event: !!t.events?.swap,
-        native_transfers: Array.isArray(t.nativeTransfers) ? t.nativeTransfers.length : 0,
-        token_transfers: Array.isArray(t.tokenTransfers) ? t.tokenTransfers.length : 0,
-        timestamp: t.timestamp,
-      })),
-      // Return only a small sample of processed swaps (if any)
+      tx_debug_sample: transactions.slice(-Math.min(10, transactions.length)).map((t: any) => {
+        const tts = Array.isArray(t.tokenTransfers) ? t.tokenTransfers : [];
+        const by: Record<string, { inRaw: number; outRaw: number; decimals?: number }> = {};
+        const getRaw = (x: any) => {
+          const v = x?.rawTokenAmount?.tokenAmount ?? x?.tokenAmount ?? x?.amount ?? x?.uiTokenAmount?.amount ?? 0
+          return typeof v === 'string' ? parseFloat(v) : (typeof v === 'number' ? v : 0)
+        }
+        for (const tr of tts) {
+          const mint = tr.mint || tr.tokenMint;
+          if (!mint) continue;
+          if (!by[mint]) by[mint] = { inRaw: 0, outRaw: 0, decimals: tr?.rawTokenAmount?.decimals ?? tr?.decimals };
+          const raw = getRaw(tr);
+          if ((tr.toUserAccount && tr.toUserAccount === wallet_address) || (tr.destinationUserAccount && tr.destinationUserAccount === wallet_address)) by[mint].inRaw += raw;
+          if ((tr.fromUserAccount && tr.fromUserAccount === wallet_address) || (tr.sourceUserAccount && tr.sourceUserAccount === wallet_address)) by[mint].outRaw += raw;
+          if (by[mint].decimals == null) by[mint].decimals = tr?.rawTokenAmount?.decimals ?? tr?.decimals;
+        }
+        const token_mints = Object.entries(by).map(([mint, v]) => ({ mint, inRaw: v.inRaw, outRaw: v.outRaw, netRaw: v.inRaw - v.outRaw, decimals: v.decimals }));
+        return {
+          signature: t.signature,
+          has_swap_event: !!t.events?.swap,
+          native_transfers: Array.isArray(t.nativeTransfers) ? t.nativeTransfers.length : 0,
+          token_transfers: tts.length,
+          token_mints,
+          timestamp: t.timestamp,
+        };
+      }),
       transactions_sample: processedTransactions.slice(-Math.min(50, processedTransactions.length)).map((tx: any) => ({
         signature: tx.signature,
         transaction_type: tx.transaction_type,
