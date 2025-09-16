@@ -316,6 +316,22 @@ function deriveSwapFromTransfers(txData: any, walletAddress: string) {
   }
 }
 
+// Fetch enhanced transaction details from Helius for a specific signature
+async function hydrateTransaction(signature: string, heliusApiKey: string) {
+  try {
+    const url = `https://api.helius.xyz/v0/transactions?api-key=${heliusApiKey}`
+    const data = await fetchJsonWithRetry(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ transactions: [signature] })
+    })
+    if (Array.isArray(data) && data.length > 0) return data[0]
+  } catch (e) {
+    console.error('hydrateTransaction error:', e)
+  }
+  return null
+}
+
 async function getWalletTransactions(address: string, heliusApiKey: string, hours?: number, limit?: number) {
   const endTime = new Date();
   const startTime = typeof hours === 'number' && hours > 0
@@ -390,6 +406,33 @@ async function processTransaction(txData: any, walletAddress: string, supabase: 
       console.log(`Successfully derived swap for ${signature}: ${derived.isBuy ? 'BUY' : 'SELL'}`);
     } else {
       console.log(`Failed to derive swap from transfers for ${signature}`);
+    }
+  }
+  // Hydration fallback: fetch enhanced tx if still no swaps
+  if (!swaps) {
+    try {
+      console.log(`Hydrating ${signature} via Helius /v0/transactions...`);
+      const heliusApiKeyLocal = Deno.env.get('HELIUS_API_KEY')!;
+      const hydrated = await hydrateTransaction(signature, heliusApiKeyLocal);
+      if (hydrated) {
+        // Try events.swap from hydrated
+        swaps = hydrated.events?.swap;
+        if (!swaps) {
+          const derived2 = deriveSwapFromTransfers(hydrated, walletAddress);
+          if (derived2?.event) {
+            swaps = [derived2.event];
+            console.log(`Derived swap after hydration for ${signature}: ${derived2.isBuy ? 'BUY' : 'SELL'}`);
+          } else {
+            console.log(`Hydration still no swap derivation for ${signature}`);
+          }
+        } else {
+          console.log(`Found swap event after hydration for ${signature}`);
+        }
+      } else {
+        console.log(`Hydration returned no data for ${signature}`);
+      }
+    } catch (e) {
+      console.error('Hydration fallback error:', e);
     }
   }
   if (!swaps) {
