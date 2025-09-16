@@ -132,9 +132,10 @@ Deno.serve(async (req) => {
     console.error('Backfill error:', error)
     return new Response(JSON.stringify({
       success: false,
-      error: error.message
+      error: error?.message || String(error),
+      hint: 'Check HELIUS_API_KEY validity, wallet address, and function logs.'
     }), {
-      status: 500,
+      status: 200,
       headers: { ...corsHeaders, 'Content-Type': 'application/json' }
     })
   }
