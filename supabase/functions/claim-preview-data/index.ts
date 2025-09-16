@@ -32,15 +32,51 @@ Deno.serve(async (req) => {
 
     const results: Record<string, number> = {}
 
-    // Helper to run update and capture count
+    // Helper to run update and capture count with duplicate handling
     const runUpdate = async (table: string, column: string = 'user_id') => {
-      const { data, error } = await supabase
-        .from(table)
-        .update({ [column]: realUserId } as any)
-        .eq(column, previewUserId)
-        .select('id')
-      if (error) throw new Error(`${table}: ${error.message}`)
-      results[table] = data?.length || 0
+      try {
+        const { data, error } = await supabase
+          .from(table)
+          .update({ [column]: realUserId } as any)
+          .eq(column, previewUserId)
+          .select('id')
+        if (error) throw new Error(`${table}: ${error.message}`)
+        results[table] = data?.length || 0
+      } catch (err) {
+        const msg = String(err)
+        // Handle duplicate conflicts for monitored_wallets gracefully
+        if (table === 'monitored_wallets' && msg.includes('duplicate key')) {
+          // Resolve by removing preview duplicates that already exist for real user
+          const { data: previewRows } = await supabase
+            .from('monitored_wallets')
+            .select('id, wallet_address')
+            .eq('user_id', previewUserId)
+
+          let deleted = 0, reassigned = 0
+          for (const row of previewRows || []) {
+            const { data: exists } = await supabase
+              .from('monitored_wallets')
+              .select('id')
+              .eq('user_id', realUserId)
+              .eq('wallet_address', row.wallet_address)
+              .maybeSingle()
+
+            if (exists) {
+              await supabase.from('monitored_wallets').delete().eq('id', row.id)
+              deleted++
+            } else {
+              const { error: upErr } = await supabase
+                .from('monitored_wallets')
+                .update({ user_id: realUserId })
+                .eq('id', row.id)
+              if (!upErr) reassigned++
+            }
+          }
+          results[table] = reassigned // report reassigned count
+        } else {
+          throw err
+        }
+      }
     }
 
     // Move monitored_wallets and wallet_copy_configs, copy_trades
@@ -71,6 +107,6 @@ Deno.serve(async (req) => {
     return new Response(JSON.stringify({ success: true, reassigned: results }), { status: 200, headers: corsHeaders })
   } catch (e) {
     console.error('claim-preview-data error:', e)
-    return new Response(JSON.stringify({ error: 'internal_error', detail: String(e) }), { status: 500, headers: corsHeaders })
+    return new Response(JSON.stringify({ success: false, error: 'internal_error', detail: String(e) }), { status: 200, headers: corsHeaders })
   }
 })

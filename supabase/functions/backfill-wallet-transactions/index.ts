@@ -222,14 +222,14 @@ async function getWalletTransactions(address: string, hours: number, heliusApiKe
   const results = [];
   let before = null;
 
-  // Use a sane limit (Helius supports higher; 200 is a good balance).
-  const LIMIT = '200';
+  // Use a sane limit (Helius supports higher; 100 is safe).
+  const LIMIT = '100';
 
   while (true) {
     const params = new URLSearchParams({ 'api-key': heliusApiKey, limit: LIMIT });
     if (before) params.set('before', before);
 
-    const url = `https://api.helius.xyz/v0/addresses/${address}/transactions?${params}`;
+    const url = `https://api.helius.xyz/v0/addresses/${address}/transactions?${params.toString()}`;
     const data = await fetchJsonWithRetry(url, { method: 'GET', headers: { 'Content-Type': 'application/json' } });
 
     if (!Array.isArray(data) || data.length === 0) break;
