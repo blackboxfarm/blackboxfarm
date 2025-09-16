@@ -12,6 +12,7 @@ import { Badge } from '@/components/ui/badge'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { useToast } from '@/hooks/use-toast'
 import { Loader2, Copy, DollarSign, Settings, TrendingUp } from 'lucide-react'
+import { AnalysisModal } from './AnalysisModal'
 
 interface MonitoredWallet {
   id: string
@@ -58,6 +59,16 @@ export function CopyTradingConfig() {
   const [walletLabel, setWalletLabel] = useState('')
   const [adding, setAdding] = useState(false)
   const [analyzing, setAnalyzing] = useState<Record<string, boolean>>({})
+  const [analysisModal, setAnalysisModal] = useState<{
+    isOpen: boolean
+    walletAddress: string
+    requestData?: any
+    responseData?: any
+    error?: string
+  }>({
+    isOpen: false,
+    walletAddress: ''
+  })
 
   useEffect(() => {
     console.log('CopyTradingConfig useEffect - user:', user, 'authReady:', authReady)
@@ -205,15 +216,45 @@ export function CopyTradingConfig() {
   }
 
   const runBackfillAnalysis = async (walletAddress: string) => {
+    const requestData = { 
+      wallet_address: walletAddress, 
+      hours: 24 
+    }
+    
     const walletId = walletAddress
     setAnalyzing(prev => ({ ...prev, [walletId]: true }))
+    setAnalysisModal({
+      isOpen: true,
+      walletAddress,
+      requestData,
+      responseData: undefined,
+      error: undefined
+    })
     
     try {
       const { data, error } = await supabase.functions.invoke('backfill-wallet-transactions', {
-        body: { wallet_address: walletAddress, hours: 24 }
+        body: requestData
       })
 
-      if (error) throw error
+      if (error) {
+        const errorMsg = `Analysis failed: ${error.message}`
+        setAnalysisModal(prev => ({
+          ...prev,
+          error: errorMsg
+        }))
+        toast({
+          title: "Analysis Failed",
+          description: errorMsg,
+          variant: "destructive"
+        })
+        return
+      }
+
+      setAnalysisModal(prev => ({
+        ...prev,
+        responseData: data,
+        error: undefined
+      }))
 
       const message = data?.message || `Found ${data?.transactions_processed || 0} transactions in last 24 hours.`
       
@@ -224,9 +265,14 @@ export function CopyTradingConfig() {
 
     } catch (error) {
       console.error('Backfill analysis error:', error)
+      const errorMsg = "Unable to analyze wallet transactions. Please try again."
+      setAnalysisModal(prev => ({
+        ...prev,
+        error: errorMsg
+      }))
       toast({
         title: "Analysis Failed",
-        description: "Unable to analyze wallet transactions. Please try again.",
+        description: errorMsg,
         variant: "destructive"
       })
     } finally {
@@ -574,6 +620,16 @@ export function CopyTradingConfig() {
           </div>
         </CardContent>
       </Card>
+
+      <AnalysisModal
+        isOpen={analysisModal.isOpen}
+        onClose={() => setAnalysisModal(prev => ({ ...prev, isOpen: false }))}
+        walletAddress={analysisModal.walletAddress}
+        isLoading={analyzing[analysisModal.walletAddress] || false}
+        requestData={analysisModal.requestData}
+        responseData={analysisModal.responseData}
+        error={analysisModal.error}
+      />
     </div>
   )
 }
