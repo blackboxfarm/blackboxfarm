@@ -287,7 +287,8 @@ async function processTransaction(txData: any, walletAddress: string, supabase: 
   const isSol = (m: string) => m === SOL_MINT;
 
   const processed = [];
-  const solPriceUsd = await getSolPriceUSD(Deno.env.get('HELIUS_API_KEY')!);
+  const heliusApiKey = Deno.env.get('HELIUS_API_KEY')!;
+  const solPriceUsd = await getSolPriceUSD(heliusApiKey);
 
   for (const swapEvent of events) {
     const inArr  = Array.isArray(swapEvent.tokenInputs)  ? swapEvent.tokenInputs  : (swapEvent.tokenInputs  ? [swapEvent.tokenInputs]  : []);
