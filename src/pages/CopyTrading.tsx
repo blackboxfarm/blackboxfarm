@@ -1,4 +1,4 @@
-import React from 'react'
+import React, { useEffect, useState } from 'react'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { CopyTradingConfig } from '@/components/copy-trading/CopyTradingConfig'
 import { CopyTradingDashboard } from '@/components/copy-trading/CopyTradingDashboard'
@@ -7,7 +7,14 @@ import { Loader2 } from 'lucide-react'
 
 export default function CopyTrading() {
   const { authReady } = useSuperAdminAuth();
+  const [tab, setTab] = useState('config');
 
+  useEffect(() => {
+    const handler = () => setTab('dashboard');
+    // @ts-ignore - CustomEvent typing
+    window.addEventListener('show-dashboard', handler as any);
+    return () => window.removeEventListener('show-dashboard', handler as any);
+  }, []);
   if (!authReady) {
     return (
       <div className="container mx-auto p-6">
@@ -21,7 +28,7 @@ export default function CopyTrading() {
 
   return (
     <div className="container mx-auto p-6">
-      <Tabs defaultValue="config" className="w-full">
+      <Tabs value={tab} onValueChange={setTab} className="w-full">
         <TabsList className="grid w-full grid-cols-2">
           <TabsTrigger value="config">Configuration</TabsTrigger>
           <TabsTrigger value="dashboard">Dashboard</TabsTrigger>

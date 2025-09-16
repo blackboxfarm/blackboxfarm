@@ -264,6 +264,9 @@ export function CopyTradingConfig() {
         description: message
       })
 
+      // Jump user to dashboard view to see results
+      window.dispatchEvent(new CustomEvent('show-dashboard'))
+
     } catch (error) {
       console.error('Backfill analysis error:', error)
       const errorMsg = "Unable to analyze wallet transactions. Please try again."
@@ -330,6 +333,9 @@ export function CopyTradingConfig() {
         title: 'Wallet added successfully', 
         description: `${backfillMessage}. Configuration saved and ready for copy trading!` 
       })
+
+      // Jump to dashboard to view populated transactions
+      window.dispatchEvent(new CustomEvent('show-dashboard'))
     } catch (e) {
       console.error('addWalletAndAnalyze error:', e)
       toast({ title: 'Failed to add wallet', description: 'Please try again.', variant: 'destructive' })

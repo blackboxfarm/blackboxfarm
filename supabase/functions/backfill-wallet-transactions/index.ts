@@ -70,6 +70,19 @@ Deno.serve(async (req) => {
 
     const { wallet_address, hours, limit }: BackfillRequest = await req.json()
 
+    // Resolve the caller so we attach inserts to THEIR monitored_wallet
+    const authHeader = req.headers.get('Authorization') || ''
+    const token = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : undefined
+
+    let userId: string | null = null
+    if (token) {
+      const { data: ud, error: ue } = await supabase.auth.getUser(token)
+      if (!ue && ud?.user?.id) userId = ud.user.id
+    }
+
+    const fallbackPreviewUserId = Deno.env.get('PREVIEW_SUPER_ADMIN_USER_ID') || '00000000-0000-0000-0000-000000000001'
+    const targetUserId = userId || fallbackPreviewUserId
+
     console.log(`Starting backfill for wallet ${wallet_address} for last ${hours} hours`)
 
     const transactions = await getWalletTransactions(wallet_address, heliusApiKey, hours, limit)
@@ -80,7 +93,7 @@ Deno.serve(async (req) => {
     const totalTransactions = transactions.length
     for (const txData of transactions) {
       try {
-        const results = await processTransaction(txData, wallet_address, supabase)
+        const results = await processTransaction(txData, wallet_address, supabase, targetUserId)
         if (Array.isArray(results) && results.length) {
           processedTransactions.push(...results)
         }
@@ -390,7 +403,7 @@ async function getWalletTransactions(address: string, heliusApiKey: string, hour
 }
 
 // returns ARRAY of processed trades (could be empty)
-async function processTransaction(txData: any, walletAddress: string, supabase: any) {
+async function processTransaction(txData: any, walletAddress: string, supabase: any, targetUserId: string) {
   const signature = txData.signature;
   const timestamp = new Date(txData.timestamp * 1000).toISOString();
 
@@ -509,7 +522,7 @@ async function processTransaction(txData: any, walletAddress: string, supabase: 
   // Insert all (if monitored)
   const { data: monitoredWallet } = await supabase
     .from('monitored_wallets').select('id')
-    .eq('wallet_address', walletAddress).eq('is_active', true).single();
+    .eq('wallet_address', walletAddress).eq('is_active', true).eq('user_id', targetUserId).single();
 
   if (monitoredWallet && processed.length) {
     for (const row of processed) row.monitored_wallet_id = monitoredWallet.id;
