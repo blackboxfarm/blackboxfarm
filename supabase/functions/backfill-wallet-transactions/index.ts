@@ -172,6 +172,8 @@ Deno.serve(async (req) => {
 function deriveSwapFromTransfers(txData: any, walletAddress: string) {
   try {
     const SOL_MINT = 'So11111111111111111111111111111111111111112'
+    const TARGET_TOKEN = '6SVBPAHNQQm4aGMemgMv2WEFTCaXCSqxCyoMucYspump'
+    
     const native = Array.isArray(txData.nativeTransfers) ? txData.nativeTransfers : []
     const tokenTransfers = Array.isArray(txData.tokenTransfers) ? txData.tokenTransfers : []
 
@@ -224,16 +226,31 @@ function deriveSwapFromTransfers(txData: any, walletAddress: string) {
 
     console.log(`  Token flows by mint:`, Object.keys(byMint).map(mint => `${mint.slice(0,8)}...: net=${(byMint[mint].inRaw - byMint[mint].outRaw).toFixed(2)}`).join(', '));
 
-    // Choose the dominant mint by absolute net flow
+    // Prioritize target token if present, otherwise choose the dominant mint by absolute net flow
     let chosenMint: string | null = null
     let netRaw = 0
     let decimals = 9
-    for (const mint in byMint) {
-      const net = byMint[mint].inRaw - byMint[mint].outRaw
-      if (Math.abs(net) > Math.abs(netRaw)) {
-        chosenMint = mint
-        netRaw = net
-        decimals = byMint[mint].decimals ?? 9
+    
+    // First check if target token is involved
+    if (byMint[TARGET_TOKEN]) {
+      const targetNet = byMint[TARGET_TOKEN].inRaw - byMint[TARGET_TOKEN].outRaw
+      if (Math.abs(targetNet) > 0) {
+        chosenMint = TARGET_TOKEN
+        netRaw = targetNet
+        decimals = byMint[TARGET_TOKEN].decimals ?? 6
+        console.log(`  Found target token ${TARGET_TOKEN} with net flow: ${targetNet}`)
+      }
+    }
+    
+    // If no target token, find the most significant token flow
+    if (!chosenMint) {
+      for (const mint in byMint) {
+        const net = byMint[mint].inRaw - byMint[mint].outRaw
+        if (Math.abs(net) > Math.abs(netRaw)) {
+          chosenMint = mint
+          netRaw = net
+          decimals = byMint[mint].decimals ?? 9
+        }
       }
     }
 
@@ -242,14 +259,42 @@ function deriveSwapFromTransfers(txData: any, walletAddress: string) {
       return null;
     }
 
-    const isBuy = solOut > 0 && netRaw > 0
-    const isSell = solIn > 0 && netRaw < 0
+    // More lenient detection - if we have token movement, assume it's a swap
+    let isBuy = false
+    let isSell = false
+    
+    if (netRaw > 0) {
+      // Gained tokens = BUY
+      isBuy = true
+    } else if (netRaw < 0) {
+      // Lost tokens = SELL  
+      isSell = true
+    }
+    
+    // If we have the target token and any SOL movement, force detection
+    if (chosenMint === TARGET_TOKEN && (solIn > 0 || solOut > 0)) {
+      if (netRaw > 0 && !isBuy) {
+        isBuy = true
+        console.log(`  Forced BUY detection for target token`)
+      } else if (netRaw < 0 && !isSell) {
+        isSell = true
+        console.log(`  Forced SELL detection for target token`)
+      }
+    }
+
     if (!isBuy && !isSell) {
       console.log(`  No clear buy/sell pattern: solOut=${solOut}, solIn=${solIn}, netRaw=${netRaw}`);
       return null;
     }
 
-    const amountSolLamports = isBuy ? solOut : solIn
+    // Use available SOL flow, or estimate if unclear
+    let amountSolLamports = 0
+    if (isBuy) {
+      amountSolLamports = solOut > 0 ? solOut : (solIn > 0 ? solIn : Math.abs(netRaw) / 1000) // rough estimate
+    } else {
+      amountSolLamports = solIn > 0 ? solIn : (solOut > 0 ? solOut : Math.abs(netRaw) / 1000) // rough estimate
+    }
+    
     const tokenAmountRaw = Math.abs(netRaw)
 
     // Build a swap-like event structure compatible with downstream logic
@@ -263,7 +308,7 @@ function deriveSwapFromTransfers(txData: any, walletAddress: string) {
           tokenOutputs: [{ mint: SOL_MINT, rawTokenAmount: { tokenAmount: String(amountSolLamports), decimals: 9 } }],
         }
 
-    console.log(`Derived ${isBuy ? 'BUY' : 'SELL'} from transfers for ${txData.signature}: SOL=${amountSolLamports} lamports, token=${chosenMint} raw=${tokenAmountRaw}`)
+    console.log(`Derived ${isBuy ? 'BUY' : 'SELL'} from transfers for ${txData.signature}: SOL=${amountSolLamports} lamports, token=${chosenMint.slice(0,8)}... raw=${tokenAmountRaw}`)
     return { isBuy, isSell, tokenMint: chosenMint, amountSolLamports, tokenAmountRaw, event }
   } catch (error) {
     console.error('deriveSwapFromTransfers error:', error)
