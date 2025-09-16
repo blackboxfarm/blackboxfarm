@@ -91,17 +91,19 @@ async function getWalletTransactions(address: string, hours: number, heliusApiKe
   let before = null
 
   for (let page = 0; page < 10; page++) { // Limit to 10 pages max
-    const requestBody = {
-      address,
-      before,
-      limit: 50,
-      type: 'SWAP'
+    // Build query parameters for GET request
+    const params = new URLSearchParams({
+      'api-key': heliusApiKey,
+      limit: '50'
+    })
+    
+    if (before) {
+      params.set('before', before)
     }
 
-    const response = await fetch(`https://api.helius.xyz/v0/addresses/${address}/transactions?api-key=${heliusApiKey}`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(requestBody)
+    const response = await fetch(`https://api.helius.xyz/v0/addresses/${address}/transactions?${params.toString()}`, {
+      method: 'GET',
+      headers: { 'Content-Type': 'application/json' }
     })
 
     if (!response.ok) {
@@ -115,10 +117,11 @@ async function getWalletTransactions(address: string, hours: number, heliusApiKe
       break
     }
 
-    // Filter transactions by time range
+    // Filter transactions by time range and SWAP events
     const filteredTxs = data.filter((tx: any) => {
       const txTime = new Date(tx.timestamp * 1000)
-      return txTime >= startTime && txTime <= endTime
+      const hasSwapEvent = tx.events && tx.events.swap
+      return txTime >= startTime && txTime <= endTime && hasSwapEvent
     })
 
     transactions.push(...filteredTxs)
