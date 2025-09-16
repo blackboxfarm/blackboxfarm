@@ -152,10 +152,11 @@ function deriveSwapFromTransfers(txData: any, walletAddress: string) {
 
     const getLamports = (t: any) => (typeof t.amount === 'number' ? t.amount : (typeof t.lamports === 'number' ? t.lamports : 0))
 
-    const solIn = native.filter((n: any) => n.toUserAccount === walletAddress).reduce((a: number, n: any) => a + getLamports(n), 0)
-    const solOut = native.filter((n: any) => n.fromUserAccount === walletAddress).reduce((a: number, n: any) => a + getLamports(n), 0)
+    const solInNative = native.filter((n: any) => n.toUserAccount === walletAddress).reduce((a: number, n: any) => a + getLamports(n), 0)
+    const solOutNative = native.filter((n: any) => n.fromUserAccount === walletAddress).reduce((a: number, n: any) => a + getLamports(n), 0)
 
-    console.log(`  SOL flows: in=${solIn}, out=${solOut}`);
+    // Track WSOL (SOL_MINT) flows that represent wrapped SOL moving as SPL tokens
+    let solInWSOL = 0, solOutWSOL = 0;
 
     // Group token transfers by mint
     const byMint: Record<string, { inRaw: number; outRaw: number; decimals?: number }> = {}
@@ -166,9 +167,19 @@ function deriveSwapFromTransfers(txData: any, walletAddress: string) {
 
     for (const t of tokenTransfers) {
       const mint = t.mint || t.tokenMint
-      if (!mint || mint === SOL_MINT) continue
-      if (!byMint[mint]) byMint[mint] = { inRaw: 0, outRaw: 0, decimals: t?.rawTokenAmount?.decimals ?? t?.decimals }
+      if (!mint) continue
       const raw = getRaw(t)
+      // Capture WSOL flows separately to augment SOL totals
+      if (mint === SOL_MINT) {
+        if ((t.toUserAccount && t.toUserAccount === walletAddress) || (t.destinationUserAccount && t.destinationUserAccount === walletAddress)) {
+          solInWSOL += raw
+        }
+        if ((t.fromUserAccount && t.fromUserAccount === walletAddress) || (t.sourceUserAccount && t.sourceUserAccount === walletAddress)) {
+          solOutWSOL += raw
+        }
+        continue
+      }
+      if (!byMint[mint]) byMint[mint] = { inRaw: 0, outRaw: 0, decimals: t?.rawTokenAmount?.decimals ?? t?.decimals }
       if ((t.toUserAccount && t.toUserAccount === walletAddress) || (t.destinationUserAccount && t.destinationUserAccount === walletAddress)) {
         byMint[mint].inRaw += raw
       }
@@ -177,6 +188,12 @@ function deriveSwapFromTransfers(txData: any, walletAddress: string) {
       }
       if (byMint[mint].decimals == null) byMint[mint].decimals = t?.rawTokenAmount?.decimals ?? t?.decimals
     }
+
+    // Combine native SOL and WSOL token flows
+    const solIn = solInNative + solInWSOL
+    const solOut = solOutNative + solOutWSOL
+
+    console.log(`  SOL flows (native+WSOL): in=${solIn}, out=${solOut}`);
 
     console.log(`  Token flows by mint:`, Object.keys(byMint).map(mint => `${mint.slice(0,8)}...: net=${(byMint[mint].inRaw - byMint[mint].outRaw).toFixed(2)}`).join(', '));
 
