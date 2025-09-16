@@ -66,7 +66,16 @@ Deno.serve(async (req) => {
       message: transactions.length > 0 
         ? `Found ${transactions.length} transactions, processed ${processedTransactions.length} swaps${errorCount > 0 ? ` (${errorCount} parsing errors)` : ''}${monitoredTransactions.length > 0 ? `, triggered ${monitoredTransactions.length} copy trades` : ''}.`
         : 'No transactions found in the specified time period.',
-      transactions: processedTransactions
+      // Return only a small sample to avoid oversized responses
+      transactions_sample: processedTransactions.slice(-Math.min(50, processedTransactions.length)).map((tx: any) => ({
+        signature: tx.signature,
+        transaction_type: tx.transaction_type,
+        token_mint: tx.token_mint,
+        token_symbol: tx.token_symbol,
+        amount_sol: tx.amount_sol,
+        amount_usd: tx.amount_usd,
+        timestamp: tx.timestamp,
+      }))
     }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' }
     })
