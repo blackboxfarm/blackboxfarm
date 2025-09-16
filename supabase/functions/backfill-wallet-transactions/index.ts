@@ -154,6 +154,18 @@ async function processTransaction(txData: any, walletAddress: string, supabase: 
   const signature = txData.signature
   const timestamp = new Date(txData.timestamp * 1000).toISOString()
 
+  // Debug: Log transaction structure for first few transactions
+  if (Math.random() < 0.1) { // Log ~10% of transactions for debugging
+    console.log(`Transaction structure for ${signature}:`, {
+      hasEvents: !!txData.events,
+      eventKeys: txData.events ? Object.keys(txData.events) : [],
+      hasSwap: !!txData.events?.swap,
+      hasTokenTransfers: !!txData.tokenTransfers,
+      hasNativeTransfers: !!txData.nativeTransfers,
+      type: txData.type
+    })
+  }
+
   // Process swap events - handle both array and single object formats
   const swapData = txData.events?.swap
   if (!swapData) {
