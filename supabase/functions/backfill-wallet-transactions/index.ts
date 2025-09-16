@@ -7,7 +7,8 @@ const corsHeaders = {
 
 interface BackfillRequest {
   wallet_address: string
-  hours: number
+  hours?: number
+  limit?: number
 }
 
 // Global caches
@@ -67,11 +68,11 @@ Deno.serve(async (req) => {
 
     const supabase = createClient(supabaseUrl, supabaseServiceKey)
 
-    const { wallet_address, hours }: BackfillRequest = await req.json()
+    const { wallet_address, hours, limit }: BackfillRequest = await req.json()
 
     console.log(`Starting backfill for wallet ${wallet_address} for last ${hours} hours`)
 
-    const transactions = await getWalletTransactions(wallet_address, hours, heliusApiKey)
+    const transactions = await getWalletTransactions(wallet_address, heliusApiKey, hours, limit)
     console.log(`Found ${transactions.length} transactions to analyze`)
 
     // Process each transaction
@@ -214,19 +215,21 @@ function deriveSwapFromTransfers(txData: any, walletAddress: string) {
   }
 }
 
-async function getWalletTransactions(address: string, hours: number, heliusApiKey: string) {
+async function getWalletTransactions(address: string, heliusApiKey: string, hours?: number, limit?: number) {
   const endTime = new Date();
-  const startTime = new Date(endTime.getTime() - hours * 60 * 60 * 1000);
+  const startTime = typeof hours === 'number' && hours > 0
+    ? new Date(endTime.getTime() - hours * 60 * 60 * 1000)
+    : null;
 
   const seen = new Set();
-  const results = [];
-  let before = null;
+  const results: any[] = [];
+  let before: string | null = null;
 
-  // Use a sane limit (Helius supports higher; 100 is safe).
-  const LIMIT = '100';
+  let remaining: number | null = (typeof limit === 'number' && limit > 0) ? limit : null;
 
   while (true) {
-    const params = new URLSearchParams({ 'api-key': heliusApiKey, limit: LIMIT });
+    const pageLimit = remaining != null ? Math.min(100, remaining) : 100;
+    const params = new URLSearchParams({ 'api-key': heliusApiKey, limit: String(pageLimit) });
     if (before) params.set('before', before);
 
     const url = `https://api.helius.xyz/v0/addresses/${address}/transactions?${params.toString()}`;
@@ -234,35 +237,37 @@ async function getWalletTransactions(address: string, hours: number, heliusApiKe
 
     if (!Array.isArray(data) || data.length === 0) break;
 
-    // Keep what's in window; stop when we've paged past the window
-    let inWindow = 0;
+    let added = 0;
     for (const tx of data) {
-      const ts = new Date(tx.timestamp * 1000);
-      if (ts >= startTime && ts <= endTime) {
-        if (!seen.has(tx.signature)) {
-          results.push(tx);
-          seen.add(tx.signature);
-          inWindow++;
-        }
+      if (seen.has(tx.signature)) continue;
+      if (startTime) {
+        const ts = new Date(tx.timestamp * 1000);
+        if (ts < startTime || ts > endTime) continue;
+      }
+      results.push(tx);
+      seen.add(tx.signature);
+      added++;
+      if (remaining != null) {
+        remaining--;
+        if (remaining <= 0) break;
       }
     }
+
+    if (remaining != null && remaining <= 0) break;
 
     const oldest = data[data.length - 1];
     if (!oldest?.timestamp) break;
     const oldestTime = new Date(oldest.timestamp * 1000);
 
-    // If oldest page item is older than our window, we're done
-    if (oldestTime < startTime) break;
+    if (startTime && oldestTime < startTime) break;
 
-    // Advance cursor; protect against stuck cursors
     const nextBefore = oldest.signature;
     if (!nextBefore || nextBefore === before) break;
     before = nextBefore;
 
-    console.log(`Fetched page with ${data.length} txs, ${inWindow} in window, oldest: ${oldestTime.toISOString()}`);
+    console.log(`Fetched page with ${data.length} txs, added ${added}, oldest: ${oldestTime.toISOString()}`);
   }
 
-  // Return chronological for UI
   results.sort((a, b) => a.timestamp - b.timestamp);
   return results;
 }
