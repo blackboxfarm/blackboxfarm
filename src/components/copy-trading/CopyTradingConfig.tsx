@@ -219,7 +219,7 @@ export function CopyTradingConfig() {
     const requestData = { 
       wallet_address: walletAddress, 
       hours: 24,
-      limit: 10
+      limit: 500
     }
     
     const walletId = walletAddress
@@ -318,7 +318,7 @@ export function CopyTradingConfig() {
 
       // 3) Backfill last 24h to initialize transactions and trigger copy logic
       const { data: backfillData, error: backfillError } = await supabase.functions.invoke('backfill-wallet-transactions', {
-        body: { wallet_address: walletAddress.trim(), hours: 24, limit: 10 }
+        body: { wallet_address: walletAddress.trim(), hours: 24, limit: 500 }
       })
 
       setWalletAddress('')
