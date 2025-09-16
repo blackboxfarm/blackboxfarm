@@ -117,12 +117,20 @@ async function getWalletTransactions(address: string, hours: number, heliusApiKe
       break
     }
 
-    // Filter transactions by time range and SWAP events
+    // Log page info and filter by time range only (don't filter by swap here)
+    const pageFirst = data[0]
+    const pageLast = data[data.length - 1]
+    const pageFirstTime = new Date(pageFirst.timestamp * 1000).toISOString()
+    const pageLastTime = new Date(pageLast.timestamp * 1000).toISOString()
+    const swapCount = data.reduce((acc: number, tx: any) => acc + (tx?.events?.swap ? 1 : 0), 0)
+    console.log(`Helius page ${page + 1}: received ${data.length} txs (${pageFirstTime} -> ${pageLastTime}), swapEvents=${swapCount}`)
+
     const filteredTxs = data.filter((tx: any) => {
       const txTime = new Date(tx.timestamp * 1000)
-      const hasSwapEvent = tx.events && tx.events.swap
-      return txTime >= startTime && txTime <= endTime && hasSwapEvent
+      return txTime >= startTime && txTime <= endTime
     })
+
+    console.log(`Filtered by time window: ${filteredTxs.length} txs kept (start=${startTime.toISOString()}, end=${endTime.toISOString()})`)
 
     transactions.push(...filteredTxs)
 
