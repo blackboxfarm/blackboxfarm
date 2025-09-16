@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { useAuth } from './useAuth';
 import { supabase } from '@/integrations/supabase/client';
 
@@ -8,6 +8,7 @@ const SUPER_ADMIN_PASSWORD = 'SuperAdmin2024!';
 
 export const useSuperAdminAuth = () => {
   const { user, signIn, loading } = useAuth();
+  const [authReady, setAuthReady] = useState(false);
 
   useEffect(() => {
     const autoLoginSuperAdmin = async () => {
@@ -57,7 +58,7 @@ export const useSuperAdminAuth = () => {
     autoLoginSuperAdmin();
   }, [user, loading]);
 
-  // Claim preview data after successful authentication
+  // Claim preview data after successful authentication and set authReady
   useEffect(() => {
     const claimPreviewData = async () => {
       if (user) {
@@ -72,12 +73,17 @@ export const useSuperAdminAuth = () => {
           }
         } catch (error) {
           console.warn('Error claiming preview data:', error);
+        } finally {
+          setAuthReady(true);
         }
+      } else if (!loading) {
+        // If no user and not loading, set authReady to true
+        setAuthReady(true);
       }
     };
 
     claimPreviewData();
-  }, [user]);
+  }, [user, loading]);
 
-  return { user, loading };
+  return { user, loading, authReady };
 };

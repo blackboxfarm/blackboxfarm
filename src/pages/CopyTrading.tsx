@@ -3,9 +3,22 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { CopyTradingConfig } from '@/components/copy-trading/CopyTradingConfig'
 import { CopyTradingDashboard } from '@/components/copy-trading/CopyTradingDashboard'
 import { useSuperAdminAuth } from '@/hooks/useSuperAdminAuth'
+import { Loader2 } from 'lucide-react'
 
 export default function CopyTrading() {
-  useSuperAdminAuth();
+  const { authReady } = useSuperAdminAuth();
+
+  if (!authReady) {
+    return (
+      <div className="container mx-auto p-6">
+        <div className="flex flex-col items-center justify-center p-8 space-y-4">
+          <Loader2 className="h-8 w-8 animate-spin" />
+          <p className="text-muted-foreground">Syncing your data to your account...</p>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="container mx-auto p-6">
       <Tabs defaultValue="config" className="w-full">

@@ -18,8 +18,18 @@ Deno.serve(async (req) => {
   try {
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!
     const serviceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
-    const heliusApiKey = Deno.env.get('HELIUS_API_KEY')!
+    const heliusApiKey = Deno.env.get('HELIUS_API_KEY')
     const supabase = createClient(supabaseUrl, serviceKey)
+
+    if (!heliusApiKey) {
+      return new Response(JSON.stringify({ 
+        error: 'HELIUS_API_KEY not configured',
+        message: 'Please add the HELIUS_API_KEY secret in Supabase Functions settings'
+      }), {
+        status: 400,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+      })
+    }
 
     const { wallet_address, hours = 24 }: BackfillRequest = await req.json()
 
@@ -256,7 +266,8 @@ async function processTransaction(supabase: any, txData: any, walletAddress: str
     return {
       ...transactionData,
       trade_type: tradeType,
-      sell_percentage: position.sell_percentage
+      sell_percentage: position.sell_percentage,
+      wallet_address: walletAddress
     }
   }
 
@@ -304,9 +315,15 @@ async function triggerCopyTrades(supabase: any, transactionData: any) {
   }
 
   try {
-    await supabase.functions.invoke('execute-copy-trade', {
+    console.log('Triggering copy trade for:', copyTradeRequest)
+    const { data, error } = await supabase.functions.invoke('execute-copy-trade', {
       body: copyTradeRequest
     })
+    if (error) {
+      console.error('Copy trade invocation error:', error)
+    } else {
+      console.log('Copy trade triggered successfully:', data)
+    }
   } catch (error) {
     console.error('Error triggering copy trade:', error)
   }

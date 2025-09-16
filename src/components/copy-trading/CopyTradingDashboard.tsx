@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react'
 import { supabase } from '@/integrations/supabase/client'
 import { useAuth } from '@/hooks/useAuth'
+import { useSuperAdminAuth } from '@/hooks/useSuperAdminAuth'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -42,14 +43,15 @@ interface FantasyPosition {
 
 export function CopyTradingDashboard() {
   const { user } = useAuth()
+  const { authReady } = useSuperAdminAuth()
   const { toast } = useToast()
   const [copyTrades, setCopyTrades] = useState<CopyTrade[]>([])
   const [fantasyPositions, setFantasyPositions] = useState<FantasyPosition[]>([])
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    console.log('CopyTradingDashboard useEffect - user:', user)
-    if (user) {
+    console.log('CopyTradingDashboard useEffect - user:', user, 'authReady:', authReady)
+    if (user && authReady) {
       loadData()
       
       // Set up real-time subscriptions
@@ -70,10 +72,23 @@ export function CopyTradingDashboard() {
       return () => {
         tradesSubscription.unsubscribe()
       }
-    } else {
+    } else if (!user || !authReady) {
       setLoading(false)
     }
-  }, [user])
+  }, [user, authReady])
+
+  // Listen for preview data claim events to reload data
+  useEffect(() => {
+    const handlePreviewDataClaimed = () => {
+      console.log('Dashboard: Preview data claimed event received, reloading data...')
+      if (user && authReady) {
+        loadData()
+      }
+    }
+
+    window.addEventListener('preview-data-claimed', handlePreviewDataClaimed)
+    return () => window.removeEventListener('preview-data-claimed', handlePreviewDataClaimed)
+  }, [user, authReady])
 
   const loadData = async () => {
     try {

@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react'
 import { supabase } from '@/integrations/supabase/client'
 import { useAuth } from '@/hooks/useAuth'
+import { useSuperAdminAuth } from '@/hooks/useSuperAdminAuth'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -46,6 +47,7 @@ interface FantasyWallet {
 
 export function CopyTradingConfig() {
   const { user } = useAuth()
+  const { authReady } = useSuperAdminAuth()
   const { toast } = useToast()
   const [monitoredWallets, setMonitoredWallets] = useState<MonitoredWallet[]>([])
   const [copyConfigs, setCopyConfigs] = useState<CopyConfig[]>([])
@@ -57,20 +59,24 @@ export function CopyTradingConfig() {
   const [adding, setAdding] = useState(false)
 
   useEffect(() => {
-    console.log('CopyTradingConfig useEffect - user:', user)
-    loadData()
-  }, [user])
+    console.log('CopyTradingConfig useEffect - user:', user, 'authReady:', authReady)
+    if (authReady) {
+      loadData()
+    }
+  }, [user, authReady])
 
   // Listen for preview data claim events to reload data
   useEffect(() => {
     const handlePreviewDataClaimed = () => {
       console.log('Preview data claimed event received, reloading data...')
-      loadData()
+      if (authReady) {
+        loadData()
+      }
     }
 
     window.addEventListener('preview-data-claimed', handlePreviewDataClaimed)
     return () => window.removeEventListener('preview-data-claimed', handlePreviewDataClaimed)
-  }, [])
+  }, [authReady])
 
   const loadData = async () => {
     try {
