@@ -41,12 +41,28 @@ interface FantasyPosition {
   profit_loss_percentage: number
 }
 
+interface WalletTx {
+  id: string
+  signature: string
+  is_buy?: boolean
+  side?: string
+  token_mint?: string
+  token_symbol?: string
+  token_name?: string
+  amount_sol?: number
+  amount_token_ui?: number
+  price_usd?: number
+  platform?: string
+  timestamp: string
+}
+
 export function CopyTradingDashboard() {
   const { user } = useAuth()
   const { authReady } = useSuperAdminAuth()
   const { toast } = useToast()
   const [copyTrades, setCopyTrades] = useState<CopyTrade[]>([])
   const [fantasyPositions, setFantasyPositions] = useState<FantasyPosition[]>([])
+  const [walletTxs, setWalletTxs] = useState<WalletTx[]>([])
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
@@ -110,6 +126,16 @@ export function CopyTradingDashboard() {
       }
       console.log('Loaded trades:', trades)
       setCopyTrades(trades || [])
+
+      // Load monitored wallet transactions via Edge Function
+      const { data: txResp, error: txErr } = await supabase.functions.invoke('get-wallet-transactions', {})
+      if (txErr) {
+        console.error('Wallet transactions error:', txErr)
+      } else {
+        console.log('Loaded wallet transactions:', txResp)
+        setWalletTxs((txResp as any)?.transactions || [])
+      }
+
 
       // Load fantasy positions
       const { data: positions, error: positionsError } = await supabase
@@ -254,6 +280,7 @@ export function CopyTradingDashboard() {
         <TabsList>
           <TabsTrigger value="trades">Recent Trades</TabsTrigger>
           <TabsTrigger value="positions">Fantasy Positions</TabsTrigger>
+          <TabsTrigger value="transactions">Wallet Transactions</TabsTrigger>
         </TabsList>
         
         <TabsContent value="trades">
@@ -375,6 +402,49 @@ export function CopyTradingDashboard() {
                   </div>
                 )}
               </div>
+            </CardContent>
+          </Card>
+        </TabsContent>
+        <TabsContent value="transactions">
+          <Card>
+            <CardHeader>
+              <CardTitle>Monitored Wallet Transactions</CardTitle>
+              <CardDescription>Your wallets' latest on-chain swap detections</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <ScrollArea className="h-96">
+                <div className="space-y-3">
+                  {user && walletTxs.map((tx) => {
+                    const side = tx.side || (tx.is_buy === true ? 'BUY' : tx.is_buy === false ? 'SELL' : '—')
+                    const tokenLabel = tx.token_symbol || tx.token_name || (tx.token_mint ? `${tx.token_mint.slice(0,4)}...${tx.token_mint.slice(-4)}` : 'Unknown')
+                    const sigShort = tx.signature ? `${tx.signature.slice(0,6)}...${tx.signature.slice(-6)}` : ''
+                    return (
+                      <div key={tx.id} className="flex items-center justify-between p-3 border rounded-lg">
+                        <div className="flex items-center gap-3">
+                          <Badge variant="outline" className="text-xs">{side}</Badge>
+                          <div>
+                            <div className="font-medium">{tokenLabel}</div>
+                            <div className="text-sm text-muted-foreground">
+                              SOL: {tx.amount_sol?.toLocaleString() ?? '—'} • Token: {tx.amount_token_ui?.toLocaleString() ?? '—'}
+                            </div>
+                          </div>
+                        </div>
+                        <div className="text-right">
+                          <a href={`https://solscan.io/tx/${tx.signature}`} target="_blank" rel="noreferrer" className="text-xs underline">{sigShort}</a>
+                          <div className="text-xs text-muted-foreground">{new Date(tx.timestamp).toLocaleString()}</div>
+                        </div>
+                      </div>
+                    )
+                  })}
+
+                  {(!user || walletTxs.length === 0) && (
+                    <div className="text-center p-8 text-muted-foreground">
+                      <Copy className="h-12 w-12 mx-auto mb-4 opacity-50" />
+                      <p>{!user ? "Sign in to view transactions" : "No transactions found yet. Run Backfill to populate."}</p>
+                    </div>
+                  )}
+                </div>
+              </ScrollArea>
             </CardContent>
           </Card>
         </TabsContent>
