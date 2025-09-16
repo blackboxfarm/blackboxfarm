@@ -132,8 +132,9 @@ export function CopyTradingDashboard() {
       if (txErr) {
         console.error('Wallet transactions error:', txErr)
       } else {
-        console.log('Loaded wallet transactions:', txResp)
-        setWalletTxs((txResp as any)?.transactions || [])
+        const parsed = typeof txResp === 'string' ? JSON.parse(txResp) : txResp
+        console.log('Loaded wallet transactions:', parsed)
+        setWalletTxs((parsed as any)?.transactions || [])
       }
 
 
