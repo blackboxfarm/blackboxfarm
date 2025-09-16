@@ -115,7 +115,16 @@ Deno.serve(async (req) => {
       message: transactions.length > 0 
         ? `Found ${transactions.length} transactions, processed ${processedTransactions.length} swaps${errorCount > 0 ? ` (${errorCount} parsing errors)` : ''}${monitoredTransactions.length > 0 ? `, triggered ${monitoredTransactions.length} copy trades` : ''}.`
         : 'No transactions found in the specified time period.',
-      // Return only a small sample to avoid oversized responses
+      // Visibility into fetched txs even if not parsed as swaps
+      raw_signatures: transactions.map((t: any) => t.signature),
+      tx_debug_sample: transactions.slice(-Math.min(10, transactions.length)).map((t: any) => ({
+        signature: t.signature,
+        has_swap_event: !!t.events?.swap,
+        native_transfers: Array.isArray(t.nativeTransfers) ? t.nativeTransfers.length : 0,
+        token_transfers: Array.isArray(t.tokenTransfers) ? t.tokenTransfers.length : 0,
+        timestamp: t.timestamp,
+      })),
+      // Return only a small sample of processed swaps (if any)
       transactions_sample: processedTransactions.slice(-Math.min(50, processedTransactions.length)).map((tx: any) => ({
         signature: tx.signature,
         transaction_type: tx.transaction_type,
