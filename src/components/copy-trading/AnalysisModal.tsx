@@ -24,12 +24,12 @@ export function AnalysisModal({
 }: AnalysisModalProps) {
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="max-w-4xl max-h-[80vh] flex flex-col">
+      <DialogContent className="max-w-4xl max-h-[80vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>24-Hour Analysis Details</DialogTitle>
         </DialogHeader>
         
-        <ScrollArea className="flex-1 pr-4">
+        <div className="flex-1 pr-4">
           <div className="space-y-4">
             <div>
               <h3 className="font-semibold mb-2">Wallet Address</h3>
@@ -110,7 +110,7 @@ export function AnalysisModal({
               </div>
             )}
           </div>
-        </ScrollArea>
+          </div>
       </DialogContent>
     </Dialog>
   )
