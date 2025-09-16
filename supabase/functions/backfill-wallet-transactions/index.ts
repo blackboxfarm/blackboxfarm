@@ -83,6 +83,79 @@ Deno.serve(async (req) => {
   }
 })
 
+function deriveSwapFromTransfers(txData: any, walletAddress: string) {
+  try {
+    const SOL_MINT = 'So11111111111111111111111111111111111111112'
+    const native = Array.isArray(txData.nativeTransfers) ? txData.nativeTransfers : []
+    const tokenTransfers = Array.isArray(txData.tokenTransfers) ? txData.tokenTransfers : []
+
+    const getLamports = (t: any) => (typeof t.amount === 'number' ? t.amount : (typeof t.lamports === 'number' ? t.lamports : 0))
+
+    const solIn = native.filter((n: any) => n.toUserAccount === walletAddress).reduce((a: number, n: any) => a + getLamports(n), 0)
+    const solOut = native.filter((n: any) => n.fromUserAccount === walletAddress).reduce((a: number, n: any) => a + getLamports(n), 0)
+
+    // Group token transfers by mint
+    const byMint: Record<string, { inRaw: number; outRaw: number; decimals?: number }> = {}
+    const getRaw = (t: any) => {
+      const v = t?.rawTokenAmount?.tokenAmount ?? t?.tokenAmount ?? t?.amount ?? t?.uiTokenAmount?.amount ?? 0
+      return typeof v === 'string' ? parseFloat(v) : (typeof v === 'number' ? v : 0)
+    }
+
+    for (const t of tokenTransfers) {
+      const mint = t.mint || t.tokenMint
+      if (!mint || mint === SOL_MINT) continue
+      if (!byMint[mint]) byMint[mint] = { inRaw: 0, outRaw: 0, decimals: t?.rawTokenAmount?.decimals ?? t?.decimals }
+      const raw = getRaw(t)
+      if ((t.toUserAccount && t.toUserAccount === walletAddress) || (t.destinationUserAccount && t.destinationUserAccount === walletAddress)) {
+        byMint[mint].inRaw += raw
+      }
+      if ((t.fromUserAccount && t.fromUserAccount === walletAddress) || (t.sourceUserAccount && t.sourceUserAccount === walletAddress)) {
+        byMint[mint].outRaw += raw
+      }
+      if (byMint[mint].decimals == null) byMint[mint].decimals = t?.rawTokenAmount?.decimals ?? t?.decimals
+    }
+
+    // Choose the dominant mint by absolute net flow
+    let chosenMint: string | null = null
+    let netRaw = 0
+    let decimals = 9
+    for (const mint in byMint) {
+      const net = byMint[mint].inRaw - byMint[mint].outRaw
+      if (Math.abs(net) > Math.abs(netRaw)) {
+        chosenMint = mint
+        netRaw = net
+        decimals = byMint[mint].decimals ?? 9
+      }
+    }
+
+    if (!chosenMint || netRaw === 0) return null
+
+    const isBuy = solOut > 0 && netRaw > 0
+    const isSell = solIn > 0 && netRaw < 0
+    if (!isBuy && !isSell) return null
+
+    const amountSolLamports = isBuy ? solOut : solIn
+    const tokenAmountRaw = Math.abs(netRaw)
+
+    // Build a swap-like event structure compatible with downstream logic
+    const event = isBuy
+      ? {
+          tokenInputs: [{ mint: SOL_MINT, rawTokenAmount: { tokenAmount: String(amountSolLamports), decimals: 9 } }],
+          tokenOutputs: [{ mint: chosenMint, rawTokenAmount: { tokenAmount: String(tokenAmountRaw), decimals } }],
+        }
+      : {
+          tokenInputs: [{ mint: chosenMint, rawTokenAmount: { tokenAmount: String(tokenAmountRaw), decimals } }],
+          tokenOutputs: [{ mint: SOL_MINT, rawTokenAmount: { tokenAmount: String(amountSolLamports), decimals: 9 } }],
+        }
+
+    console.log(`Derived ${isBuy ? 'BUY' : 'SELL'} from transfers for ${txData.signature}: SOL=${amountSolLamports} lamports, token=${chosenMint} raw=${tokenAmountRaw}`)
+    return { isBuy, isSell, tokenMint: chosenMint, amountSolLamports, tokenAmountRaw, event }
+  } catch (error) {
+    console.error('deriveSwapFromTransfers error:', error)
+    return null
+  }
+}
+
 async function getWalletTransactions(address: string, hours: number, heliusApiKey: string) {
   const endTime = new Date()
   const startTime = new Date(endTime.getTime() - (hours * 60 * 60 * 1000))
@@ -323,79 +396,6 @@ async function updateWalletPosition(tokenMint: string, walletAddress: string, to
 function detectPlatform(signature: string): string {
   // Placeholder - could analyze transaction to detect DEX
   return 'unknown'
-}
-
-function deriveSwapFromTransfers(txData: any, walletAddress: string) {
-  try {
-    const SOL_MINT = 'So11111111111111111111111111111111111111112'
-    const native = Array.isArray(txData.nativeTransfers) ? txData.nativeTransfers : []
-    const tokenTransfers = Array.isArray(txData.tokenTransfers) ? txData.tokenTransfers : []
-
-    const getLamports = (t: any) => (typeof t.amount === 'number' ? t.amount : (typeof t.lamports === 'number' ? t.lamports : 0))
-
-    const solIn = native.filter((n: any) => n.toUserAccount === walletAddress).reduce((a: number, n: any) => a + getLamports(n), 0)
-    const solOut = native.filter((n: any) => n.fromUserAccount === walletAddress).reduce((a: number, n: any) => a + getLamports(n), 0)
-
-    // Group token transfers by mint
-    const byMint: Record<string, { inRaw: number; outRaw: number; decimals?: number }> = {}
-    const getRaw = (t: any) => {
-      const v = t?.rawTokenAmount?.tokenAmount ?? t?.tokenAmount ?? t?.amount ?? t?.uiTokenAmount?.amount ?? 0
-      return typeof v === 'string' ? parseFloat(v) : (typeof v === 'number' ? v : 0)
-    }
-
-    for (const t of tokenTransfers) {
-      const mint = t.mint || t.tokenMint
-      if (!mint || mint === SOL_MINT) continue
-      if (!byMint[mint]) byMint[mint] = { inRaw: 0, outRaw: 0, decimals: t?.rawTokenAmount?.decimals ?? t?.decimals }
-      const raw = getRaw(t)
-      if ((t.toUserAccount && t.toUserAccount === walletAddress) || (t.destinationUserAccount && t.destinationUserAccount === walletAddress)) {
-        byMint[mint].inRaw += raw
-      }
-      if ((t.fromUserAccount && t.fromUserAccount === walletAddress) || (t.sourceUserAccount && t.sourceUserAccount === walletAddress)) {
-        byMint[mint].outRaw += raw
-      }
-      if (byMint[mint].decimals == null) byMint[mint].decimals = t?.rawTokenAmount?.decimals ?? t?.decimals
-    }
-
-    // Choose the dominant mint by absolute net flow
-    let chosenMint: string | null = null
-    let netRaw = 0
-    let decimals = 9
-    for (const mint in byMint) {
-      const net = byMint[mint].inRaw - byMint[mint].outRaw
-      if (Math.abs(net) > Math.abs(netRaw)) {
-        chosenMint = mint
-        netRaw = net
-        decimals = byMint[mint].decimals ?? 9
-      }
-    }
-
-    if (!chosenMint || netRaw === 0) return null
-
-    const isBuy = solOut > 0 && netRaw > 0
-    const isSell = solIn > 0 && netRaw < 0
-    if (!isBuy && !isSell) return null
-
-    const amountSolLamports = isBuy ? solOut : solIn
-    const tokenAmountRaw = Math.abs(netRaw)
-
-    // Build a swap-like event structure compatible with downstream logic
-    const event = isBuy
-      ? {
-          tokenInputs: [{ mint: SOL_MINT, rawTokenAmount: { tokenAmount: String(amountSolLamports), decimals: 9 } }],
-          tokenOutputs: [{ mint: chosenMint, rawTokenAmount: { tokenAmount: String(tokenAmountRaw), decimals } }],
-        }
-      : {
-          tokenInputs: [{ mint: chosenMint, rawTokenAmount: { tokenAmount: String(tokenAmountRaw), decimals } }],
-          tokenOutputs: [{ mint: SOL_MINT, rawTokenAmount: { tokenAmount: String(amountSolLamports), decimals: 9 } }],
-        }
-
-    console.log(`Derived ${isBuy ? 'BUY' : 'SELL'} from transfers for ${txData.signature}: SOL=${amountSolLamports} lamports, token=${chosenMint} raw=${tokenAmountRaw}`)
-    return { isBuy, isSell, tokenMint: chosenMint, amountSolLamports, tokenAmountRaw, event }
-  } catch (error) {
-    console.error('deriveSwapFromTransfers error:', error)
-    return null
-  }
 }
 
 async function triggerCopyTrades(transactions: any[], supabase: any) {
