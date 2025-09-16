@@ -148,10 +148,14 @@ function deriveSwapFromTransfers(txData: any, walletAddress: string) {
     const native = Array.isArray(txData.nativeTransfers) ? txData.nativeTransfers : []
     const tokenTransfers = Array.isArray(txData.tokenTransfers) ? txData.tokenTransfers : []
 
+    console.log(`  deriveSwapFromTransfers: ${native.length} native transfers, ${tokenTransfers.length} token transfers`);
+
     const getLamports = (t: any) => (typeof t.amount === 'number' ? t.amount : (typeof t.lamports === 'number' ? t.lamports : 0))
 
     const solIn = native.filter((n: any) => n.toUserAccount === walletAddress).reduce((a: number, n: any) => a + getLamports(n), 0)
     const solOut = native.filter((n: any) => n.fromUserAccount === walletAddress).reduce((a: number, n: any) => a + getLamports(n), 0)
+
+    console.log(`  SOL flows: in=${solIn}, out=${solOut}`);
 
     // Group token transfers by mint
     const byMint: Record<string, { inRaw: number; outRaw: number; decimals?: number }> = {}
@@ -174,6 +178,8 @@ function deriveSwapFromTransfers(txData: any, walletAddress: string) {
       if (byMint[mint].decimals == null) byMint[mint].decimals = t?.rawTokenAmount?.decimals ?? t?.decimals
     }
 
+    console.log(`  Token flows by mint:`, Object.keys(byMint).map(mint => `${mint.slice(0,8)}...: net=${(byMint[mint].inRaw - byMint[mint].outRaw).toFixed(2)}`).join(', '));
+
     // Choose the dominant mint by absolute net flow
     let chosenMint: string | null = null
     let netRaw = 0
@@ -187,11 +193,17 @@ function deriveSwapFromTransfers(txData: any, walletAddress: string) {
       }
     }
 
-    if (!chosenMint || netRaw === 0) return null
+    if (!chosenMint || netRaw === 0) {
+      console.log(`  No valid mint found or zero net flow`);
+      return null;
+    }
 
     const isBuy = solOut > 0 && netRaw > 0
     const isSell = solIn > 0 && netRaw < 0
-    if (!isBuy && !isSell) return null
+    if (!isBuy && !isSell) {
+      console.log(`  No clear buy/sell pattern: solOut=${solOut}, solIn=${solIn}, netRaw=${netRaw}`);
+      return null;
+    }
 
     const amountSolLamports = isBuy ? solOut : solIn
     const tokenAmountRaw = Math.abs(netRaw)
@@ -277,13 +289,24 @@ async function processTransaction(txData: any, walletAddress: string, supabase: 
   const signature = txData.signature;
   const timestamp = new Date(txData.timestamp * 1000).toISOString();
 
+  console.log(`Processing tx ${signature}: has events.swap=${!!txData.events?.swap}, nativeTransfers=${txData.nativeTransfers?.length || 0}, tokenTransfers=${txData.tokenTransfers?.length || 0}`);
+
   // normalize swap events; derive if missing
   let swaps = txData.events?.swap;
   if (!swaps) {
+    console.log(`No swap events found for ${signature}, attempting to derive from transfers...`);
     const derived = deriveSwapFromTransfers(txData, walletAddress);
-    if (derived?.event) swaps = [derived.event];
+    if (derived?.event) {
+      swaps = [derived.event];
+      console.log(`Successfully derived swap for ${signature}: ${derived.isBuy ? 'BUY' : 'SELL'}`);
+    } else {
+      console.log(`Failed to derive swap from transfers for ${signature}`);
+    }
   }
-  if (!swaps) return [];
+  if (!swaps) {
+    console.log(`No swaps found for ${signature}, skipping`);
+    return [];
+  }
 
   const events = Array.isArray(swaps) ? swaps : [swaps];
   if (events.length === 0) return [];
