@@ -167,6 +167,9 @@ export default function Index() {
                 <a href="/blackbox" className="px-4 py-2 bg-primary text-primary-foreground rounded-md hover:bg-primary/90 transition-colors">
                   Launch BlackBox →
                 </a>
+                <a href="/breadcrumbs" className="px-4 py-2 border border-primary text-primary rounded-md hover:bg-primary/10 transition-colors">
+                  🍞 BreadCrumbs
+                </a>
                 <a href="/competitive-analysis" className="px-4 py-2 border border-primary text-primary rounded-md hover:bg-primary/10 transition-colors">
                   View Analysis
                 </a>
