@@ -27,7 +27,7 @@ import { WalletMonitor } from "@/components/WalletMonitor";
 import { CopyTradingConfig } from "@/components/copy-trading/CopyTradingConfig";
 import { CopyTradingDashboard } from "@/components/copy-trading/CopyTradingDashboard";
 import { useSuperAdminAuth } from "@/hooks/useSuperAdminAuth";
-
+import { BreadCrumbsInterface } from "@/components/breadcrumbs/BreadCrumbsInterface";
 export default function BlackBox() {
   const [activeTab, setActiveTab] = useState("overview");
   const { user } = useAuth();
@@ -82,10 +82,11 @@ export default function BlackBox() {
 
         {/* Main Navigation */}
         <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-          <TabsList className={`grid w-full ${isAdminView ? 'grid-cols-10' : 'grid-cols-5'}`}>
+          <TabsList className={`grid w-full ${isAdminView ? 'grid-cols-11' : 'grid-cols-5'}`}>
             <TabsTrigger value="overview">Overview</TabsTrigger>
             {isAdminView && <TabsTrigger value="dashboard">Dashboard</TabsTrigger>}
             {isAdminView && <TabsTrigger value="watcher">Watcher</TabsTrigger>}
+            {isAdminView && <TabsTrigger value="breadcrumbs">BreadCrumbs</TabsTrigger>}
             {isAdminView && <TabsTrigger value="copy-trading">Copy Trading</TabsTrigger>}
             <TabsTrigger value="community">Community</TabsTrigger>
             <TabsTrigger value="simulator">Simulator</TabsTrigger>
@@ -108,6 +109,10 @@ export default function BlackBox() {
 
           <TabsContent value="watcher" className="space-y-6">
             <WalletMonitor />
+          </TabsContent>
+
+          <TabsContent value="breadcrumbs" className="space-y-6">
+            <BreadCrumbsInterface />
           </TabsContent>
 
           <TabsContent value="copy-trading" className="space-y-6">
