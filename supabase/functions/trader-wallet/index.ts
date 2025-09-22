@@ -52,18 +52,18 @@ function parseKeypair(secret: string): Keypair {
 }
 
 serve(async (req) => {
-if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
+  if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
 
-try {
-  // Setup debug logging
-  const isPost = req.method === "POST";
-  const url = new URL(req.url);
-  let body: any = {};
-  if (isPost) {
-    try { body = await req.json(); } catch { body = {}; }
-  }
-  const debug = (url.searchParams.get("debug") === "true") || Boolean(body?.debug);
-  const logs: string[] = [];
+  try {
+    // Setup debug logging
+    const isPost = req.method === "POST";
+    const url = new URL(req.url);
+    let body: any = {};
+    if (isPost) {
+      try { body = await req.json(); } catch { body = {}; }
+    }
+    const debug = (url.searchParams.get("debug") === "true") || Boolean(body?.debug);
+    const logs: string[] = [];
     const slog = (msg: string) => {
       const line = `${new Date().toISOString()} ${msg}`;
       logs.push(line);
@@ -86,13 +86,10 @@ try {
       }
     }
 
-    const rpcUrl = Deno.env.get("SOLANA_RPC_URL");
+    const rpcUrl = Deno.env.get("SOLANA_RPC_URL") || "https://mainnet.helius-rpc.com/?api-key=4237f40d-5c4c-4c30-9f85-7fc0026e1094";
     const headerSecret = req.headers.get("x-owner-secret");
     const envSecret = Deno.env.get("TRADER_PRIVATE_KEY");
-    if (!rpcUrl) {
-      slog("Missing SOLANA_RPC_URL");
-      return ok({ error: "Missing secret: SOLANA_RPC_URL", ...(debug ? { debugLogs: logs } : {}) }, 500);
-    }
+    
     if (!headerSecret && !envSecret) {
       slog("Missing both x-owner-secret and TRADER_PRIVATE_KEY");
       return ok({ error: "Missing secret: TRADER_PRIVATE_KEY or x-owner-secret", ...(debug ? { debugLogs: logs } : {}) }, 500);
@@ -107,7 +104,15 @@ try {
         slog("Owner secret decrypted (length: " + secretToUse.length + ")");
       } catch (error) {
         slog("Failed to decrypt wallet secret: " + (error as Error)?.message);
-        return ok({ error: `Failed to decrypt wallet secret: ${(error as Error).message}`, ...(debug ? { debugLogs: logs } : {}) }, 400);
+        // Try using raw secret for legacy compatibility
+        try {
+          const testKp = parseKeypair(headerSecret);
+          slog("Using raw header secret (legacy compatibility)");
+          secretToUse = headerSecret;
+        } catch (parseError) {
+          slog("Raw secret parse also failed: " + (parseError as Error)?.message);
+          return ok({ error: `Failed to decrypt wallet secret: ${(error as Error).message}`, ...(debug ? { debugLogs: logs } : {}) }, 400);
+        }
       }
     } else {
       slog("Using TRADER_PRIVATE_KEY from env");

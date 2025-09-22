@@ -55,14 +55,16 @@ export function WalletTokenManager({
         .single();
 
       if (walletError || !walletData) {
-        throw new Error('Failed to get wallet credentials');
+        throw new Error(`Failed to get wallet credentials: ${walletError?.message || 'No wallet data'}`);
       }
+
+      console.log('WalletTokenManager: Fetching tokens for wallet', walletPubkey);
 
       // Use trader-wallet function to get ALL tokens
       const { data: balanceData, error: balanceError } = await supabase.functions.invoke('trader-wallet', {
         body: { 
-          pubkey: walletPubkey,
-          getAllTokens: true
+          getAllTokens: true,
+          debug: true
         },
         headers: {
           'x-owner-secret': walletData.secret_key_encrypted
@@ -70,56 +72,70 @@ export function WalletTokenManager({
       });
 
       if (balanceError) {
-        throw new Error(balanceError.message || 'Failed to fetch token balances');
+        console.error('WalletTokenManager: trader-wallet error:', balanceError);
+        throw new Error(`trader-wallet error: ${balanceError.message || 'Unknown error'}`);
       }
+
+      if (!balanceData) {
+        throw new Error('No data returned from trader-wallet function');
+      }
+
+      console.log('WalletTokenManager: trader-wallet response:', balanceData);
 
       const data = balanceData;
       const tokenList: TokenBalance[] = [];
       
-      // Add SOL balance
-      if (data.solBalance && data.solBalance > 0) {
+      // Add SOL balance if available
+      if (data.solBalance !== undefined) {
         tokenList.push({
           mint: 'So11111111111111111111111111111111111111112',
           symbol: 'SOL',
           name: 'Solana',
-          balance: data.solBalance * 1e9,
+          balance: Math.floor(data.solBalance * 1e9),
           uiAmount: data.solBalance,
           decimals: 9,
           logoUri: 'https://raw.githubusercontent.com/solana-labs/token-list/main/assets/mainnet/So11111111111111111111111111111111111111112/logo.png',
-          usdValue: data.solBalance * solPrice
+          usdValue: data.solBalance * (solPrice || 0)
         });
       }
 
       // Add all SPL tokens from the response
       if (data.tokens && Array.isArray(data.tokens)) {
+        console.log('WalletTokenManager: Processing', data.tokens.length, 'tokens');
+        
         for (const token of data.tokens) {
-          if (token.balance > 0) {
+          if (token.uiAmount && token.uiAmount > 0) {
             try {
               // Get token metadata
-              const { data: tokenMetadata } = await supabase.functions.invoke('token-metadata', {
+              const { data: tokenMetadata, error: metadataError } = await supabase.functions.invoke('token-metadata', {
                 body: { tokenMint: token.mint }
               });
+              
+              if (metadataError) {
+                console.warn('Failed to get metadata for token', token.mint, ':', metadataError);
+              }
               
               const isStablecoin = ['USDC', 'USDT', 'BUSD', 'DAI', 'PYUSD'].includes(tokenMetadata?.symbol || '');
               tokenList.push({
                 mint: token.mint,
-                symbol: tokenMetadata?.symbol || 'UNK',
-                name: tokenMetadata?.name || 'Unknown Token',
-                balance: token.balance,
-                uiAmount: token.uiAmount || token.balance / Math.pow(10, tokenMetadata?.decimals || 6),
-                decimals: tokenMetadata?.decimals || 6,
+                symbol: tokenMetadata?.symbol || token.symbol || 'UNK',
+                name: tokenMetadata?.name || token.name || 'Unknown Token',
+                balance: parseInt(token.amount || '0'),
+                uiAmount: token.uiAmount,
+                decimals: token.decimals || tokenMetadata?.decimals || 6,
                 logoUri: tokenMetadata?.logoUri,
-                usdValue: isStablecoin ? (token.uiAmount || token.balance / Math.pow(10, tokenMetadata?.decimals || 6)) : undefined
+                usdValue: isStablecoin ? token.uiAmount : undefined
               });
             } catch (error) {
+              console.warn('Error processing token metadata for', token.mint, ':', error);
               // Add token with minimal data if metadata fetch fails
               tokenList.push({
                 mint: token.mint,
-                symbol: 'UNK',
-                name: 'Unknown Token',
-                balance: token.balance,
-                uiAmount: token.uiAmount || token.balance / Math.pow(10, 6),
-                decimals: 6,
+                symbol: token.symbol || 'UNK',
+                name: token.name || 'Unknown Token',
+                balance: parseInt(token.amount || '0'),
+                uiAmount: token.uiAmount,
+                decimals: token.decimals || 6,
                 usdValue: undefined
               });
             }
@@ -127,17 +143,18 @@ export function WalletTokenManager({
         }
       }
 
+      console.log('WalletTokenManager: Final token list:', tokenList);
       setTokens(tokenList);
       
       toast({
         title: "Tokens refreshed",
-        description: `Refreshed ${tokenList.length} tokens with balances`,
+        description: `Found ${tokenList.length} tokens with balances`,
       });
     } catch (error: any) {
-      console.error('Failed to load token balances:', error);
+      console.error('WalletTokenManager: Failed to load token balances:', error);
       toast({
         title: "Error loading tokens",
-        description: error.message,
+        description: error.message || 'Unknown error occurred',
         variant: "destructive"
       });
     } finally {
