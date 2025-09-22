@@ -79,11 +79,11 @@ serve(async (req) => {
 
     console.log("✅ Found funded wallet:", fundedWallet);
 
-    // 3. Clean up campaign_wallets - ensure funded wallet is only connected to OrangTUAH
+    // 3. Clean up campaign_wallets - keep ONLY the funded wallet on OrangTUAH
     await serviceClient
       .from('campaign_wallets')
       .delete()
-      .neq('campaign_id', keepCampaign.id);
+      .or(`campaign_id.neq.${keepCampaign.id},wallet_id.neq.${fundedWallet.id}`);
 
     // Ensure funded wallet is connected to OrangTUAH
     const { error: insertError } = await serviceClient
@@ -99,55 +99,37 @@ serve(async (req) => {
       console.log("✅ Connected funded wallet to OrangTUAH campaign");
     }
 
-    // 4. Delete orphaned wallets (not connected to any campaign)
-    const { data: orphanedWallets } = await serviceClient
+    // 4. Delete ALL other wallets (placeholders/orphans)
+    let orphanedWalletsDeleted = 0;
+    const { data: deletedWallets, error: walletDeleteError } = await serviceClient
       .from('blackbox_wallets')
-      .select('id, pubkey, sol_balance')
-      .not('id', 'in', `(SELECT wallet_id FROM campaign_wallets WHERE campaign_id = '${keepCampaign.id}')`);
+      .delete()
+      .neq('id', fundedWallet.id)
+      .select('id, pubkey');
 
-    console.log(`🗑️ Found ${orphanedWallets?.length || 0} orphaned wallets to delete`);
-
-    if (orphanedWallets && orphanedWallets.length > 0) {
-      const { error: walletDeleteError } = await serviceClient
-        .from('blackbox_wallets')
-        .delete()
-        .in('id', orphanedWallets.map(w => w.id));
-
-      if (walletDeleteError) {
-        console.error("❌ Failed to delete orphaned wallets:", walletDeleteError);
-      } else {
-        console.log(`✅ Deleted ${orphanedWallets.length} orphaned wallets`);
-      }
+    if (walletDeleteError) {
+      console.error("❌ Failed to delete extra wallets:", walletDeleteError);
+    } else {
+      orphanedWalletsDeleted = deletedWallets?.length || 0;
+      console.log(`✅ Deleted ${orphanedWalletsDeleted} extra wallets`);
     }
 
-    // 5. Clean up commands - keep only commands associated with the funded wallet
-    const { data: orphanedCommands } = await serviceClient
+    // 5. Delete commands not on the funded wallet
+    let orphanedCommandsDeleted = 0;
+    const { data: deletedCommands, error: commandDeleteError } = await serviceClient
       .from('blackbox_command_codes')
-      .select('id, name, wallet_id')
-      .neq('wallet_id', fundedWallet.id);
+      .delete()
+      .neq('wallet_id', fundedWallet.id)
+      .select('id');
 
-    console.log(`🗑️ Found ${orphanedCommands?.length || 0} orphaned commands to delete`);
-
-    if (orphanedCommands && orphanedCommands.length > 0) {
-      const { error: commandDeleteError } = await serviceClient
-        .from('blackbox_command_codes')
-        .delete()
-        .in('id', orphanedCommands.map(c => c.id));
-
-      if (commandDeleteError) {
-        console.error("❌ Failed to delete orphaned commands:", commandDeleteError);
-      } else {
-        console.log(`✅ Deleted ${orphanedCommands.length} orphaned commands`);
-      }
+    if (commandDeleteError) {
+      console.error("❌ Failed to delete orphaned commands:", commandDeleteError);
+    } else {
+      orphanedCommandsDeleted = deletedCommands?.length || 0;
+      console.log(`✅ Deleted ${orphanedCommandsDeleted} orphaned commands`);
     }
 
-    // 6. Get remaining valid commands
-    const { data: validCommands } = await serviceClient
-      .from('blackbox_command_codes')
-      .select('id, name, config, is_active')
-      .eq('wallet_id', fundedWallet.id);
-
-    // 7. Clean up orphaned transactions
+    // 6. Clean up transactions, timing and notifications not for the kept campaign
     const { error: txCleanupError } = await serviceClient
       .from('blackbox_transactions')
       .delete()
@@ -158,6 +140,57 @@ serve(async (req) => {
     } else {
       console.log("✅ Cleaned up orphaned transactions");
     }
+
+    const { error: timingCleanupError } = await serviceClient
+      .from('campaign_timing')
+      .delete()
+      .neq('campaign_id', keepCampaign.id);
+
+    if (timingCleanupError) {
+      console.error("❌ Failed to clean up campaign timing:", timingCleanupError);
+    } else {
+      console.log("✅ Cleaned up campaign timing for other campaigns");
+    }
+
+    const { error: notifCleanupError } = await serviceClient
+      .from('campaign_notifications')
+      .delete()
+      .neq('campaign_id', keepCampaign.id);
+
+    if (notifCleanupError) {
+      console.error("❌ Failed to clean up campaign notifications:", notifCleanupError);
+    } else {
+      console.log("✅ Cleaned up campaign notifications for other campaigns");
+    }
+
+    // 7. Clean up user wallet pool entries (generated/local wallets)
+    let poolsDeleted = 0;
+    const { data: deletedPools, error: poolDelError } = await serviceClient
+      .from('wallet_pools')
+      .delete()
+      .neq('pubkey', fundedWalletPubkey)
+      .select('id, pubkey');
+
+    if (poolDelError) {
+      console.error("❌ Failed to clean up wallet pools:", poolDelError);
+    } else {
+      poolsDeleted = deletedPools?.length || 0;
+      console.log(`✅ Deleted ${poolsDeleted} wallet pool entries`);
+    }
+
+    // 8. Finally, delete all other campaigns directly
+    const { data: deletedCampaigns, error: campaignDeleteError } = await serviceClient
+      .from('blackbox_campaigns')
+      .delete()
+      .neq('id', keepCampaign.id)
+      .select('id');
+
+    if (campaignDeleteError) {
+      console.error("❌ Failed to delete other campaigns:", campaignDeleteError);
+    } else {
+      console.log(`✅ Deleted ${deletedCampaigns?.length || 0} other campaigns`);
+    }
+
 
     // 8. Get final state summary
     const { data: finalCampaigns } = await serviceClient
