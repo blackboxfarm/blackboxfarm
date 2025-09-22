@@ -8,6 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Slider } from "@/components/ui/slider";
 import { Plus, Settings, AlertTriangle, DollarSign, BarChart3, TrendingUp, Info, Eye, EyeOff, Edit, Shuffle, RotateCcw, Trash2 } from "lucide-react";
+import { useSolPrice } from "@/hooks/useSolPrice";
 import { Switch } from "@/components/ui/switch";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { supabase } from "@/integrations/supabase/client";
@@ -69,6 +70,7 @@ interface WalletCommandsProps {
 }
 
 export function WalletCommands({ wallet, campaign, isDevMode = false, devBalance }: WalletCommandsProps) {
+  const { price: solPrice } = useSolPrice();
   const [commands, setCommands] = useState<CommandCode[]>([]);
   const [showCreateForm, setShowCreateForm] = useState(false);
   const [editingCommand, setEditingCommand] = useState<CommandCode | null>(null);
@@ -885,12 +887,12 @@ export function WalletCommands({ wallet, campaign, isDevMode = false, devBalance
                           {command.config.type || "simple"}
                         </Badge>
                       </div>
-                      <p className="text-sm text-muted-foreground mt-1">
-                        {command.config.type === "simple" 
-                          ? `Buy ${command.config.buyAmount} SOL every ${command.config.buyInterval}s, sell ${command.config.sellPercent}% every ${command.config.sellInterval}s`
-                          : `Random buy ${command.config.buyAmount?.min}-${command.config.buyAmount?.max} SOL`
-                        }
-                      </p>
+                       <p className="text-sm text-muted-foreground mt-1">
+                         {command.config.type === "simple" 
+                           ? `Buy $${command.config.usdAmount || command.config.buyAmount} USD (≈${((command.config.usdAmount || command.config.buyAmount) / solPrice).toFixed(6)} SOL) every ${command.config.buyInterval}s, sell ${command.config.sellPercent}% every ${command.config.sellInterval}s`
+                           : `Random buy $${command.config.usdAmount || command.config.buyAmount} USD`
+                         }
+                       </p>
                     </div>
                      <div className="flex items-center gap-2">
                        <Button

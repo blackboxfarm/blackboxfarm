@@ -148,7 +148,14 @@ export function CommandCreationDialog({ open, onOpenChange, onCommandCreated }: 
               step="0.01"
               min="0.01"
             />
-            <p className="text-xs text-muted-foreground mt-1">Amount in USD to spend on each buy transaction</p>
+            <div className="flex justify-between text-xs text-muted-foreground mt-1">
+              <span>Amount in USD to spend on each buy transaction</span>
+              {!priceLoading && parseFloat(usdAmount) > 0 && (
+                <span className="font-medium text-primary">
+                  ≈ {(parseFloat(usdAmount) / solPrice).toFixed(6)} SOL
+                </span>
+              )}
+            </div>
           </div>
 
           <Tabs value={mode} onValueChange={(v) => setMode(v as "simple" | "complex")}>
