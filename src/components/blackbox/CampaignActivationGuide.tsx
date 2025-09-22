@@ -133,18 +133,19 @@ export function CampaignActivationGuide({ campaign, onCampaignUpdate }: Campaign
   useEffect(() => {
     loadCampaignData();
     
-    // Load persisted state on component mount
-    const persistedState = loadCampaignState(campaign.id);
-    setContractActive(persistedState);
+    // Initialize state from campaign prop (database state takes precedence)
+    setContractActive(campaign.is_active);
     
-    // Check actual cron status from backend
+    // Check actual cron status from backend and sync with database state
     checkCronStatus(campaign.id).then(cronStatus => {
-      if (cronStatus !== persistedState) {
-        // Sync local state with actual backend status
-        setContractActive(cronStatus);
-        saveCampaignState(campaign.id, cronStatus);
+      // If there's a mismatch between database and cron status, use database state
+      if (cronStatus !== campaign.is_active) {
+        console.log(`🔄 Syncing campaign ${campaign.id}: DB=${campaign.is_active}, Cron=${cronStatus}`);
+        setContractActive(campaign.is_active);
+        saveCampaignState(campaign.id, campaign.is_active);
       }
     });
+    
     
     // Set up real-time subscriptions
     const campaignChannel = supabase
@@ -760,9 +761,22 @@ export function CampaignActivationGuide({ campaign, onCampaignUpdate }: Campaign
         }
         console.log('✅ Contract building and submission passed');
         
+        // Update campaign status to active in database
+        const { error: updateError } = await supabase
+          .from('blackbox_campaigns')
+          .update({ is_active: true })
+          .eq('id', campaign.id);
+
+        if (updateError) throw updateError;
+        
         setContractActive(true);
         saveCampaignState(campaign.id, true); // Persist state
         setButtonState('success');
+        
+        // Update parent component with new status
+        if (onCampaignUpdate) {
+          onCampaignUpdate({ ...campaign, is_active: true });
+        }
         
         toast({
           title: "Contract Started Successfully! 🚀",
@@ -783,6 +797,11 @@ export function CampaignActivationGuide({ campaign, onCampaignUpdate }: Campaign
         setContractActive(false);
         saveCampaignState(campaign.id, false); // Persist state
         setButtonState('success');
+        
+        // Update parent component with new status
+        if (onCampaignUpdate) {
+          onCampaignUpdate({ ...campaign, is_active: false });
+        }
         
         toast({
           title: "Contract Stopped Successfully ⏹️",
