@@ -549,6 +549,27 @@ export function CampaignDashboard() {
                             >
                               <Bell className="h-3 w-3" />
                             </Button>
+                            {campaign.nickname === 'OrangTUAH' && (
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={async (e) => {
+                                  e.stopPropagation();
+                                  try {
+                                    const { data } = await supabase.functions.invoke('run-alda-test');
+                                    console.log('🧪 ALDA Test Result:', data);
+                                    toast({ title: `ALDA Test: ${data?.status || 'Completed'}`, description: 'Check console for details' });
+                                  } catch (error) {
+                                    console.error('❌ ALDA Test Failed:', error);
+                                    toast({ title: 'ALDA test failed', description: 'Check console for details', variant: 'destructive' });
+                                  }
+                                }}
+                                disabled={deletingCampaignId === campaign.id}
+                                className="h-6 px-2 text-xs"
+                              >
+                                🧪 Test
+                              </Button>
+                            )}
                             <Button
                               size="sm"
                               variant="outline"

@@ -78,23 +78,42 @@ serve(async (req) => {
     const wallet = commandData.blackbox_wallets;
     const campaign = wallet.campaign_wallets[0]?.blackbox_campaigns;
 
-    // Decrypt wallet secret key
+    // Decrypt wallet secret key with enhanced error handling
     const supabaseClient = createClient(
       Deno.env.get("SUPABASE_URL") ?? "",
       Deno.env.get("SUPABASE_ANON_KEY") ?? ""
     );
 
+    console.log(`🔓 Attempting to decrypt wallet secret for wallet ${wallet.pubkey}`);
+    
     const { data: decryptedData, error: decryptError } = await supabaseClient.functions.invoke(
       'encrypt-data',
       { body: { data: wallet.secret_key_encrypted, action: 'decrypt' } }
     );
 
     if (decryptError) {
-      throw new Error("Failed to decrypt wallet secret");
+      console.error("❌ Decryption error:", decryptError);
+      throw new Error(`Failed to decrypt wallet secret: ${decryptError.message || 'Unknown error'}`);
     }
 
     const secretKey = (decryptedData as DecryptionResponse).decryptedData;
-    const keypair = Keypair.fromSecretKey(decode(secretKey));
+    console.log(`✅ Successfully decrypted wallet secret, length: ${secretKey?.length || 0}`);
+    
+    let keypair: Keypair;
+    try {
+      // Try to decode as base58 first
+      keypair = Keypair.fromSecretKey(decode(secretKey));
+    } catch (base58Error) {
+      console.log("📝 Base58 decode failed, trying JSON array format...");
+      try {
+        // Try as JSON array
+        const secretArray = JSON.parse(secretKey);
+        keypair = Keypair.fromSecretKey(new Uint8Array(secretArray));
+      } catch (jsonError) {
+        console.error("❌ Both base58 and JSON array decode failed:", { base58Error, jsonError });
+        throw new Error("Invalid secret key format");
+      }
+    }
 
     // Initialize Solana connection
     const connection = new Connection(
@@ -133,11 +152,17 @@ serve(async (req) => {
 
       console.log(`💰 Buying $${buyAmountUSD.toFixed(4)} USD (≈${buyAmountSOL.toFixed(6)} SOL at $${solPrice}/SOL)`);
 
+      // Add randomized delay (1-10 seconds) - "random fucking seconds" as requested
+      const randomDelay = Math.floor(Math.random() * 9000) + 1000;
+      console.log(`⏱️ Random delay: ${randomDelay}ms before execution`);
+      await new Promise(resolve => setTimeout(resolve, randomDelay));
+
       // Detect token platform by address pattern
       const tokenAddress = campaign.token_address;
       const platform = detectTokenPlatform(tokenAddress);
       
-      console.log(`🔍 Detected platform: ${platform} for token: ${tokenAddress}`);
+      console.log(`🔍 Detected platform: ${platform} for token: ${tokenAddress} (ALDA)`);
+      console.log(`🎯 EXECUTING RANDOM FUCKING BUY as requested! 🚀`);
       
       // Log detailed execution info
       console.log(`🚀 EXECUTING BUY:`, {
@@ -327,10 +352,15 @@ serve(async (req) => {
             
             console.log(`💱 Token balance: ${tokenBalance}, decimals: ${accountInfo.value.decimals}, raw amount: ${accountInfo.value.amount}`);
             
+            // Add randomized delay for sell too (1-8 seconds)
+            const randomSellDelay = Math.floor(Math.random() * 7000) + 1000;
+            console.log(`⏱️ Random sell delay: ${randomSellDelay}ms before execution`);
+            await new Promise(resolve => setTimeout(resolve, randomSellDelay));
+            
             let swapBody: any;
             if (sellPercent >= 100) {
               // Sell all tokens
-              console.log(`💱 Selling ALL tokens (${sellPercent}% = sell all) on ${platform}`);
+              console.log(`💱 Selling ALL tokens (${sellPercent}% = sell all) on ${platform} - RANDOM FUCKING SELL! 🔥`);
               swapBody = {
                 side: 'sell',
                 tokenMint: campaign.token_address,
