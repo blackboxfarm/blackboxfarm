@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
-import { Plus, Settings, Bell, Trash2 } from "lucide-react";
+import { Plus, Settings, Bell, Trash2, ChevronDown } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "@/hooks/use-toast";
 import { CampaignWallets } from "./CampaignWallets";
@@ -18,7 +18,8 @@ import { TokenMetadataDisplay } from "@/components/token/TokenMetadataDisplay";
 import { TokenPriceDisplay } from "@/components/token/TokenPriceDisplay";
 import { useTokenMetadata } from "@/hooks/useTokenMetadata";
 import { Switch } from "@/components/ui/switch";
-
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 
 interface Campaign {
   id: string;
@@ -38,6 +39,7 @@ export function CampaignDashboard() {
   const [tokenData, setTokenData] = useState<any>(null);
   const [deletingCampaignId, setDeletingCampaignId] = useState<string | null>(null);
   const [deletionCountdown, setDeletionCountdown] = useState<number>(20);
+  const [showCampaignSelector, setShowCampaignSelector] = useState(false);
   
   const {
     sendCampaignNotification,
@@ -266,14 +268,6 @@ export function CampaignDashboard() {
     );
   };
 
-  const scrollToSection = (section: 'wallets' | 'commands') => {
-    const targetId = section === 'wallets' ? 'premium-wallet-generator' : 'campaign-commands';
-    const element = document.getElementById(targetId);
-    if (element) {
-      element.scrollIntoView({ behavior: 'smooth' });
-    }
-  };
-
   const deleteCampaign = async (campaign: Campaign) => {
     if (!confirm(`Are you sure you want to delete campaign "${campaign.nickname}"? The wallets and commands will be preserved for reuse.`)) {
       return;
@@ -357,26 +351,6 @@ export function CampaignDashboard() {
     }
   };
 
-  // Add campaign existence validator
-  const validateCampaignExists = async (campaign: Campaign): Promise<boolean> => {
-    try {
-      const { data, error } = await supabase
-        .from('blackbox_campaigns')
-        .select('id')
-        .eq('id', campaign.id)
-        .single();
-      
-      if (error || !data) {
-        console.error(`Campaign ${campaign.id} does not exist in database`);
-        return false;
-      }
-      return true;
-    } catch (error) {
-      console.error('Error validating campaign existence:', error);
-      return false;
-    }
-  };
-
   // Add force refresh function
   const forceRefreshCampaigns = async () => {
     // Clear all campaign-related cache
@@ -401,11 +375,11 @@ export function CampaignDashboard() {
 
   return (
     <div className="space-y-6">
-      {/* Campaign List */}
+      {/* Campaign Header */}
       <Card>
         <CardHeader>
           <div className="flex items-center justify-between">
-            <CardTitle>Your Campaigns</CardTitle>
+            <CardTitle>Campaign Dashboard</CardTitle>
             <div className="flex gap-2">
               <Button onClick={forceRefreshCampaigns} variant="outline" size="sm">
                 Force Refresh
@@ -417,103 +391,16 @@ export function CampaignDashboard() {
             </div>
           </div>
         </CardHeader>
-        <CardContent>
-          {campaigns.length === 0 ? (
+        {campaigns.length === 0 && (
+          <CardContent>
             <div className="text-center py-8 text-muted-foreground">
               <p>No campaigns yet. Create your first BumpBot campaign to get started.</p>
             </div>
-          ) : (
-            <div className="grid gap-3">
-              {campaigns.map((campaign) => (
-                <div
-                  key={campaign.id}
-                  className={`relative p-4 border rounded-lg cursor-pointer transition-colors ${
-                    selectedCampaign?.id === campaign.id 
-                      ? "border-primary bg-primary/5" 
-                      : "hover:border-primary/50"
-                  } ${deletingCampaignId === campaign.id ? "pointer-events-none" : ""}`}
-                  onClick={() => setSelectedCampaign(campaign)}
-                >
-                  {deletingCampaignId === campaign.id && (
-                    <div className="absolute inset-0 bg-background/80 backdrop-blur-sm rounded-lg flex items-center justify-center z-10">
-                      <div className="text-center">
-                        <div className="animate-spin h-8 w-8 border-2 border-primary border-t-transparent rounded-full mx-auto mb-3"></div>
-                        <p className="text-lg font-semibold mb-1">Deleting campaign...</p>
-                        <p className="text-2xl font-bold text-primary">{deletionCountdown}</p>
-                        <p className="text-xs text-muted-foreground mt-1">seconds remaining</p>
-                      </div>
-                    </div>
-                  )}
-                   <div className="space-y-4">
-                     <div className="flex items-center justify-between">
-                       <div className="flex-1 min-w-0">
-                         <h3 className="font-medium mb-2">{campaign.nickname}</h3>
-                         <div className="space-y-2">
-                           <button
-                             onClick={() => navigator.clipboard.writeText(campaign.token_address)}
-                             className="text-sm text-muted-foreground font-mono hover:text-foreground transition-colors cursor-pointer"
-                             title="Click to copy full address"
-                           >
-                             {campaign.token_address}
-                           </button>
-                           <TokenPriceDisplay 
-                             tokenMint={campaign.token_address}
-                             size="sm"
-                             showDetails={true}
-                           />
-                         </div>
-                       </div>
-                       
-                       <div className="flex items-center gap-4">
-                         <Badge variant={campaign.is_active ? "default" : "secondary"}>
-                           {campaign.is_active ? "Enabled" : "Disabled"}
-                         </Badge>
-                         <Button
-                           size="sm"
-                           variant="outline"
-                           onClick={(e) => {
-                             e.stopPropagation();
-                             handleNotifyDonors(campaign);
-                           }}
-                           disabled={!canSendNotification(campaign.id) || isNotificationLoading}
-                           title={getNotificationButtonText(campaign.id, campaign.is_active)}
-                         >
-                           <Bell className="h-4 w-4" />
-                         </Button>
-                         <Button
-                           size="sm"
-                           variant="outline"
-                           onClick={(e) => {
-                             e.stopPropagation();
-                             deleteCampaign(campaign);
-                           }}
-                           disabled={deletingCampaignId === campaign.id}
-                           title="Delete campaign (preserves wallets and commands)"
-                         >
-                           <Trash2 className="h-4 w-4" />
-                         </Button>
-                         <div className="flex items-center gap-2">
-                           <label className="text-sm font-medium">
-                             {campaign.is_active ? "Enabled" : "Disabled"}
-                           </label>
-                           <Switch
-                             checked={campaign.is_active}
-                             onCheckedChange={(checked) => {
-                               toggleCampaign(campaign);
-                             }}
-                           />
-                         </div>
-                       </div>
-                     </div>
-                   </div>
-                </div>
-              ))}
-            </div>
-          )}
-        </CardContent>
+          </CardContent>
+        )}
       </Card>
 
-      {/* Create Campaign Form */}
+      {/* New Campaign Form */}
       {showCreateForm && (
         <Card>
           <CardHeader>
@@ -524,35 +411,33 @@ export function CampaignDashboard() {
               <Label htmlFor="nickname">Campaign Nickname</Label>
               <Input
                 id="nickname"
+                placeholder="e.g., My First Campaign"
                 value={newCampaign.nickname}
-                onChange={(e) => setNewCampaign(prev => ({ ...prev, nickname: e.target.value }))}
-                placeholder="My Token Pump"
+                onChange={(e) => setNewCampaign({ ...newCampaign, nickname: e.target.value })}
               />
             </div>
-            <TokenValidationInput
-              value={newCampaign.token_address}
-              onChange={(value) => setNewCampaign(prev => ({ ...prev, token_address: value }))}
-              onValidationChange={(isValid, data) => {
-                setIsValidToken(isValid);
-                setTokenData(data);
-              }}
-            />
-            <div className="flex gap-2">
-              <Button 
-                onClick={createCampaign} 
-                disabled={!newCampaign.nickname || !newCampaign.token_address}
-              >
-                Create Campaign {/* Temporarily removed !isValidToken requirement due to edge function issues */}
-              </Button>
-              <Button 
-                variant="outline" 
-                onClick={() => {
-                  setShowCreateForm(false);
-                  setNewCampaign({ nickname: "", token_address: "" });
-                  setIsValidToken(false);
-                  setTokenData(null);
+            <div>
+              <Label htmlFor="token">Token Address</Label>
+              <TokenValidationInput
+                value={newCampaign.token_address}
+                onChange={(value) => {
+                  setNewCampaign({ ...newCampaign, token_address: value });
                 }}
-              >
+                placeholder="Enter Solana token address"
+              />
+            </div>
+            {newCampaign.token_address && (
+              <TokenPriceDisplay 
+                tokenMint={newCampaign.token_address}
+                size="md"
+                showDetails={true}
+              />
+            )}
+            <div className="flex gap-2">
+              <Button onClick={createCampaign}>
+                Create Campaign
+              </Button>
+              <Button variant="outline" onClick={() => setShowCreateForm(false)}>
                 Cancel
               </Button>
             </div>
@@ -560,30 +445,120 @@ export function CampaignDashboard() {
         </Card>
       )}
 
-      {/* Selected Campaign Details */}
-      {selectedCampaign && (
+      {/* Campaign Management */}
+      {campaigns.length > 0 && (
         <>
-          <CampaignActivationGuide 
-            campaign={selectedCampaign}
-            onCampaignUpdate={(updated) => {
-              setSelectedCampaign(prev => (prev && prev.id === updated.id) ? { ...prev, ...updated } as Campaign : prev);
-              setCampaigns(prev => prev.map(c => c.id === updated.id ? { ...c, ...updated } as Campaign : c));
-            }}
-          />
-          <LiveActivityMonitor campaignId={selectedCampaign.id} />
+          {/* Campaign Selection */}
+          <Card>
+            <CardHeader>
+              <Collapsible open={showCampaignSelector} onOpenChange={setShowCampaignSelector}>
+                <CollapsibleTrigger asChild>
+                  <div className="flex items-center justify-between cursor-pointer">
+                    <div className="flex items-center gap-3">
+                      <CardTitle>
+                        {selectedCampaign ? `Active: ${selectedCampaign.nickname}` : "Select Campaign"}
+                      </CardTitle>
+                      {selectedCampaign && (
+                        <Badge variant={selectedCampaign.is_active ? "default" : "secondary"}>
+                          {selectedCampaign.is_active ? "Active" : "Disabled"}
+                        </Badge>
+                      )}
+                    </div>
+                    <ChevronDown className={`h-4 w-4 transition-transform ${showCampaignSelector ? 'rotate-180' : ''}`} />
+                  </div>
+                </CollapsibleTrigger>
+                <CollapsibleContent>
+                  <div className="mt-4 space-y-2 max-h-64 overflow-y-auto">
+                    {campaigns.map((campaign) => (
+                      <div
+                        key={campaign.id}
+                        className={`relative p-3 border rounded-lg cursor-pointer transition-colors ${
+                          selectedCampaign?.id === campaign.id 
+                            ? "border-primary bg-primary/5" 
+                            : "hover:border-primary/50"
+                        } ${deletingCampaignId === campaign.id ? "pointer-events-none" : ""}`}
+                        onClick={() => {
+                          setSelectedCampaign(campaign);
+                  setShowCampaignSelector(false);
+                        }}
+                      >
+                        {deletingCampaignId === campaign.id && (
+                          <div className="absolute inset-0 bg-background/80 backdrop-blur-sm rounded-lg flex items-center justify-center z-10">
+                            <div className="text-center">
+                              <div className="animate-spin h-6 w-6 border-2 border-primary border-t-transparent rounded-full mx-auto mb-2"></div>
+                              <p className="text-sm font-semibold mb-1">Deleting...</p>
+                              <p className="text-lg font-bold text-primary">{deletionCountdown}</p>
+                            </div>
+                          </div>
+                        )}
+                        <div className="flex items-center justify-between">
+                          <div className="flex-1 min-w-0">
+                            <h4 className="font-medium text-sm">{campaign.nickname}</h4>
+                            <p className="text-xs text-muted-foreground font-mono truncate">
+                              {campaign.token_address}
+                            </p>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <Badge variant={campaign.is_active ? "default" : "secondary"} className="text-xs">
+                              {campaign.is_active ? "Active" : "Disabled"}
+                            </Badge>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleNotifyDonors(campaign);
+                              }}
+                              disabled={!canSendNotification(campaign.id) || isNotificationLoading}
+                              title={getNotificationButtonText(campaign.id, campaign.is_active)}
+                              className="h-6 w-6 p-0"
+                            >
+                              <Bell className="h-3 w-3" />
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                deleteCampaign(campaign);
+                              }}
+                              disabled={deletingCampaignId === campaign.id}
+                              className="h-6 w-6 p-0"
+                            >
+                              <Trash2 className="h-3 w-3" />
+                            </Button>
+                            <Switch
+                              checked={campaign.is_active}
+                              onCheckedChange={() => toggleCampaign(campaign)}
+                              disabled={deletingCampaignId === campaign.id}
+                            />
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </CollapsibleContent>
+              </Collapsible>
+            </CardHeader>
+          </Card>
+
+          {selectedCampaign && (
+            <>
+              <CampaignActivationGuide 
+                campaign={selectedCampaign} 
+                onCampaignUpdate={(updatedCampaign) => {
+                  setSelectedCampaign({...selectedCampaign, ...updatedCampaign});
+                  setCampaigns(prev => prev.map(c => c.id === updatedCampaign.id ? {...c, ...updatedCampaign} : c));
+                }}
+              />
+              <LiveActivityMonitor campaignId={selectedCampaign.id} />
+              <CampaignCommands campaign={selectedCampaign} />
+              <CampaignWallets campaign={selectedCampaign} />
+            </>
+          )}
         </>
       )}
 
-      {/* Separate Command and Wallet Management Sections */}
-      <div id="campaign-commands">
-        <CampaignCommands campaign={selectedCampaign || campaigns[0]} />
-      </div>
-      
-      <div id="premium-wallet-generator">
-        <CampaignWallets campaign={selectedCampaign || campaigns[0]} />
-      </div>
-
-      {/* Wallet Recovery - moved to bottom */}
       <WalletRecovery 
         campaigns={campaigns} 
         onWalletRecovered={() => {

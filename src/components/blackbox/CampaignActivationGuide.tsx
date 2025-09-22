@@ -10,6 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { createClient } from "@supabase/supabase-js";
 import { toast } from "@/hooks/use-toast";
 import { CampaignTransactionHistory } from "./CampaignTransactionHistory";
+import { TokenPriceDisplay } from "@/components/token/TokenPriceDisplay";
 
 // Simple client to avoid type recursion issues
 const supabase = createClient(
@@ -857,18 +858,46 @@ export function CampaignActivationGuide({ campaign, onCampaignUpdate }: Campaign
     <Card className="border-2">
       <CardHeader>
         <CardTitle className="flex items-center justify-between">
-          <div>
-            <h3 className="text-xl font-bold">{campaign.nickname}</h3>
-            <p className="text-sm text-muted-foreground">{campaign.token_address}</p>
+          <div className="flex items-center gap-4">
+            <div>
+              <h3 className="text-xl font-bold">{campaign.nickname}</h3>
+              <Badge variant={campaign.is_active ? "default" : "secondary"} className="mt-1">
+                {campaign.is_active ? "🟢 ACTIVE" : "⚪ INACTIVE"}
+              </Badge>
+            </div>
+            <div className="hidden sm:block">
+              <TokenPriceDisplay 
+                tokenMint={campaign.token_address}
+                size="lg"
+                showDetails={true}
+              />
+            </div>
           </div>
           <div className="flex items-center gap-2">
-            <Badge variant={campaign.is_active ? "default" : "secondary"}>
-              {campaign.is_active ? "🟢 ACTIVE" : "⚪ INACTIVE"}
-            </Badge>
             <Label className="text-sm">Enabled</Label>
             <Switch checked={campaign.is_active} disabled />
           </div>
         </CardTitle>
+        
+        {/* Token Address */}
+        <div className="mt-2">
+          <button
+            onClick={() => navigator.clipboard.writeText(campaign.token_address)}
+            className="text-sm text-muted-foreground font-mono hover:text-foreground transition-colors cursor-pointer"
+            title="Click to copy full address"
+          >
+            {campaign.token_address}
+          </button>
+        </div>
+        
+        {/* Mobile Token Display */}
+        <div className="block sm:hidden mt-3">
+          <TokenPriceDisplay 
+            tokenMint={campaign.token_address}
+            size="md"
+            showDetails={true}
+          />
+        </div>
       </CardHeader>
       <CardContent className="space-y-6">
         {/* Wallets Section */}
