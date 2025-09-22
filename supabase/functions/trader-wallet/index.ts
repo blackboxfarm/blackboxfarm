@@ -101,17 +101,30 @@ serve(async (req) => {
       try {
         slog("Decrypting owner secret from header");
         secretToUse = await SecureStorage.decryptWalletSecret(headerSecret);
-        slog("Owner secret decrypted (length: " + secretToUse.length + ")");
-      } catch (error) {
-        slog("Failed to decrypt wallet secret: " + (error as Error)?.message);
-        // Try using raw secret for legacy compatibility
+        slog("✅ AES decryption successful (length: " + secretToUse.length + ")");
+      } catch (aesError) {
+        slog("⚠️ AES decryption failed: " + (aesError as Error)?.message);
+        
+        // Try base64 decoding for old format
         try {
-          const testKp = parseKeypair(headerSecret);
-          slog("Using raw header secret (legacy compatibility)");
-          secretToUse = headerSecret;
-        } catch (parseError) {
-          slog("Raw secret parse also failed: " + (parseError as Error)?.message);
-          return ok({ error: `Failed to decrypt wallet secret: ${(error as Error).message}`, ...(debug ? { debugLogs: logs } : {}) }, 400);
+          slog("🔄 Trying base64 decode for legacy format");
+          const decoded = atob(headerSecret);
+          const testKp = parseKeypair(decoded);
+          secretToUse = decoded;
+          slog("✅ Base64 decode successful - using legacy format");
+        } catch (base64Error) {
+          slog("❌ Base64 decode failed: " + (base64Error as Error)?.message);
+          
+          // Try using raw secret as final fallback
+          try {
+            slog("🔄 Trying raw secret as final fallback");
+            const testKp = parseKeypair(headerSecret);
+            slog("✅ Raw secret valid - using as-is");
+            secretToUse = headerSecret;
+          } catch (parseError) {
+            slog("❌ All decryption methods failed: " + (parseError as Error)?.message);
+            return ok({ error: `Failed to decrypt wallet secret: ${(aesError as Error).message}`, ...(debug ? { debugLogs: logs } : {}) }, 400);
+          }
         }
       }
     } else {
