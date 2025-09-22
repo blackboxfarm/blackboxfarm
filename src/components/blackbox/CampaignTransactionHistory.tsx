@@ -62,6 +62,7 @@ export function CampaignTransactionHistory({ campaignId, className }: CampaignTr
   const [loading, setLoading] = useState(false);
   const [lastActivity, setLastActivity] = useState<Date | null>(null);
   const [isStalled, setIsStalled] = useState(false);
+  const [clearBefore, setClearBefore] = useState<Date | null>(null);
 
   const visibleCount = 20;
 
@@ -159,7 +160,20 @@ export function CampaignTransactionHistory({ campaignId, className }: CampaignTr
     }
   };
 
-  const recentTransactions = transactions.slice(0, 7); // Show last 7 for status view
+  const recentTransactions = useMemo(() => {
+    let filtered = transactions.slice(0, 7); // Show last 7 for status view
+    if (clearBefore) {
+      filtered = filtered.filter(tx => new Date(tx.executed_at!) > clearBefore);
+    }
+    return filtered;
+  }, [transactions, clearBefore]);
+
+  const filteredTransactions = useMemo(() => {
+    if (clearBefore) {
+      return transactions.filter(tx => new Date(tx.executed_at!) > clearBefore);
+    }
+    return transactions;
+  }, [transactions, clearBefore]);
 
   return (
     <div className={`space-y-4 ${className}`}>
@@ -195,10 +209,22 @@ export function CampaignTransactionHistory({ campaignId, className }: CampaignTr
         
         {statusOpen && (
           <CardContent className="pt-0 max-h-60 overflow-y-auto">
+            <div className="flex justify-between items-center mb-2">
+              <span className="text-xs text-muted-foreground">Recent activity</span>
+              <Button 
+                size="sm" 
+                variant="outline"
+                onClick={() => setClearBefore(new Date())}
+                disabled={recentTransactions.length === 0}
+                className="h-6 text-xs"
+              >
+                Clear
+              </Button>
+            </div>
             <div className="space-y-2">
               {recentTransactions.length === 0 ? (
                 <div className="text-sm text-muted-foreground text-center py-4">
-                  No transactions yet
+                  {clearBefore ? "No new transactions" : "No transactions yet"}
                 </div>
               ) : (
                 recentTransactions.map((tx) => (
@@ -260,6 +286,14 @@ export function CampaignTransactionHistory({ campaignId, className }: CampaignTr
               <Badge variant="outline">live</Badge>
               <Button 
                 size="sm" 
+                variant="outline"
+                onClick={() => setClearBefore(new Date())}
+                disabled={filteredTransactions.length === 0}
+              >
+                Clear
+              </Button>
+              <Button 
+                size="sm" 
                 variant="ghost" 
                 onClick={() => setHistoryOpen(o => !o)} 
                 aria-label={historyOpen ? "Collapse" : "Expand"}
@@ -276,7 +310,7 @@ export function CampaignTransactionHistory({ campaignId, className }: CampaignTr
             ) : (
               <ScrollArea className="max-h-80">
                 <ul className="divide-y">
-                  {transactions.map((tx) => (
+                  {filteredTransactions.map((tx) => (
                     <li key={tx.id} className="py-2">
                       <div className="flex items-start justify-between gap-3">
                         <div className="min-w-0">
@@ -312,8 +346,10 @@ export function CampaignTransactionHistory({ campaignId, className }: CampaignTr
                       </div>
                     </li>
                   ))}
-                  {(!loading && transactions.length === 0) && (
-                    <li className="py-6 text-sm text-muted-foreground text-center">No transactions yet</li>
+                  {(!loading && filteredTransactions.length === 0) && (
+                    <li className="py-6 text-sm text-muted-foreground text-center">
+                      {clearBefore ? "No new transactions since clear" : "No transactions yet"}
+                    </li>
                   )}
                 </ul>
               </ScrollArea>

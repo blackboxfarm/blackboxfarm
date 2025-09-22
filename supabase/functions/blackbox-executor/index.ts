@@ -108,17 +108,30 @@ serve(async (req) => {
       // Execute REAL buy transaction using Jupiter/Raydium
       const config = commandData.config;
       
-      // buyAmount is configured in SOL, not USD
-      const buyAmountSOL = config.type === "simple" 
-        ? config.buyAmount || 0.01  // This is in SOL
-        : Math.random() * ((config.buyAmount?.max || 0.02) - (config.buyAmount?.min || 0.005)) + (config.buyAmount?.min || 0.005);
-
-      // Get current SOL price for logging purposes
+      // Get current SOL price for conversion
       const { data: solPriceData } = await supabaseClient.functions.invoke('sol-price');
       const solPrice = solPriceData?.price || 201; // Fallback price
-      const buyAmountUSD = buyAmountSOL * solPrice;
+      
+      // Handle both new USD format and legacy SOL format for backwards compatibility
+      let buyAmountUSD: number;
+      let buyAmountSOL: number;
+      
+      if (config.usdAmount) {
+        // New format: USD amount specified
+        buyAmountUSD = config.type === "simple" 
+          ? config.usdAmount
+          : Math.random() * ((config.usdAmount?.max || 0.02) - (config.usdAmount?.min || 0.01)) + (config.usdAmount?.min || 0.01);
+        buyAmountSOL = buyAmountUSD / solPrice;
+      } else {
+        // Legacy format: SOL amount specified (treat as USD for conversion)
+        const legacyAmount = config.type === "simple" 
+          ? config.buyAmount || 0.01
+          : Math.random() * ((config.buyAmount?.max || 0.02) - (config.buyAmount?.min || 0.005)) + (config.buyAmount?.min || 0.005);
+        buyAmountUSD = legacyAmount; // Treat legacy values as USD
+        buyAmountSOL = buyAmountUSD / solPrice;
+      }
 
-      console.log(`💰 Buying ${buyAmountSOL} SOL ($${buyAmountUSD.toFixed(2)} USD at $${solPrice}/SOL)`);
+      console.log(`💰 Buying $${buyAmountUSD.toFixed(4)} USD (≈${buyAmountSOL.toFixed(6)} SOL at $${solPrice}/SOL)`);
 
       // Detect token platform by address pattern
       const tokenAddress = campaign.token_address;
@@ -138,12 +151,12 @@ serve(async (req) => {
       });
 
       // Use raydium-swap function for REAL blockchain trades
-      // The raydium-swap function already handles fallbacks to Jupiter and pump.fun tokens
+      // Pass USD amount to raydium-swap for proper conversion
       const swapResponse = await supabaseClient.functions.invoke('raydium-swap', {
         body: {
           side: 'buy',
           tokenMint: campaign.token_address,
-          usdcAmount: buyAmountSOL, // Amount in SOL
+          usdcAmount: buyAmountUSD, // Pass USD amount for conversion
           slippageBps: 500, // 5% slippage
           confirmPolicy: 'processed',
           buyWithSol: true

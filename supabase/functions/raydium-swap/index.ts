@@ -290,8 +290,8 @@ serve(async (req) => {
           if (!Number.isFinite(usd) || usd <= 0) return bad("Invalid usdcAmount for buy");
           const solPrice = await fetchSolUsdPrice();
           const approxPrice = solPrice > 0 ? solPrice : 200;
-          let wantedLamports = Math.floor((usd / approxPrice) * 1_000_000_000);
-          const feeReserveLamports = 10_000_000; // 0.01 SOL
+            let wantedLamports = Math.floor((usd / approxPrice) * 1_000_000_000);
+            const feeReserveLamports = 1_000_000; // 0.001 SOL (reduced for micro-buys)
           let solBal: number | null = null;
           try { solBal = await connection.getBalance(owner.publicKey); } catch { solBal = null; }
           let lamports = wantedLamports;
@@ -387,7 +387,7 @@ serve(async (req) => {
             let wantedLamports = Math.floor((usd / approxPrice) * 1_000_000_000);
 
             // Reserve a small amount for fees when spending SOL directly
-            const feeReserveLamports = 10_000_000; // 0.01 SOL
+            const feeReserveLamports = 1_000_000; // 0.001 SOL (reduced for micro-buys)
 
             let solBal: number | null = null;
             try { solBal = await connection.getBalance(owner.publicKey); } catch { solBal = null; }
