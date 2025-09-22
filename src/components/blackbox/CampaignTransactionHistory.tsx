@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { supabase } from "@/integrations/supabase/client";
 import { Clock, ExternalLink, X, List, Activity, AlertTriangle, ChevronDown, ChevronUp } from "lucide-react";
+import { useSolPrice } from "@/hooks/useSolPrice";
 
 interface CampaignTransaction {
   id: string;
@@ -63,6 +64,7 @@ export function CampaignTransactionHistory({ campaignId, className }: CampaignTr
   const [lastActivity, setLastActivity] = useState<Date | null>(null);
   const [isStalled, setIsStalled] = useState(false);
   const [clearBefore, setClearBefore] = useState<Date | null>(null);
+  const { price: solPrice } = useSolPrice();
 
   const visibleCount = 20;
 
@@ -241,6 +243,9 @@ export function CampaignTransactionHistory({ campaignId, className }: CampaignTr
                       </Badge>
                       <span className="font-mono">
                         {tx.amount_sol.toFixed(6)} SOL
+                        <span className="text-muted-foreground ml-1">
+                          (${(tx.amount_sol * solPrice).toFixed(4)})
+                        </span>
                       </span>
                       {tx.status === 'failed' && (
                         <span className="text-destructive text-xs">
@@ -323,23 +328,35 @@ export function CampaignTransactionHistory({ campaignId, className }: CampaignTr
                             </Badge>
                           </div>
                           <div className="mt-1 text-sm text-muted-foreground">
-                            {tx.amount_sol} SOL • gas {tx.gas_fee ?? 0} • fee {tx.service_fee ?? 0}
+                            {tx.amount_sol} SOL (${(tx.amount_sol * solPrice).toFixed(4)}) • gas {tx.gas_fee ?? 0} • fee {tx.service_fee ?? 0}
                           </div>
                           <div className="mt-1 text-xs text-muted-foreground flex items-center gap-1">
                             <Clock className="h-3 w-3" />
                             <span>{formatTs(tx.executed_at)}</span>
                           </div>
                           {tx.signature && (
-                            <div className="mt-1 text-xs">
+                            <div className="mt-1 text-xs flex items-center gap-2">
                               <a
-                                className="underline hover:no-underline"
+                                className="underline hover:no-underline text-primary"
                                 href={`https://solscan.io/tx/${tx.signature}`}
                                 target="_blank"
                                 rel="noreferrer"
-                                title={tx.signature}
+                                title={`View on Solscan: ${tx.signature}`}
                               >
-                                {truncate(tx.signature)} <ExternalLink className="inline h-3 w-3" />
+                                Solscan <ExternalLink className="inline h-3 w-3" />
                               </a>
+                              <a
+                                className="underline hover:no-underline text-primary"
+                                href={`https://explorer.solana.com/tx/${tx.signature}`}
+                                target="_blank"
+                                rel="noreferrer"
+                                title={`View on Solana Explorer: ${tx.signature}`}
+                              >
+                                Explorer <ExternalLink className="inline h-3 w-3" />
+                              </a>
+                              <span className="font-mono text-muted-foreground">
+                                {truncate(tx.signature)}
+                              </span>
                             </div>
                           )}
                         </div>

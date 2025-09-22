@@ -257,19 +257,31 @@ serve(async (req) => {
           console.log(`🧪 TEST ACCOUNT (${userEmail}): Skipping revenue collection for user ${campaign.user_id}`);
         }
 
-        // Log transaction
-        await supabaseService
+        // Check if transaction already exists to prevent duplicates
+        const { data: existingTx } = await supabaseService
           .from("blackbox_transactions")
-          .insert({
-            wallet_id: wallet.id,
-            command_code_id: command_code_id,
-            transaction_type: "buy",
-            amount_sol: buyAmountSOL,
-            gas_fee: 0.000005, // Standard Solana gas
-            service_fee: serviceFee,
-            signature: signature,
-            status: "completed"
-          });
+          .select("id")
+          .eq("signature", signature)
+          .eq("wallet_id", wallet.id)
+          .single();
+
+        if (!existingTx) {
+          // Log transaction only if it doesn't exist
+          await supabaseService
+            .from("blackbox_transactions")
+            .insert({
+              wallet_id: wallet.id,
+              command_code_id: command_code_id,
+              transaction_type: "buy",
+              amount_sol: buyAmountSOL,
+              gas_fee: 0.000005, // Standard Solana gas
+              service_fee: serviceFee,
+              signature: signature,
+              status: "completed"
+            });
+        } else {
+          console.log(`⚠️ Transaction ${signature} already recorded, skipping duplicate`);
+        }
 
         result = { signature, amount: buyAmountSOL, type: "buy", revenue_collected: revenueCollected, signatures };
       }
@@ -420,19 +432,31 @@ serve(async (req) => {
 
               console.log(`✅ REAL SELL executed: ${tokensSold} tokens -> ${solReceived} SOL, signatures: ${signatures.join(', ')}`);
 
-              // Log transaction
-              await supabaseService
+              // Check if transaction already exists to prevent duplicates
+              const { data: existingSellTx } = await supabaseService
                 .from("blackbox_transactions")
-                .insert({
-                  wallet_id: wallet.id,
-                  command_code_id: command_code_id,
-                  transaction_type: "sell",
-                  amount_sol: solReceived,
-                  gas_fee: 0.000005,
-                  service_fee: solReceived * 0.35,
-                  signature: signature,
-                  status: "completed"
-                });
+                .select("id")
+                .eq("signature", signature)
+                .eq("wallet_id", wallet.id)
+                .single();
+
+              if (!existingSellTx) {
+                // Log transaction only if it doesn't exist
+                await supabaseService
+                  .from("blackbox_transactions")
+                  .insert({
+                    wallet_id: wallet.id,
+                    command_code_id: command_code_id,
+                    transaction_type: "sell",
+                    amount_sol: solReceived,
+                    gas_fee: 0.000005,
+                    service_fee: solReceived * 0.35,
+                    signature: signature,
+                    status: "completed"
+                  });
+              } else {
+                console.log(`⚠️ Sell transaction ${signature} already recorded, skipping duplicate`);
+              }
 
               result = { amount: tokensSold, percent: sellPercent, type: "sell", signatures, solReceived };
             }
