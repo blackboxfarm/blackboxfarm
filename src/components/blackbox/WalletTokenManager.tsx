@@ -505,38 +505,34 @@ export function WalletTokenManager({
           <div className="text-center py-4 text-muted-foreground">
             <RefreshCw className="h-4 w-4 animate-spin mx-auto mb-2" />
             Loading token balances...
-          </div>
-        ) : tokens.length === 0 ? (
-          <div className="text-center py-4 text-muted-foreground">
-            <p>No tokens found in this wallet</p>
-          </div>
-        ) : (
-          <div className="space-y-4">
-            <div className="p-3 bg-muted/50 rounded-lg border">
-              <div className="text-sm font-medium">Total Portfolio Value</div>
-              <div className="text-lg font-bold text-primary">{formatUsdValue(getTotalUsdValue())}</div>
             </div>
-            
-            <div className="space-y-3">
-              {tokens.map((token) => (
-                <div key={token.mint} className="p-4 border rounded-lg space-y-3">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-3">
-                      {token.logoUri && (
-                        <img 
-                          src={token.logoUri} 
-                          alt={token.symbol}
-                          className="w-8 h-8 rounded-full"
-                          onError={(e) => {
-                            e.currentTarget.style.display = 'none';
-                          }}
-                        />
-                      )}
-                      <div>
-                        <div className="font-medium">{token.symbol}</div>
-                        <div className="text-sm text-muted-foreground">{token.name}</div>
+          ) : (
+            <div className="space-y-4">
+              <div className="p-3 bg-muted/50 rounded-lg border">
+                <div className="text-sm font-medium">Total Portfolio Value</div>
+                <div className="text-lg font-bold text-primary">{formatUsdValue(getTotalUsdValue())}</div>
+              </div>
+              
+              <div className="space-y-3">
+                {tokens.map((token) => (
+                  <div key={token.mint} className="p-4 border rounded-lg space-y-3">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-3">
+                        {token.logoUri && (
+                          <img 
+                            src={token.logoUri} 
+                            alt={token.symbol}
+                            className="w-8 h-8 rounded-full"
+                            onError={(e) => {
+                              e.currentTarget.style.display = 'none';
+                            }}
+                          />
+                        )}
+                        <div>
+                          <div className="font-medium">{token.symbol}</div>
+                          <div className="text-sm text-muted-foreground">{token.name}</div>
+                        </div>
                       </div>
-                    </div>
                     
                     <div className="text-right">
                       <div className="font-medium">

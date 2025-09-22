@@ -14,6 +14,7 @@ import { SecurityDashboard } from "@/components/security/SecurityDashboard";
 import { NotificationCenter } from "@/components/NotificationCenter";
 import { AnalyticsDashboard } from "@/components/AnalyticsDashboard";
 import { ReferralDashboard } from "@/components/blackbox/ReferralDashboard";
+import { EnhancedWalletView } from "@/components/blackbox/EnhancedWalletView";
 import CommunityWalletDashboard from "@/components/blackbox/CommunityWalletDashboard";
 import { CommunityWalletPublic } from "@/components/blackbox/CommunityWalletPublic";
 import { OverviewTab } from "@/components/blackbox/OverviewTab";
@@ -82,7 +83,7 @@ export default function BlackBox() {
 
         {/* Main Navigation */}
         <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-          <TabsList className={`grid w-full ${isAdminView ? 'grid-cols-11' : 'grid-cols-5'}`}>
+          <TabsList className={`grid w-full ${isAdminView ? 'grid-cols-12' : 'grid-cols-5'}`}>
             <TabsTrigger value="overview">Overview</TabsTrigger>
             {isAdminView && <TabsTrigger value="dashboard">Dashboard</TabsTrigger>}
             {isAdminView && <TabsTrigger value="watcher">Watcher</TabsTrigger>}
@@ -93,6 +94,7 @@ export default function BlackBox() {
             <TabsTrigger value="fees">Calculator</TabsTrigger>
             <TabsTrigger value="analytics">Analytics</TabsTrigger>
             {isAdminView && <TabsTrigger value="referrals">Referrals</TabsTrigger>}
+            {isAdminView && <TabsTrigger value="wallets">Wallets</TabsTrigger>}
             {isAdminView && <TabsTrigger value="security">Security</TabsTrigger>}
           </TabsList>
 
@@ -159,6 +161,10 @@ export default function BlackBox() {
 
           <TabsContent value="referrals" className="space-y-6">
             <ReferralDashboard />
+          </TabsContent>
+
+          <TabsContent value="wallets" className="space-y-6">
+            <EnhancedWalletView />
           </TabsContent>
 
           <TabsContent value="security" className="space-y-6">
