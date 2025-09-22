@@ -230,9 +230,11 @@ export function CampaignDashboard() {
   };
 
   const toggleCampaign = async (campaign: Campaign) => {
+    const newStatus = !campaign.is_active;
+
     const { error } = await supabase
       .from('blackbox_campaigns')
-      .update({ is_active: !campaign.is_active })
+      .update({ is_active: newStatus })
       .eq('id', campaign.id);
 
     if (error) {
@@ -240,10 +242,16 @@ export function CampaignDashboard() {
       return;
     }
 
+    // Optimistically sync local state so list and details stay in lockstep
+    setCampaigns(prev => prev.map(c => c.id === campaign.id ? { ...c, is_active: newStatus } : c));
+    setSelectedCampaign(prev => (prev && prev.id === campaign.id) ? { ...prev, is_active: newStatus } : prev);
+
     toast({ 
-      title: campaign.is_active ? "Campaign disabled" : "Campaign enabled", 
-      description: `${campaign.nickname} is now ${campaign.is_active ? "disabled" : "enabled"}` 
+      title: newStatus ? "Campaign enabled" : "Campaign disabled", 
+      description: `${campaign.nickname} is now ${newStatus ? "enabled" : "disabled"}` 
     });
+
+    // Still refresh from database to stay authoritative
     loadCampaigns();
   };
 
@@ -555,7 +563,13 @@ export function CampaignDashboard() {
       {/* Selected Campaign Details */}
       {selectedCampaign && (
         <>
-          <CampaignActivationGuide campaign={selectedCampaign} />
+          <CampaignActivationGuide 
+            campaign={selectedCampaign}
+            onCampaignUpdate={(updated) => {
+              setSelectedCampaign(prev => (prev && prev.id === updated.id) ? { ...prev, ...updated } as Campaign : prev);
+              setCampaigns(prev => prev.map(c => c.id === updated.id ? { ...c, ...updated } as Campaign : c));
+            }}
+          />
           <LiveActivityMonitor campaignId={selectedCampaign.id} />
         </>
       )}
