@@ -2209,6 +2209,10 @@ export type Database = {
         Args: { encrypted_secret: string }
         Returns: string
       }
+      delete_campaign_cascade: {
+        Args: { campaign_id_param: string; campaign_type_param?: string }
+        Returns: Json
+      }
       encrypt_owner_secret: {
         Args: { input_secret: string }
         Returns: string

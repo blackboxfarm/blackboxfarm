@@ -269,7 +269,7 @@ export function CampaignDashboard() {
   };
 
   const deleteCampaign = async (campaign: Campaign) => {
-    if (!confirm(`Are you sure you want to delete campaign "${campaign.nickname}"? The wallets and commands will be preserved for reuse.`)) {
+    if (!confirm(`Are you sure you want to PERMANENTLY delete campaign "${campaign.nickname}"? This will delete ALL associated data including wallets, commands, and transaction history. This action CANNOT be undone.`)) {
       return;
     }
 
@@ -291,12 +291,13 @@ export function CampaignDashboard() {
     const startTime = Date.now();
     
     try {
-      // Delete campaign-wallet relationships first (cascade will handle this automatically)
-      // Then delete the campaign
-      const { error } = await supabase
-        .from('blackbox_campaigns')
-        .delete()
-        .eq('id', campaign.id);
+      // Use the new delete cascade function for complete cleanup
+      const { data, error } = await supabase.functions.invoke('delete-campaign', {
+        body: {
+          campaign_id: campaign.id,
+          campaign_type: 'blackbox'
+        }
+      });
 
       if (error) {
         console.error('Campaign deletion failed:', error);
@@ -317,8 +318,8 @@ export function CampaignDashboard() {
       const actualDuration = ((endTime - startTime) / 1000).toFixed(1);
       
       toast({ 
-        title: "Campaign deleted", 
-        description: `${campaign.nickname} deleted in ${actualDuration}s. Wallets and commands preserved for reuse.` 
+        title: "Campaign completely deleted", 
+        description: `${campaign.nickname} and ALL associated data deleted in ${actualDuration}s. Deleted: ${JSON.stringify(data.deleted_counts)}` 
       });
       
       // Clear countdown interval on success
