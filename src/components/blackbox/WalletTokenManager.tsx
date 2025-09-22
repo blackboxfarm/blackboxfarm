@@ -58,12 +58,14 @@ export function WalletTokenManager({
         throw new Error('Failed to get wallet credentials');
       }
 
-      // Fetch wallet balances including all tokens
-      const { data: balanceData, error: balanceError } = await supabase.functions.invoke('refresh-wallet-balances', {
+      // Use trader-wallet function to get ALL tokens
+      const { data: balanceData, error: balanceError } = await supabase.functions.invoke('trader-wallet', {
         body: { 
-          walletId: walletId,
-          walletPubkey: walletPubkey,
-          fetchTokens: true
+          pubkey: walletPubkey,
+          getAllTokens: true
+        },
+        headers: {
+          'x-owner-secret': walletData.secret_key_encrypted
         }
       });
 
@@ -72,16 +74,15 @@ export function WalletTokenManager({
       }
 
       const data = balanceData;
-
-      // For now, just track SOL balance as a "token"
       const tokenList: TokenBalance[] = [];
       
+      // Add SOL balance
       if (data.solBalance && data.solBalance > 0) {
         tokenList.push({
-          mint: 'So11111111111111111111111111111111111111112', // SOL mint
+          mint: 'So11111111111111111111111111111111111111112',
           symbol: 'SOL',
           name: 'Solana',
-          balance: data.solBalance * 1e9, // Convert to lamports
+          balance: data.solBalance * 1e9,
           uiAmount: data.solBalance,
           decimals: 9,
           logoUri: 'https://raw.githubusercontent.com/solana-labs/token-list/main/assets/mainnet/So11111111111111111111111111111111111111112/logo.png',
@@ -89,40 +90,49 @@ export function WalletTokenManager({
         });
       }
 
-      // If we have a token balance from the token-specific query, add it
-      if (data.tokenBalance && data.tokenUiAmount && data.tokenUiAmount > 0) {
-        // Get token metadata
-        try {
-          const { data: tokenMetadata } = await supabase.functions.invoke('token-metadata', {
-            body: { tokenMint: data.tokenMint }
-          });
-          
-          const isStablecoin = ['USDC', 'USDT', 'BUSD', 'DAI', 'PYUSD'].includes(tokenMetadata?.symbol || '');
-          tokenList.push({
-            mint: data.tokenMint,
-            symbol: tokenMetadata?.symbol || 'UNK',
-            name: tokenMetadata?.name || 'Unknown Token',
-            balance: data.tokenBalance,
-            uiAmount: data.tokenUiAmount,
-            decimals: tokenMetadata?.decimals || 6,
-            logoUri: tokenMetadata?.logoUri,
-            usdValue: isStablecoin ? data.tokenUiAmount : undefined
-          });
-        } catch (error) {
-          // Add token with minimal data if metadata fetch fails
-          tokenList.push({
-            mint: data.tokenMint,
-            symbol: 'UNK',
-            name: 'Unknown Token',
-            balance: data.tokenBalance,
-            uiAmount: data.tokenUiAmount,
-            decimals: 6,
-            usdValue: undefined
-          });
+      // Add all SPL tokens from the response
+      if (data.tokens && Array.isArray(data.tokens)) {
+        for (const token of data.tokens) {
+          if (token.balance > 0) {
+            try {
+              // Get token metadata
+              const { data: tokenMetadata } = await supabase.functions.invoke('token-metadata', {
+                body: { tokenMint: token.mint }
+              });
+              
+              const isStablecoin = ['USDC', 'USDT', 'BUSD', 'DAI', 'PYUSD'].includes(tokenMetadata?.symbol || '');
+              tokenList.push({
+                mint: token.mint,
+                symbol: tokenMetadata?.symbol || 'UNK',
+                name: tokenMetadata?.name || 'Unknown Token',
+                balance: token.balance,
+                uiAmount: token.uiAmount || token.balance / Math.pow(10, tokenMetadata?.decimals || 6),
+                decimals: tokenMetadata?.decimals || 6,
+                logoUri: tokenMetadata?.logoUri,
+                usdValue: isStablecoin ? (token.uiAmount || token.balance / Math.pow(10, tokenMetadata?.decimals || 6)) : undefined
+              });
+            } catch (error) {
+              // Add token with minimal data if metadata fetch fails
+              tokenList.push({
+                mint: token.mint,
+                symbol: 'UNK',
+                name: 'Unknown Token',
+                balance: token.balance,
+                uiAmount: token.uiAmount || token.balance / Math.pow(10, 6),
+                decimals: 6,
+                usdValue: undefined
+              });
+            }
+          }
         }
       }
 
       setTokens(tokenList);
+      
+      toast({
+        title: "Tokens refreshed",
+        description: `Refreshed ${tokenList.length} tokens with balances`,
+      });
     } catch (error: any) {
       console.error('Failed to load token balances:', error);
       toast({
@@ -321,6 +331,55 @@ export function WalletTokenManager({
     }
   };
 
+  const sellAllTokens = async () => {
+    const nonSolTokens = tokens.filter(t => t.symbol !== 'SOL');
+    if (nonSolTokens.length === 0) {
+      toast({
+        title: "No tokens to sell",
+        description: "This wallet only has SOL, which cannot be sold directly.",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    setConvertLoading(true);
+    let successCount = 0;
+    let failCount = 0;
+
+    try {
+      for (const token of nonSolTokens) {
+        try {
+          await sellTokens(token, 'all');
+          successCount++;
+        } catch (error) {
+          failCount++;
+          console.error(`Failed to sell ${token.symbol}:`, error);
+        }
+        // Small delay between sells
+        await new Promise(resolve => setTimeout(resolve, 1000));
+      }
+
+      toast({
+        title: "Sell all completed",
+        description: `Successfully sold ${successCount} tokens${failCount > 0 ? `, ${failCount} failed` : ''}`,
+        variant: successCount > 0 ? "default" : "destructive"
+      });
+    } catch (error: any) {
+      toast({
+        title: "Sell all failed",
+        description: error.message,
+        variant: "destructive"
+      });
+    } finally {
+      setConvertLoading(false);
+      // Refresh after selling
+      setTimeout(() => {
+        loadTokenBalances();
+        onTokensSold?.();
+      }, 2000);
+    }
+  };
+
   const convertUsdToSol = async () => {
     // Find USD stablecoins (USDC, USDT, etc.)
     const usdTokens = tokens.filter(t => ['USDC', 'USDT', 'BUSD', 'DAI'].includes(t.symbol));
@@ -362,6 +421,36 @@ export function WalletTokenManager({
             {isOrphaned && <Badge variant="outline" className="text-xs">Orphaned</Badge>}
           </CardTitle>
           <div className="flex items-center gap-2">
+            <AlertDialog>
+              <AlertDialogTrigger asChild>
+                <Button 
+                  variant="destructive" 
+                  size="sm"
+                  disabled={convertLoading || !tokens.some(t => t.symbol !== 'SOL' && t.uiAmount > 0)}
+                  title="Sell all non-SOL tokens"
+                >
+                  <Trash2 className="h-4 w-4" />
+                  Sell All Tokens
+                </Button>
+              </AlertDialogTrigger>
+              <AlertDialogContent>
+                <AlertDialogHeader>
+                  <AlertDialogTitle>Sell All Tokens</AlertDialogTitle>
+                  <AlertDialogDescription>
+                    This will sell ALL non-SOL tokens in this wallet. This action cannot be undone.
+                    <br />
+                    <br />
+                    Tokens to be sold: {tokens.filter(t => t.symbol !== 'SOL').map(t => t.symbol).join(', ')}
+                  </AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                  <AlertDialogCancel>Cancel</AlertDialogCancel>
+                  <AlertDialogAction onClick={sellAllTokens} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
+                    Sell All Tokens
+                  </AlertDialogAction>
+                </AlertDialogFooter>
+              </AlertDialogContent>
+            </AlertDialog>
             <Button 
               onClick={convertSolToUsd} 
               variant="outline" 
@@ -389,6 +478,7 @@ export function WalletTokenManager({
               disabled={isLoading}
             >
               <RefreshCw className={`h-4 w-4 ${isLoading ? 'animate-spin' : ''}`} />
+              Refresh
             </Button>
           </div>
         </div>
