@@ -9,6 +9,7 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { createClient } from "@supabase/supabase-js";
 import { toast } from "@/hooks/use-toast";
+import { CampaignTransactionHistory } from "./CampaignTransactionHistory";
 
 // Simple client to avoid type recursion issues
 const supabase = createClient(
@@ -1137,6 +1138,11 @@ export function CampaignActivationGuide({ campaign, onCampaignUpdate }: Campaign
               </div>
             )}
           </div>
+        </div>
+
+        {/* Campaign Transaction History */}
+        <div className="mt-6">
+          <CampaignTransactionHistory campaignId={campaign.id} />
         </div>
       </CardContent>
     </Card>
