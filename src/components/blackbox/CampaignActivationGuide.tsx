@@ -861,8 +861,8 @@ export function CampaignActivationGuide({ campaign, onCampaignUpdate }: Campaign
             <p className="text-sm text-muted-foreground">{campaign.token_address}</p>
           </div>
           <div className="flex items-center gap-2">
-            <Badge variant={contractActive ? "default" : "secondary"}>
-              {contractActive ? "🟢 ACTIVE" : "⚪ INACTIVE"}
+            <Badge variant={campaign.is_active ? "default" : "secondary"}>
+              {campaign.is_active ? "🟢 ACTIVE" : "⚪ INACTIVE"}
             </Badge>
             <Label className="text-sm">Enabled</Label>
             <Switch checked={campaign.is_active} disabled />
