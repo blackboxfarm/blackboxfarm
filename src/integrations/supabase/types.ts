@@ -295,6 +295,7 @@ export type Database = {
       blackbox_transactions: {
         Row: {
           amount_sol: number
+          campaign_id: string | null
           command_code_id: string | null
           executed_at: string | null
           gas_fee: number
@@ -307,6 +308,7 @@ export type Database = {
         }
         Insert: {
           amount_sol: number
+          campaign_id?: string | null
           command_code_id?: string | null
           executed_at?: string | null
           gas_fee: number
@@ -319,6 +321,7 @@ export type Database = {
         }
         Update: {
           amount_sol?: number
+          campaign_id?: string | null
           command_code_id?: string | null
           executed_at?: string | null
           gas_fee?: number

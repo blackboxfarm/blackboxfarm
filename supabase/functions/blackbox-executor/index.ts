@@ -184,6 +184,7 @@ serve(async (req) => {
           .insert({
             wallet_id: wallet.id,
             command_code_id: command_code_id,
+            campaign_id: campaign.id,
             transaction_type: "buy",
             amount_sol: buyAmountSOL,
             gas_fee: 0,
@@ -257,12 +258,11 @@ serve(async (req) => {
           console.log(`🧪 TEST ACCOUNT (${userEmail}): Skipping revenue collection for user ${campaign.user_id}`);
         }
 
-        // Check if transaction already exists to prevent duplicates
+        // Check if transaction already exists to prevent duplicates (check by signature globally)
         const { data: existingTx } = await supabaseService
           .from("blackbox_transactions")
           .select("id")
           .eq("signature", signature)
-          .eq("wallet_id", wallet.id)
           .single();
 
         if (!existingTx) {
@@ -272,6 +272,7 @@ serve(async (req) => {
             .insert({
               wallet_id: wallet.id,
               command_code_id: command_code_id,
+              campaign_id: campaign.id,
               transaction_type: "buy",
               amount_sol: buyAmountSOL,
               gas_fee: 0.000005, // Standard Solana gas
@@ -394,6 +395,7 @@ serve(async (req) => {
                 .insert({
                   wallet_id: wallet.id,
                   command_code_id: command_code_id,
+                  campaign_id: campaign.id,
                   transaction_type: "sell",
                   amount_sol: 0, // Failed transaction, no SOL received
                   gas_fee: 0,
@@ -432,12 +434,11 @@ serve(async (req) => {
 
               console.log(`✅ REAL SELL executed: ${tokensSold} tokens -> ${solReceived} SOL, signatures: ${signatures.join(', ')}`);
 
-              // Check if transaction already exists to prevent duplicates
+              // Check if transaction already exists to prevent duplicates (check by signature globally)
               const { data: existingSellTx } = await supabaseService
                 .from("blackbox_transactions")
                 .select("id")
                 .eq("signature", signature)
-                .eq("wallet_id", wallet.id)
                 .single();
 
               if (!existingSellTx) {
@@ -447,6 +448,7 @@ serve(async (req) => {
                   .insert({
                     wallet_id: wallet.id,
                     command_code_id: command_code_id,
+                    campaign_id: campaign.id,
                     transaction_type: "sell",
                     amount_sol: solReceived,
                     gas_fee: 0.000005,

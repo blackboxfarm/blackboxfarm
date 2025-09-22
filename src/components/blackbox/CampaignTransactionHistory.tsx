@@ -90,11 +90,11 @@ export function CampaignTransactionHistory({ campaignId, className }: CampaignTr
 
       const walletIds = campaignWallets.map(cw => cw.wallet_id);
 
-      // Get transactions for these wallets
+      // Get transactions for this specific campaign only
       const { data, error } = await supabase
         .from('blackbox_transactions')
-        .select('id, transaction_type, amount_sol, status, executed_at, signature, gas_fee, service_fee, wallet_id, command_code_id')
-        .in('wallet_id', walletIds)
+        .select('id, transaction_type, amount_sol, status, executed_at, signature, gas_fee, service_fee, wallet_id, command_code_id, campaign_id')
+        .eq('campaign_id', campaignId)
         .order('executed_at', { ascending: false })
         .limit(visibleCount);
 
