@@ -6,6 +6,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { supabase } from "@/integrations/supabase/client";
 import { Clock, ExternalLink, X, List, Activity, AlertTriangle, ChevronDown, ChevronUp } from "lucide-react";
 import { useSolPrice } from "@/hooks/useSolPrice";
+import { toast } from "@/hooks/use-toast";
 
 interface CampaignTransaction {
   id: string;
@@ -176,7 +177,27 @@ export function CampaignTransactionHistory({ campaignId, className }: CampaignTr
     }
     return transactions;
   }, [transactions, clearBefore]);
-
+  const clearHistory = async () => {
+    if (!confirm('Permanently delete ALL transaction history for this campaign? This cannot be undone.')) return;
+    try {
+      setLoading(true);
+      const { error } = await supabase
+        .from('blackbox_transactions')
+        .delete()
+        .eq('campaign_id', campaignId);
+      if (error) {
+        toast({ title: 'Clear failed', description: error.message, variant: 'destructive' });
+        return;
+      }
+      await loadTransactions();
+      setClearBefore(null);
+      toast({ title: 'History cleared', description: 'All campaign transactions were deleted.' });
+    } catch (e: any) {
+      toast({ title: 'Clear failed', description: e?.message || 'Unexpected error', variant: 'destructive' });
+    } finally {
+      setLoading(false);
+    }
+  };
   return (
     <div className={`space-y-4 ${className}`}>
       {/* Campaign Status */}
@@ -211,18 +232,18 @@ export function CampaignTransactionHistory({ campaignId, className }: CampaignTr
         
         {statusOpen && (
           <CardContent className="pt-0 max-h-60 overflow-y-auto">
-            <div className="flex justify-between items-center mb-2">
-              <span className="text-xs text-muted-foreground">Recent activity</span>
-              <Button 
-                size="sm" 
-                variant="outline"
-                onClick={() => setClearBefore(new Date())}
-                disabled={recentTransactions.length === 0}
-                className="h-6 text-xs"
-              >
-                Clear
-              </Button>
-            </div>
+              <div className="flex justify-between items-center mb-2">
+                <span className="text-xs text-muted-foreground">Recent activity</span>
+                <Button 
+                  size="sm" 
+                  variant="outline"
+                  onClick={clearHistory}
+                  disabled={recentTransactions.length === 0 || loading}
+                  className="h-6 text-xs"
+                >
+                  Clear
+                </Button>
+              </div>
             <div className="space-y-2">
               {recentTransactions.length === 0 ? (
                 <div className="text-sm text-muted-foreground text-center py-4">
@@ -292,8 +313,8 @@ export function CampaignTransactionHistory({ campaignId, className }: CampaignTr
               <Button 
                 size="sm" 
                 variant="outline"
-                onClick={() => setClearBefore(new Date())}
-                disabled={filteredTransactions.length === 0}
+                onClick={clearHistory}
+                disabled={filteredTransactions.length === 0 || loading}
               >
                 Clear
               </Button>

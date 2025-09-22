@@ -156,6 +156,39 @@ export function CampaignDashboard() {
         variant: "destructive"
       });
     }
+  }; 
+
+  const keepOnlyCampaign = async (campaign: Campaign) => {
+    if (!confirm(`Keep ONLY "${campaign.nickname}" and permanently delete all your other campaigns and data?`)) return;
+    try {
+      // Identify other campaigns
+      const others = campaigns.filter(c => c.id !== campaign.id);
+      if (others.length === 0) {
+        toast({ title: 'Nothing to delete', description: 'No other campaigns found.' });
+        return;
+      }
+
+      // Delete all others in parallel via cascade edge function
+      const results = await Promise.allSettled(
+        others.map(c => supabase.functions.invoke('delete-campaign', {
+          body: { campaign_id: c.id, campaign_type: 'blackbox' }
+        }))
+      );
+
+      const failures = results.filter(r => r.status === 'rejected' || ('value' in r && (r as any).value.error));
+      if (failures.length > 0) {
+        toast({ title: 'Partial failure', description: `${failures.length} deletions failed.`, variant: 'destructive' });
+      }
+
+      // Reload campaigns and keep the selected one
+      await loadCampaigns();
+      setSelectedCampaign(campaign);
+
+      toast({ title: 'Purge complete', description: `Kept "${campaign.nickname}" and deleted ${others.length - failures.length} campaign(s).` });
+    } catch (e: any) {
+      console.error('Keep only campaign failed:', e);
+      toast({ title: 'Failed to purge', description: e?.message || 'Unexpected error', variant: 'destructive' });
+    }
   };
 
   const createCampaign = async () => {
@@ -521,6 +554,18 @@ export function CampaignDashboard() {
                               variant="outline"
                               onClick={(e) => {
                                 e.stopPropagation();
+                                keepOnlyCampaign(campaign);
+                              }}
+                              disabled={deletingCampaignId === campaign.id}
+                              className="h-6 px-2 text-xs"
+                            >
+                              Keep Only
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={(e) => {
+                                e.stopPropagation();
                                 deleteCampaign(campaign);
                               }}
                               disabled={deletingCampaignId === campaign.id}
@@ -533,7 +578,7 @@ export function CampaignDashboard() {
                               onCheckedChange={() => toggleCampaign(campaign)}
                               disabled={deletingCampaignId === campaign.id}
                             />
-                          </div>
+                           </div>
                         </div>
                       </div>
                     ))}

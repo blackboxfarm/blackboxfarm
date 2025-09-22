@@ -13,7 +13,7 @@ Deno.serve(async (req) => {
   try {
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!
     const serviceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
-    const supabase = createClient(supabaseUrl, serviceKey)
+    const supabaseAdmin = createClient(supabaseUrl, serviceKey)
 
     const authHeader = req.headers.get('Authorization') || ''
     const token = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : undefined
@@ -24,7 +24,7 @@ Deno.serve(async (req) => {
     }
 
     // Verify user
-    const { data: userData, error: userError } = await supabase.auth.getUser(token)
+    const { data: userData, error: userError } = await supabaseAdmin.auth.getUser(token)
     if (userError || !userData?.user?.id) {
       return new Response(JSON.stringify({ error: 'Invalid authorization token' }), 
         { status: 401, headers: corsHeaders })
@@ -39,8 +39,13 @@ Deno.serve(async (req) => {
 
     console.log(`Deleting ${campaign_type} campaign ${campaign_id} for user ${userData.user.id}`)
 
+    // Create a client that forwards the user's JWT so RLS/auth.uid() works inside RPC
+    const supabaseUser = createClient(supabaseUrl, serviceKey, {
+      global: { headers: { Authorization: `Bearer ${token}` } },
+    })
+
     // Call the delete function with proper authentication
-    const { data, error } = await supabase.rpc('delete_campaign_cascade', {
+    const { data, error } = await supabaseUser.rpc('delete_campaign_cascade', {
       campaign_id_param: campaign_id,
       campaign_type_param: campaign_type
     })
