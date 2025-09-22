@@ -133,18 +133,12 @@ export function CampaignActivationGuide({ campaign, onCampaignUpdate }: Campaign
   useEffect(() => {
     loadCampaignData();
     
-    // Initialize state from campaign prop (database state takes precedence)
+    // Initialize state from campaign prop (database state is the source of truth)
+    console.log(`🔄 Initializing campaign ${campaign.id} with DB state:`, campaign.is_active);
     setContractActive(campaign.is_active);
     
-    // Check actual cron status from backend and sync with database state
-    checkCronStatus(campaign.id).then(cronStatus => {
-      // If there's a mismatch between database and cron status, use database state
-      if (cronStatus !== campaign.is_active) {
-        console.log(`🔄 Syncing campaign ${campaign.id}: DB=${campaign.is_active}, Cron=${cronStatus}`);
-        setContractActive(campaign.is_active);
-        saveCampaignState(campaign.id, campaign.is_active);
-      }
-    });
+    // Sync localStorage with database state
+    saveCampaignState(campaign.id, campaign.is_active);
     
     
     // Set up real-time subscriptions
@@ -767,7 +761,10 @@ export function CampaignActivationGuide({ campaign, onCampaignUpdate }: Campaign
           .update({ is_active: true })
           .eq('id', campaign.id);
 
-        if (updateError) throw updateError;
+        if (updateError) {
+          console.error('Failed to update campaign status:', updateError);
+          throw updateError;
+        }
         
         setContractActive(true);
         saveCampaignState(campaign.id, true); // Persist state
@@ -777,6 +774,8 @@ export function CampaignActivationGuide({ campaign, onCampaignUpdate }: Campaign
         if (onCampaignUpdate) {
           onCampaignUpdate({ ...campaign, is_active: true });
         }
+        
+        console.log(`✅ Campaign ${campaign.id} started successfully - DB updated, local state synced`);
         
         toast({
           title: "Contract Started Successfully! 🚀",
@@ -802,6 +801,8 @@ export function CampaignActivationGuide({ campaign, onCampaignUpdate }: Campaign
         if (onCampaignUpdate) {
           onCampaignUpdate({ ...campaign, is_active: false });
         }
+        
+        console.log(`⏹️ Campaign ${campaign.id} stopped successfully - DB updated, local state synced`);
         
         toast({
           title: "Contract Stopped Successfully ⏹️",

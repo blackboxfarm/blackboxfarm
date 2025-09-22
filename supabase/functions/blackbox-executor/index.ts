@@ -143,25 +143,26 @@ serve(async (req) => {
         body: {
           side: 'buy',
           tokenMint: campaign.token_address,
-          usdcAmount: buyAmountSOL, // Now properly converted to SOL
+          usdcAmount: buyAmountSOL, // Amount in SOL
           slippageBps: 500, // 5% slippage
           confirmPolicy: 'processed',
           buyWithSol: true
         },
         headers: {
           'x-owner-secret': wallet.secret_key_encrypted,
-          'x-function-token': Deno.env.get("FUNCTION_TOKEN")
+          'x-function-token': Deno.env.get("FUNCTION_TOKEN") || ""
         }
       });
 
       if (swapResponse.error) {
-        const errorMessage = swapResponse.error.message || '';
+        const errorMessage = swapResponse.error.message || 'Unknown error';
         console.error(`❌ BUY FAILED for token ${campaign.token_address}:`, {
           error: swapResponse.error,
           buyAmountSOL,
           platform,
           errorMessage,
-          fullResponse: swapResponse
+          responseStatus: swapResponse.status,
+          responseData: swapResponse.data
         });
         
         // Log failed transaction
@@ -178,7 +179,16 @@ serve(async (req) => {
             status: "failed"
           });
         
-        // Only skip if it's truly a liquidity/routing issue, not platform-based assumptions
+        // Check if error indicates authentication or authorization issues
+        if (errorMessage.includes('Unauthorized') || 
+            errorMessage.includes('401') ||
+            errorMessage.includes('Authentication') ||
+            errorMessage.includes('function token')) {
+          console.error(`🔐 Authentication failed for buy operation:`, errorMessage);
+          throw new Error(`Authentication failed: ${errorMessage}`);
+        }
+        
+        // Only skip if it's truly a liquidity/routing issue
         if (errorMessage.includes('INSUFFICIENT_LIQUIDITY') || 
             errorMessage.includes('ROUTE_NOT_FOUND') || 
             errorMessage.includes('No token balance') ||
@@ -353,14 +363,14 @@ serve(async (req) => {
                 fullResponse: swapResponse
               });
               
-              // Log failed transaction
+              // Log failed transaction (using 0 as sellAmount since it failed)
               await supabaseService
                 .from("blackbox_transactions")
                 .insert({
                   wallet_id: wallet.id,
                   command_code_id: command_code_id,
                   transaction_type: "sell",
-                  amount_sol: sellAmount,
+                  amount_sol: 0, // Failed transaction, no SOL received
                   gas_fee: 0,
                   service_fee: 0,
                   signature: null,
@@ -376,7 +386,7 @@ serve(async (req) => {
                 result = { 
                   message: 'Sell skipped - insufficient liquidity or no route found',
                   token: campaign.token_address,
-                  sellAmount,
+                  sellAmount: 0, // No amount since sell was skipped
                   type: 'sell',
                   skipped: true,
                   platform,
@@ -391,8 +401,11 @@ serve(async (req) => {
               const signatures = swapResponse.data?.signatures || [];
               const signature = signatures[0] || 'unknown';
               const solReceived = swapResponse.data?.estimatedAmountOut || 0;
+              
+              // Calculate how many tokens were actually sold
+              const tokensSold = sellPercent >= 100 ? tokenBalance : (tokenBalance * sellPercent / 100);
 
-              console.log(`✅ REAL SELL executed: ${sellAmount} tokens -> ${solReceived} SOL, signatures: ${signatures.join(', ')}`);
+              console.log(`✅ REAL SELL executed: ${tokensSold} tokens -> ${solReceived} SOL, signatures: ${signatures.join(', ')}`);
 
               // Log transaction
               await supabaseService
@@ -408,7 +421,7 @@ serve(async (req) => {
                   status: "completed"
                 });
 
-              result = { amount: sellAmount, percent: sellPercent, type: "sell", signatures, solReceived };
+              result = { amount: tokensSold, percent: sellPercent, type: "sell", signatures, solReceived };
             }
           }
         }

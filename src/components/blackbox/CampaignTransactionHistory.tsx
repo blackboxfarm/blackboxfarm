@@ -216,12 +216,17 @@ export function CampaignTransactionHistory({ campaignId, className }: CampaignTr
                       <span className="font-mono">
                         {tx.amount_sol.toFixed(6)} SOL
                       </span>
+                      {tx.status === 'failed' && (
+                        <span className="text-destructive text-xs">
+                          ⚠️ Failed
+                        </span>
+                      )}
                     </div>
                     <div className="flex flex-col items-end">
                       <span className="text-muted-foreground">
                         {formatTime(tx.executed_at!)}
                       </span>
-                      {tx.signature && (
+                      {tx.signature ? (
                         <a
                           href={`https://solscan.io/tx/${tx.signature}`}
                           target="_blank"
@@ -230,6 +235,10 @@ export function CampaignTransactionHistory({ campaignId, className }: CampaignTr
                         >
                           {truncate(tx.signature)}
                         </a>
+                      ) : (
+                        <span className="text-xs text-muted-foreground">
+                          No signature
+                        </span>
                       )}
                     </div>
                   </div>
