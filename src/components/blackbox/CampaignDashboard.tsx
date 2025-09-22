@@ -407,6 +407,38 @@ export function CampaignDashboard() {
     });
   };
 
+  const handleDatabaseCleanup = async () => {
+    if (!confirm("🧹 NUCLEAR DATABASE CLEANUP 🧹\n\nThis will:\n• Delete ALL orphaned campaigns, wallets, and commands\n• Keep only the OrangTUAH campaign and its funded wallet\n• Remove all garbage/placeholder data\n\nThis CANNOT be undone. Are you sure?")) {
+      return;
+    }
+
+    try {
+      const { data, error } = await supabase.functions.invoke('database-cleanup');
+      
+      if (error) {
+        throw error;
+      }
+
+      console.log("🧹 Database cleanup completed:", data);
+      
+      toast({
+        title: "🧹 Database Cleaned Successfully!",
+        description: `Deleted ${data.summary.campaignsDeleted} campaigns, ${data.summary.orphanedWalletsDeleted} orphaned wallets, ${data.summary.orphanedCommandsDeleted} orphaned commands. Kept ${data.summary.campaignsKept} campaign, ${data.summary.walletsKept} wallets, ${data.summary.commandsKept} commands.`
+      });
+
+      // Force refresh to show clean state
+      await forceRefreshCampaigns();
+      
+    } catch (error: any) {
+      console.error("Database cleanup failed:", error);
+      toast({
+        title: "Cleanup Failed",
+        description: error.message || "Failed to clean database",
+        variant: "destructive"
+      });
+    }
+  };
+
   return (
     <div className="space-y-6">
       {/* Campaign Header */}
@@ -417,6 +449,14 @@ export function CampaignDashboard() {
             <div className="flex gap-2">
               <Button onClick={forceRefreshCampaigns} variant="outline" size="sm">
                 Force Refresh
+              </Button>
+              <Button 
+                onClick={handleDatabaseCleanup} 
+                variant="destructive" 
+                size="sm"
+                className="bg-orange-600 hover:bg-orange-700"
+              >
+                🧹 Clean Database
               </Button>
               <Button onClick={() => setShowCreateForm(true)} size="sm">
                 <Plus className="h-4 w-4 mr-2" />
