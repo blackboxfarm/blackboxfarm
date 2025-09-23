@@ -48,13 +48,8 @@ export function useSolPrice() {
   }, []);
 
   useEffect(() => {
-    // Initial fetch
+    // Initial fetch only - no automatic refresh to save Helius credits
     fetchPrice();
-    
-    // Set up interval to refresh every 30 seconds
-    const interval = setInterval(fetchPrice, 30000);
-    
-    return () => clearInterval(interval);
   }, [fetchPrice]);
 
   return {
