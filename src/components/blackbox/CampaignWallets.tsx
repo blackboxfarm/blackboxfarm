@@ -676,12 +676,39 @@ export function CampaignWallets({ campaign }: CampaignWalletsProps) {
     function UnusedWallets({ onWalletAction }: { onWalletAction: () => void }) {
       const [unusedWallets, setUnusedWallets] = useState<WalletData[]>([]);
       const [isLoading, setIsLoading] = useState(false);
-      const [purging, setPurging] = useState(false);
+
+      // Hide-from-view (client-only) support
+      const HIDDEN_WALLETS_KEY = "blackbox.hiddenWalletIds";
+      const [hiddenWalletIds, setHiddenWalletIds] = useState<string[]>([]);
+
+      const loadHidden = () => {
+        try {
+          const raw = localStorage.getItem(HIDDEN_WALLETS_KEY);
+          const parsed = raw ? JSON.parse(raw) : [];
+          setHiddenWalletIds(Array.isArray(parsed) ? parsed : []);
+        } catch {
+          setHiddenWalletIds([]);
+        }
+      };
+
+      const saveHidden = (ids: string[]) => {
+        try {
+          localStorage.setItem(HIDDEN_WALLETS_KEY, JSON.stringify(ids));
+        } catch {}
+        setHiddenWalletIds(ids);
+      };
+
+      const hideWallet = (id: string) => {
+        const next = Array.from(new Set([...hiddenWalletIds, id]));
+        saveHidden(next);
+        setUnusedWallets(prev => prev.filter(w => w.id !== id));
+        toast({ title: "Removed from view", description: "Wallet hidden locally. Database not affected." });
+      };
 
       const loadUnusedWallets = async () => {
         setIsLoading(true);
         try {
-          // Load all wallets and exclude placeholders
+          // Load all wallets and exclude any non-real or hidden ones
           const { data: walletsData, error: walletsError } = await supabase
             .from('blackbox_wallets')
             .select('*')
@@ -692,9 +719,13 @@ export function CampaignWallets({ campaign }: CampaignWalletsProps) {
             throw walletsError;
           }
 
-          const filtered = (walletsData || []).filter(w =>
-            !String(w.pubkey || '').includes('PLACEHOLDER')
-          );
+          const filtered = (walletsData || []).filter((w: any) => {
+            const pk = String(w.pubkey || '');
+            return !hiddenWalletIds.includes(w.id)
+              && !pk.includes('PLACEHOLDER')
+              && !pk.startsWith('CUP')
+              && !pk.startsWith('PSY');
+          });
 
           setUnusedWallets(filtered);
         } catch (error) {
@@ -704,28 +735,10 @@ export function CampaignWallets({ campaign }: CampaignWalletsProps) {
         }
       };
 
-      const purgePlaceholders = async () => {
-        if (purging) return;
-        setPurging(true);
-        try {
-          const { data, error } = await supabase
-            .from('blackbox_wallets')
-            .delete()
-            .ilike('pubkey', '%PLACEHOLDER%')
-            .select('id');
-          if (error) throw error;
-          toast({ title: 'Placeholders removed', description: `Deleted ${data?.length || 0} placeholder wallet(s)` });
-          await loadUnusedWallets();
-          onWalletAction();
-        } catch (error: any) {
-          console.error('Failed to purge placeholders:', error);
-          toast({ title: 'Error', description: error.message || 'Failed to delete placeholder wallets', variant: 'destructive' });
-        } finally {
-          setPurging(false);
-        }
-      };
 
       useEffect(() => {
+        // Load hidden list first, then wallets
+        loadHidden();
         loadUnusedWallets();
         
         // Set up real-time updates for wallets
@@ -774,9 +787,6 @@ export function CampaignWallets({ campaign }: CampaignWalletsProps) {
               <Wallet className="h-5 w-5" />
               Wallets ({unusedWallets.length})
             </CardTitle>
-            <Button variant="outline" size="sm" onClick={purgePlaceholders} disabled={purging}>
-              {purging ? 'Deleting…' : 'Delete placeholders'}
-            </Button>
           </div>
         </CardHeader>
           <CardContent>
@@ -793,8 +803,18 @@ export function CampaignWallets({ campaign }: CampaignWalletsProps) {
                         {wallet.pubkey}
                       </button>
                     </div>
-                    <div className="text-sm text-muted-foreground">
-                      {wallet.sol_balance.toFixed(4)} SOL
+                    <div className="flex items-center gap-3">
+                      <div className="text-sm text-muted-foreground">
+                        {wallet.sol_balance.toFixed(4)} SOL
+                      </div>
+                      <Button
+                        variant="destructive"
+                        size="sm"
+                        onClick={() => hideWallet(wallet.id)}
+                        title="Remove from view (kept in database)"
+                      >
+                        Remove
+                      </Button>
                     </div>
                   </div>
                   
