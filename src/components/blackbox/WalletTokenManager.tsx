@@ -58,6 +58,15 @@ export function WalletTokenManager({
         throw new Error(`Failed to get wallet credentials: ${walletError?.message || 'No wallet data'}`);
       }
 
+      // Check if this is a dummy/placeholder wallet
+      const secretKey = walletData.secret_key_encrypted;
+      if (!secretKey || secretKey.includes('DUMMY') || secretKey.includes('PLACEHOLDER') || secretKey.endsWith('RVNJUVQ=')) {
+        console.log('WalletTokenManager: Skipping token fetch for dummy/placeholder wallet');
+        setTokens([]);
+        setIsLoading(false);
+        return;
+      }
+
       console.log('WalletTokenManager: Fetching tokens for wallet', walletPubkey);
 
       // Use trader-wallet function to get ALL tokens
@@ -67,7 +76,7 @@ export function WalletTokenManager({
           debug: true
         },
         headers: {
-          'x-owner-secret': walletData.secret_key_encrypted
+          'x-owner-secret': secretKey
         }
       });
 
