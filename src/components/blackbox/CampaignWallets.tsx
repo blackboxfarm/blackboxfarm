@@ -681,24 +681,34 @@ export function CampaignWallets({ campaign }: CampaignWalletsProps) {
       const loadOrphanedWallets = async () => {
         setIsLoading(true);
         try {
-          // Get all wallets that are not assigned to any campaign
-          const { data, error } = await supabase
-            .from('blackbox_wallets')
-            .select(`
-              *,
-              campaign_wallets!left(campaign_id)
-            `)
-            .is('campaign_wallets.campaign_id', null)
-            .eq('is_active', true)
-            .not('pubkey', 'ilike', '%PLACEHOLDER%')
-            .order('created_at', { ascending: false });
+          // Build a set of wallet IDs that are associated with any campaign
+          const { data: assocData, error: assocError } = await supabase
+            .from('campaign_wallets')
+            .select('wallet_id');
 
-          if (error) {
-            console.error('Error loading orphaned wallets:', error);
-            return;
+          if (assocError) {
+            console.error('Error loading wallet associations:', assocError);
+            throw assocError;
           }
 
-          setOrphanedWallets(data || []);
+          const associatedIds = new Set((assocData || []).map(a => a.wallet_id));
+
+          // Load all wallets and filter client-side to avoid join/null pitfalls
+          const { data: walletsData, error: walletsError } = await supabase
+            .from('blackbox_wallets')
+            .select('*')
+            .order('created_at', { ascending: false });
+
+          if (walletsError) {
+            console.error('Error loading wallets:', walletsError);
+            throw walletsError;
+          }
+
+          const filtered = (walletsData || []).filter(w =>
+            !associatedIds.has(w.id) && !String(w.pubkey || '').includes('PLACEHOLDER')
+          );
+
+          setOrphanedWallets(filtered);
         } catch (error) {
           console.error('Error loading orphaned wallets:', error);
         } finally {
