@@ -44,6 +44,7 @@ export function WalletTokenManager({
 const { price: solPrice } = useSolPrice();
 
   const TOKEN_PROGRAM_ID = new PublicKey('TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA');
+  const TOKEN_2022_PROGRAM_ID = new PublicKey('TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb');
 
   // View-only fallback: read token balances directly from the blockchain (no secrets, no campaigns)
   const loadTokensViaRPC = async (ownerAddress: string): Promise<TokenBalance[]> => {
@@ -52,9 +53,11 @@ const { price: solPrice } = useSolPrice();
       const connection = new Connection(clusterApiUrl('mainnet-beta'), 'confirmed');
       const owner = new PublicKey(ownerAddress);
 
-      const [lamports, parsed] = await Promise.all([
+      // Fetch SOL balance and both token program accounts in parallel
+      const [lamports, classicParsed, v22Parsed] = await Promise.all([
         connection.getBalance(owner),
-        connection.getParsedTokenAccountsByOwner(owner, { programId: TOKEN_PROGRAM_ID })
+        connection.getParsedTokenAccountsByOwner(owner, { programId: TOKEN_PROGRAM_ID }),
+        connection.getParsedTokenAccountsByOwner(owner, { programId: TOKEN_2022_PROGRAM_ID }),
       ]);
 
       const solUi = lamports / 1e9;
@@ -69,8 +72,10 @@ const { price: solPrice } = useSolPrice();
         usdValue: solUi * (solPrice || 0)
       });
 
-      for (const acct of parsed.value) {
-        const info: any = (acct as any).account.data.parsed.info;
+      const combined = [...classicParsed.value, ...v22Parsed.value];
+      for (const acct of combined) {
+        const info: any = (acct as any).account.data.parsed?.info;
+        if (!info?.tokenAmount) continue;
         const tokenAmount = info.tokenAmount;
         const uiAmount = parseFloat(tokenAmount.uiAmountString || tokenAmount.uiAmount || '0');
         if (uiAmount > 0) {
