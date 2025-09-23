@@ -99,8 +99,23 @@ serve(async (req) => {
       console.log("✅ Connected funded wallet to OrangTUAH campaign");
     }
 
-    // 4. Delete ALL other wallets (placeholders/orphans)
+    // 4. Delete ALL placeholder and orphaned wallets
     let orphanedWalletsDeleted = 0;
+    
+    // First delete any wallet with PLACEHOLDER in the pubkey
+    const { data: placeholderWallets, error: placeholderError } = await serviceClient
+      .from('blackbox_wallets')
+      .delete()
+      .ilike('pubkey', '%PLACEHOLDER%')
+      .select('id, pubkey');
+    
+    if (placeholderError) {
+      console.error("❌ Failed to delete placeholder wallets:", placeholderError);
+    } else {
+      console.log(`✅ Deleted ${placeholderWallets?.length || 0} placeholder wallets`);
+    }
+
+    // Then delete all other wallets except the funded one
     const { data: deletedWallets, error: walletDeleteError } = await serviceClient
       .from('blackbox_wallets')
       .delete()
