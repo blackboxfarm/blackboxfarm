@@ -676,6 +676,7 @@ export function CampaignWallets({ campaign }: CampaignWalletsProps) {
     function OrphanedWallets({ onWalletAction }: { onWalletAction: () => void }) {
       const [orphanedWallets, setOrphanedWallets] = useState<WalletData[]>([]);
       const [isLoading, setIsLoading] = useState(false);
+      const [purging, setPurging] = useState(false);
 
       const loadOrphanedWallets = async () => {
         setIsLoading(true);
@@ -689,6 +690,7 @@ export function CampaignWallets({ campaign }: CampaignWalletsProps) {
             `)
             .is('campaign_wallets.campaign_id', null)
             .eq('is_active', true)
+            .not('pubkey', 'ilike', '%PLACEHOLDER%')
             .order('created_at', { ascending: false });
 
           if (error) {
@@ -701,6 +703,27 @@ export function CampaignWallets({ campaign }: CampaignWalletsProps) {
           console.error('Error loading orphaned wallets:', error);
         } finally {
           setIsLoading(false);
+        }
+      };
+
+      const purgePlaceholders = async () => {
+        if (purging) return;
+        setPurging(true);
+        try {
+          const { data, error } = await supabase
+            .from('blackbox_wallets')
+            .delete()
+            .ilike('pubkey', '%PLACEHOLDER%')
+            .select('id');
+          if (error) throw error;
+          toast({ title: 'Placeholders removed', description: `Deleted ${data?.length || 0} placeholder wallet(s)` });
+          await loadOrphanedWallets();
+          onWalletAction();
+        } catch (error: any) {
+          console.error('Failed to purge placeholders:', error);
+          toast({ title: 'Error', description: error.message || 'Failed to delete placeholder wallets', variant: 'destructive' });
+        } finally {
+          setPurging(false);
         }
       };
 
@@ -755,12 +778,17 @@ export function CampaignWallets({ campaign }: CampaignWalletsProps) {
 
       return (
         <Card>
-          <CardHeader>
+        <CardHeader>
+          <div className="flex items-center justify-between">
             <CardTitle className="flex items-center gap-2">
               <Wallet className="h-5 w-5" />
               Orphaned Wallets ({orphanedWallets.length})
             </CardTitle>
-          </CardHeader>
+            <Button variant="outline" size="sm" onClick={purgePlaceholders} disabled={purging}>
+              {purging ? 'Deleting…' : 'Delete placeholders'}
+            </Button>
+          </div>
+        </CardHeader>
           <CardContent>
             <div className="space-y-3">
               {orphanedWallets.map((wallet) => (

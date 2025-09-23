@@ -30,6 +30,7 @@ export function WalletRecovery({ campaigns, onWalletRecovered }: WalletRecoveryP
   const [orphanedWallets, setOrphanedWallets] = useState<OrphanedWallet[]>([]);
   const [loading, setLoading] = useState(true);
   const [associating, setAssociating] = useState<string | null>(null);
+  const [purging, setPurging] = useState(false);
 
   useEffect(() => {
     loadOrphanedWallets();
@@ -56,9 +57,9 @@ export function WalletRecovery({ campaigns, onWalletRecovered }: WalletRecoveryP
         associationsData?.map(a => a.wallet_id) || []
       );
 
-      // Filter to only orphaned wallets
+      // Filter to only orphaned wallets and exclude placeholders
       const orphaned = walletsData?.filter(w => 
-        !associatedWalletIds.has(w.id)
+        !associatedWalletIds.has(w.id) && !String(w.pubkey || '').includes('PLACEHOLDER')
       ) || [];
 
       setOrphanedWallets(orphaned);
@@ -106,6 +107,29 @@ export function WalletRecovery({ campaigns, onWalletRecovered }: WalletRecoveryP
     }
   };
 
+  const purgePlaceholders = async () => {
+    if (purging) return;
+    setPurging(true);
+    try {
+      const { data, error } = await supabase
+        .from('blackbox_wallets')
+        .delete()
+        .ilike('pubkey', '%PLACEHOLDER%')
+        .select('id');
+      if (error) throw error;
+      toast({
+        title: 'Placeholders removed',
+        description: `Deleted ${data?.length || 0} placeholder wallet(s)`
+      });
+      await loadOrphanedWallets();
+    } catch (error) {
+      console.error('Failed to purge placeholders:', error);
+      toast({ title: 'Error', description: 'Failed to delete placeholder wallets', variant: 'destructive' });
+    } finally {
+      setPurging(false);
+    }
+  };
+
   if (loading) {
     return (
       <Card>
@@ -129,10 +153,15 @@ export function WalletRecovery({ campaigns, onWalletRecovered }: WalletRecoveryP
   return (
     <Card className="border-destructive/20 bg-destructive/5">
       <CardHeader>
-        <CardTitle className="flex items-center gap-2 text-destructive">
-          <Wallet className="h-5 w-5" />
-          Wallet Recovery - {orphanedWallets.length} Orphaned Wallet(s)
-        </CardTitle>
+        <div className="flex items-center justify-between">
+          <CardTitle className="flex items-center gap-2 text-destructive">
+            <Wallet className="h-5 w-5" />
+            Wallet Recovery - {orphanedWallets.length} Orphaned Wallet(s)
+          </CardTitle>
+          <Button variant="outline" size="sm" onClick={purgePlaceholders} disabled={purging}>
+            {purging ? 'Deleting…' : 'Delete placeholders'}
+          </Button>
+        </div>
         <p className="text-sm text-muted-foreground">
           These wallets were disconnected from campaigns but still contain funds. 
           Associate them with your campaigns to recover access.
