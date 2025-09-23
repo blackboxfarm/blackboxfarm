@@ -657,8 +657,8 @@ export function CampaignWallets({ campaign }: CampaignWalletsProps) {
             </CardContent>
           </Card>
 
-          {/* Orphaned Wallets Section */}
-          <OrphanedWallets onWalletAction={loadWallets} />
+          {/* Unused Wallets Section */}
+          <UnusedWallets onWalletAction={loadWallets} />
 
           {selectedWallet && (
             <WalletCommands 
@@ -672,28 +672,16 @@ export function CampaignWallets({ campaign }: CampaignWalletsProps) {
       );
     }
 
-    // Orphaned Wallets Component
-    function OrphanedWallets({ onWalletAction }: { onWalletAction: () => void }) {
-      const [orphanedWallets, setOrphanedWallets] = useState<WalletData[]>([]);
+    // Unused Wallets Component
+    function UnusedWallets({ onWalletAction }: { onWalletAction: () => void }) {
+      const [unusedWallets, setUnusedWallets] = useState<WalletData[]>([]);
       const [isLoading, setIsLoading] = useState(false);
       const [purging, setPurging] = useState(false);
 
-      const loadOrphanedWallets = async () => {
+      const loadUnusedWallets = async () => {
         setIsLoading(true);
         try {
-          // Build a set of wallet IDs that are associated with any campaign
-          const { data: assocData, error: assocError } = await supabase
-            .from('campaign_wallets')
-            .select('wallet_id');
-
-          if (assocError) {
-            console.error('Error loading wallet associations:', assocError);
-            throw assocError;
-          }
-
-          const associatedIds = new Set((assocData || []).map(a => a.wallet_id));
-
-          // Load all wallets and filter client-side to avoid join/null pitfalls
+          // Load all wallets and exclude placeholders
           const { data: walletsData, error: walletsError } = await supabase
             .from('blackbox_wallets')
             .select('*')
@@ -705,12 +693,12 @@ export function CampaignWallets({ campaign }: CampaignWalletsProps) {
           }
 
           const filtered = (walletsData || []).filter(w =>
-            !associatedIds.has(w.id) && !String(w.pubkey || '').includes('PLACEHOLDER')
+            !String(w.pubkey || '').includes('PLACEHOLDER')
           );
 
-          setOrphanedWallets(filtered);
+          setUnusedWallets(filtered);
         } catch (error) {
-          console.error('Error loading orphaned wallets:', error);
+          console.error('Error loading wallets:', error);
         } finally {
           setIsLoading(false);
         }
@@ -727,7 +715,7 @@ export function CampaignWallets({ campaign }: CampaignWalletsProps) {
             .select('id');
           if (error) throw error;
           toast({ title: 'Placeholders removed', description: `Deleted ${data?.length || 0} placeholder wallet(s)` });
-          await loadOrphanedWallets();
+          await loadUnusedWallets();
           onWalletAction();
         } catch (error: any) {
           console.error('Failed to purge placeholders:', error);
@@ -738,31 +726,23 @@ export function CampaignWallets({ campaign }: CampaignWalletsProps) {
       };
 
       useEffect(() => {
-        loadOrphanedWallets();
+        loadUnusedWallets();
         
-        // Set up real-time updates for orphaned wallets
-        const orphanChannel = supabase
-          .channel('orphan-wallet-changes')
-          .on('postgres_changes', {
-            event: '*',
-            schema: 'public',
-            table: 'campaign_wallets'
-          }, () => {
-            console.log('Campaign wallets changed, refreshing orphaned wallets...');
-            loadOrphanedWallets();
-          })
+        // Set up real-time updates for wallets
+        const walletChannel = supabase
+          .channel('wallet-changes')
           .on('postgres_changes', {
             event: '*',
             schema: 'public',
             table: 'blackbox_wallets'
           }, () => {
-            console.log('Blackbox wallets changed, refreshing orphaned wallets...');
-            loadOrphanedWallets();
+            console.log('Blackbox wallets changed, refreshing wallets...');
+            loadUnusedWallets();
           })
           .subscribe();
 
         return () => {
-          supabase.removeChannel(orphanChannel);
+          supabase.removeChannel(walletChannel);
         };
       }, []);
 
@@ -770,19 +750,19 @@ export function CampaignWallets({ campaign }: CampaignWalletsProps) {
         return (
           <Card>
             <CardHeader>
-              <CardTitle>Orphaned Wallets</CardTitle>
+              <CardTitle>Wallets</CardTitle>
             </CardHeader>
             <CardContent>
               <div className="text-center py-4">
                 <RefreshCw className="h-4 w-4 animate-spin mx-auto mb-2" />
-                Loading orphaned wallets...
+                Loading wallets...
               </div>
             </CardContent>
           </Card>
         );
       }
 
-      if (orphanedWallets.length === 0) {
+      if (unusedWallets.length === 0) {
         return null;
       }
 
@@ -792,7 +772,7 @@ export function CampaignWallets({ campaign }: CampaignWalletsProps) {
           <div className="flex items-center justify-between">
             <CardTitle className="flex items-center gap-2">
               <Wallet className="h-5 w-5" />
-              Orphaned Wallets ({orphanedWallets.length})
+              Wallets ({unusedWallets.length})
             </CardTitle>
             <Button variant="outline" size="sm" onClick={purgePlaceholders} disabled={purging}>
               {purging ? 'Deleting…' : 'Delete placeholders'}
@@ -801,7 +781,7 @@ export function CampaignWallets({ campaign }: CampaignWalletsProps) {
         </CardHeader>
           <CardContent>
             <div className="space-y-3">
-              {orphanedWallets.map((wallet) => (
+              {unusedWallets.map((wallet) => (
                 <div key={wallet.id} className="p-4 border rounded-lg">
                   <div className="flex items-center justify-between mb-2">
                     <div className="flex items-center gap-2">
@@ -812,7 +792,6 @@ export function CampaignWallets({ campaign }: CampaignWalletsProps) {
                       >
                         {wallet.pubkey}
                       </button>
-                      <Badge variant="outline">Orphaned</Badge>
                     </div>
                     <div className="text-sm text-muted-foreground">
                       {wallet.sol_balance.toFixed(4)} SOL
@@ -822,10 +801,10 @@ export function CampaignWallets({ campaign }: CampaignWalletsProps) {
                   <WalletTokenManager 
                     walletId={wallet.id}
                     walletPubkey={wallet.pubkey}
-                    isOrphaned={true}
+                    isOrphaned={false}
                     onTokensSold={() => {
                       onWalletAction();
-                      loadOrphanedWallets();
+                      loadUnusedWallets();
                     }}
                   />
                 </div>

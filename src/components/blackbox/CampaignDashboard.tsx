@@ -10,7 +10,7 @@ import { toast } from "@/hooks/use-toast";
 import { CampaignWallets } from "./CampaignWallets";
 import { CampaignActivationGuide } from "./CampaignActivationGuide";
 import { LiveActivityMonitor } from "./LiveActivityMonitor";
-import { WalletRecovery } from "./WalletRecovery";
+
 import { CampaignCommands } from "./CampaignCommands";
 import { useCampaignNotifications } from "@/hooks/useCampaignNotifications";
 import { TokenValidationInput } from "@/components/token/TokenValidationInput";
@@ -666,14 +666,6 @@ export function CampaignDashboard() {
         </>
       )}
 
-      <WalletRecovery 
-        campaigns={campaigns} 
-        onWalletRecovered={() => {
-          if (selectedCampaign) {
-            loadCampaigns();
-          }
-        }} 
-      />
     </div>
   );
 }
