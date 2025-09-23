@@ -60,7 +60,7 @@ export function WalletTokenManager({
 
       // Check if this is a dummy/placeholder wallet
       const secretKey = walletData.secret_key_encrypted;
-      if (!secretKey || secretKey.includes('DUMMY') || secretKey.includes('PLACEHOLDER') || secretKey.endsWith('RVNJUVQ=')) {
+      if (!secretKey || secretKey.includes('DUMMY') || secretKey.includes('PLACEHOLDER') || secretKey.endsWith('RVNJUVQ=') || secretKey.includes('Q==')) {
         console.log('WalletTokenManager: Skipping token fetch for dummy/placeholder wallet');
         setTokens([]);
         setIsLoading(false);
@@ -161,9 +161,20 @@ export function WalletTokenManager({
       });
     } catch (error: any) {
       console.error('WalletTokenManager: Failed to load token balances:', error);
+      
+      // Provide more user-friendly error messages
+      let errorMessage = error.message || 'Unknown error occurred';
+      if (errorMessage.includes('dummy/placeholder')) {
+        errorMessage = 'Cannot load tokens for dummy wallet';
+      } else if (errorMessage.includes('Invalid wallet secret')) {
+        errorMessage = 'Wallet configuration error - invalid secret format';
+      } else if (errorMessage.includes('non-2xx status')) {
+        errorMessage = 'Token loading service temporarily unavailable';
+      }
+      
       toast({
         title: "Error loading tokens",
-        description: error.message || 'Unknown error occurred',
+        description: errorMessage,
         variant: "destructive"
       });
     } finally {

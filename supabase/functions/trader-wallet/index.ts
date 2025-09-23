@@ -118,13 +118,21 @@ serve(async (req) => {
           // Try using raw secret as final fallback
           try {
             slog("🔄 Trying raw secret as final fallback");
-            const testKp = parseKeypair(headerSecret);
-            slog("✅ Raw secret valid - using as-is");
-            secretToUse = headerSecret;
-          } catch (parseError) {
-            slog("❌ All decryption methods failed: " + (parseError as Error)?.message);
-            return ok({ error: `Failed to decrypt wallet secret: ${(aesError as Error).message}`, ...(debug ? { debugLogs: logs } : {}) }, 400);
-          }
+            
+            // Check if it's a known dummy/placeholder format first
+            if (headerSecret.includes('DUMMY') || headerSecret.includes('PLACEHOLDER') || headerSecret.includes('RVNJUVQ=')) {
+              slog("❌ Detected dummy/placeholder wallet secret - refusing to decrypt");
+              return ok({ error: "Cannot load tokens for dummy/placeholder wallet", ...(debug ? { debugLogs: logs } : {}) }, 400);
+            }
+            
+            try {
+              const testKp = parseKeypair(headerSecret);
+              slog("✅ Raw secret valid - using as-is");
+              secretToUse = headerSecret;
+            } catch (parseError) {
+              slog("❌ All decryption methods failed: " + (parseError as Error)?.message);
+              return ok({ error: `Invalid wallet secret format. Please check wallet configuration.`, ...(debug ? { debugLogs: logs } : {}) }, 400);
+            }
         }
       }
     } else {
