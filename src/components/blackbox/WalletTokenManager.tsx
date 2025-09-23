@@ -9,6 +9,7 @@ import { Coins, DollarSign, Trash2, RefreshCw, ArrowLeftRight, Percent, Hash } f
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "@/hooks/use-toast";
 import { useSolPrice } from "@/hooks/useSolPrice";
+import { Connection, PublicKey, clusterApiUrl } from "@solana/web3.js";
 
 interface TokenBalance {
   mint: string;
@@ -40,7 +41,75 @@ export function WalletTokenManager({
   const [convertLoading, setConvertLoading] = useState(false);
   const [sellAmounts, setSellAmounts] = useState<Record<string, string>>({});
   const [sellTypes, setSellTypes] = useState<Record<string, 'all' | 'percentage' | 'amount' | 'tokens'>>({});
-  const { price: solPrice } = useSolPrice();
+const { price: solPrice } = useSolPrice();
+
+  const TOKEN_PROGRAM_ID = new PublicKey('TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA');
+
+  // View-only fallback: read token balances directly from the blockchain (no secrets, no campaigns)
+  const loadTokensViaRPC = async (ownerAddress: string): Promise<TokenBalance[]> => {
+    const list: TokenBalance[] = [];
+    try {
+      const connection = new Connection(clusterApiUrl('mainnet-beta'), 'confirmed');
+      const owner = new PublicKey(ownerAddress);
+
+      const [lamports, parsed] = await Promise.all([
+        connection.getBalance(owner),
+        connection.getParsedTokenAccountsByOwner(owner, { programId: TOKEN_PROGRAM_ID })
+      ]);
+
+      const solUi = lamports / 1e9;
+      list.push({
+        mint: 'So11111111111111111111111111111111111111112',
+        symbol: 'SOL',
+        name: 'Solana',
+        balance: lamports,
+        uiAmount: solUi,
+        decimals: 9,
+        logoUri: 'https://raw.githubusercontent.com/solana-labs/token-list/main/assets/mainnet/So11111111111111111111111111111111111111112/logo.png',
+        usdValue: solUi * (solPrice || 0)
+      });
+
+      for (const acct of parsed.value) {
+        const info: any = (acct as any).account.data.parsed.info;
+        const tokenAmount = info.tokenAmount;
+        const uiAmount = parseFloat(tokenAmount.uiAmountString || tokenAmount.uiAmount || '0');
+        if (uiAmount > 0) {
+          const mint = info.mint as string;
+          let symbol = 'UNK';
+          let name = 'Unknown Token';
+          let decimals = tokenAmount.decimals ?? 0;
+          let logoUri: string | undefined;
+          let usdValue: number | undefined;
+
+          try {
+            const { data: meta } = await supabase.functions.invoke('token-metadata', { body: { tokenMint: mint } });
+            if (meta) {
+              symbol = meta.symbol || symbol;
+              name = meta.name || name;
+              decimals = meta.decimals ?? decimals;
+              logoUri = meta.logoUri;
+              const isStable = ['USDC','USDT','BUSD','DAI','PYUSD'].includes(symbol);
+              usdValue = isStable ? uiAmount : undefined;
+            }
+          } catch {}
+
+          list.push({
+            mint,
+            symbol,
+            name,
+            balance: parseInt(tokenAmount.amount || '0'),
+            uiAmount,
+            decimals,
+            logoUri,
+            usdValue
+          });
+        }
+      }
+    } catch (e) {
+      console.warn('View-only token load failed:', e);
+    }
+    return list;
+  };
 
   const loadTokenBalances = async () => {
     if (!walletId) return;
@@ -58,11 +127,13 @@ export function WalletTokenManager({
         throw new Error(`Failed to get wallet credentials: ${walletError?.message || 'No wallet data'}`);
       }
 
-      // Check if this is a dummy/placeholder wallet
+// Check if this is a dummy/placeholder wallet
       const secretKey = walletData.secret_key_encrypted;
       if (!secretKey || secretKey.includes('DUMMY') || secretKey.includes('PLACEHOLDER') || secretKey.endsWith('RVNJUVQ=') || secretKey.includes('Q==')) {
-        console.log('WalletTokenManager: Skipping token fetch for dummy/placeholder wallet');
-        setTokens([]);
+        console.log('WalletTokenManager: Dummy/placeholder detected - using view-only RPC to list tokens');
+        const tokenList = await loadTokensViaRPC(walletPubkey);
+        setTokens(tokenList);
+        toast({ title: 'Tokens loaded', description: `Loaded ${tokenList.length} tokens (view-only)`, });
         setIsLoading(false);
         return;
       }
@@ -161,22 +232,28 @@ export function WalletTokenManager({
       });
     } catch (error: any) {
       console.error('WalletTokenManager: Failed to load token balances:', error);
-      
-      // Provide more user-friendly error messages
-      let errorMessage = error.message || 'Unknown error occurred';
-      if (errorMessage.includes('dummy/placeholder')) {
-        errorMessage = 'Cannot load tokens for dummy wallet';
-      } else if (errorMessage.includes('Invalid wallet secret')) {
-        errorMessage = 'Wallet configuration error - invalid secret format';
-      } else if (errorMessage.includes('non-2xx status')) {
-        errorMessage = 'Token loading service temporarily unavailable';
+
+      // Attempt view-only fallback before erroring out
+      const tokenList = await loadTokensViaRPC(walletPubkey);
+      if (tokenList.length > 0) {
+        setTokens(tokenList);
+        toast({ title: 'Tokens loaded', description: `Loaded ${tokenList.length} tokens (view-only)`, });
+      } else {
+        // Provide more user-friendly error messages
+        let errorMessage = (error?.message as string) || 'Unknown error occurred';
+        if (errorMessage.includes('dummy/placeholder')) {
+          errorMessage = 'Cannot load tokens for dummy wallet';
+        } else if (errorMessage.includes('Invalid wallet secret')) {
+          errorMessage = 'Wallet configuration error - invalid secret format';
+        } else if (errorMessage.includes('non-2xx status')) {
+          errorMessage = 'Token loading service temporarily unavailable';
+        }
+        toast({
+          title: 'Error loading tokens',
+          description: errorMessage,
+          variant: 'destructive'
+        });
       }
-      
-      toast({
-        title: "Error loading tokens",
-        description: errorMessage,
-        variant: "destructive"
-      });
     } finally {
       setIsLoading(false);
     }
