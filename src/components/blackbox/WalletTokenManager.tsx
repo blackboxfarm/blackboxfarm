@@ -121,144 +121,30 @@ const { price: solPrice } = useSolPrice();
     
     setIsLoading(true);
     try {
-      // Get wallet secret key
-      const { data: walletData, error: walletError } = await supabase
-        .from('blackbox_wallets')
-        .select('secret_key_encrypted')
-        .eq('id', walletId)
-        .single();
-
-      if (walletError || !walletData) {
-        throw new Error(`Failed to get wallet credentials: ${walletError?.message || 'No wallet data'}`);
-      }
-
-// Check if this is a dummy/placeholder wallet
-      const secretKey = walletData.secret_key_encrypted;
-      if (!secretKey || secretKey.includes('DUMMY') || secretKey.includes('PLACEHOLDER') || secretKey.endsWith('RVNJUVQ=') || secretKey.includes('Q==')) {
-        console.log('WalletTokenManager: Dummy/placeholder detected - using view-only RPC to list tokens');
-        const tokenList = await loadTokensViaRPC(walletPubkey);
-        setTokens(tokenList);
-        toast({ title: 'Tokens loaded', description: `Loaded ${tokenList.length} tokens (view-only)`, });
-        setIsLoading(false);
-        return;
-      }
-
-      console.log('WalletTokenManager: Fetching tokens for wallet', walletPubkey);
-
-      // Use trader-wallet function to get ALL tokens
-      const { data: balanceData, error: balanceError } = await supabase.functions.invoke('trader-wallet', {
-        body: { 
-          getAllTokens: true,
-          debug: true
-        },
-        headers: {
-          'x-owner-secret': secretKey
-        }
-      });
-
-      if (balanceError) {
-        console.error('WalletTokenManager: trader-wallet error:', balanceError);
-        throw new Error(`trader-wallet error: ${balanceError.message || 'Unknown error'}`);
-      }
-
-      if (!balanceData) {
-        throw new Error('No data returned from trader-wallet function');
-      }
-
-      console.log('WalletTokenManager: trader-wallet response:', balanceData);
-
-      const data = balanceData;
-      const tokenList: TokenBalance[] = [];
+      console.log('WalletTokenManager: Loading ALL tokens via direct RPC for wallet', walletPubkey);
       
-      // Add SOL balance if available
-      if (data.solBalance !== undefined) {
-        tokenList.push({
-          mint: 'So11111111111111111111111111111111111111112',
-          symbol: 'SOL',
-          name: 'Solana',
-          balance: Math.floor(data.solBalance * 1e9),
-          uiAmount: data.solBalance,
-          decimals: 9,
-          logoUri: 'https://raw.githubusercontent.com/solana-labs/token-list/main/assets/mainnet/So11111111111111111111111111111111111111112/logo.png',
-          usdValue: data.solBalance * (solPrice || 0)
-        });
-      }
-
-      // Add all SPL tokens from the response
-      if (data.tokens && Array.isArray(data.tokens)) {
-        console.log('WalletTokenManager: Processing', data.tokens.length, 'tokens');
-        
-        for (const token of data.tokens) {
-          if (token.uiAmount && token.uiAmount > 0) {
-            try {
-              // Get token metadata
-              const { data: tokenMetadata, error: metadataError } = await supabase.functions.invoke('token-metadata', {
-                body: { tokenMint: token.mint }
-              });
-              
-              if (metadataError) {
-                console.warn('Failed to get metadata for token', token.mint, ':', metadataError);
-              }
-              
-              const isStablecoin = ['USDC', 'USDT', 'BUSD', 'DAI', 'PYUSD'].includes(tokenMetadata?.symbol || '');
-              tokenList.push({
-                mint: token.mint,
-                symbol: tokenMetadata?.symbol || token.symbol || 'UNK',
-                name: tokenMetadata?.name || token.name || 'Unknown Token',
-                balance: parseInt(token.amount || '0'),
-                uiAmount: token.uiAmount,
-                decimals: token.decimals || tokenMetadata?.decimals || 6,
-                logoUri: tokenMetadata?.logoUri,
-                usdValue: isStablecoin ? token.uiAmount : undefined
-              });
-            } catch (error) {
-              console.warn('Error processing token metadata for', token.mint, ':', error);
-              // Add token with minimal data if metadata fetch fails
-              tokenList.push({
-                mint: token.mint,
-                symbol: token.symbol || 'UNK',
-                name: token.name || 'Unknown Token',
-                balance: parseInt(token.amount || '0'),
-                uiAmount: token.uiAmount,
-                decimals: token.decimals || 6,
-                usdValue: undefined
-              });
-            }
-          }
-        }
-      }
-
-      console.log('WalletTokenManager: Final token list:', tokenList);
+      // Use direct RPC method to get ALL tokens (SOL + SPL tokens)
+      const tokenList = await loadTokensViaRPC(walletPubkey);
       setTokens(tokenList);
       
-      toast({
-        title: "Tokens refreshed",
-        description: `Found ${tokenList.length} tokens with balances`,
-      });
+      console.log('WalletTokenManager: Loaded tokens:', tokenList);
+      
+      // Show success message without errors
+      if (tokenList.length > 0) {
+        console.log(`Successfully loaded ${tokenList.length} tokens for wallet ${walletPubkey}`);
+      }
+      
     } catch (error: any) {
       console.error('WalletTokenManager: Failed to load token balances:', error);
-
-      // Attempt view-only fallback before erroring out
-      const tokenList = await loadTokensViaRPC(walletPubkey);
-      if (tokenList.length > 0) {
-        setTokens(tokenList);
-        toast({ title: 'Tokens loaded', description: `Loaded ${tokenList.length} tokens (view-only)`, });
-      } else {
-        // Provide more user-friendly error messages
-        let errorMessage = (error?.message as string) || 'Unknown error occurred';
-        if (errorMessage.includes('dummy/placeholder')) {
-          errorMessage = 'Cannot load tokens for dummy wallet';
-        } else if (errorMessage.includes('Invalid wallet secret')) {
-          errorMessage = 'Wallet configuration error - invalid secret format';
-        } else if (errorMessage.includes('non-2xx status')) {
-          errorMessage = 'Token loading service temporarily unavailable';
-        }
-        toast({
-          title: 'Error loading tokens',
-          description: errorMessage,
-          variant: 'destructive'
-        });
-      }
+      
+      // Set empty tokens array on error
+      setTokens([]);
+      
+      toast({
+        title: 'Error loading tokens',
+        description: 'Failed to load wallet contents from blockchain',
+        variant: 'destructive'
+      });
     } finally {
       setIsLoading(false);
     }
