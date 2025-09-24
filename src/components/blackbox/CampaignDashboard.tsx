@@ -528,15 +528,10 @@ export function CampaignDashboard() {
               <Collapsible open={showCampaignSelector} onOpenChange={setShowCampaignSelector}>
                 <CollapsibleTrigger asChild>
                   <div className="flex items-center justify-between cursor-pointer">
-                    <div className="flex items-center gap-3">
+                     <div className="flex items-center gap-3">
                       <CardTitle>
-                        {selectedCampaign ? `Active: ${selectedCampaign.nickname}` : "Select Campaign"}
+                        {selectedCampaign ? `${selectedCampaign.nickname}` : "Select Campaign"}
                       </CardTitle>
-                      {selectedCampaign && (
-                        <Badge variant={selectedCampaign.is_active ? "default" : "secondary"}>
-                          {selectedCampaign.is_active ? "Active" : "Disabled"}
-                        </Badge>
-                      )}
                     </div>
                     <ChevronDown className={`h-4 w-4 transition-transform ${showCampaignSelector ? 'rotate-180' : ''}`} />
                   </div>
@@ -660,7 +655,6 @@ export function CampaignDashboard() {
               />
               <LiveActivityMonitor campaignId={selectedCampaign.id} />
               <CampaignCommands campaign={selectedCampaign} />
-              <CampaignWallets campaign={selectedCampaign} />
             </>
           )}
         </>
