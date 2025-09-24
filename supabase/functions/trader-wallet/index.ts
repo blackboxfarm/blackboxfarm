@@ -2,6 +2,7 @@ import "https://deno.land/x/xhr@0.1.0/mod.ts";
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { Connection, Keypair, PublicKey } from "npm:@solana/web3.js@1.95.3";
 import { SecureStorage } from '../_shared/encryption.ts';
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
 import bs58 from "npm:bs58@5.0.0";
 
 // Lightweight ATA helper
@@ -99,40 +100,54 @@ serve(async (req) => {
     let secretToUse = envSecret!;
     if (headerSecret) {
       try {
-        slog("Decrypting owner secret from header");
-        secretToUse = await SecureStorage.decryptWalletSecret(headerSecret);
-        slog("✅ AES decryption successful (length: " + secretToUse.length + ")");
-      } catch (aesError) {
-        slog("⚠️ AES decryption failed: " + (aesError as Error)?.message);
-        
-        // Try base64 decoding for old format
+        slog("Decrypting owner secret via encrypt-data function");
+        const supabaseClient = createClient(
+          Deno.env.get("SUPABASE_URL") ?? "",
+          Deno.env.get("SUPABASE_ANON_KEY") ?? ""
+        );
+        const { data, error } = await supabaseClient.functions.invoke('encrypt-data', {
+          body: { data: headerSecret, action: 'decrypt' }
+        });
+        if (error) throw error;
+        const decrypted = (data as any)?.decryptedData ?? '';
+        if (!decrypted) throw new Error('Empty decrypted result');
+        secretToUse = decrypted;
+        slog("✅ Decryption successful via encrypt-data (length: " + secretToUse.length + ")");
+      } catch (invokeErr) {
+        slog("⚠️ encrypt-data decrypt failed: " + (invokeErr as Error)?.message);
         try {
-          slog("🔄 Trying base64 decode for legacy format");
-          const decoded = atob(headerSecret);
-          const testKp = parseKeypair(decoded);
-          secretToUse = decoded;
-          slog("✅ Base64 decode successful - using legacy format");
-        } catch (base64Error) {
-          slog("❌ Base64 decode failed: " + (base64Error as Error)?.message);
-          
-          // Try using raw secret as final fallback
+          // Handle AES: prefix produced by encrypt-data directly with local AES helper
+          if (headerSecret.startsWith('AES:')) {
+            const payload = headerSecret.substring(4);
+            secretToUse = await SecureStorage.decrypt(payload);
+            slog("✅ Local AES decryption successful (length: " + secretToUse.length + ")");
+          } else {
+            // Legacy base64 or plaintext formats
+            slog("🔄 Trying base64 decode for legacy format");
+            const decoded = atob(headerSecret);
+            // decoded may be either base58 string or JSON array string
+            try { parseKeypair(decoded); secretToUse = decoded; }
+            catch {
+              // If decoded is raw bytes of keypair, convert to Uint8Array and validate
+              const bytes = new Uint8Array([...decoded].map(c => c.charCodeAt(0)));
+              if (bytes.length === 64 || bytes.length === 32) {
+                try { Keypair.fromSecretKey(bytes); secretToUse = JSON.stringify(Array.from(bytes)); }
+                catch (e) { throw e; }
+              } else {
+                throw new Error('Unsupported decoded secret format');
+              }
+            }
+            slog("✅ Base64 path produced a valid secret");
+          }
+        } catch (fallbackErr) {
+          slog("❌ All decryption paths failed: " + (fallbackErr as Error)?.message);
+          // As a last resort, attempt raw parse (will throw if invalid)
           try {
-            slog("🔄 Trying raw secret as final fallback");
-            
-            // Check if it's a known dummy/placeholder format first
-            if (headerSecret.includes('DUMMY') || headerSecret.includes('PLACEHOLDER') || headerSecret.includes('RVNJUVQ=')) {
-              slog("❌ Detected dummy/placeholder wallet secret - refusing to decrypt");
-              return ok({ error: "Cannot load tokens for dummy/placeholder wallet", ...(debug ? { debugLogs: logs } : {}) }, 400);
-            }
-            
-            try {
-              const testKp = parseKeypair(headerSecret);
-              slog("✅ Raw secret valid - using as-is");
-              secretToUse = headerSecret;
-            } catch (parseError) {
-              slog("❌ All decryption methods failed: " + (parseError as Error)?.message);
-              return ok({ error: `Invalid wallet secret format. Please check wallet configuration.`, ...(debug ? { debugLogs: logs } : {}) }, 400);
-            }
+            parseKeypair(headerSecret);
+            secretToUse = headerSecret;
+          } catch (parseError) {
+            return ok({ error: `Invalid wallet secret format. Please check wallet configuration.` , ...(debug ? { debugLogs: logs } : {}) }, 400);
+          }
         }
       }
     } else {
