@@ -208,7 +208,7 @@ export function CampaignCommands({ campaign }: CampaignCommandsProps) {
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Campaign: {campaign.nickname}</CardTitle>
+        <CardTitle>{campaign.nickname}</CardTitle>
       </CardHeader>
       <CardContent className="space-y-6">
         {/* Commands */}
