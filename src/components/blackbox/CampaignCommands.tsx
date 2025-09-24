@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -191,9 +191,6 @@ export function CampaignCommands({ campaign }: CampaignCommandsProps) {
   if (loading) {
     return (
       <Card>
-        <CardHeader>
-          <CardTitle>Campaign Commands & Wallets</CardTitle>
-        </CardHeader>
         <CardContent>
           <p className="text-muted-foreground">Loading...</p>
         </CardContent>
@@ -207,9 +204,6 @@ export function CampaignCommands({ campaign }: CampaignCommandsProps) {
 
   return (
     <Card>
-      <CardHeader>
-        <CardTitle>{campaign.nickname}</CardTitle>
-      </CardHeader>
       <CardContent className="space-y-6">
         {/* Commands */}
         <div>
