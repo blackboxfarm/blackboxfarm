@@ -529,9 +529,9 @@ export function CampaignDashboard() {
                 <CollapsibleTrigger asChild>
                   <div className="flex items-center justify-between cursor-pointer">
                      <div className="flex items-center gap-3">
-                      <CardTitle>
-                        {selectedCampaign ? `${selectedCampaign.nickname}` : "Select Campaign"}
-                      </CardTitle>
+                       <CardTitle>
+                         {selectedCampaign ? selectedCampaign.nickname : "Select Campaign"}
+                       </CardTitle>
                     </div>
                     <ChevronDown className={`h-4 w-4 transition-transform ${showCampaignSelector ? 'rotate-180' : ''}`} />
                   </div>
