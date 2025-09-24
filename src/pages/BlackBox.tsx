@@ -105,7 +105,6 @@ export default function BlackBox() {
           <TabsContent value="dashboard" className="space-y-6">
             <RequireAuth>
               <CampaignDashboard />
-              <WalletGenerator />
             </RequireAuth>
           </TabsContent>
 
