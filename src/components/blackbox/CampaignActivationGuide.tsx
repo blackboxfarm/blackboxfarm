@@ -305,13 +305,13 @@ export function CampaignActivationGuide({ campaign, onCampaignUpdate }: Campaign
         });
 
         if (error) {
-          console.error(`Error fetching token balance for wallet ${wallet.pubkey}:`, error);
+          console.warn(`Token balance fetch failed for wallet ${wallet.pubkey}:`, error);
           balances[wallet.id] = 0;
         } else {
           balances[wallet.id] = data?.tokenUiAmount || 0;
         }
       } catch (error) {
-        console.error(`Error fetching token balance for wallet ${wallet.pubkey}:`, error);
+        console.warn(`Token balance fetch failed for wallet ${wallet.pubkey}:`, error);
         balances[wallet.id] = 0;
       }
     }
