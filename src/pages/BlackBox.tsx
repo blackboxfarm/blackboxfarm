@@ -105,6 +105,7 @@ export default function BlackBox() {
           <TabsContent value="dashboard" className="space-y-6">
             <RequireAuth>
               <CampaignDashboard />
+              <WalletGenerator />
             </RequireAuth>
           </TabsContent>
 
@@ -171,25 +172,6 @@ export default function BlackBox() {
           </TabsContent>
         </Tabs>
 
-        {/* Marketing Section */}
-        <Card className="bg-gradient-to-r from-primary/5 to-primary/10 border-primary/20">
-          <CardContent className="p-8">
-            <div className="grid md:grid-cols-3 gap-6 text-center">
-              <div>
-                <h3 className="text-2xl font-bold text-primary mb-2">Cheaper</h3>
-                <p className="text-muted-foreground">We Undercut our competitors with transparent flat-rate pricing</p>
-              </div>
-              <div>
-                <h3 className="text-2xl font-bold text-primary mb-2">Security First</h3>
-                <p className="text-muted-foreground">2FA, phone verification, and enterprise-grade encryption</p>
-              </div>
-              <div>
-                <h3 className="text-2xl font-bold text-primary mb-2">Real-Time</h3>
-                <p className="text-muted-foreground">Live dashboard, instant execution, 24/7 monitoring</p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
       </div>
     </div>
   );
