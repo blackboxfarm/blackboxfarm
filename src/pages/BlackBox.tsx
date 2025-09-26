@@ -19,7 +19,7 @@ import CommunityWalletDashboard from "@/components/blackbox/CommunityWalletDashb
 import { CommunityWalletPublic } from "@/components/blackbox/CommunityWalletPublic";
 import { OverviewTab } from "@/components/blackbox/OverviewTab";
 import { useAuth } from "@/hooks/useAuth";
-import { usePreviewSuperAdmin } from "@/hooks/usePreviewSuperAdmin";
+
 import { Button } from "@/components/ui/button";
 import { useNavigate } from "react-router-dom";
 import { Shield } from "lucide-react";
@@ -32,8 +32,7 @@ import { BreadCrumbsInterface } from "@/components/breadcrumbs/BreadCrumbsInterf
 export default function BlackBox() {
   const [activeTab, setActiveTab] = useState("overview");
   const { user } = useAuth();
-  const isPreviewSuperAdmin = usePreviewSuperAdmin();
-  const isAdminView = !!user || isPreviewSuperAdmin;
+  const isAdminView = !!user;
   const navigate = useNavigate();
 
   return (
