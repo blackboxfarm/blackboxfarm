@@ -27,14 +27,12 @@ import { SolPriceDisplay } from "@/components/SolPriceDisplay";
 import { WalletMonitor } from "@/components/WalletMonitor";
 import { CopyTradingConfig } from "@/components/copy-trading/CopyTradingConfig";
 import { CopyTradingDashboard } from "@/components/copy-trading/CopyTradingDashboard";
-import { useSuperAdminAuth } from "@/hooks/useSuperAdminAuth";
 import { BreadCrumbsInterface } from "@/components/breadcrumbs/BreadCrumbsInterface";
+
 export default function BlackBox() {
   const [activeTab, setActiveTab] = useState("overview");
   const { user } = useAuth();
   const isPreviewSuperAdmin = usePreviewSuperAdmin();
-  // Auto-login as Super Admin when not authenticated
-  useSuperAdminAuth();
   const isAdminView = !!user || isPreviewSuperAdmin;
   const navigate = useNavigate();
 
