@@ -7,16 +7,12 @@ import { CheckCircle2, AlertTriangle, Wallet, DollarSign, Info, Clock, Check, X,
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { createClient } from "@supabase/supabase-js";
+import { supabase } from "@/integrations/supabase/client";
 import { toast } from "@/hooks/use-toast";
 import { CampaignTransactionHistory } from "./CampaignTransactionHistory";
 import { TokenPriceDisplay } from "@/components/token/TokenPriceDisplay";
 
 // Simple client to avoid type recursion issues
-const supabase = createClient(
-  "https://apxauapuusmgwbbzjgfl.supabase.co",
-  "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFweGF1YXB1dXNtZ3diYnpqZ2ZsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTQ1OTEzMDUsImV4cCI6MjA3MDE2NzMwNX0.w8IrKq4YVStF3TkdEcs5mCSeJsxjkaVq2NFkypYOXHU"
-);
 
 // Validation Step Component
 const ValidationStep = ({ label, status }: { 
@@ -1111,16 +1107,6 @@ export function CampaignActivationGuide({ campaign, onCampaignUpdate }: Campaign
                           }}
                         >
                           Retry Validation
-                        </Button>
-                        <Button 
-                          size="sm" 
-                          variant="outline"
-                          onClick={() => {
-                            setValidationErrors([]);
-                            window.location.reload();
-                          }}
-                        >
-                          Force Refresh Page
                         </Button>
                       </div>
                     </div>

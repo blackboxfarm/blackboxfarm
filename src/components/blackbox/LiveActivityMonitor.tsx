@@ -2,13 +2,9 @@ import { useState, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { createClient } from "@supabase/supabase-js";
+import { supabase } from "@/integrations/supabase/client";
 
 // Simple client to avoid type recursion issues
-const supabase = createClient(
-  "https://apxauapuusmgwbbzjgfl.supabase.co",
-  "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFweGF1YXB1dXNtZ3diYnpqZ2ZsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTQ1OTEzMDUsImV4cCI6MjA3MDE2NzMwNX0.w8IrKq4YVStF3TkdEcs5mCSeJsxjkaVq2NFkypYOXHU"
-);
 import { Activity, ArrowUpDown, Clock, DollarSign } from "lucide-react";
 
 interface ActivityLog {
@@ -81,7 +77,7 @@ export function LiveActivityMonitor({ campaignId }: LiveActivityMonitorProps) {
       return;
     }
 
-    const walletIdArray = walletIds.map(w => w.id);
+    const walletIdArray = walletIds;
 
     // Load campaign stats using junction table
     const { data: wallets } = await supabase
@@ -163,7 +159,7 @@ export function LiveActivityMonitor({ campaignId }: LiveActivityMonitorProps) {
         table: 'blackbox_transactions'
       }, (payload) => {
         // Only update if transaction belongs to one of this campaign's wallets
-        if (walletIds.some(w => w.id === payload.new.wallet_id)) {
+        if (walletIds.includes(payload.new.wallet_id)) {
           setTransactions(prev => [payload.new as Transaction, ...prev.slice(0, 9)]);
           // Update stats
           setStats(prev => ({

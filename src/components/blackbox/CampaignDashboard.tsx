@@ -447,17 +447,6 @@ export function CampaignDashboard() {
           <div className="flex items-center justify-between">
             <CardTitle>Campaign Dashboard</CardTitle>
             <div className="flex gap-2">
-              <Button onClick={forceRefreshCampaigns} variant="outline" size="sm">
-                Force Refresh
-              </Button>
-              <Button 
-                onClick={handleDatabaseCleanup} 
-                variant="destructive" 
-                size="sm"
-                className="bg-orange-600 hover:bg-orange-700"
-              >
-                🧹 Clean Database
-              </Button>
               <Button onClick={() => setShowCreateForm(true)} size="sm">
                 <Plus className="h-4 w-4 mr-2" />
                 New Campaign

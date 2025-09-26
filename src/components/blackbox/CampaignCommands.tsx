@@ -38,6 +38,7 @@ export function CampaignCommands({ campaign }: CampaignCommandsProps) {
   const [commands, setCommands] = useState<Command[]>([]);
   const [availableWallets, setAvailableWallets] = useState<Wallet[]>([]);
   const [associatedWallets, setAssociatedWallets] = useState<Wallet[]>([]);
+  const [selectedWalletId, setSelectedWalletId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -205,6 +206,49 @@ export function CampaignCommands({ campaign }: CampaignCommandsProps) {
   return (
     <Card>
       <CardContent className="space-y-6">
+        {/* Wallets */}
+        <div>
+          <h3 className="font-semibold mb-3">Wallets</h3>
+          {associatedWallets.length === 0 ? (
+            <div className="border border-dashed rounded-lg p-4 text-center">
+              <p className="text-muted-foreground mb-3">No wallets associated yet</p>
+              <p className="text-sm text-muted-foreground">Associate a wallet to start assigning commands</p>
+            </div>
+          ) : (
+            <div className="grid gap-2">
+              {associatedWallets.map((w) => (
+                <div key={w.id} className="flex items-center justify-between p-3 border rounded-lg">
+                  <div>
+                    <h4 className="font-medium">{w.pubkey}</h4>
+                    <p className="text-sm text-muted-foreground">Balance: {w.sol_balance} SOL</p>
+                  </div>
+                  <Badge variant={w.is_active ? "default" : "secondary"}>
+                    {w.is_active ? "Active" : "Inactive"}
+                  </Badge>
+                </div>
+              ))}
+            </div>
+          )}
+
+          <div className="mt-3 flex items-center gap-2">
+            <Select onValueChange={(v) => setSelectedWalletId(v)}>
+              <SelectTrigger className="w-[280px]">
+                <SelectValue placeholder="Select a wallet to associate" />
+              </SelectTrigger>
+              <SelectContent>
+                {availableWallets.map((w) => (
+                  <SelectItem key={w.id} value={w.id}>
+                    {w.pubkey.slice(0, 6)}...{w.pubkey.slice(-4)} • {w.sol_balance} SOL
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <Button size="sm" disabled={!selectedWalletId} onClick={() => selectedWalletId && associateWallet(selectedWalletId)}>
+              Associate
+            </Button>
+          </div>
+        </div>
+
         {/* Commands */}
         <div>
           <h3 className="font-semibold mb-3">Commands</h3>
