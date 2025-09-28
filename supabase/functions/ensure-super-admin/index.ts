@@ -58,6 +58,27 @@ Deno.serve(async (req) => {
       }
     }
 
+    // Ensure super admin role is assigned
+    if (user?.id) {
+      const { error: roleError } = await supabase
+        .from('user_roles')
+        .upsert(
+          {
+            user_id: user.id,
+            role: 'super_admin',
+            granted_by: user.id,
+            is_active: true
+          },
+          {
+            onConflict: 'user_id,role'
+          }
+        )
+      
+      if (roleError) {
+        console.error('Error assigning super admin role:', roleError)
+      }
+    }
+
     return new Response(
       JSON.stringify({ success: true, user_id: user?.id || null }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }

@@ -11,10 +11,14 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import TransactionHistoryWindow from "@/components/blackbox/TransactionHistoryWindow";
 import { WalletBalanceMonitor } from "@/components/WalletBalanceMonitor";
 import { WalletMonitor } from "@/components/WalletMonitor";
+import { useUserRoles } from "@/hooks/useUserRoles";
+import { Shield, AlertTriangle } from "lucide-react";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 
 
 export default function SuperAdmin() {
   const [activeTab, setActiveTab] = useState("wallets");
+  const { isSuperAdmin, isLoading } = useUserRoles();
 
   useEffect(() => {
     // Check for tab parameter in URL
@@ -24,6 +28,43 @@ export default function SuperAdmin() {
       setActiveTab(tabParam);
     }
   }, []);
+
+  // Show loading state while checking roles
+  if (isLoading) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto"></div>
+          <p className="mt-2 text-muted-foreground">Verifying permissions...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // Show access denied if not super admin
+  if (!isSuperAdmin) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center">
+        <Card className="w-full max-w-md mx-4">
+          <CardHeader className="text-center">
+            <div className="flex justify-center mb-4">
+              <AlertTriangle className="h-12 w-12 text-destructive" />
+            </div>
+            <CardTitle className="text-xl">Access Denied</CardTitle>
+          </CardHeader>
+          <CardContent className="text-center space-y-4">
+            <p className="text-muted-foreground">
+              You don't have permission to access the Super Admin panel. 
+              Only verified super administrators can access this area.
+            </p>
+            <Button onClick={() => window.history.back()} variant="outline">
+              Go Back
+            </Button>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-background">

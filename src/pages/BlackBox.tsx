@@ -19,6 +19,7 @@ import CommunityWalletDashboard from "@/components/blackbox/CommunityWalletDashb
 import { CommunityWalletPublic } from "@/components/blackbox/CommunityWalletPublic";
 import { OverviewTab } from "@/components/blackbox/OverviewTab";
 import { useAuth } from "@/hooks/useAuth";
+import { useUserRoles } from "@/hooks/useUserRoles";
 
 import { Button } from "@/components/ui/button";
 import { useNavigate } from "react-router-dom";
@@ -32,8 +33,11 @@ import { BreadCrumbsInterface } from "@/components/breadcrumbs/BreadCrumbsInterf
 export default function BlackBox() {
   const [activeTab, setActiveTab] = useState("overview");
   const { user } = useAuth();
-  const isAdminView = !!user;
+  const { isSuperAdmin, isAdmin, isLoading: rolesLoading } = useUserRoles();
   const navigate = useNavigate();
+  
+  // Only super admins should see admin features
+  const isAdminView = isSuperAdmin;
 
   return (
     <div className="min-h-screen bg-background">
@@ -62,7 +66,7 @@ export default function BlackBox() {
             </div>
           </div>
           <div className="hidden md:flex flex-shrink-0 items-center gap-3">
-            {isAdminView && (
+            {isSuperAdmin && (
               <Button 
                 onClick={() => navigate("/super-admin")}
                 variant="outline"
