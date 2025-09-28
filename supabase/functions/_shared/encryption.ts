@@ -49,8 +49,8 @@ export class SecureStorage {
 
       // Return as base64
       return btoa(String.fromCharCode(...combined));
-    } catch (error) {
-      throw new Error(`Encryption failed: ${error.message}`);
+    } catch (error: any) {
+      throw new Error(`Encryption failed: ${error?.message || String(error)}`);
     }
   }
 
@@ -74,8 +74,8 @@ export class SecureStorage {
       );
 
       return new TextDecoder().decode(decrypted);
-    } catch (error) {
-      throw new Error(`Decryption failed: ${error.message}`);
+    } catch (error: any) {
+      throw new Error(`Decryption failed: ${error?.message || String(error)}`);
     }
   }
 

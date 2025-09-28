@@ -18,7 +18,8 @@ export function usePreviewSuperAdmin(): boolean {
 
   return useMemo(() => {
     const isLovable = typeof window !== 'undefined' && window.location.host.includes('lovable.dev');
-    const flag = typeof window !== 'undefined' && localStorage.getItem('PREVIEW_SUPER_ADMIN') === 'true';
-    return isLovable && flag;
+    const pref = typeof window !== 'undefined' ? localStorage.getItem('PREVIEW_SUPER_ADMIN') : null;
+    const enabled = pref === null || pref === 'true'; // default ON in lovable preview unless explicitly disabled
+    return isLovable && enabled;
   }, []);
 }

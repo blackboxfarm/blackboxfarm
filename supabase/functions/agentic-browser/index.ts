@@ -301,7 +301,7 @@ serve(async (req) => {
         console.log('Function result:', functionResult.success);
         
         // Build results
-        const results = [
+        const results: any[] = [
           {
             action: 'navigate',
             success: true,
@@ -385,7 +385,7 @@ serve(async (req) => {
         console.log('✅ HTML content retrieved successfully, length:', htmlContent.length);
         
         // Build results for all actions
-        const results = [
+        const results: any[] = [
           {
             action: 'navigate',
             success: true,
@@ -466,7 +466,7 @@ serve(async (req) => {
         console.log('✅ Screenshot completed successfully');
         
         // Build results for screenshot actions
-        const results = [
+        const results: any[] = [
           {
             action: 'navigate',
             success: true,
@@ -516,7 +516,7 @@ serve(async (req) => {
         JSON.stringify({ 
           success: false, 
           error: 'Browser automation failed',
-          details: fetchError.message
+          details: (fetchError as any)?.message || String(fetchError)
         }),
         { 
           status: 500, 
@@ -536,13 +536,13 @@ serve(async (req) => {
 
   } catch (error) {
     console.error('Error in agentic browser:', error);
-    console.error('Error stack:', error.stack);
+    console.error('Error stack:', (error as any)?.stack);
     
     return new Response(
       JSON.stringify({ 
         success: false, 
-        error: error.message,
-        stack: error.stack,
+        error: (error as any)?.message || 'Unknown error',
+        stack: (error as any)?.stack,
         details: 'Failed to execute browser automation'
       }),
       { 

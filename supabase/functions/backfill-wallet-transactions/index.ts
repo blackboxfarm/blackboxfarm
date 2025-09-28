@@ -13,7 +13,7 @@ interface BackfillRequest {
 
 // Global caches
 const tokenMetaCache = new Map() // mint -> {name, symbol}
-let cachedSolPriceUsd = null
+let cachedSolPriceUsd: number | null = null
 
 async function fetchJsonWithRetry(url: string, opts = {}, attempts = 5) {
   let delay = 250;
