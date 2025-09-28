@@ -1,75 +1,29 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { Bell, X, CheckCircle, AlertCircle, Info, AlertTriangle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { format } from 'date-fns';
-
-interface Notification {
-  id: string;
-  type: 'campaign' | 'transaction' | 'wallet' | 'security' | 'system';
-  level: 'info' | 'success' | 'warning' | 'error';
-  title: string;
-  message: string;
-  timestamp: Date;
-  read: boolean;
-}
+import { useNotifications } from '@/hooks/useNotifications';
+import { useAuth } from '@/hooks/useAuth';
 
 export const NotificationCenter = () => {
-  const [notifications, setNotifications] = useState<Notification[]>([]);
   const [isOpen, setIsOpen] = useState(false);
+  const { isAuthenticated } = useAuth();
+  const {
+    notifications,
+    unreadCount,
+    markAsRead,
+    markAllAsRead,
+    deleteNotification,
+  } = useNotifications();
 
-  // Simulate some initial notifications for demo
-  useEffect(() => {
-    const demoNotifications: Notification[] = [
-      {
-        id: '1',
-        type: 'campaign',
-        level: 'success',
-        title: 'Campaign Started',
-        message: 'BumpBot Campaign #1 is now running',
-        timestamp: new Date(Date.now() - 5 * 60 * 1000),
-        read: false,
-      },
-      {
-        id: '2',
-        type: 'wallet',
-        level: 'success',
-        title: 'Wallet Funded',
-        message: '2.5 SOL received in 7xKJ8...mN9p',
-        timestamp: new Date(Date.now() - 15 * 60 * 1000),
-        read: false,
-      },
-      {
-        id: '3',
-        type: 'security',
-        level: 'info',
-        title: 'Login Detected',
-        message: 'New login from Chrome on Windows',
-        timestamp: new Date(Date.now() - 30 * 60 * 1000),
-        read: true,
-      },
-    ];
-    setNotifications(demoNotifications);
-  }, []);
-
-  const unreadCount = notifications.filter(n => !n.read).length;
-
-  const markAsRead = (id: string) => {
-    setNotifications(prev => 
-      prev.map(n => n.id === id ? { ...n, read: true } : n)
-    );
-  };
-
-  const markAllAsRead = () => {
-    setNotifications(prev => prev.map(n => ({ ...n, read: true })));
-  };
-
-  const removeNotification = (id: string) => {
-    setNotifications(prev => prev.filter(n => n.id !== id));
-  };
+  // Don't show notifications to unauthenticated users
+  if (!isAuthenticated) {
+    return null;
+  }
 
   const getIcon = (level: string) => {
     switch (level) {
@@ -139,12 +93,12 @@ export const NotificationCenter = () => {
                     <div
                       key={notification.id}
                       className={`p-4 border-b border-border hover:bg-muted/50 transition-colors ${
-                        !notification.read ? 'bg-muted/30' : ''
+                        !notification.is_read ? 'bg-muted/30' : ''
                       }`}
                     >
                       <div className="flex items-start gap-3">
                         <div className="mt-0.5">
-                          {getIcon(notification.level)}
+                          {getIcon(notification.type)}
                         </div>
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center justify-between mb-1">
@@ -162,7 +116,7 @@ export const NotificationCenter = () => {
                                 variant="ghost"
                                 size="icon"
                                 className="h-6 w-6"
-                                onClick={() => removeNotification(notification.id)}
+                                onClick={() => deleteNotification(notification.id)}
                               >
                                 <X className="h-3 w-3" />
                               </Button>
@@ -173,9 +127,9 @@ export const NotificationCenter = () => {
                           </p>
                           <div className="flex items-center justify-between">
                             <p className="text-xs text-muted-foreground">
-                              {format(notification.timestamp, 'MMM d, HH:mm')}
+                              {format(new Date(notification.created_at), 'MMM d, HH:mm')}
                             </p>
-                            {!notification.read && (
+                            {!notification.is_read && (
                               <Button
                                 variant="ghost"
                                 size="sm"
