@@ -35,7 +35,9 @@ export const AuthButton = () => {
 
   if (user) {
     return (
-      <DropdownMenu>
+      <div className="flex items-center gap-2">
+        <PreviewSuperAdminButton />
+        <DropdownMenu>
         <DropdownMenuTrigger asChild>
           <Button variant="outline" className="glow-soft gap-2">
             <User className="h-4 w-4" />
@@ -47,8 +49,9 @@ export const AuthButton = () => {
             <LogOut className="mr-2 h-4 w-4" />
             Sign Out
           </DropdownMenuItem>
-        </DropdownMenuContent>
-      </DropdownMenu>
+          </DropdownMenuContent>
+        </DropdownMenu>
+      </div>
     );
   }
 

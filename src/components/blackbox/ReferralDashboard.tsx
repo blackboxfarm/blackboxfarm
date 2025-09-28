@@ -6,6 +6,7 @@ import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Copy, Users, Gift, Share2 } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
+import { useUserRoles } from "@/hooks/useUserRoles";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { SocialIntegrationDemo } from "../SocialIntegrationDemo";
@@ -33,25 +34,17 @@ interface ReferralProgram {
 
 export function ReferralDashboard() {
   const { user } = useAuth();
+  const { isSuperAdmin } = useUserRoles();
   const { toast } = useToast();
   const [referralProgram, setReferralProgram] = useState<ReferralProgram | null>(null);
   const [referralCode, setReferralCode] = useState("");
   const [loading, setLoading] = useState(false);
-  const [isSuperAdmin, setIsSuperAdmin] = useState(false);
 
   useEffect(() => {
     if (user) {
       fetchReferralProgram();
-      checkSuperAdminStatus();
     }
   }, [user]);
-
-  const checkSuperAdminStatus = async () => {
-    // Check if user is super admin by checking URL pattern or specific logic
-    const currentUrl = window.location.pathname;
-    const isSuperAdminPage = currentUrl.includes('/super-admin');
-    setIsSuperAdmin(isSuperAdminPage);
-  };
 
 
   const fetchReferralProgram = async () => {

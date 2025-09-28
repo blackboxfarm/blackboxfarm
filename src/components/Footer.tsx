@@ -3,14 +3,11 @@ import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { Github, Twitter, MessageCircle, Mail, Shield, FileText, Globe, Heart } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
-import { usePasswordAuth } from "@/hooks/usePasswordAuth";
+import { useUserRoles } from "@/hooks/useUserRoles";
 
 export function Footer() {
   const { isAuthenticated } = useAuth();
-  const { isAuthenticated: isPasswordAuth } = usePasswordAuth();
-  
-  // Check if user has super admin access (password auth)
-  const isSuperAdmin = isPasswordAuth;
+  const { isSuperAdmin } = useUserRoles();
   
   return (
     <footer className="bg-muted/20 border-t">

@@ -8,7 +8,7 @@ import { Shield, AlertTriangle, CheckCircle, XCircle, RefreshCw, Search } from '
 import { useSecretManager } from '@/hooks/useSecretManager';
 import { useSecureAuth } from '@/hooks/useSecureAuth';
 import { supabase } from '@/integrations/supabase/client';
-import { usePasswordAuth } from '@/hooks/usePasswordAuth';
+import { useUserRoles } from '@/hooks/useUserRoles';
 import { AccountAuditPanel } from './AccountAuditPanel';
 import { 
   SecurityMarketingView, 
@@ -31,7 +31,7 @@ export const SecurityDashboard = () => {
   const [lastScan, setLastScan] = useState<Date | null>(null);
   const { secrets, hasSecrets, getSecretStatus } = useSecretManager();
   const { user, isRateLimited, rateLimitState, isAuthenticated } = useSecureAuth();
-  const { isAuthenticated: isSuperAdmin } = usePasswordAuth();
+  const { isSuperAdmin } = useUserRoles();
   
   // Determine user type and what security view to show
   const getUserType = () => {

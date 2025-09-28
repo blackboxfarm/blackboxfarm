@@ -8,7 +8,7 @@ import { Plus, Trash2, Activity, TrendingUp, TrendingDown } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/hooks/useAuth';
-import { usePreviewSuperAdmin } from '@/hooks/usePreviewSuperAdmin';
+import { RequireAuth } from '@/components/RequireAuth';
 
 interface MonitoredWallet {
   id: string;
@@ -41,24 +41,13 @@ export const WalletMonitor = () => {
   const [isConnected, setIsConnected] = useState(false);
   const { toast } = useToast();
   const { user } = useAuth();
-  const isPreviewSuperAdmin = usePreviewSuperAdmin();
   const wsRef = useRef<WebSocket | null>(null);
-  
-  // Check if user has access (either authenticated or preview super admin)
-  const hasAccess = !!user || isPreviewSuperAdmin;
 
   // Load monitored wallets
   const loadWallets = async () => {
-    if (!hasAccess) return;
+    if (!user) return;
 
     try {
-      if (isPreviewSuperAdmin && !user?.id) {
-        const { data, error } = await supabase.functions.invoke('get-monitored-wallets', { body: {} });
-        if (error) throw error;
-        setWallets((data as any)?.wallets || []);
-        return;
-      }
-
       const { data, error } = await supabase
         .from('monitored_wallets')
         .select('*')
@@ -73,16 +62,9 @@ export const WalletMonitor = () => {
 
   // Load transaction history
   const loadTransactions = async () => {
-    if (!hasAccess) return;
+    if (!user) return;
 
     try {
-      if (isPreviewSuperAdmin && !user?.id) {
-        const { data, error } = await supabase.functions.invoke('get-wallet-transactions', { body: {} });
-        if (error) throw error;
-        setTransactions(((data as any)?.transactions || []) as WalletTransaction[]);
-        return;
-      }
-
       const { data, error } = await supabase
         .from('wallet_transactions')
         .select(`
@@ -101,7 +83,7 @@ export const WalletMonitor = () => {
 
   // Add new wallet
   const addWallet = async () => {
-    if (!hasAccess || !newWalletAddress.trim()) return;
+    if (!user || !newWalletAddress.trim()) return;
 
     // Always persist via Edge Function (handles both auth and preview)
     const { data, error } = await supabase.functions.invoke('add-monitored-wallet', {
@@ -147,16 +129,6 @@ export const WalletMonitor = () => {
     const confirmed = window.confirm('Remove this wallet from monitoring?');
     if (!confirmed) return;
 
-    // Preview mode: remove locally and tell server to stop watching
-    if (isPreviewSuperAdmin && !user?.id) {
-      const w = wallets.find((x) => x.id === walletId);
-      setWallets((prev) => prev.filter((x) => x.id !== walletId));
-      if (w && wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
-        wsRef.current.send(JSON.stringify({ type: 'remove_wallet', address: w.wallet_address }));
-      }
-      toast({ title: 'Wallet removed', description: 'Stopped monitoring this wallet' });
-      return;
-    }
 
     const { error } = await supabase
       .from('monitored_wallets')
@@ -210,7 +182,7 @@ export const WalletMonitor = () => {
 
   // Setup realtime subscription for new transactions
   useEffect(() => {
-    if (!hasAccess) return;
+    if (!user) return;
 
     const channel = supabase
       .channel('wallet-transactions')
@@ -231,11 +203,11 @@ export const WalletMonitor = () => {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [hasAccess]);
+  }, [user]);
 
   // Initialize
   useEffect(() => {
-    if (hasAccess) {
+    if (user) {
       loadWallets();
       loadTransactions();
       setupWebSocket();
@@ -246,7 +218,7 @@ export const WalletMonitor = () => {
         wsRef.current.close();
       }
     };
-  }, [hasAccess]);
+  }, [user]);
 
   const formatTime = (timestamp: string) => {
     return new Date(timestamp).toLocaleTimeString();
@@ -263,17 +235,9 @@ export const WalletMonitor = () => {
     return address.substring(0, 8) + '...' + address.substring(address.length - 8);
   };
 
-  if (!hasAccess) {
-    return (
-      <Card>
-        <CardContent className="p-6">
-          <p>Please log in to use the wallet monitor.</p>
-        </CardContent>
-      </Card>
-    );
-  }
-
   return (
+    <RequireAuth>
+      <div className="space-y-6">
     <div className="space-y-6">
       {/* Connection Status */}
       <Card>
@@ -407,5 +371,6 @@ export const WalletMonitor = () => {
         </CardContent>
       </Card>
     </div>
+    </RequireAuth>
   );
 };

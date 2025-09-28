@@ -16,8 +16,8 @@ import { WalletInvestigator } from "@/components/WalletInvestigator";
 import { WalletMonitor } from "@/components/WalletMonitor";
 
 import SecretsModal from "@/components/SecretsModal";
-import { PasswordLogin } from "@/components/PasswordLogin";
-import { usePasswordAuth } from "@/hooks/usePasswordAuth";
+import { RequireAuth } from "@/components/RequireAuth";
+import { useAuth } from "@/hooks/useAuth";
 
 // Matrix background code snippet
 const matrixCode = `import { supabase } from '@/integrations/supabase/client';
@@ -37,7 +37,7 @@ const TradingBot = {
 export default TradingBot;`;
 
 export default function Index() {
-  const { isAuthenticated, isLoading } = usePasswordAuth();
+  const { isAuthenticated, loading } = useAuth();
   const [activeTab, setActiveTab] = useState("investigator");
 
   useEffect(() => {
@@ -69,7 +69,7 @@ export default function Index() {
     canonical.setAttribute("href", `${window.location.origin}/`);
   }, []);
 
-  if (isLoading) {
+  if (loading) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
         <div className="text-center">
@@ -80,12 +80,9 @@ export default function Index() {
     );
   }
 
-  if (!isAuthenticated) {
-    return <PasswordLogin onAuthenticate={async () => true} />;
-  }
-
   return (
-    <div className="min-h-screen tech-gradient relative overflow-hidden">
+    <RequireAuth>
+      <div className="min-h-screen tech-gradient relative overflow-hidden">
       {/* Matrix background */}
       <div className="absolute inset-0 opacity-5">
         <div className="absolute top-10 left-10 max-w-lg">
@@ -293,5 +290,6 @@ export default function Index() {
         </Tabs>
       </div>
     </div>
+    </RequireAuth>
   );
 }

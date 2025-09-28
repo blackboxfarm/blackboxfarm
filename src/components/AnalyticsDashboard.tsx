@@ -26,7 +26,7 @@ import {
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
-import { usePasswordAuth } from "@/hooks/usePasswordAuth";
+import { useUserRoles } from "@/hooks/useUserRoles";
 import { 
   AnalyticsMarketingView, 
   DonorAnalyticsView, 
@@ -72,7 +72,7 @@ export function AnalyticsDashboard() {
   const [loading, setLoading] = useState(true);
   const [timeRange, setTimeRange] = useState('7d');
   const { user, isAuthenticated } = useAuth();
-  const { isAuthenticated: isSuperAdmin } = usePasswordAuth();
+  const { isSuperAdmin } = useUserRoles();
   
   // Determine user type and what analytics to show
   const getUserType = () => {
