@@ -1,9 +1,9 @@
 import "https://deno.land/x/xhr@0.1.0/mod.ts";
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import { Connection, Keypair, PublicKey } from "npm:@solana/web3.js@1.95.3";
+import { Connection, Keypair, PublicKey } from "https://esm.sh/@solana/web3.js@1.95.3";
 import { SecureStorage } from '../_shared/encryption.ts';
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
-import bs58 from "npm:bs58@5.0.0";
+import bs58 from "https://esm.sh/bs58@5.0.0";
 
 // Lightweight ATA helper
 const TOKEN_PROGRAM_ID = new PublicKey("TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA");

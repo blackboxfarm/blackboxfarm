@@ -371,6 +371,7 @@ export const WalletMonitor = () => {
         </CardContent>
       </Card>
     </div>
+    </div>
     </RequireAuth>
   );
 };

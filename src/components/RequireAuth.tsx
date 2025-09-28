@@ -3,7 +3,7 @@ import { useAuth } from '@/hooks/useAuth';
 import { AuthModal } from './auth/AuthModal';
 import { Button } from '@/components/ui/button';
 import { Shield } from 'lucide-react';
-
+import { usePreviewSuperAdmin } from '@/hooks/usePreviewSuperAdmin';
 
 interface RequireAuthProps {
   children: ReactNode;
@@ -12,8 +12,8 @@ interface RequireAuthProps {
 
 export const RequireAuth = ({ children, fallback }: RequireAuthProps) => {
   const { isAuthenticated, loading } = useAuth();
-  
   const [showAuthModal, setShowAuthModal] = useState(false);
+  const isPreviewAdmin = usePreviewSuperAdmin();
 
   if (loading) {
     return (
@@ -24,6 +24,10 @@ export const RequireAuth = ({ children, fallback }: RequireAuthProps) => {
   }
 
   if (!isAuthenticated) {
+    if (isPreviewAdmin) {
+      return <>{children}</>;
+    }
+
     if (fallback) {
       return <>{fallback}</>;
     }

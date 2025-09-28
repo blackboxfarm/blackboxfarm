@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useAuth } from './useAuth';
 import { supabase } from '@/integrations/supabase/client';
+import { usePreviewSuperAdmin } from './usePreviewSuperAdmin';
 
 type UserRole = 'super_admin' | 'admin' | 'moderator' | 'user';
 
@@ -17,8 +18,16 @@ export const useUserRoles = (): UserRoles => {
   const { user, isAuthenticated } = useAuth();
   const [roles, setRoles] = useState<UserRole[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const isPreviewAdmin = usePreviewSuperAdmin();
 
   const fetchUserRoles = async () => {
+    // Preview bypass grants super_admin without requiring auth/session
+    if (isPreviewAdmin) {
+      setRoles(['super_admin']);
+      setIsLoading(false);
+      return;
+    }
+
     if (!user || !isAuthenticated) {
       setRoles([]);
       setIsLoading(false);
@@ -49,7 +58,7 @@ export const useUserRoles = (): UserRoles => {
 
   useEffect(() => {
     fetchUserRoles();
-  }, [user, isAuthenticated]);
+  }, [user, isAuthenticated, isPreviewAdmin]);
 
   const hasRole = (role: UserRole): boolean => {
     return roles.includes(role);

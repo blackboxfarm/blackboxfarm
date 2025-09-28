@@ -4,6 +4,7 @@ import { AuthModal } from './AuthModal';
 import { useAuth } from '@/hooks/useAuth';
 import { LogIn, User, LogOut } from 'lucide-react';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
+import { PreviewSuperAdminButton } from './PreviewSuperAdminButton';
 
 export const AuthButton = () => {
   const [showAuthModal, setShowAuthModal] = useState(false);
