@@ -705,6 +705,17 @@ export function BaglessHoldersReport({ initialToken }: BaglessHoldersReportProps
                 </div>
               </div>
               
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle>Holders List ({filteredHolders.length} wallets)</CardTitle>
+            </CardHeader>
+            <CardContent>
+              {/* Report Summary */}
+              <p className="text-sm text-muted-foreground mb-6">{report.summary}</p>
+              
               {/* LP Filter Controls */}
               <div className="flex gap-2 mb-3 flex-wrap text-sm">
                 <Button
@@ -894,16 +905,6 @@ export function BaglessHoldersReport({ initialToken }: BaglessHoldersReportProps
                   Medium ($1-$4)
                 </Button>
               </div>
-              
-              <p className="text-sm text-muted-foreground">{report.summary}</p>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader>
-              <CardTitle>Holders List ({filteredHolders.length} wallets)</CardTitle>
-            </CardHeader>
-            <CardContent>
               <div className="max-h-96 overflow-auto">
                   <Table>
                      <TableHeader>
