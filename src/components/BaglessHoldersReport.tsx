@@ -101,6 +101,9 @@ export function BaglessHoldersReport({ initialToken }: BaglessHoldersReportProps
     if (report) {
       let filtered = report.holders;
       
+      // Filter to only show wallets above $50 USD
+      filtered = filtered.filter(h => (h.usdValue || 0) >= 50);
+      
       // Apply LP filtering first
       if (excludeLPs) {
         filtered = filtered.filter(h => !h.isLiquidityPool);
@@ -910,7 +913,6 @@ export function BaglessHoldersReport({ initialToken }: BaglessHoldersReportProps
                          <TableHead>% of Supply</TableHead>
                         <TableHead>Token Balance</TableHead>
                         <TableHead>USD Value</TableHead>
-                        <TableHead>Type</TableHead>
                       </TableRow>
                     </TableHeader>
                   <TableBody>
@@ -929,51 +931,12 @@ export function BaglessHoldersReport({ initialToken }: BaglessHoldersReportProps
                          <TableCell className="font-mono text-xs">
                            {holder.percentageOfSupply?.toFixed(2)}%
                          </TableCell>
-                         <TableCell className="font-mono">
-                           {formatBalance(holder.balance)}
-                         </TableCell>
-                         <TableCell className="font-mono">
-                           ${(holder.usdValue || 0).toFixed(4)}
-                         </TableCell>
-                          <TableCell>
-                            {holder.isLiquidityPool ? (
-                              <div className="space-y-1">
-                                <Badge variant="destructive" className="bg-yellow-500 hover:bg-yellow-600">
-                                  LP ({holder.lpConfidence}%)
-                                </Badge>
-                                <div className="text-xs text-muted-foreground">
-                                  {holder.detectedPlatform && (
-                                    <div>Platform: {holder.detectedPlatform}</div>
-                                  )}
-                                  <div>Reason: {holder.lpDetectionReason}</div>
-                                </div>
-                              </div>
-                            ) : (
-                              <Badge variant={
-                                holder.isDustWallet ? "secondary" : 
-                                holder.isSmallWallet ? "outline" : 
-                                holder.isMediumWallet ? "outline" : 
-                                holder.isLargeWallet ? "outline" : 
-                                holder.isBossWallet ? "destructive" : 
-                                holder.isKingpinWallet ? "destructive" : 
-                                holder.isSuperBossWallet ? "destructive" : 
-                                holder.isBabyWhaleWallet ? "destructive" : 
-                                holder.isTrueWhaleWallet ? "destructive" : 
-                                "default"
-                              }>
-                                {holder.isDustWallet ? 'Dust' : 
-                                 holder.isSmallWallet ? 'Small' : 
-                                 holder.isMediumWallet ? 'Medium' : 
-                                 holder.isLargeWallet ? 'Large' : 
-                                 holder.isBossWallet ? 'Boss' : 
-                                 holder.isKingpinWallet ? 'Kingpin' : 
-                                 holder.isSuperBossWallet ? 'Super Boss' : 
-                                 holder.isBabyWhaleWallet ? 'Baby Whale' : 
-                                 holder.isTrueWhaleWallet ? 'True Whale' : 
-                                 'Real'}
-                              </Badge>
-                            )}
-                         </TableCell>
+                          <TableCell className="font-mono">
+                            {Math.floor(holder.balance).toLocaleString()}
+                          </TableCell>
+                          <TableCell className="font-mono">
+                            ${(holder.usdValue || 0).toFixed(2)}
+                          </TableCell>
                       </TableRow>
                     ))}
                   </TableBody>
