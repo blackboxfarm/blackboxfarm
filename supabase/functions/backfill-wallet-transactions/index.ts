@@ -173,7 +173,7 @@ Deno.serve(async (req) => {
     console.error('Backfill error:', error)
     return new Response(JSON.stringify({
       success: false,
-      error: error?.message || String(error),
+      error: error instanceof Error ? error.message : String(error),
       hint: 'Check HELIUS_API_KEY validity, wallet address, and function logs.'
     }), {
       status: 200,
@@ -468,17 +468,17 @@ async function processTransaction(txData: any, walletAddress: string, supabase: 
     const outArr = Array.isArray(swapEvent.tokenOutputs) ? swapEvent.tokenOutputs : (swapEvent.tokenOutputs ? [swapEvent.tokenOutputs] : []);
     if (inArr.length === 0 && outArr.length === 0) continue;
 
-    const isBuy  = inArr.some(x => isSol(x.mint));
-    const isSell = outArr.some(x => isSol(x.mint));
+    const isBuy  = inArr.some((x: any) => isSol(x.mint));
+    const isSell = outArr.some((x: any) => isSol(x.mint));
     if (!isBuy && !isSell) continue;
 
-    const nonSolOut = outArr.find(x => !isSol(x.mint));
-    const nonSolIn  = inArr.find(x => !isSol(x.mint));
+    const nonSolOut = outArr.find((x: any) => !isSol(x.mint));
+    const nonSolIn  = inArr.find((x: any) => !isSol(x.mint));
     const tokenMint = isBuy ? nonSolOut?.mint : nonSolIn?.mint;
     if (!tokenMint) continue;
 
-    const solLeg = (isBuy ? inArr : outArr).find(x => isSol(x.mint));
-    const tokLeg = (isBuy ? outArr : inArr).find(x => !isSol(x.mint));
+    const solLeg = (isBuy ? inArr : outArr).find((x: any) => isSol(x.mint));
+    const tokLeg = (isBuy ? outArr : inArr).find((x: any) => !isSol(x.mint));
 
     const solLamportsStr = solLeg?.rawTokenAmount?.tokenAmount ?? '0';
     const tokenRawStr    = tokLeg?.rawTokenAmount?.tokenAmount ?? '0';

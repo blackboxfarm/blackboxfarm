@@ -106,7 +106,7 @@ serve(async (req) => {
             console.log(`❌ ${api.name} HTTP error: ${response.status}`);
           }
         } catch (error) {
-          console.log(`❌ ${api.name} failed:`, error.message);
+          console.log(`❌ ${api.name} failed:`, error instanceof Error ? error.message : String(error));
           continue;
         }
       }
@@ -165,7 +165,7 @@ serve(async (req) => {
         usedRpc = url;
         break;
       } catch (e) {
-        rpcErrors.push(`RPC ${url.includes('helius') ? 'Helius' : url} exception: ${e?.message || e}`);
+        rpcErrors.push(`RPC ${url.includes('helius') ? 'Helius' : url} exception: ${e instanceof Error ? e.message : String(e)}`);
         continue;
       }
     }
@@ -375,7 +375,7 @@ serve(async (req) => {
     return new Response(
       JSON.stringify({ 
         error: 'Holders report failed', 
-        details: error.message 
+        details: error instanceof Error ? error.message : String(error) 
       }),
       { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );

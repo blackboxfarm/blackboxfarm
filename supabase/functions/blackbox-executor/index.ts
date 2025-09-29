@@ -199,7 +199,7 @@ serve(async (req) => {
           buyAmountSOL,
           platform,
           errorMessage,
-          responseStatus: swapResponse.status,
+          responseStatus: swapResponse.error ? 'error' : 'success',
           responseData: swapResponse.data
         });
         
@@ -338,7 +338,7 @@ serve(async (req) => {
         } else {
           const tokenAccount = tokenAccounts.value[0];
           const accountInfo = await connection.getTokenAccountBalance(tokenAccount.pubkey);
-          const tokenBalance = parseFloat(accountInfo.value.uiAmount || '0');
+          const tokenBalance = parseFloat(String(accountInfo.value.uiAmount || '0'));
 
           if (tokenBalance <= 0) {
             console.log(`⚠️ Zero token balance, skipping sell`);
@@ -404,7 +404,7 @@ serve(async (req) => {
               body: swapBody,
               headers: {
                 'x-owner-secret': wallet.secret_key_encrypted,
-                'x-function-token': Deno.env.get("FUNCTION_TOKEN")
+                'x-function-token': Deno.env.get("FUNCTION_TOKEN") || ''
               }
             });
 
