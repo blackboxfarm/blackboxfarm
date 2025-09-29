@@ -13,11 +13,10 @@ export default function Holders() {
   }, []);
 
   return (
-    <div className="min-h-screen bg-background">
+    <div className="min-h-screen bg-background md:bg-background bg-slate-900">
       <div className="w-full px-[5px] md:px-6 py-4 md:py-8">
         <div className="mb-8">
-          <h1 className="text-4xl font-bold mb-2">Token Holders Report</h1>
-          <p className="text-muted-foreground">
+          <p className="text-muted-foreground font-extrabold text-lg">
             Analyze token holder distribution and wallet categories
           </p>
         </div>
