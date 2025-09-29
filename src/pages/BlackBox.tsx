@@ -29,6 +29,7 @@ import { WalletMonitor } from "@/components/WalletMonitor";
 import { CopyTradingConfig } from "@/components/copy-trading/CopyTradingConfig";
 import { CopyTradingDashboard } from "@/components/copy-trading/CopyTradingDashboard";
 import { BreadCrumbsInterface } from "@/components/breadcrumbs/BreadCrumbsInterface";
+import { BaglessHoldersReport } from "@/components/BaglessHoldersReport";
 
 export default function BlackBox() {
   const [activeTab, setActiveTab] = useState("overview");
@@ -94,6 +95,7 @@ export default function BlackBox() {
             <TabsTrigger value="simulator">Simulator</TabsTrigger>
             <TabsTrigger value="fees">Calculator</TabsTrigger>
             <TabsTrigger value="analytics">Analytics</TabsTrigger>
+            <TabsTrigger value="holders">Holders</TabsTrigger>
             {isAdminView && <TabsTrigger value="referrals">Referrals</TabsTrigger>}
             {isAdminView && <TabsTrigger value="wallets">Wallets</TabsTrigger>}
             {isAdminView && <TabsTrigger value="security">Security</TabsTrigger>}
@@ -158,6 +160,12 @@ export default function BlackBox() {
 
           <TabsContent value="analytics" className="space-y-6">
             <AnalyticsDashboard />
+          </TabsContent>
+
+          <TabsContent value="holders" className="space-y-6">
+            <div className="w-full md:w-1/2 md:mx-auto px-[5px] md:px-6">
+              <BaglessHoldersReport />
+            </div>
           </TabsContent>
 
           <TabsContent value="referrals" className="space-y-6">
