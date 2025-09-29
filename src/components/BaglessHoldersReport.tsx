@@ -300,7 +300,7 @@ export function BaglessHoldersReport({ initialToken }: BaglessHoldersReportProps
       {/* Farm Banner Header */}
       <HoldersFarmBanner />
       
-      <div className="space-y-4 md:space-y-6 px-2 md:px-0 container mx-auto py-4 md:py-6">
+      <div className="space-y-4 md:space-y-6 px-2 md:px-4 w-full max-w-none md:container md:mx-auto py-4 md:py-6">
       <Card>
         <CardHeader className="pb-4">
           <CardTitle className="text-lg md:text-xl">Token Holders Report</CardTitle>
