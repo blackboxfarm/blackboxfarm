@@ -533,74 +533,128 @@ export function BaglessHoldersReport({ initialToken }: BaglessHoldersReportProps
               <div className="mb-6">
                 <h3 className="text-lg font-semibold mb-4">Wallet Distribution (Sediment Layers)</h3>
                 
-                {/* Chart - Full width */}
+                {/* Chart - Full width with Market Cap Y-axis */}
                 <div className="mb-4">
-                  <div className="bg-muted/30 rounded-lg p-4 h-80 flex flex-col justify-end">
-                    {(() => {
-                      // Calculate token balance for each category from holders data
-                        const getTokenBalanceForCategory = (categoryFilter: (holder: TokenHolder) => boolean) => {
-                          return report.holders
-                            .filter(h => !h.isLiquidityPool && categoryFilter(h))
-                            .reduce((sum, holder) => sum + holder.balance, 0);
-                        };
-                      
-                      // Calculate LP balance from liquidity pools
-                      const lpBalance = report.liquidityPools?.reduce((sum, lp) => sum + lp.balance, 0) || 0;
-                      
-                      const trueWhaleBalance = getTokenBalanceForCategory(h => h.isTrueWhaleWallet);
-                      const babyWhaleBalance = getTokenBalanceForCategory(h => h.isBabyWhaleWallet);
-                      const superBossBalance = getTokenBalanceForCategory(h => h.isSuperBossWallet);
-                      const kingpinBalance = getTokenBalanceForCategory(h => h.isKingpinWallet);
-                      const bossBalance = getTokenBalanceForCategory(h => h.isBossWallet);
-                      const realBalance = getTokenBalanceForCategory(h => !h.isDustWallet && !h.isSmallWallet && !h.isMediumWallet && !h.isLargeWallet && !h.isBossWallet && !h.isKingpinWallet && !h.isSuperBossWallet && !h.isBabyWhaleWallet && !h.isTrueWhaleWallet && !h.isLiquidityPool);
-                      const largeBalance = getTokenBalanceForCategory(h => h.isLargeWallet);
-                      const mediumBalance = getTokenBalanceForCategory(h => h.isMediumWallet);
-                      const smallBalance = getTokenBalanceForCategory(h => h.isSmallWallet);
-                      const dustBalance = getTokenBalanceForCategory(h => h.isDustWallet);
-
-                      // Include LP balance in total for proper percentage calculations
-                      const totalTokenBalance = lpBalance + trueWhaleBalance + babyWhaleBalance + superBossBalance + kingpinBalance + bossBalance + realBalance + largeBalance + mediumBalance + smallBalance + dustBalance;
-                      
-                      // Layers ordered top to bottom (largest holders at top, smallest at bottom) - REVERSED ORDER
-                      // LP is added as the foundational layer (bottom/largest)
-                      const layers = [
-                        { name: 'Liquidity Pool', count: report.liquidityPoolsDetected || 0, balance: lpBalance, color: 'bg-yellow-600', textColor: 'text-yellow-600' },
-                        { name: 'True Whale', count: report.trueWhaleWallets || 0, balance: trueWhaleBalance, color: 'bg-red-500', textColor: 'text-red-500' },
-                        { name: 'Baby Whale', count: report.babyWhaleWallets || 0, balance: babyWhaleBalance, color: 'bg-purple-500', textColor: 'text-purple-500' },
-                        { name: 'Super Boss', count: report.superBossWallets || 0, balance: superBossBalance, color: 'bg-indigo-500', textColor: 'text-indigo-500' },
-                        { name: 'Kingpin', count: report.kingpinWallets || 0, balance: kingpinBalance, color: 'bg-cyan-500', textColor: 'text-cyan-500' },
-                        { name: 'Boss', count: report.bossWallets || 0, balance: bossBalance, color: 'bg-orange-500', textColor: 'text-orange-500' },
-                        { name: 'Real', count: report.realWallets || 0, balance: realBalance, color: 'bg-green-500', textColor: 'text-green-500' },
-                        { name: 'Large', count: report.largeWallets || 0, balance: largeBalance, color: 'bg-emerald-500', textColor: 'text-emerald-500' },
-                        { name: 'Medium', count: report.mediumWallets || 0, balance: mediumBalance, color: 'bg-blue-500', textColor: 'text-blue-500' },
-                        { name: 'Small', count: report.smallWallets || 0, balance: smallBalance, color: 'bg-gray-500', textColor: 'text-gray-500' },
-                        { name: 'Dust', count: report.dustWallets || 0, balance: dustBalance, color: 'bg-slate-500', textColor: 'text-slate-500' }
-                      ];
-
-                      return [...layers].reverse().map((layer, index) => {
-                        // Calculate percentage based on token balance, not holder count
-                        const percentage = totalTokenBalance > 0 ? (layer.balance / totalTokenBalance) * 100 : 0;
-                        const minHeight = percentage > 0 ? Math.max(percentage * 2.5, 8) : 0; // Minimum 8px height if any tokens
+                  <div className="flex">
+                    {/* Y-axis Market Cap Labels */}
+                    <div className="flex flex-col justify-between h-80 pr-2 py-4 text-xs text-muted-foreground">
+                      {(() => {
+                        // Calculate total market cap
+                        const totalMarketCap = report.totalBalance * report.tokenPriceUSD;
                         
-                        return (
-                          <div
-                            key={layer.name}
-                            className={`${layer.color} border border-white/20 flex items-center justify-center text-white text-xs font-medium transition-all duration-300 hover:opacity-80`}
-                            style={{ 
-                              height: `${minHeight}px`,
-                              minHeight: percentage > 0 ? '8px' : '0px'
-                            }}
-                            title={`${layer.name}: ${layer.count} wallets (${percentage.toFixed(1)}% of tokens)`}
-                          >
-                            {percentage > 3 && ( // Only show text if layer is thick enough
-                              <span className="text-center px-2">
-                                {layer.count} ({percentage.toFixed(1)}%)
-                              </span>
-                            )}
+                        // Determine appropriate intervals based on market cap size
+                        let interval;
+                        let numTicks = 5;
+                        
+                        if (totalMarketCap < 50000) { // Under $50K
+                          interval = 10000; // $10K intervals
+                        } else if (totalMarketCap < 250000) { // Under $250K
+                          interval = 25000; // $25K intervals
+                        } else if (totalMarketCap < 1000000) { // Under $1M
+                          interval = 100000; // $100K intervals
+                        } else if (totalMarketCap < 5000000) { // Under $5M
+                          interval = 500000; // $500K intervals
+                        } else if (totalMarketCap < 20000000) { // Under $20M
+                          interval = 2000000; // $2M intervals
+                        } else {
+                          interval = 5000000; // $5M intervals
+                        }
+                        
+                        // Generate tick marks from 0 to totalMarketCap
+                        const ticks = [];
+                        const maxTick = Math.ceil(totalMarketCap / interval) * interval;
+                        
+                        for (let i = 0; i <= numTicks; i++) {
+                          const value = (maxTick / numTicks) * (numTicks - i);
+                          ticks.push(value);
+                        }
+                        
+                        return ticks.map((tick, index) => (
+                          <div key={index} className="text-right">
+                            {tick >= 1000000 
+                              ? `$${(tick / 1000000).toFixed(1)}M` 
+                              : `$${(tick / 1000).toFixed(0)}K`
+                            }
                           </div>
-                        );
-                      });
-                    })()}
+                        ));
+                      })()}
+                    </div>
+                    
+                    {/* Chart Container */}
+                    <div className="bg-muted/30 rounded-lg p-4 h-80 flex-1 flex flex-col justify-end relative">
+                      {/* Horizontal grid lines */}
+                      <div className="absolute inset-4 flex flex-col justify-between pointer-events-none">
+                        {Array.from({length: 6}).map((_, i) => (
+                          <div key={i} className="border-t border-muted-foreground/20 w-full" />
+                        ))}
+                      </div>
+                      
+                      {(() => {
+                        // Calculate token balance for each category from holders data
+                          const getTokenBalanceForCategory = (categoryFilter: (holder: TokenHolder) => boolean) => {
+                            return report.holders
+                              .filter(h => !h.isLiquidityPool && categoryFilter(h))
+                              .reduce((sum, holder) => sum + holder.balance, 0);
+                          };
+                        
+                        // Calculate LP balance from liquidity pools
+                        const lpBalance = report.liquidityPools?.reduce((sum, lp) => sum + lp.balance, 0) || 0;
+                        
+                        const trueWhaleBalance = getTokenBalanceForCategory(h => h.isTrueWhaleWallet);
+                        const babyWhaleBalance = getTokenBalanceForCategory(h => h.isBabyWhaleWallet);
+                        const superBossBalance = getTokenBalanceForCategory(h => h.isSuperBossWallet);
+                        const kingpinBalance = getTokenBalanceForCategory(h => h.isKingpinWallet);
+                        const bossBalance = getTokenBalanceForCategory(h => h.isBossWallet);
+                        const realBalance = getTokenBalanceForCategory(h => !h.isDustWallet && !h.isSmallWallet && !h.isMediumWallet && !h.isLargeWallet && !h.isBossWallet && !h.isKingpinWallet && !h.isSuperBossWallet && !h.isBabyWhaleWallet && !h.isTrueWhaleWallet && !h.isLiquidityPool);
+                        const largeBalance = getTokenBalanceForCategory(h => h.isLargeWallet);
+                        const mediumBalance = getTokenBalanceForCategory(h => h.isMediumWallet);
+                        const smallBalance = getTokenBalanceForCategory(h => h.isSmallWallet);
+                        const dustBalance = getTokenBalanceForCategory(h => h.isDustWallet);
+
+                        // Include LP balance in total for proper percentage calculations
+                        const totalTokenBalance = lpBalance + trueWhaleBalance + babyWhaleBalance + superBossBalance + kingpinBalance + bossBalance + realBalance + largeBalance + mediumBalance + smallBalance + dustBalance;
+                        
+                        // Layers ordered top to bottom (largest holders at top, smallest at bottom) - REVERSED ORDER
+                        // LP is added as the foundational layer (bottom/largest)
+                        const layers = [
+                          { name: 'Liquidity Pool', count: report.liquidityPoolsDetected || 0, balance: lpBalance, color: 'bg-yellow-600', textColor: 'text-yellow-600' },
+                          { name: 'True Whale', count: report.trueWhaleWallets || 0, balance: trueWhaleBalance, color: 'bg-red-500', textColor: 'text-red-500' },
+                          { name: 'Baby Whale', count: report.babyWhaleWallets || 0, balance: babyWhaleBalance, color: 'bg-purple-500', textColor: 'text-purple-500' },
+                          { name: 'Super Boss', count: report.superBossWallets || 0, balance: superBossBalance, color: 'bg-indigo-500', textColor: 'text-indigo-500' },
+                          { name: 'Kingpin', count: report.kingpinWallets || 0, balance: kingpinBalance, color: 'bg-cyan-500', textColor: 'text-cyan-500' },
+                          { name: 'Boss', count: report.bossWallets || 0, balance: bossBalance, color: 'bg-orange-500', textColor: 'text-orange-500' },
+                          { name: 'Real', count: report.realWallets || 0, balance: realBalance, color: 'bg-green-500', textColor: 'text-green-500' },
+                          { name: 'Large', count: report.largeWallets || 0, balance: largeBalance, color: 'bg-emerald-500', textColor: 'text-emerald-500' },
+                          { name: 'Medium', count: report.mediumWallets || 0, balance: mediumBalance, color: 'bg-blue-500', textColor: 'text-blue-500' },
+                          { name: 'Small', count: report.smallWallets || 0, balance: smallBalance, color: 'bg-gray-500', textColor: 'text-gray-500' },
+                          { name: 'Dust', count: report.dustWallets || 0, balance: dustBalance, color: 'bg-slate-500', textColor: 'text-slate-500' }
+                        ];
+
+                        return [...layers].reverse().map((layer, index) => {
+                          // Calculate percentage based on token balance, not holder count
+                          const percentage = totalTokenBalance > 0 ? (layer.balance / totalTokenBalance) * 100 : 0;
+                          const minHeight = percentage > 0 ? Math.max(percentage * 2.5, 8) : 0; // Minimum 8px height if any tokens
+                          
+                          return (
+                            <div
+                              key={layer.name}
+                              className={`${layer.color} border border-white/20 flex items-center justify-center text-white text-xs font-medium transition-all duration-300 hover:opacity-80 relative z-10`}
+                              style={{ 
+                                height: `${minHeight}px`,
+                                minHeight: percentage > 0 ? '8px' : '0px'
+                              }}
+                              title={`${layer.name}: ${layer.count} wallets (${percentage.toFixed(1)}% of tokens)`}
+                            >
+                              {percentage > 3 && ( // Only show text if layer is thick enough
+                                <span className="text-center px-2">
+                                  {layer.count} ({percentage.toFixed(1)}%)
+                                </span>
+                              )}
+                            </div>
+                          );
+                        });
+                      })()}
+                    </div>
                   </div>
                 </div>
                 
