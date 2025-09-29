@@ -163,7 +163,7 @@ export default function BlackBox() {
           </TabsContent>
 
           <TabsContent value="holders" className="space-y-6">
-            <div className="w-full md:w-3/4 md:mx-auto px-[5px] md:px-6">
+            <div className="w-full md:w-1/2 md:mx-auto px-[5px] md:px-6">
               <BaglessHoldersReport />
             </div>
           </TabsContent>
