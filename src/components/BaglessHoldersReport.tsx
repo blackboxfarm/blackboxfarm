@@ -102,8 +102,8 @@ export function BaglessHoldersReport({ initialToken }: BaglessHoldersReportProps
     if (report) {
       let filtered = report.holders;
       
-      // Filter to only show wallets above $50 USD
-      filtered = filtered.filter(h => (h.usdValue || 0) >= 50);
+      // Filter to only show wallets above $1 USD
+      filtered = filtered.filter(h => (h.usdValue || 0) >= 1);
       
       // Apply LP filtering first
       if (excludeLPs) {
