@@ -483,11 +483,20 @@ export function BaglessHoldersReport({ initialToken }: BaglessHoldersReportProps
                 </div>
               )}
 
-              <div className="grid grid-cols-2 md:grid-cols-5 gap-3 mb-6">
+              {/* Primary Statistics - Total Holders and Total Tokens on one line */}
+              <div className="grid grid-cols-2 gap-4 mb-4">
                 <div className="text-center">
-                  <div className="text-2xl font-bold">{report.totalHolders}</div>
-                  <div className="text-xs text-muted-foreground">Total Holders</div>
+                  <div className="text-3xl font-bold">{report.totalHolders}</div>
+                  <div className="text-sm text-muted-foreground">Total Holders</div>
                 </div>
+                <div className="text-center">
+                  <div className="text-3xl font-bold">{formatBalance(report.totalBalance)}</div>
+                  <div className="text-sm text-muted-foreground">Total Tokens</div>
+                </div>
+              </div>
+
+              {/* LP Detection and Wallet Categories */}
+              <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 mb-6">
                 <div className="text-center">
                   <div className="text-2xl font-bold text-yellow-500">{report.liquidityPoolsDetected || 0}</div>
                   <div className="text-xs text-muted-foreground">LP Detected</div>
@@ -531,10 +540,6 @@ export function BaglessHoldersReport({ initialToken }: BaglessHoldersReportProps
                 <div className="text-center">
                   <div className="text-2xl font-bold text-slate-500">{report.dustWallets || 0}</div>
                   <div className="text-xs text-muted-foreground">Dust (&lt;$1)</div>
-                </div>
-                <div className="text-center">
-                  <div className="text-2xl font-bold">{formatBalance(report.totalBalance)}</div>
-                  <div className="text-xs text-muted-foreground">Total Tokens</div>
                 </div>
               </div>
 
