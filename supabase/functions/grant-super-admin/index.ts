@@ -14,7 +14,8 @@ Deno.serve(async (req) => {
   try {
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!
     const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
-    const superAdminAllowList = Deno.env.get('SUPER_ADMIN_ALLOW_LIST') || 'admin@blackbox.farm'
+    const superAdminAllowList = Deno.env.get('SUPER_ADMIN_ALLOW_LIST') || 'admin@blackbox.farm,testuser@blackbox.farm'
+    const superAdminAllowDomains = Deno.env.get('SUPER_ADMIN_ALLOW_DOMAINS') || 'blackbox.farm'
 
     // Initialize Supabase client with service role key for admin operations
     const supabase = createClient(supabaseUrl, supabaseServiceKey)
@@ -52,13 +53,18 @@ Deno.serve(async (req) => {
     }
 
     // Check if user's email is in the allowlist
-    const allowedEmails = superAdminAllowList.split(',').map(email => email.trim())
-    if (!allowedEmails.includes(user.email)) {
+    const allowedEmails = superAdminAllowList.split(',').map(e => e.trim().toLowerCase()).filter(Boolean)
+    const allowedDomains = superAdminAllowDomains.split(',').map(d => d.trim().toLowerCase()).filter(Boolean)
+    const email = (user.email || '').toLowerCase()
+    const isExplicitAllowed = allowedEmails.includes(email)
+    const isDomainAllowed = allowedDomains.some(domain => email.endsWith(`@${domain}`))
+    if (!(isExplicitAllowed || isDomainAllowed)) {
       return new Response(
         JSON.stringify({ 
           error: 'Email not authorized for super admin access',
           email: user.email,
-          allowedEmails: allowedEmails.length 
+          allowedEmailsCount: allowedEmails.length,
+          allowedDomains
         }),
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 403 }
       )
