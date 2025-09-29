@@ -42,7 +42,8 @@ export const useUserRoles = (): UserRoles => {
       if (saError) {
         console.warn('RPC is_super_admin failed, falling back to user_roles SELECT:', saError);
       }
-      if (isSA === true) {
+      const isSuper = isSA === true || (typeof isSA === 'string' && (isSA === 'true' || isSA === 't')) || (typeof isSA === 'number' && isSA === 1);
+      if (isSuper) {
         setRoles(['super_admin']);
       } else {
         const { data, error } = await supabase

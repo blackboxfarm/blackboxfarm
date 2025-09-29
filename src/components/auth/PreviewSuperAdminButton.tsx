@@ -12,8 +12,8 @@ export const PreviewSuperAdminButton = () => {
   const { toast } = useToast();
   const [isLoading, setIsLoading] = useState(false);
 
-  // Only show on lovable.dev for authenticated non-super-admin users
-  const isLovablePreview = window.location.host.includes('lovable.dev');
+  // Only show on lovable preview hosts for authenticated non-super-admin users
+  const isLovablePreview = /lovable\.(dev|app)$/.test(window.location.host) || /lovableproject\.com$/.test(window.location.host);
   const shouldShow = isLovablePreview && isAuthenticated && !isSuperAdmin;
 
   if (!shouldShow) {

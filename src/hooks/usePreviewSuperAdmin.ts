@@ -21,7 +21,8 @@ export function usePreviewSuperAdmin(): boolean {
     const host = window.location.hostname || '';
     const isLovable =
       /(^|\.)lovable\.app$/.test(host) ||
-      /(^|\.)lovable\.dev$/.test(host);
+      /(^|\.)lovable\.dev$/.test(host) ||
+      /(^|\.)lovableproject\.com$/.test(host);
     const pref = localStorage.getItem('PREVIEW_SUPER_ADMIN');
     const enabled = pref === null || pref === 'true'; // default ON in lovable preview unless explicitly disabled
     return isLovable && enabled;
