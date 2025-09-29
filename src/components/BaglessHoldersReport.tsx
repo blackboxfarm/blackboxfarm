@@ -295,19 +295,20 @@ export function BaglessHoldersReport({ initialToken }: BaglessHoldersReportProps
   };
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4 md:space-y-6 px-2 md:px-0">
       <Card>
-        <CardHeader>
-          <CardTitle>Token Holders Report</CardTitle>
+        <CardHeader className="pb-4">
+          <CardTitle className="text-lg md:text-xl">Token Holders Report</CardTitle>
         </CardHeader>
-        <CardContent className="space-y-4">
+        <CardContent className="space-y-3 md:space-y-4">
           <div>
-            <Label htmlFor="tokenMint">Token Mint Address</Label>
+            <Label htmlFor="tokenMint" className="text-sm">Token Mint Address</Label>
             <Input
               id="tokenMint"
               value={tokenMint}
               onChange={(e) => setTokenMint(e.target.value)}
               placeholder="Token mint address"
+              className="mt-1 text-sm"
             />
           </div>
           
@@ -317,12 +318,12 @@ export function BaglessHoldersReport({ initialToken }: BaglessHoldersReportProps
               checked={useAutoPricing}
               onCheckedChange={setUseAutoPricing}
             />
-            <Label htmlFor="auto-pricing">Use automatic price discovery</Label>
+            <Label htmlFor="auto-pricing" className="text-sm">Use automatic price discovery</Label>
           </div>
           
           {!useAutoPricing && (
             <div>
-              <Label htmlFor="tokenPrice">Token Price (USD)</Label>
+              <Label htmlFor="tokenPrice" className="text-sm">Token Price (USD)</Label>
               <Input
                 id="tokenPrice"
                 type="number"
@@ -330,6 +331,7 @@ export function BaglessHoldersReport({ initialToken }: BaglessHoldersReportProps
                 value={tokenPrice}
                 onChange={(e) => setTokenPrice(e.target.value)}
                 placeholder="0.001"
+                className="mt-1 text-sm"
               />
             </div>
           )}
@@ -351,15 +353,19 @@ export function BaglessHoldersReport({ initialToken }: BaglessHoldersReportProps
             <Button 
               onClick={generateReport} 
               disabled={isLoading || isFetchingPrice}
-              className="flex-1"
+              className="flex-1 text-sm h-10"
             >
               {isLoading || isFetchingPrice ? (
                 <>
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  {isFetchingPrice ? 'Fetching Price...' : 'Generating Report...'}
+                  <span className="hidden sm:inline">{isFetchingPrice ? 'Fetching Price...' : 'Generating Report...'}</span>
+                  <span className="sm:hidden">{isFetchingPrice ? 'Fetching...' : 'Generating...'}</span>
                 </>
               ) : (
-                'Generate Holders Report'
+                <>
+                  <span className="hidden sm:inline">Generate Holders Report</span>
+                  <span className="sm:hidden">Generate Report</span>
+                </>
               )}
             </Button>
             
@@ -380,61 +386,63 @@ export function BaglessHoldersReport({ initialToken }: BaglessHoldersReportProps
       {report && (
         <>
           <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center justify-between">
-                Report Summary
+            <CardHeader className="pb-4">
+              <CardTitle className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2">
+                <span className="text-lg md:text-xl">Report Summary</span>
                 <Button 
                   onClick={exportToCSV}
                   variant="outline"
                   size="sm"
-                  className="flex items-center gap-2"
+                  className="flex items-center gap-2 text-xs h-8 self-end sm:self-auto"
                 >
-                  <Download className="h-4 w-4" />
-                  Export CSV
+                  <Download className="h-3 w-3" />
+                  <span className="hidden xs:inline">Export CSV</span>
+                  <span className="xs:hidden">CSV</span>
                 </Button>
               </CardTitle>
             </CardHeader>
             <CardContent>
               {/* Token Metadata Display */}
               {tokenData && (
-                <div className="mb-6 p-4 bg-muted/50 rounded-lg border">
-                  <div className="flex items-start gap-4">
+                <div className="mb-4 md:mb-6 p-3 md:p-4 bg-muted/50 rounded-lg border">
+                  <div className="flex items-start gap-3 md:gap-4">
                     {tokenData.metadata.logoURI && (
                       <img 
                         src={tokenData.metadata.logoURI} 
                         alt={`${tokenData.metadata.name} logo`}
-                        className="w-12 h-12 rounded-full"
+                        className="w-10 h-10 md:w-12 md:h-12 rounded-full flex-shrink-0"
                         onError={(e) => {
                           e.currentTarget.style.display = 'none';
                         }}
                       />
                     )}
-                    <div className="flex-1">
-                      <div className="flex items-center gap-2 mb-2">
-                        <h3 className="text-lg font-semibold">
+                    <div className="flex-1 min-w-0">
+                      <div className="flex flex-wrap items-center gap-1 md:gap-2 mb-2">
+                        <h3 className="text-base md:text-lg font-semibold truncate">
                           {tokenData.metadata.name || 'Unknown Token'}
                         </h3>
-                        <Badge variant="secondary">
+                        <Badge variant="secondary" className="text-xs">
                           {tokenData.metadata.symbol || 'UNK'}
                         </Badge>
                         {tokenData.metadata.verified && (
-                          <Badge variant="outline" className="text-green-600">
+                          <Badge variant="outline" className="text-green-600 text-xs">
                             ✓ Verified
                           </Badge>
                         )}
                         {tokenData.metadata.isPumpFun && (
-                          <Badge variant="outline" className="text-orange-600">
+                          <Badge variant="outline" className="text-orange-600 text-xs">
                             Pump.fun
                           </Badge>
                         )}
                       </div>
                       {tokenData.metadata.description && (
-                        <p className="text-sm text-muted-foreground mb-2">
+                        <p className="text-xs md:text-sm text-muted-foreground mb-2 line-clamp-2">
                           {tokenData.metadata.description}
                         </p>
                       )}
                       <div className="text-xs text-muted-foreground">
-                        Decimals: {tokenData.metadata.decimals} | Mint: {tokenData.metadata.mint}
+                        <div className="block sm:hidden">Decimals: {tokenData.metadata.decimals}</div>
+                        <div className="hidden sm:block">Decimals: {tokenData.metadata.decimals} | Mint: {tokenData.metadata.mint.slice(0, 8)}...{tokenData.metadata.mint.slice(-8)}</div>
                       </div>
                     </div>
                   </div>
@@ -484,74 +492,74 @@ export function BaglessHoldersReport({ initialToken }: BaglessHoldersReportProps
               )}
 
               {/* Primary Statistics - Total Holders and Total Tokens on one line */}
-              <div className="grid grid-cols-2 gap-4 mb-4">
+              <div className="grid grid-cols-2 gap-3 md:gap-4 mb-3 md:mb-4">
                 <div className="text-center">
-                  <div className="text-3xl font-bold">{report.totalHolders}</div>
-                  <div className="text-sm text-muted-foreground">Total Holders</div>
+                  <div className="text-2xl md:text-3xl font-bold">{report.totalHolders}</div>
+                  <div className="text-xs md:text-sm text-muted-foreground">Total Holders</div>
                 </div>
                 <div className="text-center">
-                  <div className="text-3xl font-bold">{formatBalance(report.totalBalance)}</div>
-                  <div className="text-sm text-muted-foreground">Total Tokens</div>
+                  <div className="text-xl md:text-3xl font-bold break-all">{formatBalance(report.totalBalance)}</div>
+                  <div className="text-xs md:text-sm text-muted-foreground">Total Tokens</div>
                 </div>
               </div>
 
               {/* LP Detection and Wallet Categories */}
-              <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 mb-6">
-                <div className="text-center">
-                  <div className="text-2xl font-bold text-yellow-500">{report.liquidityPoolsDetected || 0}</div>
+              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2 md:gap-3 mb-4 md:mb-6">
+                <div className="text-center p-2 rounded-lg bg-muted/30">
+                  <div className="text-lg md:text-2xl font-bold text-yellow-500">{report.liquidityPoolsDetected || 0}</div>
                   <div className="text-xs text-muted-foreground">LP Detected</div>
                 </div>
-                <div className="text-center">
-                  <div className="text-2xl font-bold text-red-500">{report.trueWhaleWallets || 0}</div>
+                <div className="text-center p-2 rounded-lg bg-muted/30">
+                  <div className="text-lg md:text-2xl font-bold text-red-500">{report.trueWhaleWallets || 0}</div>
                   <div className="text-xs text-muted-foreground">True Whale (≥$5K)</div>
                 </div>
-                <div className="text-center">
-                  <div className="text-2xl font-bold text-purple-500">{report.babyWhaleWallets || 0}</div>
+                <div className="text-center p-2 rounded-lg bg-muted/30">
+                  <div className="text-lg md:text-2xl font-bold text-purple-500">{report.babyWhaleWallets || 0}</div>
                   <div className="text-xs text-muted-foreground">Baby Whale ($2K-$5K)</div>
                 </div>
-                <div className="text-center">
-                  <div className="text-2xl font-bold text-indigo-500">{report.superBossWallets || 0}</div>
+                <div className="text-center p-2 rounded-lg bg-muted/30">
+                  <div className="text-lg md:text-2xl font-bold text-indigo-500">{report.superBossWallets || 0}</div>
                   <div className="text-xs text-muted-foreground">Super Boss ($1K-$2K)</div>
                 </div>
-                <div className="text-center">
-                  <div className="text-2xl font-bold text-cyan-500">{report.kingpinWallets || 0}</div>
+                <div className="text-center p-2 rounded-lg bg-muted/30">
+                  <div className="text-lg md:text-2xl font-bold text-cyan-500">{report.kingpinWallets || 0}</div>
                   <div className="text-xs text-muted-foreground">Kingpin ($500-$1K)</div>
                 </div>
-                <div className="text-center">
-                  <div className="text-2xl font-bold text-orange-500">{report.bossWallets}</div>
+                <div className="text-center p-2 rounded-lg bg-muted/30">
+                  <div className="text-lg md:text-2xl font-bold text-orange-500">{report.bossWallets}</div>
                   <div className="text-xs text-muted-foreground">Boss ($200-$500)</div>
                 </div>
-                <div className="text-center">
-                  <div className="text-2xl font-bold text-green-500">{report.realWallets}</div>
+                <div className="text-center p-2 rounded-lg bg-muted/30">
+                  <div className="text-lg md:text-2xl font-bold text-green-500">{report.realWallets}</div>
                   <div className="text-xs text-muted-foreground">Real ($50-$199)</div>
                 </div>
-                <div className="text-center">
-                  <div className="text-2xl font-bold text-emerald-500">{report.largeWallets}</div>
+                <div className="text-center p-2 rounded-lg bg-muted/30">
+                  <div className="text-lg md:text-2xl font-bold text-emerald-500">{report.largeWallets}</div>
                   <div className="text-xs text-muted-foreground">Large ($25-$49)</div>
                 </div>
-                <div className="text-center">
-                  <div className="text-2xl font-bold text-blue-500">{report.mediumWallets || 0}</div>
+                <div className="text-center p-2 rounded-lg bg-muted/30">
+                  <div className="text-lg md:text-2xl font-bold text-blue-500">{report.mediumWallets || 0}</div>
                   <div className="text-xs text-muted-foreground">Medium ($12-$25)</div>
                 </div>
-                <div className="text-center">
-                  <div className="text-2xl font-bold text-gray-500">{report.smallWallets || 0}</div>
+                <div className="text-center p-2 rounded-lg bg-muted/30">
+                  <div className="text-lg md:text-2xl font-bold text-gray-500">{report.smallWallets || 0}</div>
                   <div className="text-xs text-muted-foreground">Small ($1-$12)</div>
                 </div>
-                <div className="text-center">
-                  <div className="text-2xl font-bold text-slate-500">{report.dustWallets || 0}</div>
+                <div className="text-center p-2 rounded-lg bg-muted/30">
+                  <div className="text-lg md:text-2xl font-bold text-slate-500">{report.dustWallets || 0}</div>
                   <div className="text-xs text-muted-foreground">Dust (&lt;$1)</div>
                 </div>
               </div>
 
               {/* Sediment Layer Chart */}
-              <div className="mb-6">
-                <h3 className="text-lg font-semibold mb-4">Wallet Distribution (Sediment Layers)</h3>
+              <div className="mb-4 md:mb-6">
+                <h3 className="text-base md:text-lg font-semibold mb-3 md:mb-4">Wallet Distribution (Sediment Layers)</h3>
                 
                 {/* Chart - Full width with Market Cap Y-axis */}
                 <div className="mb-4">
                   <div className="flex">
                     {/* Y-axis Market Cap Labels */}
-                    <div className="flex flex-col justify-between h-80 pr-2 py-4 text-xs text-muted-foreground">
+                    <div className="flex flex-col justify-between h-60 md:h-80 pr-1 md:pr-2 py-2 md:py-4 text-xs text-muted-foreground">
                       {(() => {
                         // Calculate total market cap
                         const totalMarketCap = report.totalBalance * report.tokenPriceUSD;
@@ -595,7 +603,7 @@ export function BaglessHoldersReport({ initialToken }: BaglessHoldersReportProps
                     </div>
                     
                     {/* Chart Container */}
-                    <div className="bg-muted/30 rounded-lg p-4 h-80 flex-1 flex flex-col justify-end relative">
+                    <div className="bg-muted/30 rounded-lg p-2 md:p-4 h-60 md:h-80 flex-1 flex flex-col justify-end relative">
                       {/* Horizontal grid lines */}
                       <div className="absolute inset-4 flex flex-col justify-between pointer-events-none">
                         {Array.from({length: 6}).map((_, i) => (
@@ -785,18 +793,19 @@ export function BaglessHoldersReport({ initialToken }: BaglessHoldersReportProps
           </Card>
 
           <Card>
-            <CardHeader>
-              <CardTitle>Holders List ({filteredHolders.length} wallets)</CardTitle>
+            <CardHeader className="pb-4">
+              <CardTitle className="text-base md:text-lg">Holders List ({filteredHolders.length} wallets)</CardTitle>
             </CardHeader>
             <CardContent>
               {/* Report Summary */}
-              <p className="text-sm text-muted-foreground mb-6">{report.summary}</p>
+              <p className="text-xs md:text-sm text-muted-foreground mb-4 md:mb-6">{report.summary}</p>
               
               {/* LP Filter Controls */}
-              <div className="flex gap-2 mb-3 flex-wrap text-sm">
+              <div className="flex gap-1 md:gap-2 mb-3 flex-wrap text-xs md:text-sm">
                 <Button
                   variant={excludeLPs ? "default" : "outline"}
                   size="sm"
+                  className="h-8 px-2 md:px-3 text-xs"
                   onClick={() => {
                     setExcludeLPs(!excludeLPs);
                     setShowLPOnly(false);
@@ -807,6 +816,7 @@ export function BaglessHoldersReport({ initialToken }: BaglessHoldersReportProps
                 <Button
                   variant={showLPOnly ? "default" : "outline"}
                   size="sm"
+                  className="h-8 px-2 md:px-3 text-xs"
                   onClick={() => {
                     setShowLPOnly(!showLPOnly);
                     setExcludeLPs(false);
@@ -816,10 +826,11 @@ export function BaglessHoldersReport({ initialToken }: BaglessHoldersReportProps
                 </Button>
               </div>
 
-              <div className="flex gap-1 mb-4 flex-wrap text-sm">
+              <div className="flex gap-1 mb-4 flex-wrap text-xs md:text-sm">
                 <Button
                   variant={!showDustOnly && !showSmallOnly && !showMediumOnly && !showLargeOnly && !showRealOnly && !showBossOnly && !showKingpinOnly && !showSuperBossOnly && !showBabyWhaleOnly && !showTrueWhaleOnly && !showLPOnly ? "default" : "outline"}
                   size="sm"
+                  className="h-8 px-2 md:px-3 text-xs"
                   onClick={() => {
                     setShowDustOnly(false);
                     setShowSmallOnly(false);
@@ -839,6 +850,7 @@ export function BaglessHoldersReport({ initialToken }: BaglessHoldersReportProps
                 <Button
                   variant={showTrueWhaleOnly ? "default" : "outline"}
                   size="sm"
+                  className="h-8 px-2 md:px-3 text-xs"
                   onClick={() => {
                     setShowTrueWhaleOnly(true);
                     setShowBabyWhaleOnly(false);
@@ -852,11 +864,13 @@ export function BaglessHoldersReport({ initialToken }: BaglessHoldersReportProps
                     setShowDustOnly(false);
                   }}
                 >
-                  True Whale (≥$5K)
+                  <span className="hidden sm:inline">True Whale (≥$5K)</span>
+                  <span className="sm:hidden">Whale</span>
                 </Button>
                 <Button
                   variant={showBabyWhaleOnly ? "default" : "outline"}
                   size="sm"
+                  className="h-8 px-2 md:px-3 text-xs"
                   onClick={() => {
                     setShowBabyWhaleOnly(true);
                     setShowTrueWhaleOnly(false);
@@ -870,11 +884,13 @@ export function BaglessHoldersReport({ initialToken }: BaglessHoldersReportProps
                     setShowDustOnly(false);
                   }}
                 >
-                  Baby Whale ($2K-$5K)
+                  <span className="hidden sm:inline">Baby Whale ($2K-$5K)</span>
+                  <span className="sm:hidden">Baby Whale</span>
                 </Button>
                 <Button
                   variant={showSuperBossOnly ? "default" : "outline"}
                   size="sm"
+                  className="h-8 px-2 md:px-3 text-xs"
                   onClick={() => {
                     setShowSuperBossOnly(true);
                     setShowBabyWhaleOnly(false);
@@ -888,11 +904,13 @@ export function BaglessHoldersReport({ initialToken }: BaglessHoldersReportProps
                     setShowDustOnly(false);
                   }}
                 >
-                  Super Boss ($1K-$2K)
+                  <span className="hidden sm:inline">Super Boss ($1K-$2K)</span>
+                  <span className="sm:hidden">Super Boss</span>
                 </Button>
                 <Button
                   variant={showKingpinOnly ? "default" : "outline"}
                   size="sm"
+                  className="h-8 px-2 md:px-3 text-xs"
                   onClick={() => {
                     setShowKingpinOnly(true);
                     setShowSuperBossOnly(false);
@@ -906,7 +924,8 @@ export function BaglessHoldersReport({ initialToken }: BaglessHoldersReportProps
                     setShowDustOnly(false);
                   }}
                 >
-                  Kingpin ($500-$1K)
+                  <span className="hidden sm:inline">Kingpin ($500-$1K)</span>
+                  <span className="sm:hidden">Kingpin</span>
                 </Button>
                 <Button
                   variant={showBossOnly ? "default" : "outline"}
@@ -981,43 +1000,78 @@ export function BaglessHoldersReport({ initialToken }: BaglessHoldersReportProps
                   Medium ($1-$4)
                 </Button>
               </div>
+              {/* Mobile-optimized table display */}
               <div className="max-h-96 overflow-auto">
+                {/* Desktop Table */}
+                <div className="hidden md:block">
                   <Table>
-                     <TableHeader>
-                       <TableRow>
-                         <TableHead>Rank</TableHead>
-                         <TableHead>Wallet Address</TableHead>
-                         <TableHead>% of Supply</TableHead>
-                        <TableHead>Token Balance</TableHead>
-                        <TableHead>USD Value</TableHead>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead className="text-xs">Rank</TableHead>
+                        <TableHead className="text-xs">Wallet Address</TableHead>
+                        <TableHead className="text-xs">% Supply</TableHead>
+                        <TableHead className="text-xs">Balance</TableHead>
+                        <TableHead className="text-xs">USD Value</TableHead>
                       </TableRow>
                     </TableHeader>
-                  <TableBody>
-                    {filteredHolders.map((holder) => (
-                      <TableRow key={holder.owner}>
-                         <TableCell className="font-mono">#{holder.rank}</TableCell>
-                          <TableCell className="font-mono">
+                    <TableBody>
+                      {filteredHolders.map((holder) => (
+                        <TableRow key={holder.owner}>
+                          <TableCell className="font-mono text-xs">#{holder.rank}</TableCell>
+                          <TableCell className="font-mono text-xs">
                             <button
                               onClick={() => navigator.clipboard.writeText(holder.owner)}
-                              className="hover:text-muted-foreground transition-colors cursor-pointer break-all text-left"
+                              className="hover:text-muted-foreground transition-colors cursor-pointer text-left"
                               title="Click to copy full address"
                             >
-                              {holder.owner}
+                              {truncateAddress(holder.owner)}
                             </button>
                           </TableCell>
-                         <TableCell className="font-mono text-xs">
-                           {holder.percentageOfSupply?.toFixed(2)}%
-                         </TableCell>
-                          <TableCell className="font-mono">
+                          <TableCell className="font-mono text-xs">
+                            {holder.percentageOfSupply?.toFixed(2)}%
+                          </TableCell>
+                          <TableCell className="font-mono text-xs">
                             {Math.floor(holder.balance).toLocaleString()}
                           </TableCell>
-                          <TableCell className="font-mono">
+                          <TableCell className="font-mono text-xs">
                             ${(holder.usdValue || 0).toFixed(2)}
                           </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+
+                {/* Mobile Card List */}
+                <div className="md:hidden space-y-2">
+                  {filteredHolders.map((holder) => (
+                    <div key={holder.owner} className="bg-muted/30 rounded-lg p-3 border">
+                      <div className="flex justify-between items-start mb-2">
+                        <div className="font-mono text-sm font-bold">#{holder.rank}</div>
+                        <div className="font-mono text-sm font-bold text-green-600">
+                          ${(holder.usdValue || 0).toFixed(2)}
+                        </div>
+                      </div>
+                      <div className="space-y-1">
+                        <button
+                          onClick={() => navigator.clipboard.writeText(holder.owner)}
+                          className="font-mono text-xs text-muted-foreground hover:text-foreground transition-colors cursor-pointer text-left w-full"
+                          title="Click to copy full address"
+                        >
+                          {truncateAddress(holder.owner)}
+                        </button>
+                        <div className="flex justify-between text-xs">
+                          <span className="text-muted-foreground">
+                            {holder.percentageOfSupply?.toFixed(2)}% supply
+                          </span>
+                          <span className="font-mono">
+                            {Math.floor(holder.balance).toLocaleString()} tokens
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
               </div>
             </CardContent>
           </Card>
