@@ -36,17 +36,27 @@ export const useUserRoles = (): UserRoles => {
 
     try {
       setIsLoading(true);
-      const { data, error } = await supabase
-        .from('user_roles')
-        .select('role')
-        .eq('user_id', user.id)
-        .eq('is_active', true);
 
-      if (error) {
-        console.error('Error fetching user roles:', error);
-        setRoles([]);
+      // Prefer RPC to bypass potential RLS on user_roles
+      const { data: isSA, error: saError } = await supabase.rpc('is_super_admin', { _user_id: user.id });
+      if (saError) {
+        console.warn('RPC is_super_admin failed, falling back to user_roles SELECT:', saError);
+      }
+      if (isSA === true) {
+        setRoles(['super_admin']);
       } else {
-        setRoles(data?.map(item => item.role) || []);
+        const { data, error } = await supabase
+          .from('user_roles')
+          .select('role')
+          .eq('user_id', user.id)
+          .eq('is_active', true);
+
+        if (error) {
+          console.error('Error fetching user roles:', error);
+          setRoles([]);
+        } else {
+          setRoles(data?.map(item => item.role) || []);
+        }
       }
     } catch (error) {
       console.error('Error fetching user roles:', error);
