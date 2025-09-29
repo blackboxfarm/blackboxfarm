@@ -144,12 +144,22 @@ serve(async (req) => {
     );
   } catch (error) {
     console.error('Error in token-metadata:', error);
+    
+    // Get tokenMint from request body for error response
+    let mintAddress = 'unknown';
+    try {
+      const body = await req.json();
+      mintAddress = body.tokenMint || 'unknown';
+    } catch {
+      // If we can't parse the body, use 'unknown'
+    }
+    
     return new Response(
       JSON.stringify({ 
         success: false,
         error: error instanceof Error ? error.message : String(error),
         metadata: {
-          mint: tokenMint || 'unknown',
+          mint: mintAddress,
           name: 'Unknown Token',
           symbol: 'UNK',
           decimals: 9,

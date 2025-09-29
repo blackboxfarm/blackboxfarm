@@ -264,7 +264,7 @@ serve(async (req) => {
             if (confirmPolicy !== "none") {
               if (confirmPolicy === "processed") {
                 await connection.confirmTransaction({ blockhash, lastValidBlockHeight, signature: sig }, "processed" as any);
-                try { (EdgeRuntime as any)?.waitUntil?.(connection.confirmTransaction({ blockhash, lastValidBlockHeight, signature: sig }, "confirmed" as any).catch((e: any) => console.error("prepare bg confirm err", e))); } catch (_) {}
+                // Background confirmation (removed EdgeRuntime dependency)
               } else {
                 await connection.confirmTransaction({ blockhash, lastValidBlockHeight, signature: sig }, "confirmed" as any);
               }
@@ -409,6 +409,9 @@ serve(async (req) => {
               isOutputSol = isSolMint(String(outputMint));
               // Recompute output account for token; input account is native SOL
               inputAccount = undefined;
+              if (!outputMint) {
+                throw new Error('Output mint is required for SOL to token swap');
+              }
               const outAta = await getAssociatedTokenAddress(new PublicKey(outputMint), owner.publicKey);
               outputAccount = outAta.toBase58();
               const computeUrl2 = `${SWAP_HOST}/compute/swap-base-in?inputMint=${inputMint}&outputMint=${outputMint}&amount=${amount}&slippageBps=${slippageBps}&txVersion=${txVersion}`;
@@ -474,7 +477,7 @@ serve(async (req) => {
             if (confirmPolicy !== "none") {
               if (confirmPolicy === "processed") {
                 await connection.confirmTransaction({ blockhash, lastValidBlockHeight, signature: sig }, "processed" as any);
-                try { (EdgeRuntime as any)?.waitUntil?.(connection.confirmTransaction({ blockhash, lastValidBlockHeight, signature: sig }, "confirmed" as any).catch((e: any) => console.error("bg confirm err", e))); } catch (_) {}
+                // Background confirmation
               } else {
                 await connection.confirmTransaction({ blockhash, lastValidBlockHeight, signature: sig }, "confirmed" as any);
               }
@@ -490,7 +493,7 @@ serve(async (req) => {
               if (confirmPolicy !== "none") {
                 if (confirmPolicy === "processed") {
                   await connection.confirmTransaction({ blockhash: fresh.blockhash, lastValidBlockHeight: fresh.lastValidBlockHeight, signature: sig }, "processed" as any);
-                  try { (EdgeRuntime as any)?.waitUntil?.(connection.confirmTransaction({ blockhash: fresh.blockhash, lastValidBlockHeight: fresh.lastValidBlockHeight, signature: sig }, "confirmed" as any).catch((e: any) => console.error("bg confirm err", e))); } catch (_) {}
+                  // Background confirmation
                 } else {
                   await connection.confirmTransaction({ blockhash: fresh.blockhash, lastValidBlockHeight: fresh.lastValidBlockHeight, signature: sig }, "confirmed" as any);
                 }
@@ -515,7 +518,7 @@ serve(async (req) => {
               if (confirmPolicy !== "none") {
                 if (confirmPolicy === "processed") {
                   await connection.confirmTransaction({ blockhash: fresh.blockhash, lastValidBlockHeight: fresh.lastValidBlockHeight, signature: sig }, "processed" as any);
-                  try { (EdgeRuntime as any)?.waitUntil?.(connection.confirmTransaction({ blockhash: fresh.blockhash, lastValidBlockHeight: fresh.lastValidBlockHeight, signature: sig }, "confirmed" as any).catch((e: any) => console.error("bg confirm err", e))); } catch (_) {}
+                  // Background confirmation
                 } else {
                   await connection.confirmTransaction({ blockhash: fresh.blockhash, lastValidBlockHeight: fresh.lastValidBlockHeight, signature: sig }, "confirmed" as any);
                 }
@@ -530,7 +533,7 @@ serve(async (req) => {
                 if (confirmPolicy !== "none") {
                   if (confirmPolicy === "processed") {
                     await connection.confirmTransaction({ blockhash: newer.blockhash, lastValidBlockHeight: newer.lastValidBlockHeight, signature: sig }, "processed" as any);
-                    try { (EdgeRuntime as any)?.waitUntil?.(connection.confirmTransaction({ blockhash: newer.blockhash, lastValidBlockHeight: newer.lastValidBlockHeight, signature: sig }, "confirmed" as any).catch((e: any) => console.error("bg confirm err", e))); } catch (_) {}
+                    // Background confirmation
                   } else {
                     await connection.confirmTransaction({ blockhash: newer.blockhash, lastValidBlockHeight: newer.lastValidBlockHeight, signature: sig }, "confirmed" as any);
                   }
@@ -670,7 +673,7 @@ serve(async (req) => {
           if (confirmPolicy !== "none") {
             if (confirmPolicy === "processed") {
               await connection.confirmTransaction({ blockhash: fresh.blockhash, lastValidBlockHeight: fresh.lastValidBlockHeight, signature: sig }, "processed" as any);
-              try { (EdgeRuntime as any)?.waitUntil?.(connection.confirmTransaction({ blockhash: fresh.blockhash, lastValidBlockHeight: fresh.lastValidBlockHeight, signature: sig }, "confirmed" as any).catch((e: any) => console.error("bg confirm err", e))); } catch (_) {}
+              // Background confirmation
             } else {
               await connection.confirmTransaction({ blockhash: fresh.blockhash, lastValidBlockHeight: fresh.lastValidBlockHeight, signature: sig }, "confirmed" as any);
             }
@@ -685,7 +688,7 @@ serve(async (req) => {
             if (confirmPolicy !== "none") {
               if (confirmPolicy === "processed") {
                 await connection.confirmTransaction({ blockhash: newer.blockhash, lastValidBlockHeight: newer.lastValidBlockHeight, signature: sig }, "processed" as any);
-                try { (EdgeRuntime as any)?.waitUntil?.(connection.confirmTransaction({ blockhash: newer.blockhash, lastValidBlockHeight: newer.lastValidBlockHeight, signature: sig }, "confirmed" as any).catch((e: any) => console.error("bg confirm err", e))); } catch (_) {}
+                // Background confirmation
               } else {
                 await connection.confirmTransaction({ blockhash: newer.blockhash, lastValidBlockHeight: newer.lastValidBlockHeight, signature: sig }, "confirmed" as any);
               }
@@ -710,7 +713,7 @@ serve(async (req) => {
           if (confirmPolicy !== "none") {
             if (confirmPolicy === "processed") {
               await connection.confirmTransaction({ blockhash: fresh.blockhash, lastValidBlockHeight: fresh.lastValidBlockHeight, signature: sig }, "processed" as any);
-              try { (EdgeRuntime as any)?.waitUntil?.(connection.confirmTransaction({ blockhash: fresh.blockhash, lastValidBlockHeight: fresh.lastValidBlockHeight, signature: sig }, "confirmed" as any).catch((e: any) => console.error("bg confirm err", e))); } catch (_) {}
+              // Background confirmation
             } else {
               await connection.confirmTransaction({ blockhash: fresh.blockhash, lastValidBlockHeight: fresh.lastValidBlockHeight, signature: sig }, "confirmed" as any);
             }
@@ -725,7 +728,7 @@ serve(async (req) => {
             if (confirmPolicy !== "none") {
               if (confirmPolicy === "processed") {
                 await connection.confirmTransaction({ blockhash: newer.blockhash, lastValidBlockHeight: newer.lastValidBlockHeight, signature: sig }, "processed" as any);
-                try { (EdgeRuntime as any)?.waitUntil?.(connection.confirmTransaction({ blockhash: newer.blockhash, lastValidBlockHeight: newer.lastValidBlockHeight, signature: sig }, "confirmed" as any).catch((e: any) => console.error("bg confirm err", e))); } catch (_) {}
+                // Background confirmation
               } else {
                 await connection.confirmTransaction({ blockhash: newer.blockhash, lastValidBlockHeight: newer.lastValidBlockHeight, signature: sig }, "confirmed" as any);
               }
