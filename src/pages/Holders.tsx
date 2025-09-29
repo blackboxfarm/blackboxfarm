@@ -13,8 +13,8 @@ export default function Holders() {
   }, []);
 
   return (
-    <div className="min-h-screen bg-background md:bg-background bg-slate-900">
-      <div className="w-full px-[5px] md:px-6 py-4 md:py-8">
+    <div className="min-h-screen bg-background" style={{ backgroundColor: window.innerWidth < 768 ? '#104a4c' : undefined }}>
+      <div className="w-full md:w-1/2 md:mx-auto px-[5px] md:px-6 py-4 md:py-8">
         <div className="mb-8">
           <p className="text-muted-foreground font-extrabold text-lg">
             Analyze token holder distribution and wallet categories
