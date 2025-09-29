@@ -10,6 +10,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { Loader2, Download, RefreshCw } from 'lucide-react';
 import { useTokenMetadata } from '@/hooks/useTokenMetadata';
+import { AdBanner } from '@/components/AdBanner';
 
 interface TokenHolder {
   owner: string;
@@ -440,6 +441,14 @@ export function BaglessHoldersReport({ initialToken }: BaglessHoldersReportProps
                 </div>
               )}
               
+              {/* Ad Banner #1 - After Token Metadata */}
+              <div className="block md:hidden">
+                <AdBanner size="mobile" position={1} />
+              </div>
+              <div className="hidden md:block">
+                <AdBanner size="leaderboard" position={1} />
+              </div>
+              
               {report.tokenPriceUSD > 0 && (
                 <div className="mb-4 p-3 bg-muted rounded-lg">
                   <div className="text-sm font-medium">
@@ -703,7 +712,15 @@ export function BaglessHoldersReport({ initialToken }: BaglessHoldersReportProps
                       <div className="flex items-center gap-2">
                         <div className="w-3 h-3 bg-red-500 rounded"></div>
                         <span>True Whale (≥$5K)</span>
-                      </div>
+                </div>
+                
+                {/* Ad Banner #2 - Between Sediment Chart and Filter Controls */}
+                <div className="block md:hidden">
+                  <AdBanner size="mobile" position={2} />
+                </div>
+                <div className="hidden md:block">
+                  <AdBanner size="rectangle" position={2} />
+                </div>
                       <div className="flex items-center gap-2">
                         <div className="w-3 h-3 bg-yellow-600 rounded"></div>
                         <span>Liquidity Pool - Foundation Layer</span>
@@ -999,6 +1016,14 @@ export function BaglessHoldersReport({ initialToken }: BaglessHoldersReportProps
               </div>
             </CardContent>
           </Card>
+          
+          {/* Ad Banner #3 - After Holders List Table */}
+          <div className="block md:hidden">
+            <AdBanner size="mobile" position={3} />
+          </div>
+          <div className="hidden md:block">
+            <AdBanner size="leaderboard" position={3} />
+          </div>
         </>
       )}
     </div>
