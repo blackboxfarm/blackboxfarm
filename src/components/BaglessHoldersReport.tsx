@@ -9,6 +9,7 @@ import { Switch } from '@/components/ui/switch';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { Loader2, Download, RefreshCw } from 'lucide-react';
+import { useTokenMetadata } from '@/hooks/useTokenMetadata';
 
 interface TokenHolder {
   owner: string;
@@ -60,8 +61,12 @@ interface HoldersReport {
   summary: string;
 }
 
-export function BaglessHoldersReport() {
-  const [tokenMint, setTokenMint] = useState('GvkxeDmoghdjdrmMtc7EZQVobTgV7JiBLEkmPdVyBAGS');
+interface BaglessHoldersReportProps {
+  initialToken?: string;
+}
+
+export function BaglessHoldersReport({ initialToken }: BaglessHoldersReportProps) {
+  const [tokenMint, setTokenMint] = useState(initialToken || '');
   const [tokenPrice, setTokenPrice] = useState('');
   const [useAutoPricing, setUseAutoPricing] = useState(true);
   const [isFetchingPrice, setIsFetchingPrice] = useState(false);
@@ -83,6 +88,14 @@ export function BaglessHoldersReport() {
   const [showLPOnly, setShowLPOnly] = useState(false);
   const [excludeLPs, setExcludeLPs] = useState(false);
   const { toast } = useToast();
+  const { tokenData, fetchTokenMetadata } = useTokenMetadata();
+
+  // Fetch token metadata when tokenMint changes
+  useEffect(() => {
+    if (tokenMint.trim()) {
+      fetchTokenMetadata(tokenMint.trim());
+    }
+  }, [tokenMint, fetchTokenMetadata]);
 
   useEffect(() => {
     if (report) {
@@ -378,6 +391,52 @@ export function BaglessHoldersReport() {
               </CardTitle>
             </CardHeader>
             <CardContent>
+              {/* Token Metadata Display */}
+              {tokenData && (
+                <div className="mb-6 p-4 bg-muted/50 rounded-lg border">
+                  <div className="flex items-start gap-4">
+                    {tokenData.metadata.logoURI && (
+                      <img 
+                        src={tokenData.metadata.logoURI} 
+                        alt={`${tokenData.metadata.name} logo`}
+                        className="w-12 h-12 rounded-full"
+                        onError={(e) => {
+                          e.currentTarget.style.display = 'none';
+                        }}
+                      />
+                    )}
+                    <div className="flex-1">
+                      <div className="flex items-center gap-2 mb-2">
+                        <h3 className="text-lg font-semibold">
+                          {tokenData.metadata.name || 'Unknown Token'}
+                        </h3>
+                        <Badge variant="secondary">
+                          {tokenData.metadata.symbol || 'UNK'}
+                        </Badge>
+                        {tokenData.metadata.verified && (
+                          <Badge variant="outline" className="text-green-600">
+                            ✓ Verified
+                          </Badge>
+                        )}
+                        {tokenData.metadata.isPumpFun && (
+                          <Badge variant="outline" className="text-orange-600">
+                            Pump.fun
+                          </Badge>
+                        )}
+                      </div>
+                      {tokenData.metadata.description && (
+                        <p className="text-sm text-muted-foreground mb-2">
+                          {tokenData.metadata.description}
+                        </p>
+                      )}
+                      <div className="text-xs text-muted-foreground">
+                        Decimals: {tokenData.metadata.decimals} | Mint: {tokenData.metadata.mint}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+              
               {report.tokenPriceUSD > 0 && (
                 <div className="mb-4 p-3 bg-muted rounded-lg">
                   <div className="text-sm font-medium">

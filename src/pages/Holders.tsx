@@ -1,7 +1,17 @@
-import React from "react";
+import React, { useEffect, useState } from "react";
 import { BaglessHoldersReport } from "@/components/BaglessHoldersReport";
 
 export default function Holders() {
+  const [tokenFromUrl, setTokenFromUrl] = useState<string>("");
+
+  useEffect(() => {
+    const urlParams = new URLSearchParams(window.location.search);
+    const tokenParam = urlParams.get('token');
+    if (tokenParam) {
+      setTokenFromUrl(tokenParam);
+    }
+  }, []);
+
   return (
     <div className="min-h-screen bg-background">
       <div className="container mx-auto px-6 py-8">
@@ -12,7 +22,9 @@ export default function Holders() {
           </p>
         </div>
         
-        <BaglessHoldersReport />
+        <div className="w-1/2 mx-auto">
+          <BaglessHoldersReport initialToken={tokenFromUrl} />
+        </div>
       </div>
     </div>
   );
