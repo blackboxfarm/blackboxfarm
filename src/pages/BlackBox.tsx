@@ -84,7 +84,7 @@ export default function BlackBox() {
 
         {/* Main Navigation */}
         <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-          <TabsList className={`grid w-full ${isAdminView ? 'grid-cols-12' : 'grid-cols-5'}`}>
+          <TabsList className="w-full">{/* Remove grid constraints to allow flex-wrap */}
             <TabsTrigger value="overview">Overview</TabsTrigger>
             {isAdminView && <TabsTrigger value="dashboard">Dashboard</TabsTrigger>}
             {isAdminView && <TabsTrigger value="watcher">Watcher</TabsTrigger>}
