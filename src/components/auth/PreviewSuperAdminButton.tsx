@@ -12,9 +12,8 @@ export const PreviewSuperAdminButton = () => {
   const { toast } = useToast();
   const [isLoading, setIsLoading] = useState(false);
 
-  // Only show on lovable preview hosts for authenticated non-super-admin users
-  const isLovablePreview = /lovable\.(dev|app)$/.test(window.location.host) || /lovableproject\.com$/.test(window.location.host);
-  const shouldShow = isLovablePreview && isAuthenticated && !isSuperAdmin;
+  // Show for any authenticated non-super-admin user (server enforces allowlist)
+  const shouldShow = isAuthenticated && !isSuperAdmin;
 
   if (!shouldShow) {
     return null;
@@ -41,7 +40,7 @@ export const PreviewSuperAdminButton = () => {
       if (data.success) {
         toast({
           title: 'Super Admin Granted!',
-          description: 'You now have super admin access for this preview'
+          description: 'You now have Super Admin access'
         });
         
         // Refresh user roles
@@ -77,7 +76,7 @@ export const PreviewSuperAdminButton = () => {
       ) : (
         <Shield className="h-4 w-4" />
       )}
-      {isLoading ? 'Granting...' : 'Grant Preview Super Admin'}
+      {isLoading ? 'Granting...' : 'Grant Super Admin'}
     </Button>
   );
 };
