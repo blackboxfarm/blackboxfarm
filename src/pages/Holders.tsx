@@ -22,7 +22,7 @@ export default function Holders() {
           </p>
         </div>
         
-        <div className="w-1/2 mx-auto">
+        <div className="w-full">
           <BaglessHoldersReport initialToken={tokenFromUrl} />
         </div>
       </div>
