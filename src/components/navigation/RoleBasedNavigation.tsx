@@ -19,6 +19,7 @@ import { WalletInvestigator } from '@/components/WalletInvestigator';
 import { WalletMonitor } from '@/components/WalletMonitor';
 import { AuthButton } from '@/components/auth/AuthButton';
 import SecretsModal from '@/components/SecretsModal';
+import { BaglessHoldersReport } from '@/components/BaglessHoldersReport';
 
 interface TabConfig {
   id: string;
@@ -119,6 +120,17 @@ const tabConfigs: TabConfig[] = [
     label: 'Analytics',
     icon: BarChart3,
     component: AnalyticsDashboard,
+    isPublic: true
+  },
+  {
+    id: 'holders',
+    label: 'Holders',
+    icon: Users,
+    component: () => (
+      <div className="space-y-6">
+        <BaglessHoldersReport />
+      </div>
+    ),
     isPublic: true
   },
 
