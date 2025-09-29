@@ -383,6 +383,9 @@ export function BaglessHoldersReport({ initialToken }: BaglessHoldersReportProps
         </CardContent>
       </Card>
 
+      {/* Ad Banner under Generate Button */}
+      <AdBanner size="mobile" position={1} />
+
       {report && (
         <>
           <Card>
