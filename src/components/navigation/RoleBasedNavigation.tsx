@@ -4,7 +4,7 @@ import { useUserRoles } from '@/hooks/useUserRoles';
 import { usePreviewSuperAdmin } from '@/hooks/usePreviewSuperAdmin';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Button } from '@/components/ui/button';
-import { Shield, Users, Calculator, BarChart3, Coins, Activity, Settings, Database, Search, Eye, Zap } from 'lucide-react';
+import { Shield, Users, Calculator, BarChart3, Coins, Activity, Settings, Database, Search, Eye, Zap, List } from 'lucide-react';
 
 // Import components for different tabs
 import ServerSideTradingControl from '@/components/ServerSideTradingControl';
@@ -125,7 +125,7 @@ const tabConfigs: TabConfig[] = [
   {
     id: 'holders',
     label: 'Holders',
-    icon: Users,
+    icon: List,
     component: () => (
       <div className="space-y-6">
         <BaglessHoldersReport />
