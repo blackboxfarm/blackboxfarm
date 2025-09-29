@@ -17,8 +17,12 @@ export function usePreviewSuperAdmin(): boolean {
   }, []);
 
   return useMemo(() => {
-    const isLovable = typeof window !== 'undefined' && window.location.host.includes('lovable.dev');
-    const pref = typeof window !== 'undefined' ? localStorage.getItem('PREVIEW_SUPER_ADMIN') : null;
+    if (typeof window === 'undefined') return false;
+    const host = window.location.hostname || '';
+    const isLovable =
+      /(^|\.)lovable\.app$/.test(host) ||
+      /(^|\.)lovable\.dev$/.test(host);
+    const pref = localStorage.getItem('PREVIEW_SUPER_ADMIN');
     const enabled = pref === null || pref === 'true'; // default ON in lovable preview unless explicitly disabled
     return isLovable && enabled;
   }, []);
