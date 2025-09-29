@@ -12,8 +12,8 @@ export const PreviewSuperAdminButton = () => {
   const { toast } = useToast();
   const [isLoading, setIsLoading] = useState(false);
 
-  // Show for any authenticated non-super-admin user (server enforces allowlist)
-  const shouldShow = isAuthenticated && !isSuperAdmin;
+  // Button disabled globally per request
+  const shouldShow = false;
 
   if (!shouldShow) {
     return null;
