@@ -1,4 +1,4 @@
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.54.0';
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2?target=deno';
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
 import { SecureStorage } from '../_shared/encryption.ts';
 
