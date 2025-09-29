@@ -501,7 +501,7 @@ export function BaglessHoldersReport({ initialToken }: BaglessHoldersReportProps
                   <div className="text-xs md:text-sm text-muted-foreground">Total Holders</div>
                 </div>
                 <div className="text-center">
-                  <div className="text-xl md:text-3xl font-bold break-all">{formatBalance(report.totalBalance)}</div>
+                  <div className="text-xl md:text-3xl font-bold break-all">{Math.round(report.totalBalance).toLocaleString()}</div>
                   <div className="text-xs md:text-sm text-muted-foreground">Total Tokens</div>
                 </div>
               </div>
