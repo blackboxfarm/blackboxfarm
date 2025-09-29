@@ -61,7 +61,7 @@ serve(async (req) => {
         }
       } catch (error) {
         console.error(`❌ Exception deleting campaign ${campaignId}:`, error);
-        deletionResults.push({ campaignId, success: false, error: error.message });
+        deletionResults.push({ campaignId, success: false, error: error instanceof Error ? error.message : String(error) });
       }
     }
 

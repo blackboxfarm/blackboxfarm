@@ -60,7 +60,7 @@ serve(async (req) => {
         }
       } catch (error) {
         console.error(`❌ Exception deleting campaign ${campaign.nickname}:`, error);
-        deletionResults.push({ campaign: campaign.nickname, success: false, error: error.message });
+        deletionResults.push({ campaign: campaign.nickname, success: false, error: error instanceof Error ? error.message : String(error) });
       }
     }
 
@@ -231,8 +231,8 @@ serve(async (req) => {
           campaignsKept: finalCampaigns?.length || 0,
           walletsKept: finalWallets?.length || 0,
           commandsKept: finalCommands?.length || 0,
-          orphanedWalletsDeleted: orphanedWallets?.length || 0,
-          orphanedCommandsDeleted: orphanedCommands?.length || 0
+          orphanedWalletsDeleted: orphanedWalletsResult?.length || 0,
+          orphanedCommandsDeleted: orphanedCommandsResult?.length || 0
         },
         finalState: {
           campaigns: finalCampaigns,

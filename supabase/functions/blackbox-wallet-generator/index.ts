@@ -43,7 +43,7 @@ serve(async (req) => {
     // Generate new Solana keypair
     const keypair = Keypair.generate();
     const publicKey = keypair.publicKey.toString();
-    const secretKey = encode(keypair.secretKey);
+    const secretKey = encode(keypair.secretKey.buffer);
 
     // Encrypt the secret key using the encryption edge function
     const { data: encryptedData, error: encryptError } = await supabaseClient.functions.invoke(

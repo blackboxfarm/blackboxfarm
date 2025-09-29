@@ -495,7 +495,7 @@ serve(async (req) => {
           }
         }
       } catch (error) {
-        console.error(`❌ Sell failed: ${error.message}`);
+        console.error(`❌ Sell failed: ${error instanceof Error ? error.message : String(error)}`);
         throw error;
       }
     }

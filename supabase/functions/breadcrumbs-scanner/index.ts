@@ -90,7 +90,7 @@ serve(async (req) => {
 
       } catch (error) {
         failed++;
-        console.error(`Error fetching from ${adapter.key}:`, error.message);
+        console.error(`Error fetching from ${adapter.key}:`, error instanceof Error ? error.message : String(error));
       }
 
       // Small delay to be respectful
@@ -119,7 +119,7 @@ serve(async (req) => {
   } catch (error) {
     console.error('BreadCrumbs scanner error:', error);
     return new Response(
-      JSON.stringify({ error: error.message }),
+      JSON.stringify({ error: error instanceof Error ? error.message : String(error) }),
       {
         status: 400,
         headers: corsHeaders,
