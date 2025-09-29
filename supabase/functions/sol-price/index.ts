@@ -33,7 +33,7 @@ serve(async (req) => {
           }
         }
       } catch (error) {
-        console.log('Helius/Jupiter fetch failed:', error.message);
+        console.log('Helius/Jupiter fetch failed:', error instanceof Error ? error.message : String(error));
       }
     }
     
@@ -55,7 +55,7 @@ serve(async (req) => {
           }
         }
       } catch (error) {
-        console.log('CoinGecko fetch failed:', error.message);
+        console.log('CoinGecko fetch failed:', error instanceof Error ? error.message : String(error));
       }
     }
     

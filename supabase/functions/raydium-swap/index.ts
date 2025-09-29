@@ -202,7 +202,7 @@ serve(async (req) => {
       try {
         secretToUse = await SecureStorage.decryptWalletSecret(headerSecret);
       } catch (error) {
-        return bad(`Failed to decrypt wallet secret: ${error.message}`, 400);
+        return bad(`Failed to decrypt wallet secret: ${error instanceof Error ? error.message : String(error)}`, 400);
       }
     }
     
@@ -245,7 +245,7 @@ serve(async (req) => {
                 { pubkey: SystemProgram.programId, isSigner: false, isWritable: false },
                 { pubkey: TOKEN_PROGRAM_ID, isSigner: false, isWritable: false },
               ];
-              instrs.push(new TransactionInstruction({ programId: ASSOCIATED_TOKEN_PROGRAM_ID, keys, data: new Uint8Array() }));
+              instrs.push(new TransactionInstruction({ programId: ASSOCIATED_TOKEN_PROGRAM_ID, keys, data: undefined }));
               created[m] = true;
             } else {
               created[m] = false;

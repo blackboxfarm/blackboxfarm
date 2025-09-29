@@ -27,17 +27,17 @@ serve(async (req) => {
     let result = {
       tokenMint,
       isLocked: false,
-      lockPercentage: null, // null = no data, 0 = confirmed 0%
+      lockPercentage: null as number | null, // null = no data, 0 = confirmed 0%
       lockMechanism: 'unknown',
-      lockDuration: null, // actual lock duration if available
-      lockExpiry: null, // when lock expires if available
+      lockDuration: null as string | null, // actual lock duration if available
+      lockExpiry: null as string | null, // when lock expires if available
       dexInfo: 'unknown',
-      tokenInfo: null,
-      error: null,
-      checkedMethods: [],
+      tokenInfo: null as { name: any; symbol: any; price: number } | null,
+      error: null as string | null,
+      checkedMethods: [] as string[],
       dataQuality: 'unverified', // 'verified', 'estimated', 'unverified', 'failed'
-      actualData: {}, // store the raw data we got
-      assumptions: [] // track what we assumed vs verified
+      actualData: {} as any, // store the raw data we got
+      assumptions: [] as string[] // track what we assumed vs verified
     };
 
     // Method 1: Get token info and DEX liquidity data from DexScreener
@@ -79,7 +79,7 @@ serve(async (req) => {
       }
       result.checkedMethods.push('DexScreener - Token Info & Liquidity');
     } catch (e) {
-      console.log('⚠️ DexScreener token info failed:', e.message);
+      console.log('⚠️ DexScreener token info failed:', e instanceof Error ? e.message : String(e));
     }
 
     // Method 2: Check for Meteora and Raydium specific pools
@@ -139,9 +139,9 @@ serve(async (req) => {
               console.log(`❌ API FAILED: Meteora API returned ${meteoraResponse.status}`);
             }
           } catch (e) {
-            result.error = `Meteora API error: ${e.message}`;
+            result.error = `Meteora API error: ${e instanceof Error ? e.message : String(e)}`;
             result.dataQuality = 'failed';
-            console.log(`❌ ERROR: Failed to check Meteora: ${e.message}`);
+            console.log(`❌ ERROR: Failed to check Meteora: ${e instanceof Error ? e.message : String(e)}`);
           }
         } else if (dexId === 'raydium') {
           console.log(`💧 Raydium pool detected: ${pairAddress}`);
@@ -153,7 +153,7 @@ serve(async (req) => {
       
       result.checkedMethods.push('Meteora/Raydium Pool Detection');
     } catch (e) {
-      console.log('⚠️ Meteora/Raydium check failed:', e.message);
+      console.log('⚠️ Meteora/Raydium check failed:', e instanceof Error ? e.message : String(e));
     }
 
     // Method 3: Enhanced LP token distribution and pool analysis
@@ -265,7 +265,7 @@ serve(async (req) => {
                 }
               }
             } catch (e) {
-              console.log(`⚠️ Failed to analyze pool ${pool.owner}:`, e.message);
+              console.log(`⚠️ Failed to analyze pool ${pool.owner}:`, e instanceof Error ? e.message : String(e));
             }
           }
           
@@ -273,12 +273,12 @@ serve(async (req) => {
             const calculatedLockPercentage = Math.round((lockedAmount / totalSupply) * 100);
             
             // Update result only if we found higher lock percentage or confirmed pool locks
-            if (calculatedLockPercentage > result.lockPercentage) {
+            if (calculatedLockPercentage > (result.lockPercentage || 0)) {
               result.lockPercentage = calculatedLockPercentage;
             }
             
             // Consider locked if >80% in pools/burned OR if it's a known locked pool type
-            if (result.lockPercentage > 80 || result.lockMechanism.includes('meteora')) {
+            if ((result.lockPercentage || 0) > 80 || result.lockMechanism.includes('meteora')) {
               result.isLocked = true;
             }
             
@@ -289,7 +289,7 @@ serve(async (req) => {
         
         result.checkedMethods.push('Enhanced LP & Pool Contract Analysis');
       } catch (e) {
-        console.log('⚠️ Enhanced LP analysis failed:', e.message);
+        console.log('⚠️ Enhanced LP analysis failed:', e instanceof Error ? e.message : String(e));
         result.checkedMethods.push('Enhanced LP & Pool Analysis (FAILED)');
       }
     }
@@ -342,12 +342,12 @@ serve(async (req) => {
                       const instructions = txDetail.result?.transaction?.message?.instructions || [];
                       
                       // Look for LP token burn or lock patterns
-                      const hasLpBurn = logMessages.some(log => 
+                      const hasLpBurn = logMessages.some((log: any) => 
                         log.toLowerCase().includes('burn') && log.toLowerCase().includes('liquidity') ||
                         log.toLowerCase().includes('lp') && log.toLowerCase().includes('burn')
                       );
                       
-                      const hasLockInstruction = logMessages.some(log =>
+                      const hasLockInstruction = logMessages.some((log: any) =>
                         log.toLowerCase().includes('lock') ||
                         log.toLowerCase().includes('freeze') ||
                         log.toLowerCase().includes('time') && log.toLowerCase().includes('lock')
@@ -371,24 +371,24 @@ serve(async (req) => {
                 if (lpBurnFound) {
                   result.isLocked = true;
                   result.lockMechanism = 'lp_tokens_burned';
-                  result.lockPercentage = Math.max(result.lockPercentage, 90); // Assume high lock if LP burned
+                  result.lockPercentage = Math.max(result.lockPercentage || 0, 90); // Assume high lock if LP burned
                   console.log(`✅ LP tokens burned for ${pair.dexId} pair`);
                 } else if (liquidityLockFound) {
                   result.isLocked = true;
                   result.lockMechanism = 'time_locked';
-                  result.lockPercentage = Math.max(result.lockPercentage, 85); // Assume high lock for time locks
+                  result.lockPercentage = Math.max(result.lockPercentage || 0, 85); // Assume high lock for time locks
                   console.log(`✅ Time lock detected for ${pair.dexId} pair`);
                 }
               }
             } catch (e) {
-              console.log(`⚠️ Failed to check LP transactions for ${pair.pairAddress}:`, e.message);
+              console.log(`⚠️ Failed to check LP transactions for ${pair.pairAddress}:`, e instanceof Error ? e.message : String(e));
             }
           }
         }
         
         result.checkedMethods.push('LP Transaction & Burn Analysis');
       } catch (e) {
-        console.log('⚠️ LP transaction analysis failed:', e.message);
+        console.log('⚠️ LP transaction analysis failed:', e instanceof Error ? e.message : String(e));
         result.checkedMethods.push('LP Transaction Analysis (FAILED)');
       }
     }
@@ -408,7 +408,7 @@ serve(async (req) => {
     console.error('❌ Liquidity lock checker error:', error);
     return new Response(JSON.stringify({ 
       error: 'Internal server error', 
-      details: error.message 
+      details: error instanceof Error ? error.message : String(error) 
     }), {
       status: 500,
       headers: { ...corsHeaders, 'Content-Type': 'application/json' }

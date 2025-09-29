@@ -166,7 +166,7 @@ const executeEmergencySell = async (session: TradingSession, position: Position)
       headers: {
         // Use the database-level decryption function to get the actual secret
         'x-owner-secret': position.owner_secret, // This is now automatically decrypted by our DB functions
-        'x-function-token': Deno.env.get('FUNCTION_TOKEN')
+        'x-function-token': Deno.env.get('FUNCTION_TOKEN') || ''
       }
     });
 
@@ -197,7 +197,7 @@ const executeEmergencySell = async (session: TradingSession, position: Position)
 
     await logActivity(session.id, `✅ Emergency sell completed for position ${position.lot_id}`, 'info');
   } catch (error) {
-    await logActivity(session.id, `❌ Emergency sell error: ${error.message}`, 'error');
+    await logActivity(session.id, `❌ Emergency sell error: ${error instanceof Error ? error.message : String(error)}`, 'error');
   }
 };
 
@@ -240,7 +240,7 @@ const processTradingSession = async (session: TradingSession) => {
     // - Token switching logic
 
   } catch (error) {
-    await logActivity(session.id, `❌ Error processing session: ${error.message}`, 'error');
+    await logActivity(session.id, `❌ Error processing session: ${error instanceof Error ? error.message : String(error)}`, 'error');
   }
 };
 
@@ -291,7 +291,7 @@ serve(async (req) => {
 
   } catch (error) {
     console.error('Trading monitor error:', error);
-    return new Response(JSON.stringify({ error: error.message }), {
+    return new Response(JSON.stringify({ error: error instanceof Error ? error.message : String(error) }), {
       status: 500,
       headers: { ...corsHeaders, 'Content-Type': 'application/json' }
     });

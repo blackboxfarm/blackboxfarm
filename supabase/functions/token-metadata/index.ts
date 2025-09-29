@@ -121,7 +121,7 @@ serve(async (req) => {
         }
       }
     } catch (error) {
-      console.log('DexScreener fetch failed:', error.message);
+      console.log('DexScreener fetch failed:', error instanceof Error ? error.message : String(error));
     }
 
     const response = {
@@ -147,7 +147,7 @@ serve(async (req) => {
     return new Response(
       JSON.stringify({ 
         success: false,
-        error: error.message,
+        error: error instanceof Error ? error.message : String(error),
         metadata: {
           mint: tokenMint || 'unknown',
           name: 'Unknown Token',

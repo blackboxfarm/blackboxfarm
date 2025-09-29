@@ -57,8 +57,7 @@ serve(async (req) => {
     // Verify the TOTP code
     const isValid = authenticator.verify({ 
       token: totpCode, 
-      secret: secret,
-      window: 1 // Allow 1 time step tolerance
+      secret: secret
     });
 
     if (!isValid) {
@@ -128,7 +127,7 @@ serve(async (req) => {
     return new Response(
       JSON.stringify({ 
         success: false,
-        error: error.message 
+        error: error instanceof Error ? error.message : String(error) 
       }),
       {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },

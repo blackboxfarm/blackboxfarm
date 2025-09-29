@@ -199,7 +199,7 @@ serve(async (req) => {
     return new Response(
       JSON.stringify({ 
         error: 'Investigation failed', 
-        details: error.message 
+        details: error instanceof Error ? error.message : String(error) 
       }),
       { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );

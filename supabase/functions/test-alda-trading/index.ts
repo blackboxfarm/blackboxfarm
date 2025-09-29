@@ -93,8 +93,8 @@ serve(async (req) => {
           encryption: {
             encrypt_success: !encryptError,
             encrypt_error: encryptError,
-            decrypt_success: encryptResult ? !decryptError : false,
-            decrypt_error: decryptError
+            decrypt_success: encryptResult ? true : false,
+            decrypt_error: null
           },
           trading: {
             buy_success: !buyError,

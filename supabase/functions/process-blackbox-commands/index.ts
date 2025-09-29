@@ -113,7 +113,7 @@ serve(async (req) => {
             }
           } catch (error) {
             console.error(`❌ Buy execution error for ${command.id}:`, error);
-            results.push({ command_id: command.id, action: 'buy', success: false, error: error.message });
+            results.push({ command_id: command.id, action: 'buy', success: false, error: error instanceof Error ? error.message : String(error) });
           }
         }
 
@@ -137,7 +137,7 @@ serve(async (req) => {
             }
           } catch (error) {
             console.error(`❌ Sell execution error for ${command.id}:`, error);
-            results.push({ command_id: command.id, action: 'sell', success: false, error: error.message });
+            results.push({ command_id: command.id, action: 'sell', success: false, error: error instanceof Error ? error.message : String(error) });
           }
         }
 
@@ -147,7 +147,7 @@ serve(async (req) => {
 
       } catch (error) {
         console.error(`Error processing command ${command.id}:`, error);
-        results.push({ command_id: command.id, success: false, error: error.message });
+        results.push({ command_id: command.id, success: false, error: error instanceof Error ? error.message : String(error) });
       }
     }
 

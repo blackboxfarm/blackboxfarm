@@ -189,7 +189,7 @@ const handler = async (req: Request): Promise<Response> => {
       try {
         const { data, error } = await resend.emails.send({
           from: 'Bump Bot <notifications@resend.dev>',
-          to: [email],
+          to: [email || ''],
           subject: emailContent.subject,
           html: `
             <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">

@@ -201,11 +201,11 @@ serve(async (req) => {
         p_operation: 'system_error',
         p_user_id: null,
         p_success: false,
-        p_error_message: error.message || 'Internal server error',
+        p_error_message: (error instanceof Error ? error.message : String(error)) || 'Internal server error',
         p_security_flags: {
           critical_error: true,
           timestamp: new Date().toISOString(),
-          stack_trace: error.stack
+          stack_trace: error instanceof Error ? error.stack : String(error)
         }
       });
     } catch (logError) {
@@ -213,7 +213,7 @@ serve(async (req) => {
     }
     
     return new Response(JSON.stringify({ 
-      error: error.message || 'Internal server error' 
+      error: (error instanceof Error ? error.message : String(error)) || 'Internal server error' 
     }), {
       status: 500,
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },

@@ -231,8 +231,8 @@ serve(async (req) => {
           campaignsKept: finalCampaigns?.length || 0,
           walletsKept: finalWallets?.length || 0,
           commandsKept: finalCommands?.length || 0,
-          orphanedWalletsDeleted: orphanedWalletsResult?.length || 0,
-          orphanedCommandsDeleted: orphanedCommandsResult?.length || 0
+          orphanedWalletsDeleted: orphanedWalletsDeleted,
+          orphanedCommandsDeleted: orphanedCommandsDeleted
         },
         finalState: {
           campaigns: finalCampaigns,

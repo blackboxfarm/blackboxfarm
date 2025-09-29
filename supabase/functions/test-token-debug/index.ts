@@ -69,8 +69,8 @@ serve(async (req) => {
   } catch (e) {
     console.error("Debug function error:", e);
     return new Response(JSON.stringify({
-      error: e.message,
-      stack: e.stack
+      error: e instanceof Error ? e.message : String(e),
+      stack: e instanceof Error ? e.stack : String(e)
     }), {
       status: 500,
       headers: { ...corsHeaders, "Content-Type": "application/json" }
