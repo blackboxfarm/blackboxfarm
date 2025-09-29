@@ -11,6 +11,7 @@ import { useToast } from '@/hooks/use-toast';
 import { Loader2, Download, RefreshCw } from 'lucide-react';
 import { useTokenMetadata } from '@/hooks/useTokenMetadata';
 import { AdBanner } from '@/components/AdBanner';
+import { HoldersFarmBanner } from '@/components/HoldersFarmBanner';
 
 interface TokenHolder {
   owner: string;
@@ -295,7 +296,11 @@ export function BaglessHoldersReport({ initialToken }: BaglessHoldersReportProps
   };
 
   return (
-    <div className="space-y-4 md:space-y-6 px-2 md:px-0">
+    <div className="min-h-screen bg-background">
+      {/* Farm Banner Header */}
+      <HoldersFarmBanner />
+      
+      <div className="space-y-4 md:space-y-6 px-2 md:px-0 container mx-auto py-4 md:py-6">
       <Card>
         <CardHeader className="pb-4">
           <CardTitle className="text-lg md:text-xl">Token Holders Report</CardTitle>
@@ -1085,6 +1090,7 @@ export function BaglessHoldersReport({ initialToken }: BaglessHoldersReportProps
           </div>
         </>
       )}
+      </div>
     </div>
   );
 }
