@@ -98,6 +98,17 @@ export function BaglessHoldersReport({ initialToken }: BaglessHoldersReportProps
     }
   }, [tokenMint, fetchTokenMetadata]);
 
+  // Auto-generate report when initialToken is provided
+  useEffect(() => {
+    if (initialToken && initialToken.trim() && !report && !isLoading) {
+      // Small delay to ensure token metadata is fetched first
+      const timer = setTimeout(() => {
+        generateReport();
+      }, 500);
+      return () => clearTimeout(timer);
+    }
+  }, [initialToken]);
+
   useEffect(() => {
     if (report) {
       let filtered = report.holders;
