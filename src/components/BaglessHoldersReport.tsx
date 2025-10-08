@@ -91,6 +91,13 @@ export function BaglessHoldersReport({ initialToken }: BaglessHoldersReportProps
   const { toast } = useToast();
   const { tokenData, fetchTokenMetadata } = useTokenMetadata();
 
+  // Sync tokenMint state when initialToken prop changes (handles URL param after mount)
+  useEffect(() => {
+    if (initialToken && initialToken.trim() && tokenMint.trim() !== initialToken.trim()) {
+      setTokenMint(initialToken.trim());
+    }
+  }, [initialToken]);
+
   // Fetch token metadata when tokenMint changes
   useEffect(() => {
     if (tokenMint.trim()) {
