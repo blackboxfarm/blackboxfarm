@@ -23,6 +23,7 @@ interface TokenHolder {
   lpDetectionReason: string;
   lpConfidence: number;
   detectedPlatform: string;
+  accountOwnerProgram?: string;
   isDustWallet: boolean;
   isSmallWallet: boolean;
   isMediumWallet: boolean;
@@ -34,6 +35,15 @@ interface TokenHolder {
   isTrueWhaleWallet: boolean;
   tokenAccount: string;
   rank: number;
+}
+
+interface PotentialDevWallet {
+  address: string;
+  balance: number;
+  usdValue: number;
+  percentageOfSupply: number;
+  confidence: number;
+  reason: string;
 }
 
 interface HoldersReport {
@@ -60,6 +70,7 @@ interface HoldersReport {
   priceDiscoveryFailed?: boolean;
   holders: TokenHolder[];
   liquidityPools: TokenHolder[];
+  potentialDevWallet?: PotentialDevWallet;
   summary: string;
 }
 
@@ -339,10 +350,11 @@ export function BaglessHoldersReport({ initialToken }: BaglessHoldersReportProps
     return `${address.slice(0, 8)}...${address.slice(-8)}`;
   };
 
-  // Calculate top 10 holder stats
+  // Calculate top 10 holder stats (excluding LP and dev)
   const calculateTop10Stats = () => {
     if (!report) return { top10: [], cumulativePercentage: 0 };
-    const nonLPHolders = report.holders.filter(h => !h.isLiquidityPool);
+    const devWallet = report.potentialDevWallet?.address;
+    const nonLPHolders = report.holders.filter(h => !h.isLiquidityPool && h.owner !== devWallet);
     const top10 = nonLPHolders.slice(0, 10);
     const cumulativePercentage = top10.reduce((sum, h) => sum + h.percentageOfSupply, 0);
     return { top10, cumulativePercentage };
@@ -366,6 +378,16 @@ export function BaglessHoldersReport({ initialToken }: BaglessHoldersReportProps
     const alerts: Array<{ type: 'critical' | 'warning' | 'info'; message: string; flagged?: boolean }> = [];
     const nonLPHolders = report.holders.filter(h => !h.isLiquidityPool);
     
+    // Dev wallet detection
+    if (report.potentialDevWallet) {
+      const devFlag = walletFlags[report.potentialDevWallet.address];
+      alerts.push({
+        type: devFlag?.flag === 'dev' ? 'info' : 'warning',
+        message: `Potential Dev: ${truncateAddress(report.potentialDevWallet.address)} holds ${report.potentialDevWallet.percentageOfSupply.toFixed(1)}% - ${report.potentialDevWallet.reason}`,
+        flagged: devFlag?.flag === 'dev'
+      });
+    }
+    
     // Single wallet >10%
     const largeHolders = nonLPHolders.filter(h => h.percentageOfSupply > 10);
     largeHolders.forEach(h => {
@@ -388,7 +410,7 @@ export function BaglessHoldersReport({ initialToken }: BaglessHoldersReportProps
     // Flagged wallets
     Object.entries(walletFlags).forEach(([address, data]) => {
       const holder = report.holders.find(h => h.owner === address);
-      if (holder && !holder.isLiquidityPool) {
+      if (holder && !holder.isLiquidityPool && address !== report.potentialDevWallet?.address) {
         const label = data.flag === 'dev' ? 'Dev wallet' : 
                      data.flag === 'team' ? 'Team wallet' : 'Suspicious wallet';
         alerts.push({
@@ -853,6 +875,79 @@ export function BaglessHoldersReport({ initialToken }: BaglessHoldersReportProps
                         
                         <div className="mt-3 text-xs text-muted-foreground text-center">
                           Ratio: {(unlockedSupply / report.lpBalance).toFixed(2)}:1 (Unlocked:LP)
+                        </div>
+                      </CardContent>
+                    </Card>
+                  </div>
+                );
+              })()}
+
+              {/* First 10 Buyers (excluding LP and Dev) */}
+              {(() => {
+                const devWallet = report.potentialDevWallet?.address;
+                const first10Buyers = report.holders
+                  .filter(h => !h.isLiquidityPool && h.owner !== devWallet)
+                  .slice(0, 10);
+                
+                if (first10Buyers.length === 0) return null;
+                
+                return (
+                  <div className="mb-4 md:mb-6">
+                    <Card>
+                      <CardHeader className="pb-3">
+                        <CardTitle className="text-lg">First 10 Buyers (after LP & Dev)</CardTitle>
+                        <p className="text-xs text-muted-foreground">Early investors excluding liquidity pools and potential dev wallet</p>
+                      </CardHeader>
+                      <CardContent>
+                        <div className="overflow-x-auto">
+                          <table className="w-full text-xs md:text-sm">
+                            <thead>
+                              <tr className="border-b">
+                                <th className="text-left p-2">#</th>
+                                <th className="text-left p-2">Wallet</th>
+                                <th className="text-right p-2">Balance</th>
+                                <th className="text-right p-2">% Supply</th>
+                                <th className="text-right p-2">USD Value</th>
+                                <th className="text-center p-2">Social</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {first10Buyers.map((holder, idx) => (
+                                <tr key={holder.owner} className="border-b hover:bg-muted/20">
+                                  <td className="p-2 font-mono">{idx + 1}</td>
+                                  <td className="p-2">
+                                    <a 
+                                      href={`https://solscan.io/account/${holder.owner}`}
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                      className="font-mono text-primary hover:underline"
+                                    >
+                                      {truncateAddress(holder.owner)}
+                                    </a>
+                                  </td>
+                                  <td className="p-2 text-right font-mono">{formatBalance(holder.balance)}</td>
+                                  <td className="p-2 text-right font-semibold">{holder.percentageOfSupply.toFixed(2)}%</td>
+                                  <td className="p-2 text-right text-green-600 dark:text-green-400 font-medium">
+                                    ${holder.usdValue.toFixed(2)}
+                                  </td>
+                                  <td className="p-2 text-center">
+                                    <a 
+                                      href={`https://solscan.io/account/${holder.owner}`}
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                      className="text-blue-500 hover:text-blue-600 text-xs"
+                                      title="View on Solscan to check for linked Twitter/X account"
+                                    >
+                                      View
+                                    </a>
+                                  </td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                        <div className="mt-3 text-xs text-muted-foreground">
+                          💡 Tip: Click "View" to check Solscan for any linked Twitter/X accounts
                         </div>
                       </CardContent>
                     </Card>

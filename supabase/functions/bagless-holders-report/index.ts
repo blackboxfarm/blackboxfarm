@@ -176,6 +176,8 @@ serve(async (req) => {
 
     const holders = [];
     let totalSupply = 0;
+    let firstBuyerAddress = '';
+    let potentialDevWallet: any = null;
     
     if (data.result && data.result.length > 0) {
       // Calculate total supply first
@@ -191,11 +193,19 @@ serve(async (req) => {
         }
       }
       
-      for (const account of data.result) {
+      // Sort accounts by balance to identify earliest/largest holders
+      const sortedAccounts = [...data.result].sort((a, b) => {
+        const balanceA = parseFloat(a.account.data.parsed.info.tokenAmount.uiAmount || 0);
+        const balanceB = parseFloat(b.account.data.parsed.info.tokenAmount.uiAmount || 0);
+        return balanceB - balanceA;
+      });
+      
+      for (const account of sortedAccounts) {
         try {
           const parsedInfo = account.account.data.parsed.info;
           const balance = parseFloat(parsedInfo.tokenAmount.uiAmount || 0);
           const owner = parsedInfo.owner;
+          const accountOwner = account.account.owner; // This is the program ID that owns the account
           
           if (balance > 0) {
             // Calculate USD value
@@ -204,67 +214,52 @@ serve(async (req) => {
             // Calculate percentage of total supply
             const percentageOfSupply = (balance / totalSupply) * 100;
             
-            // LP Detection Logic
+            // LP Detection Logic - FIXED VERSION
             let isLiquidityPool = false;
             let lpDetectionReason = '';
             let lpConfidence = 0;
             let detectedPlatform = '';
             
-            // Detection 1: Large percentage ownership (likely LP)
-            if (percentageOfSupply > 20) {
-              isLiquidityPool = true;
-              lpDetectionReason = 'Large percentage ownership';
-              lpConfidence += 40;
-            }
-            
-            // Detection 2: Check if address looks like a PDA (starts with specific patterns)
-            const isPotentialPDA = !owner.match(/^[1-9A-HJ-NP-Za-km-z]{44}$/) || 
-                                   owner.length !== 44 ||
-                                   owner.startsWith('11111') ||
-                                   owner.includes('aaaa') ||
-                                   owner.includes('1111');
-            
-            if (isPotentialPDA) {
-              lpConfidence += 20;
-              if (!isLiquidityPool) {
-                lpDetectionReason = 'PDA-like address pattern';
-              }
-            }
-            
-            // Detection 3: Known DEX program patterns (simplified heuristics)
-            const knownDEXPatterns = {
-              'raydium': /^5Q544fKrFoe6tsEbD7S8EmxGTJYAKtTVhAW5Q5pge4j1$/,
-              'orca': /^whirLbMiicVdio4qvUfM5KAg6Ct8VwpYzGff3uctyCc$/,
-              'meteora': /^Eo7WjKq67rjJQSZxS6z3YkapzY3eMj6Xy8X5EQVn5UaB$/,
-              'jupiter': /^JUP6LkbZbjS1jKKwapdHNy74zcZ3tLUZoi5QNyVTaV4$/,
-              'pump_fun': /^6EF8rrecthR5Dkzon8Nwu78hRvfCKubJ14M5uBEwF6P$/
+            // Known DEX program IDs (the CORRECT way to detect LPs)
+            const knownDEXPrograms: Record<string, string> = {
+              'Pump.fun AMM': '6EF8rrecthR5Dkzon8Nwu78hRvfCKubJ14M5uBEwF6P',
+              'Raydium V4': '675kPX9MHTjS2zt1qfr1NYHuzeLXfQM9H24wFSUt1Mp8',
+              'Raydium CLMM': 'CAMMCzo5YL8w4VFF8KVHrK22GGUsp5VTaW7grrKgrWqK',
+              'Raydium V3': '27haf8L6oxUeXrHrgEgsexjSY5hbVUWEmvv9Nyytg3Ct',
+              'Orca Whirlpool': 'whirLbMiicVdio4qvUfM5KAg6Ct8VwpYzGff3uctyCc',
+              'Meteora': 'LBUZKhRxPF3XUpBCjp4YzTKgLccjZhTSDM9YuVaPwxo',
+              'Meteora DLMM': 'Eo7WjKq67rjJQSZxS6z3YkapzY3eMj6Xy8X5EQVn5UaB',
+              'Lifinity': '2wT8Yq49kHgDzXuPxZSaeLaH1qbmGXtEyPy64bL7aD3c',
+              'Phoenix': 'PhoeNiXZ8ByJGLkxNfZRnkUfjvmuYqLR89jjFHGqdXY',
+              'Fluxbeam': 'FLUXubRmkEi2q6K3Y9kBPg9248ggaZVsoSFhtJHSrm1X',
+              'Aldrin': 'CURVGoZn8zycx6FXwwevgBTB2gVvdbGTEpvMJDbgs2t4',
+              'Cropper': 'CTMAxxk34HjKWxQ3QLZK1HpaLXmBveao3ESePXbiyfzh',
+              'GooseFX': 'GFXsSL5sSaDfNFQUYsHekbWBW1TsFdjDYzACh62tEHxn',
+              'Saber': 'SSwpkEEcbUqx4vtoEByFjSkhKdCT862DNVb52nZg1UZ',
+              'Serum': '9xQeWvG816bUx9EPjHmaT23yvVM2ZWbrrpZb9PusVFin',
+              'Bags.fm': 'BagsFxwZx3cKHLGWzgU3fLzGDhgSPrfSHjgQRJZVF9HL',
+              'Bonk.fun': 'BonK1YhkXwGnzPqqiM1ycLY61w8HNJ5KHZNsmJJNFbDN'
             };
             
-            for (const [platform, pattern] of Object.entries(knownDEXPatterns)) {
-              if (pattern.test(owner)) {
+            // PRIMARY DETECTION: Check the account owner (program ID)
+            for (const [platform, programId] of Object.entries(knownDEXPrograms)) {
+              if (accountOwner === programId) {
                 isLiquidityPool = true;
                 detectedPlatform = platform;
-                lpDetectionReason = `Known ${platform} program address`;
-                lpConfidence = 90;
+                lpDetectionReason = `Token account owned by ${platform} program`;
+                lpConfidence = 95;
+                console.log(`✅ LP Detected: ${owner} is owned by ${platform} (${programId})`);
                 break;
               }
             }
             
-            // Detection 4: Very high token balance combined with round numbers (LP characteristics)
-            if (balance > 1000000 && (balance % 1000000 === 0 || balance % 100000 === 0)) {
-              lpConfidence += 15;
-              if (!isLiquidityPool && lpConfidence > 30) {
-                isLiquidityPool = true;
-                lpDetectionReason = 'Large round number balance';
-              }
-            }
-            
-            // Final confidence adjustment
-            if (isLiquidityPool && lpConfidence > 50) {
-              lpConfidence = Math.min(95, lpConfidence);
-            } else if (lpConfidence > 30) {
+            // FALLBACK DETECTION: High concentration check for unrecognized LP programs
+            if (!isLiquidityPool && percentageOfSupply > 30) {
               isLiquidityPool = true;
-              lpConfidence = Math.min(75, lpConfidence);
+              detectedPlatform = 'Unknown Platform';
+              lpDetectionReason = `Very high concentration (${percentageOfSupply.toFixed(1)}%) - likely undetected LP`;
+              lpConfidence = 60;
+              console.log(`⚠️ Potential LP: ${owner} holds ${percentageOfSupply.toFixed(1)}% (owner program: ${accountOwner})`);
             }
             
             // Categorize wallets (excluding confirmed LPs from main categories)
@@ -278,7 +273,7 @@ serve(async (req) => {
             const isBabyWhaleWallet = !isLiquidityPool && usdValue >= 2000 && usdValue < 5000; // $2K-$5K USD
             const isTrueWhaleWallet = !isLiquidityPool && usdValue >= 5000; // $5K+ USD
             
-            holders.push({
+            const holderData = {
               owner,
               balance,
               usdValue,
@@ -297,8 +292,16 @@ serve(async (req) => {
               isSuperBossWallet,
               isBabyWhaleWallet,
               isTrueWhaleWallet,
-              tokenAccount: account.pubkey
-            });
+              tokenAccount: account.pubkey,
+              accountOwnerProgram: accountOwner // Include for transparency
+            };
+            
+            holders.push(holderData);
+            
+            // Track first buyer (potential dev) - exclude LPs
+            if (!isLiquidityPool && !firstBuyerAddress && balance > 0) {
+              firstBuyerAddress = owner;
+            }
           }
         } catch (e) {
           console.error(`Error processing account ${account.pubkey}:`, e);
@@ -318,6 +321,22 @@ serve(async (req) => {
     // Separate LP and non-LP wallets
     const lpWallets = rankedHolders.filter(h => h.isLiquidityPool);
     const nonLpHolders = rankedHolders.filter(h => !h.isLiquidityPool);
+    
+    // Identify potential dev wallet (top holder excluding LPs, or first buyer)
+    if (nonLpHolders.length > 0) {
+      const topNonLpHolder = nonLpHolders[0];
+      potentialDevWallet = {
+        address: topNonLpHolder.owner,
+        balance: topNonLpHolder.balance,
+        usdValue: topNonLpHolder.usdValue,
+        percentageOfSupply: topNonLpHolder.percentageOfSupply,
+        confidence: topNonLpHolder.percentageOfSupply > 10 ? 85 : 65,
+        reason: topNonLpHolder.percentageOfSupply > 10 
+          ? `Top holder with ${topNonLpHolder.percentageOfSupply.toFixed(1)}% of supply`
+          : 'Top non-LP holder (potential dev)'
+      };
+      console.log(`🔍 Potential Dev Wallet: ${potentialDevWallet.address} (${potentialDevWallet.percentageOfSupply.toFixed(1)}%)`);
+    }
     
     const dustWallets = rankedHolders.filter(h => h.isDustWallet).length;
     const smallWallets = rankedHolders.filter(h => h.isSmallWallet).length;
@@ -362,7 +381,8 @@ serve(async (req) => {
       priceDiscoveryFailed,
       holders: rankedHolders,
       liquidityPools: lpWallets,
-      summary: `Found ${rankedHolders.length} total holders (${lpWallets.length} LP detected). ${trueWhaleWallets} true whale wallets (≥$5K), ${babyWhaleWallets} baby whale wallets ($2K-$5K), ${superBossWallets} super boss wallets ($1K-$2K), ${kingpinWallets} kingpin wallets ($500-$1K), ${bossWallets} boss wallets ($200-$500), ${realWallets} real wallets ($50-$199), ${largeWallets} large wallets ($5-$49), ${mediumWallets} medium wallets ($1-$4), ${smallWallets} small wallets (<$1), ${dustWallets} dust wallets (<1 token). Total tokens distributed: ${totalBalance.toLocaleString()}${priceSource ? ` (Price from ${priceSource})` : ''}`
+      potentialDevWallet, // NEW: Include dev wallet detection
+      summary: `Found ${rankedHolders.length} total holders (${lpWallets.length} LP detected${lpWallets.length > 0 ? ': ' + lpWallets.map(lp => lp.detectedPlatform).filter(Boolean).join(', ') : ''}). ${trueWhaleWallets} true whale wallets (≥$5K), ${babyWhaleWallets} baby whale wallets ($2K-$5K), ${superBossWallets} super boss wallets ($1K-$2K), ${kingpinWallets} kingpin wallets ($500-$1K), ${bossWallets} boss wallets ($200-$500), ${realWallets} real wallets ($50-$199), ${largeWallets} large wallets ($5-$49), ${mediumWallets} medium wallets ($1-$4), ${smallWallets} small wallets (<$1), ${dustWallets} dust wallets (<1 token). Total tokens distributed: ${totalBalance.toLocaleString()}${priceSource ? ` (Price from ${priceSource})` : ''}${potentialDevWallet ? `. Potential dev: ${potentialDevWallet.address.slice(0, 4)}...${potentialDevWallet.address.slice(-4)} (${potentialDevWallet.percentageOfSupply.toFixed(1)}%)` : ''}`
     };
 
     return new Response(

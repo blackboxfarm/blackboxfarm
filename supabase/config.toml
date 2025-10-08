@@ -66,3 +66,6 @@ verify_jwt = false
 
 [functions.claim-preview-data]
 verify_jwt = true
+
+[functions.bagless-holders-report]
+verify_jwt = false
