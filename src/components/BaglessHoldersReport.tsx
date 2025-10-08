@@ -98,16 +98,16 @@ export function BaglessHoldersReport({ initialToken }: BaglessHoldersReportProps
     }
   }, [tokenMint, fetchTokenMetadata]);
 
-  // Auto-generate report when initialToken is provided
+  // Auto-generate report when initialToken is provided and tokenMint is set
   useEffect(() => {
-    if (initialToken && initialToken.trim() && !report && !isLoading) {
+    if (initialToken && initialToken.trim() && tokenMint && tokenMint.trim() && !report && !isLoading) {
       // Small delay to ensure token metadata is fetched first
       const timer = setTimeout(() => {
         generateReport();
-      }, 500);
+      }, 800);
       return () => clearTimeout(timer);
     }
-  }, [initialToken]);
+  }, [initialToken, tokenMint]);
 
   useEffect(() => {
     if (report) {
