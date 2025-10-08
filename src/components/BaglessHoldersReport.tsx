@@ -590,20 +590,20 @@ export function BaglessHoldersReport({ initialToken }: BaglessHoldersReportProps
                       <img 
                         src={tokenData.metadata.logoURI} 
                         alt={`${tokenData.metadata.name} logo`}
-                        className="w-10 h-10 md:w-12 md:h-12 rounded-full flex-shrink-0"
+                        className="w-12 h-12 md:w-14 md:h-14 rounded-full flex-shrink-0"
                         onError={(e) => {
                           e.currentTarget.style.display = 'none';
                         }}
                       />
                     )}
                     <div className="flex-1 min-w-0">
-                      <div className="flex flex-wrap items-center gap-1 md:gap-2 mb-2">
-                        <h3 className="text-base md:text-lg font-semibold truncate">
+                      <div className="flex flex-wrap items-center gap-2 mb-2">
+                        <span className="text-base md:text-lg font-semibold">
+                          ${tokenData.metadata.symbol || 'UNK'}
+                        </span>
+                        <span className="text-base md:text-lg font-semibold">
                           {tokenData.metadata.name || 'Unknown Token'}
-                        </h3>
-                        <Badge variant="secondary" className="text-xs">
-                          {tokenData.metadata.symbol || 'UNK'}
-                        </Badge>
+                        </span>
                         {tokenData.metadata.verified && (
                           <Badge variant="outline" className="text-green-600 text-xs">
                             ✓ Verified
@@ -616,8 +616,8 @@ export function BaglessHoldersReport({ initialToken }: BaglessHoldersReportProps
                         )}
                       </div>
                       {tokenData.metadata.description && (
-                        <p className="text-xs md:text-sm text-muted-foreground mb-2 line-clamp-2">
-                          {tokenData.metadata.description}
+                        <p className="text-sm md:text-base text-muted-foreground line-clamp-2">
+                          "{tokenData.metadata.description}"
                         </p>
                       )}
                       <div className="text-xs text-muted-foreground">
