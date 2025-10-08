@@ -6,9 +6,10 @@ import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Switch } from '@/components/ui/switch';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
-import { Loader2, Download, RefreshCw } from 'lucide-react';
+import { Loader2, Download, RefreshCw, Flag, AlertTriangle, Shield } from 'lucide-react';
 import { useTokenMetadata } from '@/hooks/useTokenMetadata';
 import { AdBanner } from '@/components/AdBanner';
 
@@ -88,8 +89,34 @@ export function BaglessHoldersReport({ initialToken }: BaglessHoldersReportProps
   const [showTrueWhaleOnly, setShowTrueWhaleOnly] = useState(false);
   const [showLPOnly, setShowLPOnly] = useState(false);
   const [excludeLPs, setExcludeLPs] = useState(false);
+  const [walletFlags, setWalletFlags] = useState<{[address: string]: { flag: 'dev' | 'team' | 'suspicious'; timestamp: number }}>({});
+  const [flagModalOpen, setFlagModalOpen] = useState(false);
+  const [selectedWallet, setSelectedWallet] = useState<string | null>(null);
   const { toast } = useToast();
   const { tokenData, fetchTokenMetadata } = useTokenMetadata();
+
+  // Load wallet flags from localStorage when tokenMint changes
+  useEffect(() => {
+    if (tokenMint.trim()) {
+      const stored = localStorage.getItem(`wallet-flags-${tokenMint.trim()}`);
+      if (stored) {
+        try {
+          setWalletFlags(JSON.parse(stored));
+        } catch (e) {
+          console.error('Failed to load wallet flags:', e);
+        }
+      } else {
+        setWalletFlags({});
+      }
+    }
+  }, [tokenMint]);
+
+  // Save wallet flags to localStorage when they change
+  useEffect(() => {
+    if (tokenMint.trim() && Object.keys(walletFlags).length > 0) {
+      localStorage.setItem(`wallet-flags-${tokenMint.trim()}`, JSON.stringify(walletFlags));
+    }
+  }, [walletFlags, tokenMint]);
 
   // Sync tokenMint state when initialToken prop changes (handles URL param after mount)
   useEffect(() => {
@@ -310,6 +337,116 @@ export function BaglessHoldersReport({ initialToken }: BaglessHoldersReportProps
 
   const truncateAddress = (address: string) => {
     return `${address.slice(0, 8)}...${address.slice(-8)}`;
+  };
+
+  // Calculate top 10 holder stats
+  const calculateTop10Stats = () => {
+    if (!report) return { top10: [], cumulativePercentage: 0 };
+    const nonLPHolders = report.holders.filter(h => !h.isLiquidityPool);
+    const top10 = nonLPHolders.slice(0, 10);
+    const cumulativePercentage = top10.reduce((sum, h) => sum + h.percentageOfSupply, 0);
+    return { top10, cumulativePercentage };
+  };
+
+  // Calculate LP vs Unlocked Supply
+  const calculateLPAnalysis = () => {
+    if (!report) return { unlockedSupply: 0, unlockedPercentage: 0, lpPercentage: 0 };
+    const unlockedSupply = report.totalBalance - report.lpBalance;
+    const unlockedPercentage = report.totalBalance > 0 ? (unlockedSupply / report.totalBalance) * 100 : 0;
+    return {
+      unlockedSupply,
+      unlockedPercentage,
+      lpPercentage: report.lpPercentageOfSupply
+    };
+  };
+
+  // Detect suspicious patterns
+  const detectSuspiciousPatterns = () => {
+    if (!report) return [];
+    const alerts: Array<{ type: 'critical' | 'warning' | 'info'; message: string; flagged?: boolean }> = [];
+    const nonLPHolders = report.holders.filter(h => !h.isLiquidityPool);
+    
+    // Single wallet >10%
+    const largeHolders = nonLPHolders.filter(h => h.percentageOfSupply > 10);
+    largeHolders.forEach(h => {
+      alerts.push({
+        type: 'warning',
+        message: `Wallet ${truncateAddress(h.owner)} holds ${h.percentageOfSupply.toFixed(1)}% of supply`
+      });
+    });
+    
+    // Top 3 combined
+    const top3 = nonLPHolders.slice(0, 3);
+    const top3Percentage = top3.reduce((sum, h) => sum + h.percentageOfSupply, 0);
+    if (top3Percentage > 50) {
+      alerts.push({
+        type: 'critical',
+        message: `Top 3 wallets control ${top3Percentage.toFixed(1)}% of supply`
+      });
+    }
+    
+    // Flagged wallets
+    Object.entries(walletFlags).forEach(([address, data]) => {
+      const holder = report.holders.find(h => h.owner === address);
+      if (holder && !holder.isLiquidityPool) {
+        const label = data.flag === 'dev' ? 'Dev wallet' : 
+                     data.flag === 'team' ? 'Team wallet' : 'Suspicious wallet';
+        alerts.push({
+          type: 'info',
+          message: `${label} holds ${holder.percentageOfSupply.toFixed(1)}% of supply`,
+          flagged: true
+        });
+      }
+    });
+    
+    return alerts;
+  };
+
+  const handleFlagWallet = (address: string) => {
+    setSelectedWallet(address);
+    setFlagModalOpen(true);
+  };
+
+  const setWalletFlag = (flag: 'dev' | 'team' | 'suspicious' | null) => {
+    if (!selectedWallet) return;
+    
+    if (flag === null) {
+      const newFlags = { ...walletFlags };
+      delete newFlags[selectedWallet];
+      setWalletFlags(newFlags);
+    } else {
+      setWalletFlags({
+        ...walletFlags,
+        [selectedWallet]: { flag, timestamp: Date.now() }
+      });
+    }
+    
+    setFlagModalOpen(false);
+    setSelectedWallet(null);
+    
+    toast({
+      title: flag ? "Wallet Flagged" : "Flag Removed",
+      description: flag ? `Wallet marked as ${flag}` : "Wallet flag cleared"
+    });
+  };
+
+  const getFlagBadge = (address: string) => {
+    const flag = walletFlags[address];
+    if (!flag) return null;
+    
+    const badgeConfig = {
+      dev: { label: 'Dev', className: 'bg-red-500/20 text-red-700 dark:text-red-300 border-red-500/30' },
+      team: { label: 'Team', className: 'bg-blue-500/20 text-blue-700 dark:text-blue-300 border-blue-500/30' },
+      suspicious: { label: 'Sus', className: 'bg-orange-500/20 text-orange-700 dark:text-orange-300 border-orange-500/30' }
+    };
+    
+    const config = badgeConfig[flag.flag];
+    return (
+      <Badge variant="outline" className={`text-xs ${config.className}`}>
+        <Flag className="h-3 w-3 mr-1" />
+        {config.label}
+      </Badge>
+    );
   };
 
   return (
@@ -571,6 +708,145 @@ export function BaglessHoldersReport({ initialToken }: BaglessHoldersReportProps
                   <div className="text-xs text-muted-foreground">Dust (&lt;$1)</div>
                 </div>
               </div>
+
+              {/* Security Alerts Card */}
+              {(() => {
+                const alerts = detectSuspiciousPatterns();
+                if (alerts.length === 0) return null;
+                
+                return (
+                  <div className="mb-4 md:mb-6">
+                    <Card className="border-2 border-orange-500/30 bg-orange-500/5">
+                      <CardHeader className="pb-3">
+                        <CardTitle className="text-lg flex items-center gap-2">
+                          <AlertTriangle className="h-5 w-5 text-orange-500" />
+                          Security Alerts
+                        </CardTitle>
+                      </CardHeader>
+                      <CardContent className="space-y-2">
+                        {alerts.map((alert, idx) => (
+                          <div
+                            key={idx}
+                            className={`p-3 rounded-lg text-sm ${
+                              alert.type === 'critical' 
+                                ? 'bg-red-500/10 border border-red-500/20 text-red-700 dark:text-red-300'
+                                : alert.type === 'warning'
+                                ? 'bg-orange-500/10 border border-orange-500/20 text-orange-700 dark:text-orange-300'
+                                : 'bg-blue-500/10 border border-blue-500/20 text-blue-700 dark:text-blue-300'
+                            }`}
+                          >
+                            {alert.flagged && <Flag className="inline h-3 w-3 mr-1" />}
+                            {alert.message}
+                          </div>
+                        ))}
+                      </CardContent>
+                    </Card>
+                  </div>
+                );
+              })()}
+
+              {/* Top 10 Holders Analysis */}
+              {(() => {
+                const { top10, cumulativePercentage } = calculateTop10Stats();
+                if (top10.length === 0) return null;
+                
+                return (
+                  <div className="mb-4 md:mb-6">
+                    <Card>
+                      <CardHeader className="pb-3">
+                        <CardTitle className="text-lg flex items-center gap-2">
+                          <Shield className="h-5 w-5" />
+                          Top 10 Holders Analysis
+                        </CardTitle>
+                      </CardHeader>
+                      <CardContent>
+                        <div className="mb-4 p-4 bg-primary/10 rounded-lg border border-primary/20">
+                          <div className="text-2xl font-bold text-primary">
+                            {cumulativePercentage.toFixed(1)}%
+                          </div>
+                          <div className="text-sm text-muted-foreground">
+                            Top 10 wallets hold {cumulativePercentage.toFixed(1)}% of total supply
+                          </div>
+                        </div>
+                        
+                        <div className="space-y-2">
+                          {top10.map((holder, idx) => (
+                            <div key={holder.owner} className="flex items-center gap-2">
+                              <div className="text-xs text-muted-foreground w-6">#{idx + 1}</div>
+                              <div className="flex-1 bg-muted/30 rounded-full h-6 relative overflow-hidden">
+                                <div
+                                  className="absolute inset-y-0 left-0 bg-primary/70 transition-all"
+                                  style={{ width: `${Math.min(holder.percentageOfSupply, 100)}%` }}
+                                />
+                                <div className="absolute inset-0 flex items-center justify-between px-2 text-xs">
+                                  <span className="font-mono">{truncateAddress(holder.owner)}</span>
+                                  <span className="font-semibold">{holder.percentageOfSupply.toFixed(2)}%</span>
+                                </div>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </CardContent>
+                    </Card>
+                  </div>
+                );
+              })()}
+
+              {/* LP vs Unlocked Supply Analysis */}
+              {report.liquidityPoolsDetected > 0 && (() => {
+                const { unlockedSupply, unlockedPercentage, lpPercentage } = calculateLPAnalysis();
+                
+                return (
+                  <div className="mb-4 md:mb-6">
+                    <Card>
+                      <CardHeader className="pb-3">
+                        <CardTitle className="text-lg">Liquidity vs Unlocked Supply</CardTitle>
+                      </CardHeader>
+                      <CardContent>
+                        <div className="grid grid-cols-2 gap-4 mb-4">
+                          <div className="text-center p-3 bg-blue-500/10 rounded-lg border border-blue-500/20">
+                            <div className="text-xl font-bold text-blue-700 dark:text-blue-300">
+                              {lpPercentage.toFixed(1)}%
+                            </div>
+                            <div className="text-xs text-muted-foreground">In Liquidity Pools</div>
+                            <div className="text-xs text-muted-foreground mt-1">
+                              {formatBalance(report.lpBalance)} tokens
+                            </div>
+                          </div>
+                          <div className="text-center p-3 bg-green-500/10 rounded-lg border border-green-500/20">
+                            <div className="text-xl font-bold text-green-700 dark:text-green-300">
+                              {unlockedPercentage.toFixed(1)}%
+                            </div>
+                            <div className="text-xs text-muted-foreground">Unlocked Supply</div>
+                            <div className="text-xs text-muted-foreground mt-1">
+                              {formatBalance(unlockedSupply)} tokens
+                            </div>
+                          </div>
+                        </div>
+                        
+                        <div className="w-full bg-muted/30 rounded-full h-8 relative overflow-hidden">
+                          <div
+                            className="absolute inset-y-0 left-0 bg-blue-500/70 flex items-center justify-center text-xs font-semibold text-white"
+                            style={{ width: `${lpPercentage}%` }}
+                          >
+                            {lpPercentage > 10 && `LP ${lpPercentage.toFixed(1)}%`}
+                          </div>
+                          <div
+                            className="absolute inset-y-0 bg-green-500/70 flex items-center justify-center text-xs font-semibold text-white"
+                            style={{ left: `${lpPercentage}%`, width: `${unlockedPercentage}%` }}
+                          >
+                            {unlockedPercentage > 10 && `Unlocked ${unlockedPercentage.toFixed(1)}%`}
+                          </div>
+                        </div>
+                        
+                        <div className="mt-3 text-xs text-muted-foreground text-center">
+                          Ratio: {(unlockedSupply / report.lpBalance).toFixed(2)}:1 (Unlocked:LP)
+                        </div>
+                      </CardContent>
+                    </Card>
+                  </div>
+                );
+              })()}
 
               {/* Sediment Layer Chart */}
               <div className="mb-4 md:mb-6">
@@ -1033,6 +1309,7 @@ export function BaglessHoldersReport({ initialToken }: BaglessHoldersReportProps
                         <TableHead className="text-xs">% Supply</TableHead>
                         <TableHead className="text-xs">Balance</TableHead>
                         <TableHead className="text-xs">USD Value</TableHead>
+                        <TableHead className="text-xs w-20">Flag</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
@@ -1040,13 +1317,16 @@ export function BaglessHoldersReport({ initialToken }: BaglessHoldersReportProps
                         <TableRow key={holder.owner}>
                           <TableCell className="font-mono text-xs">#{holder.rank}</TableCell>
                           <TableCell className="font-mono text-xs">
-                            <button
-                              onClick={() => navigator.clipboard.writeText(holder.owner)}
-                              className="hover:text-muted-foreground transition-colors cursor-pointer text-left"
-                              title="Click to copy full address"
-                            >
-                              {truncateAddress(holder.owner)}
-                            </button>
+                            <div className="flex items-center gap-2">
+                              <button
+                                onClick={() => navigator.clipboard.writeText(holder.owner)}
+                                className="hover:text-muted-foreground transition-colors cursor-pointer text-left"
+                                title="Click to copy full address"
+                              >
+                                {truncateAddress(holder.owner)}
+                              </button>
+                              {getFlagBadge(holder.owner)}
+                            </div>
                           </TableCell>
                           <TableCell className="font-mono text-xs">
                             {holder.percentageOfSupply?.toFixed(2)}%
@@ -1056,6 +1336,16 @@ export function BaglessHoldersReport({ initialToken }: BaglessHoldersReportProps
                           </TableCell>
                           <TableCell className="font-mono text-xs">
                             ${(holder.usdValue || 0).toFixed(2)}
+                          </TableCell>
+                          <TableCell>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => handleFlagWallet(holder.owner)}
+                              className="h-7 w-7 p-0"
+                            >
+                              <Flag className="h-3 w-3" />
+                            </Button>
                           </TableCell>
                         </TableRow>
                       ))}
@@ -1068,9 +1358,22 @@ export function BaglessHoldersReport({ initialToken }: BaglessHoldersReportProps
                   {filteredHolders.map((holder) => (
                     <div key={holder.owner} className="bg-muted/30 rounded-lg p-3 border">
                       <div className="flex justify-between items-start mb-2">
-                        <div className="font-mono text-sm font-bold">#{holder.rank}</div>
-                        <div className="font-mono text-sm font-bold text-green-600">
-                          ${(holder.usdValue || 0).toFixed(2)}
+                        <div className="flex items-center gap-2">
+                          <div className="font-mono text-sm font-bold">#{holder.rank}</div>
+                          {getFlagBadge(holder.owner)}
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <div className="font-mono text-sm font-bold text-green-600">
+                            ${(holder.usdValue || 0).toFixed(2)}
+                          </div>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => handleFlagWallet(holder.owner)}
+                            className="h-7 w-7 p-0"
+                          >
+                            <Flag className="h-3 w-3" />
+                          </Button>
                         </div>
                       </div>
                       <div className="space-y-1">
@@ -1106,6 +1409,62 @@ export function BaglessHoldersReport({ initialToken }: BaglessHoldersReportProps
           </div>
         </>
       )}
+
+      {/* Flag Wallet Modal */}
+      <Dialog open={flagModalOpen} onOpenChange={setFlagModalOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Flag Wallet</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 pt-4">
+            {selectedWallet && (
+              <div className="p-3 bg-muted rounded-lg">
+                <div className="text-xs text-muted-foreground mb-1">Wallet Address</div>
+                <div className="font-mono text-sm break-all">{selectedWallet}</div>
+              </div>
+            )}
+            
+            <div className="space-y-2">
+              <Button
+                variant="outline"
+                className="w-full justify-start border-red-500/30 hover:bg-red-500/10"
+                onClick={() => setWalletFlag('dev')}
+              >
+                <Flag className="h-4 w-4 mr-2 text-red-500" />
+                Mark as Dev Wallet
+              </Button>
+              
+              <Button
+                variant="outline"
+                className="w-full justify-start border-blue-500/30 hover:bg-blue-500/10"
+                onClick={() => setWalletFlag('team')}
+              >
+                <Flag className="h-4 w-4 mr-2 text-blue-500" />
+                Mark as Team Wallet
+              </Button>
+              
+              <Button
+                variant="outline"
+                className="w-full justify-start border-orange-500/30 hover:bg-orange-500/10"
+                onClick={() => setWalletFlag('suspicious')}
+              >
+                <Flag className="h-4 w-4 mr-2 text-orange-500" />
+                Mark as Suspicious
+              </Button>
+              
+              {selectedWallet && walletFlags[selectedWallet] && (
+                <Button
+                  variant="outline"
+                  className="w-full justify-start border-muted-foreground/30"
+                  onClick={() => setWalletFlag(null)}
+                >
+                  Clear Flag
+                </Button>
+              )}
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
