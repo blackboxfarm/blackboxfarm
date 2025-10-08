@@ -9,7 +9,8 @@ import { Switch } from '@/components/ui/switch';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
-import { Loader2, Download, RefreshCw, Flag, AlertTriangle, Shield } from 'lucide-react';
+import { Loader2, Download, RefreshCw, Flag, AlertTriangle, Shield, TrendingUp } from 'lucide-react';
+import { Progress } from '@/components/ui/progress';
 import { useTokenMetadata } from '@/hooks/useTokenMetadata';
 import { AdBanner } from '@/components/AdBanner';
 
@@ -372,6 +373,86 @@ export function BaglessHoldersReport({ initialToken }: BaglessHoldersReportProps
     };
   };
 
+  // Calculate Stability Score
+  const calculateStabilityScore = () => {
+    if (!report) return null;
+    
+    const nonLPHolders = report.holders.filter(h => !h.isLiquidityPool);
+    const whalePercentage = nonLPHolders
+      .filter(h => h.percentageOfSupply >= 1)
+      .reduce((sum, h) => sum + h.percentageOfSupply, 0);
+    
+    const top10Stats = calculateTop10Stats();
+    const lpAnalysis = calculateLPAnalysis();
+    
+    // Whale concentration score (40 points max)
+    const whaleScore = Math.max(0, Math.min(40, 40 - (whalePercentage * 1.33)));
+    
+    // Top 10 distribution score (30 points max)
+    const top10Percentage = top10Stats.cumulativePercentage;
+    let distributionScore = 30;
+    if (top10Percentage > 40) {
+      distributionScore = Math.max(0, 30 - ((top10Percentage - 40) * 0.75));
+    } else if (top10Percentage > 20) {
+      distributionScore = 15 + ((40 - top10Percentage) * 0.75);
+    } else {
+      distributionScore = 25 + ((20 - top10Percentage) * 0.25);
+    }
+    
+    // LP percentage score (20 points max) - ideal range 5-15%
+    const lpPct = lpAnalysis.lpPercentage;
+    let lpScore = 0;
+    if (lpPct >= 5 && lpPct <= 15) {
+      lpScore = 18 + ((15 - Math.abs(lpPct - 10)) * 0.2);
+    } else if ((lpPct >= 2 && lpPct < 5) || (lpPct > 15 && lpPct <= 25)) {
+      lpScore = 10 + (8 * (1 - Math.abs(lpPct - 10) / 15));
+    } else {
+      lpScore = Math.max(0, 10 - (Math.abs(lpPct - 10) / 3));
+    }
+    
+    // Holder count score (10 points max)
+    let holderScore = 0;
+    if (report.totalHolders > 1000) holderScore = 10;
+    else if (report.totalHolders > 500) holderScore = 7 + ((report.totalHolders - 500) / 500) * 3;
+    else if (report.totalHolders > 100) holderScore = 4 + ((report.totalHolders - 100) / 400) * 3;
+    else holderScore = (report.totalHolders / 100) * 4;
+    
+    const totalScore = Math.round(whaleScore + distributionScore + lpScore + holderScore);
+    
+    // Determine risk level based on whale concentration
+    let riskLevel: 'low' | 'medium' | 'high';
+    let emoji: string;
+    let label: string;
+    
+    if (whalePercentage < 10) {
+      riskLevel = 'low';
+      emoji = '🟢';
+      label = 'Community-owned';
+    } else if (whalePercentage < 30) {
+      riskLevel = 'medium';
+      emoji = '🟡';
+      label = 'Neutral';
+    } else {
+      riskLevel = 'high';
+      emoji = '🔴';
+      label = 'High Risk';
+    }
+    
+    return {
+      score: totalScore,
+      riskLevel,
+      emoji,
+      label,
+      whalePercentage,
+      breakdown: {
+        whaleScore: Math.round(whaleScore),
+        distributionScore: Math.round(distributionScore),
+        lpScore: Math.round(lpScore),
+        holderCountScore: Math.round(holderScore)
+      }
+    };
+  };
+
   // Detect suspicious patterns
   const detectSuspiciousPatterns = () => {
     if (!report) return [];
@@ -598,10 +679,10 @@ export function BaglessHoldersReport({ initialToken }: BaglessHoldersReportProps
                     )}
                     <div className="flex-1 min-w-0">
                       <div className="flex flex-wrap items-center gap-2 mb-2">
-                        <span className="text-base md:text-lg font-semibold">
+                        <span className="text-base md:text-lg font-bold text-yellow-600 dark:text-yellow-500">
                           ${tokenData.metadata.symbol || 'UNK'}
                         </span>
-                        <span className="text-base md:text-lg font-semibold">
+                        <span className="text-base md:text-lg font-bold text-yellow-600 dark:text-yellow-500">
                           {tokenData.metadata.name || 'Unknown Token'}
                         </span>
                         {tokenData.metadata.verified && (
@@ -620,9 +701,8 @@ export function BaglessHoldersReport({ initialToken }: BaglessHoldersReportProps
                           "{tokenData.metadata.description}"
                         </p>
                       )}
-                      <div className="text-xs text-muted-foreground">
-                        <div className="block sm:hidden">Decimals: {tokenData.metadata.decimals}</div>
-                        <div className="hidden sm:block">Decimals: {tokenData.metadata.decimals} | Mint: {tokenData.metadata.mint.slice(0, 8)}...{tokenData.metadata.mint.slice(-8)}</div>
+                      <div className="text-xs text-muted-foreground break-all">
+                        Decimals: {tokenData.metadata.decimals} | Mint: {tokenData.metadata.mint}
                       </div>
                     </div>
                   </div>
@@ -670,6 +750,132 @@ export function BaglessHoldersReport({ initialToken }: BaglessHoldersReportProps
                   </div>
                 </div>
               )}
+
+              {/* Stability Score Card */}
+              {(() => {
+                const stabilityData = calculateStabilityScore();
+                if (!stabilityData) return null;
+                
+                const { score, emoji, label, riskLevel, whalePercentage, breakdown } = stabilityData;
+                const top10Stats = calculateTop10Stats();
+                const lpAnalysis = calculateLPAnalysis();
+                
+                const getBgColor = () => {
+                  if (riskLevel === 'low') return 'bg-green-500/10 border-green-500/30';
+                  if (riskLevel === 'medium') return 'bg-yellow-500/10 border-yellow-500/30';
+                  return 'bg-red-500/10 border-red-500/30';
+                };
+                
+                const getTextColor = () => {
+                  if (riskLevel === 'low') return 'text-green-700 dark:text-green-300';
+                  if (riskLevel === 'medium') return 'text-yellow-700 dark:text-yellow-300';
+                  return 'text-red-700 dark:text-red-300';
+                };
+                
+                const getStars = (value: number, max: number) => {
+                  const percentage = (value / max) * 100;
+                  if (percentage >= 90) return '⭐⭐⭐⭐⭐';
+                  if (percentage >= 75) return '⭐⭐⭐⭐';
+                  if (percentage >= 50) return '⭐⭐⭐';
+                  if (percentage >= 25) return '⭐⭐';
+                  return '⭐';
+                };
+                
+                return (
+                  <Card className={`mb-6 border-2 ${getBgColor()}`}>
+                    <CardHeader className="pb-3">
+                      <div className="flex items-center gap-3">
+                        <div className="text-4xl">{emoji}</div>
+                        <div className="flex-1">
+                          <CardTitle className={`text-xl ${getTextColor()}`}>
+                            {label}
+                          </CardTitle>
+                          <p className="text-sm text-muted-foreground mt-1">
+                            Token Distribution Analysis
+                          </p>
+                        </div>
+                      </div>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="space-y-4">
+                        {/* Score Display */}
+                        <div className="text-center py-4">
+                          <div className="flex items-center justify-center gap-2 mb-3">
+                            <TrendingUp className="w-5 h-5 text-primary" />
+                            <span className="text-sm font-medium text-muted-foreground">
+                              Stability Score
+                            </span>
+                          </div>
+                          <div className="text-5xl font-bold text-primary mb-2">
+                            {score}
+                          </div>
+                          <div className="text-muted-foreground text-sm">out of 100</div>
+                          <div className="max-w-xs mx-auto mt-4">
+                            <Progress value={score} className="h-3" />
+                          </div>
+                        </div>
+                        
+                        {/* Score Breakdown */}
+                        <div className="border-t pt-4">
+                          <h4 className="text-sm font-semibold mb-3">Score Breakdown</h4>
+                          <div className="space-y-2 text-sm">
+                            <div className="flex justify-between items-center">
+                              <span className="text-muted-foreground">
+                                Whale concentration: {whalePercentage.toFixed(1)}%
+                              </span>
+                              <span className="font-medium">
+                                {getStars(breakdown.whaleScore, 40)} ({breakdown.whaleScore}/40)
+                              </span>
+                            </div>
+                            <div className="flex justify-between items-center">
+                              <span className="text-muted-foreground">
+                                Top 10 holders: {top10Stats.cumulativePercentage.toFixed(1)}%
+                              </span>
+                              <span className="font-medium">
+                                {getStars(breakdown.distributionScore, 30)} ({breakdown.distributionScore}/30)
+                              </span>
+                            </div>
+                            <div className="flex justify-between items-center">
+                              <span className="text-muted-foreground">
+                                LP percentage: {lpAnalysis.lpPercentage.toFixed(1)}%
+                              </span>
+                              <span className="font-medium">
+                                {getStars(breakdown.lpScore, 20)} ({breakdown.lpScore}/20)
+                              </span>
+                            </div>
+                            <div className="flex justify-between items-center">
+                              <span className="text-muted-foreground">
+                                Holder count: {report.totalHolders.toLocaleString()}
+                              </span>
+                              <span className="font-medium">
+                                {getStars(breakdown.holderCountScore, 10)} ({breakdown.holderCountScore}/10)
+                              </span>
+                            </div>
+                          </div>
+                        </div>
+                        
+                        {/* Distribution Quality Summary */}
+                        <div className="border-t pt-4">
+                          <div className={`text-sm font-medium ${getTextColor()}`}>
+                            Distribution quality: {
+                              score >= 70 ? 'Excellent' :
+                              score >= 50 ? 'Good' :
+                              score >= 30 ? 'Fair' :
+                              'Poor'
+                            }
+                          </div>
+                          <p className="text-xs text-muted-foreground mt-1">
+                            {score >= 70 && 'Strong community ownership with minimal concentration risk.'}
+                            {score >= 50 && score < 70 && 'Moderate distribution with some whale presence.'}
+                            {score >= 30 && score < 50 && 'Uneven distribution may pose risks.'}
+                            {score < 30 && 'High concentration risk - proceed with caution.'}
+                          </p>
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+                );
+              })()}
 
               {/* Functional Wallets Header */}
               <div className="mb-4 p-4 bg-primary/10 rounded-lg border-2 border-primary/30">
