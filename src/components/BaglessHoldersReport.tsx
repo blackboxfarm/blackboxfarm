@@ -649,6 +649,18 @@ export function BaglessHoldersReport({ initialToken }: BaglessHoldersReportProps
                 </div>
               )}
 
+              {/* Functional Wallets Header */}
+              <div className="mb-4 p-4 bg-primary/10 rounded-lg border-2 border-primary/30">
+                <div className="text-center">
+                  <div className="text-3xl md:text-4xl font-bold text-primary">
+                    {filteredHolders.length.toLocaleString()}
+                  </div>
+                  <div className="text-sm md:text-base font-semibold text-foreground">
+                    Functional Wallets above $1
+                  </div>
+                </div>
+              </div>
+
               {/* Primary Statistics - Total Holders and Total Tokens on one line */}
               <div className="grid grid-cols-2 gap-3 md:gap-4 mb-3 md:mb-4">
                 <div className="text-center">
@@ -1091,7 +1103,9 @@ export function BaglessHoldersReport({ initialToken }: BaglessHoldersReportProps
 
           <Card>
             <CardHeader className="pb-4">
-              <CardTitle className="text-base md:text-lg">Holders List ({filteredHolders.length} wallets)</CardTitle>
+              <CardTitle className="text-base md:text-lg">
+                Holders List ({filteredHolders.length} wallets) - excluding Small and Dust Wallets for a better SnapShot!
+              </CardTitle>
             </CardHeader>
             <CardContent>
               {/* Report Summary */}
