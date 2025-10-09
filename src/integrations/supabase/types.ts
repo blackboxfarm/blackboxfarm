@@ -1956,6 +1956,57 @@ export type Database = {
           },
         ]
       }
+      wallet_metadata: {
+        Row: {
+          avatar_url: string | null
+          created_at: string
+          discord_handle: string | null
+          display_name: string | null
+          id: string
+          last_lookup_at: string
+          lookup_count: number
+          lookup_source: string
+          next_lookup_at: string
+          sns_name: string | null
+          telegram_handle: string | null
+          twitter_handle: string | null
+          updated_at: string
+          wallet_address: string
+        }
+        Insert: {
+          avatar_url?: string | null
+          created_at?: string
+          discord_handle?: string | null
+          display_name?: string | null
+          id?: string
+          last_lookup_at?: string
+          lookup_count?: number
+          lookup_source: string
+          next_lookup_at?: string
+          sns_name?: string | null
+          telegram_handle?: string | null
+          twitter_handle?: string | null
+          updated_at?: string
+          wallet_address: string
+        }
+        Update: {
+          avatar_url?: string | null
+          created_at?: string
+          discord_handle?: string | null
+          display_name?: string | null
+          id?: string
+          last_lookup_at?: string
+          lookup_count?: number
+          lookup_source?: string
+          next_lookup_at?: string
+          sns_name?: string | null
+          telegram_handle?: string | null
+          twitter_handle?: string | null
+          updated_at?: string
+          wallet_address?: string
+        }
+        Relationships: []
+      }
       wallet_pools: {
         Row: {
           created_at: string | null

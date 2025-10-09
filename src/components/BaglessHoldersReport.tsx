@@ -88,6 +88,8 @@ export function BaglessHoldersReport({ initialToken }: BaglessHoldersReportProps
   const [priceSource, setPriceSource] = useState<string>('');
   const [isLoading, setIsLoading] = useState(false);
   const [report, setReport] = useState<HoldersReport | null>(null);
+  const [walletTwitterHandles, setWalletTwitterHandles] = useState<Map<string, string>>(new Map());
+  const [isLoadingTwitter, setIsLoadingTwitter] = useState(false);
   const [filteredHolders, setFilteredHolders] = useState<TokenHolder[]>([]);
   const [showDustOnly, setShowDustOnly] = useState(false);
   const [showSmallOnly, setShowSmallOnly] = useState(false);
@@ -198,6 +200,49 @@ export function BaglessHoldersReport({ initialToken }: BaglessHoldersReportProps
     }
   }, [report, showDustOnly, showSmallOnly, showMediumOnly, showLargeOnly, showRealOnly, showBossOnly, showKingpinOnly, showSuperBossOnly, showBabyWhaleOnly, showTrueWhaleOnly, showLPOnly, excludeLPs]);
 
+  const fetchTwitterHandles = async (reportData: HoldersReport) => {
+    setIsLoadingTwitter(true);
+    try {
+      // Get top 10 holders with USD values
+      const walletsToLookup = reportData.holders
+        .slice(0, 10)
+        .map(holder => ({
+          address: holder.owner,
+          usdValue: holder.usdValue
+        }));
+
+      const { data, error } = await supabase.functions.invoke('wallet-sns-lookup', {
+        body: { wallets: walletsToLookup }
+      });
+
+      if (error) {
+        console.error("Error fetching Twitter handles:", error);
+        return;
+      }
+
+      // Build map of wallet address -> Twitter handle
+      const twitterMap = new Map<string, string>();
+      data.results?.forEach((result: any) => {
+        if (result.twitter && result.source !== 'skipped_threshold') {
+          twitterMap.set(result.address, result.twitter);
+        }
+      });
+
+      setWalletTwitterHandles(twitterMap);
+      
+      if (twitterMap.size > 0) {
+        toast({
+          title: "Twitter Handles Found",
+          description: `Found ${twitterMap.size} verified Twitter accounts via SNS`,
+        });
+      }
+    } catch (error: any) {
+      console.error("Error fetching Twitter handles:", error);
+    } finally {
+      setIsLoadingTwitter(false);
+    }
+  };
+
   const fetchTokenPrice = async () => {
     if (!tokenMint.trim()) return;
     
@@ -297,6 +342,9 @@ export function BaglessHoldersReport({ initialToken }: BaglessHoldersReportProps
         setDiscoveredPrice(data.tokenPriceUSD);
         setPriceSource(data.priceSource || 'Multiple APIs');
       }
+      
+      // Fetch Twitter handles for top holders
+      fetchTwitterHandles(data);
       
       const priceInfo = data.tokenPriceUSD > 0 ? 
         ` (Price: $${data.tokenPriceUSD.toFixed(8)}${data.priceSource ? ` from ${data.priceSource}` : ''})` : 
@@ -1182,15 +1230,23 @@ export function BaglessHoldersReport({ initialToken }: BaglessHoldersReportProps
                                     ${holder.usdValue.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                                   </td>
                                   <td className="p-2 text-center">
-                                    <a 
-                                      href={`https://solscan.io/account/${holder.owner}`}
-                                      target="_blank"
-                                      rel="noopener noreferrer"
-                                      className="text-blue-500 hover:text-blue-600 text-xs"
-                                      title="View on Solscan to check for linked Twitter/X account"
-                                    >
-                                      View
-                                    </a>
+                                    <div className="flex items-center justify-center gap-2">
+                                      {isLoadingTwitter ? (
+                                        <div className="h-4 w-4 animate-pulse bg-gray-300 dark:bg-gray-600 rounded"></div>
+                                      ) : walletTwitterHandles.has(holder.owner) ? (
+                                        <a
+                                          href={`https://twitter.com/${walletTwitterHandles.get(holder.owner)}`}
+                                          target="_blank"
+                                          rel="noopener noreferrer"
+                                          className="text-blue-600 dark:text-blue-400 hover:underline inline-flex items-center gap-1 font-mono text-sm"
+                                          title="Twitter verified via SNS"
+                                        >
+                                          @{walletTwitterHandles.get(holder.owner)}
+                                        </a>
+                                      ) : (
+                                        <span className="text-gray-400 dark:text-gray-500 text-xs" title="No SNS Twitter record found">—</span>
+                                      )}
+                                    </div>
                                   </td>
                                 </tr>
                               ))}
