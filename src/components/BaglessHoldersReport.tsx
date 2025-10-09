@@ -1088,21 +1088,58 @@ export function BaglessHoldersReport({ initialToken }: BaglessHoldersReportProps
                 );
               })()}
 
-              {/* First 10 Buyers (excluding LP and Dev) */}
+              {/* First 10 Buyers (including LP and Dev) */}
               {(() => {
                 const devWallet = report.potentialDevWallet?.address;
-                const first10Buyers = report.holders
+                
+                // Build the display list: LP first, then Dev, then first 10 regular buyers
+                const displayList = [];
+                
+                // Add LP wallet(s) as position 1
+                const lpWallets = report.holders.filter(h => h.isLiquidityPool);
+                if (lpWallets.length > 0) {
+                  lpWallets.forEach((lp, idx) => {
+                    displayList.push({
+                      ...lp,
+                      displayLabel: lpWallets.length > 1 ? `LP${idx + 1}` : 'LP',
+                      position: displayList.length + 1
+                    });
+                  });
+                }
+                
+                // Add Dev wallet as position 2 (or after LPs)
+                if (devWallet) {
+                  const devWalletData = report.holders.find(h => h.owner === devWallet);
+                  if (devWalletData) {
+                    displayList.push({
+                      ...devWalletData,
+                      displayLabel: 'DEV',
+                      position: displayList.length + 1
+                    });
+                  }
+                }
+                
+                // Add first 10 regular buyers (excluding LP and Dev)
+                const regularBuyers = report.holders
                   .filter(h => !h.isLiquidityPool && h.owner !== devWallet)
                   .slice(0, 10);
                 
-                if (first10Buyers.length === 0) return null;
+                regularBuyers.forEach((buyer, idx) => {
+                  displayList.push({
+                    ...buyer,
+                    displayLabel: `${idx + 1}`,
+                    position: displayList.length + 1
+                  });
+                });
+                
+                if (displayList.length === 0) return null;
                 
                 return (
                   <div className="mb-4 md:mb-6">
                     <Card>
                       <CardHeader className="pb-3">
-                        <CardTitle className="text-lg">First 10 Buyers (after LP & Dev)</CardTitle>
-                        <p className="text-xs text-muted-foreground">Early investors excluding liquidity pools and potential dev wallet</p>
+                        <CardTitle className="text-lg">First 10 Buyers (including LP & Dev)</CardTitle>
+                        <p className="text-xs text-muted-foreground">Early investors including liquidity pools and potential Dev wallet</p>
                       </CardHeader>
                       <CardContent>
                         <div className="overflow-x-auto">
@@ -1118,9 +1155,17 @@ export function BaglessHoldersReport({ initialToken }: BaglessHoldersReportProps
                               </tr>
                             </thead>
                             <tbody>
-                              {first10Buyers.map((holder, idx) => (
+                              {displayList.map((holder) => (
                                 <tr key={holder.owner} className="border-b hover:bg-muted/20">
-                                  <td className="p-2 font-mono">{idx + 1}</td>
+                                  <td className="p-2 font-mono">
+                                    {holder.displayLabel === 'LP' || holder.displayLabel.startsWith('LP') ? (
+                                      <span className="font-bold text-yellow-500">#{holder.displayLabel}</span>
+                                    ) : holder.displayLabel === 'DEV' ? (
+                                      <span className="font-bold text-purple-500">#{holder.displayLabel}</span>
+                                    ) : (
+                                      `#${holder.displayLabel}`
+                                    )}
+                                  </td>
                                   <td className="p-2">
                                     <a 
                                       href={`https://solscan.io/account/${holder.owner}`}
