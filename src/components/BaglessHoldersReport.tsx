@@ -1148,7 +1148,7 @@ export function BaglessHoldersReport({ initialToken }: BaglessHoldersReportProps
                               <tr className="border-b">
                                 <th className="text-left p-2">#</th>
                                 <th className="text-left p-2">Wallet</th>
-                                <th className="text-right p-2">Balance</th>
+                                <th className="text-right p-2">Token Balance</th>
                                 <th className="text-right p-2">% Supply</th>
                                 <th className="text-right p-2">USD Value</th>
                                 <th className="text-center p-2">Social</th>
@@ -1176,10 +1176,10 @@ export function BaglessHoldersReport({ initialToken }: BaglessHoldersReportProps
                                       {truncateAddress(holder.owner)}
                                     </a>
                                   </td>
-                                  <td className="p-2 text-right font-mono">{formatBalance(holder.balance)}</td>
+                                  <td className="p-2 text-right font-mono">{Math.floor(holder.balance).toLocaleString()}</td>
                                   <td className="p-2 text-right font-semibold">{holder.percentageOfSupply.toFixed(2)}%</td>
                                   <td className="p-2 text-right text-green-600 dark:text-green-400 font-medium">
-                                    ${holder.usdValue.toFixed(2)}
+                                    ${holder.usdValue.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                                   </td>
                                   <td className="p-2 text-center">
                                     <a 
