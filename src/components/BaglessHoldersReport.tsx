@@ -196,25 +196,25 @@ export function BaglessHoldersReport({ initialToken }: BaglessHoldersReportProps
       // Apply category filtering (only if not showing LP only)
       if (!showLPOnly) {
         if (showDustOnly) {
-          filtered = filtered.filter(h => h.isDustWallet);
+          filtered = filtered.filter(h => h.usdValue < 1);
         } else if (showSmallOnly) {
-          filtered = filtered.filter(h => h.isSmallWallet);
+          filtered = filtered.filter(h => h.usdValue >= 1 && h.usdValue < 5);
         } else if (showMediumOnly) {
-          filtered = filtered.filter(h => h.isMediumWallet);
+          filtered = filtered.filter(h => h.usdValue >= 1 && h.usdValue < 4);
         } else if (showLargeOnly) {
-          filtered = filtered.filter(h => h.isLargeWallet);
+          filtered = filtered.filter(h => h.usdValue >= 5 && h.usdValue < 49);
         } else if (showRealOnly) {
-          filtered = filtered.filter(h => !h.isDustWallet && !h.isSmallWallet && !h.isMediumWallet && !h.isLargeWallet && !h.isBossWallet && !h.isKingpinWallet && !h.isSuperBossWallet && !h.isBabyWhaleWallet && !h.isTrueWhaleWallet && !h.isLiquidityPool);
+          filtered = filtered.filter(h => h.usdValue >= 50 && h.usdValue < 199);
         } else if (showBossOnly) {
-          filtered = filtered.filter(h => h.isBossWallet);
+          filtered = filtered.filter(h => h.usdValue >= 200 && h.usdValue < 500);
         } else if (showKingpinOnly) {
-          filtered = filtered.filter(h => h.isKingpinWallet);
+          filtered = filtered.filter(h => h.usdValue >= 500 && h.usdValue < 1000);
         } else if (showSuperBossOnly) {
-          filtered = filtered.filter(h => h.isSuperBossWallet);
+          filtered = filtered.filter(h => h.usdValue >= 1000 && h.usdValue < 2000);
         } else if (showBabyWhaleOnly) {
-          filtered = filtered.filter(h => h.isBabyWhaleWallet);
+          filtered = filtered.filter(h => h.usdValue >= 2000 && h.usdValue < 5000);
         } else if (showTrueWhaleOnly) {
-          filtered = filtered.filter(h => h.isTrueWhaleWallet);
+          filtered = filtered.filter(h => h.usdValue >= 5000);
         }
       }
       
