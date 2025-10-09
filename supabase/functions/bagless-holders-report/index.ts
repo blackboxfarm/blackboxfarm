@@ -293,71 +293,97 @@ serve(async (req) => {
       console.warn('⚠️ No Helius API key - skipping Helius phase for historical buyers');
     }
 
-    // RPC FALLBACK: derive buyers by scanning transactions that reference the mint address
+    // RPC FALLBACK: Scan token accounts to find first inbound transfers per owner
     if (firstBuyersData.length === 0) {
       try {
         const rpcUrl = usedRpc || rpcEndpoints[0];
-        // 1) Get up to 100 signatures referencing the mint account (most recent first)
-        const sigsResp = await fetch(rpcUrl, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            jsonrpc: '2.0',
-            id: 1,
-            method: 'getSignaturesForAddress',
-            params: [tokenMint, { limit: 100 }]
-          })
-        });
-        const sigsJson = await sigsResp.json();
-        const signatures: string[] = sigsJson?.result?.map((r: any) => r.signature) || [];
-        console.log(`RPC fallback: fetched ${signatures.length} signatures for mint`);
-
-        // Process oldest first
         const buyersSeen = new Set<string>();
-        for (const sig of [...signatures].reverse()) {
+
+        // Build a list of token accounts for this mint (owner + token account pubkey)
+        const tokenAccounts: { tokenAcc: string; owner: string }[] =
+          (data.result || []).map((acc: any) => ({
+            tokenAcc: acc.pubkey,
+            owner: acc.account?.data?.parsed?.info?.owner,
+          }))
+          .filter((a: any) => a.owner && a.tokenAcc);
+
+        // Limit how many accounts to scan to avoid timeouts
+        const MAX_ACCOUNTS = 250;
+        const MAX_SIGS_PER_ACCOUNT = 20;
+
+        let accountsScanned = 0;
+        for (const acc of tokenAccounts) {
           if (firstBuyersData.length >= 25) break;
-          // 2) Fetch parsed transaction
-          const txResp = await fetch(rpcUrl, {
+          if (accountsScanned >= MAX_ACCOUNTS) break;
+          accountsScanned++;
+
+          // 1) Fetch recent signatures for this token account
+          const sigsResp = await fetch(rpcUrl, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
               jsonrpc: '2.0',
               id: 1,
-              method: 'getTransaction',
-              params: [sig, { encoding: 'jsonParsed' }]
+              method: 'getSignaturesForAddress',
+              params: [acc.tokenAcc, { limit: MAX_SIGS_PER_ACCOUNT }]
             })
           });
-          if (!txResp.ok) continue;
-          const txJson = await txResp.json();
-          const meta = txJson?.result?.meta;
-          if (!meta) continue;
-          const pre = meta.preTokenBalances || [];
-          const post = meta.postTokenBalances || [];
+          const sigsJson = await sigsResp.json();
+          const signatures: string[] = sigsJson?.result?.map((r: any) => r.signature) || [];
 
-          // Find owners with positive delta for our mint
-          for (const postEntry of post) {
-            if (postEntry.mint !== tokenMint) continue;
-            const idx = postEntry.accountIndex;
-            const preEntry = pre.find((p: any) => p.accountIndex === idx);
-            const preAmt = Number(preEntry?.uiTokenAmount?.amount || preEntry?.uiTokenAmount?.uiAmount || 0);
-            const postAmt = Number(postEntry?.uiTokenAmount?.amount || postEntry?.uiTokenAmount?.uiAmount || 0);
-            const delta = postAmt - preAmt;
-            const owner = postEntry.owner;
-            if (!owner || buyersSeen.has(owner) || !isFinite(delta) || delta <= 0) continue;
+          // Process oldest first for this account
+          for (const sig of [...signatures].reverse()) {
+            if (firstBuyersData.length >= 25) break;
 
-            buyersSeen.add(owner);
-            firstBuyersData.push({
-              wallet: owner,
-              firstBoughtAt: txJson?.result?.blockTime || Math.floor(Date.now() / 1000),
-              initialTokens: delta,
-              signature: sig,
-              purchaseRank: firstBuyersData.length + 1,
+            const txResp = await fetch(rpcUrl, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                jsonrpc: '2.0',
+                id: 1,
+                method: 'getTransaction',
+                params: [sig, { encoding: 'jsonParsed' }]
+              })
             });
+            if (!txResp.ok) continue;
+            const txJson = await txResp.json();
+            txCount += 1;
+            const meta = txJson?.result?.meta;
+            const blockTime = txJson?.result?.blockTime || Math.floor(Date.now() / 1000);
+            if (!meta) continue;
+
+            const pre = meta.preTokenBalances || [];
+            const post = meta.postTokenBalances || [];
+
+            // Find entries in post where accountIndex matches this token account and mint matches
+            const firstPost = post.find((p: any) => p.mint === tokenMint && p.owner === acc.owner);
+            if (!firstPost) continue;
+
+            const idx = firstPost.accountIndex;
+            const preEntry = pre.find((p: any) => p.accountIndex === idx && p.mint === tokenMint);
+            const preAmt = Number(preEntry?.uiTokenAmount?.amount || preEntry?.uiTokenAmount?.uiAmount || 0);
+            const postAmt = Number(firstPost?.uiTokenAmount?.amount || firstPost?.uiTokenAmount?.uiAmount || 0);
+            const delta = postAmt - preAmt;
+
+            // Treat first time balance increases from ~0 as a buy
+            if (!buyersSeen.has(acc.owner) && isFinite(delta) && delta > 0 && (preAmt === 0 || !preEntry)) {
+              buyersSeen.add(acc.owner);
+              firstBuyersData.push({
+                wallet: acc.owner,
+                firstBoughtAt: blockTime,
+                initialTokens: delta,
+                signature: sig,
+                purchaseRank: firstBuyersData.length + 1,
+              });
+            }
+
             if (firstBuyersData.length >= 25) break;
           }
         }
+
+        console.log(`RPC account-scan fallback found ${firstBuyersData.length} buyers after scanning ${accountsScanned} accounts (tx inspected: ${txCount}).`);
       } catch (e) {
-        console.error('❌ RPC fallback failed:', e instanceof Error ? e.message : String(e));
+        console.error('❌ RPC fallback (account scan) failed:', e instanceof Error ? e.message : String(e));
       }
     }
 
