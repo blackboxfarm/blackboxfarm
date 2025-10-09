@@ -181,31 +181,48 @@ serve(async (req) => {
     
     if (heliusApiKey) {
       try {
-        console.log(`Calling Helius Enhanced Transactions API for token: ${tokenMint}`);
+        console.log(`Calling Helius Enhanced Transactions API (mint search) for token: ${tokenMint}`);
 
-        // Robust approach: try GET by address with pagination + 429 backoff
+        // Use POST /v0/transactions with tokenTransfers.mint filter + 429 backoff + pagination
         const buyersSeen = new Set<string>();
-        let until: string | undefined = undefined;
+        let paginationToken: string | undefined = undefined;
         let pages = 0;
         let heliusUsed = false;
 
-        const fetchWithBackoff = async (url: string, attempt = 1): Promise<Response> => {
-          const resp = await fetch(url, { headers: { 'Accept': 'application/json' } });
-          if (resp.status === 429 && attempt < 5) {
+        const postWithBackoff = async (attempt = 1): Promise<Response> => {
+          const url = `https://api.helius.xyz/v0/transactions?api-key=${heliusApiKey}`;
+          const body = {
+            query: {
+              tokenTransfers: {
+                mint: [tokenMint]
+              }
+            },
+            options: {
+              limit: 200,
+              transactionDetails: 'full',
+              paginationToken
+            }
+          } as any;
+
+          const resp = await fetch(url, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+            body: JSON.stringify(body)
+          });
+
+          if (resp.status === 429 && attempt < 6) {
             const wait = 300 * attempt; // ms
             console.log(`Helius 429 rate limit. Retrying in ${wait}ms (attempt ${attempt})`);
             await new Promise((r) => setTimeout(r, wait));
-            return fetchWithBackoff(url, attempt + 1);
+            return postWithBackoff(attempt + 1);
           }
+
           return resp;
         };
 
-        // Page through up to 5 pages or until 25 buyers are found
-        while (firstBuyersData.length < 25 && pages < 5) {
-          const base = `https://api.helius.xyz/v0/addresses/${tokenMint}/transactions?api-key=${heliusApiKey}&limit=100`;
-          const url = until ? `${base}&until=${until}` : base;
-          const txResponse = await fetchWithBackoff(url);
-
+        // Page through up to 10 pages or until 25 buyers are found
+        while (firstBuyersData.length < 25 && pages < 10) {
+          const txResponse = await postWithBackoff();
           console.log(`Helius response status: ${txResponse.status}`);
           if (!txResponse.ok) {
             const errorText = await txResponse.text();
@@ -214,8 +231,11 @@ serve(async (req) => {
           }
 
           heliusUsed = true;
-          const transactions: any[] = await txResponse.json();
-          const count = Array.isArray(transactions) ? transactions.length : 0;
+          const json = await txResponse.json();
+          const transactions: any[] = Array.isArray(json)
+            ? json
+            : (Array.isArray(json?.result) ? json.result : []);
+          const count = transactions.length;
           txCount += count;
           console.log(`📦 Page ${pages + 1}: ${count} transactions`);
 
@@ -234,12 +254,12 @@ serve(async (req) => {
                 const recipient: string | undefined = transfer.toUserAccount;
                 const amount = Number(transfer.tokenAmount || 0);
                 if (!recipient || buyersSeen.has(recipient) || !isFinite(amount) || amount <= 0) continue;
-                // Skip burn/system
+                // Skip burn/system and common program/LP accounts
                 if (
                   recipient === '11111111111111111111111111111111' ||
                   recipient === 'TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA' ||
-                  recipient.startsWith('5Q544fKrF') || // Raydium LPs
-                  recipient.startsWith('675kPX9M') // Orca LPs
+                  recipient.startsWith('5Q544fKrF') || // Raydium
+                  recipient.startsWith('675kPX9M')    // Orca
                 ) continue;
 
                 buyersSeen.add(recipient);
@@ -258,8 +278,9 @@ serve(async (req) => {
           }
 
           // Prepare pagination for next page (older)
-          until = transactions[transactions.length - 1]?.signature;
+          paginationToken = (Array.isArray(json) ? undefined : json?.paginationToken) || undefined;
           pages += 1;
+          if (!paginationToken) break;
         }
 
         if (firstBuyersData.length === 0) {
@@ -619,8 +640,8 @@ serve(async (req) => {
           'Helius API key not configured - historical buyer tracking unavailable') : 
         null,
       firstBuyersDebug: {
-        endpoint: heliusApiKey ? 'GET /v0/addresses/{mint}/transactions + RPC fallback' : 'RPC fallback',
-        method: heliusApiKey ? 'by_address + tokenTransfers filter' : 'rpc getSignaturesForAddress + getTransaction',
+        endpoint: heliusApiKey ? 'POST /v0/transactions + RPC fallback' : 'RPC fallback',
+        method: heliusApiKey ? 'mint_search' : 'rpc getSignaturesForAddress + getTransaction',
         buyersFound: firstBuyersData.length,
         totalTransactionsSearched: txCount
       },
