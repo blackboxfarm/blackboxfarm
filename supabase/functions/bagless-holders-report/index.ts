@@ -177,6 +177,7 @@ serve(async (req) => {
     // FETCH HISTORICAL FIRST 25 BUYERS using Helius
     console.log('🔍 Fetching historical first 25 buyers...');
     const firstBuyersData: any[] = [];
+    let txCount = 0;
     
     if (heliusApiKey) {
       try {
@@ -198,7 +199,7 @@ serve(async (req) => {
                 }
               },
               options: {
-                limit: 100,
+                limit: 500,
                 transactionDetails: "full"
               }
             })
@@ -209,9 +210,11 @@ serve(async (req) => {
         
         if (txResponse.ok) {
           const transactions = await txResponse.json();
-          console.log(`📦 Fetched ${transactions?.length || 0} transactions`);
+          const count = Array.isArray(transactions) ? transactions.length : 0;
+          txCount = count;
+          console.log(`📦 Fetched ${count} transactions`);
           
-          if (!transactions || transactions.length === 0) {
+          if (!transactions || count === 0) {
             console.warn('⚠️ No transactions returned from Helius');
           } else {
             // Log first transaction structure for debugging
@@ -559,14 +562,14 @@ serve(async (req) => {
       firstBuyers: firstBuyersWithPNL, // NEW: Historical first 25 buyers with PNL
       firstBuyersError: firstBuyersData.length === 0 ? 
         (heliusApiKey ? 
-          `No buyers found (searched ${firstBuyersData.length} transactions using Enhanced Transactions API)` : 
+          `No buyers found (searched ${txCount} transactions using Enhanced Transactions API)` : 
           'Helius API key not configured - historical buyer tracking unavailable') : 
         null,
       firstBuyersDebug: {
         endpoint: 'POST /v0/transactions',
         method: 'tokenTransfers.mint filter',
         buyersFound: firstBuyersData.length,
-        totalTransactionsSearched: firstBuyersData.length
+        totalTransactionsSearched: txCount
       },
       summary: `Found ${rankedHolders.length} total holders (${lpWallets.length} LP detected${lpWallets.length > 0 ? ': ' + lpWallets.map(lp => lp.detectedPlatform).filter(Boolean).join(', ') : ''}). ${trueWhaleWallets} true whale wallets (≥$5K), ${babyWhaleWallets} baby whale wallets ($2K-$5K), ${superBossWallets} super boss wallets ($1K-$2K), ${kingpinWallets} kingpin wallets ($500-$1K), ${bossWallets} boss wallets ($200-$500), ${realWallets} real wallets ($50-$199), ${largeWallets} large wallets ($5-$49), ${mediumWallets} medium wallets ($1-$4), ${smallWallets} small wallets (<$1), ${dustWallets} dust wallets (<1 token). Total tokens distributed: ${totalBalance.toLocaleString()}${priceSource ? ` (Price from ${priceSource})` : ''}${potentialDevWallet ? `. Potential dev: ${potentialDevWallet.address.slice(0, 4)}...${potentialDevWallet.address.slice(-4)} (${potentialDevWallet.percentageOfSupply.toFixed(1)}%)` : ''}. First ${firstBuyersWithPNL.length} buyers tracked with ${firstBuyersWithPNL.filter(b => b.hasSold).length} having sold tokens.`
     };

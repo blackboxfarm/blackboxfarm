@@ -48,7 +48,7 @@ Deno.serve(async (req) => {
       .eq('is_active', true)
       .maybeSingle()
 
-    const minUsdThreshold = configData?.config_value?.min_usd_value || 1000
+    const minUsdThreshold = configData?.config_value?.min_usd_value || 100
 
     const results: WalletLookupResult[] = []
     const stats = {

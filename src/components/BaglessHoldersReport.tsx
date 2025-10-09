@@ -234,7 +234,8 @@ export function BaglessHoldersReport({ initialToken }: BaglessHoldersReportProps
     try {
       // Get top 10 holders with USD values
       const walletsToLookup = reportData.holders
-        .slice(0, 10)
+        .filter(h => (h.usdValue || 0) >= 100)
+        .slice(0, 200)
         .map(holder => ({
           address: holder.owner,
           usdValue: holder.usdValue
@@ -1123,19 +1124,36 @@ export function BaglessHoldersReport({ initialToken }: BaglessHoldersReportProps
                               View Top 25 Holders List
                             </AccordionTrigger>
                             <AccordionContent>
-                              <div className="space-y-2 pt-2">
+                              <div className="space-y-3 pt-2">
+                                <div className="grid grid-cols-12 gap-2 text-xs text-muted-foreground px-2">
+                                  <div className="col-span-1">#</div>
+                                  <div className="col-span-6">Wallet Address</div>
+                                  <div className="col-span-2 text-right">Tokens</div>
+                                  <div className="col-span-2 text-right">USD</div>
+                                  <div className="col-span-1 text-right">%</div>
+                                </div>
                                 {top25.map((holder, idx) => (
-                                  <div key={holder.owner} className="flex items-center gap-2">
-                                    <div className="text-xs text-muted-foreground w-6">#{idx + 1}</div>
-                                    <div className="flex-1 bg-muted/30 rounded-full h-6 relative overflow-hidden">
-                                      <div
-                                        className="absolute inset-y-0 left-0 bg-primary/70 transition-all"
-                                        style={{ width: `${Math.min(holder.percentageOfSupply, 100)}%` }}
-                                      />
-                                      <div className="absolute inset-0 flex items-center justify-between px-2 text-xs">
-                                        <span className="font-mono">{truncateAddress(holder.owner)}</span>
-                                        <span className="font-semibold">{holder.percentageOfSupply.toFixed(2)}%</span>
-                                      </div>
+                                  <div key={holder.owner} className="grid grid-cols-12 gap-2 items-center px-2 py-2 rounded-md border">
+                                    <div className="col-span-1 text-xs text-muted-foreground">{idx + 1}</div>
+                                    <div className="col-span-6 font-mono break-all">
+                                      <a
+                                        href={`https://solscan.io/account/${holder.owner}`}
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        className="text-primary hover:underline"
+                                        title={`View ${holder.owner} on Solscan`}
+                                      >
+                                        {holder.owner}
+                                      </a>
+                                    </div>
+                                    <div className="col-span-2 text-right text-sm">
+                                      {holder.balance.toLocaleString(undefined, { maximumFractionDigits: 6 })}
+                                    </div>
+                                    <div className="col-span-2 text-right text-sm">
+                                      ${(holder.usdValue || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                    </div>
+                                    <div className="col-span-1 text-right text-sm font-semibold">
+                                      {holder.percentageOfSupply.toFixed(2)}%
                                     </div>
                                   </div>
                                 ))}
