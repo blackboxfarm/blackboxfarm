@@ -944,6 +944,42 @@ export type Database = {
         }
         Relationships: []
       }
+      kol_wallets: {
+        Row: {
+          created_at: string
+          first_seen_at: string
+          id: string
+          is_active: boolean
+          last_verified_at: string
+          sns_name: string | null
+          twitter_handle: string
+          updated_at: string
+          wallet_address: string
+        }
+        Insert: {
+          created_at?: string
+          first_seen_at?: string
+          id?: string
+          is_active?: boolean
+          last_verified_at?: string
+          sns_name?: string | null
+          twitter_handle: string
+          updated_at?: string
+          wallet_address: string
+        }
+        Update: {
+          created_at?: string
+          first_seen_at?: string
+          id?: string
+          is_active?: boolean
+          last_verified_at?: string
+          sns_name?: string | null
+          twitter_handle?: string
+          updated_at?: string
+          wallet_address?: string
+        }
+        Relationships: []
+      }
       monitored_wallets: {
         Row: {
           created_at: string

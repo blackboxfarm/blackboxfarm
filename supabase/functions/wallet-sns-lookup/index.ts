@@ -138,6 +138,20 @@ Deno.serve(async (req) => {
             ignoreDuplicates: false
           })
 
+          // If Twitter handle found, add to KOL wallets table
+          if (result.twitter) {
+            await supabase.from('kol_wallets').upsert({
+              wallet_address: wallet.address,
+              twitter_handle: result.twitter,
+              sns_name: result.snsName || null,
+              last_verified_at: new Date().toISOString(),
+              is_active: true
+            }, {
+              onConflict: 'wallet_address',
+              ignoreDuplicates: false
+            })
+          }
+
           stats.lookedUp++
 
           return {
@@ -163,6 +177,20 @@ Deno.serve(async (req) => {
             onConflict: 'wallet_address',
             ignoreDuplicates: false
           })
+
+          // Check if this wallet was previously a KOL and mark inactive
+          const { data: existingKol } = await supabase
+            .from('kol_wallets')
+            .select('id')
+            .eq('wallet_address', wallet.address)
+            .maybeSingle()
+
+          if (existingKol) {
+            await supabase
+              .from('kol_wallets')
+              .update({ is_active: false, last_verified_at: new Date().toISOString() })
+              .eq('wallet_address', wallet.address)
+          }
 
           stats.lookedUp++
 
