@@ -109,6 +109,8 @@ export function BaglessHoldersReport({ initialToken }: BaglessHoldersReportProps
   const [report, setReport] = useState<HoldersReport | null>(null);
   const [walletTwitterHandles, setWalletTwitterHandles] = useState<Map<string, string>>(new Map());
   const [isLoadingTwitter, setIsLoadingTwitter] = useState(false);
+  const [kolWallets, setKolWallets] = useState<any[]>([]);
+  const [kolMatches, setKolMatches] = useState<any[]>([]);
   const [filteredHolders, setFilteredHolders] = useState<TokenHolder[]>([]);
   const [showDustOnly, setShowDustOnly] = useState(false);
   const [showSmallOnly, setShowSmallOnly] = useState(false);
@@ -262,6 +264,29 @@ export function BaglessHoldersReport({ initialToken }: BaglessHoldersReportProps
     }
   };
 
+  const fetchKOLWallets = async (reportData: HoldersReport) => {
+    try {
+      const { data, error } = await supabase
+        .from('kol_wallets')
+        .select('wallet_address,twitter_handle,sns_name,last_verified_at,is_active')
+        .eq('is_active', true);
+
+      if (error) {
+        console.error('Error fetching KOL wallets:', error);
+        return;
+      }
+
+      setKolWallets(data || []);
+      if (reportData?.holders?.length) {
+        const holderSet = new Set(reportData.holders.map(h => h.owner));
+        const matches = (data || []).filter((k: any) => holderSet.has(k.wallet_address));
+        setKolMatches(matches);
+      }
+    } catch (err) {
+      console.error('Error fetching KOL wallets:', err);
+    }
+  };
+
   const fetchTokenPrice = async () => {
     if (!tokenMint.trim()) return;
     
@@ -364,6 +389,8 @@ export function BaglessHoldersReport({ initialToken }: BaglessHoldersReportProps
       
       // Fetch Twitter handles for top holders
       fetchTwitterHandles(data);
+      // Fetch KOL wallets and compute matches
+      fetchKOLWallets(data);
       
       const priceInfo = data.tokenPriceUSD > 0 ? 
         ` (Price: $${data.tokenPriceUSD.toFixed(8)}${data.priceSource ? ` from ${data.priceSource}` : ''})` : 
@@ -1295,6 +1322,66 @@ export function BaglessHoldersReport({ initialToken }: BaglessHoldersReportProps
                   </Card>
                 </div>
               )}
+
+              {/* Fallback when no historical buyers */}
+              {report && (!report.firstBuyers || report.firstBuyers.length === 0) && (
+                <div className="mb-4 md:mb-6">
+                  <Card>
+                    <CardHeader className="pb-3">
+                      <CardTitle className="text-lg">First 25 Historical Buyers 🥇</CardTitle>
+                      <p className="text-xs text-muted-foreground">
+                        No historical buyer data available. This may occur due to rate limits or missing Helius API key.
+                      </p>
+                    </CardHeader>
+                  </Card>
+                </div>
+              )}
+
+              {/* KOL Table */}
+              <div className="mb-4 md:mb-6">
+                <Card>
+                  <CardHeader className="pb-3">
+                    <CardTitle className="text-lg">KOL Wallets</CardTitle>
+                    <p className="text-xs text-muted-foreground">Known KOL wallets detected among current holders</p>
+                  </CardHeader>
+                  <CardContent>
+                    {kolMatches.length > 0 ? (
+                      <div className="overflow-x-auto">
+                        <table className="w-full text-xs">
+                          <thead>
+                            <tr className="border-b">
+                              <th className="text-left p-2">Wallet</th>
+                              <th className="text-left p-2">Twitter</th>
+                              <th className="text-left p-2">SNS</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {kolMatches.map((k: any) => (
+                              <tr key={k.wallet_address} className="border-b hover:bg-muted/20">
+                                <td className="p-2 font-mono">
+                                  <a href={`https://solscan.io/account/${k.wallet_address}`} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">
+                                    {k.wallet_address.slice(0,4)}...{k.wallet_address.slice(-4)}
+                                  </a>
+                                </td>
+                                <td className="p-2">
+                                  {k.twitter_handle ? (
+                                    <a href={`https://twitter.com/${k.twitter_handle}`} target="_blank" rel="noopener noreferrer" className="text-blue-600 dark:text-blue-400 hover:underline">
+                                      @{k.twitter_handle}
+                                    </a>
+                                  ) : <span className="text-gray-400 text-xs">—</span>}
+                                </td>
+                                <td className="p-2">{k.sns_name || <span className="text-gray-400 text-xs">—</span>}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    ) : (
+                      <p className="text-xs text-muted-foreground">No KOL matches among current holders.</p>
+                    )}
+                  </CardContent>
+                </Card>
+              </div>
 
               {/* Sediment Layer Chart */}
               <div className="mb-4 md:mb-6">
