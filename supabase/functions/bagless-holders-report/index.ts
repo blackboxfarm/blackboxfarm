@@ -180,16 +180,28 @@ serve(async (req) => {
     
     if (heliusApiKey) {
       try {
-        console.log(`Calling Helius API for token: ${tokenMint}`);
+        console.log(`Calling Helius Enhanced Transactions API for token: ${tokenMint}`);
         
-        // Get first 50 transactions for the token mint
+        // Use Enhanced Transactions API with mint filter to get actual token transfers
         const txResponse = await fetch(
-          `https://api.helius.xyz/v0/addresses/${tokenMint}/transactions?api-key=${heliusApiKey}&limit=50`,
+          `https://api.helius.xyz/v0/transactions?api-key=${heliusApiKey}`,
           {
+            method: 'POST',
             headers: { 
               'Content-Type': 'application/json',
               'Accept': 'application/json'
-            }
+            },
+            body: JSON.stringify({
+              query: {
+                tokenTransfers: {
+                  mint: [tokenMint]
+                }
+              },
+              options: {
+                limit: 100,
+                transactionDetails: "full"
+              }
+            })
           }
         );
         
@@ -214,8 +226,7 @@ serve(async (req) => {
               if (firstBuyersData.length >= 25) break;
               
               try {
-                // Check multiple possible field names for token transfers
-                const tokenTransfers = tx.tokenTransfers || tx.token_transfers || tx.tokenBalanceChanges || [];
+                const tokenTransfers = tx.tokenTransfers || [];
                 
                 if (!tokenTransfers || tokenTransfers.length === 0) {
                   continue;
@@ -224,31 +235,24 @@ serve(async (req) => {
                 for (const transfer of tokenTransfers) {
                   if (firstBuyersData.length >= 25) break;
                   
-                  // Check if this transfer is for our token
-                  const transferMint = transfer.mint || transfer.tokenMint || transfer.token_mint;
-                  if (transferMint !== tokenMint) continue;
+                  // Verify this is our token
+                  if (transfer.mint !== tokenMint) continue;
                   
-                  // Try multiple field name variations
-                  const recipient = transfer.toUserAccount || transfer.to_user_account || 
-                                   transfer.toAccount || transfer.to_account ||
-                                   transfer.recipient || transfer.owner;
-                  
-                  const amount = transfer.tokenAmount || transfer.token_amount || 
-                                transfer.amount || transfer.ui_amount || 
-                                (transfer.rawAmount ? transfer.rawAmount / 1e9 : 0);
-                  
-                  // Skip invalid recipients
+                  // Get the recipient (buyer) - the person receiving tokens
+                  const recipient = transfer.toUserAccount;
                   if (!recipient || seenBuyers.has(recipient)) continue;
                   
-                  // Skip known burn/system addresses
+                  // Skip known burn/system addresses and likely LP addresses
                   if (recipient === '11111111111111111111111111111111' || 
                       recipient === 'TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA' ||
-                      recipient.startsWith('11111111111111')) continue;
+                      recipient.startsWith('5Q544fKrF') || // Raydium LPs
+                      recipient.startsWith('675kPX9M')) continue; // Orca LPs
                   
                   seenBuyers.add(recipient);
                   
-                  const timestamp = tx.timestamp || tx.blockTime || tx.block_time || Date.now() / 1000;
-                  const signature = tx.signature || tx.txHash || tx.tx_hash || '';
+                  const amount = transfer.tokenAmount || 0;
+                  const timestamp = tx.timestamp || Date.now() / 1000;
+                  const signature = tx.signature || '';
                   
                   firstBuyersData.push({
                     wallet: recipient,
@@ -553,6 +557,17 @@ serve(async (req) => {
       liquidityPools: lpWallets,
       potentialDevWallet,
       firstBuyers: firstBuyersWithPNL, // NEW: Historical first 25 buyers with PNL
+      firstBuyersError: firstBuyersData.length === 0 ? 
+        (heliusApiKey ? 
+          `No buyers found (searched ${firstBuyersData.length} transactions using Enhanced Transactions API)` : 
+          'Helius API key not configured - historical buyer tracking unavailable') : 
+        null,
+      firstBuyersDebug: {
+        endpoint: 'POST /v0/transactions',
+        method: 'tokenTransfers.mint filter',
+        buyersFound: firstBuyersData.length,
+        totalTransactionsSearched: firstBuyersData.length
+      },
       summary: `Found ${rankedHolders.length} total holders (${lpWallets.length} LP detected${lpWallets.length > 0 ? ': ' + lpWallets.map(lp => lp.detectedPlatform).filter(Boolean).join(', ') : ''}). ${trueWhaleWallets} true whale wallets (≥$5K), ${babyWhaleWallets} baby whale wallets ($2K-$5K), ${superBossWallets} super boss wallets ($1K-$2K), ${kingpinWallets} kingpin wallets ($500-$1K), ${bossWallets} boss wallets ($200-$500), ${realWallets} real wallets ($50-$199), ${largeWallets} large wallets ($5-$49), ${mediumWallets} medium wallets ($1-$4), ${smallWallets} small wallets (<$1), ${dustWallets} dust wallets (<1 token). Total tokens distributed: ${totalBalance.toLocaleString()}${priceSource ? ` (Price from ${priceSource})` : ''}${potentialDevWallet ? `. Potential dev: ${potentialDevWallet.address.slice(0, 4)}...${potentialDevWallet.address.slice(-4)} (${potentialDevWallet.percentageOfSupply.toFixed(1)}%)` : ''}. First ${firstBuyersWithPNL.length} buyers tracked with ${firstBuyersWithPNL.filter(b => b.hasSold).length} having sold tokens.`
     };
 

@@ -92,6 +92,13 @@ interface HoldersReport {
   liquidityPools: TokenHolder[];
   potentialDevWallet?: PotentialDevWallet;
   firstBuyers?: FirstBuyer[];
+  firstBuyersError?: string;
+  firstBuyersDebug?: {
+    endpoint: string;
+    method?: string;
+    buyersFound?: number;
+    totalTransactionsSearched?: number;
+  };
   summary: string;
 }
 
@@ -1346,8 +1353,16 @@ export function BaglessHoldersReport({ initialToken }: BaglessHoldersReportProps
                     <CardHeader className="pb-3">
                       <CardTitle className="text-lg">First 25 Historical Buyers 🥇</CardTitle>
                       <p className="text-xs text-muted-foreground">
-                        No historical buyer data available. This may occur due to rate limits or missing Helius API key.
+                        {report.firstBuyersError || 'No historical buyer data available'}
                       </p>
+                      {report.firstBuyersDebug && (
+                        <details className="mt-2 text-xs text-muted-foreground">
+                          <summary className="cursor-pointer hover:text-foreground">Debug Info</summary>
+                          <pre className="mt-2 p-2 bg-muted rounded text-[10px] overflow-x-auto">
+                            {JSON.stringify(report.firstBuyersDebug, null, 2)}
+                          </pre>
+                        </details>
+                      )}
                     </CardHeader>
                   </Card>
                 </div>
