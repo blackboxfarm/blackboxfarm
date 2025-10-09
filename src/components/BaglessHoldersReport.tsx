@@ -1083,7 +1083,10 @@ export function BaglessHoldersReport({ initialToken }: BaglessHoldersReportProps
               {/* Top 25 Holders Analysis */}
               {(() => {
                 const top10Stats = calculateTop10Stats();
-                const top25 = filteredHolders.slice(0, 25);
+                // ALWAYS use unfiltered holders for Top 25 - filters should only affect the Holders List below
+                const devWallet = report.potentialDevWallet?.address;
+                const nonLPHolders = report.holders.filter(h => !h.isLiquidityPool && h.owner !== devWallet);
+                const top25 = nonLPHolders.slice(0, 25);
                 if (top25.length === 0) return null;
                 
                 const top25Percentage = top25.reduce((sum, h) => sum + h.percentageOfSupply, 0);
