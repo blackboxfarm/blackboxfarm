@@ -7,6 +7,7 @@ import { Badge } from '@/components/ui/badge';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Switch } from '@/components/ui/switch';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { Loader2, Download, RefreshCw, Flag, AlertTriangle, Shield, TrendingUp } from 'lucide-react';
@@ -1079,10 +1080,13 @@ export function BaglessHoldersReport({ initialToken }: BaglessHoldersReportProps
                 );
               })()}
 
-              {/* Top 10 Holders Analysis */}
+              {/* Top 25 Holders Analysis */}
               {(() => {
-                const { top10, cumulativePercentage } = calculateTop10Stats();
-                if (top10.length === 0) return null;
+                const top10Stats = calculateTop10Stats();
+                const top25 = filteredHolders.slice(0, 25);
+                if (top25.length === 0) return null;
+                
+                const top25Percentage = top25.reduce((sum, h) => sum + h.percentageOfSupply, 0);
                 
                 return (
                   <div className="mb-4 md:mb-6">
@@ -1090,36 +1094,45 @@ export function BaglessHoldersReport({ initialToken }: BaglessHoldersReportProps
                       <CardHeader className="pb-3">
                         <CardTitle className="text-lg flex items-center gap-2">
                           <Shield className="h-5 w-5" />
-                          Top 10 Holders Analysis
+                          Top 25 Holders Analysis
                         </CardTitle>
                       </CardHeader>
                       <CardContent>
                         <div className="mb-4 p-4 bg-primary/10 rounded-lg border border-primary/20">
                           <div className="text-2xl font-bold text-primary">
-                            {cumulativePercentage.toFixed(1)}%
+                            {top25Percentage.toFixed(1)}%
                           </div>
                           <div className="text-sm text-muted-foreground">
-                            Top 10 wallets hold {cumulativePercentage.toFixed(1)}% of total supply
+                            Top 25 wallets hold {top25Percentage.toFixed(1)}% of total supply
                           </div>
                         </div>
                         
-                        <div className="space-y-2">
-                          {top10.map((holder, idx) => (
-                            <div key={holder.owner} className="flex items-center gap-2">
-                              <div className="text-xs text-muted-foreground w-6">#{idx + 1}</div>
-                              <div className="flex-1 bg-muted/30 rounded-full h-6 relative overflow-hidden">
-                                <div
-                                  className="absolute inset-y-0 left-0 bg-primary/70 transition-all"
-                                  style={{ width: `${Math.min(holder.percentageOfSupply, 100)}%` }}
-                                />
-                                <div className="absolute inset-0 flex items-center justify-between px-2 text-xs">
-                                  <span className="font-mono">{truncateAddress(holder.owner)}</span>
-                                  <span className="font-semibold">{holder.percentageOfSupply.toFixed(2)}%</span>
-                                </div>
+                        <Accordion type="single" collapsible className="w-full">
+                          <AccordionItem value="top25-list">
+                            <AccordionTrigger className="text-sm font-medium">
+                              View Top 25 Holders List
+                            </AccordionTrigger>
+                            <AccordionContent>
+                              <div className="space-y-2 pt-2">
+                                {top25.map((holder, idx) => (
+                                  <div key={holder.owner} className="flex items-center gap-2">
+                                    <div className="text-xs text-muted-foreground w-6">#{idx + 1}</div>
+                                    <div className="flex-1 bg-muted/30 rounded-full h-6 relative overflow-hidden">
+                                      <div
+                                        className="absolute inset-y-0 left-0 bg-primary/70 transition-all"
+                                        style={{ width: `${Math.min(holder.percentageOfSupply, 100)}%` }}
+                                      />
+                                      <div className="absolute inset-0 flex items-center justify-between px-2 text-xs">
+                                        <span className="font-mono">{truncateAddress(holder.owner)}</span>
+                                        <span className="font-semibold">{holder.percentageOfSupply.toFixed(2)}%</span>
+                                      </div>
+                                    </div>
+                                  </div>
+                                ))}
                               </div>
-                            </div>
-                          ))}
-                        </div>
+                            </AccordionContent>
+                          </AccordionItem>
+                        </Accordion>
                       </CardContent>
                     </Card>
                   </div>
