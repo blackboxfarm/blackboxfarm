@@ -175,72 +175,106 @@ serve(async (req) => {
     }
 
     // FETCH HISTORICAL FIRST 25 BUYERS using Helius
-    console.log('Fetching historical first 25 buyers...');
+    console.log('🔍 Fetching historical first 25 buyers...');
     const firstBuyersData: any[] = [];
     
     if (heliusApiKey) {
       try {
-        // Get first 50 transactions for the token mint (reversed chronologically = oldest first)
+        console.log(`Calling Helius API for token: ${tokenMint}`);
+        
+        // Get first 50 transactions for the token mint
         const txResponse = await fetch(
-          `https://api.helius.xyz/v0/addresses/${tokenMint}/transactions?api-key=${heliusApiKey}&limit=50&type=TRANSFER`,
+          `https://api.helius.xyz/v0/addresses/${tokenMint}/transactions?api-key=${heliusApiKey}&limit=50`,
           {
-            headers: { 'Content-Type': 'application/json' }
+            headers: { 
+              'Content-Type': 'application/json',
+              'Accept': 'application/json'
+            }
           }
         );
         
+        console.log(`Helius response status: ${txResponse.status}`);
+        
         if (txResponse.ok) {
           const transactions = await txResponse.json();
-          console.log(`Fetched ${transactions.length} historical transactions`);
+          console.log(`📦 Fetched ${transactions?.length || 0} transactions`);
           
-          // Reverse to get chronological order (oldest first)
-          const chronologicalTxs = [...transactions].reverse();
-          const seenBuyers = new Set<string>();
-          
-          // Parse transactions to find first 25 unique token buyers
-          for (const tx of chronologicalTxs) {
-            if (firstBuyersData.length >= 25) break;
+          if (!transactions || transactions.length === 0) {
+            console.warn('⚠️ No transactions returned from Helius');
+          } else {
+            // Log first transaction structure for debugging
+            console.log('First tx structure:', JSON.stringify(transactions[0], null, 2).substring(0, 500));
             
-            try {
-              // Extract token transfers for this mint
-              const tokenTransfers = tx.tokenTransfers?.filter((t: any) => t.mint === tokenMint) || [];
+            // Reverse to get chronological order (oldest first)
+            const chronologicalTxs = [...transactions].reverse();
+            const seenBuyers = new Set<string>();
+            
+            // Parse transactions to find first 25 unique token buyers
+            for (const tx of chronologicalTxs) {
+              if (firstBuyersData.length >= 25) break;
               
-              for (const transfer of tokenTransfers) {
-                if (firstBuyersData.length >= 25) break;
+              try {
+                // Check multiple possible field names for token transfers
+                const tokenTransfers = tx.tokenTransfers || tx.token_transfers || tx.tokenBalanceChanges || [];
                 
-                const recipient = transfer.toUserAccount;
-                const amount = transfer.tokenAmount;
+                if (!tokenTransfers || tokenTransfers.length === 0) {
+                  continue;
+                }
                 
-                // Skip if already seen, is LP, or is burn address
-                if (!recipient || seenBuyers.has(recipient)) continue;
-                
-                // Skip known burn/system addresses
-                if (recipient === '11111111111111111111111111111111' || 
-                    recipient === 'TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA') continue;
-                
-                seenBuyers.add(recipient);
-                
-                firstBuyersData.push({
-                  wallet: recipient,
-                  firstBoughtAt: tx.timestamp,
-                  initialTokens: amount,
-                  signature: tx.signature,
-                  purchaseRank: firstBuyersData.length + 1
-                });
-                
-                console.log(`First buyer #${firstBuyersData.length}: ${recipient} at ${new Date(tx.timestamp * 1000).toISOString()}`);
+                for (const transfer of tokenTransfers) {
+                  if (firstBuyersData.length >= 25) break;
+                  
+                  // Check if this transfer is for our token
+                  const transferMint = transfer.mint || transfer.tokenMint || transfer.token_mint;
+                  if (transferMint !== tokenMint) continue;
+                  
+                  // Try multiple field name variations
+                  const recipient = transfer.toUserAccount || transfer.to_user_account || 
+                                   transfer.toAccount || transfer.to_account ||
+                                   transfer.recipient || transfer.owner;
+                  
+                  const amount = transfer.tokenAmount || transfer.token_amount || 
+                                transfer.amount || transfer.ui_amount || 
+                                (transfer.rawAmount ? transfer.rawAmount / 1e9 : 0);
+                  
+                  // Skip invalid recipients
+                  if (!recipient || seenBuyers.has(recipient)) continue;
+                  
+                  // Skip known burn/system addresses
+                  if (recipient === '11111111111111111111111111111111' || 
+                      recipient === 'TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA' ||
+                      recipient.startsWith('11111111111111')) continue;
+                  
+                  seenBuyers.add(recipient);
+                  
+                  const timestamp = tx.timestamp || tx.blockTime || tx.block_time || Date.now() / 1000;
+                  const signature = tx.signature || tx.txHash || tx.tx_hash || '';
+                  
+                  firstBuyersData.push({
+                    wallet: recipient,
+                    firstBoughtAt: timestamp,
+                    initialTokens: amount,
+                    signature: signature,
+                    purchaseRank: firstBuyersData.length + 1
+                  });
+                  
+                  console.log(`✅ First buyer #${firstBuyersData.length}: ${recipient.substring(0, 8)}... (${amount.toFixed(2)} tokens)`);
+                }
+              } catch (e) {
+                console.error('❌ Error parsing transaction:', e instanceof Error ? e.message : String(e));
+                continue;
               }
-            } catch (e) {
-              console.error('Error parsing transaction:', e);
-              continue;
             }
+            
+            console.log(`🎯 Found ${firstBuyersData.length} historical first buyers`);
           }
-          
-          console.log(`✅ Found ${firstBuyersData.length} historical first buyers`);
         } else {
-          console.warn('Failed to fetch Helius transaction history:', txResponse.status);
+          const errorText = await txResponse.text();
+          console.error(`❌ Helius API error: ${txResponse.status} - ${errorText}`);
         }
       } catch (e) {
-        console.error('Error fetching historical transactions:', e);
+        console.error('❌ Error fetching historical transactions:', e instanceof Error ? e.message : String(e));
+        console.error('Stack trace:', e instanceof Error ? e.stack : '');
       }
     } else {
       console.warn('⚠️ No Helius API key - skipping historical first buyers fetch');
