@@ -369,10 +369,7 @@ serve(async (req) => {
             
             holders.push(holderData);
             
-            // Track first buyer (potential dev) - exclude LPs
-            if (!isLiquidityPool && !firstBuyerAddress && balance > 0) {
-              firstBuyerAddress = owner;
-            }
+            // Note: First buyer tracking moved to historical transactions section
           }
         } catch (e) {
           console.error(`Error processing account ${account.pubkey}:`, e);
