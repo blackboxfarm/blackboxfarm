@@ -182,109 +182,162 @@ serve(async (req) => {
     if (heliusApiKey) {
       try {
         console.log(`Calling Helius Enhanced Transactions API for token: ${tokenMint}`);
-        
-        // Use Enhanced Transactions API with mint filter to get actual token transfers
-        const txResponse = await fetch(
-          `https://api.helius.xyz/v0/transactions?api-key=${heliusApiKey}`,
-          {
-            method: 'POST',
-            headers: { 
-              'Content-Type': 'application/json',
-              'Accept': 'application/json'
-            },
-            body: JSON.stringify({
-              query: {
-                tokenTransfers: {
-                  mint: [tokenMint]
-                }
-              },
-              options: {
-                limit: 500,
-                transactionDetails: "full"
-              }
-            })
+
+        // Robust approach: try GET by address with pagination + 429 backoff
+        const buyersSeen = new Set<string>();
+        let until: string | undefined = undefined;
+        let pages = 0;
+        let heliusUsed = false;
+
+        const fetchWithBackoff = async (url: string, attempt = 1): Promise<Response> => {
+          const resp = await fetch(url, { headers: { 'Accept': 'application/json' } });
+          if (resp.status === 429 && attempt < 5) {
+            const wait = 300 * attempt; // ms
+            console.log(`Helius 429 rate limit. Retrying in ${wait}ms (attempt ${attempt})`);
+            await new Promise((r) => setTimeout(r, wait));
+            return fetchWithBackoff(url, attempt + 1);
           }
-        );
-        
-        console.log(`Helius response status: ${txResponse.status}`);
-        
-        if (txResponse.ok) {
-          const transactions = await txResponse.json();
+          return resp;
+        };
+
+        // Page through up to 5 pages or until 25 buyers are found
+        while (firstBuyersData.length < 25 && pages < 5) {
+          const base = `https://api.helius.xyz/v0/addresses/${tokenMint}/transactions?api-key=${heliusApiKey}&limit=100`;
+          const url = until ? `${base}&until=${until}` : base;
+          const txResponse = await fetchWithBackoff(url);
+
+          console.log(`Helius response status: ${txResponse.status}`);
+          if (!txResponse.ok) {
+            const errorText = await txResponse.text();
+            console.error(`❌ Helius API error: ${txResponse.status} - ${errorText}`);
+            break; // fall back to RPC below
+          }
+
+          heliusUsed = true;
+          const transactions: any[] = await txResponse.json();
           const count = Array.isArray(transactions) ? transactions.length : 0;
-          txCount = count;
-          console.log(`📦 Fetched ${count} transactions`);
-          
-          if (!transactions || count === 0) {
-            console.warn('⚠️ No transactions returned from Helius');
-          } else {
-            // Log first transaction structure for debugging
-            console.log('First tx structure:', JSON.stringify(transactions[0], null, 2).substring(0, 500));
-            
-            // Reverse to get chronological order (oldest first)
-            const chronologicalTxs = [...transactions].reverse();
-            const seenBuyers = new Set<string>();
-            
-            // Parse transactions to find first 25 unique token buyers
-            for (const tx of chronologicalTxs) {
-              if (firstBuyersData.length >= 25) break;
-              
-              try {
-                const tokenTransfers = tx.tokenTransfers || [];
-                
-                if (!tokenTransfers || tokenTransfers.length === 0) {
-                  continue;
-                }
-                
-                for (const transfer of tokenTransfers) {
-                  if (firstBuyersData.length >= 25) break;
-                  
-                  // Verify this is our token
-                  if (transfer.mint !== tokenMint) continue;
-                  
-                  // Get the recipient (buyer) - the person receiving tokens
-                  const recipient = transfer.toUserAccount;
-                  if (!recipient || seenBuyers.has(recipient)) continue;
-                  
-                  // Skip known burn/system addresses and likely LP addresses
-                  if (recipient === '11111111111111111111111111111111' || 
-                      recipient === 'TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA' ||
-                      recipient.startsWith('5Q544fKrF') || // Raydium LPs
-                      recipient.startsWith('675kPX9M')) continue; // Orca LPs
-                  
-                  seenBuyers.add(recipient);
-                  
-                  const amount = transfer.tokenAmount || 0;
-                  const timestamp = tx.timestamp || Date.now() / 1000;
-                  const signature = tx.signature || '';
-                  
-                  firstBuyersData.push({
-                    wallet: recipient,
-                    firstBoughtAt: timestamp,
-                    initialTokens: amount,
-                    signature: signature,
-                    purchaseRank: firstBuyersData.length + 1
-                  });
-                  
-                  console.log(`✅ First buyer #${firstBuyersData.length}: ${recipient.substring(0, 8)}... (${amount.toFixed(2)} tokens)`);
-                }
-              } catch (e) {
-                console.error('❌ Error parsing transaction:', e instanceof Error ? e.message : String(e));
-                continue;
+          txCount += count;
+          console.log(`📦 Page ${pages + 1}: ${count} transactions`);
+
+          if (count === 0) break;
+
+          // Parse oldest-first within this page
+          for (const tx of [...transactions].reverse()) {
+            if (firstBuyersData.length >= 25) break;
+            try {
+              const tokenTransfers = tx.tokenTransfers || [];
+              if (!tokenTransfers || tokenTransfers.length === 0) continue;
+
+              for (const transfer of tokenTransfers) {
+                if (firstBuyersData.length >= 25) break;
+                if (transfer.mint !== tokenMint) continue;
+                const recipient: string | undefined = transfer.toUserAccount;
+                const amount = Number(transfer.tokenAmount || 0);
+                if (!recipient || buyersSeen.has(recipient) || !isFinite(amount) || amount <= 0) continue;
+                // Skip burn/system
+                if (
+                  recipient === '11111111111111111111111111111111' ||
+                  recipient === 'TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA' ||
+                  recipient.startsWith('5Q544fKrF') || // Raydium LPs
+                  recipient.startsWith('675kPX9M') // Orca LPs
+                ) continue;
+
+                buyersSeen.add(recipient);
+                firstBuyersData.push({
+                  wallet: recipient,
+                  firstBoughtAt: tx.timestamp || Math.floor(Date.now() / 1000),
+                  initialTokens: amount,
+                  signature: tx.signature || '',
+                  purchaseRank: firstBuyersData.length + 1,
+                });
               }
+            } catch (e) {
+              console.error('❌ Error parsing transaction:', e instanceof Error ? e.message : String(e));
+              continue;
             }
-            
-            console.log(`🎯 Found ${firstBuyersData.length} historical first buyers`);
           }
-        } else {
-          const errorText = await txResponse.text();
-          console.error(`❌ Helius API error: ${txResponse.status} - ${errorText}`);
+
+          // Prepare pagination for next page (older)
+          until = transactions[transactions.length - 1]?.signature;
+          pages += 1;
+        }
+
+        if (firstBuyersData.length === 0) {
+          console.warn('⚠️ Helius returned no buyers or was rate-limited. Falling back to RPC scan.');
         }
       } catch (e) {
-        console.error('❌ Error fetching historical transactions:', e instanceof Error ? e.message : String(e));
-        console.error('Stack trace:', e instanceof Error ? e.stack : '');
+        console.error('❌ Error fetching historical transactions (Helius phase):', e instanceof Error ? e.message : String(e));
       }
     } else {
-      console.warn('⚠️ No Helius API key - skipping historical first buyers fetch');
+      console.warn('⚠️ No Helius API key - skipping Helius phase for historical buyers');
+    }
+
+    // RPC FALLBACK: derive buyers by scanning transactions that reference the mint address
+    if (firstBuyersData.length === 0) {
+      try {
+        const rpcUrl = usedRpc || rpcEndpoints[0];
+        // 1) Get up to 100 signatures referencing the mint account (most recent first)
+        const sigsResp = await fetch(rpcUrl, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            jsonrpc: '2.0',
+            id: 1,
+            method: 'getSignaturesForAddress',
+            params: [tokenMint, { limit: 100 }]
+          })
+        });
+        const sigsJson = await sigsResp.json();
+        const signatures: string[] = sigsJson?.result?.map((r: any) => r.signature) || [];
+        console.log(`RPC fallback: fetched ${signatures.length} signatures for mint`);
+
+        // Process oldest first
+        const buyersSeen = new Set<string>();
+        for (const sig of [...signatures].reverse()) {
+          if (firstBuyersData.length >= 25) break;
+          // 2) Fetch parsed transaction
+          const txResp = await fetch(rpcUrl, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              jsonrpc: '2.0',
+              id: 1,
+              method: 'getTransaction',
+              params: [sig, { encoding: 'jsonParsed' }]
+            })
+          });
+          if (!txResp.ok) continue;
+          const txJson = await txResp.json();
+          const meta = txJson?.result?.meta;
+          if (!meta) continue;
+          const pre = meta.preTokenBalances || [];
+          const post = meta.postTokenBalances || [];
+
+          // Find owners with positive delta for our mint
+          for (const postEntry of post) {
+            if (postEntry.mint !== tokenMint) continue;
+            const idx = postEntry.accountIndex;
+            const preEntry = pre.find((p: any) => p.accountIndex === idx);
+            const preAmt = Number(preEntry?.uiTokenAmount?.amount || preEntry?.uiTokenAmount?.uiAmount || 0);
+            const postAmt = Number(postEntry?.uiTokenAmount?.amount || postEntry?.uiTokenAmount?.uiAmount || 0);
+            const delta = postAmt - preAmt;
+            const owner = postEntry.owner;
+            if (!owner || buyersSeen.has(owner) || !isFinite(delta) || delta <= 0) continue;
+
+            buyersSeen.add(owner);
+            firstBuyersData.push({
+              wallet: owner,
+              firstBoughtAt: txJson?.result?.blockTime || Math.floor(Date.now() / 1000),
+              initialTokens: delta,
+              signature: sig,
+              purchaseRank: firstBuyersData.length + 1,
+            });
+            if (firstBuyersData.length >= 25) break;
+          }
+        }
+      } catch (e) {
+        console.error('❌ RPC fallback failed:', e instanceof Error ? e.message : String(e));
+      }
     }
 
     const holders = [];
@@ -566,8 +619,8 @@ serve(async (req) => {
           'Helius API key not configured - historical buyer tracking unavailable') : 
         null,
       firstBuyersDebug: {
-        endpoint: 'POST /v0/transactions',
-        method: 'tokenTransfers.mint filter',
+        endpoint: heliusApiKey ? 'GET /v0/addresses/{mint}/transactions + RPC fallback' : 'RPC fallback',
+        method: heliusApiKey ? 'by_address + tokenTransfers filter' : 'rpc getSignaturesForAddress + getTransaction',
         buyersFound: firstBuyersData.length,
         totalTransactionsSearched: txCount
       },
