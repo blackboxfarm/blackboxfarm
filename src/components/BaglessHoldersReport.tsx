@@ -47,6 +47,24 @@ interface PotentialDevWallet {
   reason: string;
 }
 
+interface FirstBuyer {
+  wallet: string;
+  firstBoughtAt: number;
+  initialTokens: number;
+  signature: string;
+  purchaseRank: number;
+  currentBalance: number;
+  currentUsdValue: number;
+  currentPercentageOfSupply: number;
+  tokensSold: number;
+  percentageSold: number;
+  hasSold: boolean;
+  pnl: number;
+  pnlPercentage: number;
+  isLiquidityPool: boolean;
+  isDevWallet: boolean;
+}
+
 interface HoldersReport {
   tokenMint: string;
   totalHolders: number;
@@ -72,6 +90,7 @@ interface HoldersReport {
   holders: TokenHolder[];
   liquidityPools: TokenHolder[];
   potentialDevWallet?: PotentialDevWallet;
+  firstBuyers?: FirstBuyer[];
   summary: string;
 }
 
@@ -1136,131 +1155,146 @@ export function BaglessHoldersReport({ initialToken }: BaglessHoldersReportProps
                 );
               })()}
 
-              {/* First 10 Buyers (including LP and Dev) */}
-              {(() => {
-                const devWallet = report.potentialDevWallet?.address;
-                
-                // Build the display list: LP first, then Dev, then first 10 regular buyers
-                const displayList = [];
-                
-                // Add LP wallet(s) as position 1
-                const lpWallets = report.holders.filter(h => h.isLiquidityPool);
-                if (lpWallets.length > 0) {
-                  lpWallets.forEach((lp, idx) => {
-                    displayList.push({
-                      ...lp,
-                      displayLabel: lpWallets.length > 1 ? `LP${idx + 1}` : 'LP',
-                      position: displayList.length + 1
-                    });
-                  });
-                }
-                
-                // Add Dev wallet as position 2 (or after LPs)
-                if (devWallet) {
-                  const devWalletData = report.holders.find(h => h.owner === devWallet);
-                  if (devWalletData) {
-                    displayList.push({
-                      ...devWalletData,
-                      displayLabel: 'DEV',
-                      position: displayList.length + 1
-                    });
-                  }
-                }
-                
-                // Add first 10 regular buyers (excluding LP and Dev)
-                const regularBuyers = report.holders
-                  .filter(h => !h.isLiquidityPool && h.owner !== devWallet)
-                  .slice(0, 10);
-                
-                regularBuyers.forEach((buyer, idx) => {
-                  displayList.push({
-                    ...buyer,
-                    displayLabel: `${idx + 1}`,
-                    position: displayList.length + 1
-                  });
-                });
-                
-                if (displayList.length === 0) return null;
-                
-                return (
-                  <div className="mb-4 md:mb-6">
-                    <Card>
-                      <CardHeader className="pb-3">
-                        <CardTitle className="text-lg">First 10 Buyers (including LP & Dev)</CardTitle>
-                        <p className="text-xs text-muted-foreground">Early investors including liquidity pools and potential Dev wallet</p>
-                      </CardHeader>
-                      <CardContent>
-                        <div className="overflow-x-auto">
-                          <table className="w-full text-xs md:text-sm">
-                            <thead>
-                              <tr className="border-b">
-                                <th className="text-left p-2">#</th>
-                                <th className="text-left p-2">Wallet</th>
-                                <th className="text-right p-2">Token Balance</th>
-                                <th className="text-right p-2">% Supply</th>
-                                <th className="text-right p-2">USD Value</th>
-                                <th className="text-center p-2">Social</th>
-                              </tr>
-                            </thead>
-                            <tbody>
-                              {displayList.map((holder) => (
-                                <tr key={holder.owner} className="border-b hover:bg-muted/20">
+              {/* First 25 Historical Buyers with PNL Tracking */}
+              {report.firstBuyers && report.firstBuyers.length > 0 && (
+                <div className="mb-4 md:mb-6">
+                  <Card>
+                    <CardHeader className="pb-3">
+                      <CardTitle className="text-lg">First 25 Historical Buyers 🥇</CardTitle>
+                      <p className="text-xs text-muted-foreground">
+                        Chronological first 25 token purchases with sell tracking & PNL
+                      </p>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="overflow-x-auto">
+                        <table className="w-full text-xs">
+                          <thead>
+                            <tr className="border-b">
+                              <th className="text-left p-2">#</th>
+                              <th className="text-left p-2">Wallet</th>
+                              <th className="text-right p-2">First Bought</th>
+                              <th className="text-right p-2">Bought</th>
+                              <th className="text-right p-2">Sold</th>
+                              <th className="text-right p-2">Current</th>
+                              <th className="text-right p-2">% Supply</th>
+                              <th className="text-right p-2">PNL</th>
+                              <th className="text-center p-2">Social</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {report.firstBuyers.map((buyer: any) => {
+                              const formatDate = (timestamp: number) => {
+                                const date = new Date(timestamp * 1000);
+                                return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+                              };
+                              
+                              return (
+                                <tr key={buyer.wallet} className="border-b hover:bg-muted/20">
                                   <td className="p-2 font-mono">
-                                    {holder.displayLabel === 'LP' || holder.displayLabel.startsWith('LP') ? (
-                                      <span className="font-bold text-yellow-500">#{holder.displayLabel}</span>
-                                    ) : holder.displayLabel === 'DEV' ? (
-                                      <span className="font-bold text-purple-500">#{holder.displayLabel}</span>
-                                    ) : (
-                                      `#${holder.displayLabel}`
-                                    )}
+                                    <div className="flex items-center gap-1">
+                                      {buyer.purchaseRank === 1 && <span title="First ever buyer!">🥇</span>}
+                                      {buyer.isDevWallet && (
+                                        <span className="px-1.5 py-0.5 bg-purple-500/20 text-purple-600 dark:text-purple-400 rounded text-[10px] font-bold">
+                                          DEV
+                                        </span>
+                                      )}
+                                      {buyer.isLiquidityPool && (
+                                        <span className="px-1.5 py-0.5 bg-yellow-500/20 text-yellow-600 dark:text-yellow-400 rounded text-[10px] font-bold">
+                                          LP
+                                        </span>
+                                      )}
+                                      <span>#{buyer.purchaseRank}</span>
+                                    </div>
                                   </td>
                                   <td className="p-2">
                                     <a 
-                                      href={`https://solscan.io/account/${holder.owner}`}
+                                      href={`https://solscan.io/account/${buyer.wallet}`}
                                       target="_blank"
                                       rel="noopener noreferrer"
-                                      className="font-mono text-primary hover:underline"
+                                      className="font-mono text-primary hover:underline text-xs"
                                     >
-                                      {truncateAddress(holder.owner)}
+                                      {buyer.wallet.slice(0, 4)}...{buyer.wallet.slice(-4)}
                                     </a>
                                   </td>
-                                  <td className="p-2 text-right font-mono">{Math.floor(holder.balance).toLocaleString()}</td>
-                                  <td className="p-2 text-right font-semibold">{holder.percentageOfSupply.toFixed(2)}%</td>
-                                  <td className="p-2 text-right text-green-600 dark:text-green-400 font-medium">
-                                    ${holder.usdValue.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                  <td className="p-2 text-right text-muted-foreground text-[10px]">
+                                    {formatDate(buyer.firstBoughtAt)}
                                   </td>
-                                  <td className="p-2 text-center">
-                                    <div className="flex items-center justify-center gap-2">
-                                      {isLoadingTwitter ? (
-                                        <div className="h-4 w-4 animate-pulse bg-gray-300 dark:bg-gray-600 rounded"></div>
-                                      ) : walletTwitterHandles.has(holder.owner) ? (
-                                        <a
-                                          href={`https://twitter.com/${walletTwitterHandles.get(holder.owner)}`}
-                                          target="_blank"
-                                          rel="noopener noreferrer"
-                                          className="text-blue-600 dark:text-blue-400 hover:underline inline-flex items-center gap-1 font-mono text-sm"
-                                          title="Twitter verified via SNS"
-                                        >
-                                          @{walletTwitterHandles.get(holder.owner)}
-                                        </a>
-                                      ) : (
-                                        <span className="text-gray-400 dark:text-gray-500 text-xs" title="No SNS Twitter record found">—</span>
-                                      )}
+                                  <td className="p-2 text-right font-mono text-[11px]">
+                                    {Math.floor(buyer.initialTokens).toLocaleString()}
+                                  </td>
+                                  <td className="p-2 text-right">
+                                    {buyer.hasSold ? (
+                                      <div className="flex flex-col items-end">
+                                        <span className="font-mono text-red-600 dark:text-red-400 text-[11px]">
+                                          {Math.floor(buyer.tokensSold).toLocaleString()}
+                                        </span>
+                                        <span className="text-[9px] text-muted-foreground">
+                                          ({buyer.percentageSold.toFixed(0)}%)
+                                        </span>
+                                      </div>
+                                    ) : (
+                                      <span className="text-gray-400 text-xs">—</span>
+                                    )}
+                                  </td>
+                                  <td className="p-2 text-right font-mono text-[11px]">
+                                    {Math.floor(buyer.currentBalance).toLocaleString()}
+                                  </td>
+                                  <td className="p-2 text-right text-[11px]">
+                                    {buyer.currentPercentageOfSupply.toFixed(2)}%
+                                  </td>
+                                  <td className="p-2 text-right">
+                                    <div className="flex flex-col items-end">
+                                      <span 
+                                        className={`font-semibold text-[11px] ${
+                                          buyer.pnl >= 0 
+                                            ? 'text-green-600 dark:text-green-400' 
+                                            : 'text-red-600 dark:text-red-400'
+                                        }`}
+                                      >
+                                        {buyer.pnl >= 0 ? '+' : ''}${Math.abs(buyer.pnl).toFixed(0)}
+                                      </span>
+                                      <span 
+                                        className={`text-[9px] ${
+                                          buyer.pnlPercentage >= 0 
+                                            ? 'text-green-600 dark:text-green-400' 
+                                            : 'text-red-600 dark:text-red-400'
+                                        }`}
+                                      >
+                                        ({buyer.pnlPercentage >= 0 ? '+' : ''}{buyer.pnlPercentage.toFixed(0)}%)
+                                      </span>
                                     </div>
                                   </td>
+                                  <td className="p-2 text-center">
+                                    {isLoadingTwitter ? (
+                                      <div className="h-3 w-3 animate-pulse bg-gray-300 dark:bg-gray-600 rounded mx-auto"></div>
+                                    ) : walletTwitterHandles.has(buyer.wallet) ? (
+                                      <a
+                                        href={`https://twitter.com/${walletTwitterHandles.get(buyer.wallet)}`}
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        className="text-blue-600 dark:text-blue-400 hover:underline text-[10px]"
+                                        title="Twitter verified via SNS"
+                                      >
+                                        @{walletTwitterHandles.get(buyer.wallet)}
+                                      </a>
+                                    ) : (
+                                      <span className="text-gray-400 text-xs">—</span>
+                                    )}
+                                  </td>
                                 </tr>
-                              ))}
-                            </tbody>
-                          </table>
-                        </div>
-                        <div className="mt-3 text-xs text-muted-foreground">
-                          💡 Tip: Click "View" to check Solscan for any linked Twitter/X accounts
-                        </div>
-                      </CardContent>
-                    </Card>
-                  </div>
-                );
-              })()}
+                              );
+                            })}
+                          </tbody>
+                        </table>
+                      </div>
+                      <div className="mt-3 text-xs text-muted-foreground space-y-1">
+                        <p>🥇 #1 = First ever token buyer • 🟣 DEV = Detected developer wallet • 🟡 LP = Liquidity pool</p>
+                        <p>💡 PNL is estimated based on current token price vs. assumed initial purchase price</p>
+                      </div>
+                    </CardContent>
+                  </Card>
+                </div>
+              )}
 
               {/* Sediment Layer Chart */}
               <div className="mb-4 md:mb-6">

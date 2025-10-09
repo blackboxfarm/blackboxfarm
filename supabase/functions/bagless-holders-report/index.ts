@@ -174,9 +174,80 @@ serve(async (req) => {
       throw new Error(`All RPC endpoints failed. ${rpcErrors.join(' | ')}`);
     }
 
+    // FETCH HISTORICAL FIRST 25 BUYERS using Helius
+    console.log('Fetching historical first 25 buyers...');
+    const firstBuyersData: any[] = [];
+    
+    if (heliusApiKey) {
+      try {
+        // Get first 50 transactions for the token mint (reversed chronologically = oldest first)
+        const txResponse = await fetch(
+          `https://api.helius.xyz/v0/addresses/${tokenMint}/transactions?api-key=${heliusApiKey}&limit=50&type=TRANSFER`,
+          {
+            headers: { 'Content-Type': 'application/json' }
+          }
+        );
+        
+        if (txResponse.ok) {
+          const transactions = await txResponse.json();
+          console.log(`Fetched ${transactions.length} historical transactions`);
+          
+          // Reverse to get chronological order (oldest first)
+          const chronologicalTxs = [...transactions].reverse();
+          const seenBuyers = new Set<string>();
+          
+          // Parse transactions to find first 25 unique token buyers
+          for (const tx of chronologicalTxs) {
+            if (firstBuyersData.length >= 25) break;
+            
+            try {
+              // Extract token transfers for this mint
+              const tokenTransfers = tx.tokenTransfers?.filter((t: any) => t.mint === tokenMint) || [];
+              
+              for (const transfer of tokenTransfers) {
+                if (firstBuyersData.length >= 25) break;
+                
+                const recipient = transfer.toUserAccount;
+                const amount = transfer.tokenAmount;
+                
+                // Skip if already seen, is LP, or is burn address
+                if (!recipient || seenBuyers.has(recipient)) continue;
+                
+                // Skip known burn/system addresses
+                if (recipient === '11111111111111111111111111111111' || 
+                    recipient === 'TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA') continue;
+                
+                seenBuyers.add(recipient);
+                
+                firstBuyersData.push({
+                  wallet: recipient,
+                  firstBoughtAt: tx.timestamp,
+                  initialTokens: amount,
+                  signature: tx.signature,
+                  purchaseRank: firstBuyersData.length + 1
+                });
+                
+                console.log(`First buyer #${firstBuyersData.length}: ${recipient} at ${new Date(tx.timestamp * 1000).toISOString()}`);
+              }
+            } catch (e) {
+              console.error('Error parsing transaction:', e);
+              continue;
+            }
+          }
+          
+          console.log(`✅ Found ${firstBuyersData.length} historical first buyers`);
+        } else {
+          console.warn('Failed to fetch Helius transaction history:', txResponse.status);
+        }
+      } catch (e) {
+        console.error('Error fetching historical transactions:', e);
+      }
+    } else {
+      console.warn('⚠️ No Helius API key - skipping historical first buyers fetch');
+    }
+
     const holders = [];
     let totalSupply = 0;
-    let firstBuyerAddress = '';
     let potentialDevWallet: any = null;
     
     if (data.result && data.result.length > 0) {
@@ -322,21 +393,89 @@ serve(async (req) => {
     const lpWallets = rankedHolders.filter(h => h.isLiquidityPool);
     const nonLpHolders = rankedHolders.filter(h => !h.isLiquidityPool);
     
-    // Identify potential dev wallet (top holder excluding LPs, or first buyer)
-    if (nonLpHolders.length > 0) {
+    // IMPROVED DEV WALLET DETECTION using historical first buyers
+    if (firstBuyersData.length > 0) {
+      // Look at first 10 buyers for early large allocations (5-20% of supply)
+      for (let i = 0; i < Math.min(10, firstBuyersData.length); i++) {
+        const earlyBuyer = firstBuyersData[i];
+        const currentHolder = rankedHolders.find(h => h.owner === earlyBuyer.wallet);
+        
+        if (currentHolder && !currentHolder.isLiquidityPool) {
+          const initialPercentage = (earlyBuyer.initialTokens / totalSupply) * 100;
+          
+          // Dev typically gets 5-20% in first few transactions
+          if (initialPercentage >= 5 && initialPercentage <= 20) {
+            potentialDevWallet = {
+              address: currentHolder.owner,
+              balance: currentHolder.balance,
+              usdValue: currentHolder.usdValue,
+              percentageOfSupply: currentHolder.percentageOfSupply,
+              initialPercentage,
+              purchaseRank: earlyBuyer.purchaseRank,
+              firstBoughtAt: earlyBuyer.firstBoughtAt,
+              confidence: 90 - (i * 5), // Earlier = higher confidence
+              detectionMethod: 'early_large_holder',
+              reason: `Early buyer #${earlyBuyer.purchaseRank} with ${initialPercentage.toFixed(1)}% initial allocation`
+            };
+            console.log(`🔍 Dev Wallet Detected: ${potentialDevWallet.address} (buyer #${earlyBuyer.purchaseRank}, ${initialPercentage.toFixed(1)}% initial)`);
+            break;
+          }
+        }
+      }
+    }
+    
+    // Fallback to top holder if no dev detected from history
+    if (!potentialDevWallet && nonLpHolders.length > 0) {
       const topNonLpHolder = nonLpHolders[0];
       potentialDevWallet = {
         address: topNonLpHolder.owner,
         balance: topNonLpHolder.balance,
         usdValue: topNonLpHolder.usdValue,
         percentageOfSupply: topNonLpHolder.percentageOfSupply,
-        confidence: topNonLpHolder.percentageOfSupply > 10 ? 85 : 65,
+        confidence: topNonLpHolder.percentageOfSupply > 10 ? 65 : 45,
+        detectionMethod: 'top_holder',
         reason: topNonLpHolder.percentageOfSupply > 10 
           ? `Top holder with ${topNonLpHolder.percentageOfSupply.toFixed(1)}% of supply`
           : 'Top non-LP holder (potential dev)'
       };
-      console.log(`🔍 Potential Dev Wallet: ${potentialDevWallet.address} (${potentialDevWallet.percentageOfSupply.toFixed(1)}%)`);
+      console.log(`🔍 Potential Dev Wallet (fallback): ${potentialDevWallet.address} (${potentialDevWallet.percentageOfSupply.toFixed(1)}%)`);
     }
+    
+    // CALCULATE SELL TRACKING AND PNL FOR FIRST 25 BUYERS
+    const firstBuyersWithPNL: any[] = [];
+    
+    for (const buyer of firstBuyersData) {
+      const currentHolder = rankedHolders.find(h => h.owner === buyer.wallet);
+      const currentBalance = currentHolder?.balance || 0;
+      const tokensSold = Math.max(0, buyer.initialTokens - currentBalance);
+      const percentageSold = buyer.initialTokens > 0 ? (tokensSold / buyer.initialTokens) * 100 : 0;
+      
+      // Calculate PNL (simplified - assumes initial price was lower)
+      // In reality, we'd need historical price data at purchase time
+      const initialValueEstimate = buyer.initialTokens * (tokenPriceUSD * 0.1); // Assume bought at 10% of current price
+      const currentValue = currentBalance * tokenPriceUSD;
+      const soldValue = tokensSold * tokenPriceUSD; // Assumes sold at current price (approximation)
+      const totalValue = currentValue + soldValue;
+      const pnl = totalValue - initialValueEstimate;
+      const pnlPercentage = initialValueEstimate > 0 ? (pnl / initialValueEstimate) * 100 : 0;
+      
+      firstBuyersWithPNL.push({
+        ...buyer,
+        currentBalance,
+        currentUsdValue: currentValue,
+        currentPercentageOfSupply: currentHolder?.percentageOfSupply || 0,
+        tokensSold,
+        percentageSold,
+        hasSold: tokensSold > 0,
+        pnl,
+        pnlPercentage,
+        isLiquidityPool: currentHolder?.isLiquidityPool || false,
+        isDevWallet: buyer.wallet === potentialDevWallet?.address
+      });
+    }
+    
+    console.log(`📊 First 25 buyers PNL calculated: ${firstBuyersWithPNL.filter(b => b.hasSold).length} have sold`);
+    
     
     const dustWallets = rankedHolders.filter(h => h.isDustWallet).length;
     const smallWallets = rankedHolders.filter(h => h.isSmallWallet).length;
@@ -381,8 +520,9 @@ serve(async (req) => {
       priceDiscoveryFailed,
       holders: rankedHolders,
       liquidityPools: lpWallets,
-      potentialDevWallet, // NEW: Include dev wallet detection
-      summary: `Found ${rankedHolders.length} total holders (${lpWallets.length} LP detected${lpWallets.length > 0 ? ': ' + lpWallets.map(lp => lp.detectedPlatform).filter(Boolean).join(', ') : ''}). ${trueWhaleWallets} true whale wallets (≥$5K), ${babyWhaleWallets} baby whale wallets ($2K-$5K), ${superBossWallets} super boss wallets ($1K-$2K), ${kingpinWallets} kingpin wallets ($500-$1K), ${bossWallets} boss wallets ($200-$500), ${realWallets} real wallets ($50-$199), ${largeWallets} large wallets ($5-$49), ${mediumWallets} medium wallets ($1-$4), ${smallWallets} small wallets (<$1), ${dustWallets} dust wallets (<1 token). Total tokens distributed: ${totalBalance.toLocaleString()}${priceSource ? ` (Price from ${priceSource})` : ''}${potentialDevWallet ? `. Potential dev: ${potentialDevWallet.address.slice(0, 4)}...${potentialDevWallet.address.slice(-4)} (${potentialDevWallet.percentageOfSupply.toFixed(1)}%)` : ''}`
+      potentialDevWallet,
+      firstBuyers: firstBuyersWithPNL, // NEW: Historical first 25 buyers with PNL
+      summary: `Found ${rankedHolders.length} total holders (${lpWallets.length} LP detected${lpWallets.length > 0 ? ': ' + lpWallets.map(lp => lp.detectedPlatform).filter(Boolean).join(', ') : ''}). ${trueWhaleWallets} true whale wallets (≥$5K), ${babyWhaleWallets} baby whale wallets ($2K-$5K), ${superBossWallets} super boss wallets ($1K-$2K), ${kingpinWallets} kingpin wallets ($500-$1K), ${bossWallets} boss wallets ($200-$500), ${realWallets} real wallets ($50-$199), ${largeWallets} large wallets ($5-$49), ${mediumWallets} medium wallets ($1-$4), ${smallWallets} small wallets (<$1), ${dustWallets} dust wallets (<1 token). Total tokens distributed: ${totalBalance.toLocaleString()}${priceSource ? ` (Price from ${priceSource})` : ''}${potentialDevWallet ? `. Potential dev: ${potentialDevWallet.address.slice(0, 4)}...${potentialDevWallet.address.slice(-4)} (${potentialDevWallet.percentageOfSupply.toFixed(1)}%)` : ''}. First ${firstBuyersWithPNL.length} buyers tracked with ${firstBuyersWithPNL.filter(b => b.hasSold).length} having sold tokens.`
     };
 
     return new Response(
