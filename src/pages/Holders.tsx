@@ -17,11 +17,19 @@ export default function Holders() {
   const { isSuperAdmin } = useUserRoles();
   const navigate = useNavigate();
 
+  const normalizeMint = (s: string) => {
+    let m = s.trim();
+    if (m.length > 44 && m.endsWith('pump')) m = m.slice(0, -4);
+    if (m.length > 44) m = m.slice(0, 44);
+    return m;
+  };
+
   useEffect(() => {
     const urlParams = new URLSearchParams(window.location.search);
     const tokenParam = urlParams.get('token');
     if (tokenParam) {
-      setTokenFromUrl(tokenParam);
+      const normalized = normalizeMint(tokenParam);
+      setTokenFromUrl(normalized);
     }
   }, []);
 

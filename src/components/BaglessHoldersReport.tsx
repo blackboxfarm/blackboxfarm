@@ -169,16 +169,31 @@ export function BaglessHoldersReport({ initialToken }: BaglessHoldersReportProps
 
   // Sync tokenMint state when initialToken prop changes (handles URL param after mount)
   useEffect(() => {
-    if (initialToken && initialToken.trim() && tokenMint.trim() !== initialToken.trim()) {
-      setTokenMint(initialToken.trim());
+    if (initialToken && initialToken.trim()) {
+      const normalized = (() => {
+        let m = initialToken.trim();
+        if (m.length > 44 && m.endsWith('pump')) m = m.slice(0, -4);
+        if (m.length > 44) m = m.slice(0, 44);
+        return m;
+      })();
+      if (tokenMint.trim() !== normalized) {
+        setTokenMint(normalized);
+      }
     }
   }, [initialToken]);
 
   // Fetch token metadata when tokenMint changes
   useEffect(() => {
-    if (tokenMint.trim()) {
-      fetchTokenMetadata(tokenMint.trim());
+    const raw = tokenMint.trim();
+    if (!raw) return;
+    let normalized = raw;
+    if (normalized.length > 44 && normalized.endsWith('pump')) normalized = normalized.slice(0, -4);
+    if (normalized.length > 44) normalized = normalized.slice(0, 44);
+    if (normalized !== tokenMint) {
+      setTokenMint(normalized);
+      return;
     }
+    fetchTokenMetadata(normalized);
   }, [tokenMint, fetchTokenMetadata]);
 
   // Auto-generate report when initialToken is provided and tokenMint is set

@@ -330,38 +330,38 @@ export function TokenMetadataDisplay({
                     {metadata.image && (
                       <div className="space-y-2">
                         <img 
-                          src={metadata.image} 
+                          src={normalizeUrl(metadata.image)} 
                           alt="Token Image" 
                           className="w-32 h-32 rounded-lg border-2 border-primary/20 object-cover shadow-lg hover:scale-105 transition-transform cursor-pointer" 
-                          onClick={() => window.open(metadata.image, '_blank')}
+                          onClick={() => window.open(normalizeUrl(metadata.image), '_blank')}
                         />
                         <p className="text-xs text-muted-foreground text-center font-medium">Primary Image</p>
                         <a 
-                          href={metadata.image}
+                          href={normalizeUrl(metadata.image)}
                           target="_blank"
                           rel="noopener noreferrer"
                           className="text-xs text-primary hover:underline block text-center break-all px-2"
                         >
-                          {metadata.image}
+                          {normalizeUrl(metadata.image)}
                         </a>
                       </div>
                     )}
                     {metadata.logoURI && metadata.logoURI !== metadata.image && (
                       <div className="space-y-2">
                         <img 
-                          src={metadata.logoURI} 
+                          src={normalizeUrl(metadata.logoURI)} 
                           alt="Logo URI" 
                           className="w-32 h-32 rounded-lg border-2 border-primary/20 object-cover shadow-lg hover:scale-105 transition-transform cursor-pointer" 
-                          onClick={() => window.open(metadata.logoURI, '_blank')}
+                          onClick={() => window.open(normalizeUrl(metadata.logoURI), '_blank')}
                         />
                         <p className="text-xs text-muted-foreground text-center font-medium">Logo URI</p>
                         <a 
-                          href={metadata.logoURI}
+                          href={normalizeUrl(metadata.logoURI)}
                           target="_blank"
                           rel="noopener noreferrer"
                           className="text-xs text-primary hover:underline block text-center break-all px-2"
                         >
-                          {metadata.logoURI}
+                          {normalizeUrl(metadata.logoURI)}
                         </a>
                       </div>
                     )}

@@ -75,14 +75,19 @@ export function useTokenMetadata() {
       return false;
     }
 
+    // Normalize incoming mints (handle "...pump" suffix and oversize strings)
+    let mint = tokenMint.trim();
+    if (mint.length > 44 && mint.toLowerCase().endsWith('pump')) mint = mint.slice(0, -4);
+    if (mint.length > 44) mint = mint.slice(0, 44);
+
     setIsLoading(true);
     setError(null);
 
     try {
-      console.log('Fetching token metadata for:', tokenMint);
+      console.log('Fetching token metadata for:', mint);
       
       const { data, error: fetchError } = await supabase.functions.invoke('token-metadata', {
-        body: { tokenMint }
+        body: { tokenMint: mint }
       });
 
       if (fetchError) {
