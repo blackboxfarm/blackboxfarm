@@ -311,21 +311,50 @@ export function TokenMetadataDisplay({
                   </div>
                 </div>
 
-                {/* Images & Assets */}
-                <div className="space-y-2">
-                  <p className="text-xs text-muted-foreground uppercase tracking-wide">Token Images</p>
-                  <div className="flex flex-wrap gap-3">
+                {/* Images & Assets - LARGE DISPLAY */}
+                <div className="space-y-3">
+                  <p className="text-sm font-semibold text-foreground uppercase tracking-wide">Token Images</p>
+                  <div className="flex flex-wrap gap-6">
                     {metadata.image && (
-                      <div className="space-y-1">
-                        <img src={metadata.image} alt="Token Image" className="w-16 h-16 rounded border object-cover" />
-                        <p className="text-xs text-muted-foreground">Primary Image</p>
+                      <div className="space-y-2">
+                        <img 
+                          src={metadata.image} 
+                          alt="Token Image" 
+                          className="w-32 h-32 rounded-lg border-2 border-primary/20 object-cover shadow-lg hover:scale-105 transition-transform cursor-pointer" 
+                          onClick={() => window.open(metadata.image, '_blank')}
+                        />
+                        <p className="text-xs text-muted-foreground text-center font-medium">Primary Image</p>
+                        <a 
+                          href={metadata.image}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-xs text-primary hover:underline block text-center break-all px-2"
+                        >
+                          {metadata.image}
+                        </a>
                       </div>
                     )}
                     {metadata.logoURI && metadata.logoURI !== metadata.image && (
-                      <div className="space-y-1">
-                        <img src={metadata.logoURI} alt="Logo URI" className="w-16 h-16 rounded border object-cover" />
-                        <p className="text-xs text-muted-foreground">Logo URI</p>
+                      <div className="space-y-2">
+                        <img 
+                          src={metadata.logoURI} 
+                          alt="Logo URI" 
+                          className="w-32 h-32 rounded-lg border-2 border-primary/20 object-cover shadow-lg hover:scale-105 transition-transform cursor-pointer" 
+                          onClick={() => window.open(metadata.logoURI, '_blank')}
+                        />
+                        <p className="text-xs text-muted-foreground text-center font-medium">Logo URI</p>
+                        <a 
+                          href={metadata.logoURI}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-xs text-primary hover:underline block text-center break-all px-2"
+                        >
+                          {metadata.logoURI}
+                        </a>
                       </div>
+                    )}
+                    {!metadata.image && !metadata.logoURI && (
+                      <p className="text-sm text-muted-foreground">No images found for this token</p>
                     )}
                   </div>
                 </div>
