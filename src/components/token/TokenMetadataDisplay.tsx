@@ -428,6 +428,16 @@ export function TokenMetadataDisplay({
                     )}
                   </div>
                 </div>
+
+                {/* Raw Data */}
+                <div className="space-y-1">
+                  <p className="text-xs text-muted-foreground uppercase tracking-wide">Raw Data</p>
+                  <div className="p-3 bg-muted/30 rounded-lg">
+                    <pre className="text-xs font-mono overflow-x-auto max-h-64 whitespace-pre-wrap break-all">
+                      {JSON.stringify({ metadata, priceInfo, onChainData, pools }, null, 2)}
+                    </pre>
+                  </div>
+                </div>
               </div>
             </div>
           </div>

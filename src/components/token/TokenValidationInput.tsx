@@ -156,7 +156,6 @@ export function TokenValidationInput({
             onChainData={tokenData.onChainData}
             pools={tokenData.pools}
             isLoading={isLoading}
-            compact
           />
         </div>
       )}
