@@ -230,20 +230,25 @@ serve(async (req) => {
           if (pair.baseToken) {
             metadata.name = pair.baseToken.name || metadata.name;
             metadata.symbol = pair.baseToken.symbol || metadata.symbol;
-            metadata.image = pair.baseToken.logoURI;
+            metadata.logoURI = pair.baseToken.logoURI;
+            metadata.image = pair.baseToken.logoURI; // Both fields for compatibility
             metadata.verified = true;
           }
           
-          // Set price info
+          // Set enhanced price info with market data
           priceInfo = {
             priceUsd: parseFloat(pair.priceUsd) || 0,
             priceChange24h: parseFloat(pair.priceChange?.h24) || 0,
             volume24h: parseFloat(pair.volume?.h24) || 0,
             liquidity: parseFloat(pair.liquidity?.usd) || 0,
-            dexUrl: pair.url
+            marketCap: parseFloat(pair.marketCap) || 0,
+            fdv: parseFloat(pair.fdv) || 0,
+            dexUrl: pair.url,
+            pairAddress: pair.pairAddress,
+            dexId: pair.dexId
           };
           
-          console.log('DexScreener data retrieved');
+          console.log('DexScreener data retrieved - Logo:', metadata.logoURI);
         }
       }
     } catch (error) {

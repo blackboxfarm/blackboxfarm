@@ -21,7 +21,11 @@ interface PriceInfo {
   priceChange24h: number;
   volume24h: number;
   liquidity: number;
+  marketCap?: number;
+  fdv?: number;
   dexUrl?: string;
+  pairAddress?: string;
+  dexId?: string;
 }
 
 interface OnChainData {

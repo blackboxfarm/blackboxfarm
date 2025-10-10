@@ -45,7 +45,11 @@ interface PriceInfo {
   priceChange24h: number;
   volume24h: number;
   liquidity: number;
+  marketCap?: number;
+  fdv?: number;
   dexUrl?: string;
+  pairAddress?: string;
+  dexId?: string;
 }
 
 interface TokenMetadataDisplayProps {
@@ -241,6 +245,20 @@ export function TokenMetadataDisplay({
                   <p className="text-sm text-muted-foreground">Liquidity</p>
                   <p className="text-lg font-semibold">${formatLargeNumber(priceInfo.liquidity)}</p>
                 </div>
+
+                {priceInfo.marketCap && priceInfo.marketCap > 0 && (
+                  <div>
+                    <p className="text-sm text-muted-foreground">Market Cap</p>
+                    <p className="text-lg font-semibold">${formatLargeNumber(priceInfo.marketCap)}</p>
+                  </div>
+                )}
+
+                {priceInfo.fdv && priceInfo.fdv > 0 && (
+                  <div>
+                    <p className="text-sm text-muted-foreground">FDV</p>
+                    <p className="text-lg font-semibold">${formatLargeNumber(priceInfo.fdv)}</p>
+                  </div>
+                )}
               </div>
               )}
 
