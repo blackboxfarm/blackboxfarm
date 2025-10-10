@@ -41,7 +41,7 @@ async function fetchMetaplexMetadata(mintAddress: string, rpcUrl: string) {
   try {
     const mintPubkey = new PublicKey(mintAddress);
     const [metadataPDA] = await PublicKey.findProgramAddress(
-      [Buffer.from('metadata'), METAPLEX_PROGRAM_ID.toBuffer(), mintPubkey.toBuffer()],
+      [new TextEncoder().encode('metadata'), METAPLEX_PROGRAM_ID.toBuffer(), mintPubkey.toBuffer()],
       METAPLEX_PROGRAM_ID
     );
     
@@ -60,9 +60,8 @@ async function fetchMetaplexMetadata(mintAddress: string, rpcUrl: string) {
     if (!data.result?.value?.data?.[0]) return null;
     
     // Decode URI from account data (simplified - proper Metaplex decoding would be more complex)
-    const accountData = Buffer.from(data.result.value.data[0], 'base64');
-    // URI is typically at offset ~60-100, look for http pattern
-    const dataStr = accountData.toString('utf8');
+    const b64: string = data.result.value.data[0];
+    const dataStr = atob(b64);
     const uriMatch = dataStr.match(/https?:\/\/[^\x00]+/);
     
     if (uriMatch) {
@@ -281,10 +280,14 @@ serve(async (req) => {
     if (offChainMetadata) {
       metadata.name = offChainMetadata.name || metadata.name;
       metadata.symbol = offChainMetadata.symbol || metadata.symbol;
-      metadata.image = offChainMetadata.image || metadata.image;
-      metadata.description = offChainMetadata.description;
-      metadata.uri = offChainMetadata.uri;
-      console.log('Off-chain metadata merged');
+      const img = offChainMetadata.image || metadata.image;
+      if (img) {
+        metadata.image = img;
+        metadata.logoURI = metadata.logoURI || img;
+      }
+      metadata.description = offChainMetadata.description ?? metadata.description;
+      metadata.uri = offChainMetadata.uri || metadata.uri;
+      console.log('Off-chain metadata merged (image set:', Boolean(img), ')');
     }
 
     const response = {
