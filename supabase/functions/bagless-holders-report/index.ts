@@ -5,6 +5,40 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 }
 
+// Launchpad detection function
+function detectLaunchpad(pairData: any, tokenMint: string): { name: string; detected: boolean; confidence: 'high' | 'medium' | 'low' } {
+  // Priority 1: Check DexScreener pair info websites
+  if (pairData?.info?.websites && Array.isArray(pairData.info.websites)) {
+    for (const website of pairData.info.websites) {
+      const url = website.url || website;
+      if (typeof url === 'string') {
+        if (url.includes('pump.fun')) {
+          return { name: 'pump.fun', detected: true, confidence: 'high' };
+        }
+        if (url.includes('bonk.bot') || url.includes('bonk.fun')) {
+          return { name: 'bonk.fun', detected: true, confidence: 'high' };
+        }
+        if (url.includes('bags.fm')) {
+          return { name: 'bags.fm', detected: true, confidence: 'high' };
+        }
+      }
+    }
+  }
+  
+  // Priority 2: Check address suffix (less reliable)
+  if (tokenMint.endsWith('pump')) {
+    return { name: 'pump.fun', detected: true, confidence: 'low' };
+  }
+  if (tokenMint.endsWith('bonk')) {
+    return { name: 'bonk.fun', detected: true, confidence: 'low' };
+  }
+  if (tokenMint.endsWith('bags')) {
+    return { name: 'bags.fm', detected: true, confidence: 'low' };
+  }
+  
+  return { name: 'unknown', detected: false, confidence: 'low' };
+}
+
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
@@ -64,7 +98,8 @@ serve(async (req) => {
               return parseFloat(data.pairs[0].priceUsd) || 0;
             }
             return 0;
-          }
+          },
+          pairData: null as any // Store full pair data for launchpad detection
         },
         {
           name: 'Birdeye',
@@ -94,6 +129,11 @@ serve(async (req) => {
             const data = await response.json();
             const price = api.parser(data);
             
+            // Store DexScreener pair data for launchpad detection
+            if (api.name === 'DexScreener' && data.pairs && data.pairs.length > 0) {
+              api.pairData = data.pairs[0];
+            }
+            
             if (price > 0) {
               tokenPriceUSD = price;
               priceSource = api.name;
@@ -110,6 +150,10 @@ serve(async (req) => {
           continue;
         }
       }
+      
+      // Detect launchpad from DexScreener data
+      const dexScreenerAPI = priceAPIs.find(api => api.name === 'DexScreener');
+      const launchpadInfo = detectLaunchpad(dexScreenerAPI?.pairData, tokenMint);
       
       if (tokenPriceUSD === 0) {
         priceDiscoveryFailed = true;
@@ -646,6 +690,7 @@ serve(async (req) => {
       kingpinWallets,
       superBossWallets,
       babyWhaleWallets,
+      launchpadInfo,
       trueWhaleWallets,
       largeWallets,
       mediumWallets,

@@ -99,6 +99,11 @@ interface HoldersReport {
     buyersFound?: number;
     totalTransactionsSearched?: number;
   };
+  launchpadInfo?: {
+    name: string;
+    detected: boolean;
+    confidence: 'high' | 'medium' | 'low';
+  };
   summary: string;
 }
 
@@ -796,6 +801,22 @@ export function BaglessHoldersReport({ initialToken }: BaglessHoldersReportProps
                         {tokenData.metadata.isPumpFun && (
                           <Badge variant="outline" className="text-orange-600 text-xs">
                             Pump.fun
+                          </Badge>
+                        )}
+                        {report.launchpadInfo?.detected && (report.launchpadInfo.confidence === 'high' || report.launchpadInfo.confidence === 'medium') && (
+                          <Badge 
+                            variant="outline" 
+                            className={
+                              report.launchpadInfo.name === 'pump.fun' ? 'text-green-600 border-green-600' :
+                              report.launchpadInfo.name === 'bonk.fun' ? 'text-orange-600 border-orange-600' :
+                              report.launchpadInfo.name === 'bags.fm' ? 'text-blue-600 border-blue-600' :
+                              'text-muted-foreground'
+                            }
+                          >
+                            {report.launchpadInfo.name === 'pump.fun' && '🚀 '}
+                            {report.launchpadInfo.name === 'bonk.fun' && '🦴 '}
+                            {report.launchpadInfo.name === 'bags.fm' && '💼 '}
+                            Launched on {report.launchpadInfo.name}
                           </Badge>
                         )}
                       </div>
