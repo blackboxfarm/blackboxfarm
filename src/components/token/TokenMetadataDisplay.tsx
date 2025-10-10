@@ -101,14 +101,6 @@ export function TokenMetadataDisplay({
   if (compact) {
     return (
       <div className="space-y-2">
-        {metadata.isPumpFun && (
-          <Alert>
-            <Zap className="h-4 w-4" />
-            <AlertDescription>
-              This appears to be a pump.fun token currently on the bonding curve. Price data may be limited.
-            </AlertDescription>
-          </Alert>
-        )}
         <div className="flex items-center gap-3">
           {(metadata.image || metadata.logoURI) && (
             <img 
@@ -150,7 +142,7 @@ export function TokenMetadataDisplay({
               </div>
             ) : metadata.isPumpFun ? (
               <div className="text-sm text-muted-foreground">
-                No price data (bonding curve)
+                No price data available
               </div>
             ) : (
               <div className="text-sm text-muted-foreground">
@@ -167,14 +159,6 @@ export function TokenMetadataDisplay({
     <Card>
       <CardContent className="p-4">
         <div className="space-y-4">
-          {metadata.isPumpFun && (
-            <Alert>
-              <Zap className="h-4 w-4" />
-              <AlertDescription>
-                This is a pump.fun token currently on the bonding curve. It may not have traditional liquidity pools yet.
-              </AlertDescription>
-            </Alert>
-          )}
           
           <div className="flex items-start gap-6">
             {(metadata.image || metadata.logoURI) && (
@@ -304,9 +288,6 @@ export function TokenMetadataDisplay({
                         <p className="text-sm font-medium">Launchpad</p>
                         <div className="flex items-center gap-2">
                           <span className="font-semibold">{metadata.launchpad.name}</span>
-                          <Badge variant={metadata.launchpad.confidence === 'high' ? 'default' : 'secondary'} className="text-xs">
-                            {metadata.launchpad.confidence} confidence
-                          </Badge>
                         </div>
                       </div>
                     </div>
@@ -406,12 +387,6 @@ export function TokenMetadataDisplay({
                         <p className="text-muted-foreground">Supply</p>
                         <p className="font-mono">{onChainData.supply || 'Unknown'}</p>
                       </div>
-                      {onChainData.isPumpFun !== undefined && (
-                        <div className="col-span-2">
-                          <p className="text-muted-foreground">Pump.fun Bonding Curve</p>
-                          <p className="font-mono">{onChainData.isPumpFun ? 'Yes' : 'No'}</p>
-                        </div>
-                      )}
                     </div>
                   </div>
                 )}

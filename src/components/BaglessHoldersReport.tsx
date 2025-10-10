@@ -798,10 +798,6 @@ export function BaglessHoldersReport({ initialToken }: BaglessHoldersReportProps
                           ? `🎉 LAUNCHED ON ${report.launchpadInfo.name.toUpperCase()}`
                           : 'LAUNCHPAD UNKNOWN'}
                       </h3>
-                      <p className="text-base md:text-lg font-semibold">
-                        Detection Confidence: <span className="uppercase">{report.launchpadInfo.confidence}</span>
-                        {report.launchpadInfo.detected && ' ✓'}
-                      </p>
                     </div>
                   </div>
                 </div>

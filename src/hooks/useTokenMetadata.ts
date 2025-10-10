@@ -95,9 +95,9 @@ export function useTokenMetadata() {
         
         // Provide better error messages for common issues
         if (data?.error?.includes('Memory limit exceeded')) {
-          setError('Token metadata service is temporarily overloaded. This may be a pump.fun token - please try again in a moment.');
+          setError('Token metadata service is temporarily overloaded. Please try again in a moment.');
         } else if (data?.error?.includes('timeout')) {
-          setError('Request timed out. The token may be on pump.fun bonding curve or network is slow.');
+          setError('Request timed out. Network may be slow or the provider is rate-limited.');
         } else if (data?.error?.includes('not found')) {
           setError('Token not found on Solana blockchain. Please verify the address.');
         } else {
