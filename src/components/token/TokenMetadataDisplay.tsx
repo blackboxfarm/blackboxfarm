@@ -84,8 +84,14 @@ export function TokenMetadataDisplay({
     return <TokenMetadataSkeleton compact={compact} />;
   }
 
-  // Direct image and description from metadata (no complex fallback)
-  const displayImage = metadata.image || metadata.logoURI;
+  // Normalize IPFS/Arweave URLs
+  const normalizeUrl = (url?: string) => {
+    if (!url) return undefined;
+    if (url.startsWith('ipfs://')) return `https://cloudflare-ipfs.com/ipfs/${url.replace('ipfs://','')}`;
+    if (url.startsWith('ar://')) return `https://arweave.net/${url.slice(5)}`;
+    return url;
+  };
+  const displayImage = normalizeUrl(metadata.image || metadata.logoURI);
   const descriptionText = metadata.description;
 
   const formatPrice = (price: number) => {
