@@ -1,0 +1,73 @@
+{
+  "pumpfun": {
+    "name": "pumpfun",
+    "type": "bonding_curve",
+    "programIds": [
+      "6EF8rrecthR5Dkzon8Nwu78hRvfCKubJ14M5uBEwF6P"
+    ],
+    "logoUrl": "https://pump.fun/icon.png",
+    "api": {
+      "enabled": true,
+      "provider": "helius",
+      "method": "enhancedTransactions",
+      "envKey": "HELIUS_API_KEY"
+    }
+  },
+  "bonkfun": {
+    "name": "bonkfun",
+    "type": "bonding_curve",
+    "programIds": [
+      "BonK1YDeXrnVmC9a7JA5KhkU7pYV1g3Vy1tLWqRNfPRZ"
+    ],
+    "logoUrl": "https://bonk.fun/favicon.ico",
+    "api": {
+      "enabled": false
+    }
+  },
+  "bagsfm": {
+    "name": "bagsfm",
+    "type": "bonding_curve",
+    "programIds": [
+      "BaGSfMx8GHd7f5EwdkQXWNCPwqbGNiN7ZQxw7NwdFWPE"
+    ],
+    "logoUrl": "https://bags.fm/favicon.ico",
+    "api": {
+      "enabled": false
+    }
+  },
+  "raydium": {
+    "name": "raydium",
+    "type": "amm",
+    "programIds": [
+      "675kPX9MHTjS2zt1qfr1NYHuzeLXfQM9H24wFSUt1Mp8",
+      "CAMMCzo5YL8w4VFF8KVHrK22GGUsp5VTaW7grrKgrWqK"
+    ],
+    "logoUrl": "https://raydium.io/logo.png",
+    "api": {
+      "enabled": false
+    }
+  },
+  "orca": {
+    "name": "orca",
+    "type": "amm",
+    "programIds": [
+      "9W959DqEETiGZocYWCQPaJ6sBmUzgfxXfqGeTEdp3aQP",
+      "whirLbMiicVdio4qvUfM5KAg6Ct8VwpYzGff3uctyCc"
+    ],
+    "logoUrl": "https://www.orca.so/favicon.ico",
+    "api": {
+      "enabled": false
+    }
+  },
+  "meteora": {
+    "name": "meteora",
+    "type": "amm",
+    "programIds": [
+      "LBUZKhRxPF3XUpBCjp4YzTKgLccjZhTSDM9YuVaPwxo"
+    ],
+    "logoUrl": "https://meteora.ag/favicon.ico",
+    "api": {
+      "enabled": false
+    }
+  }
+}

@@ -1,4 +1,9 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
+import { tryHeliusEnhancedApi, decodePumpFunBuy } from "../_shared/venue-decoders/pump-fun.ts";
+import { resolveRaydiumPools, decodeRaydiumSwap } from "../_shared/venue-decoders/raydium.ts";
+import { rankBuyers, deduplicateByWallet } from "../_shared/first-buyers-utils.ts";
+import type { BuyerRow, Venue } from "../_shared/first-buyers-utils.ts";
+import venuesConfig from "../_shared/venues.json" assert { type: "json" };
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
