@@ -31,10 +31,25 @@ interface OnChainData {
   freezeAuthority?: string;
 }
 
+interface RaydiumPool {
+  pairAddress: string;
+  baseSymbol: string;
+  quoteSymbol: string;
+  liquidityUsd: number;
+  url: string;
+}
+
+interface LaunchpadInfo {
+  name: string;
+  detected: boolean;
+  confidence: string;
+}
+
 interface TokenData {
-  metadata: TokenMetadata;
+  metadata: TokenMetadata & { launchpad?: LaunchpadInfo };
   priceInfo: PriceInfo | null;
   onChainData: OnChainData;
+  pools?: RaydiumPool[];
 }
 
 export function useTokenMetadata() {

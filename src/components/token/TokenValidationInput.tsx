@@ -153,6 +153,8 @@ export function TokenValidationInput({
           <TokenMetadataDisplay 
             metadata={tokenData.metadata}
             priceInfo={tokenData.priceInfo}
+            onChainData={tokenData.onChainData}
+            pools={tokenData.pools}
             isLoading={isLoading}
             compact
           />

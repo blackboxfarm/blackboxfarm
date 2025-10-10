@@ -2,7 +2,22 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { ExternalLink, Shield, ShieldCheck, TrendingUp, TrendingDown, Zap } from "lucide-react";
+import { ExternalLink, Shield, ShieldCheck, TrendingUp, TrendingDown, Zap, Info } from "lucide-react";
+import { Separator } from "@/components/ui/separator";
+
+interface LaunchpadInfo {
+  name: string;
+  detected: boolean;
+  confidence: string;
+}
+
+interface RaydiumPool {
+  pairAddress: string;
+  baseSymbol: string;
+  quoteSymbol: string;
+  liquidityUsd: number;
+  url: string;
+}
 
 interface TokenMetadata {
   mint: string;
@@ -15,6 +30,13 @@ interface TokenMetadata {
   image?: string;
   description?: string;
   uri?: string;
+  isPumpFun?: boolean;
+  launchpad?: LaunchpadInfo;
+}
+
+interface OnChainData {
+  decimals: number;
+  supply: string;
   isPumpFun?: boolean;
 }
 
@@ -29,13 +51,27 @@ interface PriceInfo {
 interface TokenMetadataDisplayProps {
   metadata: TokenMetadata;
   priceInfo: PriceInfo | null;
+  onChainData?: OnChainData | null;
+  pools?: RaydiumPool[];
   isLoading?: boolean;
   compact?: boolean;
 }
 
+const LAUNCHPAD_LOGOS: Record<string, string> = {
+  'pump.fun': '/launchpad-logos/pumpfun.png',
+  'pumpfun': '/launchpad-logos/pumpfun.png',
+  'bonk.fun': '/launchpad-logos/bonkfun.png',
+  'bonkfun': '/launchpad-logos/bonkfun.png',
+  'bags.fm': '/launchpad-logos/bagsfm.png',
+  'bagsfm': '/launchpad-logos/bagsfm.png',
+  'raydium': '/launchpad-logos/raydium.png',
+};
+
 export function TokenMetadataDisplay({ 
   metadata, 
-  priceInfo, 
+  priceInfo,
+  onChainData,
+  pools = [],
   isLoading = false, 
   compact = false 
 }: TokenMetadataDisplayProps) {
@@ -224,6 +260,174 @@ export function TokenMetadataDisplay({
                     View on DEX
                   </a>
                 )}
+              </div>
+
+              {/* COMPREHENSIVE METADATA DUMP */}
+              <Separator className="my-4" />
+              
+              <div className="space-y-4">
+                <div className="flex items-center gap-2">
+                  <Info className="h-4 w-4" />
+                  <h4 className="font-semibold">Complete Metadata</h4>
+                </div>
+
+                {/* Launchpad Information */}
+                {metadata.launchpad && metadata.launchpad.detected && (
+                  <div className="space-y-2 p-3 bg-muted/30 rounded-lg">
+                    <div className="flex items-center gap-3">
+                      {LAUNCHPAD_LOGOS[metadata.launchpad.name.toLowerCase()] && (
+                        <img 
+                          src={LAUNCHPAD_LOGOS[metadata.launchpad.name.toLowerCase()]}
+                          alt={metadata.launchpad.name}
+                          className="w-8 h-8 rounded object-contain"
+                        />
+                      )}
+                      <div>
+                        <p className="text-sm font-medium">Launchpad</p>
+                        <div className="flex items-center gap-2">
+                          <span className="font-semibold">{metadata.launchpad.name}</span>
+                          <Badge variant={metadata.launchpad.confidence === 'high' ? 'default' : 'secondary'} className="text-xs">
+                            {metadata.launchpad.confidence} confidence
+                          </Badge>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Token Identity */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  <div className="space-y-1">
+                    <p className="text-xs text-muted-foreground uppercase tracking-wide">Token Name</p>
+                    <p className="font-mono text-sm">{metadata.name}</p>
+                  </div>
+                  <div className="space-y-1">
+                    <p className="text-xs text-muted-foreground uppercase tracking-wide">Symbol</p>
+                    <p className="font-mono text-sm">{metadata.symbol}</p>
+                  </div>
+                  <div className="space-y-1 md:col-span-2">
+                    <p className="text-xs text-muted-foreground uppercase tracking-wide">Mint Address</p>
+                    <p className="font-mono text-xs break-all">{metadata.mint}</p>
+                  </div>
+                </div>
+
+                {/* Images & Assets */}
+                <div className="space-y-2">
+                  <p className="text-xs text-muted-foreground uppercase tracking-wide">Token Images</p>
+                  <div className="flex flex-wrap gap-3">
+                    {metadata.image && (
+                      <div className="space-y-1">
+                        <img src={metadata.image} alt="Token Image" className="w-16 h-16 rounded border object-cover" />
+                        <p className="text-xs text-muted-foreground">Primary Image</p>
+                      </div>
+                    )}
+                    {metadata.logoURI && metadata.logoURI !== metadata.image && (
+                      <div className="space-y-1">
+                        <img src={metadata.logoURI} alt="Logo URI" className="w-16 h-16 rounded border object-cover" />
+                        <p className="text-xs text-muted-foreground">Logo URI</p>
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* Metadata URI */}
+                {metadata.uri && (
+                  <div className="space-y-1">
+                    <p className="text-xs text-muted-foreground uppercase tracking-wide">Metadata URI</p>
+                    <a 
+                      href={metadata.uri}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="font-mono text-xs break-all text-primary hover:underline flex items-center gap-1"
+                    >
+                      {metadata.uri}
+                      <ExternalLink className="h-3 w-3 flex-shrink-0" />
+                    </a>
+                  </div>
+                )}
+
+                {/* On-Chain Data */}
+                {onChainData && (
+                  <div className="space-y-2 p-3 bg-muted/30 rounded-lg">
+                    <p className="text-sm font-medium">On-Chain Data</p>
+                    <div className="grid grid-cols-2 gap-2 text-sm">
+                      <div>
+                        <p className="text-muted-foreground">Decimals</p>
+                        <p className="font-mono">{onChainData.decimals}</p>
+                      </div>
+                      <div>
+                        <p className="text-muted-foreground">Supply</p>
+                        <p className="font-mono">{onChainData.supply || 'Unknown'}</p>
+                      </div>
+                      {onChainData.isPumpFun !== undefined && (
+                        <div className="col-span-2">
+                          <p className="text-muted-foreground">Pump.fun Bonding Curve</p>
+                          <p className="font-mono">{onChainData.isPumpFun ? 'Yes' : 'No'}</p>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                {/* Raydium Pools */}
+                {pools && pools.length > 0 && (
+                  <div className="space-y-2">
+                    <p className="text-sm font-medium">Raydium Pools ({pools.length})</p>
+                    <div className="space-y-2">
+                      {pools.map((pool, idx) => (
+                        <div key={pool.pairAddress} className="p-3 bg-muted/30 rounded-lg space-y-1">
+                          <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-2">
+                              <img 
+                                src="/launchpad-logos/raydium.png"
+                                alt="Raydium"
+                                className="w-5 h-5"
+                              />
+                              <span className="font-mono text-sm">
+                                {pool.baseSymbol}/{pool.quoteSymbol}
+                              </span>
+                            </div>
+                            <Badge variant="outline" className="text-xs">
+                              ${formatLargeNumber(pool.liquidityUsd)} Liquidity
+                            </Badge>
+                          </div>
+                          <p className="text-xs text-muted-foreground font-mono break-all">
+                            {pool.pairAddress}
+                          </p>
+                          {pool.url && (
+                            <a 
+                              href={pool.url}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="text-xs text-primary hover:underline inline-flex items-center gap-1"
+                            >
+                              View Pool
+                              <ExternalLink className="h-3 w-3" />
+                            </a>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Verification Status */}
+                <div className="space-y-1">
+                  <p className="text-xs text-muted-foreground uppercase tracking-wide">Verification Status</p>
+                  <div className="flex items-center gap-2">
+                    {metadata.verified ? (
+                      <>
+                        <ShieldCheck className="h-4 w-4 text-green-500" />
+                        <span className="text-sm text-green-600">Verified Token</span>
+                      </>
+                    ) : (
+                      <>
+                        <Shield className="h-4 w-4 text-yellow-500" />
+                        <span className="text-sm text-yellow-600">Unverified Token</span>
+                      </>
+                    )}
+                  </div>
+                </div>
               </div>
             </div>
           </div>
