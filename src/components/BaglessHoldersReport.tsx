@@ -753,6 +753,19 @@ export function BaglessHoldersReport({ initialToken }: BaglessHoldersReportProps
       {/* Ad Banner under Generate Button */}
       <AdBanner size="mobile" position={1} />
 
+      {/* Token Metadata - show as soon as metadata is fetched (before report) */}
+      {tokenData && (
+        <div className="mb-4 md:mb-6">
+          <TokenMetadataDisplay 
+            metadata={tokenData.metadata}
+            priceInfo={tokenData.priceInfo}
+            onChainData={tokenData.onChainData}
+            pools={tokenData.pools}
+          />
+        </div>
+      )}
+
+
       {report && (
         <>
           <Card>
@@ -803,17 +816,6 @@ export function BaglessHoldersReport({ initialToken }: BaglessHoldersReportProps
                 </div>
               )}
 
-              {/* Token Metadata Display - Full Comprehensive View */}
-              {tokenData && (
-                <div className="mb-4 md:mb-6">
-                  <TokenMetadataDisplay 
-                    metadata={tokenData.metadata}
-                    priceInfo={tokenData.priceInfo}
-                    onChainData={tokenData.onChainData}
-                    pools={tokenData.pools}
-                  />
-                </div>
-              )}
               
               {/* Ad Banner #1 - After Token Metadata */}
               <div className="block md:hidden">
