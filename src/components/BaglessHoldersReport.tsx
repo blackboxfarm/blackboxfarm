@@ -14,6 +14,7 @@ import { Loader2, Download, RefreshCw, Flag, AlertTriangle, Shield, TrendingUp }
 import { Progress } from '@/components/ui/progress';
 import { useTokenMetadata } from '@/hooks/useTokenMetadata';
 import { AdBanner } from '@/components/AdBanner';
+import { TokenMetadataDisplay } from '@/components/token/TokenMetadataDisplay';
 
 interface TokenHolder {
   owner: string;
@@ -806,49 +807,15 @@ export function BaglessHoldersReport({ initialToken }: BaglessHoldersReportProps
                 </div>
               )}
 
-              {/* Token Metadata Display */}
+              {/* Token Metadata Display - Full Comprehensive View */}
               {tokenData && (
-                <div className="mb-4 md:mb-6 p-3 md:p-4 bg-muted/50 rounded-lg border">
-                  <div className="flex items-start gap-3 md:gap-4">
-                    {tokenData.metadata.logoURI && (
-                      <img 
-                        src={tokenData.metadata.logoURI} 
-                        alt={`${tokenData.metadata.name} logo`}
-                        className="w-12 h-12 md:w-14 md:h-14 rounded-full flex-shrink-0"
-                        onError={(e) => {
-                          e.currentTarget.style.display = 'none';
-                        }}
-                      />
-                    )}
-                    <div className="flex-1 min-w-0">
-                      <div className="flex flex-wrap items-center gap-2 mb-2">
-                        <span className="text-base md:text-lg font-bold text-yellow-600 dark:text-yellow-500">
-                          ${tokenData.metadata.symbol || 'UNK'}
-                        </span>
-                        <span className="text-base md:text-lg font-bold text-yellow-600 dark:text-yellow-500">
-                          {tokenData.metadata.name || 'Unknown Token'}
-                        </span>
-                        {tokenData.metadata.verified && (
-                          <Badge variant="outline" className="text-green-600 text-xs">
-                            ✓ Verified
-                          </Badge>
-                        )}
-                        {tokenData.metadata.isPumpFun && (
-                          <Badge variant="outline" className="text-orange-600 text-xs">
-                            Pump.fun
-                          </Badge>
-                        )}
-                      </div>
-                      {tokenData.metadata.description && (
-                        <p className="text-sm md:text-base text-muted-foreground line-clamp-2">
-                          "{tokenData.metadata.description}"
-                        </p>
-                      )}
-                      <div className="text-xs text-muted-foreground break-all">
-                        Decimals: {tokenData.metadata.decimals} | Mint: {tokenData.metadata.mint}
-                      </div>
-                    </div>
-                  </div>
+                <div className="mb-4 md:mb-6">
+                  <TokenMetadataDisplay 
+                    metadata={tokenData.metadata}
+                    priceInfo={tokenData.priceInfo}
+                    onChainData={tokenData.onChainData}
+                    pools={tokenData.pools}
+                  />
                 </div>
               )}
               
