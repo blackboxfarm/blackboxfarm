@@ -70,6 +70,9 @@ serve(async (req) => {
     let priceSource = '';
     let priceDiscoveryFailed = false;
     
+    // Initialize launchpad info (will be populated later)
+    let launchpadInfo = { name: 'unknown', detected: false, confidence: 'low' as 'high' | 'medium' | 'low' };
+    
     if (!manualPrice || manualPrice === 0) {
       console.log('No manual price provided, trying multiple price sources...');
       
@@ -153,7 +156,7 @@ serve(async (req) => {
       
       // Detect launchpad from DexScreener data
       const dexScreenerAPI = priceAPIs.find(api => api.name === 'DexScreener');
-      const launchpadInfo = detectLaunchpad(dexScreenerAPI?.pairData, tokenMint);
+      launchpadInfo = detectLaunchpad(dexScreenerAPI?.pairData, tokenMint);
       
       if (tokenPriceUSD === 0) {
         priceDiscoveryFailed = true;
