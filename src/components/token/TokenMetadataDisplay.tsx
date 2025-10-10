@@ -176,12 +176,12 @@ export function TokenMetadataDisplay({
             </Alert>
           )}
           
-          <div className="flex items-start gap-4">
+          <div className="flex items-start gap-6">
             {(metadata.image || metadata.logoURI) && (
               <img 
                 src={metadata.image || metadata.logoURI} 
                 alt={metadata.symbol}
-                className="w-12 h-12 rounded-full flex-shrink-0 object-cover"
+                className="w-32 h-32 rounded-2xl flex-shrink-0 object-cover border-4 border-primary/20 shadow-xl"
                 onError={(e) => {
                   e.currentTarget.style.display = 'none';
                 }}
