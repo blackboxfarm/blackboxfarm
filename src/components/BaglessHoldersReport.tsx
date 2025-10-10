@@ -771,6 +771,41 @@ export function BaglessHoldersReport({ initialToken }: BaglessHoldersReportProps
               </CardTitle>
             </CardHeader>
             <CardContent>
+              {/* LAUNCHPAD DETECTION BANNER - BIG AND BOLD */}
+              {report.launchpadInfo && (
+                <div className={`mb-6 p-6 rounded-xl border-4 ${
+                  report.launchpadInfo.detected 
+                    ? report.launchpadInfo.name === 'pump.fun' 
+                      ? 'bg-gradient-to-r from-green-500/20 to-emerald-500/20 border-green-500 shadow-lg shadow-green-500/20'
+                      : report.launchpadInfo.name === 'bonk.fun'
+                      ? 'bg-gradient-to-r from-orange-500/20 to-amber-500/20 border-orange-500 shadow-lg shadow-orange-500/20'
+                      : report.launchpadInfo.name === 'bags.fm'
+                      ? 'bg-gradient-to-r from-blue-500/20 to-cyan-500/20 border-blue-500 shadow-lg shadow-blue-500/20'
+                      : 'bg-gradient-to-r from-primary/20 to-secondary/20 border-primary shadow-lg'
+                    : 'bg-muted/30 border-muted'
+                }`}>
+                  <div className="flex items-center gap-4">
+                    <div className="text-5xl md:text-6xl">
+                      {report.launchpadInfo.detected && report.launchpadInfo.name === 'pump.fun' && '🚀'}
+                      {report.launchpadInfo.detected && report.launchpadInfo.name === 'bonk.fun' && '🦴'}
+                      {report.launchpadInfo.detected && report.launchpadInfo.name === 'bags.fm' && '💼'}
+                      {!report.launchpadInfo.detected && '❓'}
+                    </div>
+                    <div className="flex-1">
+                      <h3 className="text-2xl md:text-3xl font-black mb-2">
+                        {report.launchpadInfo.detected 
+                          ? `🎉 LAUNCHED ON ${report.launchpadInfo.name.toUpperCase()}`
+                          : 'LAUNCHPAD UNKNOWN'}
+                      </h3>
+                      <p className="text-base md:text-lg font-semibold">
+                        Detection Confidence: <span className="uppercase">{report.launchpadInfo.confidence}</span>
+                        {report.launchpadInfo.detected && ' ✓'}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              )}
+
               {/* Token Metadata Display */}
               {tokenData && (
                 <div className="mb-4 md:mb-6 p-3 md:p-4 bg-muted/50 rounded-lg border">
@@ -801,22 +836,6 @@ export function BaglessHoldersReport({ initialToken }: BaglessHoldersReportProps
                         {tokenData.metadata.isPumpFun && (
                           <Badge variant="outline" className="text-orange-600 text-xs">
                             Pump.fun
-                          </Badge>
-                        )}
-                        {report.launchpadInfo?.detected && (report.launchpadInfo.confidence === 'high' || report.launchpadInfo.confidence === 'medium') && (
-                          <Badge 
-                            variant="outline" 
-                            className={
-                              report.launchpadInfo.name === 'pump.fun' ? 'text-green-600 border-green-600' :
-                              report.launchpadInfo.name === 'bonk.fun' ? 'text-orange-600 border-orange-600' :
-                              report.launchpadInfo.name === 'bags.fm' ? 'text-blue-600 border-blue-600' :
-                              'text-muted-foreground'
-                            }
-                          >
-                            {report.launchpadInfo.name === 'pump.fun' && '🚀 '}
-                            {report.launchpadInfo.name === 'bonk.fun' && '🦴 '}
-                            {report.launchpadInfo.name === 'bags.fm' && '💼 '}
-                            Launched on {report.launchpadInfo.name}
                           </Badge>
                         )}
                       </div>
