@@ -1,9 +1,10 @@
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Alert, AlertDescription } from "@/components/ui/alert";
+
 import { ExternalLink, Shield, ShieldCheck, TrendingUp, TrendingDown, Zap, Info } from "lucide-react";
 import { Separator } from "@/components/ui/separator";
+import { useEffect, useState } from "react";
 
 interface LaunchpadInfo {
   name: string;
@@ -83,6 +84,38 @@ export function TokenMetadataDisplay({
     return <TokenMetadataSkeleton compact={compact} />;
   }
 
+  // Fallback resolver for image/description via metadata.uri
+  const [resolvedImage, setResolvedImage] = useState<string | undefined>();
+  const [resolvedDescription, setResolvedDescription] = useState<string | undefined>();
+  const normalizeUrl = (url?: string) => {
+    if (!url) return undefined;
+    if (url.startsWith('ipfs://')) return `https://cloudflare-ipfs.com/ipfs/${url.replace('ipfs://','')}`;
+    if (url.startsWith('ar://')) return `https://arweave.net/${url.slice(5)}`;
+    return url;
+  };
+  const displayImage = normalizeUrl(metadata.image || metadata.logoURI || resolvedImage);
+  const descriptionText = metadata.description || resolvedDescription;
+
+  useEffect(() => {
+    const needsImage = !metadata.image && !metadata.logoURI;
+    const needsDescription = !metadata.description;
+    if (metadata.uri && (needsImage || needsDescription)) {
+      try {
+        fetch(metadata.uri)
+          .then((r) => (r.ok ? r.json() : Promise.reject(new Error('uri fetch failed'))))
+          .then((json) => {
+            const img = normalizeUrl(
+              json?.image || json?.logo || json?.image_url || json?.icon || json?.picture || json?.properties?.files?.[0]?.uri
+            );
+            const desc = json?.description || json?.data?.description;
+            if (img) setResolvedImage(img);
+            if (desc) setResolvedDescription(desc);
+          })
+          .catch(() => {/* ignore */});
+      } catch { /* ignore */ }
+    }
+  }, [metadata.mint, metadata.uri, metadata.image, metadata.logoURI, metadata.description]);
+
   const formatPrice = (price: number) => {
     if (price < 0.001) return `$${price.toExponential(2)}`;
     if (price < 1) return `$${price.toFixed(6)}`;
@@ -102,10 +135,11 @@ export function TokenMetadataDisplay({
     return (
       <div className="space-y-2">
         <div className="flex items-center gap-3">
-          {(metadata.image || metadata.logoURI) && (
+          {displayImage && (
             <img 
-              src={metadata.image || metadata.logoURI} 
-              alt={metadata.symbol}
+              src={displayImage} 
+              alt={`${metadata.symbol} token logo`}
+              loading="lazy"
               className="w-8 h-8 rounded-full object-cover"
               onError={(e) => {
                 e.currentTarget.style.display = 'none';
@@ -161,10 +195,11 @@ export function TokenMetadataDisplay({
         <div className="space-y-4">
           
           <div className="flex items-start gap-6">
-            {(metadata.image || metadata.logoURI) && (
+            {displayImage && (
               <img 
-                src={metadata.image || metadata.logoURI} 
-                alt={metadata.symbol}
+                src={displayImage} 
+                alt={`${metadata.symbol} token logo`}
+                loading="lazy"
                 className="w-32 h-32 rounded-2xl flex-shrink-0 object-cover border-4 border-primary/20 shadow-xl"
                 onError={(e) => {
                   e.currentTarget.style.display = 'none';
@@ -196,10 +231,10 @@ export function TokenMetadataDisplay({
                 </p>
               </div>
 
-              {metadata.description && (
+              {descriptionText && (
                 <div className="space-y-1">
                   <p className="text-sm font-medium text-muted-foreground">Description</p>
-                  <p className="text-sm leading-relaxed">{metadata.description}</p>
+                  <p className="text-sm leading-relaxed">{descriptionText}</p>
                 </div>
               )}
 
