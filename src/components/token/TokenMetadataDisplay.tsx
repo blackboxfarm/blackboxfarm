@@ -84,37 +84,9 @@ export function TokenMetadataDisplay({
     return <TokenMetadataSkeleton compact={compact} />;
   }
 
-  // Fallback resolver for image/description via metadata.uri
-  const [resolvedImage, setResolvedImage] = useState<string | undefined>();
-  const [resolvedDescription, setResolvedDescription] = useState<string | undefined>();
-  const normalizeUrl = (url?: string) => {
-    if (!url) return undefined;
-    if (url.startsWith('ipfs://')) return `https://cloudflare-ipfs.com/ipfs/${url.replace('ipfs://','')}`;
-    if (url.startsWith('ar://')) return `https://arweave.net/${url.slice(5)}`;
-    return url;
-  };
-  const displayImage = normalizeUrl(metadata.image || metadata.logoURI || resolvedImage);
-  const descriptionText = metadata.description || resolvedDescription;
-
-  useEffect(() => {
-    const needsImage = !metadata.image && !metadata.logoURI;
-    const needsDescription = !metadata.description;
-    if (metadata.uri && (needsImage || needsDescription)) {
-      try {
-        fetch(metadata.uri)
-          .then((r) => (r.ok ? r.json() : Promise.reject(new Error('uri fetch failed'))))
-          .then((json) => {
-            const img = normalizeUrl(
-              json?.image || json?.logo || json?.image_url || json?.icon || json?.picture || json?.properties?.files?.[0]?.uri
-            );
-            const desc = json?.description || json?.data?.description;
-            if (img) setResolvedImage(img);
-            if (desc) setResolvedDescription(desc);
-          })
-          .catch(() => {/* ignore */});
-      } catch { /* ignore */ }
-    }
-  }, [metadata.mint, metadata.uri, metadata.image, metadata.logoURI, metadata.description]);
+  // Direct image and description from metadata (no complex fallback)
+  const displayImage = metadata.image || metadata.logoURI;
+  const descriptionText = metadata.description;
 
   const formatPrice = (price: number) => {
     if (price < 0.001) return `$${price.toExponential(2)}`;
