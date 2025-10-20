@@ -26,6 +26,7 @@ import Demo from "./pages/Demo";
 import Holders from "./pages/Holders";
 import CopyTrading from "./pages/CopyTrading";
 import BreadCrumbs from "./pages/BreadCrumbs";
+import HeliusUsage from "./pages/HeliusUsage";
 
 const queryClient = new QueryClient();
 
@@ -61,6 +62,7 @@ const App = () => (
               <Route path="/holders" element={<Holders />} />
               <Route path="/copy-trading" element={<CopyTrading />} />
               <Route path="/breadcrumbs" element={<BreadCrumbs />} />
+              <Route path="/helius-usage" element={<HeliusUsage />} />
               {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
               <Route path="*" element={<NotFound />} />
             </Routes>

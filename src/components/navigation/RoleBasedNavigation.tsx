@@ -272,14 +272,24 @@ export const RoleBasedNavigation: React.FC = () => {
             {isAuthenticated && <SecretsModal />}
             <AuthButton />
             {effectiveIsSuperAdmin && (
-              <Button 
-                onClick={() => window.location.href = "/super-admin"}
-                variant="outline"
-                size="sm"
-                className="border-yellow-400 text-yellow-600 hover:bg-yellow-50"
-              >
-                🛡️ Super Admin
-              </Button>
+              <>
+                <Button 
+                  onClick={() => window.location.href = "/helius-usage"}
+                  variant="outline"
+                  size="sm"
+                  className="border-blue-400 text-blue-600 hover:bg-blue-50"
+                >
+                  📊 API Usage
+                </Button>
+                <Button 
+                  onClick={() => window.location.href = "/super-admin"}
+                  variant="outline"
+                  size="sm"
+                  className="border-yellow-400 text-yellow-600 hover:bg-yellow-50"
+                >
+                  🛡️ Super Admin
+                </Button>
+              </>
             )}
           </div>
         </div>

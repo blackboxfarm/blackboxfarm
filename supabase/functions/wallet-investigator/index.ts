@@ -1,4 +1,5 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
+import { logHeliusCall } from '../_shared/helius-logger.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -66,7 +67,16 @@ serve(async (req) => {
       while (true) {
         const url = `${heliusUrl}/addresses/${address}/transactions?api-key=${heliusApiKey}&limit=1000${before ? `&before=${before}` : ''}`;
         
+        const logger = await logHeliusCall({
+          functionName: 'wallet-investigator',
+          endpoint: 'addresses/transactions',
+          method: 'GET',
+          requestParams: { address, limit: 1000, before }
+        });
+        
         const response = await fetch(url);
+        await logger.complete(response.status, response.ok);
+        
         if (!response.ok) {
           console.error(`Failed to fetch transactions: ${response.status}`);
           break;

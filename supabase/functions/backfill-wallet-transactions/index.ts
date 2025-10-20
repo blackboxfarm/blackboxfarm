@@ -1,4 +1,5 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2?target=deno'
+import { logHeliusCall } from '../_shared/helius-logger.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -363,7 +364,17 @@ async function getWalletTransactions(address: string, heliusApiKey: string, hour
     if (before) params.set('before', before);
 
     const url = `https://api.helius.xyz/v0/addresses/${address}/transactions?${params.toString()}`;
+    
+    // Log this API call
+    const logger = await logHeliusCall({
+      functionName: 'backfill-wallet-transactions',
+      endpoint: 'addresses/transactions',
+      method: 'GET',
+      requestParams: { address, limit: pageLimit, before }
+    });
+    
     const data = await fetchJsonWithRetry(url, { method: 'GET', headers: { 'Content-Type': 'application/json' } });
+    await logger.complete(200, true);
 
     if (!Array.isArray(data) || data.length === 0) break;
 

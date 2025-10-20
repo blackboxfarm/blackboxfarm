@@ -944,6 +944,57 @@ export type Database = {
         }
         Relationships: []
       }
+      helius_api_usage: {
+        Row: {
+          created_at: string
+          credits_used: number | null
+          endpoint: string
+          error_message: string | null
+          function_name: string
+          id: string
+          ip_address: string | null
+          method: string | null
+          request_params: Json | null
+          response_status: number | null
+          response_time_ms: number | null
+          success: boolean
+          timestamp: string
+          user_id: string | null
+        }
+        Insert: {
+          created_at?: string
+          credits_used?: number | null
+          endpoint: string
+          error_message?: string | null
+          function_name: string
+          id?: string
+          ip_address?: string | null
+          method?: string | null
+          request_params?: Json | null
+          response_status?: number | null
+          response_time_ms?: number | null
+          success: boolean
+          timestamp?: string
+          user_id?: string | null
+        }
+        Update: {
+          created_at?: string
+          credits_used?: number | null
+          endpoint?: string
+          error_message?: string | null
+          function_name?: string
+          id?: string
+          ip_address?: string | null
+          method?: string | null
+          request_params?: Json | null
+          response_status?: number | null
+          response_time_ms?: number | null
+          success?: boolean
+          timestamp?: string
+          user_id?: string | null
+        }
+        Relationships: []
+      }
       kol_wallets: {
         Row: {
           created_at: string
@@ -2389,6 +2440,20 @@ export type Database = {
           two_factor_secret: string
           updated_at: string
           user_id: string
+        }[]
+      }
+      get_helius_usage_stats: {
+        Args: { p_end_date?: string; p_start_date?: string; p_user_id?: string }
+        Returns: {
+          avg_response_time_ms: number
+          calls_by_day: Json
+          calls_by_function: Json
+          failed_calls: number
+          hourly_distribution: Json
+          successful_calls: number
+          top_ips: Json
+          total_calls: number
+          total_credits: number
         }[]
       }
       get_profile_decrypted: {

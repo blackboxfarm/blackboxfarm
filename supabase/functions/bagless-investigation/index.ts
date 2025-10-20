@@ -1,4 +1,5 @@
-import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
+import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { logHeliusCall } from '../_shared/helius-logger.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -35,6 +36,13 @@ serve(async (req) => {
     // Get current token balance using Helius RPC
     const rpcUrl = `https://rpc.helius.xyz/?api-key=${heliusApiKey}`;
     
+    const logger = await logHeliusCall({
+      functionName: 'bagless-investigation',
+      endpoint: 'rpc.helius.xyz',
+      method: 'getTokenAccountsByOwner',
+      requestParams: { wallet: childWallet, mint: tokenMint }
+    });
+    
     const response = await fetch(rpcUrl, {
       method: 'POST',
       headers: {
@@ -55,6 +63,8 @@ serve(async (req) => {
         ]
       })
     });
+
+    await logger.complete(response.status, response.ok);
 
     if (!response.ok) {
       throw new Error(`RPC request failed: ${response.status}`);
