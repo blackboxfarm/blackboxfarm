@@ -246,6 +246,7 @@ serve(async (req) => {
     const buyersStartTime = Date.now();
     console.log('⚠️ [PERF] BYPASSING Helius/RPC Historical Buyers fetch - Using ANON placeholders');
     const firstBuyersData: any[] = [];
+    const txCount = 0; // No transactions searched since we're bypassing
     
     // Fill with 25 ANON placeholder buyers
     for (let i = 0; i < 25; i++) {
