@@ -1149,8 +1149,8 @@ export function BaglessHoldersReport({ initialToken }: BaglessHoldersReportProps
                 );
               })()}
 
-              {/* Top 25 Holders Analysis */}
-              {(() => {
+              {/* Top 25 Holders Analysis - HIDDEN */}
+              {false && (() => {
                 const top10Stats = calculateTop10Stats();
                 // ALWAYS use unfiltered holders for Top 25 - filters should only affect the Holders List below
                 const devWallet = report.potentialDevWallet?.address;
@@ -1284,8 +1284,8 @@ export function BaglessHoldersReport({ initialToken }: BaglessHoldersReportProps
                 );
               })()}
 
-              {/* First 25 Historical Buyers with PNL Tracking */}
-              {report.firstBuyers && report.firstBuyers.length > 0 && (
+              {/* First 25 Historical Buyers with PNL Tracking - HIDDEN */}
+              {false && report.firstBuyers && report.firstBuyers.length > 0 && (
                 <div className="mb-4 md:mb-6">
                   <Card>
                     <CardHeader className="pb-3">
@@ -1447,8 +1447,8 @@ export function BaglessHoldersReport({ initialToken }: BaglessHoldersReportProps
                 </div>
               )}
 
-              {/* KOL Table */}
-              <div className="mb-4 md:mb-6">
+              {/* KOL Table - HIDDEN */}
+              <div className="mb-4 md:mb-6 hidden">
                 <Card>
                   <CardHeader className="pb-3">
                     <CardTitle className="text-lg">KOL Wallets</CardTitle>
