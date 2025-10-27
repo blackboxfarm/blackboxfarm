@@ -116,8 +116,8 @@ serve(async (req) => {
       ];
       
       for (const api of priceAPIs) {
+        const apiStartTime = Date.now();
         try {
-          const apiStartTime = Date.now();
           console.log(`⏱️ [PERF] Trying ${api.name}...`);
           
           const controller = new AbortController();
@@ -127,7 +127,7 @@ serve(async (req) => {
             signal: controller.signal,
             headers: {
               'User-Agent': 'Supabase Edge Function',
-              'Accept': 'application/json'
+              ...(api.name === 'Birdeye' ? { 'X-API-KEY': Deno.env.get('BIRDEYE_API_KEY') || '' } : {})
             }
           });
           
