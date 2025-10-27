@@ -450,10 +450,10 @@ export function BaglessHoldersReport({ initialToken }: BaglessHoldersReportProps
       console.log(`✅ [PERF] Report processing complete: ${reportProcessTime.toFixed(0)}ms`);
       
       // Fetch Twitter handles for top holders (async - won't block)
-      console.log('⏱️ [PERF] Starting parallel data fetches (Twitter + KOL)...');
+      console.log('⏱️ [PERF] Starting parallel data fetches (KOL only - Twitter SNS BYPASSED)...');
       const parallelStart = performance.now();
       await Promise.all([
-        fetchTwitterHandles(data),
+        // fetchTwitterHandles(data), // BYPASSED
         fetchKOLWallets(data)
       ]);
       const parallelTime = performance.now() - parallelStart;

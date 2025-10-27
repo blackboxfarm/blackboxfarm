@@ -242,230 +242,24 @@ serve(async (req) => {
       throw new Error(`All RPC endpoints failed. ${rpcErrors.join(' | ')}`);
     }
 
-    // FETCH HISTORICAL FIRST 25 BUYERS using Helius
+    // BYPASS HISTORICAL BUYERS FETCH - Fill with ANON placeholders
     const buyersStartTime = Date.now();
-    console.log('⏱️ [PERF] 🔍 Fetching historical first 25 buyers...');
+    console.log('⚠️ [PERF] BYPASSING Helius/RPC Historical Buyers fetch - Using ANON placeholders');
     const firstBuyersData: any[] = [];
-    let txCount = 0;
     
-    if (heliusApiKey) {
-      try {
-        console.log(`⏱️ [PERF] Calling Helius Enhanced Transactions API (mint search) for token: ${tokenMint}`);
-
-        // Use POST /v0/transactions with tokenTransfers.mint filter + 429 backoff + pagination
-        const buyersSeen = new Set<string>();
-        let paginationToken: string | undefined = undefined;
-        let pages = 0;
-        let heliusUsed = false;
-
-        const postWithBackoff = async (attempt = 1): Promise<Response> => {
-          const url = `https://api.helius.xyz/v0/transactions?api-key=${heliusApiKey}`;
-          const body = {
-            query: {
-              tokenTransfers: {
-                mint: [tokenMint]
-              }
-            },
-            options: {
-              limit: 200,
-              transactionDetails: 'full',
-              paginationToken
-            }
-          } as any;
-
-          const resp = await fetch(url, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
-            body: JSON.stringify(body)
-          });
-
-          if (resp.status === 429 && attempt < 6) {
-            const wait = 300 * attempt; // ms
-            console.log(`Helius 429 rate limit. Retrying in ${wait}ms (attempt ${attempt})`);
-            await new Promise((r) => setTimeout(r, wait));
-            return postWithBackoff(attempt + 1);
-          }
-
-          return resp;
-        };
-
-        // Page through up to 10 pages or until 25 buyers are found
-        while (firstBuyersData.length < 25 && pages < 10) {
-          const txResponse = await postWithBackoff();
-          console.log(`Helius response status: ${txResponse.status}`);
-          if (!txResponse.ok) {
-            const errorText = await txResponse.text();
-            console.error(`❌ Helius API error: ${txResponse.status} - ${errorText}`);
-            break; // fall back to RPC below
-          }
-
-          heliusUsed = true;
-          const json = await txResponse.json();
-          const transactions: any[] = Array.isArray(json)
-            ? json
-            : (Array.isArray(json?.result) ? json.result : []);
-          const count = transactions.length;
-          txCount += count;
-          console.log(`📦 Page ${pages + 1}: ${count} transactions`);
-
-          if (count === 0) break;
-
-          // Parse oldest-first within this page
-          for (const tx of [...transactions].reverse()) {
-            if (firstBuyersData.length >= 25) break;
-            try {
-              const tokenTransfers = tx.tokenTransfers || [];
-              if (!tokenTransfers || tokenTransfers.length === 0) continue;
-
-              for (const transfer of tokenTransfers) {
-                if (firstBuyersData.length >= 25) break;
-                if (transfer.mint !== tokenMint) continue;
-                const recipient: string | undefined = transfer.toUserAccount;
-                const amount = Number(transfer.tokenAmount || 0);
-                if (!recipient || buyersSeen.has(recipient) || !isFinite(amount) || amount <= 0) continue;
-                // Skip burn/system and common program/LP accounts
-                if (
-                  recipient === '11111111111111111111111111111111' ||
-                  recipient === 'TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA' ||
-                  recipient.startsWith('5Q544fKrF') || // Raydium
-                  recipient.startsWith('675kPX9M')    // Orca
-                ) continue;
-
-                buyersSeen.add(recipient);
-                firstBuyersData.push({
-                  wallet: recipient,
-                  firstBoughtAt: tx.timestamp || Math.floor(Date.now() / 1000),
-                  initialTokens: amount,
-                  signature: tx.signature || '',
-                  purchaseRank: firstBuyersData.length + 1,
-                });
-              }
-            } catch (e) {
-              console.error('❌ Error parsing transaction:', e instanceof Error ? e.message : String(e));
-              continue;
-            }
-          }
-
-          // Prepare pagination for next page (older)
-          paginationToken = (Array.isArray(json) ? undefined : json?.paginationToken) || undefined;
-          pages += 1;
-          if (!paginationToken) break;
-        }
-
-        const buyersHeliusTime = Date.now() - buyersStartTime;
-        console.log(`✅ [PERF] Helius buyers fetch complete in ${buyersHeliusTime}ms - Found: ${firstBuyersData.length} buyers`);
-        
-        if (firstBuyersData.length === 0) {
-          console.warn('⚠️ Helius returned no buyers or was rate-limited. Falling back to RPC scan.');
-        }
-      } catch (e) {
-        const buyersHeliusTime = Date.now() - buyersStartTime;
-        console.error(`❌ [PERF] Error fetching historical transactions (Helius phase) after ${buyersHeliusTime}ms:`, e instanceof Error ? e.message : String(e));
-      }
-    } else {
-      console.warn('⚠️ No Helius API key - skipping Helius phase for historical buyers');
-    }
-
-    // RPC FALLBACK: Scan token accounts to find first inbound transfers per owner
-    if (firstBuyersData.length === 0) {
-      const rpcFallbackStart = Date.now();
-      console.log('⏱️ [PERF] Starting RPC fallback for buyers...');
-      try {
-        const rpcUrl = usedRpc || rpcEndpoints[0];
-        const buyersSeen = new Set<string>();
-
-        // Build a list of token accounts for this mint (owner + token account pubkey)
-        const tokenAccounts: { tokenAcc: string; owner: string }[] =
-          (data.result || []).map((acc: any) => ({
-            tokenAcc: acc.pubkey,
-            owner: acc.account?.data?.parsed?.info?.owner,
-          }))
-          .filter((a: any) => a.owner && a.tokenAcc);
-
-        // Limit how many accounts to scan to avoid timeouts
-        const MAX_ACCOUNTS = 250;
-        const MAX_SIGS_PER_ACCOUNT = 20;
-
-        let accountsScanned = 0;
-        for (const acc of tokenAccounts) {
-          if (firstBuyersData.length >= 25) break;
-          if (accountsScanned >= MAX_ACCOUNTS) break;
-          accountsScanned++;
-
-          // 1) Fetch recent signatures for this token account
-          const sigsResp = await fetch(rpcUrl, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              jsonrpc: '2.0',
-              id: 1,
-              method: 'getSignaturesForAddress',
-              params: [acc.tokenAcc, { limit: MAX_SIGS_PER_ACCOUNT }]
-            })
-          });
-          const sigsJson = await sigsResp.json();
-          const signatures: string[] = sigsJson?.result?.map((r: any) => r.signature) || [];
-
-          // Process oldest first for this account
-          for (const sig of [...signatures].reverse()) {
-            if (firstBuyersData.length >= 25) break;
-
-            const txResp = await fetch(rpcUrl, {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                jsonrpc: '2.0',
-                id: 1,
-                method: 'getTransaction',
-                params: [sig, { encoding: 'jsonParsed' }]
-              })
-            });
-            if (!txResp.ok) continue;
-            const txJson = await txResp.json();
-            txCount += 1;
-            const meta = txJson?.result?.meta;
-            const blockTime = txJson?.result?.blockTime || Math.floor(Date.now() / 1000);
-            if (!meta) continue;
-
-            const pre = meta.preTokenBalances || [];
-            const post = meta.postTokenBalances || [];
-
-            // Find entries in post where accountIndex matches this token account and mint matches
-            const firstPost = post.find((p: any) => p.mint === tokenMint && p.owner === acc.owner);
-            if (!firstPost) continue;
-
-            const idx = firstPost.accountIndex;
-            const preEntry = pre.find((p: any) => p.accountIndex === idx && p.mint === tokenMint);
-            const preAmt = Number(preEntry?.uiTokenAmount?.amount || preEntry?.uiTokenAmount?.uiAmount || 0);
-            const postAmt = Number(firstPost?.uiTokenAmount?.amount || firstPost?.uiTokenAmount?.uiAmount || 0);
-            const delta = postAmt - preAmt;
-
-            // Treat first time balance increases from ~0 as a buy
-            if (!buyersSeen.has(acc.owner) && isFinite(delta) && delta > 0 && (preAmt === 0 || !preEntry)) {
-              buyersSeen.add(acc.owner);
-              firstBuyersData.push({
-                wallet: acc.owner,
-                firstBoughtAt: blockTime,
-                initialTokens: delta,
-                signature: sig,
-                purchaseRank: firstBuyersData.length + 1,
-              });
-            }
-
-            if (firstBuyersData.length >= 25) break;
-          }
-        }
-
-        const rpcFallbackTime = Date.now() - rpcFallbackStart;
-        console.log(`✅ [PERF] RPC account-scan fallback found ${firstBuyersData.length} buyers after scanning ${accountsScanned} accounts in ${rpcFallbackTime}ms (tx inspected: ${txCount})`);
-      } catch (e) {
-        const rpcFallbackTime = Date.now() - rpcFallbackStart;
-        console.error(`❌ [PERF] RPC fallback (account scan) FAILED after ${rpcFallbackTime}ms:`, e instanceof Error ? e.message : String(e));
-      }
+    // Fill with 25 ANON placeholder buyers
+    for (let i = 0; i < 25; i++) {
+      firstBuyersData.push({
+        wallet: 'ANON',
+        firstBoughtAt: Math.floor(Date.now() / 1000),
+        initialTokens: 0,
+        signature: '',
+        purchaseRank: i + 1,
+      });
     }
     
     const totalBuyersTime = Date.now() - buyersStartTime;
-    console.log(`⏱️ [PERF] Total buyer discovery time: ${totalBuyersTime}ms - Found: ${firstBuyersData.length}`);
+    console.log(`✅ [PERF] BYPASSED buyer discovery: ${totalBuyersTime.toFixed(0)}ms - Filled with ${firstBuyersData.length} ANON placeholders`);
 
     const holders = [];
     let totalSupply = 0;
