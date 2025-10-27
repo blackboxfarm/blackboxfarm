@@ -251,6 +251,8 @@ export function BaglessHoldersReport({ initialToken }: BaglessHoldersReportProps
   }, [report, showDustOnly, showSmallOnly, showMediumOnly, showLargeOnly, showRealOnly, showBossOnly, showKingpinOnly, showSuperBossOnly, showBabyWhaleOnly, showTrueWhaleOnly, showLPOnly, excludeLPs]);
 
   const fetchTwitterHandles = async (reportData: HoldersReport) => {
+    const startTime = performance.now();
+    console.log('⏱️ [PERF] Starting Twitter SNS lookup...');
     setIsLoadingTwitter(true);
     try {
       // Get top 10 holders with USD values
@@ -261,10 +263,14 @@ export function BaglessHoldersReport({ initialToken }: BaglessHoldersReportProps
           address: holder.owner,
           usdValue: holder.usdValue
         }));
+      console.log(`⏱️ [PERF] Prepared ${walletsToLookup.length} wallets for lookup`);
 
+      const lookupStart = performance.now();
       const { data, error } = await supabase.functions.invoke('wallet-sns-lookup', {
         body: { wallets: walletsToLookup }
       });
+      const lookupTime = performance.now() - lookupStart;
+      console.log(`⏱️ [PERF] SNS lookup completed in ${lookupTime.toFixed(0)}ms`);
 
       if (error) {
         console.error("Error fetching Twitter handles:", error);
@@ -281,25 +287,33 @@ export function BaglessHoldersReport({ initialToken }: BaglessHoldersReportProps
 
       setWalletTwitterHandles(twitterMap);
       
+      const totalTime = performance.now() - startTime;
+      console.log(`✅ [PERF] Twitter lookup TOTAL: ${totalTime.toFixed(0)}ms | Found: ${twitterMap.size} handles`);
+      
       if (twitterMap.size > 0) {
         toast({
           title: "Twitter Handles Found",
-          description: `Found ${twitterMap.size} verified Twitter accounts via SNS`,
+          description: `Found ${twitterMap.size} verified Twitter accounts via SNS (${(totalTime / 1000).toFixed(1)}s)`,
         });
       }
     } catch (error: any) {
-      console.error("Error fetching Twitter handles:", error);
+      const totalTime = performance.now() - startTime;
+      console.error(`❌ [PERF] Twitter lookup FAILED after ${totalTime.toFixed(0)}ms:`, error);
     } finally {
       setIsLoadingTwitter(false);
     }
   };
 
   const fetchKOLWallets = async (reportData: HoldersReport) => {
+    const startTime = performance.now();
+    console.log('⏱️ [PERF] Starting KOL wallet fetch...');
     try {
       const { data, error } = await supabase
         .from('kol_wallets')
         .select('wallet_address,twitter_handle,sns_name,last_verified_at,is_active')
         .eq('is_active', true);
+      const fetchTime = performance.now() - startTime;
+      console.log(`⏱️ [PERF] KOL fetch completed in ${fetchTime.toFixed(0)}ms`);
 
       if (error) {
         console.error('Error fetching KOL wallets:', error);
@@ -311,15 +325,20 @@ export function BaglessHoldersReport({ initialToken }: BaglessHoldersReportProps
         const holderSet = new Set(reportData.holders.map(h => h.owner));
         const matches = (data || []).filter((k: any) => holderSet.has(k.wallet_address));
         setKolMatches(matches);
+        const totalTime = performance.now() - startTime;
+        console.log(`✅ [PERF] KOL matching TOTAL: ${totalTime.toFixed(0)}ms | Matches: ${matches.length}`);
       }
     } catch (err) {
-      console.error('Error fetching KOL wallets:', err);
+      const totalTime = performance.now() - startTime;
+      console.error(`❌ [PERF] KOL fetch FAILED after ${totalTime.toFixed(0)}ms:`, err);
     }
   };
 
   const fetchTokenPrice = async () => {
     if (!tokenMint.trim()) return;
     
+    const startTime = performance.now();
+    console.log('⏱️ [PERF] Starting price discovery...');
     setIsFetchingPrice(true);
     setDiscoveredPrice(null);
     setPriceSource('');
@@ -331,6 +350,8 @@ export function BaglessHoldersReport({ initialToken }: BaglessHoldersReportProps
           manualPrice: 0 // Force price discovery
         }
       });
+      const fetchTime = performance.now() - startTime;
+      console.log(`⏱️ [PERF] Price discovery completed in ${fetchTime.toFixed(0)}ms`);
 
       if (error) {
         const ctx = (error as any)?.context?.body;
@@ -347,6 +368,8 @@ export function BaglessHoldersReport({ initialToken }: BaglessHoldersReportProps
       if (data.tokenPriceUSD > 0) {
         setDiscoveredPrice(data.tokenPriceUSD);
         setPriceSource(data.priceSource || 'API');
+        const totalTime = performance.now() - startTime;
+        console.log(`✅ [PERF] Price discovery SUCCESS: ${totalTime.toFixed(0)}ms | Price: $${data.tokenPriceUSD}`);
         toast({
           title: "Price Discovered",
           description: `Found price: $${data.tokenPriceUSD.toFixed(8)} from ${data.priceSource || 'API'}`,
@@ -355,7 +378,8 @@ export function BaglessHoldersReport({ initialToken }: BaglessHoldersReportProps
         throw new Error('Price discovery failed');
       }
     } catch (error) {
-      console.error('Price discovery failed:', error);
+      const totalTime = performance.now() - startTime;
+      console.error(`❌ [PERF] Price discovery FAILED after ${totalTime.toFixed(0)}ms:`, error);
       const msg = error instanceof Error ? error.message : 'Could not fetch token price automatically. Please enter manually.';
       toast({
         title: "Price Discovery Failed",
@@ -377,23 +401,28 @@ export function BaglessHoldersReport({ initialToken }: BaglessHoldersReportProps
       return;
     }
 
+    const reportStartTime = performance.now();
+    console.log('🚀 [PERF] ========== STARTING FULL REPORT GENERATION ==========');
     setIsLoading(true);
     setReport(null);
     
     try {
-      console.log('Generating holders report...');
+      console.log('⏱️ [PERF] Generating holders report...');
       const priceToUse = useAutoPricing ? 0 : parseFloat(tokenPrice) || 0;
       
       if (useAutoPricing) {
         setIsFetchingPrice(true);
       }
       
+      const edgeFunctionStart = performance.now();
       const { data, error } = await supabase.functions.invoke('bagless-holders-report', {
         body: {
           tokenMint: tokenMint.trim(),
           manualPrice: priceToUse
         }
       });
+      const edgeFunctionTime = performance.now() - edgeFunctionStart;
+      console.log(`⏱️ [PERF] Edge function completed in ${edgeFunctionTime.toFixed(0)}ms`);
 
       if (error) {
         console.error('Report generation error:', error);
@@ -408,7 +437,7 @@ export function BaglessHoldersReport({ initialToken }: BaglessHoldersReportProps
         throw new Error(message);
       }
 
-      console.log('Report generated:', data);
+      console.log('⏱️ [PERF] Report data received, processing...');
       setReport(data);
       
       // Update discovered price info if auto pricing was used
@@ -417,10 +446,21 @@ export function BaglessHoldersReport({ initialToken }: BaglessHoldersReportProps
         setPriceSource(data.priceSource || 'Multiple APIs');
       }
       
-      // Fetch Twitter handles for top holders
-      fetchTwitterHandles(data);
-      // Fetch KOL wallets and compute matches
-      fetchKOLWallets(data);
+      const reportProcessTime = performance.now() - reportStartTime;
+      console.log(`✅ [PERF] Report processing complete: ${reportProcessTime.toFixed(0)}ms`);
+      
+      // Fetch Twitter handles for top holders (async - won't block)
+      console.log('⏱️ [PERF] Starting parallel data fetches (Twitter + KOL)...');
+      const parallelStart = performance.now();
+      await Promise.all([
+        fetchTwitterHandles(data),
+        fetchKOLWallets(data)
+      ]);
+      const parallelTime = performance.now() - parallelStart;
+      console.log(`✅ [PERF] Parallel fetches complete: ${parallelTime.toFixed(0)}ms`);
+      
+      const totalReportTime = performance.now() - reportStartTime;
+      console.log(`🏁 [PERF] ========== FULL REPORT COMPLETE: ${totalReportTime.toFixed(0)}ms (${(totalReportTime / 1000).toFixed(2)}s) ==========`);
       
       const priceInfo = data.tokenPriceUSD > 0 ? 
         ` (Price: $${data.tokenPriceUSD.toFixed(8)}${data.priceSource ? ` from ${data.priceSource}` : ''})` : 
@@ -428,10 +468,11 @@ export function BaglessHoldersReport({ initialToken }: BaglessHoldersReportProps
       
       toast({
         title: "Report Generated",
-        description: `Found ${data.totalHolders} total holders${priceInfo}`,
+        description: `Found ${data.totalHolders} total holders${priceInfo} in ${(totalReportTime / 1000).toFixed(1)}s`,
       });
     } catch (error) {
-      console.error('Report generation failed:', error);
+      const totalReportTime = performance.now() - reportStartTime;
+      console.error(`❌ [PERF] Report generation FAILED after ${totalReportTime.toFixed(0)}ms:`, error);
       toast({
         title: "Report Generation Failed",
         description: error instanceof Error ? error.message : "Failed to generate holders report",

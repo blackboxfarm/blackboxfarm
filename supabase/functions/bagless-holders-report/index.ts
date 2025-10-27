@@ -40,6 +40,9 @@ function detectLaunchpad(pairData: any, tokenMint: string): { name: string; dete
 }
 
 serve(async (req) => {
+  const requestStartTime = Date.now();
+  console.log('🚀 [PERF] Edge function started');
+  
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
   }
@@ -57,7 +60,7 @@ serve(async (req) => {
     // Get Helius API key from environment (optional)
     const heliusApiKey = Deno.env.get('HELIUS_API_KEY');
 
-    console.log(`Fetching all token holders for: ${tokenMint}`);
+    console.log(`⏱️ [PERF] Fetching all token holders for: ${tokenMint}`);
 
     const rpcEndpoints = heliusApiKey
       ? [`https://rpc.helius.xyz/?api-key=${heliusApiKey}`, 'https://api.mainnet-beta.solana.com', 'https://solana-api.projectserum.com']
@@ -74,7 +77,8 @@ serve(async (req) => {
     let launchpadInfo = { name: 'unknown', detected: false, confidence: 'low' as 'high' | 'medium' | 'low' };
     
     if (!manualPrice || manualPrice === 0) {
-      console.log('No manual price provided, trying multiple price sources...');
+      const priceStartTime = Date.now();
+      console.log('⏱️ [PERF] No manual price provided, trying multiple price sources...');
       
       // Try multiple price sources in order of reliability
       const priceAPIs = [
@@ -113,7 +117,8 @@ serve(async (req) => {
       
       for (const api of priceAPIs) {
         try {
-          console.log(`Trying ${api.name}...`);
+          const apiStartTime = Date.now();
+          console.log(`⏱️ [PERF] Trying ${api.name}...`);
           
           const controller = new AbortController();
           const timeoutId = setTimeout(() => controller.abort(), 10000); // 10 second timeout
@@ -140,19 +145,26 @@ serve(async (req) => {
             if (price > 0) {
               tokenPriceUSD = price;
               priceSource = api.name;
-              console.log(`✅ Got price from ${api.name}: $${tokenPriceUSD}`);
+              const apiTime = Date.now() - apiStartTime;
+              console.log(`✅ [PERF] Got price from ${api.name} in ${apiTime}ms: $${tokenPriceUSD}`);
               break;
             } else {
-              console.log(`⚠️ ${api.name} returned 0 price`);
+              const apiTime = Date.now() - apiStartTime;
+              console.log(`⚠️ [PERF] ${api.name} returned 0 price after ${apiTime}ms`);
             }
           } else {
-            console.log(`❌ ${api.name} HTTP error: ${response.status}`);
+            const apiTime = Date.now() - apiStartTime;
+            console.log(`❌ [PERF] ${api.name} HTTP error ${response.status} after ${apiTime}ms`);
           }
         } catch (error) {
-          console.log(`❌ ${api.name} failed:`, error instanceof Error ? error.message : String(error));
+          const apiTime = Date.now() - apiStartTime;
+          console.log(`❌ [PERF] ${api.name} failed after ${apiTime}ms:`, error instanceof Error ? error.message : String(error));
           continue;
         }
       }
+      
+      const priceDiscoveryTime = Date.now() - priceStartTime;
+      console.log(`⏱️ [PERF] Price discovery complete in ${priceDiscoveryTime}ms - Source: ${priceSource || 'FAILED'}`);
       
       // Detect launchpad from DexScreener data
       const dexScreenerAPI = priceAPIs.find(api => api.name === 'DexScreener');
@@ -171,9 +183,12 @@ serve(async (req) => {
     }
     
     // Get all token accounts for this mint (try multiple RPCs)
+    const rpcStartTime = Date.now();
+    console.log('⏱️ [PERF] Starting RPC account fetch...');
     let data: any = null;
     for (const url of rpcEndpoints) {
       try {
+        const rpcCallStart = Date.now();
         const controller = new AbortController();
         const timeoutId = setTimeout(() => controller.abort(), 15000);
         const resp = await fetch(url, {
@@ -210,25 +225,32 @@ serve(async (req) => {
         }
         data = json;
         usedRpc = url;
+        const rpcCallTime = Date.now() - rpcCallStart;
+        const totalRpcTime = Date.now() - rpcStartTime;
+        console.log(`✅ [PERF] RPC account fetch SUCCESS via ${url.includes('helius') ? 'Helius' : 'public RPC'} in ${rpcCallTime}ms (total: ${totalRpcTime}ms)`);
         break;
       } catch (e) {
-        rpcErrors.push(`RPC ${url.includes('helius') ? 'Helius' : url} exception: ${e instanceof Error ? e.message : String(e)}`);
+        const rpcCallTime = Date.now() - rpcCallStart;
+        rpcErrors.push(`RPC ${url.includes('helius') ? 'Helius' : url} exception after ${rpcCallTime}ms: ${e instanceof Error ? e.message : String(e)}`);
         continue;
       }
     }
 
     if (!data) {
+      const totalRpcTime = Date.now() - rpcStartTime;
+      console.log(`❌ [PERF] All RPC endpoints FAILED after ${totalRpcTime}ms`);
       throw new Error(`All RPC endpoints failed. ${rpcErrors.join(' | ')}`);
     }
 
     // FETCH HISTORICAL FIRST 25 BUYERS using Helius
-    console.log('🔍 Fetching historical first 25 buyers...');
+    const buyersStartTime = Date.now();
+    console.log('⏱️ [PERF] 🔍 Fetching historical first 25 buyers...');
     const firstBuyersData: any[] = [];
     let txCount = 0;
     
     if (heliusApiKey) {
       try {
-        console.log(`Calling Helius Enhanced Transactions API (mint search) for token: ${tokenMint}`);
+        console.log(`⏱️ [PERF] Calling Helius Enhanced Transactions API (mint search) for token: ${tokenMint}`);
 
         // Use POST /v0/transactions with tokenTransfers.mint filter + 429 backoff + pagination
         const buyersSeen = new Set<string>();
@@ -330,11 +352,15 @@ serve(async (req) => {
           if (!paginationToken) break;
         }
 
+        const buyersHeliusTime = Date.now() - buyersStartTime;
+        console.log(`✅ [PERF] Helius buyers fetch complete in ${buyersHeliusTime}ms - Found: ${firstBuyersData.length} buyers`);
+        
         if (firstBuyersData.length === 0) {
           console.warn('⚠️ Helius returned no buyers or was rate-limited. Falling back to RPC scan.');
         }
       } catch (e) {
-        console.error('❌ Error fetching historical transactions (Helius phase):', e instanceof Error ? e.message : String(e));
+        const buyersHeliusTime = Date.now() - buyersStartTime;
+        console.error(`❌ [PERF] Error fetching historical transactions (Helius phase) after ${buyersHeliusTime}ms:`, e instanceof Error ? e.message : String(e));
       }
     } else {
       console.warn('⚠️ No Helius API key - skipping Helius phase for historical buyers');
@@ -342,6 +368,8 @@ serve(async (req) => {
 
     // RPC FALLBACK: Scan token accounts to find first inbound transfers per owner
     if (firstBuyersData.length === 0) {
+      const rpcFallbackStart = Date.now();
+      console.log('⏱️ [PERF] Starting RPC fallback for buyers...');
       try {
         const rpcUrl = usedRpc || rpcEndpoints[0];
         const buyersSeen = new Set<string>();
@@ -428,11 +456,16 @@ serve(async (req) => {
           }
         }
 
-        console.log(`RPC account-scan fallback found ${firstBuyersData.length} buyers after scanning ${accountsScanned} accounts (tx inspected: ${txCount}).`);
+        const rpcFallbackTime = Date.now() - rpcFallbackStart;
+        console.log(`✅ [PERF] RPC account-scan fallback found ${firstBuyersData.length} buyers after scanning ${accountsScanned} accounts in ${rpcFallbackTime}ms (tx inspected: ${txCount})`);
       } catch (e) {
-        console.error('❌ RPC fallback (account scan) failed:', e instanceof Error ? e.message : String(e));
+        const rpcFallbackTime = Date.now() - rpcFallbackStart;
+        console.error(`❌ [PERF] RPC fallback (account scan) FAILED after ${rpcFallbackTime}ms:`, e instanceof Error ? e.message : String(e));
       }
     }
+    
+    const totalBuyersTime = Date.now() - buyersStartTime;
+    console.log(`⏱️ [PERF] Total buyer discovery time: ${totalBuyersTime}ms - Found: ${firstBuyersData.length}`);
 
     const holders = [];
     let totalSupply = 0;
