@@ -5,10 +5,10 @@ project_id = "apxauapuusmgwbbzjgfl"
 verify_jwt = false
 
 [functions.test-developer-intelligence]
-verify_jwt = true
+verify_jwt = false
 
 [functions.test-discovery-job]
-verify_jwt = true
+verify_jwt = false
 
 [functions.raydium-quote]
 verify_jwt = false

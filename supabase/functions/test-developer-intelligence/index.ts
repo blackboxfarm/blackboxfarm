@@ -15,24 +15,6 @@ Deno.serve(async (req) => {
     const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
     const supabase = createClient(supabaseUrl, supabaseKey)
 
-    // Authenticate user
-    const authHeader = req.headers.get('Authorization')
-    if (!authHeader) {
-      throw new Error('Missing authorization header')
-    }
-
-    const token = authHeader.replace('Bearer ', '')
-    const { data: { user }, error: authError } = await supabase.auth.getUser(token)
-    if (authError || !user) {
-      throw new Error('Unauthorized')
-    }
-
-    // Check super admin
-    const { data: isSuperAdmin } = await supabase.rpc('is_super_admin', { user_id: user.id })
-    if (!isSuperAdmin) {
-      throw new Error('Requires super admin privileges')
-    }
-
     console.log('🧪 Running Developer Intelligence System Integration Tests...')
 
     const results = {

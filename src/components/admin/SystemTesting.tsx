@@ -19,17 +19,7 @@ export const SystemTesting = () => {
     setIntegrationResults(null);
     
     try {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session) {
-        toast.error("You must be logged in to run integration tests");
-        return;
-      }
-
-      const { data, error } = await supabase.functions.invoke("test-developer-intelligence", {
-        headers: {
-          Authorization: `Bearer ${session.access_token}`,
-        },
-      });
+      const { data, error } = await supabase.functions.invoke("test-developer-intelligence");
       
       if (error) throw error;
       
@@ -58,17 +48,8 @@ export const SystemTesting = () => {
     setDiscoveryResults(null);
     
     try {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session) {
-        toast.error("You must be logged in to run discovery tests");
-        return;
-      }
-
       const { data, error } = await supabase.functions.invoke("test-discovery-job", {
         body: { tokenMint: testTokenMint },
-        headers: {
-          Authorization: `Bearer ${session.access_token}`,
-        },
       });
       
       if (error) throw error;
