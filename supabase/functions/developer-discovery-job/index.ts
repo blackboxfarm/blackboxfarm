@@ -15,9 +15,10 @@ Deno.serve(async (req) => {
     const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
     
     const supabase = createClient(supabaseUrl, supabaseKey)
+    // Use service-role JWT to authenticate internal function calls
+    const token = supabaseKey
 
     // Public function: no authentication required
-
 
     const { tokenMint, walletAddress, maxDepth = 10 } = await req.json()
 
@@ -176,6 +177,7 @@ Deno.serve(async (req) => {
       .eq('id', job.id)
 
     // Step 3: Scan for all tokens (50-70%)
+    let tokensFound = 0
     const scanResponse = await fetch(
       `${supabaseUrl}/functions/v1/developer-token-scanner`,
       {
@@ -193,12 +195,13 @@ Deno.serve(async (req) => {
 
     if (scanResponse.ok) {
       const scanData = await scanResponse.json()
+      tokensFound = scanData.tokensFound || 0
       
       await supabase
         .from('developer_analysis_jobs')
         .update({
           progress_percent: 70,
-          tokens_discovered: scanData.tokensFound || 0,
+          tokens_discovered: tokensFound,
         })
         .eq('id', job.id)
     }
@@ -235,9 +238,9 @@ Deno.serve(async (req) => {
         completed_at: new Date().toISOString(),
         results: {
           developerId,
-          walletsTraced: traceData.walletsTraced,
-          cexSources: traceData.cexSources,
-          tokensFound: scanResponse.ok ? (await scanResponse.json()).tokensFound : 0,
+          walletsTraced: traceData?.walletsTraced ?? 0,
+          cexSources: traceData?.cexSources ?? [],
+          tokensFound: tokensFound,
           reputation: reputationData,
         },
       })
