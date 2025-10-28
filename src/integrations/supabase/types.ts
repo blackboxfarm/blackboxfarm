@@ -766,6 +766,294 @@ export type Database = {
           },
         ]
       }
+      developer_analysis_jobs: {
+        Row: {
+          completed_at: string | null
+          created_at: string | null
+          current_depth: number | null
+          developer_id: string | null
+          error_message: string | null
+          id: string
+          job_type: string
+          max_depth: number | null
+          progress_percent: number | null
+          results: Json | null
+          started_at: string | null
+          status: string | null
+          tokens_discovered: number | null
+          wallet_address: string | null
+          wallets_discovered: number | null
+        }
+        Insert: {
+          completed_at?: string | null
+          created_at?: string | null
+          current_depth?: number | null
+          developer_id?: string | null
+          error_message?: string | null
+          id?: string
+          job_type: string
+          max_depth?: number | null
+          progress_percent?: number | null
+          results?: Json | null
+          started_at?: string | null
+          status?: string | null
+          tokens_discovered?: number | null
+          wallet_address?: string | null
+          wallets_discovered?: number | null
+        }
+        Update: {
+          completed_at?: string | null
+          created_at?: string | null
+          current_depth?: number | null
+          developer_id?: string | null
+          error_message?: string | null
+          id?: string
+          job_type?: string
+          max_depth?: number | null
+          progress_percent?: number | null
+          results?: Json | null
+          started_at?: string | null
+          status?: string | null
+          tokens_discovered?: number | null
+          wallet_address?: string | null
+          wallets_discovered?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "developer_analysis_jobs_developer_id_fkey"
+            columns: ["developer_id"]
+            isOneToOne: false
+            referencedRelation: "developer_profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      developer_profiles: {
+        Row: {
+          average_token_lifespan_days: number | null
+          created_at: string | null
+          discord_handle: string | null
+          display_name: string | null
+          failed_tokens: number | null
+          id: string
+          kyc_source: string | null
+          kyc_verification_date: string | null
+          kyc_verified: boolean | null
+          last_analysis_at: string | null
+          master_wallet_address: string
+          notes: string | null
+          reputation_score: number | null
+          rug_pull_count: number | null
+          slow_drain_count: number | null
+          successful_tokens: number | null
+          tags: string[] | null
+          telegram_handle: string | null
+          total_tokens_created: number | null
+          total_volume_generated: number | null
+          trust_level: string | null
+          twitter_handle: string | null
+          updated_at: string | null
+          website_url: string | null
+        }
+        Insert: {
+          average_token_lifespan_days?: number | null
+          created_at?: string | null
+          discord_handle?: string | null
+          display_name?: string | null
+          failed_tokens?: number | null
+          id?: string
+          kyc_source?: string | null
+          kyc_verification_date?: string | null
+          kyc_verified?: boolean | null
+          last_analysis_at?: string | null
+          master_wallet_address: string
+          notes?: string | null
+          reputation_score?: number | null
+          rug_pull_count?: number | null
+          slow_drain_count?: number | null
+          successful_tokens?: number | null
+          tags?: string[] | null
+          telegram_handle?: string | null
+          total_tokens_created?: number | null
+          total_volume_generated?: number | null
+          trust_level?: string | null
+          twitter_handle?: string | null
+          updated_at?: string | null
+          website_url?: string | null
+        }
+        Update: {
+          average_token_lifespan_days?: number | null
+          created_at?: string | null
+          discord_handle?: string | null
+          display_name?: string | null
+          failed_tokens?: number | null
+          id?: string
+          kyc_source?: string | null
+          kyc_verification_date?: string | null
+          kyc_verified?: boolean | null
+          last_analysis_at?: string | null
+          master_wallet_address?: string
+          notes?: string | null
+          reputation_score?: number | null
+          rug_pull_count?: number | null
+          slow_drain_count?: number | null
+          successful_tokens?: number | null
+          tags?: string[] | null
+          telegram_handle?: string | null
+          total_tokens_created?: number | null
+          total_volume_generated?: number | null
+          trust_level?: string | null
+          twitter_handle?: string | null
+          updated_at?: string | null
+          website_url?: string | null
+        }
+        Relationships: []
+      }
+      developer_tokens: {
+        Row: {
+          created_at: string | null
+          creator_wallet: string
+          current_market_cap_usd: number | null
+          death_date: string | null
+          developer_id: string
+          freeze_authority_revoked: boolean | null
+          funding_wallet: string | null
+          holder_count: number | null
+          id: string
+          is_active: boolean | null
+          launch_date: string | null
+          launchpad: string | null
+          lifespan_days: number | null
+          liquidity_lock_duration_days: number | null
+          liquidity_locked: boolean | null
+          mint_authority_revoked: boolean | null
+          notes: string | null
+          outcome: string | null
+          peak_market_cap_usd: number | null
+          performance_score: number | null
+          rug_pull_evidence: Json | null
+          token_mint: string
+          total_volume_usd: number | null
+          transaction_count: number | null
+          updated_at: string | null
+        }
+        Insert: {
+          created_at?: string | null
+          creator_wallet: string
+          current_market_cap_usd?: number | null
+          death_date?: string | null
+          developer_id: string
+          freeze_authority_revoked?: boolean | null
+          funding_wallet?: string | null
+          holder_count?: number | null
+          id?: string
+          is_active?: boolean | null
+          launch_date?: string | null
+          launchpad?: string | null
+          lifespan_days?: number | null
+          liquidity_lock_duration_days?: number | null
+          liquidity_locked?: boolean | null
+          mint_authority_revoked?: boolean | null
+          notes?: string | null
+          outcome?: string | null
+          peak_market_cap_usd?: number | null
+          performance_score?: number | null
+          rug_pull_evidence?: Json | null
+          token_mint: string
+          total_volume_usd?: number | null
+          transaction_count?: number | null
+          updated_at?: string | null
+        }
+        Update: {
+          created_at?: string | null
+          creator_wallet?: string
+          current_market_cap_usd?: number | null
+          death_date?: string | null
+          developer_id?: string
+          freeze_authority_revoked?: boolean | null
+          funding_wallet?: string | null
+          holder_count?: number | null
+          id?: string
+          is_active?: boolean | null
+          launch_date?: string | null
+          launchpad?: string | null
+          lifespan_days?: number | null
+          liquidity_lock_duration_days?: number | null
+          liquidity_locked?: boolean | null
+          mint_authority_revoked?: boolean | null
+          notes?: string | null
+          outcome?: string | null
+          peak_market_cap_usd?: number | null
+          performance_score?: number | null
+          rug_pull_evidence?: Json | null
+          token_mint?: string
+          total_volume_usd?: number | null
+          transaction_count?: number | null
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "developer_tokens_developer_id_fkey"
+            columns: ["developer_id"]
+            isOneToOne: false
+            referencedRelation: "developer_profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      developer_wallets: {
+        Row: {
+          created_at: string | null
+          depth_level: number | null
+          developer_id: string
+          first_seen_at: string | null
+          id: string
+          last_active_at: string | null
+          parent_wallet_address: string | null
+          total_sol_received: number | null
+          total_sol_sent: number | null
+          transaction_count: number | null
+          wallet_address: string
+          wallet_type: string
+        }
+        Insert: {
+          created_at?: string | null
+          depth_level?: number | null
+          developer_id: string
+          first_seen_at?: string | null
+          id?: string
+          last_active_at?: string | null
+          parent_wallet_address?: string | null
+          total_sol_received?: number | null
+          total_sol_sent?: number | null
+          transaction_count?: number | null
+          wallet_address: string
+          wallet_type: string
+        }
+        Update: {
+          created_at?: string | null
+          depth_level?: number | null
+          developer_id?: string
+          first_seen_at?: string | null
+          id?: string
+          last_active_at?: string | null
+          parent_wallet_address?: string | null
+          total_sol_received?: number | null
+          total_sol_sent?: number | null
+          transaction_count?: number | null
+          wallet_address?: string
+          wallet_type?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "developer_wallets_developer_id_fkey"
+            columns: ["developer_id"]
+            isOneToOne: false
+            referencedRelation: "developer_profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       development_ideas: {
         Row: {
           category: string
@@ -1392,7 +1680,7 @@ export type Database = {
           access_timestamp: string | null
           failure_reason: string | null
           id: string
-          ip_address: unknown | null
+          ip_address: unknown
           metadata: Json | null
           operation: string
           secret_type: string
@@ -1405,7 +1693,7 @@ export type Database = {
           access_timestamp?: string | null
           failure_reason?: string | null
           id?: string
-          ip_address?: unknown | null
+          ip_address?: unknown
           metadata?: Json | null
           operation: string
           secret_type: string
@@ -1418,7 +1706,7 @@ export type Database = {
           access_timestamp?: string | null
           failure_reason?: string | null
           id?: string
-          ip_address?: unknown | null
+          ip_address?: unknown
           metadata?: Json | null
           operation?: string
           secret_type?: string
@@ -1459,7 +1747,7 @@ export type Database = {
           details: Json | null
           event_type: string
           id: string
-          ip_address: unknown | null
+          ip_address: unknown
           table_name: string
           user_id: string | null
         }
@@ -1468,7 +1756,7 @@ export type Database = {
           details?: Json | null
           event_type: string
           id?: string
-          ip_address?: unknown | null
+          ip_address?: unknown
           table_name: string
           user_id?: string | null
         }
@@ -1477,7 +1765,7 @@ export type Database = {
           details?: Json | null
           event_type?: string
           id?: string
-          ip_address?: unknown | null
+          ip_address?: unknown
           table_name?: string
           user_id?: string | null
         }
@@ -1596,6 +1884,71 @@ export type Database = {
           verified?: boolean | null
         }
         Relationships: []
+      }
+      token_mint_watchdog: {
+        Row: {
+          alert_level: string
+          alert_sent: boolean | null
+          alert_sent_at: string | null
+          block_slot: number | null
+          created_at: string | null
+          creator_wallet: string
+          deep_analysis_at: string | null
+          deep_analysis_completed: boolean | null
+          detected_at: string | null
+          developer_id: string | null
+          id: string
+          match_confidence: string | null
+          quick_analysis: Json | null
+          reasoning: string | null
+          recommendation: string | null
+          token_mint: string
+        }
+        Insert: {
+          alert_level?: string
+          alert_sent?: boolean | null
+          alert_sent_at?: string | null
+          block_slot?: number | null
+          created_at?: string | null
+          creator_wallet: string
+          deep_analysis_at?: string | null
+          deep_analysis_completed?: boolean | null
+          detected_at?: string | null
+          developer_id?: string | null
+          id?: string
+          match_confidence?: string | null
+          quick_analysis?: Json | null
+          reasoning?: string | null
+          recommendation?: string | null
+          token_mint: string
+        }
+        Update: {
+          alert_level?: string
+          alert_sent?: boolean | null
+          alert_sent_at?: string | null
+          block_slot?: number | null
+          created_at?: string | null
+          creator_wallet?: string
+          deep_analysis_at?: string | null
+          deep_analysis_completed?: boolean | null
+          detected_at?: string | null
+          developer_id?: string | null
+          id?: string
+          match_confidence?: string | null
+          quick_analysis?: Json | null
+          reasoning?: string | null
+          recommendation?: string | null
+          token_mint?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "token_mint_watchdog_developer_id_fkey"
+            columns: ["developer_id"]
+            isOneToOne: false
+            referencedRelation: "developer_profiles"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       token_watchlist: {
         Row: {
@@ -2043,6 +2396,56 @@ export type Database = {
           },
         ]
       }
+      wallet_funding_traces: {
+        Row: {
+          amount_sol: number
+          cex_name: string | null
+          created_at: string | null
+          developer_id: string | null
+          from_wallet: string
+          id: string
+          source_type: string | null
+          timestamp: string
+          to_wallet: string
+          trace_depth: number | null
+          transaction_signature: string | null
+        }
+        Insert: {
+          amount_sol: number
+          cex_name?: string | null
+          created_at?: string | null
+          developer_id?: string | null
+          from_wallet: string
+          id?: string
+          source_type?: string | null
+          timestamp: string
+          to_wallet: string
+          trace_depth?: number | null
+          transaction_signature?: string | null
+        }
+        Update: {
+          amount_sol?: number
+          cex_name?: string | null
+          created_at?: string | null
+          developer_id?: string | null
+          from_wallet?: string
+          id?: string
+          source_type?: string | null
+          timestamp?: string
+          to_wallet?: string
+          trace_depth?: number | null
+          transaction_signature?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "wallet_funding_traces_developer_id_fkey"
+            columns: ["developer_id"]
+            isOneToOne: false
+            referencedRelation: "developer_profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       wallet_metadata: {
         Row: {
           avatar_url: string | null
@@ -2182,7 +2585,7 @@ export type Database = {
           created_at: string
           error_message: string | null
           id: string
-          ip_address: unknown | null
+          ip_address: unknown
           operation: string
           security_flags: Json | null
           session_id: string | null
@@ -2196,7 +2599,7 @@ export type Database = {
           created_at?: string
           error_message?: string | null
           id?: string
-          ip_address?: unknown | null
+          ip_address?: unknown
           operation: string
           security_flags?: Json | null
           session_id?: string | null
@@ -2210,7 +2613,7 @@ export type Database = {
           created_at?: string
           error_message?: string | null
           id?: string
-          ip_address?: unknown | null
+          ip_address?: unknown
           operation?: string
           security_flags?: Json | null
           session_id?: string | null
@@ -2384,22 +2787,10 @@ export type Database = {
         Args: { campaign_id_param: string; campaign_type_param?: string }
         Returns: Json
       }
-      encrypt_owner_secret: {
-        Args: { input_secret: string }
-        Returns: string
-      }
-      encrypt_secret_secure: {
-        Args: { input_secret: string }
-        Returns: string
-      }
-      encrypt_user_secret: {
-        Args: { input_secret: string }
-        Returns: string
-      }
-      encrypt_wallet_secret: {
-        Args: { input_secret: string }
-        Returns: string
-      }
+      encrypt_owner_secret: { Args: { input_secret: string }; Returns: string }
+      encrypt_secret_secure: { Args: { input_secret: string }; Returns: string }
+      encrypt_user_secret: { Args: { input_secret: string }; Returns: string }
+      encrypt_wallet_secret: { Args: { input_secret: string }; Returns: string }
       generate_referral_code: {
         Args: { user_id_param: string }
         Returns: string
@@ -2472,14 +2863,8 @@ export type Database = {
           user_id: string
         }[]
       }
-      get_security_config: {
-        Args: { config_key_param: string }
-        Returns: Json
-      }
-      get_security_status: {
-        Args: Record<PropertyKey, never>
-        Returns: Json
-      }
+      get_security_config: { Args: { config_key_param: string }; Returns: Json }
+      get_security_status: { Args: never; Returns: Json }
       get_user_profile_safe: {
         Args: { requesting_user_id: string }
         Returns: {
@@ -2568,10 +2953,7 @@ export type Database = {
         }
         Returns: boolean
       }
-      is_super_admin: {
-        Args: { _user_id: string }
-        Returns: boolean
-      }
+      is_super_admin: { Args: { _user_id: string }; Returns: boolean }
       log_auth_failure: {
         Args: { client_info?: Json; failure_reason: string; user_email: string }
         Returns: undefined
@@ -2597,14 +2979,8 @@ export type Database = {
         }
         Returns: undefined
       }
-      mask_sensitive_data: {
-        Args: { input_text: string }
-        Returns: string
-      }
-      process_active_blackbox_commands: {
-        Args: Record<PropertyKey, never>
-        Returns: undefined
-      }
+      mask_sensitive_data: { Args: { input_text: string }; Returns: string }
+      process_active_blackbox_commands: { Args: never; Returns: undefined }
       track_referral_signup: {
         Args: { new_user_id: string; referral_code_param: string }
         Returns: Json
