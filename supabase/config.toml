@@ -10,6 +10,9 @@ verify_jwt = false
 [functions.test-discovery-job]
 verify_jwt = false
 
+[functions.developer-discovery-job]
+verify_jwt = false
+
 [functions.raydium-quote]
 verify_jwt = false
 
