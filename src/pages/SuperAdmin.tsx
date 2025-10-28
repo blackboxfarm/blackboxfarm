@@ -10,6 +10,7 @@ import { DeveloperProfiles } from "@/components/admin/DeveloperProfiles";
 import { AnalysisJobs } from "@/components/admin/AnalysisJobs";
 import { TokenWatchdog } from "@/components/admin/TokenWatchdog";
 import { SystemTesting } from "@/components/admin/SystemTesting";
+import { DeveloperAlerts } from "@/components/admin/DeveloperAlerts";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import TransactionHistoryWindow from "@/components/blackbox/TransactionHistoryWindow";
@@ -83,7 +84,7 @@ export default function SuperAdmin() {
           <WalletBalanceMonitor />
         </div>
         <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
-          <TabsList className="grid w-full grid-cols-12">
+          <TabsList className="grid w-full grid-cols-12 lg:grid-cols-13">
             <TabsTrigger value="wallets">Wallet Management</TabsTrigger>
             <TabsTrigger value="recovery">Wallet Recovery</TabsTrigger>
             <TabsTrigger value="monitor">Wallet Monitor</TabsTrigger>
@@ -95,6 +96,7 @@ export default function SuperAdmin() {
             <TabsTrigger value="developers">Developer Intel</TabsTrigger>
             <TabsTrigger value="analysis">Analysis Jobs</TabsTrigger>
             <TabsTrigger value="watchdog">Token Watchdog</TabsTrigger>
+            <TabsTrigger value="alerts">Dev Alerts</TabsTrigger>
             <TabsTrigger value="testing">System Tests</TabsTrigger>
           </TabsList>
           
@@ -140,6 +142,10 @@ export default function SuperAdmin() {
 
           <TabsContent value="watchdog">
             <TokenWatchdog />
+          </TabsContent>
+
+          <TabsContent value="alerts">
+            <DeveloperAlerts />
           </TabsContent>
 
           <TabsContent value="testing">
