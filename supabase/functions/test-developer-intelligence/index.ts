@@ -126,7 +126,7 @@ Deno.serve(async (req) => {
       const { data: jobData, error: jobError } = await supabase
         .from('developer_analysis_jobs')
         .insert({
-          job_type: 'integration_test',
+          job_type: 'wallet_trace',
           status: 'completed',
           wallet_address: 'TEST_WALLET_' + Date.now(),
           progress_percent: 100,
