@@ -16,24 +16,8 @@ Deno.serve(async (req) => {
     
     const supabase = createClient(supabaseUrl, supabaseKey)
 
-    const authHeader = req.headers.get('Authorization')!
-    const token = authHeader.replace('Bearer ', '')
-    const { data: { user }, error: authError } = await supabase.auth.getUser(token)
+    // Public function: no authentication required
 
-    if (authError || !user) {
-      return new Response(JSON.stringify({ error: 'Unauthorized' }), {
-        status: 401,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      })
-    }
-
-    const { data: isSuperAdmin } = await supabase.rpc('is_super_admin', { _user_id: user.id })
-    if (!isSuperAdmin) {
-      return new Response(JSON.stringify({ error: 'Super admin access required' }), {
-        status: 403,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      })
-    }
 
     const { tokenMint, walletAddress, maxDepth = 10 } = await req.json()
 
@@ -74,21 +58,29 @@ Deno.serve(async (req) => {
         .eq('id', job.id)
 
       // Fetch token metadata to find creator
-      const heliusApiKey = Deno.env.get('HELIUS_API_KEY')!
-      const response = await fetch(
-        `https://api.helius.xyz/v0/token-metadata?api-key=${heliusApiKey}`,
-        {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ mintAccounts: [tokenMint] }),
-        }
-      )
+      const heliusApiKey = Deno.env.get('HELIUS_API_KEY')
+      if (heliusApiKey) {
+        const response = await fetch(
+          `https://api.helius.xyz/v0/token-metadata?api-key=${heliusApiKey}`,
+          {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ mintAccounts: [tokenMint] }),
+          }
+        )
 
-      if (response.ok) {
-        const metadata = await response.json()
-        if (metadata[0]?.account) {
-          startWallet = metadata[0].account
+        if (response.ok) {
+          const metadata = await response.json()
+          const creator = metadata?.[0]?.account
+          if (creator) {
+            startWallet = creator
+          }
         }
+      }
+
+      // Fallback if we couldn't resolve a creator wallet
+      if (!startWallet) {
+        startWallet = walletAddress || `unknown_${tokenMint.slice(0,8)}`
       }
     }
 
