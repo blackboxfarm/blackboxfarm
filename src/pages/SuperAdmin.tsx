@@ -6,6 +6,9 @@ import { AccountViewer } from "@/components/AccountViewer";
 import { BaglessHoldersReport } from "@/components/BaglessHoldersReport";
 import { LiquidityLockChecker } from "@/components/LiquidityLockChecker";
 import { AllWalletsTokenView } from "@/components/AllWalletsTokenView";
+import { DeveloperProfiles } from "@/components/admin/DeveloperProfiles";
+import { AnalysisJobs } from "@/components/admin/AnalysisJobs";
+import { TokenWatchdog } from "@/components/admin/TokenWatchdog";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import TransactionHistoryWindow from "@/components/blackbox/TransactionHistoryWindow";
@@ -79,7 +82,7 @@ export default function SuperAdmin() {
           <WalletBalanceMonitor />
         </div>
         <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
-          <TabsList className="grid w-full grid-cols-8">
+          <TabsList className="grid w-full grid-cols-11">
             <TabsTrigger value="wallets">Wallet Management</TabsTrigger>
             <TabsTrigger value="recovery">Wallet Recovery</TabsTrigger>
             <TabsTrigger value="monitor">Wallet Monitor</TabsTrigger>
@@ -88,6 +91,9 @@ export default function SuperAdmin() {
             <TabsTrigger value="holders">Token Holders</TabsTrigger>
             <TabsTrigger value="liquidity">Liquidity Checker</TabsTrigger>
             <TabsTrigger value="tokens">All Tokens</TabsTrigger>
+            <TabsTrigger value="developers">Developer Intel</TabsTrigger>
+            <TabsTrigger value="analysis">Analysis Jobs</TabsTrigger>
+            <TabsTrigger value="watchdog">Token Watchdog</TabsTrigger>
           </TabsList>
           
           <TabsContent value="wallets">
@@ -120,6 +126,18 @@ export default function SuperAdmin() {
           
           <TabsContent value="tokens">
             <AllWalletsTokenView />
+          </TabsContent>
+
+          <TabsContent value="developers">
+            <DeveloperProfiles />
+          </TabsContent>
+
+          <TabsContent value="analysis">
+            <AnalysisJobs />
+          </TabsContent>
+
+          <TabsContent value="watchdog">
+            <TokenWatchdog />
           </TabsContent>
         </Tabs>
       </div>
