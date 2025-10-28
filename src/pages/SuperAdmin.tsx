@@ -84,20 +84,20 @@ export default function SuperAdmin() {
           <WalletBalanceMonitor />
         </div>
         <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
-          <TabsList className="grid w-full grid-cols-12 lg:grid-cols-13">
-            <TabsTrigger value="wallets">Wallet Management</TabsTrigger>
-            <TabsTrigger value="recovery">Wallet Recovery</TabsTrigger>
-            <TabsTrigger value="monitor">Wallet Monitor</TabsTrigger>
-            <TabsTrigger value="security">Security Dashboard</TabsTrigger>
-            <TabsTrigger value="accounts">Account Directory</TabsTrigger>
-            <TabsTrigger value="holders">Token Holders</TabsTrigger>
-            <TabsTrigger value="liquidity">Liquidity Checker</TabsTrigger>
-            <TabsTrigger value="tokens">All Tokens</TabsTrigger>
-            <TabsTrigger value="developers">Developer Intel</TabsTrigger>
-            <TabsTrigger value="analysis">Analysis Jobs</TabsTrigger>
-            <TabsTrigger value="watchdog">Token Watchdog</TabsTrigger>
-            <TabsTrigger value="alerts">Dev Alerts</TabsTrigger>
-            <TabsTrigger value="testing">System Tests</TabsTrigger>
+          <TabsList className="flex flex-wrap w-full h-auto gap-1 p-2">
+            <TabsTrigger value="wallets" className="flex-shrink-0">Wallet Management</TabsTrigger>
+            <TabsTrigger value="recovery" className="flex-shrink-0">Wallet Recovery</TabsTrigger>
+            <TabsTrigger value="monitor" className="flex-shrink-0">Wallet Monitor</TabsTrigger>
+            <TabsTrigger value="security" className="flex-shrink-0">Security Dashboard</TabsTrigger>
+            <TabsTrigger value="accounts" className="flex-shrink-0">Account Directory</TabsTrigger>
+            <TabsTrigger value="holders" className="flex-shrink-0">Token Holders</TabsTrigger>
+            <TabsTrigger value="liquidity" className="flex-shrink-0">Liquidity Checker</TabsTrigger>
+            <TabsTrigger value="tokens" className="flex-shrink-0">All Tokens</TabsTrigger>
+            <TabsTrigger value="developers" className="flex-shrink-0">Developer Intel</TabsTrigger>
+            <TabsTrigger value="analysis" className="flex-shrink-0">Analysis Jobs</TabsTrigger>
+            <TabsTrigger value="watchdog" className="flex-shrink-0">Token Watchdog</TabsTrigger>
+            <TabsTrigger value="alerts" className="flex-shrink-0">Dev Alerts</TabsTrigger>
+            <TabsTrigger value="testing" className="flex-shrink-0">System Tests</TabsTrigger>
           </TabsList>
           
           <TabsContent value="wallets">
