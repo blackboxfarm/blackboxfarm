@@ -1,7 +1,7 @@
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
-
+import { DeveloperRiskBadge } from "./DeveloperRiskBadge";
 import { ExternalLink, Shield, ShieldCheck, TrendingUp, TrendingDown, Zap, Info } from "lucide-react";
 import { Separator } from "@/components/ui/separator";
 import { useEffect, useState } from "react";
@@ -60,6 +60,7 @@ interface TokenMetadataDisplayProps {
   pools?: RaydiumPool[];
   isLoading?: boolean;
   compact?: boolean;
+  creatorWallet?: string;
 }
 
 const LAUNCHPAD_LOGOS: Record<string, string> = {
@@ -78,7 +79,8 @@ export function TokenMetadataDisplay({
   onChainData,
   pools = [],
   isLoading = false, 
-  compact = false 
+  compact = false,
+  creatorWallet
 }: TokenMetadataDisplayProps) {
   if (isLoading) {
     return <TokenMetadataSkeleton compact={compact} />;
@@ -187,7 +189,7 @@ export function TokenMetadataDisplay({
             
             <div className="flex-1 space-y-3">
               <div>
-                <div className="flex items-center gap-2 mb-1">
+                <div className="flex items-center gap-2 mb-1 flex-wrap">
                   <h3 className="text-lg font-semibold">{metadata.name}</h3>
                   <Badge variant="outline">{metadata.symbol}</Badge>
                   {metadata.isPumpFun && (
@@ -203,6 +205,9 @@ export function TokenMetadataDisplay({
                       <Shield className="h-4 w-4 text-yellow-500" />
                     )}
                   </div>
+                  {creatorWallet && (
+                    <DeveloperRiskBadge creatorWallet={creatorWallet} showDetails />
+                  )}
                 </div>
                 <p className="text-sm text-muted-foreground font-mono">
                   {metadata.mint}

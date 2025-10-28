@@ -766,6 +766,47 @@ export type Database = {
           },
         ]
       }
+      developer_alerts: {
+        Row: {
+          alert_type: string
+          created_at: string
+          creator_wallet: string
+          developer_id: string | null
+          id: string
+          metadata: Json | null
+          risk_level: string
+          token_mint: string
+        }
+        Insert: {
+          alert_type: string
+          created_at?: string
+          creator_wallet: string
+          developer_id?: string | null
+          id?: string
+          metadata?: Json | null
+          risk_level: string
+          token_mint: string
+        }
+        Update: {
+          alert_type?: string
+          created_at?: string
+          creator_wallet?: string
+          developer_id?: string | null
+          id?: string
+          metadata?: Json | null
+          risk_level?: string
+          token_mint?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "developer_alerts_developer_id_fkey"
+            columns: ["developer_id"]
+            isOneToOne: false
+            referencedRelation: "developer_profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       developer_analysis_jobs: {
         Row: {
           completed_at: string | null
@@ -2865,6 +2906,12 @@ export type Database = {
       }
       get_security_config: { Args: { config_key_param: string }; Returns: Json }
       get_security_status: { Args: never; Returns: Json }
+      get_super_admin_ids: {
+        Args: never
+        Returns: {
+          user_id: string
+        }[]
+      }
       get_user_profile_safe: {
         Args: { requesting_user_id: string }
         Returns: {

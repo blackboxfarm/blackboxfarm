@@ -79,3 +79,9 @@ verify_jwt = true
 
 [functions.bagless-holders-report]
 verify_jwt = false
+
+[functions.developer-reputation]
+verify_jwt = false
+
+[functions.alert-high-risk-token]
+verify_jwt = false

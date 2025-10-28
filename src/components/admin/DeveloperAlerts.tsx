@@ -14,10 +14,7 @@ export const DeveloperAlerts = () => {
     queryFn: async () => {
       const { data, error } = await supabase
         .from('developer_alerts')
-        .select(`
-          *,
-          developer_profiles(display_name, reputation_score, trust_level)
-        `)
+        .select('*')
         .order('created_at', { ascending: false })
         .limit(50);
 
@@ -26,7 +23,16 @@ export const DeveloperAlerts = () => {
         throw error;
       }
 
-      return data;
+      return data as Array<{
+        id: string;
+        token_mint: string;
+        creator_wallet: string;
+        risk_level: string;
+        developer_id: string | null;
+        alert_type: string;
+        metadata: Record<string, any>;
+        created_at: string;
+      }>;
     },
     refetchInterval: 30000 // Refresh every 30 seconds
   });
@@ -151,11 +157,11 @@ export const DeveloperAlerts = () => {
                       </code>
                     </TableCell>
                     <TableCell>
-                      {alert.developer_profiles?.display_name || 'Unknown'}
+                      {alert.metadata?.developerName || 'Unknown'}
                     </TableCell>
                     <TableCell>
                       <Badge variant="outline">
-                        {alert.metadata?.reputationScore || alert.developer_profiles?.reputation_score || 'N/A'}
+                        {alert.metadata?.reputationScore || 'N/A'}
                       </Badge>
                     </TableCell>
                   </TableRow>
