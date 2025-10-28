@@ -93,11 +93,11 @@ export default function SuperAdmin() {
             <TabsTrigger value="holders" className="flex-shrink-0">Token Holders</TabsTrigger>
             <TabsTrigger value="liquidity" className="flex-shrink-0">Liquidity Checker</TabsTrigger>
             <TabsTrigger value="tokens" className="flex-shrink-0">All Tokens</TabsTrigger>
-            <TabsTrigger value="developers" className="flex-shrink-0">Developer Intel</TabsTrigger>
-            <TabsTrigger value="analysis" className="flex-shrink-0">Analysis Jobs</TabsTrigger>
-            <TabsTrigger value="watchdog" className="flex-shrink-0">Token Watchdog</TabsTrigger>
-            <TabsTrigger value="alerts" className="flex-shrink-0">Dev Alerts</TabsTrigger>
-            <TabsTrigger value="testing" className="flex-shrink-0">System Tests</TabsTrigger>
+            <TabsTrigger value="developers" className="flex-shrink-0 data-[state=active]:bg-primary/20 data-[state=inactive]:bg-primary/5">Developer Intel</TabsTrigger>
+            <TabsTrigger value="analysis" className="flex-shrink-0 data-[state=active]:bg-primary/20 data-[state=inactive]:bg-primary/5">Analysis Jobs</TabsTrigger>
+            <TabsTrigger value="watchdog" className="flex-shrink-0 data-[state=active]:bg-primary/20 data-[state=inactive]:bg-primary/5">Token Watchdog</TabsTrigger>
+            <TabsTrigger value="alerts" className="flex-shrink-0 data-[state=active]:bg-primary/20 data-[state=inactive]:bg-primary/5">Dev Alerts</TabsTrigger>
+            <TabsTrigger value="testing" className="flex-shrink-0 data-[state=active]:bg-primary/20 data-[state=inactive]:bg-primary/5">System Tests</TabsTrigger>
           </TabsList>
           
           <TabsContent value="wallets">
