@@ -1,5 +1,15 @@
 project_id = "apxauapuusmgwbbzjgfl"
 
+# Edge Functions configuration
+[functions.token-mint-watchdog-monitor]
+verify_jwt = false
+
+[functions.test-developer-intelligence]
+verify_jwt = true
+
+[functions.test-discovery-job]
+verify_jwt = true
+
 [functions.raydium-quote]
 verify_jwt = false
 
