@@ -41,16 +41,18 @@ export default function Holders() {
         {/* Header */}
         <div className="flex flex-col md:flex-row md:justify-between md:items-start space-y-4 md:space-y-0">
           <div className="text-center md:text-left flex-1 space-y-4">
-            <div className="flex items-center justify-center md:justify-start gap-3">
-              <img 
-                src="/lovable-uploads/7283e809-e703-4594-8dc8-a1ade76b06de.png" 
-                alt="BlackBox Cube Logo" 
-                className="w-10 h-10 md:w-12 md:h-12"
-              />
-              <h1 className="text-3xl md:text-4xl font-bold bg-gradient-to-r from-primary to-primary/70 bg-clip-text text-transparent">
-                Holders Analysis
-              </h1>
-              <SolPriceDisplay size="lg" className="ml-4" />
+            <div className="flex flex-col md:flex-row items-center justify-center md:justify-start gap-3">
+              <div className="flex items-center gap-2 md:gap-3">
+                <img 
+                  src="/lovable-uploads/7283e809-e703-4594-8dc8-a1ade76b06de.png" 
+                  alt="BlackBox Cube Logo" 
+                  className="w-8 h-8 md:w-12 md:h-12"
+                />
+                <h1 className="text-2xl md:text-4xl font-bold bg-gradient-to-r from-primary to-primary/70 bg-clip-text text-transparent">
+                  Holders Analysis
+                </h1>
+              </div>
+              <SolPriceDisplay size="lg" className="md:ml-4" />
             </div>
             <p className="text-lg md:text-xl text-muted-foreground max-w-2xl mx-auto md:mx-0">
               Analyze token holder distribution and wallet categories
@@ -79,7 +81,7 @@ export default function Holders() {
         </div>
 
         {/* Main Content */}
-        <div className="w-full md:w-3/4 md:mx-auto px-[5px] md:px-6 py-4 md:py-8">
+        <div className="w-full md:w-3/4 md:mx-auto px-3 md:px-6 py-4 md:py-8">
           <BaglessHoldersReport initialToken={tokenFromUrl} />
         </div>
 

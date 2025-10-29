@@ -115,17 +115,18 @@ export function TokenMetadataDisplay({
     return (
       <div className="space-y-2">
         <div className="flex items-center gap-3">
-          {displayImage && (
-            <img 
-              src={displayImage} 
-              alt={`${metadata.symbol} token logo`}
-              loading="lazy"
-              className="w-8 h-8 rounded-full object-cover"
-              onError={(e) => {
-                e.currentTarget.style.display = 'none';
-              }}
-            />
-          )}
+          <img 
+            src={displayImage || '/lovable-uploads/7283e809-e703-4594-8dc8-a1ade76b06de.png'} 
+            alt={displayImage ? `${metadata.symbol} token logo` : 'Token placeholder'}
+            loading="lazy"
+            className={`w-8 h-8 rounded-full object-cover ${!displayImage ? 'opacity-40 grayscale' : ''}`}
+            onError={(e) => {
+              if (e.currentTarget.src !== '/lovable-uploads/7283e809-e703-4594-8dc8-a1ade76b06de.png') {
+                e.currentTarget.src = '/lovable-uploads/7283e809-e703-4594-8dc8-a1ade76b06de.png';
+                e.currentTarget.className = 'w-8 h-8 rounded-full object-cover opacity-40 grayscale';
+              }
+            }}
+          />
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2">
               <span className="font-medium truncate">{metadata.name}</span>
@@ -175,17 +176,18 @@ export function TokenMetadataDisplay({
         <div className="space-y-4">
           
           <div className="flex items-start gap-6">
-            {displayImage && (
-              <img 
-                src={displayImage} 
-                alt={`${metadata.symbol} token logo`}
-                loading="lazy"
-                className="w-32 h-32 rounded-2xl flex-shrink-0 object-cover border-4 border-primary/20 shadow-xl"
-                onError={(e) => {
-                  e.currentTarget.style.display = 'none';
-                }}
-              />
-            )}
+            <img 
+              src={displayImage || '/lovable-uploads/7283e809-e703-4594-8dc8-a1ade76b06de.png'} 
+              alt={displayImage ? `${metadata.symbol} token logo` : 'Token placeholder'}
+              loading="lazy"
+              className={`w-24 h-24 md:w-32 md:h-32 rounded-2xl flex-shrink-0 object-cover border-4 border-primary/20 shadow-xl ${!displayImage ? 'opacity-40 grayscale' : ''}`}
+              onError={(e) => {
+                if (e.currentTarget.src !== '/lovable-uploads/7283e809-e703-4594-8dc8-a1ade76b06de.png') {
+                  e.currentTarget.src = '/lovable-uploads/7283e809-e703-4594-8dc8-a1ade76b06de.png';
+                  e.currentTarget.className = 'w-24 h-24 md:w-32 md:h-32 rounded-2xl flex-shrink-0 object-cover border-4 border-primary/20 shadow-xl opacity-40 grayscale';
+                }
+              }}
+            />
             
             <div className="flex-1 space-y-3">
               <div>

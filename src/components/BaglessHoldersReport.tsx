@@ -854,15 +854,15 @@ export function BaglessHoldersReport({ initialToken }: BaglessHoldersReportProps
                       : 'bg-gradient-to-r from-primary/20 to-secondary/20 border-primary shadow-lg'
                     : 'bg-muted/30 border-muted'
                 }`}>
-                  <div className="flex items-center gap-4">
-                    <div className="text-5xl md:text-6xl">
+                  <div className="flex items-center gap-3 md:gap-4">
+                    <div className="text-3xl md:text-6xl flex-shrink-0">
                       {report.launchpadInfo.detected && report.launchpadInfo.name === 'pump.fun' && '🚀'}
                       {report.launchpadInfo.detected && report.launchpadInfo.name === 'bonk.fun' && '🦴'}
                       {report.launchpadInfo.detected && report.launchpadInfo.name === 'bags.fm' && '💼'}
                       {!report.launchpadInfo.detected && '❓'}
                     </div>
-                    <div className="flex-1">
-                      <h3 className="text-2xl md:text-3xl font-black mb-2">
+                    <div className="flex-1 min-w-0">
+                      <h3 className="text-lg md:text-3xl font-black mb-1 md:mb-2 leading-tight">
                         {report.launchpadInfo.detected 
                           ? `🎉 LAUNCHED ON ${report.launchpadInfo.name.toUpperCase()}`
                           : 'LAUNCHPAD UNKNOWN'}
