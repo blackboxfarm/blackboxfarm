@@ -55,7 +55,7 @@ export default function Holders() {
             <p className="text-lg md:text-xl text-muted-foreground max-w-2xl mx-auto md:mx-0">
               Analyze token holder distribution and wallet categories
             </p>
-            <div className="flex justify-center md:hidden space-x-3">
+            <div className="flex justify-center md:hidden space-x-3 hidden">
               <AuthButton />
             </div>
           </div>
@@ -72,7 +72,9 @@ export default function Holders() {
               </Button>
             )}
             <NotificationCenter />
-            <AuthButton />
+            <div className="hidden">
+              <AuthButton />
+            </div>
           </div>
         </div>
 
