@@ -718,12 +718,12 @@ export function BaglessHoldersReport({ initialToken }: BaglessHoldersReportProps
   };
 
   return (
-    <div className="space-y-4 md:space-y-6 px-2 md:px-0">
+    <div className="space-y-3 md:space-y-6">
       <Card>
-        <CardHeader className="pb-4">
-          <CardTitle className="text-lg md:text-xl">Token Holders Report</CardTitle>
+        <CardHeader className="p-3 md:p-6 pb-2 md:pb-4">
+          <CardTitle className="text-base md:text-xl">Token Holders Report</CardTitle>
         </CardHeader>
-        <CardContent className="space-y-3 md:space-y-4">
+        <CardContent className="space-y-2 md:space-y-4 p-3 md:p-6 pt-2 md:pt-0">
           <div>
             <Label htmlFor="tokenMint" className="text-sm">Token Mint Address</Label>
             <Input
@@ -825,9 +825,9 @@ export function BaglessHoldersReport({ initialToken }: BaglessHoldersReportProps
       {report && (
         <>
           <Card>
-            <CardHeader className="pb-4">
+            <CardHeader className="p-3 md:p-6 pb-2 md:pb-4">
               <CardTitle className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2">
-                <span className="text-lg md:text-xl">Report Summary</span>
+                <span className="text-base md:text-xl">Report Summary</span>
                 <Button 
                   onClick={exportToCSV}
                   variant="outline"
@@ -840,10 +840,10 @@ export function BaglessHoldersReport({ initialToken }: BaglessHoldersReportProps
                 </Button>
               </CardTitle>
             </CardHeader>
-            <CardContent>
+            <CardContent className="p-3 md:p-6 pt-2 md:pt-0">
               {/* LAUNCHPAD DETECTION BANNER - BIG AND BOLD */}
               {report.launchpadInfo && (
-                <div className={`mb-6 p-6 rounded-xl border-4 ${
+                <div className={`mb-3 md:mb-6 p-3 md:p-6 rounded-lg md:rounded-xl border-2 md:border-4 ${
                   report.launchpadInfo.detected 
                     ? report.launchpadInfo.name === 'pump.fun' 
                       ? 'bg-gradient-to-r from-green-500/20 to-emerald-500/20 border-green-500 shadow-lg shadow-green-500/20'
@@ -862,7 +862,7 @@ export function BaglessHoldersReport({ initialToken }: BaglessHoldersReportProps
                       {!report.launchpadInfo.detected && '❓'}
                     </div>
                     <div className="flex-1 min-w-0">
-                      <h3 className="text-lg md:text-3xl font-black mb-1 md:mb-2 leading-tight">
+                      <h3 className="text-base md:text-3xl font-black mb-0 md:mb-2 leading-tight">
                         {report.launchpadInfo.detected 
                           ? `🎉 LAUNCHED ON ${report.launchpadInfo.name.toUpperCase()}`
                           : 'LAUNCHPAD UNKNOWN'}
@@ -882,8 +882,8 @@ export function BaglessHoldersReport({ initialToken }: BaglessHoldersReportProps
               </div>
               
               {report.tokenPriceUSD > 0 && (
-                <div className="mb-4 p-3 bg-muted rounded-lg">
-                  <div className="text-sm font-medium">
+                <div className="mb-3 md:mb-4 p-2 md:p-3 bg-muted rounded-lg">
+                  <div className="text-xs md:text-sm font-medium break-all">
                     Token Price: ${report.tokenPriceUSD.toFixed(8)}
                     {report.priceSource && (
                       <span className="text-muted-foreground ml-2">
@@ -895,8 +895,8 @@ export function BaglessHoldersReport({ initialToken }: BaglessHoldersReportProps
               )}
               
               {report.priceDiscoveryFailed && (
-                <div className="mb-4 p-3 bg-yellow-500/10 border border-yellow-500/20 rounded-lg">
-                  <div className="text-sm text-yellow-700 dark:text-yellow-300">
+                <div className="mb-3 md:mb-4 p-2 md:p-3 bg-yellow-500/10 border border-yellow-500/20 rounded-lg">
+                  <div className="text-xs md:text-sm text-yellow-700 dark:text-yellow-300">
                     ⚠️ Price discovery failed - USD values may be inaccurate
                   </div>
                 </div>
@@ -904,8 +904,8 @@ export function BaglessHoldersReport({ initialToken }: BaglessHoldersReportProps
               
               {/* LP Detection Summary */}
               {report.liquidityPoolsDetected > 0 && (
-                <div className="mb-4 p-3 bg-blue-500/10 border border-blue-500/20 rounded-lg">
-                  <div className="text-sm font-medium text-blue-700 dark:text-blue-300 mb-2">
+                <div className="mb-3 md:mb-4 p-2 md:p-3 bg-blue-500/10 border border-blue-500/20 rounded-lg">
+                  <div className="text-xs md:text-sm font-medium text-blue-700 dark:text-blue-300 mb-1 md:mb-2">
                     🔍 LP Detection Results
                   </div>
                   <div className="text-xs text-blue-600 dark:text-blue-400">
@@ -946,21 +946,21 @@ export function BaglessHoldersReport({ initialToken }: BaglessHoldersReportProps
                 };
                 
                 return (
-                  <Card className={`mb-6 border-2 ${getBgColor()}`}>
-                    <CardHeader className="pb-3">
-                      <div className="flex items-center gap-3">
-                        <div className="text-4xl">{emoji}</div>
-                        <div className="flex-1">
-                          <CardTitle className={`text-xl ${getTextColor()}`}>
+                  <Card className={`mb-3 md:mb-6 border-2 ${getBgColor()}`}>
+                    <CardHeader className="p-3 md:p-6 pb-2 md:pb-3">
+                      <div className="flex items-center gap-2 md:gap-3">
+                        <div className="text-2xl md:text-4xl">{emoji}</div>
+                        <div className="flex-1 min-w-0">
+                          <CardTitle className={`text-base md:text-xl ${getTextColor()}`}>
                             {label}
                           </CardTitle>
-                          <p className="text-sm text-muted-foreground mt-1">
+                          <p className="text-xs md:text-sm text-muted-foreground mt-1">
                             Token Distribution Analysis
                           </p>
                         </div>
                       </div>
                     </CardHeader>
-                    <CardContent>
+                    <CardContent className="p-3 md:p-6 pt-0 md:pt-0">
                       <div className="space-y-4">
                         {/* Score Display */}
                         <div className="text-center py-4">

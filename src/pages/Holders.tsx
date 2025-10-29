@@ -81,7 +81,7 @@ export default function Holders() {
         </div>
 
         {/* Main Content */}
-        <div className="w-full md:w-3/4 md:mx-auto px-3 md:px-6 py-4 md:py-8">
+        <div className="w-full md:w-3/4 md:mx-auto px-2 md:px-6 py-2 md:py-8">
           <BaglessHoldersReport initialToken={tokenFromUrl} />
         </div>
 

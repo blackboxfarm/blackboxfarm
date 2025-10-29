@@ -113,8 +113,9 @@ export function TokenMetadataDisplay({
 
   if (compact) {
     return (
-      <div className="space-y-2">
-        <div className="flex items-center gap-3">
+      <Card className="overflow-hidden">
+        <CardContent className="p-2 md:p-4">
+          <div className="flex items-center gap-3">
           <img 
             src={displayImage || '/lovable-uploads/7283e809-e703-4594-8dc8-a1ade76b06de.png'} 
             alt={displayImage ? `${metadata.symbol} token logo` : 'Token placeholder'}
@@ -166,17 +167,18 @@ export function TokenMetadataDisplay({
             )}
           </div>
         </div>
-      </div>
+        </CardContent>
+      </Card>
     );
   }
 
   return (
     <Card>
-      <CardContent className="p-4">
-        <div className="space-y-4">
+      <CardContent className="p-3 md:p-6">
+        <div className="space-y-3 md:space-y-4">
           
-          <div className="flex items-start gap-6">
-            <img 
+          <div className="flex items-start gap-3 md:gap-6">
+            <img
               src={displayImage || '/lovable-uploads/7283e809-e703-4594-8dc8-a1ade76b06de.png'} 
               alt={displayImage ? `${metadata.symbol} token logo` : 'Token placeholder'}
               loading="lazy"
@@ -192,8 +194,8 @@ export function TokenMetadataDisplay({
             <div className="flex-1 space-y-3">
               <div>
                 <div className="flex items-center gap-2 mb-1 flex-wrap">
-                  <h3 className="text-lg font-semibold">{metadata.name}</h3>
-                  <Badge variant="outline">{metadata.symbol}</Badge>
+                  <h3 className="text-base md:text-lg font-semibold">{metadata.name}</h3>
+                  <Badge variant="outline" className="text-xs">{metadata.symbol}</Badge>
                   {metadata.isPumpFun && (
                     <Badge variant="secondary">
                       <Zap className="h-3 w-3 mr-1" />
@@ -211,7 +213,7 @@ export function TokenMetadataDisplay({
                     <DeveloperRiskBadge creatorWallet={creatorWallet} showDetails />
                   )}
                 </div>
-                <p className="text-sm text-muted-foreground font-mono">
+                <p className="text-xs md:text-sm text-muted-foreground font-mono break-all">
                   {metadata.mint}
                 </p>
               </div>
