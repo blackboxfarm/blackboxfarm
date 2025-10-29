@@ -36,7 +36,44 @@ export function Footer() {
           </div>
 
 
-          {/* Company Links */}
+          {/* Product Links - Hidden */}
+          <div className="space-y-4 hidden">
+            <h3 className="font-semibold text-sm uppercase tracking-wide">Product</h3>
+            <ul className="space-y-2 text-sm">
+              <li>
+                <Link to="/?tab=volume-sim" className="text-muted-foreground hover:text-primary transition-colors">
+                  Fee Calculator
+                </Link>
+              </li>
+              <li>
+                <Link to="/?tab=volume-sim" className="text-muted-foreground hover:text-primary transition-colors">
+                  Volume Simulator
+                </Link>
+              </li>
+              {isAuthenticated && (
+                <li>
+                  <Link to="/community-wallet" className="text-muted-foreground hover:text-primary transition-colors">
+                    Community Campaigns
+                  </Link>
+                </li>
+              )}
+              {isAuthenticated && (
+                <li>
+                  <Link to="/?tab=analytics" className="text-muted-foreground hover:text-primary transition-colors">
+                    Analytics Dashboard
+                  </Link>
+                </li>
+              )}
+              {isSuperAdmin && (
+                <li>
+                  <Link to="/super-admin?tab=security" className="text-muted-foreground hover:text-primary transition-colors">
+                    Security Center
+                  </Link>
+                </li>
+              )}
+            </ul>
+          </div>
+
           <div className="space-y-4">
             <h3 className="font-semibold text-sm uppercase tracking-wide">Company</h3>
             <ul className="space-y-2 text-sm">
