@@ -89,32 +89,33 @@ const tabConfigs: TabConfig[] = [
     ),
     isPublic: true
   },
-  {
-    id: 'calculator',
-    label: 'Calculator',
-    icon: Calculator,
-    component: () => (
-      <div className="space-y-6">
-        <div className="tech-border p-6">
-          <h2 className="text-2xl font-bold mb-4">Trading Calculator</h2>
-          <p className="text-muted-foreground mb-4">
-            Calculate potential returns, fees, and risks for your trading strategies.
-          </p>
-          <div className="grid md:grid-cols-2 gap-4">
-            <div className="tech-border p-4">
-              <h3 className="font-semibold mb-2">💰 Profit Calculator</h3>
-              <p className="text-sm text-muted-foreground">Estimate potential profits based on investment amount and strategy parameters.</p>
-            </div>
-            <div className="tech-border p-4">
-              <h3 className="font-semibold mb-2">📈 Fee Estimator</h3>
-              <p className="text-sm text-muted-foreground">Calculate transaction fees, gas costs, and service charges.</p>
-            </div>
-          </div>
-        </div>
-      </div>
-    ),
-    isPublic: true
-  },
+  // Calculator tab - Hidden
+  // {
+  //   id: 'calculator',
+  //   label: 'Calculator',
+  //   icon: Calculator,
+  //   component: () => (
+  //     <div className="space-y-6">
+  //       <div className="tech-border p-6">
+  //         <h2 className="text-2xl font-bold mb-4">Trading Calculator</h2>
+  //         <p className="text-muted-foreground mb-4">
+  //           Calculate potential returns, fees, and risks for your trading strategies.
+  //         </p>
+  //         <div className="grid md:grid-cols-2 gap-4">
+  //           <div className="tech-border p-4">
+  //             <h3 className="font-semibold mb-2">💰 Profit Calculator</h3>
+  //             <p className="text-sm text-muted-foreground">Estimate potential profits based on investment amount and strategy parameters.</p>
+  //           </div>
+  //           <div className="tech-border p-4">
+  //             <h3 className="font-semibold mb-2">📈 Fee Estimator</h3>
+  //             <p className="text-sm text-muted-foreground">Calculate transaction fees, gas costs, and service charges.</p>
+  //           </div>
+  //         </div>
+  //       </div>
+  //     </div>
+  //   ),
+  //   isPublic: true
+  // },
   {
     id: 'analytics',
     label: 'Analytics',

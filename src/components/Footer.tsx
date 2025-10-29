@@ -35,8 +35,8 @@ export function Footer() {
             </div>
           </div>
 
-          {/* Product Links */}
-          <div className="space-y-4">
+          {/* Product Links - Hidden */}
+          <div className="space-y-4 hidden">
             <h3 className="font-semibold text-sm uppercase tracking-wide">Product</h3>
             <ul className="space-y-2 text-sm">
               <li>
