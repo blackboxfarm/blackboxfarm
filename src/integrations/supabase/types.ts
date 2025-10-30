@@ -73,6 +73,118 @@ export type Database = {
           },
         ]
       }
+      banner_ads: {
+        Row: {
+          created_at: string | null
+          created_by: string | null
+          end_date: string | null
+          id: string
+          image_url: string
+          is_active: boolean | null
+          link_url: string
+          notes: string | null
+          position: number
+          start_date: string | null
+          title: string
+          updated_at: string | null
+          weight: number | null
+        }
+        Insert: {
+          created_at?: string | null
+          created_by?: string | null
+          end_date?: string | null
+          id?: string
+          image_url: string
+          is_active?: boolean | null
+          link_url: string
+          notes?: string | null
+          position: number
+          start_date?: string | null
+          title: string
+          updated_at?: string | null
+          weight?: number | null
+        }
+        Update: {
+          created_at?: string | null
+          created_by?: string | null
+          end_date?: string | null
+          id?: string
+          image_url?: string
+          is_active?: boolean | null
+          link_url?: string
+          notes?: string | null
+          position?: number
+          start_date?: string | null
+          title?: string
+          updated_at?: string | null
+          weight?: number | null
+        }
+        Relationships: []
+      }
+      banner_clicks: {
+        Row: {
+          banner_id: string
+          created_at: string | null
+          id: string
+          session_id: string | null
+          user_id: string | null
+        }
+        Insert: {
+          banner_id: string
+          created_at?: string | null
+          id?: string
+          session_id?: string | null
+          user_id?: string | null
+        }
+        Update: {
+          banner_id?: string
+          created_at?: string | null
+          id?: string
+          session_id?: string | null
+          user_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "banner_clicks_banner_id_fkey"
+            columns: ["banner_id"]
+            isOneToOne: false
+            referencedRelation: "banner_ads"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      banner_impressions: {
+        Row: {
+          banner_id: string
+          created_at: string | null
+          id: string
+          session_id: string | null
+          user_id: string | null
+        }
+        Insert: {
+          banner_id: string
+          created_at?: string | null
+          id?: string
+          session_id?: string | null
+          user_id?: string | null
+        }
+        Update: {
+          banner_id?: string
+          created_at?: string | null
+          id?: string
+          session_id?: string | null
+          user_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "banner_impressions_banner_id_fkey"
+            columns: ["banner_id"]
+            isOneToOne: false
+            referencedRelation: "banner_ads"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       blackbox_campaigns: {
         Row: {
           created_at: string | null
@@ -1273,6 +1385,39 @@ export type Database = {
         }
         Relationships: []
       }
+      feature_usage_analytics: {
+        Row: {
+          created_at: string | null
+          duration_seconds: number | null
+          feature_name: string
+          id: string
+          metadata: Json | null
+          session_id: string | null
+          token_mint: string | null
+          user_id: string | null
+        }
+        Insert: {
+          created_at?: string | null
+          duration_seconds?: number | null
+          feature_name: string
+          id?: string
+          metadata?: Json | null
+          session_id?: string | null
+          token_mint?: string | null
+          user_id?: string | null
+        }
+        Update: {
+          created_at?: string | null
+          duration_seconds?: number | null
+          feature_name?: string
+          id?: string
+          metadata?: Json | null
+          session_id?: string | null
+          token_mint?: string | null
+          user_id?: string | null
+        }
+        Relationships: []
+      }
       helius_api_usage: {
         Row: {
           created_at: string
@@ -1321,6 +1466,81 @@ export type Database = {
           success?: boolean
           timestamp?: string
           user_id?: string | null
+        }
+        Relationships: []
+      }
+      holder_movements: {
+        Row: {
+          action: string
+          amount_tokens: number
+          created_at: string | null
+          detected_at: string | null
+          id: string
+          percentage_of_supply: number | null
+          tier: string | null
+          token_mint: string
+          usd_value: number | null
+          wallet_address: string
+        }
+        Insert: {
+          action: string
+          amount_tokens: number
+          created_at?: string | null
+          detected_at?: string | null
+          id?: string
+          percentage_of_supply?: number | null
+          tier?: string | null
+          token_mint: string
+          usd_value?: number | null
+          wallet_address: string
+        }
+        Update: {
+          action?: string
+          amount_tokens?: number
+          created_at?: string | null
+          detected_at?: string | null
+          id?: string
+          percentage_of_supply?: number | null
+          tier?: string | null
+          token_mint?: string
+          usd_value?: number | null
+          wallet_address?: string
+        }
+        Relationships: []
+      }
+      holder_snapshots: {
+        Row: {
+          balance: number
+          created_at: string | null
+          id: string
+          price_at_snapshot: number | null
+          snapshot_date: string
+          tier: string | null
+          token_mint: string
+          usd_value: number | null
+          wallet_address: string
+        }
+        Insert: {
+          balance: number
+          created_at?: string | null
+          id?: string
+          price_at_snapshot?: number | null
+          snapshot_date: string
+          tier?: string | null
+          token_mint: string
+          usd_value?: number | null
+          wallet_address: string
+        }
+        Update: {
+          balance?: number
+          created_at?: string | null
+          id?: string
+          price_at_snapshot?: number | null
+          snapshot_date?: string
+          tier?: string | null
+          token_mint?: string
+          usd_value?: number | null
+          wallet_address?: string
         }
         Relationships: []
       }
@@ -1477,6 +1697,36 @@ export type Database = {
           description?: string | null
           id?: string
           is_active?: boolean | null
+        }
+        Relationships: []
+      }
+      premium_feature_views: {
+        Row: {
+          converted_to_signup: boolean | null
+          created_at: string | null
+          feature_name: string
+          id: string
+          token_mint: string | null
+          user_id: string | null
+          viewed_as_teaser: boolean | null
+        }
+        Insert: {
+          converted_to_signup?: boolean | null
+          created_at?: string | null
+          feature_name: string
+          id?: string
+          token_mint?: string | null
+          user_id?: string | null
+          viewed_as_teaser?: boolean | null
+        }
+        Update: {
+          converted_to_signup?: boolean | null
+          created_at?: string | null
+          feature_name?: string
+          id?: string
+          token_mint?: string | null
+          user_id?: string | null
+          viewed_as_teaser?: boolean | null
         }
         Relationships: []
       }
@@ -1878,6 +2128,140 @@ export type Database = {
         }
         Relationships: []
       }
+      survey_responses: {
+        Row: {
+          completion_time_seconds: number | null
+          created_at: string | null
+          id: string
+          responses: Json
+          survey_id: string
+          user_id: string
+        }
+        Insert: {
+          completion_time_seconds?: number | null
+          created_at?: string | null
+          id?: string
+          responses: Json
+          survey_id: string
+          user_id: string
+        }
+        Update: {
+          completion_time_seconds?: number | null
+          created_at?: string | null
+          id?: string
+          responses?: Json
+          survey_id?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "survey_responses_survey_id_fkey"
+            columns: ["survey_id"]
+            isOneToOne: false
+            referencedRelation: "surveys"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      survey_winners: {
+        Row: {
+          claimed_at: string | null
+          created_at: string | null
+          id: string
+          notified_at: string | null
+          prize_claimed: boolean | null
+          response_id: string
+          survey_id: string
+          user_id: string
+        }
+        Insert: {
+          claimed_at?: string | null
+          created_at?: string | null
+          id?: string
+          notified_at?: string | null
+          prize_claimed?: boolean | null
+          response_id: string
+          survey_id: string
+          user_id: string
+        }
+        Update: {
+          claimed_at?: string | null
+          created_at?: string | null
+          id?: string
+          notified_at?: string | null
+          prize_claimed?: boolean | null
+          response_id?: string
+          survey_id?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "survey_winners_response_id_fkey"
+            columns: ["response_id"]
+            isOneToOne: false
+            referencedRelation: "survey_responses"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "survey_winners_survey_id_fkey"
+            columns: ["survey_id"]
+            isOneToOne: false
+            referencedRelation: "surveys"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      surveys: {
+        Row: {
+          created_at: string | null
+          created_by: string | null
+          description: string | null
+          end_date: string | null
+          id: string
+          is_active: boolean | null
+          prize_description: string | null
+          prize_quantity: number | null
+          prize_value: number | null
+          questions: Json
+          start_date: string | null
+          target_audience: string | null
+          title: string
+          updated_at: string | null
+        }
+        Insert: {
+          created_at?: string | null
+          created_by?: string | null
+          description?: string | null
+          end_date?: string | null
+          id?: string
+          is_active?: boolean | null
+          prize_description?: string | null
+          prize_quantity?: number | null
+          prize_value?: number | null
+          questions: Json
+          start_date?: string | null
+          target_audience?: string | null
+          title: string
+          updated_at?: string | null
+        }
+        Update: {
+          created_at?: string | null
+          created_by?: string | null
+          description?: string | null
+          end_date?: string | null
+          id?: string
+          is_active?: boolean | null
+          prize_description?: string | null
+          prize_quantity?: number | null
+          prize_value?: number | null
+          questions?: Json
+          start_date?: string | null
+          target_audience?: string | null
+          title?: string
+          updated_at?: string | null
+        }
+        Relationships: []
+      }
       token_metadata: {
         Row: {
           created_at: string | null
@@ -2235,6 +2619,39 @@ export type Database = {
         }
         Relationships: []
       }
+      user_preferences: {
+        Row: {
+          alert_types: Json | null
+          created_at: string | null
+          email_alerts_enabled: boolean | null
+          id: string
+          last_survey_shown_at: string | null
+          survey_frequency_days: number | null
+          updated_at: string | null
+          user_id: string
+        }
+        Insert: {
+          alert_types?: Json | null
+          created_at?: string | null
+          email_alerts_enabled?: boolean | null
+          id?: string
+          last_survey_shown_at?: string | null
+          survey_frequency_days?: number | null
+          updated_at?: string | null
+          user_id: string
+        }
+        Update: {
+          alert_types?: Json | null
+          created_at?: string | null
+          email_alerts_enabled?: boolean | null
+          id?: string
+          last_survey_shown_at?: string | null
+          survey_frequency_days?: number | null
+          updated_at?: string | null
+          user_id?: string
+        }
+        Relationships: []
+      }
       user_roles: {
         Row: {
           created_at: string | null
@@ -2437,6 +2854,36 @@ export type Database = {
           },
         ]
       }
+      wallet_follows: {
+        Row: {
+          alert_on_movement: boolean | null
+          created_at: string | null
+          id: string
+          minimum_movement_usd: number | null
+          token_mint: string | null
+          user_id: string
+          wallet_address: string
+        }
+        Insert: {
+          alert_on_movement?: boolean | null
+          created_at?: string | null
+          id?: string
+          minimum_movement_usd?: number | null
+          token_mint?: string | null
+          user_id: string
+          wallet_address: string
+        }
+        Update: {
+          alert_on_movement?: boolean | null
+          created_at?: string | null
+          id?: string
+          minimum_movement_usd?: number | null
+          token_mint?: string | null
+          user_id?: string
+          wallet_address?: string
+        }
+        Relationships: []
+      }
       wallet_funding_traces: {
         Row: {
           amount_sol: number
@@ -2621,6 +3068,51 @@ export type Database = {
         }
         Relationships: []
       }
+      wallet_profiles: {
+        Row: {
+          created_at: string | null
+          diamond_hands_count: number | null
+          early_entry_count: number | null
+          last_analyzed_at: string | null
+          paper_hands_count: number | null
+          smart_money_score: number | null
+          total_realized_pnl: number | null
+          total_tokens_traded: number | null
+          total_volume_usd: number | null
+          updated_at: string | null
+          wallet_address: string
+          win_rate: number | null
+        }
+        Insert: {
+          created_at?: string | null
+          diamond_hands_count?: number | null
+          early_entry_count?: number | null
+          last_analyzed_at?: string | null
+          paper_hands_count?: number | null
+          smart_money_score?: number | null
+          total_realized_pnl?: number | null
+          total_tokens_traded?: number | null
+          total_volume_usd?: number | null
+          updated_at?: string | null
+          wallet_address: string
+          win_rate?: number | null
+        }
+        Update: {
+          created_at?: string | null
+          diamond_hands_count?: number | null
+          early_entry_count?: number | null
+          last_analyzed_at?: string | null
+          paper_hands_count?: number | null
+          smart_money_score?: number | null
+          total_realized_pnl?: number | null
+          total_tokens_traded?: number | null
+          total_volume_usd?: number | null
+          updated_at?: string | null
+          wallet_address?: string
+          win_rate?: number | null
+        }
+        Relationships: []
+      }
       wallet_security_audit: {
         Row: {
           created_at: string
@@ -2663,6 +3155,60 @@ export type Database = {
           user_id?: string | null
           wallet_id?: string
           wallet_type?: string
+        }
+        Relationships: []
+      }
+      wallet_token_history: {
+        Row: {
+          behavior_pattern: string | null
+          created_at: string | null
+          current_balance: number | null
+          entry_date: string | null
+          entry_price: number | null
+          exit_date: string | null
+          exit_price: number | null
+          id: string
+          max_balance: number | null
+          realized_pnl: number | null
+          token_mint: string
+          transaction_count: number | null
+          unrealized_pnl: number | null
+          updated_at: string | null
+          wallet_address: string
+        }
+        Insert: {
+          behavior_pattern?: string | null
+          created_at?: string | null
+          current_balance?: number | null
+          entry_date?: string | null
+          entry_price?: number | null
+          exit_date?: string | null
+          exit_price?: number | null
+          id?: string
+          max_balance?: number | null
+          realized_pnl?: number | null
+          token_mint: string
+          transaction_count?: number | null
+          unrealized_pnl?: number | null
+          updated_at?: string | null
+          wallet_address: string
+        }
+        Update: {
+          behavior_pattern?: string | null
+          created_at?: string | null
+          current_balance?: number | null
+          entry_date?: string | null
+          entry_price?: number | null
+          exit_date?: string | null
+          exit_price?: number | null
+          id?: string
+          max_balance?: number | null
+          realized_pnl?: number | null
+          token_mint?: string
+          transaction_count?: number | null
+          unrealized_pnl?: number | null
+          updated_at?: string | null
+          wallet_address?: string
         }
         Relationships: []
       }
