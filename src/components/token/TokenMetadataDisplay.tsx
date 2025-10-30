@@ -177,56 +177,86 @@ export function TokenMetadataDisplay({
       <CardContent className="p-3 md:p-6">
         <div className="space-y-3 md:space-y-4">
           
-          <div className="flex items-start gap-3 md:gap-6">
-            <img
+          {/* Mobile: Image left, Symbol + Launchpad right stacked */}
+          <div className="flex gap-3 md:gap-6">
+            <img 
               src={displayImage || '/lovable-uploads/7283e809-e703-4594-8dc8-a1ade76b06de.png'} 
               alt={displayImage ? `${metadata.symbol} token logo` : 'Token placeholder'}
               loading="lazy"
-              className={`w-24 h-24 md:w-32 md:h-32 rounded-2xl flex-shrink-0 object-cover border-4 border-primary/20 shadow-xl ${!displayImage ? 'opacity-40 grayscale' : ''}`}
+              className={`w-20 h-20 md:w-32 md:h-32 rounded-2xl flex-shrink-0 object-cover border-4 border-primary/20 shadow-xl ${!displayImage ? 'opacity-40 grayscale' : ''}`}
               onError={(e) => {
                 if (e.currentTarget.src !== '/lovable-uploads/7283e809-e703-4594-8dc8-a1ade76b06de.png') {
                   e.currentTarget.src = '/lovable-uploads/7283e809-e703-4594-8dc8-a1ade76b06de.png';
-                  e.currentTarget.className = 'w-24 h-24 md:w-32 md:h-32 rounded-2xl flex-shrink-0 object-cover border-4 border-primary/20 shadow-xl opacity-40 grayscale';
+                  e.currentTarget.className = 'w-20 h-20 md:w-32 md:h-32 rounded-2xl flex-shrink-0 object-cover border-4 border-primary/20 shadow-xl opacity-40 grayscale';
                 }
               }}
             />
             
-            <div className="flex-1 space-y-3">
-              <div>
-                <div className="flex items-center gap-2 mb-1 flex-wrap">
-                  <h3 className="text-base md:text-lg font-semibold">{metadata.name}</h3>
-                  <Badge variant="outline" className="text-xs">{metadata.symbol}</Badge>
-                  {metadata.isPumpFun && (
-                    <Badge variant="secondary">
-                      <Zap className="h-3 w-3 mr-1" />
-                      Pump.fun
-                    </Badge>
-                  )}
-                  <div title={metadata.verified ? "Verified Token" : "Unverified Token"}>
-                    {metadata.verified ? (
-                      <ShieldCheck className="h-4 w-4 text-green-500" />
-                    ) : (
-                      <Shield className="h-4 w-4 text-yellow-500" />
-                    )}
-                  </div>
-                  {creatorWallet && (
-                    <DeveloperRiskBadge creatorWallet={creatorWallet} showDetails />
+            <div className="flex-1 space-y-2">
+              {/* Symbol with $ */}
+              <div className="flex items-center gap-2">
+                <Badge variant="outline" className="text-sm md:text-base font-bold px-3 py-1">
+                  ${metadata.symbol}
+                </Badge>
+                <div title={metadata.verified ? "Verified Token" : "Unverified Token"}>
+                  {metadata.verified ? (
+                    <ShieldCheck className="h-4 w-4 text-green-500" />
+                  ) : (
+                    <Shield className="h-4 w-4 text-yellow-500" />
                   )}
                 </div>
-                <p className="text-xs md:text-sm text-muted-foreground font-mono break-all">
-                  {metadata.mint}
-                </p>
               </div>
 
-              {descriptionText && (
-                <div className="space-y-1">
-                  <p className="text-sm font-medium text-muted-foreground">Description</p>
-                  <p className="text-sm leading-relaxed">{descriptionText}</p>
+              {/* Launchpad Info */}
+              {metadata.launchpad && metadata.launchpad.detected && (
+                <div className="flex items-center gap-2">
+                  {LAUNCHPAD_LOGOS[metadata.launchpad.name.toLowerCase()] && (
+                    <img 
+                      src={LAUNCHPAD_LOGOS[metadata.launchpad.name.toLowerCase()]}
+                      alt={metadata.launchpad.name}
+                      className="w-5 h-5 md:w-6 md:h-6 rounded object-contain"
+                    />
+                  )}
+                  <span className="text-xs md:text-sm font-medium">{metadata.launchpad.name}</span>
                 </div>
               )}
+              {metadata.isPumpFun && !metadata.launchpad?.detected && (
+                <Badge variant="secondary" className="text-xs">
+                  <Zap className="h-3 w-3 mr-1" />
+                  Pump.fun
+                </Badge>
+              )}
 
-              {priceInfo && (
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+              {creatorWallet && (
+                <DeveloperRiskBadge creatorWallet={creatorWallet} showDetails />
+              )}
+            </div>
+          </div>
+
+          {/* Token Address */}
+          <div className="space-y-1">
+            <p className="text-xs text-muted-foreground uppercase tracking-wide">Token Address</p>
+            <p className="text-xs md:text-sm text-muted-foreground font-mono break-all">
+              {metadata.mint}
+            </p>
+          </div>
+
+          {/* Token Name */}
+          <div className="space-y-1">
+            <p className="text-xs text-muted-foreground uppercase tracking-wide">Token Name</p>
+            <h3 className="text-base md:text-lg font-semibold">{metadata.name}</h3>
+          </div>
+
+          {/* Token Description */}
+          {descriptionText && (
+            <div className="space-y-1">
+              <p className="text-xs text-muted-foreground uppercase tracking-wide">Description</p>
+              <p className="text-sm leading-relaxed">{descriptionText}</p>
+            </div>
+          )}
+
+          {priceInfo && (
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                 <div>
                   <p className="text-sm text-muted-foreground">Price</p>
                   <p className="text-lg font-semibold">{formatPrice(priceInfo.priceUsd)}</p>
@@ -265,10 +295,10 @@ export function TokenMetadataDisplay({
                     <p className="text-lg font-semibold">${formatLargeNumber(priceInfo.fdv)}</p>
                   </div>
                 )}
-              </div>
-              )}
+          </div>
+          )}
 
-              <div className="flex items-center gap-4 text-sm text-muted-foreground">
+          <div className="flex items-center gap-4 text-sm text-muted-foreground flex-wrap">
                 <span>Decimals: {metadata.decimals}</span>
                 {metadata.totalSupply && (
                   <span>Supply: {formatLargeNumber(metadata.totalSupply)}</span>
@@ -284,206 +314,6 @@ export function TokenMetadataDisplay({
                     View on DEX
                   </a>
                 )}
-              </div>
-
-              {/* COMPREHENSIVE METADATA DUMP */}
-              <Separator className="my-4" />
-              
-              <div className="space-y-4">
-                <div className="flex items-center gap-2">
-                  <Info className="h-4 w-4" />
-                  <h4 className="font-semibold">Complete Metadata</h4>
-                </div>
-
-                {/* Launchpad Information */}
-                {metadata.launchpad && metadata.launchpad.detected && (
-                  <div className="space-y-2 p-3 bg-muted/30 rounded-lg">
-                    <div className="flex items-center gap-3">
-                      {LAUNCHPAD_LOGOS[metadata.launchpad.name.toLowerCase()] && (
-                        <img 
-                          src={LAUNCHPAD_LOGOS[metadata.launchpad.name.toLowerCase()]}
-                          alt={metadata.launchpad.name}
-                          className="w-8 h-8 rounded object-contain"
-                        />
-                      )}
-                      <div>
-                        <p className="text-sm font-medium">Launchpad</p>
-                        <div className="flex items-center gap-2">
-                          <span className="font-semibold">{metadata.launchpad.name}</span>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                )}
-
-                {/* Token Identity */}
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                  <div className="space-y-1">
-                    <p className="text-xs text-muted-foreground uppercase tracking-wide">Token Name</p>
-                    <p className="font-mono text-sm">{metadata.name}</p>
-                  </div>
-                  <div className="space-y-1">
-                    <p className="text-xs text-muted-foreground uppercase tracking-wide">Symbol</p>
-                    <p className="font-mono text-sm">{metadata.symbol}</p>
-                  </div>
-                  <div className="space-y-1 md:col-span-2">
-                    <p className="text-xs text-muted-foreground uppercase tracking-wide">Mint Address</p>
-                    <p className="font-mono text-xs break-all">{metadata.mint}</p>
-                  </div>
-                </div>
-
-                {/* Images & Assets - LARGE DISPLAY */}
-                <div className="space-y-3">
-                  <p className="text-sm font-semibold text-foreground uppercase tracking-wide">Token Images</p>
-                  <div className="flex flex-wrap gap-6">
-                    {metadata.image && (
-                      <div className="space-y-2">
-                        <img 
-                          src={normalizeUrl(metadata.image)} 
-                          alt="Token Image" 
-                          className="w-32 h-32 rounded-lg border-2 border-primary/20 object-cover shadow-lg hover:scale-105 transition-transform cursor-pointer" 
-                          onClick={() => window.open(normalizeUrl(metadata.image), '_blank')}
-                        />
-                        <p className="text-xs text-muted-foreground text-center font-medium">Primary Image</p>
-                        <a 
-                          href={normalizeUrl(metadata.image)}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="text-xs text-primary hover:underline block text-center break-all px-2"
-                        >
-                          {normalizeUrl(metadata.image)}
-                        </a>
-                      </div>
-                    )}
-                    {metadata.logoURI && metadata.logoURI !== metadata.image && (
-                      <div className="space-y-2">
-                        <img 
-                          src={normalizeUrl(metadata.logoURI)} 
-                          alt="Logo URI" 
-                          className="w-32 h-32 rounded-lg border-2 border-primary/20 object-cover shadow-lg hover:scale-105 transition-transform cursor-pointer" 
-                          onClick={() => window.open(normalizeUrl(metadata.logoURI), '_blank')}
-                        />
-                        <p className="text-xs text-muted-foreground text-center font-medium">Logo URI</p>
-                        <a 
-                          href={normalizeUrl(metadata.logoURI)}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="text-xs text-primary hover:underline block text-center break-all px-2"
-                        >
-                          {normalizeUrl(metadata.logoURI)}
-                        </a>
-                      </div>
-                    )}
-                    {!metadata.image && !metadata.logoURI && (
-                      <p className="text-sm text-muted-foreground">No images found for this token</p>
-                    )}
-                  </div>
-                </div>
-
-                {/* Metadata URI */}
-                {metadata.uri && (
-                  <div className="space-y-1">
-                    <p className="text-xs text-muted-foreground uppercase tracking-wide">Metadata URI</p>
-                    <a 
-                      href={metadata.uri}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="font-mono text-xs break-all text-primary hover:underline flex items-center gap-1"
-                    >
-                      {metadata.uri}
-                      <ExternalLink className="h-3 w-3 flex-shrink-0" />
-                    </a>
-                  </div>
-                )}
-
-                {/* On-Chain Data */}
-                {onChainData && (
-                  <div className="space-y-2 p-3 bg-muted/30 rounded-lg">
-                    <p className="text-sm font-medium">On-Chain Data</p>
-                    <div className="grid grid-cols-2 gap-2 text-sm">
-                      <div>
-                        <p className="text-muted-foreground">Decimals</p>
-                        <p className="font-mono">{onChainData.decimals}</p>
-                      </div>
-                      <div>
-                        <p className="text-muted-foreground">Supply</p>
-                        <p className="font-mono">{onChainData.supply || 'Unknown'}</p>
-                      </div>
-                    </div>
-                  </div>
-                )}
-
-                {/* Raydium Pools */}
-                {pools && pools.length > 0 && (
-                  <div className="space-y-2">
-                    <p className="text-sm font-medium">Raydium Pools ({pools.length})</p>
-                    <div className="space-y-2">
-                      {pools.map((pool, idx) => (
-                        <div key={pool.pairAddress} className="p-3 bg-muted/30 rounded-lg space-y-1">
-                          <div className="flex items-center justify-between">
-                            <div className="flex items-center gap-2">
-                              <img 
-                                src="/launchpad-logos/raydium.png"
-                                alt="Raydium"
-                                className="w-5 h-5"
-                              />
-                              <span className="font-mono text-sm">
-                                {pool.baseSymbol}/{pool.quoteSymbol}
-                              </span>
-                            </div>
-                            <Badge variant="outline" className="text-xs">
-                              ${formatLargeNumber(pool.liquidityUsd)} Liquidity
-                            </Badge>
-                          </div>
-                          <p className="text-xs text-muted-foreground font-mono break-all">
-                            {pool.pairAddress}
-                          </p>
-                          {pool.url && (
-                            <a 
-                              href={pool.url}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="text-xs text-primary hover:underline inline-flex items-center gap-1"
-                            >
-                              View Pool
-                              <ExternalLink className="h-3 w-3" />
-                            </a>
-                          )}
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
-
-                {/* Verification Status */}
-                <div className="space-y-1">
-                  <p className="text-xs text-muted-foreground uppercase tracking-wide">Verification Status</p>
-                  <div className="flex items-center gap-2">
-                    {metadata.verified ? (
-                      <>
-                        <ShieldCheck className="h-4 w-4 text-green-500" />
-                        <span className="text-sm text-green-600">Verified Token</span>
-                      </>
-                    ) : (
-                      <>
-                        <Shield className="h-4 w-4 text-yellow-500" />
-                        <span className="text-sm text-yellow-600">Unverified Token</span>
-                      </>
-                    )}
-                  </div>
-                </div>
-
-                {/* Raw Data */}
-                <div className="space-y-1">
-                  <p className="text-xs text-muted-foreground uppercase tracking-wide">Raw Data</p>
-                  <div className="p-3 bg-muted/30 rounded-lg">
-                    <pre className="text-xs font-mono overflow-x-auto max-h-64 whitespace-pre-wrap break-all">
-                      {JSON.stringify({ metadata, priceInfo, onChainData, pools }, null, 2)}
-                    </pre>
-                  </div>
-                </div>
-              </div>
-            </div>
           </div>
         </div>
       </CardContent>
