@@ -91,9 +91,17 @@ export function SuperAdminWallets() {
 
   const loadSuperAdminWallets = async () => {
     try {
-      // Use edge function to load wallets with proper authentication
+      // Ensure we pass the authenticated access token explicitly
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session?.access_token) {
+        throw new Error('Not authenticated. Please sign in again.');
+      }
+
       const { data: response, error } = await supabase.functions.invoke('super-admin-wallet-generator', {
-        method: 'GET'
+        method: 'GET',
+        headers: {
+          Authorization: `Bearer ${session.access_token}`,
+        },
       });
 
       if (error) throw error;
@@ -128,6 +136,9 @@ export function SuperAdminWallets() {
 
       // Call edge function to create wallet securely
       const { data, error } = await supabase.functions.invoke('super-admin-wallet-generator', {
+        headers: {
+          Authorization: `Bearer ${session.access_token}`,
+        },
         body: {
           label: newWallet.label,
           wallet_type: newWallet.wallet_type,
