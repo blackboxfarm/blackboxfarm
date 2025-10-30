@@ -824,33 +824,6 @@ export function BaglessHoldersReport({ initialToken }: BaglessHoldersReportProps
       {/* Ad Banner under Generate Button */}
       <AdBanner size="mobile" position={1} />
 
-      {/* Premium Features Section - only show if report exists */}
-      {report && tokenMint && (
-        <div className="space-y-4">
-          <PremiumFeatureGate
-            isAuthenticated={!!user}
-            featureName="Real-Time Whale Movements"
-            featureDescription="Track live whale movements and detect significant holder activity in real-time."
-            featureIcon={<TrendingUp />}
-            onSignUpClick={() => setShowAuthModal(true)}
-            tokenMint={tokenMint}
-          >
-            <HolderMovementFeed tokenMint={tokenMint} />
-          </PremiumFeatureGate>
-
-          <PremiumFeatureGate
-            isAuthenticated={!!user}
-            featureName="Diamond Hands Analysis"
-            featureDescription="Analyze holder retention, loyalty metrics, and get a comprehensive Diamond Hands Score."
-            featureIcon={<Diamond />}
-            onSignUpClick={() => setShowAuthModal(true)}
-            tokenMint={tokenMint}
-          >
-            <RetentionAnalysis tokenMint={tokenMint} />
-          </PremiumFeatureGate>
-        </div>
-      )}
-
       {/* Token Metadata - show as soon as metadata is fetched (before report) */}
       {tokenData && (
         <div className="mb-4 md:mb-6">
@@ -866,6 +839,20 @@ export function BaglessHoldersReport({ initialToken }: BaglessHoldersReportProps
 
       {report && (
         <>
+          {/* Premium Features - Real-Time Whale Movements above Report Summary */}
+          {tokenMint && (
+            <PremiumFeatureGate
+              isAuthenticated={!!user}
+              featureName="Real-Time Whale Movements"
+              featureDescription="Track live whale movements and detect significant holder activity in real-time."
+              featureIcon={<TrendingUp />}
+              onSignUpClick={() => setShowAuthModal(true)}
+              tokenMint={tokenMint}
+            >
+              <HolderMovementFeed tokenMint={tokenMint} />
+            </PremiumFeatureGate>
+          )}
+
           <Card>
             <CardHeader className="p-3 md:p-6 pb-2 md:pb-4">
               <CardTitle className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2">
@@ -1725,7 +1712,7 @@ export function BaglessHoldersReport({ initialToken }: BaglessHoldersReportProps
                           Liquidity Pool - Price Stability Base
                         </div>
                         <div className="text-xs">
-                          {report.liquidityPoolsDetected || 0} pool{(report.liquidityPoolsDetected || 0) !== 1 ? 's' : ''}
+                          {report.liquidityPoolsDetected || 0} pool{(report.liquidityPoolsDetected || 0) !== 1 ? 's' : ''} ({formatBalance(report.lpBalance)} tokens)
                         </div>
                       </div>
                     </div>
@@ -1735,6 +1722,20 @@ export function BaglessHoldersReport({ initialToken }: BaglessHoldersReportProps
               
             </CardContent>
           </Card>
+
+          {/* Premium Features - Diamond Hands Analysis above Holders List */}
+          {tokenMint && (
+            <PremiumFeatureGate
+              isAuthenticated={!!user}
+              featureName="Diamond Hands Analysis"
+              featureDescription="Analyze holder retention, loyalty metrics, and get a comprehensive Diamond Hands Score."
+              featureIcon={<Diamond />}
+              onSignUpClick={() => setShowAuthModal(true)}
+              tokenMint={tokenMint}
+            >
+              <RetentionAnalysis tokenMint={tokenMint} />
+            </PremiumFeatureGate>
+          )}
 
           <Card>
             <CardHeader className="pb-4">
