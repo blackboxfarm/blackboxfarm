@@ -750,19 +750,6 @@ export function BaglessHoldersReport({ initialToken }: BaglessHoldersReportProps
             />
           </div>
           
-          <div>
-            <Label htmlFor="tokenPrice" className="text-sm">Token Price (USD)</Label>
-            <Input
-              id="tokenPrice"
-              type="number"
-              step="0.0001"
-              value={tokenPrice}
-              onChange={(e) => setTokenPrice(e.target.value)}
-              placeholder="0.001"
-              className="mt-1 text-sm"
-            />
-          </div>
-          
           {useAutoPricing && discoveredPrice !== null && (
             <div className="p-3 bg-muted rounded-lg">
               <div className="text-sm font-medium">
