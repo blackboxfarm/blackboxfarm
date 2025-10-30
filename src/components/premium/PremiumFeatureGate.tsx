@@ -27,12 +27,12 @@ export const PremiumFeatureGate = ({
   const previewPaywall = usePreviewPaywall();
 
   useEffect(() => {
-    if (!isAuthenticated || previewPaywall) {
+    if (!isAuthenticated && !previewPaywall) {
       trackView(true);
     }
   }, [isAuthenticated, previewPaywall, trackView]);
 
-  if (!isAuthenticated || previewPaywall) {
+  if (!isAuthenticated && !previewPaywall) {
     return (
       <Card className="relative overflow-hidden tech-border mb-4">
         {/* Blurred preview */}
