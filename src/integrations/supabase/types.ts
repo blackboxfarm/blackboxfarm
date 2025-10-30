@@ -914,6 +914,13 @@ export type Database = {
             foreignKeyName: "developer_alerts_developer_id_fkey"
             columns: ["developer_id"]
             isOneToOne: false
+            referencedRelation: "developer_genealogy"
+            referencedColumns: ["developer_id"]
+          },
+          {
+            foreignKeyName: "developer_alerts_developer_id_fkey"
+            columns: ["developer_id"]
+            isOneToOne: false
             referencedRelation: "developer_profiles"
             referencedColumns: ["id"]
           },
@@ -976,6 +983,13 @@ export type Database = {
             foreignKeyName: "developer_analysis_jobs_developer_id_fkey"
             columns: ["developer_id"]
             isOneToOne: false
+            referencedRelation: "developer_genealogy"
+            referencedColumns: ["developer_id"]
+          },
+          {
+            foreignKeyName: "developer_analysis_jobs_developer_id_fkey"
+            columns: ["developer_id"]
+            isOneToOne: false
             referencedRelation: "developer_profiles"
             referencedColumns: ["id"]
           },
@@ -997,6 +1011,7 @@ export type Database = {
           kyc_verified: boolean | null
           last_analysis_at: string | null
           master_wallet_address: string
+          metadata: Json | null
           notes: string | null
           reputation_score: number | null
           rug_pull_count: number | null
@@ -1029,6 +1044,7 @@ export type Database = {
           kyc_verified?: boolean | null
           last_analysis_at?: string | null
           master_wallet_address: string
+          metadata?: Json | null
           notes?: string | null
           reputation_score?: number | null
           rug_pull_count?: number | null
@@ -1061,6 +1077,7 @@ export type Database = {
           kyc_verified?: boolean | null
           last_analysis_at?: string | null
           master_wallet_address?: string
+          metadata?: Json | null
           notes?: string | null
           reputation_score?: number | null
           rug_pull_count?: number | null
@@ -1167,6 +1184,13 @@ export type Database = {
             foreignKeyName: "developer_tokens_developer_id_fkey"
             columns: ["developer_id"]
             isOneToOne: false
+            referencedRelation: "developer_genealogy"
+            referencedColumns: ["developer_id"]
+          },
+          {
+            foreignKeyName: "developer_tokens_developer_id_fkey"
+            columns: ["developer_id"]
+            isOneToOne: false
             referencedRelation: "developer_profiles"
             referencedColumns: ["id"]
           },
@@ -1216,6 +1240,13 @@ export type Database = {
           wallet_type?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "developer_wallets_developer_id_fkey"
+            columns: ["developer_id"]
+            isOneToOne: false
+            referencedRelation: "developer_genealogy"
+            referencedColumns: ["developer_id"]
+          },
           {
             foreignKeyName: "developer_wallets_developer_id_fkey"
             columns: ["developer_id"]
@@ -2331,6 +2362,13 @@ export type Database = {
             foreignKeyName: "token_lifecycle_developer_id_fkey"
             columns: ["developer_id"]
             isOneToOne: false
+            referencedRelation: "developer_genealogy"
+            referencedColumns: ["developer_id"]
+          },
+          {
+            foreignKeyName: "token_lifecycle_developer_id_fkey"
+            columns: ["developer_id"]
+            isOneToOne: false
             referencedRelation: "developer_profiles"
             referencedColumns: ["id"]
           },
@@ -2440,6 +2478,13 @@ export type Database = {
           token_mint?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "token_mint_watchdog_developer_id_fkey"
+            columns: ["developer_id"]
+            isOneToOne: false
+            referencedRelation: "developer_genealogy"
+            referencedColumns: ["developer_id"]
+          },
           {
             foreignKeyName: "token_mint_watchdog_developer_id_fkey"
             columns: ["developer_id"]
@@ -3054,6 +3099,13 @@ export type Database = {
             foreignKeyName: "wallet_funding_traces_developer_id_fkey"
             columns: ["developer_id"]
             isOneToOne: false
+            referencedRelation: "developer_genealogy"
+            referencedColumns: ["developer_id"]
+          },
+          {
+            foreignKeyName: "wallet_funding_traces_developer_id_fkey"
+            columns: ["developer_id"]
+            isOneToOne: false
             referencedRelation: "developer_profiles"
             referencedColumns: ["id"]
           },
@@ -3398,6 +3450,27 @@ export type Database = {
       }
     }
     Views: {
+      developer_genealogy: {
+        Row: {
+          avg_best_rank: number | null
+          developer_first_tracked: string | null
+          developer_id: string | null
+          display_name: string | null
+          first_token_discovered: string | null
+          integrity_score: number | null
+          kyc_verified: boolean | null
+          master_wallet_address: string | null
+          most_recent_token: string | null
+          tags: string[] | null
+          tokens_in_top_10: number | null
+          tokens_in_top_100: number | null
+          tokens_in_top_200: number | null
+          total_tokens_tracked: number | null
+          total_wallets_in_network: number | null
+          trust_level: string | null
+        }
+        Relationships: []
+      }
       security_summary: {
         Row: {
           encrypted_keys: number | null
@@ -3503,6 +3576,16 @@ export type Database = {
       encrypt_secret_secure: { Args: { input_secret: string }; Returns: string }
       encrypt_user_secret: { Args: { input_secret: string }; Returns: string }
       encrypt_wallet_secret: { Args: { input_secret: string }; Returns: string }
+      find_common_developer_origins: {
+        Args: never
+        Returns: {
+          developer_id: string
+          display_name: string
+          master_wallet: string
+          related_developers: Json
+          shared_wallets_count: number
+        }[]
+      }
       generate_referral_code: {
         Args: { user_id_param: string }
         Returns: string
