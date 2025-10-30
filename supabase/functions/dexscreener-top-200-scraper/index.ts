@@ -47,14 +47,24 @@ Deno.serve(async (req) => {
       }
     );
 
+    console.log(`[DexScreener] API Response Status: ${response.status}`);
+    console.log(`[DexScreener] API Response Headers:`, Object.fromEntries(response.headers.entries()));
+
     if (!response.ok) {
-      throw new Error(`DexScreener API error: ${response.status}`);
+      const errorText = await response.text();
+      console.error(`[DexScreener] API error body:`, errorText);
+      throw new Error(`DexScreener API error: ${response.status} - ${errorText}`);
     }
 
     const data = await response.json();
+    console.log(`[DexScreener] Raw API response structure:`, JSON.stringify(data, null, 2));
+    
     const pairs: DexScreenerPair[] = data.pairs || [];
     
     console.log(`[DexScreener] Found ${pairs.length} trending pairs`);
+    if (pairs.length === 0) {
+      console.warn('[DexScreener] WARNING: API returned 0 pairs. Full response:', JSON.stringify(data));
+    }
 
     // Process top 200 (or however many are returned)
     const top200 = pairs.slice(0, 200);
