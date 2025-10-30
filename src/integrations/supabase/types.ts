@@ -984,11 +984,14 @@ export type Database = {
       developer_profiles: {
         Row: {
           average_token_lifespan_days: number | null
+          avg_time_in_rankings_hours: number | null
+          avg_token_rank_achieved: number | null
           created_at: string | null
           discord_handle: string | null
           display_name: string | null
           failed_tokens: number | null
           id: string
+          integrity_score: number | null
           kyc_source: string | null
           kyc_verification_date: string | null
           kyc_verified: boolean | null
@@ -1001,6 +1004,9 @@ export type Database = {
           successful_tokens: number | null
           tags: string[] | null
           telegram_handle: string | null
+          tokens_in_top_10_count: number | null
+          tokens_in_top_200_count: number | null
+          tokens_in_top_50_count: number | null
           total_tokens_created: number | null
           total_volume_generated: number | null
           trust_level: string | null
@@ -1010,11 +1016,14 @@ export type Database = {
         }
         Insert: {
           average_token_lifespan_days?: number | null
+          avg_time_in_rankings_hours?: number | null
+          avg_token_rank_achieved?: number | null
           created_at?: string | null
           discord_handle?: string | null
           display_name?: string | null
           failed_tokens?: number | null
           id?: string
+          integrity_score?: number | null
           kyc_source?: string | null
           kyc_verification_date?: string | null
           kyc_verified?: boolean | null
@@ -1027,6 +1036,9 @@ export type Database = {
           successful_tokens?: number | null
           tags?: string[] | null
           telegram_handle?: string | null
+          tokens_in_top_10_count?: number | null
+          tokens_in_top_200_count?: number | null
+          tokens_in_top_50_count?: number | null
           total_tokens_created?: number | null
           total_volume_generated?: number | null
           trust_level?: string | null
@@ -1036,11 +1048,14 @@ export type Database = {
         }
         Update: {
           average_token_lifespan_days?: number | null
+          avg_time_in_rankings_hours?: number | null
+          avg_token_rank_achieved?: number | null
           created_at?: string | null
           discord_handle?: string | null
           display_name?: string | null
           failed_tokens?: number | null
           id?: string
+          integrity_score?: number | null
           kyc_source?: string | null
           kyc_verification_date?: string | null
           kyc_verified?: boolean | null
@@ -1053,6 +1068,9 @@ export type Database = {
           successful_tokens?: number | null
           tags?: string[] | null
           telegram_handle?: string | null
+          tokens_in_top_10_count?: number | null
+          tokens_in_top_200_count?: number | null
+          tokens_in_top_50_count?: number | null
           total_tokens_created?: number | null
           total_volume_generated?: number | null
           trust_level?: string | null
@@ -2262,6 +2280,62 @@ export type Database = {
         }
         Relationships: []
       }
+      token_lifecycle: {
+        Row: {
+          created_at: string | null
+          creator_wallet: string | null
+          current_status: string | null
+          developer_id: string | null
+          first_seen_at: string
+          highest_rank: number | null
+          last_seen_at: string
+          lowest_rank: number | null
+          metadata: Json | null
+          times_entered_top_200: number | null
+          token_mint: string
+          total_hours_in_top_200: number | null
+          updated_at: string | null
+        }
+        Insert: {
+          created_at?: string | null
+          creator_wallet?: string | null
+          current_status?: string | null
+          developer_id?: string | null
+          first_seen_at: string
+          highest_rank?: number | null
+          last_seen_at: string
+          lowest_rank?: number | null
+          metadata?: Json | null
+          times_entered_top_200?: number | null
+          token_mint: string
+          total_hours_in_top_200?: number | null
+          updated_at?: string | null
+        }
+        Update: {
+          created_at?: string | null
+          creator_wallet?: string | null
+          current_status?: string | null
+          developer_id?: string | null
+          first_seen_at?: string
+          highest_rank?: number | null
+          last_seen_at?: string
+          lowest_rank?: number | null
+          metadata?: Json | null
+          times_entered_top_200?: number | null
+          token_mint?: string
+          total_hours_in_top_200?: number | null
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "token_lifecycle_developer_id_fkey"
+            columns: ["developer_id"]
+            isOneToOne: false
+            referencedRelation: "developer_profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       token_metadata: {
         Row: {
           created_at: string | null
@@ -2374,6 +2448,57 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      token_rankings: {
+        Row: {
+          captured_at: string
+          data_source: string | null
+          holder_count: number | null
+          id: string
+          is_in_top_200: boolean | null
+          liquidity_usd: number | null
+          market_cap: number | null
+          metadata: Json | null
+          price_change_24h: number | null
+          price_usd: number | null
+          rank: number
+          token_mint: string
+          trending_score: number | null
+          volume_24h: number | null
+        }
+        Insert: {
+          captured_at?: string
+          data_source?: string | null
+          holder_count?: number | null
+          id?: string
+          is_in_top_200?: boolean | null
+          liquidity_usd?: number | null
+          market_cap?: number | null
+          metadata?: Json | null
+          price_change_24h?: number | null
+          price_usd?: number | null
+          rank: number
+          token_mint: string
+          trending_score?: number | null
+          volume_24h?: number | null
+        }
+        Update: {
+          captured_at?: string
+          data_source?: string | null
+          holder_count?: number | null
+          id?: string
+          is_in_top_200?: boolean | null
+          liquidity_usd?: number | null
+          market_cap?: number | null
+          metadata?: Json | null
+          price_change_24h?: number | null
+          price_usd?: number | null
+          rank?: number
+          token_mint?: string
+          trending_score?: number | null
+          volume_24h?: number | null
+        }
+        Relationships: []
       }
       token_watchlist: {
         Row: {
