@@ -750,29 +750,18 @@ export function BaglessHoldersReport({ initialToken }: BaglessHoldersReportProps
             />
           </div>
           
-          <div className="flex items-center space-x-2">
-            <Switch
-              id="auto-pricing"
-              checked={useAutoPricing}
-              onCheckedChange={setUseAutoPricing}
+          <div>
+            <Label htmlFor="tokenPrice" className="text-sm">Token Price (USD)</Label>
+            <Input
+              id="tokenPrice"
+              type="number"
+              step="0.0001"
+              value={tokenPrice}
+              onChange={(e) => setTokenPrice(e.target.value)}
+              placeholder="0.001"
+              className="mt-1 text-sm"
             />
-            <Label htmlFor="auto-pricing" className="text-sm">Use automatic price discovery</Label>
           </div>
-          
-          {!useAutoPricing && (
-            <div>
-              <Label htmlFor="tokenPrice" className="text-sm">Token Price (USD)</Label>
-              <Input
-                id="tokenPrice"
-                type="number"
-                step="0.0001"
-                value={tokenPrice}
-                onChange={(e) => setTokenPrice(e.target.value)}
-                placeholder="0.001"
-                className="mt-1 text-sm"
-              />
-            </div>
-          )}
           
           {useAutoPricing && discoveredPrice !== null && (
             <div className="p-3 bg-muted rounded-lg">
