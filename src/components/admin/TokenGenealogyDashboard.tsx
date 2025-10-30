@@ -233,42 +233,6 @@ export const TokenGenealogyDashboard = () => {
           </Card>
         </TabsContent>
 
-        <TabsContent value="developers" className="space-y-4">
-          <Card>
-            <CardHeader>
-              <CardTitle>Top Developers by Integrity Score</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-3">
-                {topDevelopers?.map((dev, idx) => (
-                  <div 
-                    key={dev.id}
-                    className="flex items-center justify-between p-4 border rounded-lg hover:bg-accent/50 transition-colors"
-                  >
-                    <div className="flex items-center gap-3">
-                      <Badge variant="outline" className="w-12 justify-center">
-                        #{idx + 1}
-                      </Badge>
-                      <div>
-                        <p className="font-medium">{dev.display_name}</p>
-                        <p className="text-xs text-muted-foreground">
-                          {dev.master_wallet_address.slice(0, 16)}...
-                        </p>
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-4">
-                      <div className="text-right text-sm">
-                        <p className="text-muted-foreground">Tokens in Top 10: <span className="font-medium text-foreground">{dev.tokens_in_top_10_count || 0}</span></p>
-                        <p className="text-muted-foreground">Tokens in Top 200: <span className="font-medium text-foreground">{dev.tokens_in_top_200_count || 0}</span></p>
-                      </div>
-                      {getTrustBadge(dev.trust_level, dev.integrity_score || 50)}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </CardContent>
-          </Card>
-        </TabsContent>
       </Tabs>
     </div>
   );
