@@ -812,24 +812,6 @@ export function BaglessHoldersReport({ initialToken }: BaglessHoldersReportProps
         </div>
       )}
 
-      {/* Helpful notification when mint data is loaded but report not yet generated */}
-      {tokenData && !report && (
-        <Card className="border-primary/50 bg-primary/5">
-          <CardContent className="p-4">
-            <div className="flex items-center gap-3">
-              <div className="h-10 w-10 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0">
-                <TrendingUp className="h-5 w-5 text-primary" />
-              </div>
-              <div>
-                <p className="font-medium text-sm">Retrieved Mint Data Successfully!</p>
-                <p className="text-xs text-muted-foreground mt-0.5">
-                  Now click "Generate Holders Report" to analyze wallet holders
-                </p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-      )}
 
 
       {report && (
