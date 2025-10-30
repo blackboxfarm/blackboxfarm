@@ -2,6 +2,7 @@ import { ReactNode, useEffect } from 'react';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { useFeatureTracking } from '@/hooks/useFeatureTracking';
+import { usePreviewPaywall } from '@/hooks/usePreviewPaywall';
 
 interface PremiumFeatureGateProps {
   isAuthenticated: boolean;
@@ -23,14 +24,15 @@ export const PremiumFeatureGate = ({
   tokenMint,
 }: PremiumFeatureGateProps) => {
   const { trackView } = useFeatureTracking(featureName, tokenMint);
+  const previewPaywall = usePreviewPaywall();
 
   useEffect(() => {
-    if (!isAuthenticated) {
+    if (!isAuthenticated || previewPaywall) {
       trackView(true);
     }
-  }, [isAuthenticated, trackView]);
+  }, [isAuthenticated, previewPaywall, trackView]);
 
-  if (!isAuthenticated) {
+  if (!isAuthenticated || previewPaywall) {
     return (
       <Card className="relative overflow-hidden tech-border mb-4">
         {/* Blurred preview */}
