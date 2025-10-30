@@ -40,21 +40,31 @@ Deno.serve(async (req) => {
     const allTokens: TokenData[] = [];
     const capturedAt = new Date().toISOString();
 
+    const browserlessApiKey = Deno.env.get('BROWSERLESS_API_KEY');
+    if (!browserlessApiKey) {
+      console.error('[TokenCollector] ❌ BROWSERLESS_API_KEY not found in environment');
+      throw new Error('BROWSERLESS_API_KEY required for scraping');
+    }
+
     for (const page of pages) {
       console.log(`[TokenCollector] 📄 Page ${page.pageNum}/10: Fetching ranks ${page.startRank}-${page.startRank + 99}`);
       
       try {
-        const response = await fetch(page.url, {
+        // Use Browserless to bypass 403 blocks
+        const browserlessUrl = `https://production-sfo.browserless.io/content?token=${browserlessApiKey}`;
+        const response = await fetch(browserlessUrl, {
+          method: 'POST',
           headers: {
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
-            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
-            'Accept-Language': 'en-US,en;q=0.5',
-            'Cache-Control': 'no-cache'
-          }
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+            url: page.url,
+            waitFor: 2000
+          })
         });
 
         if (!response.ok) {
-          console.error(`[TokenCollector] ❌ HTTP ${response.status} for ${page.url}`);
+          console.error(`[TokenCollector] ❌ Browserless error ${response.status} for ${page.url}`);
           continue;
         }
 
