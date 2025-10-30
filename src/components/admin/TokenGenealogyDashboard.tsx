@@ -4,7 +4,8 @@ import { supabase } from '@/integrations/supabase/client';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Badge } from '@/components/ui/badge';
-import { TrendingUp, TrendingDown, Users, Trophy, AlertTriangle } from 'lucide-react';
+import { ScrollArea } from '@/components/ui/scroll-area';
+import { TrendingUp, TrendingDown, Users, Trophy, AlertTriangle, Terminal } from 'lucide-react';
 import { useTopDevelopers } from '@/hooks/useDeveloperIntegrity';
 
 export const TokenGenealogyDashboard = () => {
@@ -31,6 +32,19 @@ export const TokenGenealogyDashboard = () => {
   });
 
   const { data: topDevelopers } = useTopDevelopers(10);
+
+  // Fetch DexScreener scraper logs
+  const { data: scraperlogs } = useQuery({
+    queryKey: ['dexscreener-logs'],
+    queryFn: async () => {
+      const { data, error } = await supabase.functions.invoke('dexscreener-top-200-scraper', {
+        body: { getLogs: true }
+      });
+      if (error) throw error;
+      return data;
+    },
+    refetchInterval: 60 * 1000 // Refresh every minute
+  });
 
   // Stats
   const stats = {
@@ -153,6 +167,68 @@ export const TokenGenealogyDashboard = () => {
                   </div>
                 ))}
               </div>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="developers" className="space-y-4">
+          <Card>
+            <CardHeader>
+              <CardTitle>Top Developers by Integrity Score</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-3">
+                {topDevelopers?.map((dev, idx) => (
+                  <div 
+                    key={dev.id}
+                    className="flex items-center justify-between p-4 border rounded-lg hover:bg-accent/50 transition-colors"
+                  >
+                    <div className="flex items-center gap-3">
+                      <Badge variant="outline" className="w-12 justify-center">
+                        #{idx + 1}
+                      </Badge>
+                      <div>
+                        <p className="font-medium">{dev.display_name}</p>
+                        <p className="text-xs text-muted-foreground">
+                          {dev.master_wallet_address.slice(0, 16)}...
+                        </p>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-4">
+                      <div className="text-right text-sm">
+                        <p className="text-muted-foreground">Tokens in Top 10: <span className="font-medium text-foreground">{dev.tokens_in_top_10_count || 0}</span></p>
+                        <p className="text-muted-foreground">Tokens in Top 200: <span className="font-medium text-foreground">{dev.tokens_in_top_200_count || 0}</span></p>
+                      </div>
+                      {getTrustBadge(dev.trust_level, dev.integrity_score || 50)}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Terminal className="h-5 w-5" />
+                DexScreener API Logs
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <ScrollArea className="h-[300px] w-full rounded-md border p-4 font-mono text-xs">
+                <div className="space-y-1">
+                  {scraperlogs?.logs?.map((log: any, idx: number) => (
+                    <div key={idx} className={`${
+                      log.level === 'error' ? 'text-red-500' :
+                      log.level === 'warning' ? 'text-yellow-500' :
+                      log.level === 'info' ? 'text-blue-500' :
+                      'text-muted-foreground'
+                    }`}>
+                      <span className="text-muted-foreground">[{new Date(log.timestamp).toLocaleTimeString()}]</span> {log.event_message}
+                    </div>
+                  )) || <p className="text-muted-foreground">Loading logs...</p>}
+                </div>
+              </ScrollArea>
             </CardContent>
           </Card>
         </TabsContent>
