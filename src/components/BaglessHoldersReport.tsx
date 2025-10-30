@@ -750,18 +750,6 @@ export function BaglessHoldersReport({ initialToken }: BaglessHoldersReportProps
             />
           </div>
           
-          {useAutoPricing && discoveredPrice !== null && (
-            <div className="p-3 bg-muted rounded-lg">
-              <div className="text-sm font-medium">
-                Discovered Price: ${discoveredPrice.toFixed(8)}
-              </div>
-              {priceSource && (
-                <div className="text-xs text-muted-foreground">
-                  Source: {priceSource}
-                </div>
-              )}
-            </div>
-          )}
           
           {tokenData && !report && (
             <Card className="border-primary/50 bg-primary/5">
