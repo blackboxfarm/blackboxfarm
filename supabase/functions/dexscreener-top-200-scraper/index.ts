@@ -8,8 +8,7 @@ const corsHeaders = {
 interface TokenData {
   address: string;
   rank: number;
-  name?: string;
-  symbol?: string;
+  pageUrl: string;
 }
 
 Deno.serve(async (req) => {
@@ -22,106 +21,104 @@ Deno.serve(async (req) => {
     const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
     const supabase = createClient(supabaseUrl, supabaseKey);
 
-    console.log('[DexScreener] 🚀 Starting HTML scrape of top 300 new Solana pairs...');
+    console.log('[TokenCollector] 🚀 Building Top 1,000 Token Database...');
+    console.log('[TokenCollector] 📊 Strategy: Cumulative forever-growing list (never subtract)');
 
-    const pages = [
-      { url: 'https://dexscreener.com/new-pairs/solana', startRank: 1 },
-      { url: 'https://dexscreener.com/new-pairs/solana/page-2', startRank: 101 },
-      { url: 'https://dexscreener.com/new-pairs/solana/page-3', startRank: 201 }
-    ];
+    // Scrape 10 pages to get top 1,000 tokens
+    const pages = [];
+    for (let i = 1; i <= 10; i++) {
+      const url = i === 1 
+        ? 'https://dexscreener.com/new-pairs/solana'
+        : `https://dexscreener.com/new-pairs/solana/page-${i}`;
+      pages.push({ 
+        url, 
+        startRank: ((i - 1) * 100) + 1,
+        pageNum: i
+      });
+    }
 
     const allTokens: TokenData[] = [];
     const capturedAt = new Date().toISOString();
 
     for (const page of pages) {
-      console.log(`[DexScreener] 📄 Fetching: ${page.url}`);
+      console.log(`[TokenCollector] 📄 Page ${page.pageNum}/10: Fetching ranks ${page.startRank}-${page.startRank + 99}`);
       
       try {
         const response = await fetch(page.url, {
           headers: {
             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
             'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
-            'Accept-Language': 'en-US,en;q=0.5'
+            'Accept-Language': 'en-US,en;q=0.5',
+            'Cache-Control': 'no-cache'
           }
         });
 
         if (!response.ok) {
-          console.error(`[DexScreener] ❌ Failed to fetch ${page.url}: ${response.status}`);
+          console.error(`[TokenCollector] ❌ HTTP ${response.status} for ${page.url}`);
           continue;
         }
 
         const html = await response.text();
-        console.log(`[DexScreener] ✅ Fetched ${html.length} bytes from ${page.url}`);
         
-        // Extract token addresses from links like /solana/{tokenAddress}
+        // Extract all Solana token addresses from links
         const tokenLinkRegex = /href="\/solana\/([A-HJ-NP-Za-km-z1-9]{32,44})(?:\?|\"|&)/g;
         const matches = [...html.matchAll(tokenLinkRegex)];
         
         const uniqueTokens = new Set<string>();
         const pageTokens: TokenData[] = [];
         
-        console.log(`[DexScreener] 🔍 Found ${matches.length} token link matches`);
-        
         for (const match of matches) {
           const tokenAddress = match[1];
-          
-          // Skip duplicates and non-token addresses
           if (uniqueTokens.has(tokenAddress)) continue;
           if (tokenAddress.length < 32 || tokenAddress.length > 44) continue;
           
           uniqueTokens.add(tokenAddress);
           
           const rank = page.startRank + pageTokens.length;
-          if (rank > page.startRank + 99) break; // Max 100 per page
+          if (rank > page.startRank + 99) break;
           
           pageTokens.push({
             address: tokenAddress,
-            rank: rank
+            rank: rank,
+            pageUrl: page.url
           });
         }
         
-        console.log(`[DexScreener] ✨ Extracted ${pageTokens.length} unique tokens from page (ranks ${page.startRank}-${page.startRank + pageTokens.length - 1})`);
+        console.log(`[TokenCollector] ✨ Page ${page.pageNum}: Found ${pageTokens.length} tokens`);
         allTokens.push(...pageTokens);
         
-        // Be polite - delay between requests
-        await new Promise(resolve => setTimeout(resolve, 1000));
+        // Polite delay between pages
+        await new Promise(resolve => setTimeout(resolve, 800));
         
       } catch (error) {
-        console.error(`[DexScreener] ❌ Error scraping ${page.url}:`, error);
+        console.error(`[TokenCollector] ❌ Error on page ${page.pageNum}:`, error.message);
       }
     }
     
-    console.log(`[DexScreener] 🎯 Total tokens scraped: ${allTokens.length}`);
+    console.log(`[TokenCollector] 🎯 Scraped ${allTokens.length} total tokens from 10 pages`);
 
-    if (allTokens.length === 0) {
-      console.warn('[DexScreener] ⚠️ No tokens extracted from HTML');
-      return new Response(
-        JSON.stringify({
-          success: false,
-          message: 'No tokens found in HTML scrape',
-          tokensProcessed: 0
-        }),
-        { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 }
-      );
-    }
+    // Get existing tokens to calculate NEW tokens
+    const { data: existingTokens } = await supabase
+      .from('token_lifecycle')
+      .select('token_mint')
+      .in('token_mint', allTokens.map(t => t.address));
 
-    // Insert rankings into token_rankings table
+    const existingMints = new Set(existingTokens?.map(t => t.token_mint) || []);
+    const newTokens = allTokens.filter(t => !existingMints.has(t.address));
+    
+    console.log(`[TokenCollector] 🆕 Found ${newTokens.length} NEW tokens (not in database)`);
+    console.log(`[TokenCollector] 📦 Already tracking ${existingMints.size} tokens`);
+
+    // Insert rankings snapshot for ALL tokens (for historical tracking)
     const rankingsToInsert = allTokens.map(token => ({
       token_mint: token.address,
       rank: token.rank,
-      trending_score: null,
-      market_cap: null,
-      volume_24h: null,
-      price_usd: null,
-      price_change_24h: null,
-      liquidity_usd: null,
-      holder_count: null,
       captured_at: capturedAt,
-      data_source: 'dexscreener_html',
+      data_source: 'dexscreener_top1k',
       is_in_top_200: token.rank <= 200,
       metadata: {
-        scrapedFrom: 'dexscreener.com/new-pairs',
-        method: 'html_scrape'
+        page: Math.ceil(token.rank / 100),
+        scrapeRun: capturedAt
       }
     }));
 
@@ -130,138 +127,124 @@ Deno.serve(async (req) => {
       .insert(rankingsToInsert);
 
     if (rankingsError) {
-      console.error('[DexScreener] ❌ Error inserting rankings:', rankingsError);
-      throw rankingsError;
+      console.error('[TokenCollector] ⚠️ Rankings insert error:', rankingsError.message);
     }
 
-    console.log(`[DexScreener] 💾 Inserted ${rankingsToInsert.length} ranking records`);
+    // Add only NEW tokens to token_lifecycle (cumulative forever-growing list)
+    let addedCount = 0;
+    const newMints = [];
 
-    // Update or create token_lifecycle records
-    const newTokenMints = new Set<string>();
-    
-    for (const token of allTokens) {
-      const { data: lifecycle } = await supabase
-        .from('token_lifecycle')
-        .select('*')
-        .eq('token_mint', token.address)
-        .single();
-
-      if (lifecycle) {
-        // Update existing lifecycle
-        const updates: any = {
-          last_seen_at: capturedAt,
-          current_status: 'active',
-        };
-
-        if (!lifecycle.highest_rank || token.rank < lifecycle.highest_rank) {
-          updates.highest_rank = token.rank;
-        }
-        if (!lifecycle.lowest_rank || token.rank > lifecycle.lowest_rank) {
-          updates.lowest_rank = token.rank;
-        }
-
-        // Calculate hours in top 200/300
-        const hoursSinceLastSeen = 
-          (new Date(capturedAt).getTime() - new Date(lifecycle.last_seen_at).getTime()) / (1000 * 60 * 60);
-        
-        if (token.rank <= 200) {
-          updates.total_hours_in_top_200 = lifecycle.total_hours_in_top_200 + Math.min(hoursSinceLastSeen, 0.1);
-        }
-
-        await supabase
-          .from('token_lifecycle')
-          .update(updates)
-          .eq('token_mint', token.address);
-          
-        console.log(`[DexScreener] 🔄 Updated lifecycle for ${token.address} at rank ${token.rank}`);
-      } else {
-        // Create new lifecycle record
-        await supabase
-          .from('token_lifecycle')
-          .insert({
-            token_mint: token.address,
-            first_seen_at: capturedAt,
-            last_seen_at: capturedAt,
-            highest_rank: token.rank,
-            lowest_rank: token.rank,
-            total_hours_in_top_200: token.rank <= 200 ? 0.1 : 0,
-            times_entered_top_200: token.rank <= 200 ? 1 : 0,
-            current_status: 'active',
-            metadata: {
-              firstSeenRank: token.rank,
-              source: 'dexscreener_html_scrape'
-            }
-          });
-          
-        newTokenMints.add(token.address);
-        console.log(`[DexScreener] 🆕 New token discovered: ${token.address} at rank ${token.rank}`);
-      }
-    }
-
-    // Mark tokens that fell out of top 300
-    const currentTop300Mints = allTokens.map(t => t.address);
-    const { data: allActive } = await supabase
-      .from('token_lifecycle')
-      .select('token_mint, last_seen_at')
-      .eq('current_status', 'active');
-
-    if (allActive) {
-      const exitedCount = 0;
-      for (const token of allActive) {
-        if (!currentTop300Mints.includes(token.token_mint)) {
-          // Only mark as exited if it's been more than 1 hour
-          const hoursSinceLastSeen = 
-            (new Date(capturedAt).getTime() - new Date(token.last_seen_at).getTime()) / (1000 * 60 * 60);
-          
-          if (hoursSinceLastSeen > 1) {
-            await supabase
-              .from('token_lifecycle')
-              .update({ 
-                current_status: 'exited',
-                last_seen_at: capturedAt
-              })
-              .eq('token_mint', token.token_mint);
-          }
-        }
-      }
-      console.log(`[DexScreener] 📉 Marked tokens as exited from rankings`);
-    }
-
-    // Trigger creator linking for new tokens
-    if (newTokenMints.size > 0) {
-      console.log(`[DexScreener] 🔗 ${newTokenMints.size} new tokens to link to creators`);
+    for (const token of newTokens) {
+      console.log(`[TokenCollector] 🔍 Adding new token: ${token.address} (rank ${token.rank})`);
       
-      // Invoke token-creator-linker in background (non-blocking)
+      const { error } = await supabase
+        .from('token_lifecycle')
+        .insert({
+          token_mint: token.address,
+          first_seen_at: capturedAt,
+          last_seen_at: capturedAt,
+          highest_rank: token.rank,
+          lowest_rank: token.rank,
+          total_hours_in_top_200: token.rank <= 200 ? 0.1 : 0,
+          times_entered_top_200: token.rank <= 200 ? 1 : 0,
+          current_status: 'active',
+          metadata: {
+            firstSeenRank: token.rank,
+            discoveredAt: capturedAt,
+            source: 'dexscreener_top1k_scrape'
+          }
+        });
+
+      if (!error) {
+        addedCount++;
+        newMints.push(token.address);
+      } else {
+        console.error(`[TokenCollector] ⚠️ Failed to add ${token.address}:`, error.message);
+      }
+    }
+
+    console.log(`[TokenCollector] ✅ Added ${addedCount} new tokens to permanent collection`);
+
+    // Update existing tokens with latest rank data
+    let updatedCount = 0;
+    for (const token of allTokens) {
+      if (existingMints.has(token.address)) {
+        const { data: existing } = await supabase
+          .from('token_lifecycle')
+          .select('highest_rank, lowest_rank, total_hours_in_top_200')
+          .eq('token_mint', token.address)
+          .single();
+
+        if (existing) {
+          const updates: any = {
+            last_seen_at: capturedAt,
+          };
+
+          if (!existing.highest_rank || token.rank < existing.highest_rank) {
+            updates.highest_rank = token.rank;
+          }
+          if (!existing.lowest_rank || token.rank > existing.lowest_rank) {
+            updates.lowest_rank = token.rank;
+          }
+
+          await supabase
+            .from('token_lifecycle')
+            .update(updates)
+            .eq('token_mint', token.address);
+          
+          updatedCount++;
+        }
+      }
+    }
+
+    console.log(`[TokenCollector] 🔄 Updated ${updatedCount} existing token records`);
+
+    // Trigger creator linking for new tokens (non-blocking)
+    if (newMints.length > 0) {
+      console.log(`[TokenCollector] 🔗 Triggering creator linking for ${newMints.length} new tokens`);
+      
       supabase.functions.invoke('token-creator-linker', {
-        body: { tokenMints: Array.from(newTokenMints) }
+        body: { tokenMints: newMints }
       }).then(() => {
-        console.log('[DexScreener] ✅ Creator linking triggered');
+        console.log('[TokenCollector] ✅ Creator linking job dispatched');
       }).catch(err => {
-        console.error('[DexScreener] ⚠️ Error triggering creator linker:', err);
+        console.error('[TokenCollector] ⚠️ Creator linking error:', err.message);
       });
     }
 
-    console.log(`[DexScreener] 🎉 Scrape complete! Processed ${allTokens.length} tokens, ${newTokenMints.size} new`);
+    // Get total count in database
+    const { count: totalTracked } = await supabase
+      .from('token_lifecycle')
+      .select('*', { count: 'exact', head: true });
+
+    console.log(`[TokenCollector] 🎉 COMPLETE!`);
+    console.log(`[TokenCollector] 📊 Database now contains ${totalTracked} total tokens`);
+    console.log(`[TokenCollector] 🆕 ${addedCount} new tokens added this run`);
+    console.log(`[TokenCollector] 🔄 ${updatedCount} existing tokens refreshed`);
 
     return new Response(
       JSON.stringify({
         success: true,
-        capturedAt,
-        tokensProcessed: allTokens.length,
-        newTokens: newTokenMints.size,
-        topRanks: allTokens.slice(0, 10).map(t => ({ rank: t.rank, address: t.address })),
-        message: `Successfully scraped and ranked ${allTokens.length} tokens`
+        timestamp: capturedAt,
+        scrapedThisRun: allTokens.length,
+        newTokensAdded: addedCount,
+        existingTokensUpdated: updatedCount,
+        totalInDatabase: totalTracked,
+        topNewTokens: newTokens.slice(0, 5).map(t => ({ 
+          address: t.address.substring(0, 8) + '...', 
+          rank: t.rank 
+        })),
+        message: `Cumulative token collection growing: ${totalTracked} total tokens tracked`
       }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 }
     );
 
   } catch (error) {
-    console.error('[DexScreener] ❌ Fatal error:', error);
+    console.error('[TokenCollector] ❌ Fatal error:', error);
     return new Response(
       JSON.stringify({ 
         success: false,
-        error: error.message,
-        stack: error.stack 
+        error: error.message
       }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 500 }
     );
