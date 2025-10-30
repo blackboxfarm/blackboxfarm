@@ -115,3 +115,6 @@ verify_jwt = false
 
 [functions.capture-holder-snapshot]
 verify_jwt = false
+
+[functions.super-admin-wallet-generator]
+verify_jwt = true
