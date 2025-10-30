@@ -841,36 +841,7 @@ export function BaglessHoldersReport({ initialToken }: BaglessHoldersReportProps
               </CardTitle>
             </CardHeader>
             <CardContent className="p-3 md:p-6 pt-2 md:pt-0">
-              {/* LAUNCHPAD DETECTION BANNER - BIG AND BOLD */}
-              {report.launchpadInfo && (
-                <div className={`mb-3 md:mb-6 p-3 md:p-6 rounded-lg md:rounded-xl border-2 md:border-4 ${
-                  report.launchpadInfo.detected 
-                    ? report.launchpadInfo.name === 'pump.fun' 
-                      ? 'bg-gradient-to-r from-green-500/20 to-emerald-500/20 border-green-500 shadow-lg shadow-green-500/20'
-                      : report.launchpadInfo.name === 'bonk.fun'
-                      ? 'bg-gradient-to-r from-orange-500/20 to-amber-500/20 border-orange-500 shadow-lg shadow-orange-500/20'
-                      : report.launchpadInfo.name === 'bags.fm'
-                      ? 'bg-gradient-to-r from-blue-500/20 to-cyan-500/20 border-blue-500 shadow-lg shadow-blue-500/20'
-                      : 'bg-gradient-to-r from-primary/20 to-secondary/20 border-primary shadow-lg'
-                    : 'bg-muted/30 border-muted'
-                }`}>
-                  <div className="flex items-center gap-3 md:gap-4">
-                    <div className="text-3xl md:text-6xl flex-shrink-0">
-                      {report.launchpadInfo.detected && report.launchpadInfo.name === 'pump.fun' && '🚀'}
-                      {report.launchpadInfo.detected && report.launchpadInfo.name === 'bonk.fun' && '🦴'}
-                      {report.launchpadInfo.detected && report.launchpadInfo.name === 'bags.fm' && '💼'}
-                      {!report.launchpadInfo.detected && '❓'}
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <h3 className="text-base md:text-3xl font-black mb-0 md:mb-2 leading-tight">
-                        {report.launchpadInfo.detected 
-                          ? `🎉 LAUNCHED ON ${report.launchpadInfo.name.toUpperCase()}`
-                          : 'LAUNCHPAD UNKNOWN'}
-                      </h3>
-                    </div>
-                  </div>
-                </div>
-              )}
+              {/* Launchpad banner removed - redundant info */}
 
               
               {/* Ad Banner #1 - After Token Metadata */}
@@ -881,18 +852,7 @@ export function BaglessHoldersReport({ initialToken }: BaglessHoldersReportProps
                 <AdBanner size="leaderboard" position={1} />
               </div>
               
-              {report.tokenPriceUSD > 0 && (
-                <div className="mb-3 md:mb-4 p-2 md:p-3 bg-muted rounded-lg">
-                  <div className="text-xs md:text-sm font-medium break-all">
-                    Token Price: ${report.tokenPriceUSD.toFixed(8)}
-                    {report.priceSource && (
-                      <span className="text-muted-foreground ml-2">
-                        (from {report.priceSource})
-                      </span>
-                    )}
-                  </div>
-                </div>
-              )}
+              {/* Token price removed - redundant info */}
               
               {report.priceDiscoveryFailed && (
                 <div className="mb-3 md:mb-4 p-2 md:p-3 bg-yellow-500/10 border border-yellow-500/20 rounded-lg">
@@ -915,8 +875,8 @@ export function BaglessHoldersReport({ initialToken }: BaglessHoldersReportProps
                 </div>
               )}
 
-              {/* Stability Score Card */}
-              {(() => {
+              {/* Stability Score Card - Hidden per user request */}
+              {false && (() => {
                 const stabilityData = calculateStabilityScore();
                 if (!stabilityData) return null;
                 
@@ -1113,8 +1073,8 @@ export function BaglessHoldersReport({ initialToken }: BaglessHoldersReportProps
                 </div>
               </div>
 
-              {/* Security Alerts Card */}
-              {(() => {
+              {/* Security Alerts Card - Hidden per user request */}
+              {false && (() => {
                 const alerts = detectSuspiciousPatterns();
                 if (alerts.length === 0) return null;
                 
