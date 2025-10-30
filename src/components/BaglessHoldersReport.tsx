@@ -19,6 +19,7 @@ import { PremiumFeatureGate } from '@/components/premium/PremiumFeatureGate';
 import { HolderMovementFeed } from '@/components/premium/HolderMovementFeed';
 import { RetentionAnalysis } from '@/components/premium/RetentionAnalysis';
 import { useAuth } from '@/hooks/useAuth';
+import { useTokenDataCollection } from '@/hooks/useTokenDataCollection';
 
 interface TokenHolder {
   owner: string;
@@ -149,6 +150,13 @@ export function BaglessHoldersReport({ initialToken }: BaglessHoldersReportProps
   const { tokenData, fetchTokenMetadata } = useTokenMetadata();
   const { user } = useAuth();
   const [showAuthModal, setShowAuthModal] = useState(false);
+  
+  // Background data collection - builds historical data for premium features
+  useTokenDataCollection(
+    report?.tokenMint || null,
+    report?.holders,
+    report?.tokenPriceUSD
+  );
 
   // Load wallet flags from localStorage when tokenMint changes
   useEffect(() => {
@@ -455,14 +463,7 @@ export function BaglessHoldersReport({ initialToken }: BaglessHoldersReportProps
       const reportProcessTime = performance.now() - reportStartTime;
       console.log(`✅ [PERF] Report processing complete: ${reportProcessTime.toFixed(0)}ms`);
       
-      // Capture holder snapshot for analytics
-      supabase.functions.invoke('capture-holder-snapshot', {
-        body: { 
-          token_mint: tokenMint.trim(),
-          holders: data.holders,
-          token_price: data.tokenPriceUSD
-        }
-      }).catch(err => console.error('Failed to capture snapshot:', err));
+      // Note: Snapshot capture now handled by useTokenDataCollection hook
       
       // Fetch Twitter handles for top holders (async - won't block)
       console.log('⏱️ [PERF] Starting parallel data fetches (KOL only - Twitter SNS BYPASSED)...');
