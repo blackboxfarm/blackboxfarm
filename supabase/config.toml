@@ -1,6 +1,15 @@
 project_id = "apxauapuusmgwbbzjgfl"
 
 # Edge Functions configuration
+[functions.dexscreener-top-200-scraper]
+verify_jwt = false
+
+[functions.token-creator-linker]
+verify_jwt = false
+
+[functions.calculate-developer-integrity]
+verify_jwt = false
+
 [functions.token-mint-watchdog-monitor]
 verify_jwt = false
 
