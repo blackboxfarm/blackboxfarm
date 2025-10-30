@@ -88,3 +88,21 @@ verify_jwt = false
 
 [functions.alert-high-risk-token]
 verify_jwt = false
+
+[functions.track-holder-movements]
+verify_jwt = false
+
+[functions.holder-retention-analysis]
+verify_jwt = false
+
+[functions.wallet-behavior-analysis]
+verify_jwt = false
+
+[functions.get-active-survey]
+verify_jwt = false
+
+[functions.get-banner-for-position]
+verify_jwt = false
+
+[functions.capture-holder-snapshot]
+verify_jwt = false

@@ -10,11 +10,15 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/u
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
-import { Loader2, Download, RefreshCw, Flag, AlertTriangle, Shield, TrendingUp } from 'lucide-react';
+import { Loader2, Download, RefreshCw, Flag, AlertTriangle, Shield, TrendingUp, Diamond, Brain } from 'lucide-react';
 import { Progress } from '@/components/ui/progress';
 import { useTokenMetadata } from '@/hooks/useTokenMetadata';
 import { AdBanner } from '@/components/AdBanner';
 import { TokenMetadataDisplay } from '@/components/token/TokenMetadataDisplay';
+import { PremiumFeatureGate } from '@/components/premium/PremiumFeatureGate';
+import { HolderMovementFeed } from '@/components/premium/HolderMovementFeed';
+import { RetentionAnalysis } from '@/components/premium/RetentionAnalysis';
+import { useAuth } from '@/hooks/useAuth';
 
 interface TokenHolder {
   owner: string;
@@ -143,6 +147,8 @@ export function BaglessHoldersReport({ initialToken }: BaglessHoldersReportProps
   const [selectedWallet, setSelectedWallet] = useState<string | null>(null);
   const { toast } = useToast();
   const { tokenData, fetchTokenMetadata } = useTokenMetadata();
+  const { user } = useAuth();
+  const [showAuthModal, setShowAuthModal] = useState(false);
 
   // Load wallet flags from localStorage when tokenMint changes
   useEffect(() => {
@@ -448,6 +454,15 @@ export function BaglessHoldersReport({ initialToken }: BaglessHoldersReportProps
       
       const reportProcessTime = performance.now() - reportStartTime;
       console.log(`✅ [PERF] Report processing complete: ${reportProcessTime.toFixed(0)}ms`);
+      
+      // Capture holder snapshot for analytics
+      supabase.functions.invoke('capture-holder-snapshot', {
+        body: { 
+          token_mint: tokenMint.trim(),
+          holders: data.holders,
+          token_price: data.tokenPriceUSD
+        }
+      }).catch(err => console.error('Failed to capture snapshot:', err));
       
       // Fetch Twitter handles for top holders (async - won't block)
       console.log('⏱️ [PERF] Starting parallel data fetches (KOL only - Twitter SNS BYPASSED)...');
@@ -808,6 +823,33 @@ export function BaglessHoldersReport({ initialToken }: BaglessHoldersReportProps
 
       {/* Ad Banner under Generate Button */}
       <AdBanner size="mobile" position={1} />
+
+      {/* Premium Features Section - only show if report exists */}
+      {report && tokenMint && (
+        <div className="space-y-4">
+          <PremiumFeatureGate
+            isAuthenticated={!!user}
+            featureName="Real-Time Whale Movements"
+            featureDescription="Track live whale movements and detect significant holder activity in real-time."
+            featureIcon={<TrendingUp />}
+            onSignUpClick={() => setShowAuthModal(true)}
+            tokenMint={tokenMint}
+          >
+            <HolderMovementFeed tokenMint={tokenMint} />
+          </PremiumFeatureGate>
+
+          <PremiumFeatureGate
+            isAuthenticated={!!user}
+            featureName="Diamond Hands Analysis"
+            featureDescription="Analyze holder retention, loyalty metrics, and get a comprehensive Diamond Hands Score."
+            featureIcon={<Diamond />}
+            onSignUpClick={() => setShowAuthModal(true)}
+            tokenMint={tokenMint}
+          >
+            <RetentionAnalysis tokenMint={tokenMint} />
+          </PremiumFeatureGate>
+        </div>
+      )}
 
       {/* Token Metadata - show as soon as metadata is fetched (before report) */}
       {tokenData && (
