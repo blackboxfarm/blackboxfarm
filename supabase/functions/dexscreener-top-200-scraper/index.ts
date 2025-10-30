@@ -34,37 +34,74 @@ Deno.serve(async (req) => {
     const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
     const supabase = createClient(supabaseUrl, supabaseKey);
 
-    console.log('[DexScreener] Fetching top 200 trending Solana tokens...');
+    console.log('[DexScreener] Scraping top 300 new pairs from Solana...');
 
-    // Fetch trending pairs from DexScreener
-    const response = await fetch(
-      'https://api.dexscreener.com/latest/dex/tokens/trending?chainId=solana',
-      {
+    // Scrape the three pages
+    const pages = [
+      { url: 'https://dexscreener.com/new-pairs/solana', offset: 0 },
+      { url: 'https://dexscreener.com/new-pairs/solana/page-2', offset: 100 },
+      { url: 'https://dexscreener.com/new-pairs/solana/page-3', offset: 200 }
+    ];
+
+    const pairs: DexScreenerPair[] = [];
+
+    for (const page of pages) {
+      console.log(`[DexScreener] Fetching page: ${page.url}`);
+      
+      const response = await fetch(page.url, {
         headers: {
-          'Accept': 'application/json',
-          'User-Agent': 'TokenGenealogyBot/1.0'
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+          'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+          'Accept-Language': 'en-US,en;q=0.5'
         }
+      });
+
+      if (!response.ok) {
+        console.error(`[DexScreener] Failed to fetch ${page.url}: ${response.status}`);
+        continue;
       }
-    );
 
-    console.log(`[DexScreener] API Response Status: ${response.status}`);
-    console.log(`[DexScreener] API Response Headers:`, Object.fromEntries(response.headers.entries()));
-
-    if (!response.ok) {
-      const errorText = await response.text();
-      console.error(`[DexScreener] API error body:`, errorText);
-      throw new Error(`DexScreener API error: ${response.status} - ${errorText}`);
+      const html = await response.text();
+      
+      // Extract token data from HTML
+      // Looking for links like /solana/{tokenAddress}
+      const tokenRegex = /href="\/solana\/([A-Za-z0-9]{32,44})"/g;
+      const priceRegex = /\$(\d+\.?\d*)/g;
+      
+      const matches = [...html.matchAll(tokenRegex)];
+      const uniqueTokens = new Set<string>();
+      
+      console.log(`[DexScreener] Found ${matches.length} token matches on ${page.url}`);
+      
+      let position = page.offset;
+      for (const match of matches) {
+        const tokenAddress = match[1];
+        
+        // Avoid duplicates within the same page
+        if (uniqueTokens.has(tokenAddress) || position >= page.offset + 100) break;
+        uniqueTokens.add(tokenAddress);
+        
+        position++;
+        
+        // Create a basic pair object (we'll have limited data from HTML)
+        pairs.push({
+          chainId: 'solana',
+          dexId: 'unknown',
+          url: `https://dexscreener.com/solana/${tokenAddress}`,
+          pairAddress: tokenAddress,
+          baseToken: {
+            address: tokenAddress,
+            name: 'Unknown',
+            symbol: 'Unknown'
+          }
+        });
+      }
+      
+      // Small delay between requests to be polite
+      await new Promise(resolve => setTimeout(resolve, 1000));
     }
-
-    const data = await response.json();
-    console.log(`[DexScreener] Raw API response structure:`, JSON.stringify(data, null, 2));
     
-    const pairs: DexScreenerPair[] = data.pairs || [];
-    
-    console.log(`[DexScreener] Found ${pairs.length} trending pairs`);
-    if (pairs.length === 0) {
-      console.warn('[DexScreener] WARNING: API returned 0 pairs. Full response:', JSON.stringify(data));
-    }
+    console.log(`[DexScreener] Total unique pairs scraped: ${pairs.length}`);
 
     // Process top 200 (or however many are returned)
     const top200 = pairs.slice(0, 200);
