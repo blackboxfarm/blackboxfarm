@@ -40,38 +40,27 @@ Deno.serve(async (req) => {
     const allTokens: TokenData[] = [];
     const capturedAt = new Date().toISOString();
 
-    const browserlessApiKey = Deno.env.get('BROWSERLESS_API_KEY');
-    if (!browserlessApiKey) {
-      console.error('[TokenCollector] ❌ BROWSERLESS_API_KEY not found in environment');
-      throw new Error('BROWSERLESS_API_KEY required for scraping');
-    }
-
     for (const page of pages) {
       console.log(`[TokenCollector] 📄 Page ${page.pageNum}/10: Fetching ranks ${page.startRank}-${page.startRank + 99}`);
       
       try {
-        // Use Browserless to bypass 403 blocks
-        const browserlessUrl = `https://production-sfo.browserless.io/content?token=${browserlessApiKey}`;
-        const response = await fetch(browserlessUrl, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json'
-          },
-          body: JSON.stringify({
+        // Use agentic-browser to handle Cloudflare challenges
+        const { data: browserResult, error: browserError } = await supabase.functions.invoke('agentic-browser', {
+          body: {
             url: page.url,
-            gotoOptions: {
-              waitUntil: 'networkidle0',
-              timeout: 30000
-            }
-          })
+            actions: [
+              { type: 'cloudflare_challenge' },
+              { type: 'scrape' }
+            ]
+          }
         });
 
-        if (!response.ok) {
-          console.error(`[TokenCollector] ❌ Browserless error ${response.status} for ${page.url}`);
+        if (browserError || !browserResult?.success) {
+          console.error(`[TokenCollector] ❌ Browser error for ${page.url}:`, browserError?.message || 'Unknown error');
           continue;
         }
 
-        const html = await response.text();
+        const html = browserResult.results?.find((r: any) => r.action === 'scrape')?.html || '';
         
         // Extract all Solana token addresses from links
         const tokenLinkRegex = /href="\/solana\/([A-HJ-NP-Za-km-z1-9]{32,44})(?:\?|\"|&)/g;
