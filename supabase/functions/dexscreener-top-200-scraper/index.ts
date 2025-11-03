@@ -59,10 +59,10 @@ Deno.serve(async (req) => {
     // Get existing tokens from database
     const { data: existingTokens } = await supabase
       .from('token_lifecycle')
-      .select('token_address');
+      .select('token_mint');
 
     const existingSet = new Set(
-      (existingTokens || []).map((t: any) => t.token_address)
+      (existingTokens || []).map((t: any) => t.token_mint)
     );
 
     const newTokens = allTokens.filter(t => !existingSet.has(t.address));
@@ -71,10 +71,9 @@ Deno.serve(async (req) => {
 
     // Insert snapshot of all token rankings
     const rankingSnapshot = allTokens.map(token => ({
-      token_address: token.address,
+      token_mint: token.address,
       rank: token.rank,
-      captured_at: capturedAt,
-      page_url: token.pageUrl
+      captured_at: capturedAt
     }));
 
     if (rankingSnapshot.length > 0) {
@@ -92,13 +91,11 @@ Deno.serve(async (req) => {
     // Insert new tokens into token_lifecycle
     if (newTokens.length > 0) {
       const tokenInserts = newTokens.map(token => ({
-        token_address: token.address,
+        token_mint: token.address,
         first_seen_at: capturedAt,
         last_seen_at: capturedAt,
-        current_rank: token.rank,
-        best_rank: token.rank,
-        times_seen: 1,
-        page_url: token.pageUrl
+        highest_rank: token.rank,
+        lowest_rank: token.rank
       }));
 
       const { error: insertError } = await supabase
@@ -121,12 +118,9 @@ Deno.serve(async (req) => {
         const { error: updateError } = await supabase
           .from('token_lifecycle')
           .update({
-            last_seen_at: capturedAt,
-            current_rank: token.rank,
-            times_seen: supabase.rpc('increment', { x: 1 }),
-            best_rank: supabase.rpc('least', { a: 'best_rank', b: token.rank })
+            last_seen_at: capturedAt
           })
-          .eq('token_address', token.address);
+          .eq('token_mint', token.address);
 
         if (!updateError) {
           updateCount++;
