@@ -5,296 +5,193 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
-interface TokenData {
-  address: string;
-  rank: number;
-  pageUrl: string;
-}
-
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
   }
 
   try {
-    const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
-    const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
-    const supabase = createClient(supabaseUrl, supabaseKey);
+    const supabase = createClient(
+      Deno.env.get('SUPABASE_URL') ?? '',
+      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
+    );
 
-    console.log('[TokenCollector] 🚀 Building Top 1,000 Token Database...');
-    console.log('[TokenCollector] 📊 Strategy: Cumulative forever-growing list (never subtract)');
+    console.log('[TokenCollector] 🚀 Using Dexscreener Official API');
+    console.log('[TokenCollector] 📊 Strategy: Collect latest token profiles');
 
-    // Scrape 10 pages to get top 1,000 tokens
-    const pages = [];
-    for (let i = 1; i <= 10; i++) {
-      const url = i === 1 
-        ? 'https://dexscreener.com/new-pairs/solana'
-        : `https://dexscreener.com/new-pairs/solana/page-${i}`;
-      pages.push({ 
-        url, 
-        startRank: ((i - 1) * 100) + 1,
-        pageNum: i
-      });
-    }
-
-    const allTokens: TokenData[] = [];
+    const allTokens: Array<{
+      address: string;
+      rank: number;
+      pageUrl: string;
+      chainId: string;
+    }> = [];
+    
     const capturedAt = new Date().toISOString();
 
-    const apifyApiKey = Deno.env.get('APIFY_API_KEY');
-    if (!apifyApiKey) {
-      console.error('[TokenCollector] ❌ APIFY_API_KEY not found in environment');
-      throw new Error('APIFY_API_KEY required for scraping');
+    // Fetch latest token profiles from Dexscreener API
+    console.log('[TokenCollector] 📡 Fetching latest token profiles from API');
+    
+    const apiResponse = await fetch('https://api.dexscreener.com/token-profiles/latest/v1');
+    
+    if (!apiResponse.ok) {
+      console.error(`[TokenCollector] ❌ API request failed: ${apiResponse.status}`);
+      throw new Error(`Dexscreener API returned ${apiResponse.status}`);
     }
 
-    for (const page of pages) {
-      console.log(`[TokenCollector] 📄 Page ${page.pageNum}/10: Fetching ranks ${page.startRank}-${page.startRank + 99}`);
-      
-      try {
-        // Use Apify Cheerio Scraper (much faster than Web Scraper)
-        console.log(`[TokenCollector] 🚀 Starting Apify Cheerio Scraper for ${page.url}`);
-        
-        const apifyRunResponse = await fetch('https://api.apify.com/v2/acts/apify~cheerio-scraper/runs', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${apifyApiKey}`
-          },
-          body: JSON.stringify({
-            startUrls: [{ url: page.url }],
-            proxyConfiguration: { useApifyProxy: true },
-            pageFunction: `async function pageFunction(context) {
-              const $ = context.$;
-              const html = $('html').html();
-              return { html };
-            }`,
-            maxRequestsPerCrawl: 1,
-            maxConcurrency: 1,
-            maxRequestRetries: 2
-          })
+    const profiles = await apiResponse.json();
+    console.log(`[TokenCollector] ✅ Received ${profiles.length} token profiles`);
+
+    // Filter for Solana tokens and create our token list
+    let rank = 1;
+    for (const profile of profiles) {
+      if (profile.chainId === 'solana' && profile.tokenAddress) {
+        allTokens.push({
+          address: profile.tokenAddress,
+          rank: rank++,
+          pageUrl: profile.url || `https://dexscreener.com/solana/${profile.tokenAddress}`,
+          chainId: 'solana'
         });
-
-        if (!apifyRunResponse.ok) {
-          const errorText = await apifyRunResponse.text();
-          console.error(`[TokenCollector] ❌ Apify run failed: ${apifyRunResponse.status} - ${errorText}`);
-          continue;
-        }
-
-        const runData = await apifyRunResponse.json();
-        const runId = runData.data.id;
-        console.log(`[TokenCollector] ⏳ Apify run started: ${runId}`);
-
-        // Poll for results with faster checks (Cheerio is much quicker)
-        let html = '';
-        for (let i = 0; i < 20; i++) {
-          await new Promise(resolve => setTimeout(resolve, 1500));
-          
-          const datasetResponse = await fetch(
-            `https://api.apify.com/v2/acts/apify~cheerio-scraper/runs/${runId}/dataset/items`,
-            { headers: { 'Authorization': `Bearer ${apifyApiKey}` } }
-          );
-
-          if (datasetResponse.ok) {
-            const items = await datasetResponse.json();
-            if (items.length > 0 && items[0].html) {
-              html = items[0].html;
-              console.log(`[TokenCollector] ✅ Got HTML from Apify (${html.length} chars)`);
-              break;
-            }
-          }
-        }
-
-        if (!html) {
-          console.error(`[TokenCollector] ❌ No HTML from Apify after 30s timeout`);
-          continue;
-        }
-        
-        // Extract all Solana token addresses from links
-        const tokenLinkRegex = /href="\/solana\/([A-HJ-NP-Za-km-z1-9]{32,44})(?:\?|\"|&)/g;
-        const matches = [...html.matchAll(tokenLinkRegex)];
-        
-        const uniqueTokens = new Set<string>();
-        const pageTokens: TokenData[] = [];
-        
-        for (const match of matches) {
-          const tokenAddress = match[1];
-          if (uniqueTokens.has(tokenAddress)) continue;
-          if (tokenAddress.length < 32 || tokenAddress.length > 44) continue;
-          
-          uniqueTokens.add(tokenAddress);
-          
-          const rank = page.startRank + pageTokens.length;
-          if (rank > page.startRank + 99) break;
-          
-          pageTokens.push({
-            address: tokenAddress,
-            rank: rank,
-            pageUrl: page.url
-          });
-        }
-        
-        console.log(`[TokenCollector] ✨ Page ${page.pageNum}: Found ${pageTokens.length} tokens`);
-        allTokens.push(...pageTokens);
-        
-        // Polite delay between pages
-        await new Promise(resolve => setTimeout(resolve, 2000));
-        
-      } catch (error) {
-        console.error(`[TokenCollector] ❌ Error on page ${page.pageNum}:`, error.message);
       }
     }
-    
-    console.log(`[TokenCollector] 🎯 Scraped ${allTokens.length} total tokens from 10 pages`);
 
-    // Get existing tokens to calculate NEW tokens
+    console.log(`[TokenCollector] 🎯 Found ${allTokens.length} Solana tokens from profiles`);
+
+    // Get existing tokens from database
     const { data: existingTokens } = await supabase
       .from('token_lifecycle')
-      .select('token_mint')
-      .in('token_mint', allTokens.map(t => t.address));
+      .select('token_address');
 
-    const existingMints = new Set(existingTokens?.map(t => t.token_mint) || []);
-    const newTokens = allTokens.filter(t => !existingMints.has(t.address));
-    
+    const existingSet = new Set(
+      (existingTokens || []).map((t: any) => t.token_address)
+    );
+
+    const newTokens = allTokens.filter(t => !existingSet.has(t.address));
     console.log(`[TokenCollector] 🆕 Found ${newTokens.length} NEW tokens (not in database)`);
-    console.log(`[TokenCollector] 📦 Already tracking ${existingMints.size} tokens`);
+    console.log(`[TokenCollector] 📦 Already tracking ${existingSet.size} tokens`);
 
-    // Insert rankings snapshot for ALL tokens (for historical tracking)
-    const rankingsToInsert = allTokens.map(token => ({
-      token_mint: token.address,
+    // Insert snapshot of all token rankings
+    const rankingSnapshot = allTokens.map(token => ({
+      token_address: token.address,
       rank: token.rank,
       captured_at: capturedAt,
-      data_source: 'dexscreener_top1k',
-      is_in_top_200: token.rank <= 200,
-      metadata: {
-        page: Math.ceil(token.rank / 100),
-        scrapeRun: capturedAt
-      }
+      page_url: token.pageUrl
     }));
 
-    const { error: rankingsError } = await supabase
-      .from('token_rankings')
-      .insert(rankingsToInsert);
+    if (rankingSnapshot.length > 0) {
+      const { error: snapshotError } = await supabase
+        .from('token_rankings')
+        .insert(rankingSnapshot);
 
-    if (rankingsError) {
-      console.error('[TokenCollector] ⚠️ Rankings insert error:', rankingsError.message);
-    }
-
-    // Add only NEW tokens to token_lifecycle (cumulative forever-growing list)
-    let addedCount = 0;
-    const newMints = [];
-
-    for (const token of newTokens) {
-      console.log(`[TokenCollector] 🔍 Adding new token: ${token.address} (rank ${token.rank})`);
-      
-      const { error } = await supabase
-        .from('token_lifecycle')
-        .insert({
-          token_mint: token.address,
-          first_seen_at: capturedAt,
-          last_seen_at: capturedAt,
-          highest_rank: token.rank,
-          lowest_rank: token.rank,
-          total_hours_in_top_200: token.rank <= 200 ? 0.1 : 0,
-          times_entered_top_200: token.rank <= 200 ? 1 : 0,
-          current_status: 'active',
-          metadata: {
-            firstSeenRank: token.rank,
-            discoveredAt: capturedAt,
-            source: 'dexscreener_top1k_scrape'
-          }
-        });
-
-      if (!error) {
-        addedCount++;
-        newMints.push(token.address);
+      if (snapshotError) {
+        console.error('[TokenCollector] ❌ Failed to insert ranking snapshot:', snapshotError);
       } else {
-        console.error(`[TokenCollector] ⚠️ Failed to add ${token.address}:`, error.message);
+        console.log(`[TokenCollector] ✅ Inserted ${rankingSnapshot.length} ranking records`);
       }
     }
 
-    console.log(`[TokenCollector] ✅ Added ${addedCount} new tokens to permanent collection`);
+    // Insert new tokens into token_lifecycle
+    if (newTokens.length > 0) {
+      const tokenInserts = newTokens.map(token => ({
+        token_address: token.address,
+        first_seen_at: capturedAt,
+        last_seen_at: capturedAt,
+        current_rank: token.rank,
+        best_rank: token.rank,
+        times_seen: 1,
+        page_url: token.pageUrl
+      }));
 
-    // Update existing tokens with latest rank data
-    let updatedCount = 0;
-    for (const token of allTokens) {
-      if (existingMints.has(token.address)) {
-        const { data: existing } = await supabase
+      const { error: insertError } = await supabase
+        .from('token_lifecycle')
+        .insert(tokenInserts);
+
+      if (insertError) {
+        console.error('[TokenCollector] ❌ Failed to insert new tokens:', insertError);
+      } else {
+        console.log(`[TokenCollector] ✅ Added ${newTokens.length} new tokens to permanent collection`);
+      }
+    }
+
+    // Update existing tokens
+    const tokensToUpdate = allTokens.filter(t => existingSet.has(t.address));
+    
+    if (tokensToUpdate.length > 0) {
+      let updateCount = 0;
+      for (const token of tokensToUpdate) {
+        const { error: updateError } = await supabase
           .from('token_lifecycle')
-          .select('highest_rank, lowest_rank, total_hours_in_top_200')
-          .eq('token_mint', token.address)
-          .single();
-
-        if (existing) {
-          const updates: any = {
+          .update({
             last_seen_at: capturedAt,
-          };
+            current_rank: token.rank,
+            times_seen: supabase.rpc('increment', { x: 1 }),
+            best_rank: supabase.rpc('least', { a: 'best_rank', b: token.rank })
+          })
+          .eq('token_address', token.address);
 
-          if (!existing.highest_rank || token.rank < existing.highest_rank) {
-            updates.highest_rank = token.rank;
-          }
-          if (!existing.lowest_rank || token.rank > existing.lowest_rank) {
-            updates.lowest_rank = token.rank;
-          }
-
-          await supabase
-            .from('token_lifecycle')
-            .update(updates)
-            .eq('token_mint', token.address);
-          
-          updatedCount++;
+        if (!updateError) {
+          updateCount++;
         }
       }
+      console.log(`[TokenCollector] 🔄 Updated ${updateCount} existing token records`);
+      console.log(`[TokenCollector] 🔄 ${tokensToUpdate.length} existing tokens refreshed`);
     }
 
-    console.log(`[TokenCollector] 🔄 Updated ${updatedCount} existing token records`);
-
-    // Trigger creator linking for new tokens (non-blocking)
-    if (newMints.length > 0) {
-      console.log(`[TokenCollector] 🔗 Triggering creator linking for ${newMints.length} new tokens`);
-      
-      supabase.functions.invoke('token-creator-linker', {
-        body: { tokenMints: newMints }
-      }).then(() => {
-        console.log('[TokenCollector] ✅ Creator linking job dispatched');
-      }).catch(err => {
-        console.error('[TokenCollector] ⚠️ Creator linking error:', err.message);
-      });
+    // Trigger token-creator-linker for new tokens
+    if (newTokens.length > 0) {
+      console.log('[TokenCollector] 🔗 Triggering token-creator-linker for new tokens...');
+      try {
+        const { error: funcError } = await supabase.functions.invoke('token-creator-linker', {
+          body: { 
+            tokens: newTokens.map(t => t.address),
+            source: 'dexscreener-collector'
+          }
+        });
+        
+        if (funcError) {
+          console.error('[TokenCollector] ⚠️ token-creator-linker error:', funcError);
+        } else {
+          console.log('[TokenCollector] ✅ token-creator-linker triggered successfully');
+        }
+      } catch (err) {
+        console.error('[TokenCollector] ⚠️ Failed to trigger token-creator-linker:', err);
+      }
     }
 
-    // Get total count in database
-    const { count: totalTracked } = await supabase
+    // Get total tokens in database
+    const { count: totalCount } = await supabase
       .from('token_lifecycle')
       .select('*', { count: 'exact', head: true });
 
-    console.log(`[TokenCollector] 🎉 COMPLETE!`);
-    console.log(`[TokenCollector] 📊 Database now contains ${totalTracked} total tokens`);
-    console.log(`[TokenCollector] 🆕 ${addedCount} new tokens added this run`);
-    console.log(`[TokenCollector] 🔄 ${updatedCount} existing tokens refreshed`);
+    console.log(`[TokenCollector] 📊 Database now contains ${totalCount} total tokens`);
+    console.log(`[TokenCollector] 🆕 ${newTokens.length} new tokens added this run`);
+    console.log('[TokenCollector] 🎉 COMPLETE!');
 
     return new Response(
       JSON.stringify({
         success: true,
-        timestamp: capturedAt,
-        scrapedThisRun: allTokens.length,
-        newTokensAdded: addedCount,
-        existingTokensUpdated: updatedCount,
-        totalInDatabase: totalTracked,
-        topNewTokens: newTokens.slice(0, 5).map(t => ({ 
-          address: t.address.substring(0, 8) + '...', 
-          rank: t.rank 
-        })),
-        message: `Cumulative token collection growing: ${totalTracked} total tokens tracked`
+        tokensScraped: allTokens.length,
+        newTokens: newTokens.length,
+        updatedTokens: tokensToUpdate.length,
+        totalInDatabase: totalCount,
+        timestamp: capturedAt
       }),
-      { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 }
+      { 
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        status: 200 
+      }
     );
 
   } catch (error) {
     console.error('[TokenCollector] ❌ Fatal error:', error);
     return new Response(
       JSON.stringify({ 
-        success: false,
-        error: error.message
+        error: error instanceof Error ? error.message : 'Unknown error',
+        success: false 
       }),
-      { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 500 }
+      { 
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        status: 500 
+      }
     );
   }
 });
