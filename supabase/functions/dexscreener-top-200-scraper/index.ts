@@ -59,7 +59,10 @@ Deno.serve(async (req) => {
           },
           body: JSON.stringify({
             url: page.url,
-            waitFor: 2000
+            gotoOptions: {
+              waitUntil: 'networkidle0',
+              timeout: 30000
+            }
           })
         });
 
