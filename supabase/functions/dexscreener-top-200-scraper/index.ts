@@ -50,10 +50,10 @@ Deno.serve(async (req) => {
       console.log(`[TokenCollector] 📄 Page ${page.pageNum}/10: Fetching ranks ${page.startRank}-${page.startRank + 99}`);
       
       try {
-        // Use Apify Web Scraper to bypass Cloudflare
-        console.log(`[TokenCollector] 🚀 Starting Apify scraper for ${page.url}`);
+        // Use Apify Cheerio Scraper (much faster than Web Scraper)
+        console.log(`[TokenCollector] 🚀 Starting Apify Cheerio Scraper for ${page.url}`);
         
-        const apifyRunResponse = await fetch('https://api.apify.com/v2/acts/apify~web-scraper/runs', {
+        const apifyRunResponse = await fetch('https://api.apify.com/v2/acts/apify~cheerio-scraper/runs', {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
@@ -63,18 +63,19 @@ Deno.serve(async (req) => {
             startUrls: [{ url: page.url }],
             proxyConfiguration: { useApifyProxy: true },
             pageFunction: `async function pageFunction(context) {
-              const { page } = context;
-              await page.waitForSelector('a[href*="/solana/"]', { timeout: 30000 });
-              const html = await page.content();
+              const $ = context.$;
+              const html = $('html').html();
               return { html };
             }`,
             maxRequestsPerCrawl: 1,
-            maxConcurrency: 1
+            maxConcurrency: 1,
+            maxRequestRetries: 2
           })
         });
 
         if (!apifyRunResponse.ok) {
-          console.error(`[TokenCollector] ❌ Apify run failed: ${apifyRunResponse.status}`);
+          const errorText = await apifyRunResponse.text();
+          console.error(`[TokenCollector] ❌ Apify run failed: ${apifyRunResponse.status} - ${errorText}`);
           continue;
         }
 
@@ -82,13 +83,13 @@ Deno.serve(async (req) => {
         const runId = runData.data.id;
         console.log(`[TokenCollector] ⏳ Apify run started: ${runId}`);
 
-        // Poll for results (max 60 seconds)
+        // Poll for results with faster checks (Cheerio is much quicker)
         let html = '';
-        for (let i = 0; i < 30; i++) {
-          await new Promise(resolve => setTimeout(resolve, 2000));
+        for (let i = 0; i < 20; i++) {
+          await new Promise(resolve => setTimeout(resolve, 1500));
           
           const datasetResponse = await fetch(
-            `https://api.apify.com/v2/acts/apify~web-scraper/runs/${runId}/dataset/items`,
+            `https://api.apify.com/v2/acts/apify~cheerio-scraper/runs/${runId}/dataset/items`,
             { headers: { 'Authorization': `Bearer ${apifyApiKey}` } }
           );
 
@@ -103,7 +104,7 @@ Deno.serve(async (req) => {
         }
 
         if (!html) {
-          console.error(`[TokenCollector] ❌ No HTML from Apify after timeout`);
+          console.error(`[TokenCollector] ❌ No HTML from Apify after 30s timeout`);
           continue;
         }
         
