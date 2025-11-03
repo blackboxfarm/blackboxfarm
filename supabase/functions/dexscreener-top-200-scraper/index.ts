@@ -24,6 +24,8 @@ Deno.serve(async (req) => {
       rank: number;
       pageUrl: string;
       chainId: string;
+      symbol?: string;
+      name?: string;
     }> = [];
     
     const capturedAt = new Date().toISOString();
@@ -49,7 +51,9 @@ Deno.serve(async (req) => {
           address: profile.tokenAddress,
           rank: rank++,
           pageUrl: profile.url || `https://dexscreener.com/solana/${profile.tokenAddress}`,
-          chainId: 'solana'
+          chainId: 'solana',
+          symbol: profile.icon || profile.description?.split(' ')[0], // Try to extract symbol
+          name: profile.description
         });
       }
     }
@@ -73,7 +77,11 @@ Deno.serve(async (req) => {
     const rankingSnapshot = allTokens.map(token => ({
       token_mint: token.address,
       rank: token.rank,
-      captured_at: capturedAt
+      captured_at: capturedAt,
+      metadata: token.symbol || token.name ? {
+        symbol: token.symbol,
+        name: token.name
+      } : null
     }));
 
     if (rankingSnapshot.length > 0) {
