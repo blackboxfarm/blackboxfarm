@@ -101,7 +101,7 @@ Deno.serve(async (req) => {
         allTokens.push(...pageTokens);
         
         // Polite delay between pages
-        await new Promise(resolve => setTimeout(resolve, 800));
+        await new Promise(resolve => setTimeout(resolve, 2000));
         
       } catch (error) {
         console.error(`[TokenCollector] ❌ Error on page ${page.pageNum}:`, error.message);
