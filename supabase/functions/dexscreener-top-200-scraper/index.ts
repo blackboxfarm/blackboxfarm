@@ -40,27 +40,72 @@ Deno.serve(async (req) => {
     const allTokens: TokenData[] = [];
     const capturedAt = new Date().toISOString();
 
+    const apifyApiKey = Deno.env.get('APIFY_API_KEY');
+    if (!apifyApiKey) {
+      console.error('[TokenCollector] ❌ APIFY_API_KEY not found in environment');
+      throw new Error('APIFY_API_KEY required for scraping');
+    }
+
     for (const page of pages) {
       console.log(`[TokenCollector] 📄 Page ${page.pageNum}/10: Fetching ranks ${page.startRank}-${page.startRank + 99}`);
       
       try {
-        // Use agentic-browser to handle Cloudflare challenges
-        const { data: browserResult, error: browserError } = await supabase.functions.invoke('agentic-browser', {
-          body: {
-            url: page.url,
-            actions: [
-              { type: 'cloudflare_challenge' },
-              { type: 'scrape' }
-            ]
-          }
+        // Use Apify Web Scraper to bypass Cloudflare
+        console.log(`[TokenCollector] 🚀 Starting Apify scraper for ${page.url}`);
+        
+        const apifyRunResponse = await fetch('https://api.apify.com/v2/acts/apify~web-scraper/runs', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${apifyApiKey}`
+          },
+          body: JSON.stringify({
+            startUrls: [{ url: page.url }],
+            proxyConfiguration: { useApifyProxy: true },
+            pageFunction: `async function pageFunction(context) {
+              const { page } = context;
+              await page.waitForSelector('a[href*="/solana/"]', { timeout: 30000 });
+              const html = await page.content();
+              return { html };
+            }`,
+            maxRequestsPerCrawl: 1,
+            maxConcurrency: 1
+          })
         });
 
-        if (browserError || !browserResult?.success) {
-          console.error(`[TokenCollector] ❌ Browser error for ${page.url}:`, browserError?.message || 'Unknown error');
+        if (!apifyRunResponse.ok) {
+          console.error(`[TokenCollector] ❌ Apify run failed: ${apifyRunResponse.status}`);
           continue;
         }
 
-        const html = browserResult.results?.find((r: any) => r.action === 'scrape')?.html || '';
+        const runData = await apifyRunResponse.json();
+        const runId = runData.data.id;
+        console.log(`[TokenCollector] ⏳ Apify run started: ${runId}`);
+
+        // Poll for results (max 60 seconds)
+        let html = '';
+        for (let i = 0; i < 30; i++) {
+          await new Promise(resolve => setTimeout(resolve, 2000));
+          
+          const datasetResponse = await fetch(
+            `https://api.apify.com/v2/acts/apify~web-scraper/runs/${runId}/dataset/items`,
+            { headers: { 'Authorization': `Bearer ${apifyApiKey}` } }
+          );
+
+          if (datasetResponse.ok) {
+            const items = await datasetResponse.json();
+            if (items.length > 0 && items[0].html) {
+              html = items[0].html;
+              console.log(`[TokenCollector] ✅ Got HTML from Apify (${html.length} chars)`);
+              break;
+            }
+          }
+        }
+
+        if (!html) {
+          console.error(`[TokenCollector] ❌ No HTML from Apify after timeout`);
+          continue;
+        }
         
         // Extract all Solana token addresses from links
         const tokenLinkRegex = /href="\/solana\/([A-HJ-NP-Za-km-z1-9]{32,44})(?:\?|\"|&)/g;
