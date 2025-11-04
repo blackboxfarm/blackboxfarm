@@ -3,12 +3,15 @@ import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
-import { Loader2, ExternalLink } from "lucide-react";
+import { Loader2, ExternalLink, ArrowUpDown, Search } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Link } from "react-router-dom";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useMemo } from "react";
 import { toast } from "sonner";
 import { TokenImageModal } from "@/components/ui/token-image-modal";
+import { Input } from "@/components/ui/input";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Pagination, PaginationContent, PaginationItem, PaginationLink, PaginationNext, PaginationPrevious } from "@/components/ui/pagination";
 
 const getLaunchpadIcon = (launchpad?: string) => {
   if (!launchpad) return null;
@@ -37,6 +40,11 @@ interface TokenSet {
 
 export const TokenSets = () => {
   const [enriching, setEnriching] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [currentPage, setCurrentPage] = useState(1);
+  const [itemsPerPage, setItemsPerPage] = useState(25);
+  const [sortColumn, setSortColumn] = useState<'symbol' | 'name' | 'launchpad' | 'raydium_date' | 'creator_wallet' | 'discovery_source' | null>(null);
+  const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
   
   const { data: tokens, isLoading, refetch } = useQuery({
     queryKey: ['token-sets'],
@@ -163,6 +171,72 @@ export const TokenSets = () => {
     enrichTokens();
   }, [tokens, enriching, refetch]);
 
+  // Filter and sort tokens
+  const filteredAndSortedTokens = useMemo(() => {
+    if (!tokens) return [];
+
+    let filtered = tokens.filter((token) => {
+      const query = searchQuery.toLowerCase();
+      return (
+        token.token_mint.toLowerCase().includes(query) ||
+        token.symbol?.toLowerCase().includes(query) ||
+        token.name?.toLowerCase().includes(query) ||
+        token.creator_wallet?.toLowerCase().includes(query)
+      );
+    });
+
+    if (sortColumn) {
+      filtered = [...filtered].sort((a, b) => {
+        let aVal = a[sortColumn];
+        let bVal = b[sortColumn];
+
+        // Handle null/undefined values
+        if (!aVal && !bVal) return 0;
+        if (!aVal) return sortDirection === 'asc' ? 1 : -1;
+        if (!bVal) return sortDirection === 'asc' ? -1 : 1;
+
+        // String comparison
+        if (typeof aVal === 'string' && typeof bVal === 'string') {
+          return sortDirection === 'asc' 
+            ? aVal.localeCompare(bVal)
+            : bVal.localeCompare(aVal);
+        }
+
+        // Date comparison
+        if (sortColumn === 'raydium_date') {
+          const dateA = new Date(aVal as string).getTime();
+          const dateB = new Date(bVal as string).getTime();
+          return sortDirection === 'asc' ? dateA - dateB : dateB - dateA;
+        }
+
+        return 0;
+      });
+    }
+
+    return filtered;
+  }, [tokens, searchQuery, sortColumn, sortDirection]);
+
+  // Pagination
+  const totalPages = Math.ceil(filteredAndSortedTokens.length / itemsPerPage);
+  const paginatedTokens = useMemo(() => {
+    const startIndex = (currentPage - 1) * itemsPerPage;
+    return filteredAndSortedTokens.slice(startIndex, startIndex + itemsPerPage);
+  }, [filteredAndSortedTokens, currentPage, itemsPerPage]);
+
+  // Reset to page 1 when search changes
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchQuery, itemsPerPage]);
+
+  const handleSort = (column: typeof sortColumn) => {
+    if (sortColumn === column) {
+      setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc');
+    } else {
+      setSortColumn(column);
+      setSortDirection('asc');
+    }
+  };
+
   if (isLoading) {
     return (
       <div className="flex items-center justify-center p-8">
@@ -175,7 +249,7 @@ export const TokenSets = () => {
     <div className="space-y-4">
       <Card>
         <CardHeader className="p-4">
-          <div className="flex items-center justify-between">
+          <div className="flex items-center justify-between mb-4">
             <div>
               <CardTitle>Token Sets</CardTitle>
               <CardDescription>
@@ -187,6 +261,31 @@ export const TokenSets = () => {
               <div className="text-xs text-muted-foreground">Total Tokens</div>
             </div>
           </div>
+          
+          <div className="flex items-center gap-4 flex-wrap">
+            <div className="flex-1 min-w-[200px]">
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                <Input
+                  placeholder="Search by token, name, or wallet..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="pl-10"
+                />
+              </div>
+            </div>
+            <Select value={itemsPerPage.toString()} onValueChange={(val) => setItemsPerPage(Number(val))}>
+              <SelectTrigger className="w-[140px]">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="10">10 per page</SelectItem>
+                <SelectItem value="25">25 per page</SelectItem>
+                <SelectItem value="50">50 per page</SelectItem>
+                <SelectItem value="100">100 per page</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
         </CardHeader>
         <CardContent className="p-4">
           <div className="overflow-x-auto">
@@ -194,17 +293,74 @@ export const TokenSets = () => {
               <TableHeader>
                 <TableRow>
                   <TableHead className="py-2 w-10">Image</TableHead>
-                  <TableHead className="py-2 min-w-[160px]">Token</TableHead>
+                  <TableHead className="py-2 min-w-[160px]">
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-8 px-2 hover:bg-accent"
+                      onClick={() => handleSort('symbol')}
+                    >
+                      Token
+                      <ArrowUpDown className="ml-2 h-3 w-3" />
+                    </Button>
+                  </TableHead>
                   <TableHead className="py-2 min-w-[260px]">Token Address (Mint)</TableHead>
-                  <TableHead className="py-2 min-w-[80px]">Launchpad</TableHead>
-                  <TableHead className="py-2 min-w-[120px]">Raydium Date</TableHead>
-                  <TableHead className="py-2 min-w-[220px]">Creator Wallet</TableHead>
-                  <TableHead className="py-2 min-w-[100px]">Source</TableHead>
+                  <TableHead className="py-2 min-w-[80px]">
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-8 px-2 hover:bg-accent"
+                      onClick={() => handleSort('launchpad')}
+                    >
+                      Launchpad
+                      <ArrowUpDown className="ml-2 h-3 w-3" />
+                    </Button>
+                  </TableHead>
+                  <TableHead className="py-2 min-w-[120px]">
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-8 px-2 hover:bg-accent"
+                      onClick={() => handleSort('raydium_date')}
+                    >
+                      Raydium Date
+                      <ArrowUpDown className="ml-2 h-3 w-3" />
+                    </Button>
+                  </TableHead>
+                  <TableHead className="py-2 min-w-[220px]">
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-8 px-2 hover:bg-accent"
+                      onClick={() => handleSort('creator_wallet')}
+                    >
+                      Creator Wallet
+                      <ArrowUpDown className="ml-2 h-3 w-3" />
+                    </Button>
+                  </TableHead>
+                  <TableHead className="py-2 min-w-[100px]">
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-8 px-2 hover:bg-accent"
+                      onClick={() => handleSort('discovery_source')}
+                    >
+                      Source
+                      <ArrowUpDown className="ml-2 h-3 w-3" />
+                    </Button>
+                  </TableHead>
                   <TableHead className="py-2 w-16">Actions</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {tokens?.map((token) => (
+                {paginatedTokens.length === 0 ? (
+                  <TableRow>
+                    <TableCell colSpan={8} className="text-center py-8 text-muted-foreground">
+                      No tokens found matching your search.
+                    </TableCell>
+                  </TableRow>
+                ) : (
+                  paginatedTokens.map((token) => (
                   <TableRow key={token.token_mint}>
                     <TableCell className="py-2">
                       <TokenImageModal 
@@ -281,10 +437,61 @@ export const TokenSets = () => {
                       </Button>
                     </TableCell>
                   </TableRow>
-                ))}
+                  ))
+                )}
               </TableBody>
             </Table>
           </div>
+
+          {totalPages > 1 && (
+            <div className="flex items-center justify-between px-4 py-4 border-t">
+              <div className="text-sm text-muted-foreground">
+                Showing {((currentPage - 1) * itemsPerPage) + 1} to {Math.min(currentPage * itemsPerPage, filteredAndSortedTokens.length)} of {filteredAndSortedTokens.length} tokens
+              </div>
+              <Pagination>
+                <PaginationContent>
+                  <PaginationItem>
+                    <PaginationPrevious 
+                      onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                      className={currentPage === 1 ? 'pointer-events-none opacity-50' : 'cursor-pointer'}
+                    />
+                  </PaginationItem>
+                  
+                  {[...Array(Math.min(5, totalPages))].map((_, i) => {
+                    let pageNum;
+                    if (totalPages <= 5) {
+                      pageNum = i + 1;
+                    } else if (currentPage <= 3) {
+                      pageNum = i + 1;
+                    } else if (currentPage >= totalPages - 2) {
+                      pageNum = totalPages - 4 + i;
+                    } else {
+                      pageNum = currentPage - 2 + i;
+                    }
+                    
+                    return (
+                      <PaginationItem key={pageNum}>
+                        <PaginationLink
+                          onClick={() => setCurrentPage(pageNum)}
+                          isActive={currentPage === pageNum}
+                          className="cursor-pointer"
+                        >
+                          {pageNum}
+                        </PaginationLink>
+                      </PaginationItem>
+                    );
+                  })}
+
+                  <PaginationItem>
+                    <PaginationNext 
+                      onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+                      className={currentPage === totalPages ? 'pointer-events-none opacity-50' : 'cursor-pointer'}
+                    />
+                  </PaginationItem>
+                </PaginationContent>
+              </Pagination>
+            </div>
+          )}
         </CardContent>
       </Card>
     </div>
