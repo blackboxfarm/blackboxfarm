@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Link } from "react-router-dom";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
+import { TokenImageModal } from "@/components/ui/token-image-modal";
 
 interface TokenSet {
   token_mint: string;
@@ -28,29 +29,80 @@ export const TokenSets = () => {
   const { data: tokens, isLoading, refetch } = useQuery({
     queryKey: ['token-sets'],
     queryFn: async () => {
-      // Fetch from scraped_tokens with new enrichment columns
+      // Fetch from scraped_tokens
       const { data: scrapedTokens, error: scrapedError } = await supabase
         .from('scraped_tokens' as any)
         .select('token_mint, symbol, name, discovery_source, first_seen_at, creator_wallet, image_url, raydium_date, metadata_fetched_at, creator_fetched_at')
         .order('first_seen_at', { ascending: false });
 
+      // Fetch from token_lifecycle (Recently Discovered Tokens)
+      const { data: lifecycleTokens, error: lifecycleError } = await supabase
+        .from('token_lifecycle')
+        .select('token_mint, symbol, name, discovery_source, first_seen_at, image_url, pair_created_at')
+        .order('first_seen_at', { ascending: false })
+        .limit(500);
+
       if (scrapedError) {
         console.error('Error fetching scraped tokens:', scrapedError);
-        return [] as TokenSet[];
+      }
+      
+      if (lifecycleError) {
+        console.error('Error fetching lifecycle tokens:', lifecycleError);
       }
 
-      return (scrapedTokens as any[]).map((t: any) => ({
-        token_mint: t.token_mint,
-        symbol: t.symbol || undefined,
-        name: t.name || undefined,
-        creator_wallet: t.creator_wallet || undefined,
-        discovery_source: t.discovery_source || 'html_scrape',
-        first_seen_at: t.first_seen_at || new Date().toISOString(),
-        image_url: t.image_url || undefined,
-        raydium_date: t.raydium_date || undefined,
-        metadata_fetched_at: t.metadata_fetched_at || undefined,
-        creator_fetched_at: t.creator_fetched_at || undefined,
-      }));
+      // Combine both sources, removing duplicates by token_mint
+      const tokenMap = new Map<string, TokenSet>();
+
+      // Add scraped tokens first
+      (scrapedTokens || []).forEach((t: any) => {
+        tokenMap.set(t.token_mint, {
+          token_mint: t.token_mint,
+          symbol: t.symbol || undefined,
+          name: t.name || undefined,
+          creator_wallet: t.creator_wallet || undefined,
+          discovery_source: t.discovery_source || 'html_scrape',
+          first_seen_at: t.first_seen_at || new Date().toISOString(),
+          image_url: t.image_url || undefined,
+          raydium_date: t.raydium_date || undefined,
+          metadata_fetched_at: t.metadata_fetched_at || undefined,
+          creator_fetched_at: t.creator_fetched_at || undefined,
+        });
+      });
+
+      // Merge lifecycle tokens, filling in missing data
+      (lifecycleTokens || []).forEach((t: any) => {
+        const existing = tokenMap.get(t.token_mint);
+        if (existing) {
+          // Merge data, preferring non-null values
+          tokenMap.set(t.token_mint, {
+            ...existing,
+            symbol: existing.symbol || t.symbol,
+            name: existing.name || t.name,
+            image_url: existing.image_url || t.image_url,
+            raydium_date: existing.raydium_date || t.pair_created_at,
+            discovery_source: existing.discovery_source || t.discovery_source,
+          });
+        } else {
+          // Add new token from lifecycle
+          tokenMap.set(t.token_mint, {
+            token_mint: t.token_mint,
+            symbol: t.symbol || undefined,
+            name: t.name || undefined,
+            creator_wallet: undefined,
+            discovery_source: t.discovery_source || 'dex_compile',
+            first_seen_at: t.first_seen_at || new Date().toISOString(),
+            image_url: t.image_url || undefined,
+            raydium_date: t.pair_created_at || undefined,
+            metadata_fetched_at: undefined,
+            creator_fetched_at: undefined,
+          });
+        }
+      });
+
+      // Convert map to sorted array
+      return Array.from(tokenMap.values()).sort((a, b) => 
+        new Date(b.first_seen_at).getTime() - new Date(a.first_seen_at).getTime()
+      );
     }
   });
 
@@ -139,22 +191,12 @@ export const TokenSets = () => {
                 {tokens?.map((token) => (
                   <TableRow key={token.token_mint}>
                     <TableCell className="py-2">
-                      {token.image_url ? (
-                        <img 
-                          src={token.image_url} 
-                          alt={token.symbol || 'Token'} 
-                          className="w-8 h-8 rounded-full object-cover border border-border"
-                          onError={(e) => {
-                            const target = e.currentTarget as HTMLImageElement;
-                            target.style.display = 'none';
-                            const placeholder = target.nextElementSibling as HTMLElement;
-                            if (placeholder) placeholder.style.display = 'flex';
-                          }}
-                        />
-                      ) : null}
-                      <div className="w-8 h-8 rounded-full bg-muted flex items-center justify-center" style={{ display: token.image_url ? 'none' : 'flex' }}>
-                        <span className="text-xs text-muted-foreground">?</span>
-                      </div>
+                      <TokenImageModal 
+                        imageUrl={token.image_url}
+                        tokenSymbol={token.symbol}
+                        tokenName={token.name}
+                        tokenMint={token.token_mint}
+                      />
                     </TableCell>
                     <TableCell className="py-2">
                       <div className="flex flex-col">

@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { RefreshCw, TrendingUp, Flame, Clock, Database } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
+import { TokenImageModal } from "@/components/ui/token-image-modal";
 
 interface TokenLifecycle {
   token_mint: string;
@@ -147,9 +148,13 @@ export function DexCompilesView() {
     <TableRow key={token.token_mint}>
       <TableCell>
         <div className="flex items-center gap-2">
-          {token.image_url && (
-            <img src={token.image_url} alt={token.symbol || ''} className="w-6 h-6 rounded-full" />
-          )}
+          <TokenImageModal 
+            imageUrl={token.image_url}
+            tokenSymbol={token.symbol}
+            tokenName={token.name}
+            tokenMint={token.token_mint}
+            thumbnailClassName="w-6 h-6"
+          />
           <div className="flex flex-col">
             <span className="font-medium text-base">{formatSymbol(token)}</span>
             <span className="text-xs text-muted-foreground">
