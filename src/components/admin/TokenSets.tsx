@@ -21,15 +21,15 @@ export const TokenSets = () => {
   const { data: tokens, isLoading } = useQuery({
     queryKey: ['token-sets'],
     queryFn: async () => {
-      // Fetch from scraped_tokens
+      // Fetch from scraped_tokens (columns: id, token_mint, symbol, name, creator_wallet, discovery_source, first_seen_at)
       const { data: scrapedTokens, error: scrapedError } = await supabase
         .from('scraped_tokens' as any)
-        .select('token_mint, symbol, name, discovery_source, first_seen_at, creator_wallet, image_url, raydium_date')
+        .select('token_mint, symbol, name, discovery_source, first_seen_at, creator_wallet')
         .order('first_seen_at', { ascending: false });
 
       if (scrapedError) {
         console.error('Error fetching scraped tokens:', scrapedError);
-        return [];
+        return [] as TokenSet[];
       }
 
       return (scrapedTokens as any[]).map((t: any) => ({
@@ -39,8 +39,9 @@ export const TokenSets = () => {
         creator_wallet: t.creator_wallet || undefined,
         discovery_source: t.discovery_source || 'html_scrape',
         first_seen_at: t.first_seen_at || new Date().toISOString(),
-        image_url: t.image_url || undefined,
-        raydium_date: t.raydium_date || undefined
+        // Optional fields left undefined when not available in table
+        image_url: undefined,
+        raydium_date: undefined,
       }));
     }
   });
