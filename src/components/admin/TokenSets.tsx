@@ -127,10 +127,10 @@ export const TokenSets = () => {
               <TableHeader>
                 <TableRow>
                   <TableHead className="py-2 w-10">Image</TableHead>
-                  <TableHead className="py-2 min-w-[140px]">Token</TableHead>
-                  <TableHead className="py-2 min-w-[100px]">Raydium Date</TableHead>
+                  <TableHead className="py-2 min-w-[160px]">Token</TableHead>
+                  <TableHead className="py-2 min-w-[260px]">Token Address (Mint)</TableHead>
+                  <TableHead className="py-2 min-w-[120px]">Raydium Date</TableHead>
                   <TableHead className="py-2 min-w-[220px]">Creator Wallet</TableHead>
-                  <TableHead className="py-2 min-w-[240px]">Token Address (Mint)</TableHead>
                   <TableHead className="py-2 min-w-[100px]">Source</TableHead>
                   <TableHead className="py-2 w-16">Actions</TableHead>
                 </TableRow>
@@ -143,25 +143,30 @@ export const TokenSets = () => {
                         <img 
                           src={token.image_url} 
                           alt={token.symbol || 'Token'} 
-                          className="w-6 h-6 rounded-full object-cover"
+                          className="w-8 h-8 rounded-full object-cover border border-border"
                           onError={(e) => {
-                            e.currentTarget.style.display = 'none';
+                            const target = e.currentTarget as HTMLImageElement;
+                            target.style.display = 'none';
+                            const placeholder = target.nextElementSibling as HTMLElement;
+                            if (placeholder) placeholder.style.display = 'flex';
                           }}
                         />
-                      ) : (
-                        <div className="w-6 h-6 rounded-full bg-muted flex items-center justify-center">
-                          <span className="text-xs text-muted-foreground">?</span>
-                        </div>
-                      )}
-                    </TableCell>
-                    <TableCell className="py-2">
-                      <div className="flex flex-col">
-                        <span className="font-medium text-sm">${token.symbol || 'No Symbol'}</span>
-                        <span className="text-xs text-muted-foreground">{token.name || '-'}</span>
+                      ) : null}
+                      <div className="w-8 h-8 rounded-full bg-muted flex items-center justify-center" style={{ display: token.image_url ? 'none' : 'flex' }}>
+                        <span className="text-xs text-muted-foreground">?</span>
                       </div>
                     </TableCell>
                     <TableCell className="py-2">
-                      <span className="text-xs">
+                      <div className="flex flex-col">
+                        <span className="font-medium text-sm">${token.symbol || 'Unknown'}</span>
+                        <span className="text-xs text-muted-foreground truncate max-w-[150px]">{token.name || 'No name'}</span>
+                      </div>
+                    </TableCell>
+                    <TableCell className="py-2">
+                      <code className="text-xs block max-w-[260px] truncate" title={token.token_mint}>{token.token_mint}</code>
+                    </TableCell>
+                    <TableCell className="py-2">
+                      <span className="text-xs whitespace-nowrap">
                         {token.raydium_date 
                           ? new Date(token.raydium_date).toLocaleDateString('en-US', { 
                               month: 'short', 
@@ -180,12 +185,9 @@ export const TokenSets = () => {
                             </code>
                           </Link>
                         ) : (
-                          <span className="text-xs text-muted-foreground">Pending...</span>
+                          <span className="text-xs text-muted-foreground">Enriching...</span>
                         )}
                       </div>
-                    </TableCell>
-                    <TableCell className="py-2">
-                      <code className="text-xs block max-w-[240px] truncate" title={token.token_mint}>{token.token_mint}</code>
                     </TableCell>
                     <TableCell className="py-2">
                       <Badge variant="outline" className="text-xs">{token.discovery_source}</Badge>
