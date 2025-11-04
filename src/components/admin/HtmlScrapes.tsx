@@ -45,27 +45,36 @@ export const HtmlScrapes = () => {
   const extractTokensFromHtml = (html: string) => {
     const tokens: Array<{ mint: string; symbol?: string; name?: string }> = [];
     
-    // Parse HTML and extract token data
+    // Parse HTML and extract token data from DexScreener format
     const parser = new DOMParser();
     const doc = parser.parseFromString(html, 'text/html');
     
-    // Find all token rows - adjust selectors based on actual HTML structure
-    const tokenElements = doc.querySelectorAll('[data-testid*="token"], .token-row, tr');
+    // Find all DexScreener table rows
+    const tokenRows = doc.querySelectorAll('a.ds-dex-table-row');
     
-    tokenElements.forEach((element) => {
-      const text = element.textContent || '';
+    tokenRows.forEach((row) => {
+      // Extract mint address from href="/solana/{token_mint}"
+      const href = row.getAttribute('href');
+      if (!href || !href.startsWith('/solana/')) return;
       
-      // Solana addresses are base58 encoded, 32-44 characters
-      const addressMatch = text.match(/[1-9A-HJ-NP-Za-km-z]{32,44}/g);
+      const mint = href.replace('/solana/', '');
       
-      if (addressMatch) {
-        addressMatch.forEach(mint => {
-          // Basic validation for Solana address format
-          if (mint.length >= 32 && mint.length <= 44) {
-            tokens.push({ mint });
-          }
-        });
-      }
+      // Validate Solana address format (base58, 32-44 characters)
+      if (mint.length < 32 || mint.length > 44) return;
+      
+      // Extract symbol
+      const symbolElement = row.querySelector('.ds-dex-table-row-base-token-symbol');
+      const symbol = symbolElement?.textContent?.trim();
+      
+      // Extract name
+      const nameElement = row.querySelector('.ds-dex-table-row-base-token-name-text');
+      const name = nameElement?.textContent?.trim();
+      
+      tokens.push({ 
+        mint, 
+        symbol: symbol || undefined,
+        name: name || undefined
+      });
     });
     
     return tokens;
