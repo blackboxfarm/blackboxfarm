@@ -141,32 +141,20 @@ export function DexCompilesView() {
             <img src={token.image_url} alt={token.symbol || ''} className="w-6 h-6 rounded-full" />
           )}
           <div className="flex flex-col">
-            <span className="font-medium">{token.symbol || 'Unknown'}</span>
-            <span className="text-xs text-muted-foreground truncate max-w-[200px]">
-              {token.name || token.token_mint.slice(0, 8)}
+            <span className="font-medium text-base">{token.symbol || 'No Symbol'}</span>
+            <span className="text-xs text-muted-foreground">
+              {token.name || '-'}
             </span>
           </div>
         </div>
       </TableCell>
-      <TableCell>{formatNumber(token.liquidity_usd)}</TableCell>
-      <TableCell>{formatNumber(token.volume_24h)}</TableCell>
-      <TableCell>{formatNumber(token.market_cap)}</TableCell>
-      <TableCell>{token.price_usd ? `$${parseFloat(token.price_usd.toString()).toFixed(6)}` : '-'}</TableCell>
       <TableCell>
-        <Badge variant="outline">{token.dex_id || 'Unknown'}</Badge>
+        <code className="text-xs">{token.token_mint}</code>
       </TableCell>
-      <TableCell>
-        {token.active_boosts ? (
-          <Badge className="flex items-center gap-1">
-            <Flame className="h-3 w-3" />
-            {token.active_boosts}
-          </Badge>
-        ) : '-'}
+      <TableCell className="text-xs text-muted-foreground">
+        {token.first_seen_at ? formatDistanceToNow(new Date(token.first_seen_at), { addSuffix: true }) : '-'}
       </TableCell>
       <TableCell>{getSourceBadge(token.discovery_source)}</TableCell>
-      <TableCell className="text-xs text-muted-foreground">
-        {token.pair_created_at ? formatDistanceToNow(new Date(token.pair_created_at), { addSuffix: true }) : '-'}
-      </TableCell>
     </TableRow>
   );
 
@@ -242,14 +230,9 @@ export function DexCompilesView() {
                     <TableHeader>
                       <TableRow>
                         <TableHead>Token</TableHead>
-                        <TableHead>Liquidity</TableHead>
-                        <TableHead>Volume 24h</TableHead>
-                        <TableHead>Market Cap</TableHead>
-                        <TableHead>Price</TableHead>
-                        <TableHead>DEX</TableHead>
-                        <TableHead>Boosts</TableHead>
+                        <TableHead>Token Address (Mint)</TableHead>
+                        <TableHead>First Seen</TableHead>
                         <TableHead>Source</TableHead>
-                        <TableHead>Launched</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
@@ -276,14 +259,9 @@ export function DexCompilesView() {
                     <TableHeader>
                       <TableRow>
                         <TableHead>Token</TableHead>
-                        <TableHead>Liquidity</TableHead>
-                        <TableHead>Volume 24h</TableHead>
-                        <TableHead>Market Cap</TableHead>
-                        <TableHead>Price</TableHead>
-                        <TableHead>DEX</TableHead>
-                        <TableHead>Boosts</TableHead>
+                        <TableHead>Token Address (Mint)</TableHead>
+                        <TableHead>First Seen</TableHead>
                         <TableHead>Source</TableHead>
-                        <TableHead>Launched</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
@@ -310,14 +288,9 @@ export function DexCompilesView() {
                     <TableHeader>
                       <TableRow>
                         <TableHead>Token</TableHead>
-                        <TableHead>Liquidity</TableHead>
-                        <TableHead>Volume 24h</TableHead>
-                        <TableHead>Market Cap</TableHead>
-                        <TableHead>Price</TableHead>
-                        <TableHead>DEX</TableHead>
-                        <TableHead>Boosts</TableHead>
+                        <TableHead>Token Address (Mint)</TableHead>
+                        <TableHead>First Seen</TableHead>
                         <TableHead>Source</TableHead>
-                        <TableHead>Launched</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
