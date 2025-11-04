@@ -78,16 +78,16 @@ export const TokenSets = () => {
           </div>
         </CardHeader>
         <CardContent className="p-4">
-          <div className="rounded-md border">
+          <div className="overflow-x-auto">
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead className="py-2 w-12">Image</TableHead>
-                  <TableHead className="py-2 w-40">Token</TableHead>
-                  <TableHead className="py-2 w-32">Raydium Date</TableHead>
-                  <TableHead className="py-2">Token Address (Mint)</TableHead>
-                  <TableHead className="py-2">Creator Wallet</TableHead>
-                  <TableHead className="py-2 w-24">Source</TableHead>
+                  <TableHead className="py-2 w-10">Image</TableHead>
+                  <TableHead className="py-2 min-w-[140px]">Token</TableHead>
+                  <TableHead className="py-2 min-w-[100px]">Raydium Date</TableHead>
+                  <TableHead className="py-2 min-w-[280px]">Token Address (Mint)</TableHead>
+                  <TableHead className="py-2 min-w-[280px]">Creator Wallet</TableHead>
+                  <TableHead className="py-2 min-w-[100px]">Source</TableHead>
                   <TableHead className="py-2 w-16">Actions</TableHead>
                 </TableRow>
               </TableHeader>
