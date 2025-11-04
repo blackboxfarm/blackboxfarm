@@ -25,8 +25,7 @@ export const AnalysisJobs = () => {
         .limit(50);
       if (error) throw error;
       return data;
-    },
-    refetchInterval: 5000, // Auto-refresh every 5 seconds
+    }
   });
 
   const startDiscoveryJob = async () => {

@@ -21,8 +21,7 @@ export const TokenWatchdog = () => {
         .limit(100);
       if (error) throw error;
       return data;
-    },
-    refetchInterval: 10000, // Auto-refresh every 10 seconds
+    }
   });
 
   const triggerDiscoveryForPending = async () => {

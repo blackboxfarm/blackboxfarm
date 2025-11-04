@@ -40,8 +40,7 @@ export function DexCompilesView() {
       
       if (error) throw error;
       return data as TokenLifecycle[];
-    },
-    refetchInterval: 60000 // Refresh every minute
+    }
   });
 
   // Fetch recently discovered tokens
@@ -56,8 +55,7 @@ export function DexCompilesView() {
       
       if (error) throw error;
       return data as TokenLifecycle[];
-    },
-    refetchInterval: 30000 // Refresh every 30 seconds
+    }
   });
 
   // Fetch boosted tokens
@@ -73,8 +71,7 @@ export function DexCompilesView() {
       
       if (error) throw error;
       return data as TokenLifecycle[];
-    },
-    refetchInterval: 60000
+    }
   });
 
   // Fetch stats
@@ -94,8 +91,7 @@ export function DexCompilesView() {
         last24h: recentResult.count || 0,
         boosted: boostedResult.count || 0
       };
-    },
-    refetchInterval: 60000
+    }
   });
 
   const runCollector = async () => {

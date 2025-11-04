@@ -33,8 +33,7 @@ export const DeveloperAlerts = () => {
         metadata: Record<string, any>;
         created_at: string;
       }>;
-    },
-    refetchInterval: 30000 // Refresh every 30 seconds
+    }
   });
 
   const getRiskBadge = (riskLevel: string) => {
