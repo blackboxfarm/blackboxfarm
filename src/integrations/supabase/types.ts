@@ -2313,49 +2313,91 @@ export type Database = {
       }
       token_lifecycle: {
         Row: {
+          active_boosts: number | null
           created_at: string | null
           creator_wallet: string | null
           current_status: string | null
           developer_id: string | null
+          dex_id: string | null
+          discovery_source: string | null
+          fdv: number | null
           first_seen_at: string
           highest_rank: number | null
+          image_url: string | null
+          last_fetched_at: string | null
           last_seen_at: string
+          liquidity_usd: number | null
           lowest_rank: number | null
+          market_cap: number | null
           metadata: Json | null
+          name: string | null
+          pair_address: string | null
+          pair_created_at: string | null
+          price_usd: number | null
+          symbol: string | null
           times_entered_top_200: number | null
           token_mint: string
           total_hours_in_top_200: number | null
           updated_at: string | null
+          volume_24h: number | null
         }
         Insert: {
+          active_boosts?: number | null
           created_at?: string | null
           creator_wallet?: string | null
           current_status?: string | null
           developer_id?: string | null
+          dex_id?: string | null
+          discovery_source?: string | null
+          fdv?: number | null
           first_seen_at: string
           highest_rank?: number | null
+          image_url?: string | null
+          last_fetched_at?: string | null
           last_seen_at: string
+          liquidity_usd?: number | null
           lowest_rank?: number | null
+          market_cap?: number | null
           metadata?: Json | null
+          name?: string | null
+          pair_address?: string | null
+          pair_created_at?: string | null
+          price_usd?: number | null
+          symbol?: string | null
           times_entered_top_200?: number | null
           token_mint: string
           total_hours_in_top_200?: number | null
           updated_at?: string | null
+          volume_24h?: number | null
         }
         Update: {
+          active_boosts?: number | null
           created_at?: string | null
           creator_wallet?: string | null
           current_status?: string | null
           developer_id?: string | null
+          dex_id?: string | null
+          discovery_source?: string | null
+          fdv?: number | null
           first_seen_at?: string
           highest_rank?: number | null
+          image_url?: string | null
+          last_fetched_at?: string | null
           last_seen_at?: string
+          liquidity_usd?: number | null
           lowest_rank?: number | null
+          market_cap?: number | null
           metadata?: Json | null
+          name?: string | null
+          pair_address?: string | null
+          pair_created_at?: string | null
+          price_usd?: number | null
+          symbol?: string | null
           times_entered_top_200?: number | null
           token_mint?: string
           total_hours_in_top_200?: number | null
           updated_at?: string | null
+          volume_24h?: number | null
         }
         Relationships: [
           {

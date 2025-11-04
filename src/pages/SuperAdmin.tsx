@@ -14,6 +14,7 @@ import { DeveloperAlerts } from "@/components/admin/DeveloperAlerts";
 import { BannerManagement } from "@/components/admin/BannerManagement";
 import { SurveyManagement } from "@/components/admin/SurveyManagement";
 import { TokenGenealogyDashboard } from "@/components/admin/TokenGenealogyDashboard";
+import { DexCompilesView } from "@/components/admin/DexCompilesView";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import TransactionHistoryWindow from "@/components/blackbox/TransactionHistoryWindow";
@@ -102,6 +103,7 @@ export default function SuperAdmin() {
             <TabsTrigger value="alerts" className="flex-shrink-0 data-[state=active]:bg-primary/20 data-[state=inactive]:bg-primary/5">Dev Alerts</TabsTrigger>
             <TabsTrigger value="testing" className="flex-shrink-0 data-[state=active]:bg-primary/20 data-[state=inactive]:bg-primary/5">System Tests</TabsTrigger>
             <TabsTrigger value="genealogy" className="flex-shrink-0 data-[state=active]:bg-gradient-to-r data-[state=active]:from-primary/30 data-[state=active]:to-primary/20">Token Genealogy</TabsTrigger>
+            <TabsTrigger value="dex-compiles" className="flex-shrink-0 data-[state=active]:bg-gradient-to-r data-[state=active]:from-emerald-500/30 data-[state=active]:to-emerald-500/20">Dex Compiles</TabsTrigger>
             <TabsTrigger value="banners" className="flex-shrink-0">Banners</TabsTrigger>
             <TabsTrigger value="surveys" className="flex-shrink-0">Surveys</TabsTrigger>
           </TabsList>
@@ -160,6 +162,10 @@ export default function SuperAdmin() {
 
           <TabsContent value="genealogy">
             <TokenGenealogyDashboard />
+          </TabsContent>
+
+          <TabsContent value="dex-compiles">
+            <DexCompilesView />
           </TabsContent>
 
           <TabsContent value="banners">
