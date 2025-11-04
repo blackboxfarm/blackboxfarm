@@ -1,15 +1,46 @@
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
-import { Upload } from "lucide-react";
+import { Upload, FileUp } from "lucide-react";
+import { Input } from "@/components/ui/input";
 
 export const HtmlScrapes = () => {
   const [htmlContent, setHtmlContent] = useState("");
   const [isProcessing, setIsProcessing] = useState(false);
   const { toast } = useToast();
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    if (!file.name.endsWith('.html')) {
+      toast({
+        title: "Invalid file",
+        description: "Please upload an HTML file",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    try {
+      const text = await file.text();
+      setHtmlContent(text);
+      toast({
+        title: "File loaded",
+        description: `Loaded ${file.name} successfully`,
+      });
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: "Failed to read file",
+        variant: "destructive"
+      });
+    }
+  };
 
   const extractTokensFromHtml = (html: string) => {
     const tokens: Array<{ mint: string; symbol?: string; name?: string }> = [];
@@ -109,20 +140,37 @@ export const HtmlScrapes = () => {
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
+          <div className="flex gap-2">
+            <Input
+              ref={fileInputRef}
+              type="file"
+              accept=".html"
+              onChange={handleFileUpload}
+              className="hidden"
+            />
+            <Button 
+              onClick={() => fileInputRef.current?.click()}
+              variant="outline"
+              className="flex-1"
+            >
+              <FileUp className="mr-2 h-4 w-4" />
+              Upload HTML File
+            </Button>
+            <Button 
+              onClick={handleScrape} 
+              disabled={isProcessing || !htmlContent.trim()}
+              className="flex-1"
+            >
+              <Upload className="mr-2 h-4 w-4" />
+              {isProcessing ? "Processing..." : "Extract & Save Tokens"}
+            </Button>
+          </div>
           <Textarea
-            placeholder="Paste HTML content from DexScreener page here..."
+            placeholder="Paste HTML content from DexScreener page here or upload an HTML file..."
             value={htmlContent}
             onChange={(e) => setHtmlContent(e.target.value)}
             className="min-h-[400px] font-mono text-xs"
           />
-          <Button 
-            onClick={handleScrape} 
-            disabled={isProcessing || !htmlContent.trim()}
-            className="w-full"
-          >
-            <Upload className="mr-2 h-4 w-4" />
-            {isProcessing ? "Processing..." : "Extract & Save Tokens"}
-          </Button>
         </CardContent>
       </Card>
     </div>
