@@ -81,58 +81,72 @@ export const TokenSets = () => {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
       <Card>
-        <CardHeader>
-          <CardTitle>Token Sets</CardTitle>
-          <CardDescription>
-            Combined list of tokens from Dex Compiles and HTML Scrapes
-          </CardDescription>
+        <CardHeader className="p-4">
+          <div className="flex items-center justify-between">
+            <div>
+              <CardTitle>Token Sets</CardTitle>
+              <CardDescription>
+                Combined list of tokens from Dex Compiles and HTML Scrapes
+              </CardDescription>
+            </div>
+            <div className="text-right">
+              <div className="text-2xl font-bold">{tokens?.length || 0}</div>
+              <div className="text-xs text-muted-foreground">Total Tokens</div>
+            </div>
+          </div>
         </CardHeader>
-        <CardContent>
+        <CardContent className="p-4">
           <div className="rounded-md border">
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Token</TableHead>
-                  <TableHead>Token Address (Mint)</TableHead>
-                  <TableHead>Creator Wallet</TableHead>
-                  <TableHead>Source</TableHead>
-                  <TableHead>Actions</TableHead>
+                  <TableHead className="py-2">Token</TableHead>
+                  <TableHead className="py-2">Token Address (Mint)</TableHead>
+                  <TableHead className="py-2">Creator Wallet</TableHead>
+                  <TableHead className="py-2">Creator/Developer Wallet</TableHead>
+                  <TableHead className="py-2">Source</TableHead>
+                  <TableHead className="py-2">Actions</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {tokens?.map((token) => (
                   <TableRow key={token.token_mint}>
-                    <TableCell>
+                    <TableCell className="py-2">
                       <div className="flex flex-col">
-                        <span className="font-medium">{token.symbol || 'No Symbol'}</span>
+                        <span className="font-medium text-sm">{token.symbol || 'No Symbol'}</span>
                         <span className="text-xs text-muted-foreground">{token.name || '-'}</span>
                       </div>
                     </TableCell>
-                    <TableCell>
+                    <TableCell className="py-2">
                       <code className="text-xs">{token.token_mint}</code>
                     </TableCell>
-                    <TableCell>
+                    <TableCell className="py-2">
                       {token.creator_wallet ? (
                         <code className="text-xs">{token.creator_wallet}</code>
                       ) : (
                         <Button 
                           variant="outline" 
                           size="sm"
+                          className="h-7 text-xs"
                           onClick={() => fetchCreatorWallet(token.token_mint)}
                         >
                           Fetch from Solscan
                         </Button>
                       )}
                     </TableCell>
-                    <TableCell>
-                      <Badge variant="outline">{token.discovery_source}</Badge>
+                    <TableCell className="py-2">
+                      <span className="text-xs text-muted-foreground">Placeholder</span>
                     </TableCell>
-                    <TableCell>
+                    <TableCell className="py-2">
+                      <Badge variant="outline" className="text-xs">{token.discovery_source}</Badge>
+                    </TableCell>
+                    <TableCell className="py-2">
                       <Button
                         variant="ghost"
                         size="sm"
+                        className="h-7 w-7 p-0"
                         asChild
                       >
                         <a 
@@ -140,7 +154,7 @@ export const TokenSets = () => {
                           target="_blank"
                           rel="noopener noreferrer"
                         >
-                          <ExternalLink className="h-4 w-4" />
+                          <ExternalLink className="h-3 w-3" />
                         </a>
                       </Button>
                     </TableCell>
