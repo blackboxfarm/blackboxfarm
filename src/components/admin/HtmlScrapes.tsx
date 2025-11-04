@@ -17,21 +17,12 @@ export const HtmlScrapes = () => {
     const file = event.target.files?.[0];
     if (!file) return;
 
-    if (!file.name.endsWith('.html')) {
-      toast({
-        title: "Invalid file",
-        description: "Please upload an HTML file",
-        variant: "destructive"
-      });
-      return;
-    }
-
     try {
       const text = await file.text();
       setHtmlContent(text);
       toast({
         title: "File loaded",
-        description: `Loaded ${file.name} successfully`,
+        description: `Loaded ${file.name}`,
       });
     } catch (error) {
       toast({
@@ -153,7 +144,6 @@ export const HtmlScrapes = () => {
             <Input
               ref={fileInputRef}
               type="file"
-              accept=".html"
               onChange={handleFileUpload}
               className="hidden"
             />
