@@ -25,7 +25,19 @@ interface TokenLifecycle {
   first_seen_at?: string;
   last_fetched_at?: string;
   dex_id?: string;
+  launchpad?: string;
 }
+
+const getLaunchpadIcon = (launchpad?: string) => {
+  if (!launchpad) return null;
+  const icons: Record<string, string> = {
+    'pump.fun': '/launchpad-logos/pumpfun.png',
+    'bonk.fun': '/launchpad-logos/bonkfun.png',
+    'bags.fm': '/launchpad-logos/bagsfm.png',
+    'raydium': '/launchpad-logos/raydium.png',
+  };
+  return icons[launchpad.toLowerCase()] || null;
+};
 
 export function DexCompilesView() {
   // Fetch top 500 by liquidity
@@ -166,6 +178,20 @@ export function DexCompilesView() {
       <TableCell>
         <code className="text-xs">{token.token_mint}</code>
       </TableCell>
+      <TableCell>
+        {token.launchpad && getLaunchpadIcon(token.launchpad) ? (
+          <div className="flex items-center gap-2">
+            <img 
+              src={getLaunchpadIcon(token.launchpad)} 
+              alt={token.launchpad} 
+              className="w-5 h-5 object-contain"
+            />
+            <span className="text-xs">{token.launchpad}</span>
+          </div>
+        ) : (
+          <span className="text-xs text-muted-foreground">-</span>
+        )}
+      </TableCell>
       <TableCell className="text-xs text-muted-foreground">
         {token.first_seen_at ? formatDistanceToNow(new Date(token.first_seen_at), { addSuffix: true }) : '-'}
       </TableCell>
@@ -246,6 +272,7 @@ export function DexCompilesView() {
                       <TableRow>
                         <TableHead>Token</TableHead>
                         <TableHead>Token Address (Mint)</TableHead>
+                        <TableHead>Launchpad</TableHead>
                         <TableHead>First Seen</TableHead>
                         <TableHead>Source</TableHead>
                       </TableRow>
@@ -275,6 +302,7 @@ export function DexCompilesView() {
                       <TableRow>
                         <TableHead>Token</TableHead>
                         <TableHead>Token Address (Mint)</TableHead>
+                        <TableHead>Launchpad</TableHead>
                         <TableHead>First Seen</TableHead>
                         <TableHead>Source</TableHead>
                       </TableRow>
@@ -304,6 +332,7 @@ export function DexCompilesView() {
                       <TableRow>
                         <TableHead>Token</TableHead>
                         <TableHead>Token Address (Mint)</TableHead>
+                        <TableHead>Launchpad</TableHead>
                         <TableHead>First Seen</TableHead>
                         <TableHead>Source</TableHead>
                       </TableRow>

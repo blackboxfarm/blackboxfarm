@@ -7,6 +7,31 @@ const corsHeaders = {
 
 const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
+// Detect launchpad based on token mint and DEX data
+const detectLaunchpad = (tokenMint: string, pairData: any): string | null => {
+  // Check for pump.fun pattern (typically starts with 'pump' in URL or specific indicators)
+  if (pairData?.url?.includes('pump.fun') || pairData?.info?.websites?.some((w: any) => w.url?.includes('pump.fun'))) {
+    return 'pump.fun';
+  }
+  
+  // Check for bonk.fun
+  if (pairData?.url?.includes('bonk.fun') || pairData?.info?.websites?.some((w: any) => w.url?.includes('bonk.fun'))) {
+    return 'bonk.fun';
+  }
+  
+  // Check for bags.fm
+  if (pairData?.url?.includes('bags.fm') || pairData?.info?.websites?.some((w: any) => w.url?.includes('bags.fm'))) {
+    return 'bags.fm';
+  }
+  
+  // Check based on DEX ID
+  if (pairData?.dexId === 'raydium') {
+    return 'raydium';
+  }
+  
+  return null;
+};
+
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
@@ -79,6 +104,13 @@ Deno.serve(async (req) => {
                 if (pair.pairCreatedAt) {
                   updates.raydium_date = new Date(pair.pairCreatedAt).toISOString();
                 }
+                
+                // Detect launchpad
+                const launchpad = detectLaunchpad(token.token_mint, pair);
+                if (launchpad) {
+                  updates.launchpad = launchpad;
+                }
+                
                 updates.metadata_fetched_at = new Date().toISOString();
                 needsUpdate = true;
               }

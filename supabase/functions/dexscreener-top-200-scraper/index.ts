@@ -20,7 +20,25 @@ interface TokenData {
   activeBoosts?: number;
   imageUrl?: string;
   discoverySource: string;
+  launchpad?: string;
 }
+
+// Detect launchpad based on pair data
+const detectLaunchpad = (pair: any): string | null => {
+  if (pair?.url?.includes('pump.fun') || pair?.info?.websites?.some((w: any) => w.url?.includes('pump.fun'))) {
+    return 'pump.fun';
+  }
+  if (pair?.url?.includes('bonk.fun') || pair?.info?.websites?.some((w: any) => w.url?.includes('bonk.fun'))) {
+    return 'bonk.fun';
+  }
+  if (pair?.url?.includes('bags.fm') || pair?.info?.websites?.some((w: any) => w.url?.includes('bags.fm'))) {
+    return 'bags.fm';
+  }
+  if (pair?.dexId === 'raydium') {
+    return 'raydium';
+  }
+  return null;
+};
 
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {
@@ -168,6 +186,7 @@ Deno.serve(async (req) => {
                   tokenData.priceUsd = tokenData.priceUsd || parseFloat(bestPair.priceUsd);
                   tokenData.pairCreatedAt = tokenData.pairCreatedAt || (bestPair.pairCreatedAt ? new Date(bestPair.pairCreatedAt).toISOString() : undefined);
                   tokenData.imageUrl = tokenData.imageUrl || bestPair.info?.imageUrl;
+                  tokenData.launchpad = tokenData.launchpad || detectLaunchpad(bestPair);
                 }
               }
             }
@@ -219,6 +238,7 @@ Deno.serve(async (req) => {
         active_boosts: token.activeBoosts || 0,
         image_url: token.imageUrl,
         discovery_source: token.discoverySource,
+        launchpad: token.launchpad,
         first_seen_at: capturedAt,
         last_seen_at: capturedAt,
         last_fetched_at: capturedAt,
@@ -259,6 +279,7 @@ Deno.serve(async (req) => {
         if (token.pairCreatedAt) updateData.pair_created_at = token.pairCreatedAt;
         if (token.activeBoosts !== undefined) updateData.active_boosts = token.activeBoosts;
         if (token.imageUrl) updateData.image_url = token.imageUrl;
+        if (token.launchpad) updateData.launchpad = token.launchpad;
         
         const { error: updateError } = await supabase
           .from('token_lifecycle')

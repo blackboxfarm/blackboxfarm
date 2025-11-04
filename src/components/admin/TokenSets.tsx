@@ -10,6 +10,17 @@ import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { TokenImageModal } from "@/components/ui/token-image-modal";
 
+const getLaunchpadIcon = (launchpad?: string) => {
+  if (!launchpad) return null;
+  const icons: Record<string, string> = {
+    'pump.fun': '/launchpad-logos/pumpfun.png',
+    'bonk.fun': '/launchpad-logos/bonkfun.png',
+    'bags.fm': '/launchpad-logos/bagsfm.png',
+    'raydium': '/launchpad-logos/raydium.png',
+  };
+  return icons[launchpad.toLowerCase()] || null;
+};
+
 interface TokenSet {
   token_mint: string;
   symbol?: string;
@@ -21,6 +32,7 @@ interface TokenSet {
   raydium_date?: string;
   metadata_fetched_at?: string;
   creator_fetched_at?: string;
+  launchpad?: string;
 }
 
 export const TokenSets = () => {
@@ -32,13 +44,13 @@ export const TokenSets = () => {
       // Fetch from scraped_tokens
       const { data: scrapedTokens, error: scrapedError } = await supabase
         .from('scraped_tokens' as any)
-        .select('token_mint, symbol, name, discovery_source, first_seen_at, creator_wallet, image_url, raydium_date, metadata_fetched_at, creator_fetched_at')
+        .select('token_mint, symbol, name, discovery_source, first_seen_at, creator_wallet, image_url, raydium_date, metadata_fetched_at, creator_fetched_at, launchpad')
         .order('first_seen_at', { ascending: false });
 
       // Fetch from token_lifecycle (Recently Discovered Tokens)
       const { data: lifecycleTokens, error: lifecycleError } = await supabase
         .from('token_lifecycle')
-        .select('token_mint, symbol, name, discovery_source, first_seen_at, image_url, pair_created_at')
+        .select('token_mint, symbol, name, discovery_source, first_seen_at, image_url, pair_created_at, launchpad')
         .order('first_seen_at', { ascending: false })
         .limit(500);
 
@@ -66,6 +78,7 @@ export const TokenSets = () => {
           raydium_date: t.raydium_date || undefined,
           metadata_fetched_at: t.metadata_fetched_at || undefined,
           creator_fetched_at: t.creator_fetched_at || undefined,
+          launchpad: t.launchpad || undefined,
         });
       });
 
@@ -81,6 +94,7 @@ export const TokenSets = () => {
             image_url: existing.image_url || t.image_url,
             raydium_date: existing.raydium_date || t.pair_created_at,
             discovery_source: existing.discovery_source || t.discovery_source,
+            launchpad: existing.launchpad || t.launchpad,
           });
         } else {
           // Add new token from lifecycle
@@ -95,6 +109,7 @@ export const TokenSets = () => {
             raydium_date: t.pair_created_at || undefined,
             metadata_fetched_at: undefined,
             creator_fetched_at: undefined,
+            launchpad: t.launchpad || undefined,
           });
         }
       });
@@ -181,6 +196,7 @@ export const TokenSets = () => {
                   <TableHead className="py-2 w-10">Image</TableHead>
                   <TableHead className="py-2 min-w-[160px]">Token</TableHead>
                   <TableHead className="py-2 min-w-[260px]">Token Address (Mint)</TableHead>
+                  <TableHead className="py-2 min-w-[80px]">Launchpad</TableHead>
                   <TableHead className="py-2 min-w-[120px]">Raydium Date</TableHead>
                   <TableHead className="py-2 min-w-[220px]">Creator Wallet</TableHead>
                   <TableHead className="py-2 min-w-[100px]">Source</TableHead>
@@ -206,6 +222,20 @@ export const TokenSets = () => {
                     </TableCell>
                     <TableCell className="py-2">
                       <code className="text-xs block max-w-[260px] truncate" title={token.token_mint}>{token.token_mint}</code>
+                    </TableCell>
+                    <TableCell className="py-2">
+                      {token.launchpad && getLaunchpadIcon(token.launchpad) ? (
+                        <div className="flex items-center gap-2">
+                          <img 
+                            src={getLaunchpadIcon(token.launchpad)} 
+                            alt={token.launchpad} 
+                            className="w-5 h-5 object-contain"
+                          />
+                          <span className="text-xs">{token.launchpad}</span>
+                        </div>
+                      ) : (
+                        <span className="text-xs text-muted-foreground">-</span>
+                      )}
                     </TableCell>
                     <TableCell className="py-2">
                       <span className="text-xs whitespace-nowrap">

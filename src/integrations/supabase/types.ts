@@ -2024,6 +2024,7 @@ export type Database = {
           first_seen_at: string
           id: string
           image_url: string | null
+          launchpad: string | null
           metadata_fetched_at: string | null
           name: string | null
           raydium_date: string | null
@@ -2039,6 +2040,7 @@ export type Database = {
           first_seen_at?: string
           id?: string
           image_url?: string | null
+          launchpad?: string | null
           metadata_fetched_at?: string | null
           name?: string | null
           raydium_date?: string | null
@@ -2054,6 +2056,7 @@ export type Database = {
           first_seen_at?: string
           id?: string
           image_url?: string | null
+          launchpad?: string | null
           metadata_fetched_at?: string | null
           name?: string | null
           raydium_date?: string | null
@@ -2374,6 +2377,7 @@ export type Database = {
           image_url: string | null
           last_fetched_at: string | null
           last_seen_at: string
+          launchpad: string | null
           liquidity_usd: number | null
           lowest_rank: number | null
           market_cap: number | null
@@ -2403,6 +2407,7 @@ export type Database = {
           image_url?: string | null
           last_fetched_at?: string | null
           last_seen_at: string
+          launchpad?: string | null
           liquidity_usd?: number | null
           lowest_rank?: number | null
           market_cap?: number | null
@@ -2432,6 +2437,7 @@ export type Database = {
           image_url?: string | null
           last_fetched_at?: string | null
           last_seen_at?: string
+          launchpad?: string | null
           liquidity_usd?: number | null
           lowest_rank?: number | null
           market_cap?: number | null
