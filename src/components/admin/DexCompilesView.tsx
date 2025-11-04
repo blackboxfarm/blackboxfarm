@@ -133,6 +133,15 @@ export function DexCompilesView() {
     );
   };
 
+  const formatSymbol = (t: TokenLifecycle) => {
+    const raw = t.symbol?.trim();
+    if (raw && raw !== '-' && raw !== 'No Symbol') {
+      return raw.startsWith('$') ? raw : `$${raw}`;
+    }
+    const guess = t.name?.split(/\s|-/)[0]?.replace(/[^A-Za-z0-9]/g, '') || t.token_mint?.slice(0,4) || '';
+    return `$${guess}`;
+  };
+
   const renderTokenRow = (token: TokenLifecycle) => (
     <TableRow key={token.token_mint}>
       <TableCell>
@@ -141,7 +150,7 @@ export function DexCompilesView() {
             <img src={token.image_url} alt={token.symbol || ''} className="w-6 h-6 rounded-full" />
           )}
           <div className="flex flex-col">
-            <span className="font-medium text-base">{token.symbol || 'No Symbol'}</span>
+            <span className="font-medium text-base">{formatSymbol(token)}</span>
             <span className="text-xs text-muted-foreground">
               {token.name || '-'}
             </span>
