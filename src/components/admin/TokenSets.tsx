@@ -85,8 +85,8 @@ export const TokenSets = () => {
                   <TableHead className="py-2 w-10">Image</TableHead>
                   <TableHead className="py-2 min-w-[140px]">Token</TableHead>
                   <TableHead className="py-2 min-w-[100px]">Raydium Date</TableHead>
-                  <TableHead className="py-2 min-w-[280px]">Token Address (Mint)</TableHead>
-                  <TableHead className="py-2 min-w-[280px]">Creator Wallet</TableHead>
+                  <TableHead className="py-2 min-w-[220px]">Creator Wallet</TableHead>
+                  <TableHead className="py-2 min-w-[240px]">Token Address (Mint)</TableHead>
                   <TableHead className="py-2 min-w-[100px]">Source</TableHead>
                   <TableHead className="py-2 w-16">Actions</TableHead>
                 </TableRow>
@@ -128,21 +128,23 @@ export const TokenSets = () => {
                       </span>
                     </TableCell>
                     <TableCell className="py-2">
-                      <code className="text-xs">{token.token_mint}</code>
+                      <div className="max-w-[220px]">
+                        {token.creator_wallet ? (
+                          <code className="text-xs block truncate" title={token.creator_wallet}>{token.creator_wallet}</code>
+                        ) : (
+                          <Button 
+                            variant="outline" 
+                            size="sm"
+                            className="h-7 text-xs"
+                            onClick={() => fetchCreatorWallet(token.token_mint)}
+                          >
+                            Fetch from Solscan
+                          </Button>
+                        )}
+                      </div>
                     </TableCell>
                     <TableCell className="py-2">
-                      {token.creator_wallet ? (
-                        <code className="text-xs">{token.creator_wallet}</code>
-                      ) : (
-                        <Button 
-                          variant="outline" 
-                          size="sm"
-                          className="h-7 text-xs"
-                          onClick={() => fetchCreatorWallet(token.token_mint)}
-                        >
-                          Fetch from Solscan
-                        </Button>
-                      )}
+                      <code className="text-xs block max-w-[240px] truncate" title={token.token_mint}>{token.token_mint}</code>
                     </TableCell>
                     <TableCell className="py-2">
                       <Badge variant="outline" className="text-xs">{token.discovery_source}</Badge>
