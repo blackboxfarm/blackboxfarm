@@ -138,8 +138,9 @@ export function DexCompilesView() {
     if (raw && raw !== '-' && raw !== 'No Symbol') {
       return raw.startsWith('$') ? raw : `$${raw}`;
     }
-    const guess = t.name?.split(/\s|-/)[0]?.replace(/[^A-Za-z0-9]/g, '') || t.token_mint?.slice(0,4) || '';
-    return `$${guess}`;
+    // Fallback: try first word of name, otherwise "Unknown"
+    const nameGuess = t.name?.split(/\s|-/)[0]?.replace(/[^A-Za-z0-9]/g, '');
+    return nameGuess ? `$${nameGuess}` : '$Unknown';
   };
 
   const renderTokenRow = (token: TokenLifecycle) => (
