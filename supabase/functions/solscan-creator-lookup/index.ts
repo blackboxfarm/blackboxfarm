@@ -23,11 +23,22 @@ Deno.serve(async (req) => {
     console.log(`Fetching creator for token: ${tokenMint}`);
 
     // Call Solscan API to get token metadata
+    const solscanApiKey = Deno.env.get('SOLSCAN_API_KEY');
+    
+    if (!solscanApiKey) {
+      console.error('SOLSCAN_API_KEY not configured');
+      return new Response(
+        JSON.stringify({ error: 'API key not configured', creatorWallet: null }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 }
+      );
+    }
+
     const solscanResponse = await fetch(
       `https://pro-api.solscan.io/v1.0/token/meta?tokenAddress=${tokenMint}`,
       {
         headers: {
           'Accept': 'application/json',
+          'token': solscanApiKey,
         }
       }
     );
