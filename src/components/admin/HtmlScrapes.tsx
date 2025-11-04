@@ -66,8 +66,8 @@ export const HtmlScrapes = () => {
       }
 
       // Insert tokens into database
-      const { data, error } = await supabase
-        .from('scraped_tokens')
+      const { error } = await supabase
+        .from('scraped_tokens' as any)
         .upsert(
           tokens.map(token => ({
             token_mint: token.mint,

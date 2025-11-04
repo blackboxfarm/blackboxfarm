@@ -2015,6 +2015,42 @@ export type Database = {
           },
         ]
       }
+      scraped_tokens: {
+        Row: {
+          created_at: string
+          creator_wallet: string | null
+          discovery_source: string
+          first_seen_at: string
+          id: string
+          name: string | null
+          symbol: string | null
+          token_mint: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          creator_wallet?: string | null
+          discovery_source?: string
+          first_seen_at?: string
+          id?: string
+          name?: string | null
+          symbol?: string | null
+          token_mint: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          creator_wallet?: string | null
+          discovery_source?: string
+          first_seen_at?: string
+          id?: string
+          name?: string | null
+          symbol?: string | null
+          token_mint?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       secret_access_audit: {
         Row: {
           access_timestamp: string | null

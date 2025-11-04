@@ -15,6 +15,8 @@ import { BannerManagement } from "@/components/admin/BannerManagement";
 import { SurveyManagement } from "@/components/admin/SurveyManagement";
 import { TokenGenealogyDashboard } from "@/components/admin/TokenGenealogyDashboard";
 import { DexCompilesView } from "@/components/admin/DexCompilesView";
+import { HtmlScrapes } from "@/components/admin/HtmlScrapes";
+import { TokenSets } from "@/components/admin/TokenSets";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import TransactionHistoryWindow from "@/components/blackbox/TransactionHistoryWindow";
@@ -104,6 +106,8 @@ export default function SuperAdmin() {
             <TabsTrigger value="testing" className="flex-shrink-0 data-[state=active]:bg-primary/20 data-[state=inactive]:bg-primary/5">System Tests</TabsTrigger>
             <TabsTrigger value="genealogy" className="flex-shrink-0 data-[state=active]:bg-gradient-to-r data-[state=active]:from-primary/30 data-[state=active]:to-primary/20">Token Genealogy</TabsTrigger>
             <TabsTrigger value="dex-compiles" className="flex-shrink-0 data-[state=active]:bg-gradient-to-r data-[state=active]:from-emerald-500/30 data-[state=active]:to-emerald-500/20">Dex Compiles</TabsTrigger>
+            <TabsTrigger value="html-scrapes" className="flex-shrink-0 data-[state=active]:bg-gradient-to-r data-[state=active]:from-blue-500/30 data-[state=active]:to-blue-500/20">HTML Scrapes</TabsTrigger>
+            <TabsTrigger value="token-sets" className="flex-shrink-0 data-[state=active]:bg-gradient-to-r data-[state=active]:from-purple-500/30 data-[state=active]:to-purple-500/20">Token Sets</TabsTrigger>
             <TabsTrigger value="banners" className="flex-shrink-0">Banners</TabsTrigger>
             <TabsTrigger value="surveys" className="flex-shrink-0">Surveys</TabsTrigger>
           </TabsList>
@@ -166,6 +170,14 @@ export default function SuperAdmin() {
 
           <TabsContent value="dex-compiles">
             <DexCompilesView />
+          </TabsContent>
+
+          <TabsContent value="html-scrapes">
+            <HtmlScrapes />
+          </TabsContent>
+
+          <TabsContent value="token-sets">
+            <TokenSets />
           </TabsContent>
 
           <TabsContent value="banners">
