@@ -2018,33 +2018,45 @@ export type Database = {
       scraped_tokens: {
         Row: {
           created_at: string
+          creator_fetched_at: string | null
           creator_wallet: string | null
           discovery_source: string
           first_seen_at: string
           id: string
+          image_url: string | null
+          metadata_fetched_at: string | null
           name: string | null
+          raydium_date: string | null
           symbol: string | null
           token_mint: string
           updated_at: string
         }
         Insert: {
           created_at?: string
+          creator_fetched_at?: string | null
           creator_wallet?: string | null
           discovery_source?: string
           first_seen_at?: string
           id?: string
+          image_url?: string | null
+          metadata_fetched_at?: string | null
           name?: string | null
+          raydium_date?: string | null
           symbol?: string | null
           token_mint: string
           updated_at?: string
         }
         Update: {
           created_at?: string
+          creator_fetched_at?: string | null
           creator_wallet?: string | null
           discovery_source?: string
           first_seen_at?: string
           id?: string
+          image_url?: string | null
+          metadata_fetched_at?: string | null
           name?: string | null
+          raydium_date?: string | null
           symbol?: string | null
           token_mint?: string
           updated_at?: string

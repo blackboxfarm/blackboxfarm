@@ -337,6 +337,19 @@ Deno.serve(async (req) => {
     }, {} as Record<string, number>);
     console.log(JSON.stringify(sourceBreakdown, null, 2));
 
+    // Trigger enrichment in background (don't wait for it)
+    if (newTokens.length > 0) {
+      console.log('[DexCompiler] 🎨 Triggering background enrichment for scraped_tokens...');
+      fetch(`${Deno.env.get('SUPABASE_URL')}/functions/v1/enrich-scraped-tokens`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${Deno.env.get('SUPABASE_ANON_KEY')}`
+        },
+        body: JSON.stringify({ batchSize: 50 })
+      }).catch(err => console.error('[DexCompiler] Background enrichment failed:', err));
+    }
+
     return new Response(
       JSON.stringify({
         success: true,

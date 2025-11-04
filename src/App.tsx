@@ -22,6 +22,7 @@ import AboutUs from "./pages/AboutUs";
 import ContactUs from "./pages/ContactUs";
 import Web3Manifesto from "./pages/Web3Manifesto";
 import SuperAdmin from "./pages/SuperAdmin";
+import Developer from "./pages/Developer";
 import Demo from "./pages/Demo";
 import Holders from "./pages/Holders";
 import CopyTrading from "./pages/CopyTrading";
@@ -58,6 +59,7 @@ const App = () => (
               <Route path="/contact" element={<ContactUs />} />
               <Route path="/web3-manifesto" element={<Web3Manifesto />} />
               <Route path="/super-admin" element={<SuperAdmin />} />
+              <Route path="/developer/:walletAddress" element={<Developer />} />
               <Route path="/demo" element={<Demo />} />
               <Route path="/holders" element={<Holders />} />
               <Route path="/copy-trading" element={<CopyTrading />} />

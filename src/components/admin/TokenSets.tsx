@@ -5,6 +5,9 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Badge } from "@/components/ui/badge";
 import { Loader2, ExternalLink } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Link } from "react-router-dom";
+import { useEffect, useState } from "react";
+import { toast } from "sonner";
 
 interface TokenSet {
   token_mint: string;
@@ -18,13 +21,15 @@ interface TokenSet {
 }
 
 export const TokenSets = () => {
-  const { data: tokens, isLoading } = useQuery({
+  const [enriching, setEnriching] = useState(false);
+  
+  const { data: tokens, isLoading, refetch } = useQuery({
     queryKey: ['token-sets'],
     queryFn: async () => {
-      // Fetch from scraped_tokens (columns: id, token_mint, symbol, name, creator_wallet, discovery_source, first_seen_at)
+      // Fetch from scraped_tokens with new enrichment columns
       const { data: scrapedTokens, error: scrapedError } = await supabase
         .from('scraped_tokens' as any)
-        .select('token_mint, symbol, name, discovery_source, first_seen_at, creator_wallet')
+        .select('token_mint, symbol, name, discovery_source, first_seen_at, creator_wallet, image_url, raydium_date, metadata_fetched_at, creator_fetched_at')
         .order('first_seen_at', { ascending: false });
 
       if (scrapedError) {
@@ -46,11 +51,40 @@ export const TokenSets = () => {
     }
   });
 
-  const fetchCreatorWallet = async (tokenMint: string) => {
-    // TODO: Implement solscan.io API call to get creator wallet
-    console.log('Fetching creator wallet for:', tokenMint);
-    // This will be implemented with the solscan API
-  };
+  // Auto-enrich tokens on mount
+  useEffect(() => {
+    const enrichTokens = async () => {
+      if (tokens && tokens.length > 0) {
+        const needsEnrichment = tokens.some(
+          (t) => !t.metadata_fetched_at || !t.creator_fetched_at
+        );
+
+        if (needsEnrichment && !enriching) {
+          setEnriching(true);
+          try {
+            const { error } = await supabase.functions.invoke('enrich-scraped-tokens', {
+              body: { batchSize: 50 }
+            });
+
+            if (error) {
+              console.error('Enrichment error:', error);
+              toast.error('Failed to enrich tokens');
+            } else {
+              toast.success('Token enrichment started');
+              // Refetch after a delay to get updated data
+              setTimeout(() => refetch(), 3000);
+            }
+          } catch (error) {
+            console.error('Enrichment error:', error);
+          } finally {
+            setEnriching(false);
+          }
+        }
+      }
+    };
+
+    enrichTokens();
+  }, [tokens]);
 
   if (isLoading) {
     return (
@@ -130,16 +164,13 @@ export const TokenSets = () => {
                     <TableCell className="py-2">
                       <div className="max-w-[220px]">
                         {token.creator_wallet ? (
-                          <code className="text-xs block truncate" title={token.creator_wallet}>{token.creator_wallet}</code>
+                          <Link to={`/developer/${token.creator_wallet}`}>
+                            <code className="text-xs block truncate hover:underline cursor-pointer text-primary" title={token.creator_wallet}>
+                              {token.creator_wallet}
+                            </code>
+                          </Link>
                         ) : (
-                          <Button 
-                            variant="outline" 
-                            size="sm"
-                            className="h-7 text-xs"
-                            onClick={() => fetchCreatorWallet(token.token_mint)}
-                          >
-                            Fetch from Solscan
-                          </Button>
+                          <span className="text-xs text-muted-foreground">Pending...</span>
                         )}
                       </div>
                     </TableCell>
