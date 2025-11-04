@@ -83,12 +83,12 @@ export const TokenSets = () => {
               <TableHeader>
                 <TableRow>
                   <TableHead className="py-2 w-12">Image</TableHead>
-                  <TableHead className="py-2">Token</TableHead>
-                  <TableHead className="py-2">Raydium Date</TableHead>
+                  <TableHead className="py-2 w-40">Token</TableHead>
+                  <TableHead className="py-2 w-32">Raydium Date</TableHead>
                   <TableHead className="py-2">Token Address (Mint)</TableHead>
                   <TableHead className="py-2">Creator Wallet</TableHead>
-                  <TableHead className="py-2">Source</TableHead>
-                  <TableHead className="py-2">Actions</TableHead>
+                  <TableHead className="py-2 w-24">Source</TableHead>
+                  <TableHead className="py-2 w-16">Actions</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
