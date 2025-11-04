@@ -18,6 +18,8 @@ interface TokenSet {
   first_seen_at: string;
   image_url?: string;
   raydium_date?: string;
+  metadata_fetched_at?: string;
+  creator_fetched_at?: string;
 }
 
 export const TokenSets = () => {
@@ -44,9 +46,10 @@ export const TokenSets = () => {
         creator_wallet: t.creator_wallet || undefined,
         discovery_source: t.discovery_source || 'html_scrape',
         first_seen_at: t.first_seen_at || new Date().toISOString(),
-        // Optional fields left undefined when not available in table
-        image_url: undefined,
-        raydium_date: undefined,
+        image_url: t.image_url || undefined,
+        raydium_date: t.raydium_date || undefined,
+        metadata_fetched_at: t.metadata_fetched_at || undefined,
+        creator_fetched_at: t.creator_fetched_at || undefined,
       }));
     }
   });
@@ -55,12 +58,14 @@ export const TokenSets = () => {
   useEffect(() => {
     const enrichTokens = async () => {
       if (tokens && tokens.length > 0) {
+        // Check if any tokens need enrichment (missing symbol, name, image, or creator)
         const needsEnrichment = tokens.some(
-          (t) => !t.metadata_fetched_at || !t.creator_fetched_at
+          (t) => !t.symbol || !t.name || !t.image_url || !t.creator_wallet
         );
 
         if (needsEnrichment && !enriching) {
           setEnriching(true);
+          console.log('Starting token enrichment...');
           try {
             const { error } = await supabase.functions.invoke('enrich-scraped-tokens', {
               body: { batchSize: 50 }
@@ -70,12 +75,17 @@ export const TokenSets = () => {
               console.error('Enrichment error:', error);
               toast.error('Failed to enrich tokens');
             } else {
+              console.log('Token enrichment started successfully');
               toast.success('Token enrichment started');
               // Refetch after a delay to get updated data
-              setTimeout(() => refetch(), 3000);
+              setTimeout(() => {
+                console.log('Refetching enriched token data...');
+                refetch();
+              }, 5000);
             }
           } catch (error) {
             console.error('Enrichment error:', error);
+            toast.error('Enrichment failed');
           } finally {
             setEnriching(false);
           }
@@ -84,7 +94,7 @@ export const TokenSets = () => {
     };
 
     enrichTokens();
-  }, [tokens]);
+  }, [tokens, enriching, refetch]);
 
   if (isLoading) {
     return (

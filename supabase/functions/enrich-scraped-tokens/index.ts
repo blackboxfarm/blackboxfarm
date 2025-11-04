@@ -54,8 +54,8 @@ Deno.serve(async (req) => {
         const updates: any = {};
         let needsUpdate = false;
 
-        // Fetch image from DexScreener if missing
-        if (!token.image_url) {
+        // Fetch metadata from DexScreener if missing
+        if (!token.metadata_fetched_at || !token.symbol || !token.name) {
           try {
             const dexResponse = await fetch(
               `https://api.dexscreener.com/latest/dex/tokens/${token.token_mint}`
@@ -66,8 +66,19 @@ Deno.serve(async (req) => {
               const pair = dexData.pairs?.[0];
               
               if (pair) {
-                updates.image_url = pair.info?.imageUrl || null;
-                updates.raydium_date = pair.pairCreatedAt ? new Date(pair.pairCreatedAt).toISOString() : null;
+                // Update symbol and name from baseToken
+                if (!token.symbol && pair.baseToken?.symbol) {
+                  updates.symbol = pair.baseToken.symbol;
+                }
+                if (!token.name && pair.baseToken?.name) {
+                  updates.name = pair.baseToken.name;
+                }
+                if (!token.image_url && pair.info?.imageUrl) {
+                  updates.image_url = pair.info.imageUrl;
+                }
+                if (pair.pairCreatedAt) {
+                  updates.raydium_date = new Date(pair.pairCreatedAt).toISOString();
+                }
                 updates.metadata_fetched_at = new Date().toISOString();
                 needsUpdate = true;
               }
