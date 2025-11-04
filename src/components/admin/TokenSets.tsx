@@ -21,54 +21,27 @@ export const TokenSets = () => {
   const { data: tokens, isLoading } = useQuery({
     queryKey: ['token-sets'],
     queryFn: async () => {
-      const results: TokenSet[] = [];
-
-      // Fetch from dex_compiles
-      const { data: dexTokens, error: dexError } = await supabase
-        .from('dex_compiles' as any)
-        .select('token_mint, symbol, name, discovery_source, first_seen_at, image_url, raydium_date')
-        .order('first_seen_at', { ascending: false });
-
-      if (!dexError && dexTokens) {
-        results.push(...(dexTokens as any[]).map((t: any) => ({
-          token_mint: t.token_mint,
-          symbol: t.symbol || undefined,
-          name: t.name || undefined,
-          discovery_source: t.discovery_source || 'dex_compile',
-          first_seen_at: t.first_seen_at || new Date().toISOString(),
-          image_url: t.image_url || undefined,
-          raydium_date: t.raydium_date || undefined
-        })));
-      }
-
       // Fetch from scraped_tokens
       const { data: scrapedTokens, error: scrapedError } = await supabase
         .from('scraped_tokens' as any)
         .select('token_mint, symbol, name, discovery_source, first_seen_at, creator_wallet, image_url, raydium_date')
         .order('first_seen_at', { ascending: false });
 
-      if (!scrapedError && scrapedTokens) {
-        results.push(...(scrapedTokens as any[]).map((t: any) => ({
-          token_mint: t.token_mint,
-          symbol: t.symbol || undefined,
-          name: t.name || undefined,
-          creator_wallet: t.creator_wallet || undefined,
-          discovery_source: t.discovery_source || 'html_scrape',
-          first_seen_at: t.first_seen_at || new Date().toISOString(),
-          image_url: t.image_url || undefined,
-          raydium_date: t.raydium_date || undefined
-        })));
+      if (scrapedError) {
+        console.error('Error fetching scraped tokens:', scrapedError);
+        return [];
       }
 
-      // Deduplicate by token_mint
-      const uniqueTokens = new Map<string, TokenSet>();
-      results.forEach(token => {
-        if (!uniqueTokens.has(token.token_mint)) {
-          uniqueTokens.set(token.token_mint, token);
-        }
-      });
-
-      return Array.from(uniqueTokens.values());
+      return (scrapedTokens as any[]).map((t: any) => ({
+        token_mint: t.token_mint,
+        symbol: t.symbol || undefined,
+        name: t.name || undefined,
+        creator_wallet: t.creator_wallet || undefined,
+        discovery_source: t.discovery_source || 'html_scrape',
+        first_seen_at: t.first_seen_at || new Date().toISOString(),
+        image_url: t.image_url || undefined,
+        raydium_date: t.raydium_date || undefined
+      }));
     }
   });
 
