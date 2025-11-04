@@ -113,7 +113,6 @@ export const TokenSets = () => {
                   <TableHead className="py-2">Raydium Date</TableHead>
                   <TableHead className="py-2">Token Address (Mint)</TableHead>
                   <TableHead className="py-2">Creator Wallet</TableHead>
-                  <TableHead className="py-2">Creator/Developer Wallet</TableHead>
                   <TableHead className="py-2">Source</TableHead>
                   <TableHead className="py-2">Actions</TableHead>
                 </TableRow>
@@ -170,9 +169,6 @@ export const TokenSets = () => {
                           Fetch from Solscan
                         </Button>
                       )}
-                    </TableCell>
-                    <TableCell className="py-2">
-                      <span className="text-xs text-muted-foreground">Placeholder</span>
                     </TableCell>
                     <TableCell className="py-2">
                       <Badge variant="outline" className="text-xs">{token.discovery_source}</Badge>
