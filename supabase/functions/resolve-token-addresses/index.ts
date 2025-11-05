@@ -12,18 +12,18 @@ serve(async (req) => {
   }
 
   try {
-    const { batchSize = 5 } = await req.json();
+    const { batchSize = 1000 } = await req.json(); // Process up to 1000 by default
     
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
     const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
     const supabase = createClient(supabaseUrl, supabaseKey);
 
-    // Get tokens that need address resolution (only pending validation status)
+    // Get tokens that need address resolution (only pending - invalid ones are moved to separate table)
     const { data: tokensToResolve, error: fetchError } = await supabase
       .from('scraped_tokens')
-      .select('id, token_mint, symbol, name')
+      .select('id, token_mint, symbol, name, validation_attempts, scraped_at, rank_snapshot, discovery_source')
       .eq('discovery_source', 'html_scrape')
-      .in('validation_status', ['pending', 'invalid']) // Allow retry of invalid ones
+      .eq('validation_status', 'pending')
       .order('created_at', { ascending: true })
       .limit(batchSize);
 
@@ -145,16 +145,29 @@ serve(async (req) => {
               html.includes('Token Not Found')) {
             console.warn(`⚠️ Token not found (404) for ${token.symbol}`);
             
-            // Mark as not_found and continue
-            await supabase
-              .from('scraped_tokens')
-              .update({ 
+            // Move to invalid_scraped_tokens table
+            const { error: insertError } = await supabase
+              .from('invalid_scraped_tokens')
+              .insert({
+                token_mint: token.token_mint,
+                symbol: token.symbol,
+                name: token.name,
+                discovery_source: token.discovery_source,
+                rank_snapshot: token.rank_snapshot,
+                scraped_at: token.scraped_at,
                 validation_status: 'not_found',
                 validation_error: 'Token or pair not found on DexScreener (404)',
                 last_validation_attempt: new Date().toISOString(),
-                validation_attempts: token.validation_attempts ? token.validation_attempts + 1 : 1
-              })
-              .eq('id', token.id);
+                validation_attempts: (token.validation_attempts || 0) + 1
+              });
+
+            if (!insertError) {
+              // Delete from scraped_tokens
+              await supabase
+                .from('scraped_tokens')
+                .delete()
+                .eq('id', token.id);
+            }
             
             notFoundCount++;
             results.push({
@@ -182,16 +195,28 @@ serve(async (req) => {
           if (!html) {
             console.error(`No HTML returned for ${token.symbol}`);
             
-            // Mark as invalid and continue
-            await supabase
-              .from('scraped_tokens')
-              .update({ 
+            // Move to invalid_scraped_tokens table
+            const { error: insertError } = await supabase
+              .from('invalid_scraped_tokens')
+              .insert({
+                token_mint: token.token_mint,
+                symbol: token.symbol,
+                name: token.name,
+                discovery_source: token.discovery_source,
+                rank_snapshot: token.rank_snapshot,
+                scraped_at: token.scraped_at,
                 validation_status: 'invalid',
                 validation_error: 'No HTML content returned from browser',
                 last_validation_attempt: new Date().toISOString(),
-                validation_attempts: token.validation_attempts ? token.validation_attempts + 1 : 1
-              })
-              .eq('id', token.id);
+                validation_attempts: (token.validation_attempts || 0) + 1
+              });
+
+            if (!insertError) {
+              await supabase
+                .from('scraped_tokens')
+                .delete()
+                .eq('id', token.id);
+            }
             
             failCount++;
             results.push({
@@ -216,16 +241,28 @@ serve(async (req) => {
         if (!realAddress || realAddress === lowercaseAddress) {
           console.error(`   ❌ FAILED: Could not extract real address for ${token.symbol}`);
           
-          // Mark as invalid and continue
-          await supabase
-            .from('scraped_tokens')
-            .update({ 
+          // Move to invalid_scraped_tokens table
+          const { error: insertError } = await supabase
+            .from('invalid_scraped_tokens')
+            .insert({
+              token_mint: token.token_mint,
+              symbol: token.symbol,
+              name: token.name,
+              discovery_source: token.discovery_source,
+              rank_snapshot: token.rank_snapshot,
+              scraped_at: token.scraped_at,
               validation_status: 'invalid',
               validation_error: 'Could not find real address in API/HTML',
               last_validation_attempt: new Date().toISOString(),
-              validation_attempts: token.validation_attempts ? token.validation_attempts + 1 : 1
-            })
-            .eq('id', token.id);
+              validation_attempts: (token.validation_attempts || 0) + 1
+            });
+
+          if (!insertError) {
+            await supabase
+              .from('scraped_tokens')
+              .delete()
+              .eq('id', token.id);
+          }
           
           failCount++;
           results.push({
@@ -279,16 +316,28 @@ serve(async (req) => {
       } catch (error: any) {
         console.error(`   ❌ Error processing ${token.symbol}:`, error);
         
-        // Mark as invalid and continue
-        await supabase
-          .from('scraped_tokens')
-          .update({ 
+        // Move to invalid_scraped_tokens table
+        const { error: insertError } = await supabase
+          .from('invalid_scraped_tokens')
+          .insert({
+            token_mint: token.token_mint,
+            symbol: token.symbol,
+            name: token.name,
+            discovery_source: token.discovery_source,
+            rank_snapshot: token.rank_snapshot,
+            scraped_at: token.scraped_at,
             validation_status: 'invalid',
             validation_error: error.message,
             last_validation_attempt: new Date().toISOString(),
-            validation_attempts: token.validation_attempts ? token.validation_attempts + 1 : 1
-          })
-          .eq('id', token.id);
+            validation_attempts: (token.validation_attempts || 0) + 1
+          });
+
+        if (!insertError) {
+          await supabase
+            .from('scraped_tokens')
+            .delete()
+            .eq('id', token.id);
+        }
         
         failCount++;
         results.push({

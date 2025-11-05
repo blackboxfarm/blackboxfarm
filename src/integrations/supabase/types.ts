@@ -1593,6 +1593,51 @@ export type Database = {
         }
         Relationships: []
       }
+      invalid_scraped_tokens: {
+        Row: {
+          discovery_source: string
+          id: string
+          last_validation_attempt: string | null
+          moved_at: string | null
+          name: string | null
+          rank_snapshot: number | null
+          scraped_at: string | null
+          symbol: string | null
+          token_mint: string
+          validation_attempts: number | null
+          validation_error: string | null
+          validation_status: string
+        }
+        Insert: {
+          discovery_source: string
+          id?: string
+          last_validation_attempt?: string | null
+          moved_at?: string | null
+          name?: string | null
+          rank_snapshot?: number | null
+          scraped_at?: string | null
+          symbol?: string | null
+          token_mint: string
+          validation_attempts?: number | null
+          validation_error?: string | null
+          validation_status: string
+        }
+        Update: {
+          discovery_source?: string
+          id?: string
+          last_validation_attempt?: string | null
+          moved_at?: string | null
+          name?: string | null
+          rank_snapshot?: number | null
+          scraped_at?: string | null
+          symbol?: string | null
+          token_mint?: string
+          validation_attempts?: number | null
+          validation_error?: string | null
+          validation_status?: string
+        }
+        Relationships: []
+      }
       kol_wallets: {
         Row: {
           created_at: string
