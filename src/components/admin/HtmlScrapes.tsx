@@ -4,15 +4,18 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
-import { Upload, FileUp, Terminal } from "lucide-react";
+import { Upload, FileUp, Terminal, List } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 export const HtmlScrapes = () => {
   const [htmlContent, setHtmlContent] = useState("");
   const [isProcessing, setIsProcessing] = useState(false);
   const [isResolving, setIsResolving] = useState(false);
   const [logMessages, setLogMessages] = useState<string[]>([]);
+  const [scrapedTokens, setScrapedTokens] = useState<any[]>([]);
+  const [isLoadingTokens, setIsLoadingTokens] = useState(false);
   const { toast } = useToast();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const logEndRef = useRef<HTMLDivElement>(null);
@@ -25,6 +28,32 @@ export const HtmlScrapes = () => {
   useEffect(() => {
     logEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [logMessages]);
+
+  const loadScrapedTokens = async () => {
+    setIsLoadingTokens(true);
+    try {
+      const { data, error } = await supabase
+        .from('scraped_tokens' as any)
+        .select('*')
+        .order('first_seen_at', { ascending: false });
+
+      if (error) throw error;
+      setScrapedTokens(data || []);
+    } catch (error: any) {
+      console.error('Error loading scraped tokens:', error);
+      toast({
+        title: "Error",
+        description: "Failed to load scraped tokens",
+        variant: "destructive"
+      });
+    } finally {
+      setIsLoadingTokens(false);
+    }
+  };
+
+  useEffect(() => {
+    loadScrapedTokens();
+  }, []);
 
   const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
@@ -255,6 +284,19 @@ export const HtmlScrapes = () => {
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
+          <Tabs defaultValue="scraper" className="w-full">
+            <TabsList className="grid w-full grid-cols-2">
+              <TabsTrigger value="scraper">
+                <Upload className="mr-2 h-4 w-4" />
+                Scraper
+              </TabsTrigger>
+              <TabsTrigger value="list" onClick={loadScrapedTokens}>
+                <List className="mr-2 h-4 w-4" />
+                Scraped Tokens ({scrapedTokens.length})
+              </TabsTrigger>
+            </TabsList>
+
+            <TabsContent value="scraper" className="space-y-4 mt-4">
           <div className="flex gap-2">
             <Input
               ref={fileInputRef}
@@ -327,6 +369,54 @@ export const HtmlScrapes = () => {
               </div>
             </ScrollArea>
           </div>
+            </TabsContent>
+
+            <TabsContent value="list" className="mt-4">
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <div className="text-sm font-medium">
+                    All Scraped Tokens ({scrapedTokens.length})
+                  </div>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={loadScrapedTokens}
+                    disabled={isLoadingTokens}
+                  >
+                    {isLoadingTokens ? "Loading..." : "Refresh"}
+                  </Button>
+                </div>
+                <ScrollArea className="h-[480px] rounded-md border bg-muted/50 p-4">
+                  <div className="space-y-1 font-mono text-xs">
+                    {isLoadingTokens ? (
+                      <div className="text-muted-foreground italic">Loading tokens...</div>
+                    ) : scrapedTokens.length === 0 ? (
+                      <div className="text-muted-foreground italic">No tokens scraped yet</div>
+                    ) : (
+                      scrapedTokens.map((token, idx) => (
+                        <div key={token.token_mint} className="py-1 border-b border-border/50 last:border-0">
+                          <div className="flex items-start gap-2">
+                            <span className="text-muted-foreground min-w-[40px]">{idx + 1}.</span>
+                            <div className="flex-1 space-y-0.5">
+                              <div className="break-all">{token.token_mint}</div>
+                              {token.symbol && (
+                                <div className="text-muted-foreground">
+                                  Symbol: {token.symbol} {token.name && `(${token.name})`}
+                                </div>
+                              )}
+                              <div className="text-muted-foreground text-[10px]">
+                                {new Date(token.first_seen_at).toLocaleString()}
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                </ScrollArea>
+              </div>
+            </TabsContent>
+          </Tabs>
         </CardContent>
       </Card>
     </div>
