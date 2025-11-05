@@ -16,6 +16,8 @@ export const HtmlScrapes = () => {
   const [logMessages, setLogMessages] = useState<string[]>([]);
   const [scrapedTokens, setScrapedTokens] = useState<any[]>([]);
   const [isLoadingTokens, setIsLoadingTokens] = useState(false);
+  const [resolutionStatus, setResolutionStatus] = useState<'idle' | 'processing' | 'complete' | 'error'>('idle');
+  const [resolutionSummary, setResolutionSummary] = useState<{ resolved: number; failed: number } | null>(null);
   const { toast } = useToast();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const logEndRef = useRef<HTMLDivElement>(null);
@@ -183,6 +185,8 @@ export const HtmlScrapes = () => {
 
   const resolveAddresses = async (tokenCount?: number) => {
     setIsResolving(true);
+    setResolutionStatus('processing');
+    setResolutionSummary(null);
     abortControllerRef.current = new AbortController();
     const batchSize = 1000; // Process up to 1000 tokens per batch
     
@@ -204,12 +208,14 @@ export const HtmlScrapes = () => {
 
       if (abortControllerRef.current?.signal.aborted) {
         addLog(`🛑 Resolution cancelled by user`);
+        setResolutionStatus('idle');
         return;
       }
 
       if (resolveError) {
         console.error('Error resolving addresses:', resolveError);
         addLog(`❌ Resolution failed: ${resolveError.message}`);
+        setResolutionStatus('error');
         toast({
           title: "Address Resolution Failed",
           description: "The resolve function may not be deployed yet. Try the manual button in 2-3 minutes.",
@@ -277,14 +283,20 @@ export const HtmlScrapes = () => {
         addLog(`━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`);
         addLog(`✅ Address resolution batch complete!`);
         
+        setResolutionStatus('complete');
+        setResolutionSummary({ resolved: resolveData.resolved, failed: resolveData.failed });
+        
         toast({
-          title: "Addresses Resolved",
-          description: `✓ Resolved ${resolveData.resolved} of ${resolveData.resolved + resolveData.failed} token addresses.`,
+          title: "✅ Resolution Complete!",
+          description: `Resolved ${resolveData.resolved} of ${resolveData.resolved + resolveData.failed} tokens. Check the summary below.`,
         });
+        
+        await loadScrapedTokens();
       }
     } catch (resolveErr: any) {
       console.error('Error triggering resolution:', resolveErr);
       addLog(`❌ Network error: ${resolveErr.message}`);
+      setResolutionStatus('error');
       toast({
         title: "Resolution Error",
         description: "Function not ready. Wait 2-3 min and use manual resolve button.",
@@ -301,6 +313,7 @@ export const HtmlScrapes = () => {
       abortControllerRef.current.abort();
       addLog(`🛑 Cancellation requested...`);
       setIsResolving(false);
+      setResolutionStatus('idle');
       toast({
         title: "Cancelled",
         description: "Address resolution cancelled",
@@ -331,6 +344,54 @@ export const HtmlScrapes = () => {
             </TabsList>
 
             <TabsContent value="scraper" className="space-y-4 mt-4">
+          {resolutionSummary && resolutionStatus === 'complete' && (
+            <Card className="bg-primary/5 border-primary">
+              <CardContent className="pt-6">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h3 className="font-semibold text-lg">✅ Resolution Complete!</h3>
+                    <p className="text-sm text-muted-foreground mt-1">
+                      Successfully resolved {resolutionSummary.resolved} of {resolutionSummary.resolved + resolutionSummary.failed} tokens
+                      {resolutionSummary.failed > 0 && ` (${resolutionSummary.failed} failed)`}
+                    </p>
+                  </div>
+                  <Button 
+                    variant="ghost" 
+                    size="sm"
+                    onClick={() => {
+                      setResolutionStatus('idle');
+                      setResolutionSummary(null);
+                    }}
+                  >
+                    Dismiss
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+          )}
+          
+          {resolutionStatus === 'error' && (
+            <Card className="bg-destructive/5 border-destructive">
+              <CardContent className="pt-6">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h3 className="font-semibold text-lg">❌ Resolution Failed</h3>
+                    <p className="text-sm text-muted-foreground mt-1">
+                      Check the logs below for error details
+                    </p>
+                  </div>
+                  <Button 
+                    variant="ghost" 
+                    size="sm"
+                    onClick={() => setResolutionStatus('idle')}
+                  >
+                    Dismiss
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+          )}
+          
           <div className="flex gap-2">
             <Input
               ref={fileInputRef}
