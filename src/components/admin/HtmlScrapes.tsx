@@ -10,6 +10,7 @@ import { Input } from "@/components/ui/input";
 export const HtmlScrapes = () => {
   const [htmlContent, setHtmlContent] = useState("");
   const [isProcessing, setIsProcessing] = useState(false);
+  const [isResolving, setIsResolving] = useState(false);
   const { toast } = useToast();
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -114,33 +115,14 @@ export const HtmlScrapes = () => {
 
       toast({
         title: "Success",
-        description: `Extracted and saved ${tokens.length} token(s). Resolving addresses...`,
+        description: `Extracted and saved ${tokens.length} token(s). Starting address resolution...`,
       });
 
-      // Trigger address resolution in background
-      try {
-        const { data: resolveData, error: resolveError } = await supabase.functions.invoke('resolve-token-addresses', {
-          body: { batchSize: Math.min(tokens.length, 10) }
-        });
-
-        if (resolveError) {
-          console.error('Error resolving addresses:', resolveError);
-          toast({
-            title: "Address Resolution Warning",
-            description: "Tokens saved but address resolution failed. Check console.",
-            variant: "destructive",
-          });
-        } else {
-          toast({
-            title: "Addresses Resolved",
-            description: `Resolved ${resolveData.resolved} of ${tokens.length} token addresses.`,
-          });
-        }
-      } catch (resolveErr: any) {
-        console.error('Error triggering resolution:', resolveErr);
-      }
-
       setHtmlContent("");
+      
+      // Trigger address resolution separately with better error handling
+      setTimeout(() => resolveAddresses(tokens.length), 1000);
+      
     } catch (error: any) {
       console.error('Error scraping HTML:', error);
       toast({
@@ -150,6 +132,38 @@ export const HtmlScrapes = () => {
       });
     } finally {
       setIsProcessing(false);
+    }
+  };
+
+  const resolveAddresses = async (tokenCount?: number) => {
+    setIsResolving(true);
+    try {
+      const { data: resolveData, error: resolveError } = await supabase.functions.invoke('resolve-token-addresses', {
+        body: { batchSize: Math.min(tokenCount || 50, 10) }
+      });
+
+      if (resolveError) {
+        console.error('Error resolving addresses:', resolveError);
+        toast({
+          title: "Address Resolution Failed",
+          description: "The resolve function may not be deployed yet. Try the manual button in 2-3 minutes.",
+          variant: "destructive",
+        });
+      } else {
+        toast({
+          title: "Addresses Resolved",
+          description: `✓ Resolved ${resolveData.resolved} of ${tokenCount || 'pending'} token addresses.`,
+        });
+      }
+    } catch (resolveErr: any) {
+      console.error('Error triggering resolution:', resolveErr);
+      toast({
+        title: "Resolution Error",
+        description: "Function not ready. Wait 2-3 min and use manual resolve button.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsResolving(false);
     }
   };
 
@@ -185,6 +199,13 @@ export const HtmlScrapes = () => {
             >
               <Upload className="mr-2 h-4 w-4" />
               {isProcessing ? "Processing..." : "Extract & Save Tokens"}
+            </Button>
+            <Button 
+              onClick={() => resolveAddresses()}
+              disabled={isResolving}
+              variant="secondary"
+            >
+              {isResolving ? "Resolving..." : "🔄 Resolve Addresses"}
             </Button>
           </div>
           <Textarea
