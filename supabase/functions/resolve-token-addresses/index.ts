@@ -21,7 +21,7 @@ serve(async (req) => {
     // Get tokens that need address resolution (only pending - invalid ones are moved to separate table)
     const { data: tokensToResolve, error: fetchError } = await supabase
       .from('scraped_tokens')
-      .select('id, token_mint, symbol, name, validation_attempts, scraped_at, rank_snapshot, discovery_source')
+      .select('id, token_mint, symbol, name, validation_attempts, first_seen_at, rank_snapshot, discovery_source')
       .eq('discovery_source', 'html_scrape')
       .eq('validation_status', 'pending')
       .order('created_at', { ascending: true })
@@ -154,7 +154,7 @@ serve(async (req) => {
                 name: token.name,
                 discovery_source: token.discovery_source,
                 rank_snapshot: token.rank_snapshot,
-                scraped_at: token.scraped_at,
+                scraped_at: token.first_seen_at,
                 validation_status: 'not_found',
                 validation_error: 'Token or pair not found on DexScreener (404)',
                 last_validation_attempt: new Date().toISOString(),
@@ -204,7 +204,7 @@ serve(async (req) => {
                 name: token.name,
                 discovery_source: token.discovery_source,
                 rank_snapshot: token.rank_snapshot,
-                scraped_at: token.scraped_at,
+                scraped_at: token.first_seen_at,
                 validation_status: 'invalid',
                 validation_error: 'No HTML content returned from browser',
                 last_validation_attempt: new Date().toISOString(),
@@ -250,7 +250,7 @@ serve(async (req) => {
               name: token.name,
               discovery_source: token.discovery_source,
               rank_snapshot: token.rank_snapshot,
-              scraped_at: token.scraped_at,
+              scraped_at: token.first_seen_at,
               validation_status: 'invalid',
               validation_error: 'Could not find real address in API/HTML',
               last_validation_attempt: new Date().toISOString(),
@@ -325,7 +325,7 @@ serve(async (req) => {
             name: token.name,
             discovery_source: token.discovery_source,
             rank_snapshot: token.rank_snapshot,
-            scraped_at: token.scraped_at,
+            scraped_at: token.first_seen_at,
             validation_status: 'invalid',
             validation_error: error.message,
             last_validation_attempt: new Date().toISOString(),
