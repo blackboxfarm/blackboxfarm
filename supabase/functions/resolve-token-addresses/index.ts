@@ -214,34 +214,23 @@ serve(async (req) => {
 });
 
 function extractTokenAddress(html: string, lowercaseAddress: string): string | null {
-  // Try multiple patterns to find the real token address
+  // Primary method: Extract from Solscan link
+  // Pattern: href="https://solscan.io/token/{TOKEN_ADDRESS}"
+  const solscanRegex = /href="https:\/\/solscan\.io\/token\/([A-HJ-NP-Za-km-z1-9]{32,44})"/gi;
+  const solscanMatch = solscanRegex.exec(html);
   
-  // Pattern 1: Look for the token address in meta tags or data attributes
-  const metaMatch = html.match(/data-token-address="([A-HJ-NP-Za-km-z1-9]{32,44})"/);
-  if (metaMatch) return metaMatch[1];
-
-  // Pattern 2: Look for base58 address that's NOT the lowercase one
-  // Solana addresses are 32-44 chars, base58 encoded (no 0, O, I, l)
-  const base58Regex = /\b([A-HJ-NP-Za-km-z1-9]{32,44})\b/g;
-  const matches = html.match(base58Regex) || [];
-  
-  for (const match of matches) {
-    // Skip if it's the lowercase version we already have
-    if (match.toLowerCase() === lowercaseAddress.toLowerCase()) continue;
-    
-    // Check if it looks like a valid Solana address (has mixed case and valid chars)
-    if (match.match(/[A-Z]/) && match.match(/[a-z]/) && match.match(/[1-9]/)) {
-      return match;
-    }
+  if (solscanMatch && solscanMatch[1]) {
+    console.log(`Found token address via Solscan link: ${solscanMatch[1]}`);
+    return solscanMatch[1];
   }
-
-  // Pattern 3: Look for copy button content or title attributes
-  const copyButtonMatch = html.match(/title="Copy token address"[^>]*>([A-HJ-NP-Za-km-z1-9]{32,44})</);
-  if (copyButtonMatch) return copyButtonMatch[1];
-
-  // Pattern 4: Look in class names that suggest token address display
-  const addressClassMatch = html.match(/class="[^"]*token[_-]?address[^"]*"[^>]*>([A-HJ-NP-Za-km-z1-9]{32,44})</i);
-  if (addressClassMatch) return addressClassMatch[1];
-
+  
+  // Fallback: Check meta tags if Solscan link not found
+  const metaMatch = html.match(/<meta[^>]*property="og:url"[^>]*content="[^"]*\/solana\/([A-HJ-NP-Za-km-z1-9]{32,44})"[^>]*>/i);
+  if (metaMatch && metaMatch[1]) {
+    console.log(`Found token address via meta tag: ${metaMatch[1]}`);
+    return metaMatch[1];
+  }
+  
+  console.warn(`Could not extract token address from HTML for lowercase: ${lowercaseAddress}`);
   return null;
 }
