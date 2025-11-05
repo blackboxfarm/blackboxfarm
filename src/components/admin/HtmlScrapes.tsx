@@ -182,10 +182,10 @@ export const HtmlScrapes = () => {
 
   const resolveAddresses = async (tokenCount?: number) => {
     setIsResolving(true);
-    const batchSize = Math.min(tokenCount || 50, 3);
+    const batchSize = 1000; // Process up to 1000 tokens per batch
     
     addLog(`🚀 Starting address resolution process...`);
-    addLog(`📊 Batch size: ${batchSize} tokens`);
+    addLog(`📊 Batch size: ${batchSize} tokens (processing all pending)`);
     addLog(`⏱️ Estimated time: ${batchSize * 2} seconds (2s delay per token)`);
     addLog(`━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`);
 
