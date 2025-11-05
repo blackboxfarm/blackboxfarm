@@ -114,11 +114,34 @@ export const HtmlScrapes = () => {
 
       toast({
         title: "Success",
-        description: `Extracted and saved ${tokens.length} token(s)`,
+        description: `Extracted and saved ${tokens.length} token(s). Resolving addresses...`,
       });
 
+      // Trigger address resolution in background
+      try {
+        const { data: resolveData, error: resolveError } = await supabase.functions.invoke('resolve-token-addresses', {
+          body: { batchSize: Math.min(tokens.length, 10) }
+        });
+
+        if (resolveError) {
+          console.error('Error resolving addresses:', resolveError);
+          toast({
+            title: "Address Resolution Warning",
+            description: "Tokens saved but address resolution failed. Check console.",
+            variant: "destructive",
+          });
+        } else {
+          toast({
+            title: "Addresses Resolved",
+            description: `Resolved ${resolveData.resolved} of ${tokens.length} token addresses.`,
+          });
+        }
+      } catch (resolveErr: any) {
+        console.error('Error triggering resolution:', resolveErr);
+      }
+
       setHtmlContent("");
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error scraping HTML:', error);
       toast({
         title: "Error",
