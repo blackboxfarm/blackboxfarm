@@ -87,6 +87,8 @@ serve(async (req) => {
 
         // 2) Fallback to agentic-browser scrape if API did not resolve
         if (!realAddress) {
+          console.log(`🌐 Attempting browser scrape for ${token.symbol}...`);
+          
           // Call agentic-browser to scrape the page
           const { data: browserData, error: browserError } = await supabase.functions.invoke('agentic-browser', {
             body: {
@@ -98,6 +100,16 @@ serve(async (req) => {
               timeout: 30000
             }
           });
+
+          console.log(`📡 Browser response status:`, browserError ? 'ERROR' : 'SUCCESS');
+          if (browserError) {
+            console.error(`❌ Browser error details:`, JSON.stringify(browserError, null, 2));
+          }
+          if (browserData) {
+            console.log(`📊 Browser data keys:`, Object.keys(browserData));
+            console.log(`✅ Browser success:`, browserData.success);
+            console.log(`📝 Results count:`, browserData.results?.length || 0);
+          }
 
           if (browserError || !browserData?.success) {
             console.error(`Browser error for ${token.symbol}:`, browserError?.message || 'Unknown error');
@@ -115,6 +127,22 @@ serve(async (req) => {
           const scrapeResult = browserData.results?.find((r: any) => r.action === 'scrape');
           const html = scrapeResult?.html || '';
 
+          console.log(`📄 HTML length:`, html.length);
+          console.log(`🔍 First 500 chars of HTML:`, html.substring(0, 500));
+          console.log(`🔍 Last 500 chars of HTML:`, html.substring(Math.max(0, html.length - 500)));
+          
+          // Check if it's a 404 or error page
+          if (html.includes('404') || html.includes('Page not found') || html.includes('cloudflare')) {
+            console.warn(`⚠️ Possible 404 or error page detected`);
+          }
+          
+          // Check for Solscan links
+          const solscanMatches = html.match(/solscan\.io\/token/gi);
+          console.log(`🔎 Solscan link count:`, solscanMatches?.length || 0);
+          if (solscanMatches) {
+            console.log(`🔗 Sample Solscan context:`, html.substring(html.indexOf('solscan.io/token') - 50, html.indexOf('solscan.io/token') + 150));
+          }
+
           if (!html) {
             console.error(`No HTML returned for ${token.symbol}`);
             failCount++;
@@ -128,7 +156,10 @@ serve(async (req) => {
           }
 
           // Parse HTML to find the real token address
+          console.log(`🔍 Attempting to extract token address...`);
           realAddress = extractTokenAddress(html, lowercaseAddress);
+          console.log(`📊 Extraction result:`, realAddress || 'NULL');
+          
           if (realAddress && realAddress !== lowercaseAddress) {
             resolutionMethod = 'browser';
           }
@@ -214,23 +245,35 @@ serve(async (req) => {
 });
 
 function extractTokenAddress(html: string, lowercaseAddress: string): string | null {
+  console.log(`🔍 Starting extraction for lowercase: ${lowercaseAddress}`);
+  
   // Primary method: Extract from Solscan link
   // Pattern: href="https://solscan.io/token/{TOKEN_ADDRESS}"
   const solscanRegex = /href="https:\/\/solscan\.io\/token\/([A-HJ-NP-Za-km-z1-9]{32,44})"/gi;
-  const solscanMatch = solscanRegex.exec(html);
   
-  if (solscanMatch && solscanMatch[1]) {
-    console.log(`Found token address via Solscan link: ${solscanMatch[1]}`);
-    return solscanMatch[1];
+  let match;
+  const allMatches = [];
+  while ((match = solscanRegex.exec(html)) !== null) {
+    allMatches.push(match[1]);
   }
+  
+  console.log(`📊 Found ${allMatches.length} Solscan token links:`, allMatches);
+  
+  if (allMatches.length > 0) {
+    const selectedAddress = allMatches[0];
+    console.log(`✅ Selected first match: ${selectedAddress}`);
+    return selectedAddress;
+  }
+  
+  console.log(`⚠️ No Solscan links found, trying meta tag fallback...`);
   
   // Fallback: Check meta tags if Solscan link not found
   const metaMatch = html.match(/<meta[^>]*property="og:url"[^>]*content="[^"]*\/solana\/([A-HJ-NP-Za-km-z1-9]{32,44})"[^>]*>/i);
   if (metaMatch && metaMatch[1]) {
-    console.log(`Found token address via meta tag: ${metaMatch[1]}`);
+    console.log(`✅ Found via meta tag: ${metaMatch[1]}`);
     return metaMatch[1];
   }
   
-  console.warn(`Could not extract token address from HTML for lowercase: ${lowercaseAddress}`);
+  console.warn(`❌ Could not extract token address from HTML for lowercase: ${lowercaseAddress}`);
   return null;
 }
