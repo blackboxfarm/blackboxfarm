@@ -56,46 +56,76 @@ serve(async (req) => {
         
         console.log(`Resolving ${token.symbol} (${lowercaseAddress})...`);
 
-        // Call agentic-browser to scrape the page
-        const { data: browserData, error: browserError } = await supabase.functions.invoke('agentic-browser', {
-          body: {
-            url: dexScreenerUrl,
-            actions: [
-              { type: 'cloudflare_challenge' },
-              { type: 'scrape' }
-            ],
-            timeout: 30000
+        let realAddress: string | null = null;
+
+        // 1) Try DexScreener API first (avoids Cloudflare/browser timeouts)
+        try {
+          const apiRes = await fetch(`https://api.dexscreener.com/latest/dex/search?q=${encodeURIComponent(lowercaseAddress)}`, {
+            method: 'GET',
+            headers: { 'accept': 'application/json' }
+          });
+          if (apiRes.ok) {
+            const apiJson = await apiRes.json();
+            const pairs = apiJson?.pairs ?? [];
+            const solPair = pairs.find((p: any) =>
+              p?.chainId === 'solana' ||
+              p?.baseToken?.chainId === 'solana' ||
+              p?.quoteToken?.chainId === 'solana'
+            );
+            if (solPair?.baseToken?.address) {
+              realAddress = solPair.baseToken.address;
+              console.log(`API resolved ${token.symbol}: ${realAddress}`);
+            }
+          } else {
+            console.warn(`DexScreener API responded with ${apiRes.status} for ${token.symbol}`);
           }
-        });
-
-        if (browserError || !browserData?.success) {
-          console.error(`Browser error for ${token.symbol}:`, browserError?.message || 'Unknown error');
-          failCount++;
-          results.push({
-            symbol: token.symbol,
-            success: false,
-            error: browserError?.message || 'Browser failed'
-          });
-          continue;
+        } catch (e) {
+          console.warn(`DexScreener API lookup failed for ${token.symbol}:`, e);
         }
 
-        // Extract HTML from the scrape action result
-        const scrapeResult = browserData.results?.find((r: any) => r.action === 'scrape');
-        const html = scrapeResult?.html || '';
-
-        if (!html) {
-          console.error(`No HTML returned for ${token.symbol}`);
-          failCount++;
-          results.push({
-            symbol: token.symbol,
-            success: false,
-            error: 'No HTML content'
+        // 2) Fallback to agentic-browser scrape if API did not resolve
+        if (!realAddress) {
+          // Call agentic-browser to scrape the page
+          const { data: browserData, error: browserError } = await supabase.functions.invoke('agentic-browser', {
+            body: {
+              url: dexScreenerUrl,
+              actions: [
+                { type: 'cloudflare_challenge' },
+                { type: 'scrape' }
+              ],
+              timeout: 30000
+            }
           });
-          continue;
-        }
 
-        // Parse HTML to find the real token address
-        const realAddress = extractTokenAddress(html, lowercaseAddress);
+          if (browserError || !browserData?.success) {
+            console.error(`Browser error for ${token.symbol}:`, browserError?.message || 'Unknown error');
+            failCount++;
+            results.push({
+              symbol: token.symbol,
+              success: false,
+              error: browserError?.message || 'Browser failed'
+            });
+            continue;
+          }
+
+          // Extract HTML from the scrape action result
+          const scrapeResult = browserData.results?.find((r: any) => r.action === 'scrape');
+          const html = scrapeResult?.html || '';
+
+          if (!html) {
+            console.error(`No HTML returned for ${token.symbol}`);
+            failCount++;
+            results.push({
+              symbol: token.symbol,
+              success: false,
+              error: 'No HTML content'
+            });
+            continue;
+          }
+
+          // Parse HTML to find the real token address
+          realAddress = extractTokenAddress(html, lowercaseAddress);
+        }
 
         if (!realAddress || realAddress === lowercaseAddress) {
           console.error(`Could not extract real address for ${token.symbol}`);
@@ -103,7 +133,7 @@ serve(async (req) => {
           results.push({
             symbol: token.symbol,
             success: false,
-            error: 'Could not find real address in HTML'
+            error: 'Could not find real address in API/HTML'
           });
           continue;
         }
