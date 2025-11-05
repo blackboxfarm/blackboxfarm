@@ -57,6 +57,7 @@ serve(async (req) => {
         console.log(`Resolving ${token.symbol} (${lowercaseAddress})...`);
 
         let realAddress: string | null = null;
+        let resolutionMethod = 'unknown';
 
         // 1) Try DexScreener API first (avoids Cloudflare/browser timeouts)
         try {
@@ -74,6 +75,7 @@ serve(async (req) => {
             );
             if (solPair?.baseToken?.address) {
               realAddress = solPair.baseToken.address;
+              resolutionMethod = 'api';
               console.log(`API resolved ${token.symbol}: ${realAddress}`);
             }
           } else {
@@ -125,6 +127,9 @@ serve(async (req) => {
 
           // Parse HTML to find the real token address
           realAddress = extractTokenAddress(html, lowercaseAddress);
+          if (realAddress && realAddress !== lowercaseAddress) {
+            resolutionMethod = 'browser';
+          }
         }
 
         if (!realAddress || realAddress === lowercaseAddress) {
@@ -162,6 +167,7 @@ serve(async (req) => {
             symbol: token.symbol,
             oldAddress: lowercaseAddress,
             newAddress: realAddress,
+            method: resolutionMethod,
             success: true
           });
         }

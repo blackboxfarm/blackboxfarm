@@ -181,10 +181,16 @@ export const HtmlScrapes = () => {
         results.forEach((result: any, index: number) => {
           if (result.success) {
             addLog(`🕷️ Spidering ${result.symbol}...`);
+            if (result.method === 'api') {
+              addLog(`📡 API: https://api.dexscreener.com/latest/dex/search?q=${result.oldAddress}`);
+            } else {
+              addLog(`🌐 Browser: https://dexscreener.com/solana/${result.oldAddress}`);
+            }
             addLog(`✅ Success: Retrieved HTML & Regex'd the Token Address`);
             addLog(`🎯 CA = ${result.newAddress}`);
           } else {
             addLog(`🕷️ Spidering ${result.symbol}...`);
+            addLog(`🌐 URL: https://dexscreener.com/solana/${result.oldAddress || 'unknown'}`);
             addLog(`❌ Fail: ${result.error}`);
           }
           
