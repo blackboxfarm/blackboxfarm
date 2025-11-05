@@ -1,18 +1,30 @@
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
-import { Upload, FileUp } from "lucide-react";
+import { Upload, FileUp, Terminal } from "lucide-react";
 import { Input } from "@/components/ui/input";
+import { ScrollArea } from "@/components/ui/scroll-area";
 
 export const HtmlScrapes = () => {
   const [htmlContent, setHtmlContent] = useState("");
   const [isProcessing, setIsProcessing] = useState(false);
   const [isResolving, setIsResolving] = useState(false);
+  const [logMessages, setLogMessages] = useState<string[]>([]);
   const { toast } = useToast();
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const logEndRef = useRef<HTMLDivElement>(null);
+
+  const addLog = (message: string) => {
+    const timestamp = new Date().toLocaleTimeString();
+    setLogMessages(prev => [...prev, `[${timestamp}] ${message}`]);
+  };
+
+  useEffect(() => {
+    logEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [logMessages]);
 
   const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
@@ -83,11 +95,14 @@ export const HtmlScrapes = () => {
     }
 
     setIsProcessing(true);
+    addLog("🔍 Starting HTML scrape...");
 
     try {
       const tokens = extractTokensFromHtml(htmlContent);
+      addLog(`📊 Scraped ${tokens.length} token addresses from HTML`);
       
       if (tokens.length === 0) {
+        addLog("❌ No tokens found in HTML");
         toast({
           title: "No tokens found",
           description: "Could not extract any token addresses from the HTML",
@@ -96,6 +111,8 @@ export const HtmlScrapes = () => {
         setIsProcessing(false);
         return;
       }
+
+      addLog("💾 Converting to unique URLs and saving to database...");
 
       // Insert tokens into database
       const { error } = await supabase
@@ -113,6 +130,7 @@ export const HtmlScrapes = () => {
 
       if (error) throw error;
 
+      addLog(`✅ Saved ${tokens.length} tokens to database`);
       toast({
         title: "Success",
         description: `Extracted and saved ${tokens.length} token(s). Starting address resolution...`,
@@ -125,6 +143,7 @@ export const HtmlScrapes = () => {
       
     } catch (error: any) {
       console.error('Error scraping HTML:', error);
+      addLog(`❌ Error: ${error.message}`);
       toast({
         title: "Error",
         description: error.message || "Failed to process HTML",
@@ -137,19 +156,44 @@ export const HtmlScrapes = () => {
 
   const resolveAddresses = async (tokenCount?: number) => {
     setIsResolving(true);
+    const batchSize = Math.min(tokenCount || 50, 10);
+    
+    addLog(`🌐 Starting address resolution for ${batchSize} tokens...`);
+    addLog("📍 Converting lowercase URLs to DexScreener pages...");
+
     try {
       const { data: resolveData, error: resolveError } = await supabase.functions.invoke('resolve-token-addresses', {
-        body: { batchSize: Math.min(tokenCount || 50, 10) }
+        body: { batchSize }
       });
 
       if (resolveError) {
         console.error('Error resolving addresses:', resolveError);
+        addLog(`❌ Resolution failed: ${resolveError.message}`);
         toast({
           title: "Address Resolution Failed",
           description: "The resolve function may not be deployed yet. Try the manual button in 2-3 minutes.",
           variant: "destructive",
         });
       } else {
+        const results = resolveData.results || [];
+        
+        results.forEach((result: any, index: number) => {
+          if (result.success) {
+            addLog(`🕷️ Spidering ${result.symbol}...`);
+            addLog(`✅ Success: Retrieved HTML & Regex'd the Token Address`);
+            addLog(`🎯 CA = ${result.newAddress}`);
+          } else {
+            addLog(`🕷️ Spidering ${result.symbol}...`);
+            addLog(`❌ Fail: ${result.error}`);
+          }
+          
+          if (index < results.length - 1) {
+            addLog("⏭️ Fetching next URL...");
+          }
+        });
+
+        addLog(`✅ Resolution complete: ${resolveData.resolved}/${resolveData.resolved + resolveData.failed} tokens resolved`);
+        
         toast({
           title: "Addresses Resolved",
           description: `✓ Resolved ${resolveData.resolved} of ${tokenCount || 'pending'} token addresses.`,
@@ -157,6 +201,7 @@ export const HtmlScrapes = () => {
       }
     } catch (resolveErr: any) {
       console.error('Error triggering resolution:', resolveErr);
+      addLog(`❌ Network error: ${resolveErr.message}`);
       toast({
         title: "Resolution Error",
         description: "Function not ready. Wait 2-3 min and use manual resolve button.",
@@ -212,8 +257,43 @@ export const HtmlScrapes = () => {
             placeholder="Paste HTML content from DexScreener page here or upload an HTML file..."
             value={htmlContent}
             onChange={(e) => setHtmlContent(e.target.value)}
-            className="min-h-[400px] font-mono text-xs"
+            className="h-20 font-mono text-xs"
           />
+          
+          <div className="space-y-2">
+            <div className="flex items-center gap-2 text-sm font-medium">
+              <Terminal className="h-4 w-4" />
+              <span>Processing Log</span>
+              {logMessages.length > 0 && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setLogMessages([])}
+                  className="h-6 text-xs ml-auto"
+                >
+                  Clear
+                </Button>
+              )}
+            </div>
+            <ScrollArea className="h-[480px] rounded-md border bg-muted/50 p-4">
+              <div className="space-y-1 font-mono text-xs">
+                {logMessages.length === 0 ? (
+                  <div className="text-muted-foreground italic">
+                    No activity yet. Upload HTML or click "Extract & Save Tokens" to begin.
+                  </div>
+                ) : (
+                  <>
+                    {logMessages.map((msg, idx) => (
+                      <div key={idx} className="whitespace-pre-wrap break-all">
+                        {msg}
+                      </div>
+                    ))}
+                    <div ref={logEndRef} />
+                  </>
+                )}
+              </div>
+            </ScrollArea>
+          </div>
         </CardContent>
       </Card>
     </div>
