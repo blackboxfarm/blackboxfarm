@@ -156,10 +156,11 @@ export const HtmlScrapes = () => {
 
   const resolveAddresses = async (tokenCount?: number) => {
     setIsResolving(true);
-    const batchSize = Math.min(tokenCount || 50, 10);
+    const batchSize = Math.min(tokenCount || 50, 3); // Reduced to 3 to avoid timeouts
     
     addLog(`🌐 Starting address resolution for ${batchSize} tokens...`);
     addLog("📍 Converting lowercase URLs to DexScreener pages...");
+    addLog("⏳ This may take 10-20 seconds (2s delay between each token)...");
 
     try {
       const { data: resolveData, error: resolveError } = await supabase.functions.invoke('resolve-token-addresses', {
