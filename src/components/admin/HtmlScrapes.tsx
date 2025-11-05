@@ -133,13 +133,10 @@ export const HtmlScrapes = () => {
       addLog(`✅ Saved ${tokens.length} tokens to database`);
       toast({
         title: "Success",
-        description: `Extracted and saved ${tokens.length} token(s). Starting address resolution...`,
+        description: `Extracted and saved ${tokens.length} token(s) with mixed-case addresses`,
       });
 
       setHtmlContent("");
-      
-      // Trigger address resolution separately with better error handling
-      setTimeout(() => resolveAddresses(tokens.length), 1000);
       
     } catch (error: any) {
       console.error('Error scraping HTML:', error);
