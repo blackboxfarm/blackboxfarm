@@ -134,13 +134,13 @@ export function useRealtimeBalances() {
       )
       .subscribe();
 
-    // Auto-refresh every 5 minutes
-    const autoRefreshInterval = setInterval(refreshBalances, 5 * 60 * 1000);
+    // Auto-refresh disabled to prevent constant toast notifications
+    // const autoRefreshInterval = setInterval(refreshBalances, 5 * 60 * 1000);
 
     return () => {
       poolSubscription.unsubscribe();
       blackboxSubscription.unsubscribe();
-      clearInterval(autoRefreshInterval);
+      // clearInterval(autoRefreshInterval);
     };
   }, []);
 
