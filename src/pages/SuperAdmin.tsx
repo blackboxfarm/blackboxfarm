@@ -86,9 +86,6 @@ export default function SuperAdmin() {
             Manage platform wallets and administrative functions
           </p>
         </div>
-        <div className="mb-6">
-          <WalletBalanceMonitor />
-        </div>
         <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
           <TabsList className="flex flex-wrap w-full h-auto gap-1 p-2">
             <TabsTrigger value="wallets" className="flex-shrink-0">Wallet Management</TabsTrigger>
@@ -113,7 +110,10 @@ export default function SuperAdmin() {
           </TabsList>
           
           <TabsContent value="wallets">
-            <SuperAdminWallets />
+            <div className="space-y-6">
+              <WalletBalanceMonitor />
+              <SuperAdminWallets />
+            </div>
           </TabsContent>
           
           <TabsContent value="recovery">
