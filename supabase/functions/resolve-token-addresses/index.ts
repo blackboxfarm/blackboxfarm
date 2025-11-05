@@ -24,7 +24,8 @@ serve(async (req) => {
       .select('id, token_mint, symbol, name, validation_attempts, first_seen_at, discovery_source')
       .eq('discovery_source', 'html_scrape')
       .eq('validation_status', 'pending')
-      .order('created_at', { ascending: true })
+      .order('first_seen_at', { ascending: true })
+      .order('id', { ascending: true })
       .limit(batchSize);
 
     if (fetchError) {
