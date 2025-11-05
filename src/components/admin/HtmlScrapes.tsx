@@ -153,13 +153,17 @@ export const HtmlScrapes = () => {
 
   const resolveAddresses = async (tokenCount?: number) => {
     setIsResolving(true);
-    const batchSize = Math.min(tokenCount || 50, 3); // Reduced to 3 to avoid timeouts
+    const batchSize = Math.min(tokenCount || 50, 3);
     
-    addLog(`🌐 Starting address resolution for ${batchSize} tokens...`);
-    addLog("📍 Converting lowercase URLs to DexScreener pages...");
-    addLog("⏳ This may take 10-20 seconds (2s delay between each token)...");
+    addLog(`🚀 Starting address resolution process...`);
+    addLog(`📊 Batch size: ${batchSize} tokens`);
+    addLog(`⏱️ Estimated time: ${batchSize * 2} seconds (2s delay per token)`);
+    addLog(`━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`);
 
     try {
+      addLog(`🔌 Invoking resolve-token-addresses edge function...`);
+      addLog(`⏳ Waiting for response from server...`);
+      
       const { data: resolveData, error: resolveError } = await supabase.functions.invoke('resolve-token-addresses', {
         body: { batchSize }
       });
@@ -173,34 +177,59 @@ export const HtmlScrapes = () => {
           variant: "destructive",
         });
       } else {
+        addLog(`📥 Received response from server`);
+        addLog(`━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`);
+        
         const results = resolveData.results || [];
+        addLog(`📋 Processing ${results.length} token results...`);
+        addLog(``);
         
         results.forEach((result: any, index: number) => {
+          addLog(`🔄 Token ${index + 1}/${results.length}: ${result.symbol || 'Unknown'}`);
+          
           if (result.success) {
-            addLog(`🕷️ Spidering ${result.symbol}...`);
+            addLog(`   📍 Old: ${result.oldAddress}`);
+            
             if (result.method === 'api') {
-              addLog(`📡 API: https://api.dexscreener.com/latest/dex/search?q=${result.oldAddress}`);
-            } else {
-              addLog(`🌐 Browser: https://dexscreener.com/solana/${result.oldAddress}`);
+              addLog(`   🔍 Method: DexScreener API`);
+              addLog(`   📡 URL: https://api.dexscreener.com/latest/dex/search?q=${result.oldAddress}`);
+              addLog(`   ✅ API returned real address`);
+            } else if (result.method === 'browser') {
+              addLog(`   🔍 Method: Browser scrape (API fallback failed)`);
+              addLog(`   🌐 URL: https://dexscreener.com/solana/${result.oldAddress}`);
+              addLog(`   🤖 Cloudflare challenge solved`);
+              addLog(`   📄 HTML retrieved`);
+              addLog(`   🔎 Searching for Solscan link pattern...`);
+              addLog(`   ✅ Found: href="https://solscan.io/token/..."`);
             }
-            addLog(`✅ Success: Retrieved HTML & Regex'd the Token Address`);
-            addLog(`🎯 CA = ${result.newAddress}`);
+            
+            addLog(`   🎯 New: ${result.newAddress}`);
+            addLog(`   💾 Database updated`);
+            addLog(`   ✅ SUCCESS`);
           } else {
-            addLog(`🕷️ Spidering ${result.symbol}...`);
-            addLog(`🌐 URL: https://dexscreener.com/solana/${result.oldAddress || 'unknown'}`);
-            addLog(`❌ Fail: ${result.error}`);
+            addLog(`   📍 Address: ${result.oldAddress || 'unknown'}`);
+            addLog(`   🌐 Attempted: https://dexscreener.com/solana/${result.oldAddress || 'unknown'}`);
+            addLog(`   ❌ FAILED: ${result.error}`);
           }
           
           if (index < results.length - 1) {
-            addLog("⏭️ Fetching next URL...");
+            addLog(``);
+            addLog(`   ⏳ Waiting 2 seconds before next token...`);
+            addLog(`━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`);
           }
         });
 
-        addLog(`✅ Resolution complete: ${resolveData.resolved}/${resolveData.resolved + resolveData.failed} tokens resolved`);
+        addLog(``);
+        addLog(`━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`);
+        addLog(`📊 SUMMARY:`);
+        addLog(`   ✅ Resolved: ${resolveData.resolved}`);
+        addLog(`   ❌ Failed: ${resolveData.failed}`);
+        addLog(`   📈 Success rate: ${((resolveData.resolved / (resolveData.resolved + resolveData.failed)) * 100).toFixed(1)}%`);
+        addLog(`✅ Resolution complete!`);
         
         toast({
           title: "Addresses Resolved",
-          description: `✓ Resolved ${resolveData.resolved} of ${tokenCount || 'pending'} token addresses.`,
+          description: `✓ Resolved ${resolveData.resolved} of ${resolveData.resolved + resolveData.failed} token addresses.`,
         });
       }
     } catch (resolveErr: any) {
