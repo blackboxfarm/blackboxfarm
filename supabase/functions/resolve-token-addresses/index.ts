@@ -85,8 +85,54 @@ serve(async (req) => {
           console.warn(`DexScreener API lookup failed for ${token.symbol}:`, e);
         }
 
-        // 2) Skip browser scraping - API should have resolved or it's not available
-        // The browser scraping is timing out (408) and causing issues
+        // 2) Fallback to agentic-browser scrape if API did not resolve
+        if (!realAddress) {
+          // Call agentic-browser to scrape the page
+          const { data: browserData, error: browserError } = await supabase.functions.invoke('agentic-browser', {
+            body: {
+              url: dexScreenerUrl,
+              actions: [
+                { type: 'cloudflare_challenge' },
+                { type: 'scrape' }
+              ],
+              timeout: 30000
+            }
+          });
+
+          if (browserError || !browserData?.success) {
+            console.error(`Browser error for ${token.symbol}:`, browserError?.message || 'Unknown error');
+            failCount++;
+            results.push({
+              symbol: token.symbol,
+              oldAddress: lowercaseAddress,
+              success: false,
+              error: browserError?.message || 'Browser failed'
+            });
+            continue;
+          }
+
+          // Extract HTML from the scrape action result
+          const scrapeResult = browserData.results?.find((r: any) => r.action === 'scrape');
+          const html = scrapeResult?.html || '';
+
+          if (!html) {
+            console.error(`No HTML returned for ${token.symbol}`);
+            failCount++;
+            results.push({
+              symbol: token.symbol,
+              oldAddress: lowercaseAddress,
+              success: false,
+              error: 'No HTML content'
+            });
+            continue;
+          }
+
+          // Parse HTML to find the real token address
+          realAddress = extractTokenAddress(html, lowercaseAddress);
+          if (realAddress && realAddress !== lowercaseAddress) {
+            resolutionMethod = 'browser';
+          }
+        }
 
         if (!realAddress || realAddress === lowercaseAddress) {
           console.error(`Could not extract real address for ${token.symbol}`);
