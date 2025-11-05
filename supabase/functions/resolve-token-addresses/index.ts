@@ -104,6 +104,7 @@ serve(async (req) => {
             failCount++;
             results.push({
               symbol: token.symbol,
+              oldAddress: lowercaseAddress,
               success: false,
               error: browserError?.message || 'Browser failed'
             });
@@ -119,6 +120,7 @@ serve(async (req) => {
             failCount++;
             results.push({
               symbol: token.symbol,
+              oldAddress: lowercaseAddress,
               success: false,
               error: 'No HTML content'
             });
@@ -137,6 +139,7 @@ serve(async (req) => {
           failCount++;
           results.push({
             symbol: token.symbol,
+            oldAddress: lowercaseAddress,
             success: false,
             error: 'Could not find real address in API/HTML'
           });
@@ -157,6 +160,7 @@ serve(async (req) => {
           failCount++;
           results.push({
             symbol: token.symbol,
+            oldAddress: lowercaseAddress,
             success: false,
             error: updateError.message
           });
@@ -182,6 +186,7 @@ serve(async (req) => {
         failCount++;
         results.push({
           symbol: token.symbol,
+          oldAddress: token.token_mint,
           success: false,
           error: error.message
         });
