@@ -19,6 +19,7 @@ export const HtmlScrapes = () => {
   const { toast } = useToast();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const logEndRef = useRef<HTMLDivElement>(null);
+  const abortControllerRef = useRef<AbortController | null>(null);
 
   const addLog = (message: string) => {
     const timestamp = new Date().toLocaleTimeString();
@@ -182,20 +183,29 @@ export const HtmlScrapes = () => {
 
   const resolveAddresses = async (tokenCount?: number) => {
     setIsResolving(true);
+    abortControllerRef.current = new AbortController();
     const batchSize = 1000; // Process up to 1000 tokens per batch
     
     addLog(`🚀 Starting address resolution process...`);
     addLog(`📊 Batch size: ${batchSize} tokens (processing all pending)`);
     addLog(`⏱️ Estimated time: ${batchSize * 2} seconds (2s delay per token)`);
     addLog(`━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`);
+    addLog(``);
 
     try {
       addLog(`🔌 Invoking resolve-token-addresses edge function...`);
-      addLog(`⏳ Waiting for response from server...`);
+      addLog(`📡 Sending request to server...`);
+      addLog(`⏳ Server is now processing tokens...`);
+      addLog(``);
       
       const { data: resolveData, error: resolveError } = await supabase.functions.invoke('resolve-token-addresses', {
         body: { batchSize }
       });
+
+      if (abortControllerRef.current?.signal.aborted) {
+        addLog(`🛑 Resolution cancelled by user`);
+        return;
+      }
 
       if (resolveError) {
         console.error('Error resolving addresses:', resolveError);
@@ -206,55 +216,66 @@ export const HtmlScrapes = () => {
           variant: "destructive",
         });
       } else {
-        addLog(`📥 Received response from server`);
+        addLog(`✅ Received response from server`);
         addLog(`━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`);
+        addLog(``);
         
         const results = resolveData.results || [];
-        addLog(`📋 Processing ${results.length} token results...`);
+        addLog(`📊 Total tokens processed: ${results.length}`);
+        addLog(`━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`);
         addLog(``);
         
         results.forEach((result: any, index: number) => {
-          addLog(`🔄 Token ${index + 1}/${results.length}: ${result.symbol || 'Unknown'}`);
+          addLog(`▶️ Token ${index + 1}/${results.length}: ${result.symbol || result.oldAddress?.substring(0, 8) || 'Unknown'}`);
+          addLog(``);
           
           if (result.success) {
-            addLog(`   📍 Old: ${result.oldAddress}`);
+            addLog(`   📍 Original Address:`);
+            addLog(`      ${result.oldAddress}`);
+            addLog(``);
             
             if (result.method === 'api') {
-              addLog(`   🔍 Method: DexScreener API`);
-              addLog(`   📡 URL: https://api.dexscreener.com/latest/dex/search?q=${result.oldAddress}`);
-              addLog(`   ✅ API returned real address`);
+              addLog(`   🔍 Resolution Method: DexScreener API`);
+              addLog(`   📡 API Endpoint: https://api.dexscreener.com/latest/dex/search?q=${result.oldAddress}`);
+              addLog(`   ✅ API returned canonical address`);
             } else if (result.method === 'browser') {
-              addLog(`   🔍 Method: Browser scrape (API fallback failed)`);
-              addLog(`   🌐 URL: https://dexscreener.com/solana/${result.oldAddress}`);
-              addLog(`   🤖 Cloudflare challenge solved`);
-              addLog(`   📄 HTML retrieved`);
-              addLog(`   🔎 Searching for Solscan link pattern...`);
-              addLog(`   ✅ Found: href="https://solscan.io/token/..."`);
+              addLog(`   🔍 Resolution Method: Browser Automation`);
+              addLog(`   ⚠️  API fallback failed - using browser scrape`);
+              addLog(`   🌐 Target URL: https://dexscreener.com/solana/${result.oldAddress}`);
+              addLog(`   🤖 Step 1: Solved Cloudflare challenge`);
+              addLog(`   📄 Step 2: Retrieved page HTML`);
+              addLog(`   🔎 Step 3: Extracted Solscan token link`);
+              addLog(`   ✅ Found canonical address in page`);
             }
             
-            addLog(`   🎯 New: ${result.newAddress}`);
-            addLog(`   💾 Database updated`);
-            addLog(`   ✅ SUCCESS`);
+            addLog(``);
+            addLog(`   🎯 Canonical Address:`);
+            addLog(`      ${result.newAddress}`);
+            addLog(``);
+            addLog(`   💾 Database update: SUCCESS`);
+            addLog(`   ✅ Token resolution complete`);
           } else {
-            addLog(`   📍 Address: ${result.oldAddress || 'unknown'}`);
-            addLog(`   🌐 Attempted: https://dexscreener.com/solana/${result.oldAddress || 'unknown'}`);
-            addLog(`   ❌ FAILED: ${result.error}`);
+            addLog(`   📍 Address Attempted:`);
+            addLog(`      ${result.oldAddress || 'unknown'}`);
+            addLog(``);
+            addLog(`   🌐 Checked: https://dexscreener.com/solana/${result.oldAddress || 'unknown'}`);
+            addLog(`   ❌ Resolution FAILED`);
+            addLog(`   🔴 Error: ${result.error}`);
           }
           
-          if (index < results.length - 1) {
-            addLog(``);
-            addLog(`   ⏳ Waiting 2 seconds before next token...`);
-            addLog(`━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`);
-          }
+          addLog(``);
+          addLog(`━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`);
+          addLog(``);
         });
 
-        addLog(``);
+        addLog(`📊 FINAL SUMMARY:`);
         addLog(`━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`);
-        addLog(`📊 SUMMARY:`);
-        addLog(`   ✅ Resolved: ${resolveData.resolved}`);
-        addLog(`   ❌ Failed: ${resolveData.failed}`);
-        addLog(`   📈 Success rate: ${((resolveData.resolved / (resolveData.resolved + resolveData.failed)) * 100).toFixed(1)}%`);
-        addLog(`✅ Resolution complete!`);
+        addLog(`   ✅ Successfully Resolved: ${resolveData.resolved} tokens`);
+        addLog(`   ❌ Failed to Resolve: ${resolveData.failed} tokens`);
+        addLog(`   📊 Total Processed: ${resolveData.resolved + resolveData.failed} tokens`);
+        addLog(`   📈 Success Rate: ${((resolveData.resolved / (resolveData.resolved + resolveData.failed)) * 100).toFixed(1)}%`);
+        addLog(`━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`);
+        addLog(`✅ Address resolution batch complete!`);
         
         toast({
           title: "Addresses Resolved",
@@ -271,6 +292,19 @@ export const HtmlScrapes = () => {
       });
     } finally {
       setIsResolving(false);
+      abortControllerRef.current = null;
+    }
+  };
+
+  const cancelResolve = () => {
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+      addLog(`🛑 Cancellation requested...`);
+      setIsResolving(false);
+      toast({
+        title: "Cancelled",
+        description: "Address resolution cancelled",
+      });
     }
   };
 
@@ -320,13 +354,21 @@ export const HtmlScrapes = () => {
               <Upload className="mr-2 h-4 w-4" />
               {isProcessing ? "Processing..." : "Extract & Save Tokens"}
             </Button>
-            <Button 
-              onClick={() => resolveAddresses()}
-              disabled={isResolving}
-              variant="secondary"
-            >
-              {isResolving ? "Resolving..." : "🔄 Resolve Addresses"}
-            </Button>
+            {!isResolving ? (
+              <Button 
+                onClick={() => resolveAddresses()}
+                variant="secondary"
+              >
+                🔄 Resolve Addresses
+              </Button>
+            ) : (
+              <Button 
+                onClick={cancelResolve}
+                variant="destructive"
+              >
+                🛑 Cancel
+              </Button>
+            )}
           </div>
           <Textarea
             placeholder="Paste HTML content from DexScreener page here or upload an HTML file..."
