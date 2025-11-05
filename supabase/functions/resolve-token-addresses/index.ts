@@ -23,7 +23,7 @@ serve(async (req) => {
       .from('scraped_tokens')
       .select('id, token_mint, symbol, name')
       .eq('discovery_source', 'html_scrape')
-      .order('created_at', { ascending: false })
+      .order('created_at', { ascending: true })
       .limit(batchSize);
 
     if (fetchError) {
