@@ -2024,6 +2024,7 @@ export type Database = {
           first_seen_at: string
           id: string
           image_url: string | null
+          last_validation_attempt: string | null
           launchpad: string | null
           metadata_fetched_at: string | null
           name: string | null
@@ -2031,6 +2032,9 @@ export type Database = {
           symbol: string | null
           token_mint: string
           updated_at: string
+          validation_attempts: number | null
+          validation_error: string | null
+          validation_status: string | null
         }
         Insert: {
           created_at?: string
@@ -2040,6 +2044,7 @@ export type Database = {
           first_seen_at?: string
           id?: string
           image_url?: string | null
+          last_validation_attempt?: string | null
           launchpad?: string | null
           metadata_fetched_at?: string | null
           name?: string | null
@@ -2047,6 +2052,9 @@ export type Database = {
           symbol?: string | null
           token_mint: string
           updated_at?: string
+          validation_attempts?: number | null
+          validation_error?: string | null
+          validation_status?: string | null
         }
         Update: {
           created_at?: string
@@ -2056,6 +2064,7 @@ export type Database = {
           first_seen_at?: string
           id?: string
           image_url?: string | null
+          last_validation_attempt?: string | null
           launchpad?: string | null
           metadata_fetched_at?: string | null
           name?: string | null
@@ -2063,6 +2072,9 @@ export type Database = {
           symbol?: string | null
           token_mint?: string
           updated_at?: string
+          validation_attempts?: number | null
+          validation_error?: string | null
+          validation_status?: string | null
         }
         Relationships: []
       }

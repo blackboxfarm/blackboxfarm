@@ -404,6 +404,17 @@ export const HtmlScrapes = () => {
                                   Symbol: {token.symbol} {token.name && `(${token.name})`}
                                 </div>
                               )}
+                              {token.validation_status && (
+                                <div className={`text-[10px] ${
+                                  token.validation_status === 'valid' ? 'text-green-500' :
+                                  token.validation_status === 'not_found' ? 'text-yellow-500' :
+                                  token.validation_status === 'invalid' ? 'text-red-500' :
+                                  'text-blue-500'
+                                }`}>
+                                  Status: {token.validation_status}
+                                  {token.validation_error && ` - ${token.validation_error}`}
+                                </div>
+                              )}
                               <div className="text-muted-foreground text-[10px]">
                                 {new Date(token.first_seen_at).toLocaleString()}
                               </div>

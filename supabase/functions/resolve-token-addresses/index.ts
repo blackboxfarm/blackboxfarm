@@ -18,11 +18,12 @@ serve(async (req) => {
     const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
     const supabase = createClient(supabaseUrl, supabaseKey);
 
-    // Get tokens that need address resolution (lowercase addresses from html_scrape)
+    // Get tokens that need address resolution (only pending validation status)
     const { data: tokensToResolve, error: fetchError } = await supabase
       .from('scraped_tokens')
       .select('id, token_mint, symbol, name')
       .eq('discovery_source', 'html_scrape')
+      .in('validation_status', ['pending', 'invalid']) // Allow retry of invalid ones
       .order('created_at', { ascending: true })
       .limit(batchSize);
 
@@ -48,13 +49,19 @@ serve(async (req) => {
     const results = [];
     let successCount = 0;
     let failCount = 0;
+    let notFoundCount = 0;
+    let tokenCounter = 0;
 
     for (const token of tokensToResolve) {
+      tokenCounter++;
+      console.log(`\n🔄 Token ${tokenCounter}/${tokensToResolve.length}: ${token.symbol}`);
+      console.log(`   📍 Address: ${token.token_mint}`);
+      
       try {
         const lowercaseAddress = token.token_mint;
         const dexScreenerUrl = `https://dexscreener.com/solana/${lowercaseAddress}`;
         
-        console.log(`Resolving ${token.symbol} (${lowercaseAddress})...`);
+        console.log(`   🌐 Attempted: ${dexScreenerUrl}`);
 
         let realAddress: string | null = null;
         let resolutionMethod = 'unknown';
@@ -131,9 +138,38 @@ serve(async (req) => {
           console.log(`🔍 First 500 chars of HTML:`, html.substring(0, 500));
           console.log(`🔍 Last 500 chars of HTML:`, html.substring(Math.max(0, html.length - 500)));
           
-          // Check if it's a 404 or error page
-          if (html.includes('404') || html.includes('Page not found') || html.includes('cloudflare')) {
-            console.warn(`⚠️ Possible 404 or error page detected`);
+          // Check for 404 or "Token or Pair Not Found"
+          if (html.includes('404') || 
+              html.includes('Page not found') || 
+              html.includes('Token or Pair Not Found') ||
+              html.includes('Token Not Found')) {
+            console.warn(`⚠️ Token not found (404) for ${token.symbol}`);
+            
+            // Mark as not_found and continue
+            await supabase
+              .from('scraped_tokens')
+              .update({ 
+                validation_status: 'not_found',
+                validation_error: 'Token or pair not found on DexScreener (404)',
+                last_validation_attempt: new Date().toISOString(),
+                validation_attempts: token.validation_attempts ? token.validation_attempts + 1 : 1
+              })
+              .eq('id', token.id);
+            
+            notFoundCount++;
+            results.push({
+              symbol: token.symbol,
+              oldAddress: lowercaseAddress,
+              success: false,
+              status: 'not_found',
+              error: 'Token not found on DexScreener'
+            });
+            continue;
+          }
+          
+          // Check for Cloudflare challenge
+          if (html.includes('cloudflare')) {
+            console.warn(`⚠️ Cloudflare challenge detected`);
           }
           
           // Check for Solscan links
@@ -145,6 +181,18 @@ serve(async (req) => {
 
           if (!html) {
             console.error(`No HTML returned for ${token.symbol}`);
+            
+            // Mark as invalid and continue
+            await supabase
+              .from('scraped_tokens')
+              .update({ 
+                validation_status: 'invalid',
+                validation_error: 'No HTML content returned from browser',
+                last_validation_attempt: new Date().toISOString(),
+                validation_attempts: token.validation_attempts ? token.validation_attempts + 1 : 1
+              })
+              .eq('id', token.id);
+            
             failCount++;
             results.push({
               symbol: token.symbol,
@@ -166,7 +214,19 @@ serve(async (req) => {
         }
 
         if (!realAddress || realAddress === lowercaseAddress) {
-          console.error(`Could not extract real address for ${token.symbol}`);
+          console.error(`   ❌ FAILED: Could not extract real address for ${token.symbol}`);
+          
+          // Mark as invalid and continue
+          await supabase
+            .from('scraped_tokens')
+            .update({ 
+              validation_status: 'invalid',
+              validation_error: 'Could not find real address in API/HTML',
+              last_validation_attempt: new Date().toISOString(),
+              validation_attempts: token.validation_attempts ? token.validation_attempts + 1 : 1
+            })
+            .eq('id', token.id);
+          
           failCount++;
           results.push({
             symbol: token.symbol,
@@ -177,17 +237,21 @@ serve(async (req) => {
           continue;
         }
 
-        // Update the database with the correct address
+        // Update the database with the correct address and mark as valid
         const { error: updateError } = await supabase
           .from('scraped_tokens')
           .update({ 
             token_mint: realAddress,
+            validation_status: 'valid',
+            validation_error: null,
+            last_validation_attempt: new Date().toISOString(),
+            validation_attempts: token.validation_attempts ? token.validation_attempts + 1 : 1,
             updated_at: new Date().toISOString()
           })
           .eq('id', token.id);
 
         if (updateError) {
-          console.error(`Update error for ${token.symbol}:`, updateError);
+          console.error(`   ❌ Update error for ${token.symbol}:`, updateError);
           failCount++;
           results.push({
             symbol: token.symbol,
@@ -196,7 +260,7 @@ serve(async (req) => {
             error: updateError.message
           });
         } else {
-          console.log(`✓ Resolved ${token.symbol}: ${realAddress}`);
+          console.log(`   ✓ Resolved ${token.symbol}: ${realAddress}`);
           successCount++;
           results.push({
             symbol: token.symbol,
@@ -213,7 +277,19 @@ serve(async (req) => {
         }
 
       } catch (error: any) {
-        console.error(`Error processing ${token.symbol}:`, error);
+        console.error(`   ❌ Error processing ${token.symbol}:`, error);
+        
+        // Mark as invalid and continue
+        await supabase
+          .from('scraped_tokens')
+          .update({ 
+            validation_status: 'invalid',
+            validation_error: error.message,
+            last_validation_attempt: new Date().toISOString(),
+            validation_attempts: token.validation_attempts ? token.validation_attempts + 1 : 1
+          })
+          .eq('id', token.id);
+        
         failCount++;
         results.push({
           symbol: token.symbol,
@@ -224,12 +300,13 @@ serve(async (req) => {
       }
     }
 
-    console.log(`Resolution complete: ${successCount} succeeded, ${failCount} failed`);
+    console.log(`\n📊 Resolution complete: ${successCount} succeeded, ${failCount} failed, ${notFoundCount} not found`);
 
     return new Response(JSON.stringify({
       message: `Resolved ${successCount} of ${tokensToResolve.length} token addresses`,
       resolved: successCount,
       failed: failCount,
+      not_found: notFoundCount,
       results
     }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
