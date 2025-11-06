@@ -93,7 +93,8 @@ serve(async (req) => {
         const lowercaseAddress = token.token_mint;
         const dexScreenerUrl = `https://dexscreener.com/solana/${lowercaseAddress}`;
         
-        console.log(`   🌐 Attempted: ${dexScreenerUrl}`);
+        console.log(`\n🌐🌐🌐 FETCHING URL: ${dexScreenerUrl}`);
+        console.log(`   Symbol: ${token.symbol}`);
 
         let realAddress: string | null = null;
         let resolutionMethod = 'unknown';
@@ -126,7 +127,8 @@ serve(async (req) => {
 
         // 2) Fallback to agentic-browser scrape if API did not resolve
         if (!realAddress) {
-          console.log(`🌐 Attempting browser scrape for ${token.symbol}...`);
+          console.log(`\n🤖 API failed - Attempting browser scrape for ${token.symbol}`);
+          console.log(`🌐 Browser scrape URL: ${dexScreenerUrl}`);
           
           // Call agentic-browser to scrape the page
           let browserData: any = null;
