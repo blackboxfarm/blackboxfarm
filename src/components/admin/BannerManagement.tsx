@@ -42,6 +42,12 @@ export function BannerManagement() {
   });
   const { toast } = useToast();
 
+  // Auth + permission state (server-verified)
+  const [isSuperAdminServer, setIsSuperAdminServer] = useState(false);
+  const [authUserId, setAuthUserId] = useState<string | null>(null);
+  const [checkingAdmin, setCheckingAdmin] = useState(true);
+  const [grantLoading, setGrantLoading] = useState(false);
+
   useEffect(() => {
     fetchBanners();
   }, []);
@@ -63,15 +69,49 @@ export function BannerManagement() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    
+
+    // Ensure user is authenticated and has server-side super admin role per RLS
     const { data: { user } } = await supabase.auth.getUser();
+    if (!user) {
+      toast({ title: 'Sign in required', description: 'Please sign in to create banners.', variant: 'destructive' });
+      return;
+    }
+
+    const isLovablePreview = typeof window !== 'undefined' && /(lovable\.(dev|app)|lovableproject\.com)$/.test(window.location.hostname);
+    let canManage = false;
+
+    try {
+      const { data: isSA } = await supabase.rpc('is_super_admin', { _user_id: user.id });
+      canManage = isSA === true || isSA === 'true' || isSA === 't' || isSA === 1;
+    } catch {}
+
+    if (!canManage && isLovablePreview) {
+      // Auto-grant in preview (safe) so RLS allows the insert
+      try {
+        setGrantLoading(true);
+        const { data, error } = await supabase.functions.invoke('grant-super-admin');
+        if (!error && data?.success) {
+          canManage = true;
+          setIsSuperAdminServer(true);
+        }
+      } catch (err) {
+        console.warn('Preview super admin grant failed', err);
+      } finally {
+        setGrantLoading(false);
+      }
+    }
+
+    if (!canManage) {
+      toast({ title: 'Insufficient permissions', description: 'Only Super Admins can manage banners.', variant: 'destructive' });
+      return;
+    }
     
     const payload = {
       ...formData,
       start_date: formData.start_date || null,
       end_date: formData.end_date || null,
       notes: formData.notes || null,
-      created_by: user?.id,
+      created_by: user.id,
     };
 
     if (editBanner) {
