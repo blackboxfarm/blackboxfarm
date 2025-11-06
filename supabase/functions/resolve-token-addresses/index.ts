@@ -75,14 +75,16 @@ serve(async (req) => {
       tokenCounter++;
 
       // Mark as processing immediately to avoid being picked up again
-      await supabase
+      const { error: lockErr } = await supabase
         .from('scraped_tokens')
         .update({
-          validation_status: 'processing',
           last_validation_attempt: new Date().toISOString(),
           validation_attempts: (token.validation_attempts || 0) + 1
         })
         .eq('id', token.id);
+      if (lockErr) {
+        console.error('❌ Failed to set lock on token before processing:', lockErr);
+      }
 
       console.log(`\n🔄 Token ${tokenCounter}/${tokensToResolve.length}: ${token.symbol}`);
       console.log(`   📍 Address: ${token.token_mint}`);
@@ -182,6 +184,18 @@ serve(async (req) => {
                 .from('scraped_tokens')
                 .delete()
                 .eq('id', token.id);
+            } else {
+              console.error('❌ Failed to insert into invalid_scraped_tokens:', insertError);
+              // Fallback: mark as invalid directly on scraped_tokens to avoid re-processing
+              await supabase
+                .from('scraped_tokens')
+                .update({
+                  validation_status: 'invalid',
+                  validation_error: `Browser scraping failed: ${errorMsg}`,
+                  last_validation_attempt: new Date().toISOString(),
+                  validation_attempts: (token.validation_attempts || 0) + 1
+                })
+                .eq('id', token.id);
             }
             
             failCount++;
@@ -229,6 +243,18 @@ serve(async (req) => {
               await supabase
                 .from('scraped_tokens')
                 .delete()
+                .eq('id', token.id);
+            } else {
+              console.error('❌ Failed to insert into invalid_scraped_tokens:', insertError);
+              // Fallback: mark as not_found directly to avoid re-processing
+              await supabase
+                .from('scraped_tokens')
+                .update({
+                  validation_status: 'not_found',
+                  validation_error: 'Token or pair not found on DexScreener (404)',
+                  last_validation_attempt: new Date().toISOString(),
+                  validation_attempts: (token.validation_attempts || 0) + 1
+                })
                 .eq('id', token.id);
             }
             
@@ -278,6 +304,17 @@ serve(async (req) => {
                 .from('scraped_tokens')
                 .delete()
                 .eq('id', token.id);
+            } else {
+              console.error('❌ Failed to insert into invalid_scraped_tokens:', insertError);
+              await supabase
+                .from('scraped_tokens')
+                .update({
+                  validation_status: 'invalid',
+                  validation_error: 'No HTML content returned from browser',
+                  last_validation_attempt: new Date().toISOString(),
+                  validation_attempts: (token.validation_attempts || 0) + 1
+                })
+                .eq('id', token.id);
             }
             
             failCount++;
@@ -322,6 +359,17 @@ serve(async (req) => {
             await supabase
               .from('scraped_tokens')
               .delete()
+              .eq('id', token.id);
+          } else {
+            console.error('❌ Failed to insert into invalid_scraped_tokens:', insertError);
+            await supabase
+              .from('scraped_tokens')
+              .update({
+                validation_status: 'invalid',
+                validation_error: 'Could not find real address in API/HTML',
+                last_validation_attempt: new Date().toISOString(),
+                validation_attempts: (token.validation_attempts || 0) + 1
+              })
               .eq('id', token.id);
           }
           
