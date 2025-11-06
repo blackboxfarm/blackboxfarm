@@ -84,10 +84,9 @@ export function BannerManagement() {
     };
 
     if (editBanner) {
-      const { error } = await supabase
-        .from('banner_ads')
-        .update(payload)
-        .eq('id', editBanner.id);
+      const { data, error } = await supabase.functions.invoke('manage-banner-ad', {
+        body: { action: 'update', payload: { ...payload, id: editBanner.id } }
+      });
 
       if (error) {
         toast({ title: 'Error', description: error.message, variant: 'destructive' });
@@ -98,9 +97,9 @@ export function BannerManagement() {
         fetchBanners();
       }
     } else {
-      const { error } = await supabase
-        .from('banner_ads')
-        .insert([payload]);
+      const { data, error } = await supabase.functions.invoke('manage-banner-ad', {
+        body: { action: 'create', payload }
+      });
 
       if (error) {
         toast({ title: 'Error', description: error.message, variant: 'destructive' });
@@ -115,10 +114,9 @@ export function BannerManagement() {
   const handleDelete = async (id: string) => {
     if (!confirm('Are you sure you want to delete this banner?')) return;
 
-    const { error } = await supabase
-      .from('banner_ads')
-      .delete()
-      .eq('id', id);
+    const { data, error } = await supabase.functions.invoke('manage-banner-ad', {
+      body: { action: 'delete', payload: { id } }
+    });
 
     if (error) {
       toast({ title: 'Error', description: error.message, variant: 'destructive' });

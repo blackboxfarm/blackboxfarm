@@ -127,3 +127,6 @@ verify_jwt = false
 
 [functions.token-metadata]
 verify_jwt = false
+
+[functions.manage-banner-ad]
+verify_jwt = false
