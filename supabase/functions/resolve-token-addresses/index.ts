@@ -12,26 +12,44 @@ serve(async (req) => {
   }
 
   try {
-    const { batchSize = 1000 } = await req.json(); // Process up to 1000 by default
+    const { batchSize = 1000, tokenId = null } = await req.json(); // Process up to 1000 by default
     
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
     const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
     const supabase = createClient(supabaseUrl, supabaseKey);
 
     // Get tokens that need address resolution (only pending - invalid ones are moved to separate table)
-    const { data: tokensToResolve, error: fetchError } = await supabase
-      .from('scraped_tokens')
-      .select('id, token_mint, symbol, name, validation_attempts, first_seen_at, discovery_source')
-      .eq('discovery_source', 'html_scrape')
-      .eq('validation_status', 'pending')
-      .order('first_seen_at', { ascending: true })
-      .order('id', { ascending: true })
-      .limit(batchSize);
+    let tokensToResolve: any[] | null = null;
+    let fetchError: any = null;
+
+    if (tokenId) {
+      const { data, error } = await supabase
+        .from('scraped_tokens')
+        .select('id, token_mint, symbol, name, validation_attempts, first_seen_at, discovery_source')
+        .eq('id', tokenId)
+        .eq('discovery_source', 'html_scrape')
+        .eq('validation_status', 'pending')
+        .limit(1);
+      tokensToResolve = data || [];
+      fetchError = error;
+    } else {
+      const { data, error } = await supabase
+        .from('scraped_tokens')
+        .select('id, token_mint, symbol, name, validation_attempts, first_seen_at, discovery_source')
+        .eq('discovery_source', 'html_scrape')
+        .eq('validation_status', 'pending')
+        .order('first_seen_at', { ascending: true })
+        .order('id', { ascending: true })
+        .limit(batchSize);
+      tokensToResolve = data || [];
+      fetchError = error;
+    }
 
     if (fetchError) {
       console.error('Error fetching tokens:', fetchError);
-      return new Response(JSON.stringify({ error: fetchError.message }), {
-        status: 500,
+      return new Response(JSON.stringify({ error: fetchError.message, results: [], ok: false }), {
+        // Always return 200 to let the client progress and log the error
+        status: 200,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }
@@ -55,6 +73,17 @@ serve(async (req) => {
 
     for (const token of tokensToResolve) {
       tokenCounter++;
+
+      // Mark as processing immediately to avoid being picked up again
+      await supabase
+        .from('scraped_tokens')
+        .update({
+          validation_status: 'processing',
+          last_validation_attempt: new Date().toISOString(),
+          validation_attempts: (token.validation_attempts || 0) + 1
+        })
+        .eq('id', token.id);
+
       console.log(`\n🔄 Token ${tokenCounter}/${tokensToResolve.length}: ${token.symbol}`);
       console.log(`   📍 Address: ${token.token_mint}`);
       
@@ -394,8 +423,9 @@ serve(async (req) => {
 
   } catch (error: any) {
     console.error('Error in resolve-token-addresses:', error);
-    return new Response(JSON.stringify({ error: error.message }), {
-      status: 500,
+    return new Response(JSON.stringify({ error: error.message, results: [], ok: false }), {
+      // Return 200 so the client loop can continue and log the error
+      status: 200,
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
   }

@@ -223,8 +223,31 @@ export const HtmlScrapes = () => {
 
         addLog(`🔄 Processing token ${tokenNumber} of ${pending}...`);
         
+        // Fetch the next pending token deterministically to avoid repeats
+        const { data: nextBatch, error: nextErr } = await supabase
+          .from('scraped_tokens' as any)
+          .select('id, symbol, token_mint')
+          .eq('discovery_source', 'html_scrape')
+          .eq('validation_status', 'pending')
+          .order('first_seen_at', { ascending: true })
+          .order('id', { ascending: true })
+          .limit(1);
+
+        if (nextErr) {
+          addLog(`❌ Failed to fetch next token: ${nextErr.message}`);
+          totalFailed++;
+          break;
+        }
+
+        const target = (nextBatch && nextBatch.length > 0) ? (nextBatch[0] as any) : null;
+        if (!target) {
+          addLog(`✅ No more pending tokens found`);
+          break;
+        }
+
+        const targetId = (target?.id as string | number | undefined);
         const { data: resolveData, error: resolveError } = await supabase.functions.invoke('resolve-token-addresses', {
-          body: { batchSize: 1 }
+          body: { batchSize: 1, tokenId: targetId }
         });
 
         if (abortControllerRef.current?.signal.aborted) {
