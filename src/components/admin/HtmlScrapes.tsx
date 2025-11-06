@@ -339,7 +339,11 @@ export const HtmlScrapes = () => {
               </TabsTrigger>
               <TabsTrigger value="list" onClick={loadScrapedTokens}>
                 <List className="mr-2 h-4 w-4" />
-                Scraped Tokens ({scrapedTokens.length})
+                {(() => {
+                  const done = scrapedTokens.filter(t => t.validation_status === 'valid').length;
+                  const pending = scrapedTokens.length - done;
+                  return `Scraped Tokens: ${pending} TBA / ${done} Done (${scrapedTokens.length})`;
+                })()}
               </TabsTrigger>
             </TabsList>
 
