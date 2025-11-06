@@ -42,6 +42,8 @@ export function BannerManagement() {
   });
   const { toast } = useToast();
 
+  const [isDialogOpen, setIsDialogOpen] = useState(false);
+
   // Auth + permission state (server-verified)
   const [isSuperAdminServer, setIsSuperAdminServer] = useState(false);
   const [authUserId, setAuthUserId] = useState<string | null>(null);
@@ -94,6 +96,7 @@ export function BannerManagement() {
         toast({ title: 'Success', description: 'Banner updated successfully' });
         setEditBanner(null);
         resetForm();
+        setIsDialogOpen(false);
         fetchBanners();
       }
     } else {
@@ -106,6 +109,7 @@ export function BannerManagement() {
       } else {
         toast({ title: 'Success', description: 'Banner created successfully' });
         resetForm();
+        setIsDialogOpen(false);
         fetchBanners();
       }
     }
@@ -163,7 +167,7 @@ export function BannerManagement() {
           <CardDescription>Create and manage banner ads displayed across the platform</CardDescription>
         </CardHeader>
         <CardContent>
-          <Dialog>
+          <Dialog open={isDialogOpen} onOpenChange={(open) => { setIsDialogOpen(open); if (!open) { setEditBanner(null); resetForm(); } }}>
             <DialogTrigger asChild>
               <Button onClick={resetForm}>
                 <Plus className="w-4 h-4 mr-2" />
@@ -261,7 +265,7 @@ export function BannerManagement() {
                 <div className="flex gap-2">
                   <Button type="submit">{editBanner ? 'Update' : 'Create'} Banner</Button>
                   {editBanner && (
-                    <Button type="button" variant="outline" onClick={() => { setEditBanner(null); resetForm(); }}>
+                    <Button type="button" variant="outline" onClick={() => { setEditBanner(null); resetForm(); setIsDialogOpen(false); }}>
                       Cancel
                     </Button>
                   )}
@@ -300,7 +304,7 @@ export function BannerManagement() {
                     </TableCell>
                     <TableCell>
                       <div className="flex gap-2">
-                        <Button variant="outline" size="sm" onClick={() => handleEdit(banner)}>
+                        <Button variant="outline" size="sm" onClick={() => { handleEdit(banner); setIsDialogOpen(true); }}>
                           <Edit className="w-4 h-4" />
                         </Button>
                         <Button variant="destructive" size="sm" onClick={() => handleDelete(banner.id)}>
