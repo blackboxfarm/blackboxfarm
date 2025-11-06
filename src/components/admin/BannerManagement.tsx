@@ -82,7 +82,7 @@ export function BannerManagement() {
 
     try {
       const { data: isSA } = await supabase.rpc('is_super_admin', { _user_id: user.id });
-      canManage = isSA === true || isSA === 'true' || isSA === 't' || isSA === 1;
+      canManage = !!(isSA as any);
     } catch {}
 
     if (!canManage && isLovablePreview) {
