@@ -64,11 +64,14 @@ export function BannerManagement() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
+    const { data: { user } } = await supabase.auth.getUser();
+    
     const payload = {
       ...formData,
       start_date: formData.start_date || null,
       end_date: formData.end_date || null,
       notes: formData.notes || null,
+      created_by: user?.id,
     };
 
     if (editBanner) {
