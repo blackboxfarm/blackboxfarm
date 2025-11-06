@@ -160,11 +160,11 @@ export function BannerManagement() {
                 Create Banner
               </Button>
             </DialogTrigger>
-            <DialogContent className="max-w-2xl">
+            <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
               <DialogHeader>
                 <DialogTitle>{editBanner ? 'Edit Banner' : 'Create Banner'}</DialogTitle>
               </DialogHeader>
-              <form onSubmit={handleSubmit} className="space-y-4">
+              <form onSubmit={handleSubmit} className="space-y-4 pb-4">
                 <div>
                   <Label>Title</Label>
                   <Input
