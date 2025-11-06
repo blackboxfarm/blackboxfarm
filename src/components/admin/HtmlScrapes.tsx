@@ -8,6 +8,7 @@ import { Upload, FileUp, Terminal, List } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Progress } from "@/components/ui/progress";
 
 export const HtmlScrapes = () => {
   const [htmlContent, setHtmlContent] = useState("");
@@ -18,6 +19,10 @@ export const HtmlScrapes = () => {
   const [isLoadingTokens, setIsLoadingTokens] = useState(false);
   const [resolutionStatus, setResolutionStatus] = useState<'idle' | 'processing' | 'complete' | 'error'>('idle');
   const [resolutionSummary, setResolutionSummary] = useState<{ resolved: number; failed: number } | null>(null);
+  const [batchSize, setBatchSize] = useState(25);
+  const [resolutionProgress, setResolutionProgress] = useState(0);
+  const [totalPending, setTotalPending] = useState(0);
+  const [processedCount, setProcessedCount] = useState(0);
   const { toast } = useToast();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const logEndRef = useRef<HTMLDivElement>(null);
@@ -183,115 +188,115 @@ export const HtmlScrapes = () => {
     }
   };
 
-  const resolveAddresses = async (tokenCount?: number) => {
+  const resolveAddresses = async () => {
     setIsResolving(true);
     setResolutionStatus('processing');
     setResolutionSummary(null);
+    setProcessedCount(0);
     abortControllerRef.current = new AbortController();
-    const batchSize = 1000; // Process up to 1000 tokens per batch
     
-    addLog(`🚀 Starting address resolution process...`);
-    addLog(`📊 Batch size: ${batchSize} tokens (processing all pending)`);
-    addLog(`⏱️ Estimated time: ${batchSize * 2} seconds (2s delay per token)`);
+    // Get count of pending tokens
+    const { count } = await supabase
+      .from('scraped_tokens' as any)
+      .select('*', { count: 'exact', head: true })
+      .neq('validation_status', 'valid');
+    
+    const pending = count || 0;
+    setTotalPending(pending);
+    setResolutionProgress(0);
+    
+    addLog(`🚀 Starting incremental address resolution...`);
+    addLog(`📊 Total pending tokens: ${pending}`);
+    addLog(`📦 Batch size: ${batchSize} tokens per batch`);
+    addLog(`⏱️ Estimated time per batch: ~${batchSize * 2} seconds`);
     addLog(`━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`);
     addLog(``);
 
+    let totalResolved = 0;
+    let totalFailed = 0;
+    let batchNumber = 1;
+
     try {
-      addLog(`🔌 Invoking resolve-token-addresses edge function...`);
-      addLog(`📡 Sending request to server...`);
-      addLog(`⏳ Server is now processing tokens...`);
-      addLog(``);
-      
-      const { data: resolveData, error: resolveError } = await supabase.functions.invoke('resolve-token-addresses', {
-        body: { batchSize }
-      });
+      while (true) {
+        if (abortControllerRef.current?.signal.aborted) {
+          addLog(`🛑 Resolution cancelled by user`);
+          setResolutionStatus('idle');
+          break;
+        }
 
-      if (abortControllerRef.current?.signal.aborted) {
-        addLog(`🛑 Resolution cancelled by user`);
-        setResolutionStatus('idle');
-        return;
-      }
-
-      if (resolveError) {
-        console.error('Error resolving addresses:', resolveError);
-        addLog(`❌ Resolution failed: ${resolveError.message}`);
-        setResolutionStatus('error');
-        toast({
-          title: "Address Resolution Failed",
-          description: "The resolve function may not be deployed yet. Try the manual button in 2-3 minutes.",
-          variant: "destructive",
+        addLog(`🔄 Processing batch ${batchNumber}...`);
+        addLog(`🔌 Invoking resolve-token-addresses edge function...`);
+        
+        const { data: resolveData, error: resolveError } = await supabase.functions.invoke('resolve-token-addresses', {
+          body: { batchSize }
         });
-      } else {
-        addLog(`✅ Received response from server`);
-        addLog(`━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`);
-        addLog(``);
-        
+
+        if (abortControllerRef.current?.signal.aborted) {
+          addLog(`🛑 Resolution cancelled by user`);
+          setResolutionStatus('idle');
+          break;
+        }
+
+        if (resolveError) {
+          console.error('Error resolving addresses:', resolveError);
+          addLog(`❌ Batch ${batchNumber} failed: ${resolveError.message}`);
+          setResolutionStatus('error');
+          toast({
+            title: "Batch Resolution Failed",
+            description: `Batch ${batchNumber} failed. Stopping process.`,
+            variant: "destructive",
+          });
+          break;
+        }
+
         const results = resolveData.results || [];
-        addLog(`📊 Total tokens processed: ${results.length}`);
+        const batchResolved = resolveData.resolved || 0;
+        const batchFailed = resolveData.failed || 0;
+        
+        totalResolved += batchResolved;
+        totalFailed += batchFailed;
+        
+        addLog(`✅ Batch ${batchNumber} complete`);
         addLog(`━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`);
+        addLog(`📊 Batch processed: ${results.length} tokens`);
+        addLog(`   ✅ Resolved: ${batchResolved}`);
+        addLog(`   ❌ Failed: ${batchFailed}`);
         addLog(``);
         
-        results.forEach((result: any, index: number) => {
-          addLog(`▶️ Token ${index + 1}/${results.length}: ${result.symbol || result.oldAddress?.substring(0, 8) || 'Unknown'}`);
-          addLog(``);
-          
-          if (result.success) {
-            addLog(`   📍 Original Address:`);
-            addLog(`      ${result.oldAddress}`);
-            addLog(``);
-            
-            if (result.method === 'api') {
-              addLog(`   🔍 Resolution Method: DexScreener API`);
-              addLog(`   📡 API Endpoint: https://api.dexscreener.com/latest/dex/search?q=${result.oldAddress}`);
-              addLog(`   ✅ API returned canonical address`);
-            } else if (result.method === 'browser') {
-              addLog(`   🔍 Resolution Method: Browser Automation`);
-              addLog(`   ⚠️  API fallback failed - using browser scrape`);
-              addLog(`   🌐 Target URL: https://dexscreener.com/solana/${result.oldAddress}`);
-              addLog(`   🤖 Step 1: Solved Cloudflare challenge`);
-              addLog(`   📄 Step 2: Retrieved page HTML`);
-              addLog(`   🔎 Step 3: Extracted Solscan token link`);
-              addLog(`   ✅ Found canonical address in page`);
-            }
-            
-            addLog(``);
-            addLog(`   🎯 Canonical Address:`);
-            addLog(`      ${result.newAddress}`);
-            addLog(``);
-            addLog(`   💾 Database update: SUCCESS`);
-            addLog(`   ✅ Token resolution complete`);
-          } else {
-            addLog(`   📍 Address Attempted:`);
-            addLog(`      ${result.oldAddress || 'unknown'}`);
-            addLog(``);
-            addLog(`   🌐 Checked: https://dexscreener.com/solana/${result.oldAddress || 'unknown'}`);
-            addLog(`   ❌ Resolution FAILED`);
-            addLog(`   🔴 Error: ${result.error}`);
-          }
-          
+        // Update progress
+        const newProcessed = processedCount + results.length;
+        setProcessedCount(newProcessed);
+        setResolutionProgress((newProcessed / pending) * 100);
+
+        // If we processed fewer tokens than batch size, we're done
+        if (results.length < batchSize) {
           addLog(``);
           addLog(`━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`);
-          addLog(``);
-        });
+          addLog(`📊 FINAL SUMMARY:`);
+          addLog(`━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`);
+          addLog(`   ✅ Successfully Resolved: ${totalResolved} tokens`);
+          addLog(`   ❌ Failed to Resolve: ${totalFailed} tokens`);
+          addLog(`   📊 Total Processed: ${totalResolved + totalFailed} tokens`);
+          addLog(`   📈 Success Rate: ${((totalResolved / (totalResolved + totalFailed)) * 100).toFixed(1)}%`);
+          addLog(`━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`);
+          addLog(`✅ All pending tokens processed!`);
+          
+          setResolutionStatus('complete');
+          setResolutionSummary({ resolved: totalResolved, failed: totalFailed });
+          
+          toast({
+            title: "✅ Resolution Complete!",
+            description: `Resolved ${totalResolved} of ${totalResolved + totalFailed} tokens.`,
+          });
+          
+          await loadScrapedTokens();
+          break;
+        }
 
-        addLog(`📊 FINAL SUMMARY:`);
-        addLog(`━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`);
-        addLog(`   ✅ Successfully Resolved: ${resolveData.resolved} tokens`);
-        addLog(`   ❌ Failed to Resolve: ${resolveData.failed} tokens`);
-        addLog(`   📊 Total Processed: ${resolveData.resolved + resolveData.failed} tokens`);
-        addLog(`   📈 Success Rate: ${((resolveData.resolved / (resolveData.resolved + resolveData.failed)) * 100).toFixed(1)}%`);
-        addLog(`━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`);
-        addLog(`✅ Address resolution batch complete!`);
-        
-        setResolutionStatus('complete');
-        setResolutionSummary({ resolved: resolveData.resolved, failed: resolveData.failed });
-        
-        toast({
-          title: "✅ Resolution Complete!",
-          description: `Resolved ${resolveData.resolved} of ${resolveData.resolved + resolveData.failed} tokens. Check the summary below.`,
-        });
-        
-        await loadScrapedTokens();
+        batchNumber++;
+        addLog(`⏳ Waiting 2 seconds before next batch...`);
+        addLog(``);
+        await new Promise(resolve => setTimeout(resolve, 2000));
       }
     } catch (resolveErr: any) {
       console.error('Error triggering resolution:', resolveErr);
@@ -419,21 +424,52 @@ export const HtmlScrapes = () => {
               <Upload className="mr-2 h-4 w-4" />
               {isProcessing ? "Processing..." : "Extract & Save Tokens"}
             </Button>
-            {!isResolving ? (
-              <Button 
-                onClick={() => resolveAddresses()}
-                variant="secondary"
-              >
-                🔄 Resolve Addresses
-              </Button>
-            ) : (
-              <Button 
-                onClick={cancelResolve}
-                variant="destructive"
-              >
-                🛑 Cancel
-              </Button>
+          </div>
+
+          <div className="space-y-2">
+            <div className="flex items-center gap-2">
+              <label className="text-sm font-medium">Batch Size:</label>
+              <Input
+                type="number"
+                min="1"
+                max="100"
+                value={batchSize}
+                onChange={(e) => setBatchSize(Math.max(1, Math.min(100, parseInt(e.target.value) || 25)))}
+                className="w-20"
+                disabled={isResolving}
+              />
+              <span className="text-xs text-muted-foreground">tokens per batch (recommended: 25)</span>
+            </div>
+            
+            {isResolving && (
+              <div className="space-y-2">
+                <div className="flex items-center justify-between text-sm">
+                  <span>Progress: {processedCount} / {totalPending} tokens</span>
+                  <span>{resolutionProgress.toFixed(0)}%</span>
+                </div>
+                <Progress value={resolutionProgress} className="h-2" />
+              </div>
             )}
+
+            <div className="flex gap-2">
+              {!isResolving ? (
+                <Button 
+                  onClick={resolveAddresses}
+                  variant="secondary"
+                  className="flex-1"
+                >
+                  🔄 Resolve Addresses
+                </Button>
+              ) : (
+                <Button 
+                  onClick={cancelResolve}
+                  variant="destructive"
+                  className="flex-1"
+                >
+                  🛑 Cancel
+                </Button>
+              )}
+            </div>
           </div>
           <Textarea
             placeholder="Paste HTML content from DexScreener page here or upload an HTML file..."
