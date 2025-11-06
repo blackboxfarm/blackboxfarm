@@ -19,7 +19,6 @@ export const HtmlScrapes = () => {
   const [isLoadingTokens, setIsLoadingTokens] = useState(false);
   const [resolutionStatus, setResolutionStatus] = useState<'idle' | 'processing' | 'complete' | 'error'>('idle');
   const [resolutionSummary, setResolutionSummary] = useState<{ resolved: number; failed: number } | null>(null);
-  const [batchSize, setBatchSize] = useState(25);
   const [resolutionProgress, setResolutionProgress] = useState(0);
   const [totalPending, setTotalPending] = useState(0);
   const [processedCount, setProcessedCount] = useState(0);
@@ -205,16 +204,14 @@ export const HtmlScrapes = () => {
     setTotalPending(pending);
     setResolutionProgress(0);
     
-    addLog(`🚀 Starting incremental address resolution...`);
+    addLog(`🚀 Starting one-by-one address resolution...`);
     addLog(`📊 Total pending tokens: ${pending}`);
-    addLog(`📦 Batch size: ${batchSize} tokens per batch`);
-    addLog(`⏱️ Estimated time per batch: ~${batchSize * 2} seconds`);
     addLog(`━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`);
     addLog(``);
 
     let totalResolved = 0;
     let totalFailed = 0;
-    let batchNumber = 1;
+    let tokenNumber = 1;
 
     try {
       while (true) {
@@ -224,11 +221,10 @@ export const HtmlScrapes = () => {
           break;
         }
 
-        addLog(`🔄 Processing batch ${batchNumber}...`);
-        addLog(`🔌 Invoking resolve-token-addresses edge function...`);
+        addLog(`🔄 Processing token ${tokenNumber} of ${pending}...`);
         
         const { data: resolveData, error: resolveError } = await supabase.functions.invoke('resolve-token-addresses', {
-          body: { batchSize }
+          body: { batchSize: 1 }
         });
 
         if (abortControllerRef.current?.signal.aborted) {
@@ -238,38 +234,36 @@ export const HtmlScrapes = () => {
         }
 
         if (resolveError) {
-          console.error('Error resolving addresses:', resolveError);
-          addLog(`❌ Batch ${batchNumber} failed: ${resolveError.message}`);
-          setResolutionStatus('error');
-          toast({
-            title: "Batch Resolution Failed",
-            description: `Batch ${batchNumber} failed. Stopping process.`,
-            variant: "destructive",
-          });
-          break;
+          console.error('Error resolving token:', resolveError);
+          addLog(`❌ Token ${tokenNumber} failed: ${resolveError.message}`);
+          totalFailed++;
+        } else {
+          const results = resolveData.results || [];
+          const result = results[0];
+          
+          if (result) {
+            if (result.status === 'valid') {
+              addLog(`✅ Token ${tokenNumber}: ${result.symbol || result.tokenMint} - RESOLVED`);
+              addLog(`   📍 Address: ${result.resolvedAddress || result.tokenMint}`);
+              totalResolved++;
+            } else {
+              addLog(`❌ Token ${tokenNumber}: ${result.symbol || result.tokenMint} - FAILED`);
+              addLog(`   ⚠️ Reason: ${result.error || 'Unknown error'}`);
+              totalFailed++;
+            }
+          } else {
+            addLog(`✅ No more pending tokens found`);
+            break;
+          }
         }
-
-        const results = resolveData.results || [];
-        const batchResolved = resolveData.resolved || 0;
-        const batchFailed = resolveData.failed || 0;
-        
-        totalResolved += batchResolved;
-        totalFailed += batchFailed;
-        
-        addLog(`✅ Batch ${batchNumber} complete`);
-        addLog(`━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`);
-        addLog(`📊 Batch processed: ${results.length} tokens`);
-        addLog(`   ✅ Resolved: ${batchResolved}`);
-        addLog(`   ❌ Failed: ${batchFailed}`);
-        addLog(``);
         
         // Update progress
-        const newProcessed = processedCount + results.length;
+        const newProcessed = tokenNumber;
         setProcessedCount(newProcessed);
         setResolutionProgress((newProcessed / pending) * 100);
 
-        // If we processed fewer tokens than batch size, we're done
-        if (results.length < batchSize) {
+        // Check if we're done
+        if (!resolveData?.results || resolveData.results.length === 0) {
           addLog(``);
           addLog(`━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`);
           addLog(`📊 FINAL SUMMARY:`);
@@ -277,7 +271,9 @@ export const HtmlScrapes = () => {
           addLog(`   ✅ Successfully Resolved: ${totalResolved} tokens`);
           addLog(`   ❌ Failed to Resolve: ${totalFailed} tokens`);
           addLog(`   📊 Total Processed: ${totalResolved + totalFailed} tokens`);
-          addLog(`   📈 Success Rate: ${((totalResolved / (totalResolved + totalFailed)) * 100).toFixed(1)}%`);
+          if (totalResolved + totalFailed > 0) {
+            addLog(`   📈 Success Rate: ${((totalResolved / (totalResolved + totalFailed)) * 100).toFixed(1)}%`);
+          }
           addLog(`━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`);
           addLog(`✅ All pending tokens processed!`);
           
@@ -293,10 +289,9 @@ export const HtmlScrapes = () => {
           break;
         }
 
-        batchNumber++;
-        addLog(`⏳ Waiting 2 seconds before next batch...`);
+        tokenNumber++;
         addLog(``);
-        await new Promise(resolve => setTimeout(resolve, 2000));
+        await new Promise(resolve => setTimeout(resolve, 1000));
       }
     } catch (resolveErr: any) {
       console.error('Error triggering resolution:', resolveErr);
@@ -304,7 +299,7 @@ export const HtmlScrapes = () => {
       setResolutionStatus('error');
       toast({
         title: "Resolution Error",
-        description: "Function not ready. Wait 2-3 min and use manual resolve button.",
+        description: "Failed to resolve token addresses.",
         variant: "destructive",
       });
     } finally {
@@ -427,20 +422,6 @@ export const HtmlScrapes = () => {
           </div>
 
           <div className="space-y-2">
-            <div className="flex items-center gap-2">
-              <label className="text-sm font-medium">Batch Size:</label>
-              <Input
-                type="number"
-                min="1"
-                max="100"
-                value={batchSize}
-                onChange={(e) => setBatchSize(Math.max(1, Math.min(100, parseInt(e.target.value) || 25)))}
-                className="w-20"
-                disabled={isResolving}
-              />
-              <span className="text-xs text-muted-foreground">tokens per batch (recommended: 25)</span>
-            </div>
-            
             {isResolving && (
               <div className="space-y-2">
                 <div className="flex items-center justify-between text-sm">
