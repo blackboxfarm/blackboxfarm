@@ -158,6 +158,12 @@ serve(async (req) => {
             console.log(`📊 Browser data keys:`, Object.keys(browserData || {}));
             console.log(`✅ Browser success:`, browserData?.success);
             console.log(`📝 Results count:`, browserData?.results?.length || 0);
+            
+            // Log the actual URL that was scraped (may differ from input due to redirects)
+            const scrapeResult = browserData.results?.find((r: any) => r.action === 'scrape');
+            if (scrapeResult?.url) {
+              console.log(`🌐 Actual scraped URL: ${scrapeResult.url}`);
+            }
           }
 
           if (browserError || !browserData?.success) {
