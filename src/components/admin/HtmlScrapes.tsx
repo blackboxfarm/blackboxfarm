@@ -235,19 +235,28 @@ export const HtmlScrapes = () => {
 
         if (resolveError) {
           console.error('Error resolving token:', resolveError);
-          addLog(`❌ Token ${tokenNumber} failed: ${resolveError.message}`);
+          addLog(`❌ Token ${tokenNumber} - FAILED`);
+          addLog(`   ⚠️ Reason: ${resolveError.message}`);
+          // Continue to next token even if the invocation failed
           totalFailed++;
         } else {
-          const results = resolveData.results || [];
+          const results = resolveData?.results || [];
           const result = results[0];
-          
+
           if (result) {
-            if (result.status === 'valid') {
-              addLog(`✅ Token ${tokenNumber}: ${result.symbol || result.tokenMint} - RESOLVED`);
-              addLog(`   📍 Address: ${result.resolvedAddress || result.tokenMint}`);
+            const sym = result.symbol || result.tokenMint || result.oldAddress || 'Unknown';
+            if (result.success) {
+              addLog(`✅ Token ${tokenNumber}: ${sym} - RESOLVED`);
+              if (result.newAddress) {
+                addLog(`   📍 Address: ${result.newAddress}`);
+              }
               totalResolved++;
+            } else if (result.status === 'not_found') {
+              addLog(`⚠️ Token ${tokenNumber}: ${sym} - NOT FOUND`);
+              addLog(`   ⚠️ Reason: ${result.error || 'Token not found on DexScreener'}`);
+              totalFailed++;
             } else {
-              addLog(`❌ Token ${tokenNumber}: ${result.symbol || result.tokenMint} - FAILED`);
+              addLog(`❌ Token ${tokenNumber}: ${sym} - FAILED`);
               addLog(`   ⚠️ Reason: ${result.error || 'Unknown error'}`);
               totalFailed++;
             }
