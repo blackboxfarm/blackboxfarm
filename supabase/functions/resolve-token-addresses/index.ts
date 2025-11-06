@@ -98,35 +98,69 @@ serve(async (req) => {
           console.log(`🌐 Attempting browser scrape for ${token.symbol}...`);
           
           // Call agentic-browser to scrape the page
-          const { data: browserData, error: browserError } = await supabase.functions.invoke('agentic-browser', {
-            body: {
-              url: dexScreenerUrl,
-              actions: [
-                { type: 'cloudflare_challenge' },
-                { type: 'scrape' }
-              ],
-              timeout: 30000
-            }
-          });
+          let browserData: any = null;
+          let browserError: any = null;
+          
+          try {
+            const response = await supabase.functions.invoke('agentic-browser', {
+              body: {
+                url: dexScreenerUrl,
+                actions: [
+                  { type: 'cloudflare_challenge' },
+                  { type: 'scrape' }
+                ],
+                timeout: 30000
+              }
+            });
+            browserData = response.data;
+            browserError = response.error;
+          } catch (invokeError: any) {
+            console.error(`❌ Exception calling agentic-browser:`, invokeError);
+            browserError = { message: invokeError.message || 'Function invocation failed' };
+          }
 
           console.log(`📡 Browser response status:`, browserError ? 'ERROR' : 'SUCCESS');
           if (browserError) {
             console.error(`❌ Browser error details:`, JSON.stringify(browserError, null, 2));
           }
           if (browserData) {
-            console.log(`📊 Browser data keys:`, Object.keys(browserData));
-            console.log(`✅ Browser success:`, browserData.success);
-            console.log(`📝 Results count:`, browserData.results?.length || 0);
+            console.log(`📊 Browser data keys:`, Object.keys(browserData || {}));
+            console.log(`✅ Browser success:`, browserData?.success);
+            console.log(`📝 Results count:`, browserData?.results?.length || 0);
           }
 
           if (browserError || !browserData?.success) {
-            console.error(`Browser error for ${token.symbol}:`, browserError?.message || 'Unknown error');
+            const errorMsg = browserError?.message || browserData?.error || 'Browser scraping failed';
+            console.error(`⚠️ Browser failed for ${token.symbol}:`, errorMsg);
+            
+            // Move to invalid_scraped_tokens
+            const { error: insertError } = await supabase
+              .from('invalid_scraped_tokens')
+              .insert({
+                token_mint: token.token_mint,
+                symbol: token.symbol,
+                name: token.name,
+                discovery_source: token.discovery_source,
+                scraped_at: token.first_seen_at,
+                validation_status: 'invalid',
+                validation_error: `Browser scraping failed: ${errorMsg}`,
+                last_validation_attempt: new Date().toISOString(),
+                validation_attempts: (token.validation_attempts || 0) + 1
+              });
+
+            if (!insertError) {
+              await supabase
+                .from('scraped_tokens')
+                .delete()
+                .eq('id', token.id);
+            }
+            
             failCount++;
             results.push({
               symbol: token.symbol,
               oldAddress: lowercaseAddress,
               success: false,
-              error: browserError?.message || 'Browser failed'
+              error: errorMsg
             });
             continue;
           }
