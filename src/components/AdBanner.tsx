@@ -107,6 +107,9 @@ export function AdBanner({ size, position }: AdBannerProps) {
               </Badge>
             </div>
             <div className="absolute bottom-1 left-3 text-xs opacity-75">Sponsored</div>
+            <div className="absolute top-1 left-1 bg-primary text-primary-foreground font-bold text-lg px-2 py-1 rounded shadow-lg">
+              #{position}
+            </div>
           </div>
         ) : (
           <div className={`bg-gradient-to-r ${displayData.gradient} p-3 text-white`}>
@@ -148,6 +151,9 @@ export function AdBanner({ size, position }: AdBannerProps) {
                 </div>
               </div>
             </div>
+            <div className="absolute top-2 left-2 bg-primary text-primary-foreground font-bold text-2xl px-3 py-2 rounded shadow-lg">
+              #{position}
+            </div>
           </div>
         ) : (
           <div className={`bg-gradient-to-br ${displayData.gradient} p-6 text-white h-64 flex flex-col justify-between`}>
@@ -175,7 +181,7 @@ export function AdBanner({ size, position }: AdBannerProps) {
 
   // Leaderboard (728x90 equivalent)
   return (
-    <Card className="mb-4 overflow-hidden cursor-pointer" onClick={handleClick}>
+      <Card className="mb-4 overflow-hidden cursor-pointer" onClick={handleClick}>
       {displayData.image_url ? (
         <div className="relative h-24 bg-cover bg-center" style={{ backgroundImage: `url(${displayData.image_url})` }}>
           <div className="absolute inset-0 bg-gradient-to-r from-black/70 to-black/50 p-4 text-white">
@@ -191,6 +197,9 @@ export function AdBanner({ size, position }: AdBannerProps) {
                 <div className="text-xs opacity-60">Sponsored</div>
               </div>
             </div>
+          </div>
+          <div className="absolute top-1 left-1 bg-primary text-primary-foreground font-bold text-lg px-2 py-1 rounded shadow-lg">
+            #{position}
           </div>
         </div>
       ) : (
