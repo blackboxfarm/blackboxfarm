@@ -278,6 +278,7 @@ export function BannerManagement() {
             <Table>
               <TableHeader>
                 <TableRow>
+                  <TableHead>Preview</TableHead>
                   <TableHead>Title</TableHead>
                   <TableHead>Position</TableHead>
                   <TableHead>Weight</TableHead>
@@ -289,6 +290,18 @@ export function BannerManagement() {
               <TableBody>
                 {banners.map((banner) => (
                   <TableRow key={banner.id}>
+                    <TableCell>
+                      <div className="relative w-24 h-16">
+                        <img 
+                          src={banner.image_url} 
+                          alt={banner.title}
+                          className="w-full h-full object-cover rounded"
+                        />
+                        <div className="absolute top-1 left-1 bg-primary text-primary-foreground font-bold text-lg px-2 py-1 rounded shadow-lg">
+                          #{banner.position}
+                        </div>
+                      </div>
+                    </TableCell>
                     <TableCell className="font-medium">{banner.title}</TableCell>
                     <TableCell>{banner.position}</TableCell>
                     <TableCell>{banner.weight}</TableCell>
