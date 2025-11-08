@@ -857,12 +857,12 @@ export function BaglessHoldersReport({ initialToken }: BaglessHoldersReportProps
               {/* Launchpad banner removed - redundant info */}
 
               
-              {/* Ad Banner #1 - After Token Metadata */}
+              {/* Ad Banner #2 - After Token Metadata */}
               <div className="block md:hidden">
-                <AdBanner size="mobile" position={1} />
+                <AdBanner size="mobile" position={2} />
               </div>
               <div className="hidden md:block">
-                <AdBanner size="leaderboard" position={1} />
+                <AdBanner size="leaderboard" position={2} />
               </div>
               
               {/* Token price removed - redundant info */}
@@ -1642,12 +1642,12 @@ export function BaglessHoldersReport({ initialToken }: BaglessHoldersReportProps
                         <span>True Whale (≥$5K)</span>
                 </div>
                 
-                {/* Ad Banner #2 - Between Sediment Chart and Filter Controls */}
+                {/* Ad Banner #3 - Between Sediment Chart and Filter Controls */}
                 <div className="block md:hidden">
-                  <AdBanner size="mobile" position={2} />
+                  <AdBanner size="mobile" position={3} />
                 </div>
                 <div className="hidden md:block">
-                  <AdBanner size="rectangle" position={2} />
+                  <AdBanner size="rectangle" position={3} />
                 </div>
                       <div className="flex items-center gap-2">
                         <div className="w-3 h-3 bg-yellow-600 rounded"></div>
@@ -2034,12 +2034,12 @@ export function BaglessHoldersReport({ initialToken }: BaglessHoldersReportProps
             </CardContent>
           </Card>
           
-          {/* Ad Banner #3 - After Holders List Table */}
+          {/* Ad Banner #4 - After Holders List Table */}
           <div className="block md:hidden">
-            <AdBanner size="mobile" position={3} />
+            <AdBanner size="mobile" position={4} />
           </div>
           <div className="hidden md:block">
-            <AdBanner size="leaderboard" position={3} />
+            <AdBanner size="leaderboard" position={4} />
           </div>
         </>
       )}
