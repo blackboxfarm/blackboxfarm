@@ -96,7 +96,12 @@ export function AdBanner({ size, position }: AdBannerProps) {
     return (
       <Card className="mb-4 overflow-hidden cursor-pointer" onClick={handleClick}>
         {displayData.image_url ? (
-          <div className="relative h-24 bg-cover bg-center" style={{ backgroundImage: `url(${displayData.image_url})` }}>
+          <div className="relative w-full" style={{ aspectRatio: 'auto' }}>
+            <img 
+              src={displayData.image_url} 
+              alt={displayData.title}
+              className="w-full h-auto object-contain"
+            />
             <div className="absolute inset-0 bg-gradient-to-r from-black/60 to-black/40 flex items-center justify-between p-3 text-white">
               <div className="flex-1">
                 <div className="font-semibold text-sm">{displayData.title}</div>
