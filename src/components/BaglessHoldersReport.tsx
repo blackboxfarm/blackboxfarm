@@ -305,12 +305,7 @@ export function BaglessHoldersReport({ initialToken }: BaglessHoldersReportProps
       const totalTime = performance.now() - startTime;
       console.log(`✅ [PERF] Twitter lookup TOTAL: ${totalTime.toFixed(0)}ms | Found: ${twitterMap.size} handles`);
       
-      if (twitterMap.size > 0) {
-        toast({
-          title: "Twitter Handles Found",
-          description: `Found ${twitterMap.size} verified Twitter accounts via SNS (${(totalTime / 1000).toFixed(1)}s)`,
-        });
-      }
+      // Toast removed - UI feedback is sufficient
     } catch (error: any) {
       const totalTime = performance.now() - startTime;
       console.error(`❌ [PERF] Twitter lookup FAILED after ${totalTime.toFixed(0)}ms:`, error);
@@ -385,10 +380,7 @@ export function BaglessHoldersReport({ initialToken }: BaglessHoldersReportProps
         setPriceSource(data.priceSource || 'API');
         const totalTime = performance.now() - startTime;
         console.log(`✅ [PERF] Price discovery SUCCESS: ${totalTime.toFixed(0)}ms | Price: $${data.tokenPriceUSD}`);
-        toast({
-          title: "Price Discovered",
-          description: `Found price: $${data.tokenPriceUSD.toFixed(8)} from ${data.priceSource || 'API'}`,
-        });
+        // Toast removed - UI feedback is sufficient
       } else {
         throw new Error('Price discovery failed');
       }
@@ -396,11 +388,7 @@ export function BaglessHoldersReport({ initialToken }: BaglessHoldersReportProps
       const totalTime = performance.now() - startTime;
       console.error(`❌ [PERF] Price discovery FAILED after ${totalTime.toFixed(0)}ms:`, error);
       const msg = error instanceof Error ? error.message : 'Could not fetch token price automatically. Please enter manually.';
-      toast({
-        title: "Price Discovery Failed",
-        description: msg,
-        variant: "destructive"
-      });
+      // Toast removed - UI feedback is sufficient
     } finally {
       setIsFetchingPrice(false);
     }
@@ -483,10 +471,7 @@ export function BaglessHoldersReport({ initialToken }: BaglessHoldersReportProps
         ` (Price: $${data.tokenPriceUSD.toFixed(8)}${data.priceSource ? ` from ${data.priceSource}` : ''})` : 
         ' (Price: Failed to fetch)';
       
-      toast({
-        title: "Report Generated",
-        description: `Found ${data.totalHolders} total holders${priceInfo} in ${(totalReportTime / 1000).toFixed(1)}s`,
-      });
+      // Toast removed - UI feedback is sufficient
     } catch (error) {
       const totalReportTime = performance.now() - reportStartTime;
       console.error(`❌ [PERF] Report generation FAILED after ${totalReportTime.toFixed(0)}ms:`, error);
