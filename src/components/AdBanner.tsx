@@ -94,7 +94,7 @@ export function AdBanner({ size, position }: AdBannerProps) {
 
   if (size === 'mobile') {
     return (
-      <Card className="mb-4 overflow-hidden cursor-pointer" onClick={handleClick}>
+      <Card className="mb-4 overflow-hidden cursor-pointer transition-all duration-300 hover:scale-105 hover:shadow-2xl hover:shadow-primary/20" onClick={handleClick}>
         {displayData.image_url ? (
           <div className="relative w-full" style={{ aspectRatio: 'auto' }}>
             <img 
@@ -191,7 +191,7 @@ export function AdBanner({ size, position }: AdBannerProps) {
 
   // Leaderboard (728x90 equivalent)
   return (
-      <Card className="mb-4 overflow-hidden cursor-pointer" onClick={handleClick}>
+      <Card className="mb-4 overflow-hidden cursor-pointer transition-all duration-300 hover:scale-105 hover:shadow-2xl hover:shadow-primary/20" onClick={handleClick}>
       {displayData.image_url ? (
         <div className="relative h-24 bg-cover bg-center" style={{ backgroundImage: `url(${displayData.image_url})` }}>
           <div className="absolute inset-0 bg-gradient-to-r from-black/70 to-black/50 p-4 text-white">
