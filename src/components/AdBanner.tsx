@@ -139,7 +139,7 @@ export function AdBanner({ size, position }: AdBannerProps) {
 
   if (size === 'rectangle') {
     return (
-      <Card className="mb-4 overflow-hidden cursor-pointer w-[300px] mx-auto shadow-lg" onClick={handleClick}>
+      <Card className="mb-4 overflow-hidden cursor-pointer w-[300px] mx-auto shadow-lg transition-all duration-300 hover:scale-105 hover:shadow-2xl hover:shadow-primary/20" onClick={handleClick}>
         {displayData.image_url ? (
           <div className="relative w-[300px] h-[250px]">
             <img 
