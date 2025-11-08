@@ -210,16 +210,17 @@ export function BaglessHoldersReport({ initialToken }: BaglessHoldersReportProps
     fetchTokenMetadata(normalized);
   }, [tokenMint, fetchTokenMetadata]);
 
-  // Auto-generate report when initialToken is provided and tokenMint is set
+  // Auto-generate report when token metadata is successfully fetched
   useEffect(() => {
-    if (initialToken && initialToken.trim() && tokenMint && tokenMint.trim() && !report && !isLoading) {
-      // Small delay to ensure token metadata is fetched first
+    if (tokenData && !report && !isLoading && tokenMint.trim()) {
+      // Small delay to ensure metadata is fully processed
       const timer = setTimeout(() => {
         generateReport();
-      }, 800);
+      }, 500);
       return () => clearTimeout(timer);
     }
-  }, [initialToken, tokenMint]);
+  }, [tokenData]);
+
 
   useEffect(() => {
     if (report) {
@@ -752,17 +753,15 @@ export function BaglessHoldersReport({ initialToken }: BaglessHoldersReportProps
           </div>
           
           
-          {tokenData && !report && (
+          {tokenData && !report && isLoading && (
             <Card className="border-primary/50 bg-primary/5">
               <CardContent className="p-4">
                 <div className="flex items-center gap-3">
-                  <div className="h-10 w-10 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0">
-                    <TrendingUp className="h-5 w-5 text-primary" />
-                  </div>
+                  <Loader2 className="h-5 w-5 text-primary animate-spin flex-shrink-0" />
                   <div>
-                    <p className="font-medium text-sm">Retrieved Mint Data Successfully!</p>
+                    <p className="font-medium text-sm">Generating Holders Report...</p>
                     <p className="text-xs text-muted-foreground mt-0.5">
-                      Now click "Generate Holders Report" to analyze wallet holders
+                      Analyzing wallet holders and calculating statistics
                     </p>
                   </div>
                 </div>
