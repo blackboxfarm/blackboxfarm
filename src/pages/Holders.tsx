@@ -37,7 +37,7 @@ export default function Holders() {
     <div className="min-h-screen bg-background">
       {/* Farm Banner Header */}
       <FarmBanner />
-      <div className="container mx-auto py-6 space-y-8">
+      <div className="container mx-auto py-6 space-y-4">
         {/* Header */}
         <div className="flex flex-col md:flex-row md:justify-between md:items-start space-y-4 md:space-y-0">
           <div className="text-center md:text-left flex-1 space-y-4">
@@ -81,7 +81,7 @@ export default function Holders() {
         </div>
 
         {/* Main Content */}
-        <div className="w-full md:w-3/4 md:mx-auto px-2 md:px-6 py-2 md:py-8">
+        <div className="w-full md:w-3/4 md:mx-auto px-2 md:px-6">
           <BaglessHoldersReport initialToken={tokenFromUrl} />
         </div>
 
