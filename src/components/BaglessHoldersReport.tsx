@@ -1609,19 +1609,19 @@ export function BaglessHoldersReport({ initialToken }: BaglessHoldersReportProps
                       <div className="flex items-center gap-2">
                         <div className="w-3 h-3 bg-red-500 rounded"></div>
                         <span>True Whale (≥$5K)</span>
-                </div>
-                
-                {/* Ad Banner #3 - Between Sediment Chart and Filter Controls */}
-                <div className="block md:hidden">
-                  <AdBanner size="mobile" position={3} />
-                </div>
-                <div className="hidden md:block">
-                  <AdBanner size="rectangle" position={3} />
-                </div>
+                      </div>
                       <div className="flex items-center gap-2">
                         <div className="w-3 h-3 bg-yellow-600 rounded"></div>
                         <span>Liquidity Pool - Foundation Layer</span>
                       </div>
+                    </div>
+                    
+                    {/* Ad Banner #3 - After Liquidity Pool in Legend */}
+                    <div className="block md:hidden mt-4">
+                      <AdBanner size="mobile" position={3} />
+                    </div>
+                    <div className="hidden md:block mt-4">
+                      <AdBanner size="rectangle" position={3} />
                     </div>
                   </div>
                   
