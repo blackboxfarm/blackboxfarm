@@ -139,13 +139,13 @@ export function AdBanner({ size, position }: AdBannerProps) {
 
   if (size === 'rectangle') {
     return (
-      <Card className="mb-4 overflow-hidden cursor-pointer" onClick={handleClick}>
+      <Card className="mb-4 overflow-hidden cursor-pointer w-[300px]" onClick={handleClick}>
         {displayData.image_url ? (
-          <div className="relative w-full" style={{ aspectRatio: 'auto' }}>
+          <div className="relative w-[300px] h-[250px]">
             <img 
               src={displayData.image_url} 
               alt={displayData.title}
-              className="w-full h-auto object-contain"
+              className="w-full h-full object-cover"
             />
             <div className="absolute inset-0 bg-gradient-to-br from-black/60 to-black/40 p-6 text-white flex flex-col justify-between">
               <div>
