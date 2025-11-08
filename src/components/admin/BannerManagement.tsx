@@ -31,19 +31,12 @@ interface BannerAnalytics {
   ctr: number;
 }
 
-interface PositionAnalytics {
-  position: number;
-  impressions: number;
-  clicks: number;
-  ctr: number;
-}
 
 export function BannerManagement() {
   const [banners, setBanners] = useState<Banner[]>([]);
   const [loading, setLoading] = useState(true);
   const [editBanner, setEditBanner] = useState<Banner | null>(null);
   const [analytics, setAnalytics] = useState<Record<string, BannerAnalytics>>({});
-  const [positionAnalytics, setPositionAnalytics] = useState<PositionAnalytics[]>([]);
   const [formData, setFormData] = useState({
     title: '',
     image_url: '',
@@ -86,11 +79,6 @@ export function BannerManagement() {
   };
 
   const fetchAnalytics = async () => {
-    // Get all banners with their positions
-    const { data: bannersData } = await supabase
-      .from('banner_ads')
-      .select('id, position');
-
     const { data: impressionsData } = await supabase
       .from('banner_impressions')
       .select('banner_id');
@@ -100,42 +88,17 @@ export function BannerManagement() {
       .select('banner_id');
 
     const analyticsMap: Record<string, BannerAnalytics> = {};
-    const positionMap: Record<number, { impressions: number; clicks: number }> = {};
 
-    // Create banner ID to position map
-    const bannerPositions: Record<string, number> = {};
-    bannersData?.forEach(banner => {
-      bannerPositions[banner.id] = banner.position;
-    });
-
-    // Count impressions per banner and position
+    // Count impressions per banner
     const impressionCounts: Record<string, number> = {};
     impressionsData?.forEach(imp => {
       impressionCounts[imp.banner_id] = (impressionCounts[imp.banner_id] || 0) + 1;
-      
-      // Aggregate by position
-      const position = bannerPositions[imp.banner_id];
-      if (position) {
-        if (!positionMap[position]) {
-          positionMap[position] = { impressions: 0, clicks: 0 };
-        }
-        positionMap[position].impressions += 1;
-      }
     });
 
-    // Count clicks per banner and position
+    // Count clicks per banner
     const clickCounts: Record<string, number> = {};
     clicksData?.forEach(click => {
       clickCounts[click.banner_id] = (clickCounts[click.banner_id] || 0) + 1;
-      
-      // Aggregate by position
-      const position = bannerPositions[click.banner_id];
-      if (position) {
-        if (!positionMap[position]) {
-          positionMap[position] = { impressions: 0, clicks: 0 };
-        }
-        positionMap[position].clicks += 1;
-      }
     });
 
     // Calculate CTR per banner
@@ -151,19 +114,7 @@ export function BannerManagement() {
       };
     });
 
-    // Calculate position analytics
-    const positionStats: PositionAnalytics[] = Object.entries(positionMap).map(([position, stats]) => {
-      const ctr = stats.impressions > 0 ? (stats.clicks / stats.impressions) * 100 : 0;
-      return {
-        position: parseInt(position),
-        impressions: stats.impressions,
-        clicks: stats.clicks,
-        ctr
-      };
-    }).sort((a, b) => a.position - b.position);
-
     setAnalytics(analyticsMap);
-    setPositionAnalytics(positionStats);
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -258,40 +209,6 @@ export function BannerManagement() {
 
   return (
     <div className="space-y-6">
-      {positionAnalytics.length > 0 && (
-        <Card>
-          <CardHeader>
-            <CardTitle>Position Performance Analytics</CardTitle>
-            <CardDescription>Overall performance by banner position across all campaigns</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
-              {positionAnalytics.map((stat) => (
-                <Card key={stat.position}>
-                  <CardHeader className="pb-3">
-                    <CardTitle className="text-2xl font-bold">Position #{stat.position}</CardTitle>
-                  </CardHeader>
-                  <CardContent className="space-y-2">
-                    <div className="flex justify-between items-center">
-                      <span className="text-sm text-muted-foreground">Impressions</span>
-                      <Badge variant="secondary">{stat.impressions.toLocaleString()}</Badge>
-                    </div>
-                    <div className="flex justify-between items-center">
-                      <span className="text-sm text-muted-foreground">Clicks</span>
-                      <Badge variant="secondary">{stat.clicks.toLocaleString()}</Badge>
-                    </div>
-                    <div className="flex justify-between items-center">
-                      <span className="text-sm text-muted-foreground">CTR</span>
-                      <Badge variant="default">{stat.ctr.toFixed(2)}%</Badge>
-                    </div>
-                  </CardContent>
-                </Card>
-              ))}
-            </div>
-          </CardContent>
-        </Card>
-      )}
-      
       <Card>
         <CardHeader>
           <CardTitle>Banner Advertisement Management</CardTitle>
