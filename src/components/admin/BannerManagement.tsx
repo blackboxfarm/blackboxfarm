@@ -25,10 +25,17 @@ interface Banner {
   notes: string | null;
 }
 
+interface BannerAnalytics {
+  impressions: number;
+  clicks: number;
+  ctr: number;
+}
+
 export function BannerManagement() {
   const [banners, setBanners] = useState<Banner[]>([]);
   const [loading, setLoading] = useState(true);
   const [editBanner, setEditBanner] = useState<Banner | null>(null);
+  const [analytics, setAnalytics] = useState<Record<string, BannerAnalytics>>({});
   const [formData, setFormData] = useState({
     title: '',
     image_url: '',
@@ -52,6 +59,7 @@ export function BannerManagement() {
 
   useEffect(() => {
     fetchBanners();
+    fetchAnalytics();
   }, []);
 
   const fetchBanners = async () => {
@@ -67,6 +75,45 @@ export function BannerManagement() {
       setBanners(data || []);
     }
     setLoading(false);
+  };
+
+  const fetchAnalytics = async () => {
+    const { data: impressionsData } = await supabase
+      .from('banner_impressions')
+      .select('banner_id');
+    
+    const { data: clicksData } = await supabase
+      .from('banner_clicks')
+      .select('banner_id');
+
+    const analyticsMap: Record<string, BannerAnalytics> = {};
+
+    // Count impressions per banner
+    const impressionCounts: Record<string, number> = {};
+    impressionsData?.forEach(imp => {
+      impressionCounts[imp.banner_id] = (impressionCounts[imp.banner_id] || 0) + 1;
+    });
+
+    // Count clicks per banner
+    const clickCounts: Record<string, number> = {};
+    clicksData?.forEach(click => {
+      clickCounts[click.banner_id] = (clickCounts[click.banner_id] || 0) + 1;
+    });
+
+    // Calculate CTR
+    Object.keys(impressionCounts).forEach(bannerId => {
+      const impressions = impressionCounts[bannerId] || 0;
+      const clicks = clickCounts[bannerId] || 0;
+      const ctr = impressions > 0 ? (clicks / impressions) * 100 : 0;
+      
+      analyticsMap[bannerId] = {
+        impressions,
+        clicks,
+        ctr
+      };
+    });
+
+    setAnalytics(analyticsMap);
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -283,6 +330,12 @@ export function BannerManagement() {
                   <TableHead>Position</TableHead>
                   <TableHead>Weight</TableHead>
                   <TableHead>Status</TableHead>
+                  <TableHead>
+                    <div className="flex items-center gap-1">
+                      <BarChart3 className="w-4 h-4" />
+                      Analytics
+                    </div>
+                  </TableHead>
                   <TableHead>Schedule</TableHead>
                   <TableHead>Actions</TableHead>
                 </TableRow>
@@ -309,6 +362,26 @@ export function BannerManagement() {
                       <Badge variant={banner.is_active ? 'default' : 'secondary'}>
                         {banner.is_active ? 'Active' : 'Inactive'}
                       </Badge>
+                    </TableCell>
+                    <TableCell>
+                      {analytics[banner.id] ? (
+                        <div className="text-sm space-y-1">
+                          <div className="flex items-center gap-2">
+                            <span className="text-muted-foreground">Impressions:</span>
+                            <span className="font-semibold">{analytics[banner.id].impressions.toLocaleString()}</span>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <span className="text-muted-foreground">Clicks:</span>
+                            <span className="font-semibold">{analytics[banner.id].clicks.toLocaleString()}</span>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <span className="text-muted-foreground">CTR:</span>
+                            <Badge variant="outline">{analytics[banner.id].ctr.toFixed(2)}%</Badge>
+                          </div>
+                        </div>
+                      ) : (
+                        <span className="text-sm text-muted-foreground">No data yet</span>
+                      )}
                     </TableCell>
                     <TableCell className="text-sm text-muted-foreground">
                       {banner.start_date && `From ${new Date(banner.start_date).toLocaleDateString()}`}
