@@ -737,22 +737,7 @@ export function BaglessHoldersReport({ initialToken }: BaglessHoldersReportProps
             />
           </div>
           
-          
-          {tokenData && !report && isLoading && (
-            <Card className="border-primary/50 bg-primary/5">
-              <CardContent className="p-4">
-                <div className="flex items-center gap-3">
-                  <Loader2 className="h-5 w-5 text-primary animate-spin flex-shrink-0" />
-                  <div>
-                    <p className="font-medium text-sm">Generating Holders Report...</p>
-                    <p className="text-xs text-muted-foreground mt-0.5">
-                      Analyzing wallet holders and calculating statistics
-                    </p>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-          )}
+          {/* Removed "Generating Holders Report" notification */}
 
           <div className="flex gap-2">
             <Button 
