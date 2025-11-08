@@ -102,19 +102,6 @@ export function AdBanner({ size, position }: AdBannerProps) {
               alt={displayData.title}
               className="w-full h-auto object-contain"
             />
-            <div className="absolute inset-0 bg-gradient-to-r from-black/60 to-black/40 flex items-center justify-between p-3 text-white">
-              <div className="flex-1">
-                <div className="font-semibold text-sm">{displayData.title}</div>
-                <div className="text-xs opacity-90">{displayData.description}</div>
-              </div>
-              <Badge variant="secondary" className="bg-white/20 text-white border-white/30">
-                {displayData.cta}
-              </Badge>
-            </div>
-            <div className="absolute bottom-1 left-3 text-xs opacity-75">Sponsored</div>
-            <div className="absolute top-1 left-1 bg-primary text-primary-foreground font-bold text-lg px-2 py-1 rounded shadow-lg">
-              #{position}
-            </div>
           </div>
         ) : (
           <div className={`bg-gradient-to-r ${displayData.gradient} p-3 text-white`}>
@@ -147,23 +134,6 @@ export function AdBanner({ size, position }: AdBannerProps) {
               alt={displayData.title}
               className="w-full h-full object-cover"
             />
-            <div className="absolute inset-0 bg-gradient-to-br from-black/60 to-black/40 p-6 text-white flex flex-col justify-between">
-              <div>
-                <Badge variant="secondary" className="bg-white/20 text-white border-white/30 text-xs mb-2 inline-block">
-                  Sponsored
-                </Badge>
-                <h3 className="text-xl font-bold mb-1">{displayData.title}</h3>
-                <p className="text-sm opacity-90">{displayData.subtitle}</p>
-              </div>
-              <div className="flex justify-between items-end">
-                <div className="bg-white/20 backdrop-blur-sm rounded-lg px-4 py-2 hover:bg-white/30 transition-colors">
-                  <span className="font-medium">{displayData.cta}</span>
-                </div>
-              </div>
-            </div>
-            <div className="absolute top-2 left-2 bg-primary text-primary-foreground font-bold text-2xl px-3 py-2 rounded shadow-lg">
-              #{position}
-            </div>
           </div>
         ) : (
           <div className={`bg-gradient-to-br ${displayData.gradient} p-6 text-white h-64 flex flex-col justify-between`}>
@@ -194,23 +164,11 @@ export function AdBanner({ size, position }: AdBannerProps) {
       <Card className="mb-4 overflow-hidden cursor-pointer transition-all duration-300 hover:scale-105 hover:shadow-2xl hover:shadow-primary/20" onClick={handleClick}>
       {displayData.image_url ? (
         <div className="relative h-24 bg-cover bg-center" style={{ backgroundImage: `url(${displayData.image_url})` }}>
-          <div className="absolute inset-0 bg-gradient-to-r from-black/70 to-black/50 p-4 text-white">
-            <div className="flex items-center justify-between max-w-4xl mx-auto">
-              <div>
-                <h3 className="text-lg font-bold">{displayData.title}</h3>
-                <p className="text-sm opacity-90">{displayData.description}</p>
-              </div>
-              <div className="flex items-center gap-3">
-                <Badge variant="secondary" className="bg-white/20 text-white border-white/30">
-                  {displayData.cta}
-                </Badge>
-                <div className="text-xs opacity-60">Sponsored</div>
-              </div>
-            </div>
-          </div>
-          <div className="absolute top-1 left-1 bg-primary text-primary-foreground font-bold text-lg px-2 py-1 rounded shadow-lg">
-            #{position}
-          </div>
+          <img 
+            src={displayData.image_url} 
+            alt={displayData.title}
+            className="w-full h-full object-cover"
+          />
         </div>
       ) : (
         <div className={`bg-gradient-to-r ${displayData.gradient} p-4 text-white`}>

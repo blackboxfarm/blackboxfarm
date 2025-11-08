@@ -792,8 +792,8 @@ export function BaglessHoldersReport({ initialToken }: BaglessHoldersReportProps
 
       {report && (
         <>
-          {/* Premium Features - Real-Time Whale Movements above Report Summary */}
-          {tokenMint && (
+          {/* Premium Features - Real-Time Whale Movements above Report Summary - TEMPORARILY HIDDEN */}
+          {false && tokenMint && (
             <PremiumFeatureGate
               isAuthenticated={!!user}
               featureName="Real-Time Whale Movements"
@@ -1677,7 +1677,8 @@ export function BaglessHoldersReport({ initialToken }: BaglessHoldersReportProps
           </Card>
 
           {/* Premium Features - Diamond Hands Analysis above Holders List */}
-          {tokenMint && (
+          {/* Diamond Hands Analysis - TEMPORARILY HIDDEN */}
+          {false && tokenMint && (
             <PremiumFeatureGate
               isAuthenticated={!!user}
               featureName="Diamond Hands Analysis"
