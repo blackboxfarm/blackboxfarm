@@ -839,13 +839,11 @@ export function BaglessHoldersReport({ initialToken }: BaglessHoldersReportProps
           {(() => {
             const lpAnalysis = calculateLPAnalysis();
             const top10Stats = calculateTop10Stats();
-            const holderChange24h = calculate24hHolderChange();
             
             return (
               <TokenHealthDashboard 
                 lpPercentage={lpAnalysis.lpPercentage}
                 top10Concentration={top10Stats.top10Percentage}
-                holderChange24h={holderChange24h}
                 lpDetectionConfidence={lpAnalysis.confidence}
               />
             );
