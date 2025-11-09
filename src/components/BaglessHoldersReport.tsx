@@ -18,6 +18,7 @@ import { TokenMetadataDisplay } from '@/components/token/TokenMetadataDisplay';
 import { PremiumFeatureGate } from '@/components/premium/PremiumFeatureGate';
 import { HolderMovementFeed } from '@/components/premium/HolderMovementFeed';
 import { RetentionAnalysis } from '@/components/premium/RetentionAnalysis';
+import { TokenHealthDashboard } from '@/components/premium/TokenHealthDashboard';
 import { useAuth } from '@/hooks/useAuth';
 import { useTokenDataCollection } from '@/hooks/useTokenDataCollection';
 
@@ -529,17 +530,35 @@ export function BaglessHoldersReport({ initialToken }: BaglessHoldersReportProps
 
   // Calculate top 10 holder stats (excluding LP and dev)
   const calculateTop10Stats = () => {
-    if (!report) return { top10: [], cumulativePercentage: 0 };
+    if (!report) return { top10: [], cumulativePercentage: 0, top10Percentage: 0 };
     const devWallet = report.potentialDevWallet?.address;
     const nonLPHolders = report.holders.filter(h => !h.isLiquidityPool && h.owner !== devWallet);
     const top10 = nonLPHolders.slice(0, 10);
     const cumulativePercentage = top10.reduce((sum, h) => sum + h.percentageOfSupply, 0);
-    return { top10, cumulativePercentage };
+    return { top10, cumulativePercentage, top10Percentage: cumulativePercentage };
+  };
+
+  // Calculate 24h holder change - simplified approach using recent report data
+  const calculate24hHolderChange = (): number => {
+    // For now, return 0 as we don't have historical snapshot data in state
+    // The edge function would need to be called separately for real data
+    // This is a placeholder that could be enhanced later
+    return 0;
   };
 
   // Calculate LP vs Unlocked Supply
   const calculateLPAnalysis = () => {
-    if (!report) return { unlockedSupply: 0, unlockedPercentage: 0, lpPercentage: 0, lpCount: 0, lpWallets: [], hasHighConfidenceLP: false, hasLowConfidenceLP: false, suspiciousZeroLP: false };
+    if (!report) return { 
+      unlockedSupply: 0, 
+      unlockedPercentage: 0, 
+      lpPercentage: 0, 
+      lpCount: 0, 
+      lpWallets: [], 
+      hasHighConfidenceLP: false, 
+      hasLowConfidenceLP: false, 
+      suspiciousZeroLP: false, 
+      confidence: 50 
+    };
     
     const lpWallets = report.holders.filter(h => h.isLiquidityPool);
     const totalLPTokens = lpWallets.reduce((sum, w) => sum + w.balance, 0);
@@ -816,6 +835,22 @@ export function BaglessHoldersReport({ initialToken }: BaglessHoldersReportProps
 
       {report && (
         <>
+          {/* Token Health Dashboard - Quick Glance Summary */}
+          {(() => {
+            const lpAnalysis = calculateLPAnalysis();
+            const top10Stats = calculateTop10Stats();
+            const holderChange24h = calculate24hHolderChange();
+            
+            return (
+              <TokenHealthDashboard 
+                lpPercentage={lpAnalysis.lpPercentage}
+                top10Concentration={top10Stats.top10Percentage}
+                holderChange24h={holderChange24h}
+                lpDetectionConfidence={lpAnalysis.confidence}
+              />
+            );
+          })()}
+
           {/* Premium Features - Real-Time Whale Movements - Smart Conditional Display */}
           {tokenMint && (
             <PremiumFeatureGate
