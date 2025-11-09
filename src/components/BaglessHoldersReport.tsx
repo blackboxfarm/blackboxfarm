@@ -131,6 +131,7 @@ export function BaglessHoldersReport({ initialToken }: BaglessHoldersReportProps
   const [kolWallets, setKolWallets] = useState<any[]>([]);
   const [kolMatches, setKolMatches] = useState<any[]>([]);
   const [filteredHolders, setFilteredHolders] = useState<TokenHolder[]>([]);
+  const [tokenAge, setTokenAge] = useState<number | undefined>(undefined); // Age in hours
   const [showDustOnly, setShowDustOnly] = useState(false);
   const [showSmallOnly, setShowSmallOnly] = useState(false);
   const [showMediumOnly, setShowMediumOnly] = useState(false);
@@ -443,6 +444,14 @@ export function BaglessHoldersReport({ initialToken }: BaglessHoldersReportProps
       console.log('⏱️ [PERF] Report data received, processing...');
       setReport(data);
       
+      // Calculate token age from first buyer timestamp (if available)
+      if (data.firstBuyers && data.firstBuyers.length > 0) {
+        const oldestBuyerTimestamp = Math.min(...data.firstBuyers.map((b: FirstBuyer) => b.firstBoughtAt));
+        const ageInHours = (Date.now() / 1000 - oldestBuyerTimestamp) / 3600;
+        setTokenAge(ageInHours);
+        console.log(`Token age: ${ageInHours.toFixed(1)} hours`);
+      }
+      
       // Update discovered price info if auto pricing was used
       if (useAutoPricing) {
         setDiscoveredPrice(data.tokenPriceUSD);
@@ -530,13 +539,28 @@ export function BaglessHoldersReport({ initialToken }: BaglessHoldersReportProps
 
   // Calculate LP vs Unlocked Supply
   const calculateLPAnalysis = () => {
-    if (!report) return { unlockedSupply: 0, unlockedPercentage: 0, lpPercentage: 0 };
-    const unlockedSupply = report.totalBalance - report.lpBalance;
-    const unlockedPercentage = report.totalBalance > 0 ? (unlockedSupply / report.totalBalance) * 100 : 0;
+    if (!report) return { unlockedSupply: 0, unlockedPercentage: 0, lpPercentage: 0, lpCount: 0, lpWallets: [], hasHighConfidenceLP: false, hasLowConfidenceLP: false, suspiciousZeroLP: false };
+    
+    const lpWallets = report.holders.filter(h => h.isLiquidityPool);
+    const totalLPTokens = lpWallets.reduce((sum, w) => sum + w.balance, 0);
+    const lpPercentage = (totalLPTokens / report.totalBalance) * 100;
+    const unlockedSupply = report.totalBalance - totalLPTokens;
+    
+    // Detect suspicious LP detection
+    const hasHighConfidenceLP = lpWallets.some(w => (w.lpConfidence || 0) >= 90);
+    const hasLowConfidenceLP = lpWallets.some(w => (w.lpConfidence || 0) < 70);
+    const top10Stats = calculateTop10Stats();
+    const suspiciousZeroLP = lpPercentage === 0 && top10Stats && top10Stats.cumulativePercentage > 30;
+    
     return {
+      lpCount: lpWallets.length,
+      lpPercentage,
       unlockedSupply,
-      unlockedPercentage,
-      lpPercentage: report.lpPercentageOfSupply
+      unlockedPercentage: 100 - lpPercentage,
+      lpWallets,
+      hasHighConfidenceLP,
+      hasLowConfidenceLP,
+      suspiciousZeroLP
     };
   };
 
@@ -792,8 +816,8 @@ export function BaglessHoldersReport({ initialToken }: BaglessHoldersReportProps
 
       {report && (
         <>
-          {/* Premium Features - Real-Time Whale Movements above Report Summary - TEMPORARILY HIDDEN */}
-          {false && tokenMint && (
+          {/* Premium Features - Real-Time Whale Movements - Smart Conditional Display */}
+          {tokenMint && (
             <PremiumFeatureGate
               isAuthenticated={!!user}
               featureName="Real-Time Whale Movements"
@@ -802,7 +826,7 @@ export function BaglessHoldersReport({ initialToken }: BaglessHoldersReportProps
               onSignUpClick={() => setShowAuthModal(true)}
               tokenMint={tokenMint}
             >
-              <HolderMovementFeed tokenMint={tokenMint} />
+              <HolderMovementFeed tokenMint={tokenMint} hideWhenEmpty={true} tokenAge={tokenAge} />
             </PremiumFeatureGate>
           )}
 
@@ -844,18 +868,63 @@ export function BaglessHoldersReport({ initialToken }: BaglessHoldersReportProps
                 </div>
               )}
               
-              {/* LP Detection Summary */}
-              {report.liquidityPoolsDetected > 0 && (
-                <div className="mb-3 md:mb-4 p-2 md:p-3 bg-blue-500/10 border border-blue-500/20 rounded-lg">
-                  <div className="text-xs md:text-sm font-medium text-blue-700 dark:text-blue-300 mb-1 md:mb-2">
-                    🔍 LP Detection Results
+              {/* LP Detection Summary - Enhanced Display */}
+              {(() => {
+                const lpAnalysis = calculateLPAnalysis();
+                
+                return (
+                  <div className={`mb-3 md:mb-4 p-2 md:p-3 rounded-lg border ${
+                    lpAnalysis.suspiciousZeroLP 
+                      ? 'bg-yellow-500/10 border-yellow-500/30' 
+                      : lpAnalysis.lpCount > 0 
+                        ? 'bg-blue-500/10 border-blue-500/20'
+                        : 'bg-muted/50 border-border'
+                  }`}>
+                    <div className="text-xs md:text-sm font-medium mb-1 md:mb-2 flex items-center justify-between">
+                      <span className={
+                        lpAnalysis.suspiciousZeroLP 
+                          ? 'text-yellow-700 dark:text-yellow-300'
+                          : lpAnalysis.lpCount > 0
+                            ? 'text-blue-700 dark:text-blue-300'
+                            : 'text-muted-foreground'
+                      }>
+                        🔍 LP Detection Results
+                      </span>
+                      {lpAnalysis.lpCount > 0 && (
+                        <Badge variant="outline" className="text-xs">
+                          {lpAnalysis.hasHighConfidenceLP ? '✅ High Confidence' : lpAnalysis.hasLowConfidenceLP ? '⚠️ Low Confidence' : 'Detected'}
+                        </Badge>
+                      )}
+                    </div>
+                    <div className={`text-xs ${
+                      lpAnalysis.suspiciousZeroLP
+                        ? 'text-yellow-600 dark:text-yellow-400'
+                        : lpAnalysis.lpCount > 0
+                          ? 'text-blue-600 dark:text-blue-400'
+                          : 'text-muted-foreground'
+                    }`}>
+                      {lpAnalysis.lpCount > 0 ? (
+                        <>
+                          Detected {lpAnalysis.lpCount} liquidity pool wallet{lpAnalysis.lpCount > 1 ? 's' : ''} 
+                          ({lpAnalysis.lpPercentage.toFixed(1)}% of total supply)
+                          {lpAnalysis.lpWallets.length > 0 && (
+                            <span className="block mt-1">
+                              Platforms: {lpAnalysis.lpWallets.map((w: any) => w.detectedPlatform || 'Unknown').join(', ')}
+                            </span>
+                          )}
+                        </>
+                      ) : lpAnalysis.suspiciousZeroLP ? (
+                        <>
+                          ⚠️ No LPs detected, but high wallet concentration detected ({calculateTop10Stats()?.cumulativePercentage.toFixed(1)}% in top 10).
+                          <span className="block mt-1">LP detection may have failed or token uses an unrecognized platform. Manual review recommended.</span>
+                        </>
+                      ) : (
+                        'No liquidity pools detected (0.0% of supply)'
+                      )}
+                    </div>
                   </div>
-                  <div className="text-xs text-blue-600 dark:text-blue-400">
-                    Detected {report.liquidityPoolsDetected} liquidity pool wallet{report.liquidityPoolsDetected > 1 ? 's' : ''} 
-                    ({report.lpPercentageOfSupply.toFixed(1)}% of total supply)
-                  </div>
-                </div>
-              )}
+                );
+              })()}
 
               {/* Stability Score Card - Hidden per user request */}
               {false && (() => {
@@ -1676,9 +1745,8 @@ export function BaglessHoldersReport({ initialToken }: BaglessHoldersReportProps
             </CardContent>
           </Card>
 
-          {/* Premium Features - Diamond Hands Analysis above Holders List */}
-          {/* Diamond Hands Analysis - TEMPORARILY HIDDEN */}
-          {false && tokenMint && (
+          {/* Premium Features - Diamond Hands Analysis - Smart Conditional Display */}
+          {tokenMint && (
             <PremiumFeatureGate
               isAuthenticated={!!user}
               featureName="Diamond Hands Analysis"
@@ -1687,7 +1755,7 @@ export function BaglessHoldersReport({ initialToken }: BaglessHoldersReportProps
               onSignUpClick={() => setShowAuthModal(true)}
               tokenMint={tokenMint}
             >
-              <RetentionAnalysis tokenMint={tokenMint} />
+              <RetentionAnalysis tokenMint={tokenMint} tokenAge={tokenAge} />
             </PremiumFeatureGate>
           )}
 

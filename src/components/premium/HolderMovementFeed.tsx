@@ -19,13 +19,19 @@ interface Movement {
 
 interface HolderMovementFeedProps {
   tokenMint: string;
+  hideWhenEmpty?: boolean;
+  tokenAge?: number; // Age in hours
 }
 
-export const HolderMovementFeed = ({ tokenMint }: HolderMovementFeedProps) => {
+export const HolderMovementFeed = ({ tokenMint, hideWhenEmpty = false, tokenAge }: HolderMovementFeedProps) => {
   const [movements, setMovements] = useState<Movement[]>([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState<'all' | 'whales'>('all');
   const { trackView } = useFeatureTracking('holder_movements', tokenMint);
+
+  // Hide if too young and empty
+  const isTooYoung = tokenAge !== undefined && tokenAge < 24;
+  const shouldHide = hideWhenEmpty && movements.length === 0 && !loading;
 
   useEffect(() => {
     trackView();
@@ -81,6 +87,27 @@ export const HolderMovementFeed = ({ tokenMint }: HolderMovementFeedProps) => {
   const filteredMovements = movements.filter(m => 
     filter === 'all' || (filter === 'whales' && m.tier === 'Whale')
   );
+
+  // Hide component if empty and configured to hide
+  if (shouldHide) {
+    return null;
+  }
+
+  // Show "too young" message for new tokens
+  if (isTooYoung && movements.length === 0 && !loading) {
+    return (
+      <Card className="tech-border border-yellow-500/30 bg-yellow-500/5">
+        <CardContent className="py-6 text-center">
+          <p className="text-sm text-muted-foreground">
+            ⏰ <strong>New Token</strong> - Whale activity tracking available after 24 hours
+          </p>
+          <p className="text-xs text-muted-foreground mt-1">
+            (This is expected for new launches - whales typically enter later)
+          </p>
+        </CardContent>
+      </Card>
+    );
+  }
 
   return (
     <Card className="tech-border">

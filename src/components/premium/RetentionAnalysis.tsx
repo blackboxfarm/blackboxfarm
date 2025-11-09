@@ -9,15 +9,19 @@ import { Progress } from '@/components/ui/progress';
 
 interface RetentionAnalysisProps {
   tokenMint: string;
+  tokenAge?: number; // Age in hours
 }
 
-export const RetentionAnalysis = ({ tokenMint }: RetentionAnalysisProps) => {
+export const RetentionAnalysis = ({ tokenMint, tokenAge }: RetentionAnalysisProps) => {
   const [retentionData, setRetentionData] = useState<any[]>([]);
   const [diamondScore, setDiamondScore] = useState(0);
   const [metrics, setMetrics] = useState<any>(null);
   const [timeframe, setTimeframe] = useState('30d');
   const [loading, setLoading] = useState(true);
   const { trackView } = useFeatureTracking('retention_analysis', tokenMint);
+
+  // Hide if token is too young (less than 6 hours)
+  const isTooYoung = tokenAge !== undefined && tokenAge < 6;
 
   useEffect(() => {
     trackView();
@@ -52,6 +56,28 @@ export const RetentionAnalysis = ({ tokenMint }: RetentionAnalysisProps) => {
     if (score >= 40) return 'text-yellow-500';
     return 'text-red-500';
   };
+
+  // Show "too young" message for very new tokens
+  if (isTooYoung) {
+    return (
+      <Card className="tech-border border-blue-500/30 bg-blue-500/5">
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Diamond className="w-5 h-5 text-primary" />
+            Diamond Hands Analysis
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="text-center py-6">
+          <p className="text-sm text-muted-foreground">
+            📊 <strong>New Token</strong> - Trend data will be available after 6 hours
+          </p>
+          <p className="text-xs text-muted-foreground mt-1">
+            Historical snapshots are needed for accurate retention analysis
+          </p>
+        </CardContent>
+      </Card>
+    );
+  }
 
   return (
     <div className="space-y-4">

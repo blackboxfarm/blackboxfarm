@@ -307,25 +307,30 @@ serve(async (req) => {
             let lpConfidence = 0;
             let detectedPlatform = '';
             
-            // Known DEX program IDs (the CORRECT way to detect LPs)
+            // Known DEX program IDs (the CORRECT way to detect LPs) - EXPANDED LIST
             const knownDEXPrograms: Record<string, string> = {
               'Pump.fun AMM': '6EF8rrecthR5Dkzon8Nwu78hRvfCKubJ14M5uBEwF6P',
               'Raydium V4': '675kPX9MHTjS2zt1qfr1NYHuzeLXfQM9H24wFSUt1Mp8',
               'Raydium CLMM': 'CAMMCzo5YL8w4VFF8KVHrK22GGUsp5VTaW7grrKgrWqK',
               'Raydium V3': '27haf8L6oxUeXrHrgEgsexjSY5hbVUWEmvv9Nyytg3Ct',
               'Orca Whirlpool': 'whirLbMiicVdio4qvUfM5KAg6Ct8VwpYzGff3uctyCc',
+              'Orca V2': '9W959DqEETiGZocYWCQPaJ6sBmUzgfxXfqGeTEdp3aQP',
               'Meteora': 'LBUZKhRxPF3XUpBCjp4YzTKgLccjZhTSDM9YuVaPwxo',
               'Meteora DLMM': 'Eo7WjKq67rjJQSZxS6z3YkapzY3eMj6Xy8X5EQVn5UaB',
               'Lifinity': '2wT8Yq49kHgDzXuPxZSaeLaH1qbmGXtEyPy64bL7aD3c',
               'Phoenix': 'PhoeNiXZ8ByJGLkxNfZRnkUfjvmuYqLR89jjFHGqdXY',
               'Fluxbeam': 'FLUXubRmkEi2q6K3Y9kBPg9248ggaZVsoSFhtJHSrm1X',
               'Aldrin': 'CURVGoZn8zycx6FXwwevgBTB2gVvdbGTEpvMJDbgs2t4',
+              'Aldrin V2': 'AMM55ShdkoGRB5jVYPjWziwk8m5MpwyDgsMWHaMSQWH6',
               'Cropper': 'CTMAxxk34HjKWxQ3QLZK1HpaLXmBveao3ESePXbiyfzh',
               'GooseFX': 'GFXsSL5sSaDfNFQUYsHekbWBW1TsFdjDYzACh62tEHxn',
               'Saber': 'SSwpkEEcbUqx4vtoEByFjSkhKdCT862DNVb52nZg1UZ',
               'Serum': '9xQeWvG816bUx9EPjHmaT23yvVM2ZWbrrpZb9PusVFin',
+              'Openbook': 'srmqPvymJeFKQ4zGQed1GFppgkRHL9kaELCbyksJtPX',
               'Bags.fm': 'BagsFxwZx3cKHLGWzgU3fLzGDhgSPrfSHjgQRJZVF9HL',
-              'Bonk.fun': 'BonK1YhkXwGnzPqqiM1ycLY61w8HNJ5KHZNsmJJNFbDN'
+              'Bonk.fun': 'BonK1YhkXwGnzPqqiM1ycLY61w8HNJ5KHZNsmJJNFbDN',
+              'Moonshot': 'MoonCVVNZFSYkqNXP6bxHLPL6QQJiMagDL3qcqUQTrG',
+              'Token-2022': 'TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb'
             };
             
             // PRIMARY DETECTION: Check the account owner (program ID)
@@ -340,11 +345,11 @@ serve(async (req) => {
               }
             }
             
-            // FALLBACK DETECTION: High concentration check for unrecognized LP programs
-            if (!isLiquidityPool && percentageOfSupply > 30) {
+            // FALLBACK DETECTION: Lower threshold (15%) for unrecognized LP programs
+            if (!isLiquidityPool && percentageOfSupply > 15) {
               isLiquidityPool = true;
               detectedPlatform = 'Unknown Platform';
-              lpDetectionReason = `Very high concentration (${percentageOfSupply.toFixed(1)}%) - likely undetected LP`;
+              lpDetectionReason = `High concentration (${percentageOfSupply.toFixed(1)}%) - likely undetected LP`;
               lpConfidence = 60;
               console.log(`⚠️ Potential LP: ${owner} holds ${percentageOfSupply.toFixed(1)}% (owner program: ${accountOwner})`);
             }
