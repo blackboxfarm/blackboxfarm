@@ -25,6 +25,7 @@ import SuperAdmin from "./pages/SuperAdmin";
 import Developer from "./pages/Developer";
 import Demo from "./pages/Demo";
 import Holders from "./pages/Holders";
+import HoldersMarketing from "./pages/HoldersMarketing";
 import CopyTrading from "./pages/CopyTrading";
 import BreadCrumbs from "./pages/BreadCrumbs";
 import HeliusUsage from "./pages/HeliusUsage";
@@ -62,6 +63,7 @@ const App = () => (
               <Route path="/developer/:walletAddress" element={<Developer />} />
               <Route path="/demo" element={<Demo />} />
               <Route path="/holders" element={<Holders />} />
+              <Route path="/holders-marketing" element={<HoldersMarketing />} />
               <Route path="/copy-trading" element={<CopyTrading />} />
               <Route path="/breadcrumbs" element={<BreadCrumbs />} />
               <Route path="/helius-usage" element={<HeliusUsage />} />
