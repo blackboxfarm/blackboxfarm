@@ -38,9 +38,22 @@ serve(async (req) => {
       .order('snapshot_date', { ascending: true });
 
     if (!snapshots || snapshots.length === 0) {
+      console.log(`No snapshot data found for ${token_mint} since ${startDate}`);
       return new Response(
-        JSON.stringify({ error: 'No snapshot data available for this token' }),
-        { status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        JSON.stringify({ 
+          error: 'No snapshot data available for this token',
+          suggestion: 'Capture a snapshot first using the capture-holder-snapshot function',
+          retention_data: [],
+          diamond_hands_score: 0,
+          metrics: {
+            total_wallets_start: 0,
+            total_wallets_now: 0,
+            retention_rate: '0.00',
+            churn_rate: '100.00',
+            avg_retention: '0.00',
+          },
+        }),
+        { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
 

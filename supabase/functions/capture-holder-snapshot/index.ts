@@ -27,8 +27,17 @@ serve(async (req) => {
 
     const today = new Date().toISOString().split('T')[0];
 
-    // Prepare snapshot data
-    const snapshots = holders.map((holder: any) => ({
+    // Prepare snapshot data and deduplicate by wallet address
+    // Keep the latest/highest balance if duplicate wallets exist
+    const holderMap = new Map();
+    holders.forEach((holder: any) => {
+      const existingHolder = holderMap.get(holder.address);
+      if (!existingHolder || (holder.balance || 0) > (existingHolder.balance || 0)) {
+        holderMap.set(holder.address, holder);
+      }
+    });
+
+    const snapshots = Array.from(holderMap.values()).map((holder: any) => ({
       token_mint,
       snapshot_date: today,
       wallet_address: holder.address,
@@ -37,6 +46,8 @@ serve(async (req) => {
       tier: holder.tier || 'Unknown',
       price_at_snapshot: price || 0,
     }));
+
+    console.log(`Capturing ${snapshots.length} unique holders for ${token_mint}`);
 
     // Upsert snapshots (update if exists for today, insert if not)
     const { error } = await supabase
