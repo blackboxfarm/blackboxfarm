@@ -26,6 +26,7 @@ import Developer from "./pages/Developer";
 import Demo from "./pages/Demo";
 import Holders from "./pages/Holders";
 import HoldersMarketing from "./pages/HoldersMarketing";
+import Adverts from "./pages/Adverts";
 import CopyTrading from "./pages/CopyTrading";
 import BreadCrumbs from "./pages/BreadCrumbs";
 import HeliusUsage from "./pages/HeliusUsage";
@@ -64,6 +65,7 @@ const App = () => (
               <Route path="/demo" element={<Demo />} />
               <Route path="/holders" element={<Holders />} />
               <Route path="/holders-marketing" element={<HoldersMarketing />} />
+              <Route path="/adverts" element={<Adverts />} />
               <Route path="/copy-trading" element={<CopyTrading />} />
               <Route path="/breadcrumbs" element={<BreadCrumbs />} />
               <Route path="/helius-usage" element={<HeliusUsage />} />
