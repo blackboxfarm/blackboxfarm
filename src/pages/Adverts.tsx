@@ -11,6 +11,7 @@ import {
 } from "lucide-react";
 import { FarmBanner } from "@/components/FarmBanner";
 import { SolPriceDisplay } from "@/components/SolPriceDisplay";
+import { AdvertiserInquiryForm } from "@/components/AdvertiserInquiryForm";
 
 export default function Adverts() {
   const navigate = useNavigate();
@@ -157,18 +158,16 @@ export default function Adverts() {
           </CardContent>
         </Card>
 
-        {/* CTA */}
+        {/* Inquiry Form */}
+        <AdvertiserInquiryForm />
+
+        {/* Alternative CTA */}
         <div className="text-center space-y-4 pb-8">
-          <Button 
-            onClick={() => navigate("/contact-us")}
-            size="lg"
-            className="text-lg px-8 py-6"
-          >
-            <DollarSign className="w-5 h-5 mr-2" />
-            Contact Us About Advertising
-          </Button>
           <p className="text-sm text-muted-foreground">
-            Quick response • Custom packages available • Professional support
+            Prefer to reach out directly? Email us at{" "}
+            <a href="mailto:support@blackbox.farm" className="text-primary hover:underline">
+              support@blackbox.farm
+            </a>
           </p>
         </div>
       </div>
