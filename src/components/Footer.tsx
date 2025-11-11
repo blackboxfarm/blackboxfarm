@@ -90,6 +90,12 @@ export function Footer() {
                 </Link>
               </li>
               <li>
+                <Link to="/adverts" className="text-muted-foreground hover:text-primary transition-colors flex items-center gap-2">
+                  <Globe className="h-3 w-3" />
+                  Advertise
+                </Link>
+              </li>
+              <li>
                 <Link to="/web3-manifesto" className="text-muted-foreground hover:text-primary transition-colors flex items-center gap-2">
                   <Globe className="h-3 w-3" />
                   Web3 Manifesto
