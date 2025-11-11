@@ -73,6 +73,48 @@ export type Database = {
           },
         ]
       }
+      advertiser_inquiries: {
+        Row: {
+          additional_info: string | null
+          budget: string
+          campaign_goals: string
+          company: string
+          created_at: string
+          email: string
+          id: string
+          name: string
+          status: string
+          updated_at: string
+          website: string | null
+        }
+        Insert: {
+          additional_info?: string | null
+          budget: string
+          campaign_goals: string
+          company: string
+          created_at?: string
+          email: string
+          id?: string
+          name: string
+          status?: string
+          updated_at?: string
+          website?: string | null
+        }
+        Update: {
+          additional_info?: string | null
+          budget?: string
+          campaign_goals?: string
+          company?: string
+          created_at?: string
+          email?: string
+          id?: string
+          name?: string
+          status?: string
+          updated_at?: string
+          website?: string | null
+        }
+        Relationships: []
+      }
       banner_ads: {
         Row: {
           created_at: string | null

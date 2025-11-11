@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { Resend } from "npm:resend@2.0.0";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2.54.0";
 
 const resend = new Resend(Deno.env.get("RESEND_API_KEY"));
 
@@ -56,6 +57,35 @@ const handler = async (req: Request): Promise<Response> => {
     }
 
     const budgetLabel = budgetLabels[budget] || budget;
+
+    // Initialize Supabase client
+    const supabase = createClient(
+      Deno.env.get("SUPABASE_URL") ?? "",
+      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? ""
+    );
+
+    // Save inquiry to database
+    const { data: inquiryData, error: dbError } = await supabase
+      .from("advertiser_inquiries")
+      .insert({
+        name,
+        email,
+        company,
+        website,
+        budget,
+        campaign_goals: campaignGoals,
+        additional_info: additionalInfo,
+        status: "new",
+      })
+      .select()
+      .single();
+
+    if (dbError) {
+      console.error("Database error:", dbError);
+      throw new Error("Failed to save inquiry");
+    }
+
+    console.log("Inquiry saved to database:", inquiryData.id);
 
     // Send email to BlackBox Farm team
     const teamEmailResponse = await resend.emails.send({
