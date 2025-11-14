@@ -161,7 +161,7 @@ export function AdBanner({ size, position }: AdBannerProps) {
 
   // Leaderboard (728x90 equivalent)
   return (
-      <Card className="mb-4 overflow-hidden cursor-pointer transition-all duration-300 hover:scale-105 hover:shadow-2xl hover:shadow-primary/20 max-w-[900px] mx-auto" onClick={handleClick}>
+      <Card className="mb-4 overflow-hidden cursor-pointer transition-all duration-300 hover:scale-105 hover:shadow-2xl hover:shadow-primary/20 max-w-[450px] mx-auto" onClick={handleClick}>
       {displayData.image_url ? (
         <img 
           src={displayData.image_url} 
