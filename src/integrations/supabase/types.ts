@@ -3166,6 +3166,68 @@ export type Database = {
         }
         Relationships: []
       }
+      wallet_chains: {
+        Row: {
+          child_1_wallet_id: string | null
+          child_2_wallet_id: string | null
+          child_3_wallet_id: string | null
+          created_at: string
+          id: string
+          parent_wallet_id: string | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          child_1_wallet_id?: string | null
+          child_2_wallet_id?: string | null
+          child_3_wallet_id?: string | null
+          created_at?: string
+          id?: string
+          parent_wallet_id?: string | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          child_1_wallet_id?: string | null
+          child_2_wallet_id?: string | null
+          child_3_wallet_id?: string | null
+          created_at?: string
+          id?: string
+          parent_wallet_id?: string | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "wallet_chains_child_1_wallet_id_fkey"
+            columns: ["child_1_wallet_id"]
+            isOneToOne: false
+            referencedRelation: "blackbox_wallets"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "wallet_chains_child_2_wallet_id_fkey"
+            columns: ["child_2_wallet_id"]
+            isOneToOne: false
+            referencedRelation: "blackbox_wallets"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "wallet_chains_child_3_wallet_id_fkey"
+            columns: ["child_3_wallet_id"]
+            isOneToOne: false
+            referencedRelation: "blackbox_wallets"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "wallet_chains_parent_wallet_id_fkey"
+            columns: ["parent_wallet_id"]
+            isOneToOne: false
+            referencedRelation: "blackbox_wallets"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       wallet_copy_configs: {
         Row: {
           copy_sell_percentage: boolean
