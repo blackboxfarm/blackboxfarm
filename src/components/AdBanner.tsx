@@ -161,32 +161,34 @@ export function AdBanner({ size, position }: AdBannerProps) {
 
   // Leaderboard (728x90 equivalent)
   return (
-      <Card className="mb-4 overflow-hidden cursor-pointer transition-all duration-300 hover:scale-105 hover:shadow-2xl hover:shadow-primary/20 w-[450px] mx-auto" onClick={handleClick}>
-      {displayData.image_url ? (
-        <img 
-          src={displayData.image_url} 
-          alt={displayData.title}
-          className="w-full aspect-[16/4] object-contain"
-        />
-      ) : (
-        <div className={`bg-gradient-to-r ${displayData.gradient} p-4 text-white`}>
-          <div className="flex items-center justify-between max-w-4xl mx-auto">
-            <div className="flex items-center gap-4">
-              <IconComponent size={32} />
-              <div>
-                <h3 className="text-lg font-bold">{displayData.title}</h3>
-                <p className="text-sm opacity-90">{displayData.subtitle} • {displayData.description}</p>
+      <Card className="mb-4 overflow-hidden cursor-pointer transition-all duration-300 hover:scale-105 hover:shadow-2xl hover:shadow-primary/20 mx-auto" onClick={handleClick}>
+        <div className="w-[450px] mx-auto">
+        {displayData.image_url ? (
+          <img 
+            src={displayData.image_url} 
+            alt={displayData.title}
+            className="w-[450px] h-auto object-contain"
+          />
+        ) : (
+          <div className={`w-[450px] bg-gradient-to-r ${displayData.gradient} p-4 text-white`}>
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-4">
+                <IconComponent size={32} />
+                <div>
+                  <h3 className="text-lg font-bold">{displayData.title}</h3>
+                  <p className="text-sm opacity-90">{displayData.subtitle} • {displayData.description}</p>
+                </div>
+              </div>
+              <div className="flex items-center gap-3">
+                <Badge variant="secondary" className="bg-white/20 text-white border-white/30">
+                  {displayData.cta}
+                </Badge>
+                <div className="text-xs opacity-60">Sponsored</div>
               </div>
             </div>
-            <div className="flex items-center gap-3">
-              <Badge variant="secondary" className="bg-white/20 text-white border-white/30">
-                {displayData.cta}
-              </Badge>
-              <div className="text-xs opacity-60">Sponsored</div>
-            </div>
           </div>
+        )}
         </div>
-      )}
-    </Card>
+      </Card>
   );
 }
