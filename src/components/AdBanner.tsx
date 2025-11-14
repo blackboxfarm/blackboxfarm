@@ -163,13 +163,11 @@ export function AdBanner({ size, position }: AdBannerProps) {
   return (
       <Card className="mb-4 overflow-hidden cursor-pointer transition-all duration-300 hover:scale-105 hover:shadow-2xl hover:shadow-primary/20 max-w-[900px] mx-auto" onClick={handleClick}>
       {displayData.image_url ? (
-        <div className="relative h-24 bg-cover bg-center" style={{ backgroundImage: `url(${displayData.image_url})` }}>
-          <img 
-            src={displayData.image_url} 
-            alt={displayData.title}
-            className="w-full h-full object-contain"
-          />
-        </div>
+        <img 
+          src={displayData.image_url} 
+          alt={displayData.title}
+          className="w-full aspect-[16/4] object-contain"
+        />
       ) : (
         <div className={`bg-gradient-to-r ${displayData.gradient} p-4 text-white`}>
           <div className="flex items-center justify-between max-w-4xl mx-auto">
