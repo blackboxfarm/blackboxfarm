@@ -67,60 +67,56 @@ export function WalletChainManager() {
   }, [connection, wallets.length]);
 
   const loadChain = async () => {
-    const { data, error } = await supabase
-      .from('wallet_chains')
-      .select(`
-        id,
-        parent_wallet_id,
-        child_1_wallet_id,
-        child_2_wallet_id,
-        child_3_wallet_id,
-        blackbox_wallets!wallet_chains_parent_wallet_id_fkey(*),
-        blackbox_wallets!wallet_chains_child_1_wallet_id_fkey(*),
-        blackbox_wallets!wallet_chains_child_2_wallet_id_fkey(*),
-        blackbox_wallets!wallet_chains_child_3_wallet_id_fkey(*)
-      `)
-      .eq('user_id', user?.id)
-      .order('created_at', { ascending: false })
-      .limit(1)
-      .single();
+    try {
+      const { data, error } = await supabase
+        .from('wallet_chains' as any)
+        .select('*')
+        .eq('user_id', user?.id)
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .single();
 
-    if (error && error.code !== 'PGRST116') {
-      console.error('Error loading chain:', error);
-      return;
-    }
-
-    if (data) {
-      setChainId(data.id);
-      const walletList: ChainWallet[] = [];
-
-      // Map wallets to positions
-      if (data.parent_wallet_id) {
-        const { data: wallet } = await supabase
-          .from('blackbox_wallets')
-          .select('*')
-          .eq('id', data.parent_wallet_id)
-          .single();
-        if (wallet && wallet.is_active) {
-          walletList.push({ ...wallet, position: 0, balance: wallet.sol_balance || 0 });
-        }
+      if (error && error.code !== 'PGRST116') {
+        console.error('Error loading chain:', error);
+        return;
       }
 
-      for (let i = 1; i <= 3; i++) {
-        const walletId = data[`child_${i}_wallet_id`];
-        if (walletId) {
+      if (data) {
+        const chainData = data as any;
+        setChainId(chainData.id);
+        const walletList: ChainWallet[] = [];
+
+        // Load parent wallet
+        if (chainData.parent_wallet_id) {
           const { data: wallet } = await supabase
             .from('blackbox_wallets')
             .select('*')
-            .eq('id', walletId)
+            .eq('id', chainData.parent_wallet_id)
             .single();
           if (wallet && wallet.is_active) {
-            walletList.push({ ...wallet, position: i, balance: wallet.sol_balance || 0 });
+            walletList.push({ ...wallet, position: 0, balance: wallet.sol_balance || 0 });
           }
         }
-      }
 
-      setWallets(walletList);
+        // Load child wallets
+        for (let i = 1; i <= 3; i++) {
+          const walletId = chainData[`child_${i}_wallet_id`];
+          if (walletId) {
+            const { data: wallet } = await supabase
+              .from('blackbox_wallets')
+              .select('*')
+              .eq('id', walletId)
+              .single();
+            if (wallet && wallet.is_active) {
+              walletList.push({ ...wallet, position: i, balance: wallet.sol_balance || 0 });
+            }
+          }
+        }
+
+        setWallets(walletList);
+      }
+    } catch (error) {
+      console.error('Error loading chain:', error);
     }
   };
 
