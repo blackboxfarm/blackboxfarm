@@ -22,6 +22,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import TransactionHistoryWindow from "@/components/blackbox/TransactionHistoryWindow";
 import { WalletBalanceMonitor } from "@/components/WalletBalanceMonitor";
 import { WalletMonitor } from "@/components/WalletMonitor";
+import { WalletChainManager } from "@/components/WalletChainManager";
 import { useUserRoles } from "@/hooks/useUserRoles";
 import { Shield, AlertTriangle } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -107,6 +108,7 @@ export default function SuperAdmin() {
             <TabsTrigger value="token-sets" className="flex-shrink-0 data-[state=active]:bg-gradient-to-r data-[state=active]:from-purple-500/30 data-[state=active]:to-purple-500/20">Token Sets</TabsTrigger>
             <TabsTrigger value="banners" className="flex-shrink-0">Banners</TabsTrigger>
             <TabsTrigger value="surveys" className="flex-shrink-0">Surveys</TabsTrigger>
+            <TabsTrigger value="waterfall" className="flex-shrink-0 data-[state=active]:bg-gradient-to-r data-[state=active]:from-cyan-500/30 data-[state=active]:to-cyan-500/20">Waterfall</TabsTrigger>
           </TabsList>
           
           <TabsContent value="wallets">
@@ -186,6 +188,10 @@ export default function SuperAdmin() {
 
           <TabsContent value="surveys">
             <SurveyManagement />
+          </TabsContent>
+
+          <TabsContent value="waterfall">
+            <WalletChainManager />
           </TabsContent>
         </Tabs>
       </div>
