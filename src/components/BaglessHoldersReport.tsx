@@ -766,7 +766,7 @@ export function BaglessHoldersReport({ initialToken }: BaglessHoldersReportProps
   };
 
   return (
-    <div className="space-y-3 md:space-y-6">
+    <div className="space-y-3 md:space-y-6 max-w-[900px] mx-auto">
       <Card>
         <CardHeader className="p-3 md:p-6 pb-2 md:pb-4">
           <CardTitle className="text-base md:text-xl">Token Holders Report</CardTitle>
@@ -779,13 +779,13 @@ export function BaglessHoldersReport({ initialToken }: BaglessHoldersReportProps
               value={tokenMint}
               onChange={(e) => setTokenMint(e.target.value)}
               placeholder="Token mint address"
-              className="mt-1 text-sm"
+              className="mt-1 text-sm md:max-w-[600px]"
             />
           </div>
           
           {/* Removed "Generating Holders Report" notification */}
 
-          <div className="flex gap-2">
+          <div className="flex gap-2 md:max-w-[250px]">
             <Button 
               onClick={generateReport} 
               disabled={isLoading || isFetchingPrice}
@@ -799,8 +799,8 @@ export function BaglessHoldersReport({ initialToken }: BaglessHoldersReportProps
                 </>
               ) : (
                 <>
-                  <span className="hidden sm:inline">Generate Holders Report</span>
-                  <span className="sm:hidden">Generate Report</span>
+                  <span className="hidden sm:inline">Generate Report</span>
+                  <span className="sm:hidden">Generate</span>
                 </>
               )}
             </Button>
