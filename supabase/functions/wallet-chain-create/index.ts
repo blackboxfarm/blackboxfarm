@@ -1,7 +1,7 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2?target=deno";
 import { Keypair } from "https://esm.sh/@solana/web3.js@1.95.3";
-import { encode } from "https://esm.sh/bs58@5.0.0";
+import bs58 from "https://esm.sh/bs58@5.0.0";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -37,7 +37,7 @@ serve(async (req) => {
     // Generate new Solana keypair
     const keypair = Keypair.generate();
     const publicKey = keypair.publicKey.toString();
-    const secretKey = encode(keypair.secretKey);
+    const secretKey = bs58.encode(keypair.secretKey);
 
     // Encrypt the secret key
     const { data: encryptedData, error: encryptError } = await supabaseClient.functions.invoke(
