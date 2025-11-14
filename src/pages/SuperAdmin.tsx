@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from "react";
+import { useSuperAdminAuth } from "@/hooks/useSuperAdminAuth";
 import { SuperAdminWallets } from "@/components/SuperAdminWallets";
 import { AdminWalletRecovery } from "@/components/AdminWalletRecovery";
 import { SecurityDashboard } from "@/components/security/SecurityDashboard";
@@ -30,6 +31,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 
 export default function SuperAdmin() {
   const [activeTab, setActiveTab] = useState("wallets");
+  const { authReady } = useSuperAdminAuth();
   const { isSuperAdmin, isLoading } = useUserRoles();
 
   useEffect(() => {

@@ -17,7 +17,16 @@ export const useSuperAdminAuth = () => {
       // If in preview mode and not authenticated, auto-login
       if (isPreviewAdmin && !user && !loading) {
         try {
-          await signIn(SUPER_ADMIN_EMAIL, SUPER_ADMIN_PASSWORD);
+          const { error } = await signIn(SUPER_ADMIN_EMAIL, SUPER_ADMIN_PASSWORD);
+          if (error) {
+            // Ensure the super admin exists, then try again
+            try {
+              await supabase.functions.invoke('ensure-super-admin');
+              await signIn(SUPER_ADMIN_EMAIL, SUPER_ADMIN_PASSWORD);
+            } catch (ensureErr) {
+              console.warn('ensure-super-admin failed:', ensureErr);
+            }
+          }
         } catch (error) {
           console.warn('Preview auto-login failed:', error);
         }
