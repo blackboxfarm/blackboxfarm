@@ -161,12 +161,12 @@ export function AdBanner({ size, position }: AdBannerProps) {
 
   // Leaderboard (728x90 equivalent)
   return (
-      <Card className="mb-4 overflow-hidden cursor-pointer transition-all duration-300 hover:scale-105 hover:shadow-2xl hover:shadow-primary/20 mx-auto" onClick={handleClick}>
-        <div className="w-[450px] mx-auto">
+      <Card className="mb-4 overflow-hidden cursor-pointer transition-all duration-300 hover:scale-105 hover:shadow-2xl hover:shadow-primary/20 w-[450px] mx-auto" onClick={handleClick}>
         {displayData.image_url ? (
           <img 
             src={displayData.image_url} 
             alt={displayData.title}
+            width={450}
             className="w-[450px] h-auto object-contain"
           />
         ) : (
@@ -188,7 +188,6 @@ export function AdBanner({ size, position }: AdBannerProps) {
             </div>
           </div>
         )}
-        </div>
       </Card>
   );
 }
