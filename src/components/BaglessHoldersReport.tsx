@@ -263,6 +263,9 @@ export function BaglessHoldersReport({ initialToken }: BaglessHoldersReportProps
         }
       }
       
+      // Limit to top 1000 holders to prevent performance issues with large holder lists
+      filtered = filtered.slice(0, 1000);
+      
       setFilteredHolders(filtered);
     }
   }, [report, showDustOnly, showSmallOnly, showMediumOnly, showLargeOnly, showRealOnly, showBossOnly, showKingpinOnly, showSuperBossOnly, showBabyWhaleOnly, showTrueWhaleOnly, showLPOnly, excludeLPs]);
