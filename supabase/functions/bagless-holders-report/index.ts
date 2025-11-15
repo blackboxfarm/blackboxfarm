@@ -182,66 +182,137 @@ serve(async (req) => {
       console.warn('⚠️ WARNING: All price sources failed or returned $0 - USD calculations will be incorrect');
     }
     
-    // Get all token accounts for this mint (try multiple RPCs)
-    const rpcStartTime = Date.now();
-    console.log('⏱️ [PERF] Starting RPC account fetch...');
-    let data: any = null;
-for (const url of rpcEndpoints) {
-  let rpcCallStart = Date.now();
+// Get all token accounts for this mint (prefer Helius gPA V2 with pagination)
+const rpcStartTime = Date.now();
+console.log('⏱️ [PERF] Starting RPC account fetch...');
+let data: any = null;
+
+if (heliusApiKey) {
+  const url = `https://rpc.helius.xyz/?api-key=${heliusApiKey}`;
+  let paginationKey: string | null = null;
+  const allAccounts: any[] = [];
+  let pages = 0;
   try {
-    rpcCallStart = Date.now();
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 15000);
-    const resp = await fetch(url, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            jsonrpc: '2.0',
-            id: 1,
-            method: 'getProgramAccounts',
-            params: [
-              'TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA',
-              {
-                encoding: 'jsonParsed',
-                filters: [
-                  { dataSize: 165 },
-                  { memcmp: { offset: 0, bytes: tokenMint } }
-                ]
-              }
-            ]
-          }),
-          signal: controller.signal
-        });
-        clearTimeout(timeoutId);
-        if (!resp.ok) {
-          const msg = `RPC ${url.includes('helius') ? 'Helius' : url} failed: ${resp.status}`;
-          rpcErrors.push(msg);
-          continue;
-        }
-        const json = await resp.json();
-        if (json.error) {
-          const msg = `RPC ${url.includes('helius') ? 'Helius' : url} error: ${json.error.message}`;
-          rpcErrors.push(msg);
-          continue;
-        }
-        data = json;
-        usedRpc = url;
-        const rpcCallTime = Date.now() - rpcCallStart;
-        const totalRpcTime = Date.now() - rpcStartTime;
-        console.log(`✅ [PERF] RPC account fetch SUCCESS via ${url.includes('helius') ? 'Helius' : 'public RPC'} in ${rpcCallTime}ms (total: ${totalRpcTime}ms)`);
+    while (pages < 20) { // hard cap to avoid runaway loops
+      pages++;
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 20000);
+      const params: Record<string, unknown> = {
+        encoding: 'jsonParsed',
+        filters: [
+          { dataSize: 165 },
+          { memcmp: { offset: 0, bytes: tokenMint } }
+        ],
+        limit: 5000,
+      };
+      if (paginationKey) {
+        // Helius gPA V2 uses `paginationKey` for subsequent pages
+        (params as any).paginationKey = paginationKey;
+      }
+
+      const resp = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          jsonrpc: '2.0',
+          id: pages,
+          method: 'getProgramAccountsV2',
+          params: [
+            'TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA',
+            params
+          ]
+        }),
+        signal: controller.signal
+      });
+      clearTimeout(timeoutId);
+      if (!resp.ok) {
+        rpcErrors.push(`RPC Helius failed (page ${pages}): ${resp.status}`);
         break;
-      } catch (e) {
-        const rpcCallTime = Date.now() - rpcCallStart;
-        rpcErrors.push(`RPC ${url.includes('helius') ? 'Helius' : url} exception after ${rpcCallTime}ms: ${e instanceof Error ? e.message : String(e)}`);
-        continue;
+      }
+      const json = await resp.json();
+      if (json.error) {
+        rpcErrors.push(`RPC Helius error (page ${pages}): ${json.error.message}`);
+        break;
+      }
+      const accounts = json?.result?.accounts || [];
+      allAccounts.push(...accounts);
+      paginationKey = json?.result?.paginationKey || null;
+      console.log(`✅ [PERF] Helius gPA V2 page ${pages}: +${accounts.length} (total ${allAccounts.length})`);
+      if (!paginationKey || accounts.length === 0) {
+        break;
       }
     }
 
-    if (!data) {
+    if (allAccounts.length > 0) {
+      usedRpc = 'helius-gpa-v2';
       const totalRpcTime = Date.now() - rpcStartTime;
-      console.log(`❌ [PERF] All RPC endpoints FAILED after ${totalRpcTime}ms`);
-      throw new Error(`All RPC endpoints failed. ${rpcErrors.join(' | ')}`);
+      console.log(`✅ [PERF] RPC account fetch SUCCESS via Helius gPA V2 in ${totalRpcTime}ms, accounts: ${allAccounts.length}`);
+      data = { result: allAccounts };
     }
+  } catch (e) {
+    rpcErrors.push(`RPC Helius exception: ${e instanceof Error ? e.message : String(e)}`);
+  }
+}
+
+// Fallback to public RPCs if Helius not available or failed
+if (!data) {
+  for (const url of rpcEndpoints) {
+    if (url.includes('helius')) continue; // we already tried dedicated Helius flow above
+    const rpcCallStart = Date.now();
+    try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 15000);
+      const resp = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          jsonrpc: '2.0',
+          id: 1,
+          method: 'getProgramAccounts',
+          params: [
+            'TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA',
+            {
+              encoding: 'jsonParsed',
+              filters: [
+                { dataSize: 165 },
+                { memcmp: { offset: 0, bytes: tokenMint } }
+              ]
+            }
+          ]
+        }),
+        signal: controller.signal
+      });
+      clearTimeout(timeoutId);
+      if (!resp.ok) {
+        const msg = `RPC ${url} failed: ${resp.status}`;
+        rpcErrors.push(msg);
+        continue;
+      }
+      const json = await resp.json();
+      if (json.error) {
+        const msg = `RPC ${url} error: ${json.error.message}`;
+        rpcErrors.push(msg);
+        continue;
+      }
+      data = json;
+      usedRpc = url;
+      const rpcCallTime = Date.now() - rpcCallStart;
+      const totalRpcTime = Date.now() - rpcStartTime;
+      console.log(`✅ [PERF] RPC account fetch SUCCESS via public RPC in ${rpcCallTime}ms (total: ${totalRpcTime}ms)`);
+      break;
+    } catch (e) {
+      const rpcCallTime = Date.now() - rpcCallStart;
+      rpcErrors.push(`RPC ${url} exception after ${rpcCallTime}ms: ${e instanceof Error ? e.message : String(e)}`);
+      continue;
+    }
+  }
+}
+
+if (!data) {
+  const totalRpcTime = Date.now() - rpcStartTime;
+  console.log(`❌ [PERF] All RPC endpoints FAILED after ${totalRpcTime}ms`);
+  throw new Error(`All RPC endpoints failed. ${rpcErrors.join(' | ')}`);
+}
 
     // BYPASS HISTORICAL BUYERS FETCH - Fill with ANON placeholders
     const buyersStartTime = Date.now();
