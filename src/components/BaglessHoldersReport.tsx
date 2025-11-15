@@ -812,8 +812,8 @@ export function BaglessHoldersReport({ initialToken }: BaglessHoldersReportProps
               {isLoading || isFetchingPrice ? (
                 <>
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  <span className="hidden sm:inline">{isFetchingPrice ? 'Fetching Price...' : 'Generating Report...'}</span>
-                  <span className="sm:hidden">{isFetchingPrice ? 'Fetching...' : 'Generating...'}</span>
+                  <span className="hidden sm:inline">Generating Report...</span>
+                  <span className="sm:hidden">Generating...</span>
                 </>
               ) : (
                 <>
