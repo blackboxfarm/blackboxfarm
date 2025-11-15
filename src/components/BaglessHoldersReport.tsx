@@ -820,7 +820,12 @@ export function BaglessHoldersReport({ initialToken }: BaglessHoldersReportProps
       </Card>
 
       {/* Ad Banner under Generate Button */}
-      <AdBanner size="mobile" position={1} />
+      <div className="block md:hidden">
+        <AdBanner size="mobile" position={1} />
+      </div>
+      <div className="hidden md:block">
+        <AdBanner size="leaderboard" position={1} />
+      </div>
 
       {/* Token Metadata - show as soon as metadata is fetched (before report) */}
       {tokenData && (
