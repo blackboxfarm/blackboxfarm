@@ -160,17 +160,19 @@ export function AdBanner({ size, position }: AdBannerProps) {
   }
 
   // Leaderboard (728x90 equivalent)
+  // Position 1 gets 900px, others get full width
+  const leaderboardWidth = position === 1 ? 'max-w-[900px]' : 'max-w-full';
+  
   return (
-      <Card className="mb-4 overflow-hidden cursor-pointer transition-all duration-300 hover:scale-105 hover:shadow-2xl hover:shadow-primary/20 w-[450px] mx-auto" onClick={handleClick}>
+      <Card className={`mb-4 overflow-hidden cursor-pointer transition-all duration-300 hover:scale-105 hover:shadow-2xl hover:shadow-primary/20 ${leaderboardWidth} mx-auto`} onClick={handleClick}>
         {displayData.image_url ? (
           <img 
             src={displayData.image_url} 
             alt={displayData.title}
-            width={450}
-            className="w-[450px] h-auto object-contain"
+            className="w-full h-auto object-contain"
           />
         ) : (
-          <div className={`w-[450px] bg-gradient-to-r ${displayData.gradient} p-4 text-white`}>
+          <div className={`bg-gradient-to-r ${displayData.gradient} p-4 text-white`}>
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-4">
                 <IconComponent size={32} />
