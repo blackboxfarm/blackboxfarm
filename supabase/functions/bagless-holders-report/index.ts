@@ -57,10 +57,22 @@ serve(async (req) => {
       );
     }
 
+    // Normalize the provided mint to avoid pump.fun suffix issues and overly-long strings
+    const normalizeMint = (s: string) => {
+      let m = s.trim();
+      if (m.length > 44 && m.endsWith('pump')) m = m.slice(0, -4);
+      if (m.length > 44) m = m.slice(0, 44);
+      return m;
+    };
+    const normalizedMint = normalizeMint(tokenMint);
+    if (normalizedMint !== tokenMint) {
+      console.log(`[DEBUG] Normalized mint ${tokenMint} -> ${normalizedMint}`);
+    }
+
     // Get Helius API key from environment (optional)
     const heliusApiKey = Deno.env.get('HELIUS_API_KEY');
 
-    console.log(`⏱️ [PERF] Fetching all token holders for: ${tokenMint}`);
+    console.log(`⏱️ [PERF] Fetching all token holders for: ${tokenMint} (normalized: ${normalizedMint})`);
 
     const rpcEndpoints = heliusApiKey
       ? [`https://rpc.helius.xyz/?api-key=${heliusApiKey}`, 'https://api.mainnet-beta.solana.com', 'https://solana-api.projectserum.com']
@@ -204,7 +216,7 @@ serve(async (req) => {
                 encoding: 'jsonParsed',
                 filters: [
                   { dataSize: 165 },
-                  { memcmp: { offset: 0, bytes: tokenMint } }
+                  { memcmp: { offset: 0, bytes: normalizedMint } }
                 ]
               }
             ]

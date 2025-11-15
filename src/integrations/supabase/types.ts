@@ -73,6 +73,48 @@ export type Database = {
           },
         ]
       }
+      advertiser_inquiries: {
+        Row: {
+          additional_info: string | null
+          budget: string
+          campaign_goals: string
+          company: string
+          created_at: string
+          email: string
+          id: string
+          name: string
+          status: string
+          updated_at: string
+          website: string | null
+        }
+        Insert: {
+          additional_info?: string | null
+          budget: string
+          campaign_goals: string
+          company: string
+          created_at?: string
+          email: string
+          id?: string
+          name: string
+          status?: string
+          updated_at?: string
+          website?: string | null
+        }
+        Update: {
+          additional_info?: string | null
+          budget?: string
+          campaign_goals?: string
+          company?: string
+          created_at?: string
+          email?: string
+          id?: string
+          name?: string
+          status?: string
+          updated_at?: string
+          website?: string | null
+        }
+        Relationships: []
+      }
       banner_ads: {
         Row: {
           created_at: string | null
@@ -3123,6 +3165,68 @@ export type Database = {
           wallet_type?: string
         }
         Relationships: []
+      }
+      wallet_chains: {
+        Row: {
+          child_1_wallet_id: string | null
+          child_2_wallet_id: string | null
+          child_3_wallet_id: string | null
+          created_at: string
+          id: string
+          parent_wallet_id: string | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          child_1_wallet_id?: string | null
+          child_2_wallet_id?: string | null
+          child_3_wallet_id?: string | null
+          created_at?: string
+          id?: string
+          parent_wallet_id?: string | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          child_1_wallet_id?: string | null
+          child_2_wallet_id?: string | null
+          child_3_wallet_id?: string | null
+          created_at?: string
+          id?: string
+          parent_wallet_id?: string | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "wallet_chains_child_1_wallet_id_fkey"
+            columns: ["child_1_wallet_id"]
+            isOneToOne: false
+            referencedRelation: "blackbox_wallets"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "wallet_chains_child_2_wallet_id_fkey"
+            columns: ["child_2_wallet_id"]
+            isOneToOne: false
+            referencedRelation: "blackbox_wallets"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "wallet_chains_child_3_wallet_id_fkey"
+            columns: ["child_3_wallet_id"]
+            isOneToOne: false
+            referencedRelation: "blackbox_wallets"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "wallet_chains_parent_wallet_id_fkey"
+            columns: ["parent_wallet_id"]
+            isOneToOne: false
+            referencedRelation: "blackbox_wallets"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       wallet_copy_configs: {
         Row: {
