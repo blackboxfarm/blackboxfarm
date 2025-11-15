@@ -769,7 +769,7 @@ export function BaglessHoldersReport({ initialToken }: BaglessHoldersReportProps
     <div className="space-y-3 md:space-y-6 max-w-[900px] mx-auto">
       <Card>
         <CardHeader className="p-3 md:p-6 pb-2 md:pb-4">
-          <CardTitle className="text-base md:text-xl">Token Holders Report</CardTitle>
+          <CardTitle className="text-base md:text-xl text-center">📊 Token Holders Report 🔍</CardTitle>
         </CardHeader>
         <CardContent className="space-y-2 md:space-y-4 p-3 md:p-6 pt-2 md:pt-0 flex flex-col items-center">
           <div className="w-full">
@@ -785,11 +785,11 @@ export function BaglessHoldersReport({ initialToken }: BaglessHoldersReportProps
           
           {/* Removed "Generating Holders Report" notification */}
 
-          <div className="flex gap-2 justify-center">
+          <div className="flex gap-2 justify-center w-full">
             <Button 
               onClick={generateReport} 
               disabled={isLoading || isFetchingPrice}
-              className="flex-1 text-sm h-10"
+              className="w-[400px] text-sm h-10"
             >
               {isLoading || isFetchingPrice ? (
                 <>
