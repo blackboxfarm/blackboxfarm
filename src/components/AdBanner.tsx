@@ -160,8 +160,8 @@ export function AdBanner({ size, position }: AdBannerProps) {
   }
 
   // Leaderboard (728x90 equivalent)
-  // Position 1 gets 900px, others get full width
-  const leaderboardWidth = position === 1 ? 'max-w-[900px]' : 'max-w-full';
+  // Position 1 gets 450px, others get full width
+  const leaderboardWidth = position === 1 ? 'max-w-[450px]' : 'max-w-full';
   
   return (
       <Card className={`mb-4 overflow-hidden cursor-pointer transition-all duration-300 hover:scale-105 hover:shadow-2xl hover:shadow-primary/20 ${leaderboardWidth} mx-auto`} onClick={handleClick}>
