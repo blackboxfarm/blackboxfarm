@@ -359,9 +359,18 @@ export function BaglessHoldersReport({ initialToken }: BaglessHoldersReportProps
     setPriceSource('');
     
     try {
+      // Normalize token mint before sending to edge function
+      let normalizedMint = tokenMint.trim();
+      if (normalizedMint.length > 44 && normalizedMint.toLowerCase().endsWith('pump')) {
+        normalizedMint = normalizedMint.slice(0, -4);
+      }
+      if (normalizedMint.length > 44) {
+        normalizedMint = normalizedMint.slice(0, 44);
+      }
+      
       const { data, error } = await supabase.functions.invoke('bagless-holders-report', {
         body: {
-          tokenMint: tokenMint.trim(),
+          tokenMint: normalizedMint,
           manualPrice: 0 // Force price discovery
         }
       });
@@ -422,10 +431,19 @@ export function BaglessHoldersReport({ initialToken }: BaglessHoldersReportProps
         setIsFetchingPrice(true);
       }
       
+      // Normalize token mint before sending to edge function
+      let normalizedMint = tokenMint.trim();
+      if (normalizedMint.length > 44 && normalizedMint.toLowerCase().endsWith('pump')) {
+        normalizedMint = normalizedMint.slice(0, -4);
+      }
+      if (normalizedMint.length > 44) {
+        normalizedMint = normalizedMint.slice(0, 44);
+      }
+      
       const edgeFunctionStart = performance.now();
       const { data, error } = await supabase.functions.invoke('bagless-holders-report', {
         body: {
-          tokenMint: tokenMint.trim(),
+          tokenMint: normalizedMint,
           manualPrice: priceToUse
         }
       });
