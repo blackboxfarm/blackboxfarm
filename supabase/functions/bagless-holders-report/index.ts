@@ -212,12 +212,17 @@ if (heliusApiKey) {
         pages++;
         const controller = new AbortController();
         const timeoutId = setTimeout(() => controller.abort(), 20000);
-        const params: Record<string, unknown> = {
-          encoding: 'jsonParsed',
-          filters: [
+        const filters = programId === 'TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA'
+          ? [
             { dataSize: 165 },
             { memcmp: { offset: 0, bytes: normalizedMint } }
-          ],
+          ]
+          : [
+            { memcmp: { offset: 0, bytes: normalizedMint } }
+          ];
+        const params: Record<string, unknown> = {
+          encoding: 'jsonParsed',
+          filters,
           limit: 5000,
         };
         if (paginationKey) {
@@ -294,10 +299,14 @@ if (!data) {
               programId,
               {
                 encoding: 'jsonParsed',
-                filters: [
-                  { dataSize: 165 },
-                  { memcmp: { offset: 0, bytes: normalizedMint } }
-                ]
+                filters: programId === 'TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA'
+                  ? [
+                      { dataSize: 165 },
+                      { memcmp: { offset: 0, bytes: normalizedMint } }
+                    ]
+                  : [
+                      { memcmp: { offset: 0, bytes: normalizedMint } }
+                    ]
               }
             ]
           }),
