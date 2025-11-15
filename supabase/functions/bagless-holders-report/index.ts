@@ -211,7 +211,7 @@ if (heliusApiKey) {
       while (pages < 20) { // hard cap to avoid runaway loops
         pages++;
         const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 20000);
+        const timeoutId = setTimeout(() => controller.abort(), 30000);
         const filters = programId === 'TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA'
           ? [
             { dataSize: 165 },
@@ -287,7 +287,7 @@ if (!data) {
       const combined: any[] = [];
       for (const programId of PROGRAM_IDS) {
         const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 15000);
+        const timeoutId = setTimeout(() => controller.abort(), 30000);
         const resp = await fetch(url, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -349,8 +349,9 @@ if (!data) {
 
 if (!data) {
   const totalRpcTime = Date.now() - rpcStartTime;
-  console.log(`❌ [PERF] All RPC endpoints FAILED after ${totalRpcTime}ms`);
-  throw new Error(`All RPC endpoints failed. ${rpcErrors.join(' | ')}`);
+  console.log(`❌ [PERF] All RPC endpoints FAILED after ${totalRpcTime}ms — continuing with empty dataset to avoid UI error`);
+  usedRpc = 'none';
+  data = { result: [] };
 }
 
     // BYPASS HISTORICAL BUYERS FETCH - Fill with ANON placeholders
@@ -647,6 +648,8 @@ if (!data) {
       tokenPriceUSD,
       priceSource,
       rpcSource: usedRpc,
+      rpcErrors,
+      normalizedMint,
       priceDiscoveryFailed,
       holders: rankedHolders,
       liquidityPools: lpWallets,
