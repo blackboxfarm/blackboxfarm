@@ -263,9 +263,6 @@ export function BaglessHoldersReport({ initialToken }: BaglessHoldersReportProps
         }
       }
       
-      // Limit to top 1000 holders to prevent performance issues with large holder lists
-      filtered = filtered.slice(0, 1000);
-      
       setFilteredHolders(filtered);
     }
   }, [report, showDustOnly, showSmallOnly, showMediumOnly, showLargeOnly, showRealOnly, showBossOnly, showKingpinOnly, showSuperBossOnly, showBabyWhaleOnly, showTrueWhaleOnly, showLPOnly, excludeLPs]);
@@ -359,18 +356,9 @@ export function BaglessHoldersReport({ initialToken }: BaglessHoldersReportProps
     setPriceSource('');
     
     try {
-      // Normalize token mint before sending to edge function
-      let normalizedMint = tokenMint.trim();
-      if (normalizedMint.length > 44 && normalizedMint.toLowerCase().endsWith('pump')) {
-        normalizedMint = normalizedMint.slice(0, -4);
-      }
-      if (normalizedMint.length > 44) {
-        normalizedMint = normalizedMint.slice(0, 44);
-      }
-      
       const { data, error } = await supabase.functions.invoke('bagless-holders-report', {
         body: {
-          tokenMint: normalizedMint,
+          tokenMint: tokenMint.trim(),
           manualPrice: 0 // Force price discovery
         }
       });
@@ -431,19 +419,10 @@ export function BaglessHoldersReport({ initialToken }: BaglessHoldersReportProps
         setIsFetchingPrice(true);
       }
       
-      // Normalize token mint before sending to edge function
-      let normalizedMint = tokenMint.trim();
-      if (normalizedMint.length > 44 && normalizedMint.toLowerCase().endsWith('pump')) {
-        normalizedMint = normalizedMint.slice(0, -4);
-      }
-      if (normalizedMint.length > 44) {
-        normalizedMint = normalizedMint.slice(0, 44);
-      }
-      
       const edgeFunctionStart = performance.now();
       const { data, error } = await supabase.functions.invoke('bagless-holders-report', {
         body: {
-          tokenMint: normalizedMint,
+          tokenMint: tokenMint.trim(),
           manualPrice: priceToUse
         }
       });
@@ -784,41 +763,41 @@ export function BaglessHoldersReport({ initialToken }: BaglessHoldersReportProps
   };
 
   return (
-    <div className="space-y-3 md:space-y-6 max-w-[900px] mx-auto">
+    <div className="space-y-3 md:space-y-6">
       <Card>
         <CardHeader className="p-3 md:p-6 pb-2 md:pb-4">
-          <CardTitle className="text-base md:text-xl text-center">📊 Token Holders Report 🔍</CardTitle>
+          <CardTitle className="text-base md:text-xl">Token Holders Report</CardTitle>
         </CardHeader>
-        <CardContent className="space-y-2 md:space-y-4 p-3 md:p-6 pt-2 md:pt-0 flex flex-col items-center">
-          <div className="w-full">
-            <Label htmlFor="tokenMint" className="text-sm block text-center">Token Mint Address</Label>
+        <CardContent className="space-y-2 md:space-y-4 p-3 md:p-6 pt-2 md:pt-0">
+          <div>
+            <Label htmlFor="tokenMint" className="text-sm">Token Mint Address</Label>
             <Input
               id="tokenMint"
               value={tokenMint}
               onChange={(e) => setTokenMint(e.target.value)}
               placeholder="Token mint address"
-              className="mt-1 text-sm md:max-w-[600px] mx-auto"
+              className="mt-1 text-sm"
             />
           </div>
           
           {/* Removed "Generating Holders Report" notification */}
 
-          <div className="flex gap-2 justify-center w-full">
+          <div className="flex gap-2">
             <Button 
               onClick={generateReport} 
               disabled={isLoading || isFetchingPrice}
-              className="w-[400px] text-sm h-10"
+              className="flex-1 text-sm h-10"
             >
               {isLoading || isFetchingPrice ? (
                 <>
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  <span className="hidden sm:inline">Generating Report...</span>
-                  <span className="sm:hidden">Generating...</span>
+                  <span className="hidden sm:inline">{isFetchingPrice ? 'Fetching Price...' : 'Generating Report...'}</span>
+                  <span className="sm:hidden">{isFetchingPrice ? 'Fetching...' : 'Generating...'}</span>
                 </>
               ) : (
                 <>
-                  <span className="hidden sm:inline">Generate Report</span>
-                  <span className="sm:hidden">Generate</span>
+                  <span className="hidden sm:inline">Generate Holders Report</span>
+                  <span className="sm:hidden">Generate Report</span>
                 </>
               )}
             </Button>
@@ -838,12 +817,7 @@ export function BaglessHoldersReport({ initialToken }: BaglessHoldersReportProps
       </Card>
 
       {/* Ad Banner under Generate Button */}
-      <div className="block md:hidden">
-        <AdBanner size="mobile" position={1} />
-      </div>
-      <div className="hidden md:block">
-        <AdBanner size="leaderboard" position={1} />
-      </div>
+      <AdBanner size="mobile" position={1} />
 
       {/* Token Metadata - show as soon as metadata is fetched (before report) */}
       {tokenData && (

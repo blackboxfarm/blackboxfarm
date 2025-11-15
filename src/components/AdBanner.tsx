@@ -160,36 +160,35 @@ export function AdBanner({ size, position }: AdBannerProps) {
   }
 
   // Leaderboard (728x90 equivalent)
-  // Position 1 capped at 600px wide (natural 600x200), others capped at 728px
-  const leaderboardClasses = position === 1 ? 'max-w-[600px] w-full' : 'max-w-[728px] w-full';
-  
   return (
-      <Card className={`mb-4 overflow-hidden cursor-pointer transition-all duration-300 hover:scale-105 hover:shadow-2xl hover:shadow-primary/20 ${leaderboardClasses} mx-auto`} onClick={handleClick}>
-        {displayData.image_url ? (
+      <Card className="mb-4 overflow-hidden cursor-pointer transition-all duration-300 hover:scale-105 hover:shadow-2xl hover:shadow-primary/20" onClick={handleClick}>
+      {displayData.image_url ? (
+        <div className="relative h-24 bg-cover bg-center" style={{ backgroundImage: `url(${displayData.image_url})` }}>
           <img 
             src={displayData.image_url} 
             alt={displayData.title}
-            className="w-full h-auto object-contain max-h-[200px]"
+            className="w-full h-full object-cover"
           />
-        ) : (
-          <div className={`bg-gradient-to-r ${displayData.gradient} p-4 text-white`}>
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-4">
-                <IconComponent size={32} />
-                <div>
-                  <h3 className="text-lg font-bold">{displayData.title}</h3>
-                  <p className="text-sm opacity-90">{displayData.subtitle} • {displayData.description}</p>
-                </div>
-              </div>
-              <div className="flex items-center gap-3">
-                <Badge variant="secondary" className="bg-white/20 text-white border-white/30">
-                  {displayData.cta}
-                </Badge>
-                <div className="text-xs opacity-60">Sponsored</div>
+        </div>
+      ) : (
+        <div className={`bg-gradient-to-r ${displayData.gradient} p-4 text-white`}>
+          <div className="flex items-center justify-between max-w-4xl mx-auto">
+            <div className="flex items-center gap-4">
+              <IconComponent size={32} />
+              <div>
+                <h3 className="text-lg font-bold">{displayData.title}</h3>
+                <p className="text-sm opacity-90">{displayData.subtitle} • {displayData.description}</p>
               </div>
             </div>
+            <div className="flex items-center gap-3">
+              <Badge variant="secondary" className="bg-white/20 text-white border-white/30">
+                {displayData.cta}
+              </Badge>
+              <div className="text-xs opacity-60">Sponsored</div>
+            </div>
           </div>
-        )}
-      </Card>
+        </div>
+      )}
+    </Card>
   );
 }

@@ -4,7 +4,7 @@ import { useUserRoles } from '@/hooks/useUserRoles';
 import { usePreviewSuperAdmin } from '@/hooks/usePreviewSuperAdmin';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Button } from '@/components/ui/button';
-import { Shield, Users, Calculator, BarChart3, Coins, Activity, Settings, Database, Search, Eye, Zap, List, Megaphone } from 'lucide-react';
+import { Shield, Users, Calculator, BarChart3, Coins, Activity, Settings, Database, Search, Eye, Zap, List } from 'lucide-react';
 
 // Import components for different tabs
 import ServerSideTradingControl from '@/components/ServerSideTradingControl';
@@ -270,15 +270,6 @@ export const RoleBasedNavigation: React.FC = () => {
             </p>
           </div>
           <div className="flex items-center gap-4">
-            <Button 
-              onClick={() => window.location.href = "/adverts"}
-              variant="default"
-              size="sm"
-              className="bg-gradient-to-r from-primary to-primary/80 hover:from-primary/90 hover:to-primary/70 font-semibold"
-            >
-              <Megaphone className="h-4 w-4 mr-2" />
-              Advertise With Us
-            </Button>
             {isAuthenticated && <SecretsModal />}
             <AuthButton />
             {effectiveIsSuperAdmin && (

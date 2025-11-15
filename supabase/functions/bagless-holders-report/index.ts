@@ -60,21 +60,7 @@ serve(async (req) => {
     // Get Helius API key from environment (optional)
     const heliusApiKey = Deno.env.get('HELIUS_API_KEY');
 
-    // Normalize mint for on-chain queries (strip known suffixes and enforce 44 chars)
-    const rawMint: string = String(tokenMint).trim();
-    let normalizedMint = rawMint;
-    if (normalizedMint.length > 44 && normalizedMint.endsWith('pump')) normalizedMint = normalizedMint.slice(0, -4);
-    if (normalizedMint.length > 44 && normalizedMint.endsWith('bonk')) normalizedMint = normalizedMint.slice(0, -4);
-    if (normalizedMint.length > 44 && normalizedMint.endsWith('bags')) normalizedMint = normalizedMint.slice(0, -4);
-    if (normalizedMint.length > 44) normalizedMint = normalizedMint.slice(0, 44);
-
-    console.log(`⏱️ [PERF] Fetching all token holders for: ${rawMint} (normalized: ${normalizedMint})`);
-
-    // Support both SPL Token program IDs (legacy + 2022)
-    const PROGRAM_IDS = [
-      'TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA', // SPL Token (legacy)
-      'TokenzQdhuDSzUbezNKMvJdNwMMvyfZyvYg5k5gjdMr'  // SPL Token 2022
-    ];
+    console.log(`⏱️ [PERF] Fetching all token holders for: ${tokenMint}`);
 
     const rpcEndpoints = heliusApiKey
       ? [`https://rpc.helius.xyz/?api-key=${heliusApiKey}`, 'https://api.mainnet-beta.solana.com', 'https://solana-api.projectserum.com']
@@ -196,98 +182,15 @@ serve(async (req) => {
       console.warn('⚠️ WARNING: All price sources failed or returned $0 - USD calculations will be incorrect');
     }
     
-// Get all token accounts for this mint (prefer Helius gPA V2 with pagination)
-const rpcStartTime = Date.now();
-console.log('⏱️ [PERF] Starting RPC account fetch...');
-let data: any = null;
-
-if (heliusApiKey) {
-  const url = `https://rpc.helius.xyz/?api-key=${heliusApiKey}`;
-  const allAccountsMap = new Map<string, any>();
-  try {
-    for (const programId of PROGRAM_IDS) {
-      let paginationKey: string | null = null;
-      let pages = 0;
-      while (pages < 20) { // hard cap to avoid runaway loops
-        pages++;
+    // Get all token accounts for this mint (try multiple RPCs)
+    const rpcStartTime = Date.now();
+    console.log('⏱️ [PERF] Starting RPC account fetch...');
+    let data: any = null;
+    for (const url of rpcEndpoints) {
+      try {
+        const rpcCallStart = Date.now();
         const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 30000);
-        const filters = programId === 'TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA'
-          ? [
-            { dataSize: 165 },
-            { memcmp: { offset: 0, bytes: normalizedMint } }
-          ]
-          : [
-            { memcmp: { offset: 0, bytes: normalizedMint } }
-          ];
-        const params: Record<string, unknown> = {
-          encoding: 'jsonParsed',
-          filters,
-          limit: 5000,
-        };
-        if (paginationKey) {
-          (params as any).paginationKey = paginationKey;
-        }
-
-        const resp = await fetch(url, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            jsonrpc: '2.0',
-            id: pages,
-            method: 'getProgramAccountsV2',
-            params: [
-              programId,
-              params
-            ]
-          }),
-          signal: controller.signal
-        });
-        clearTimeout(timeoutId);
-        if (!resp.ok) {
-          rpcErrors.push(`RPC Helius failed (${programId}) page ${pages}: ${resp.status}`);
-          break;
-        }
-        const json = await resp.json();
-        if (json.error) {
-          rpcErrors.push(`RPC Helius error (${programId}) page ${pages}: ${json.error.message}`);
-          break;
-        }
-        const accounts = json?.result?.accounts || [];
-        for (const acc of accounts) {
-          const key = acc.pubkey || acc.account?.pubkey || `${programId}-${pages}-${Math.random()}`;
-          if (!allAccountsMap.has(key)) allAccountsMap.set(key, acc);
-        }
-        paginationKey = json?.result?.paginationKey || null;
-        console.log(`✅ [PERF] Helius gPA V2 (${programId.slice(0,6)}...) page ${pages}: +${accounts.length} (total ${allAccountsMap.size})`);
-        if (!paginationKey || accounts.length === 0) {
-          break;
-        }
-      }
-    }
-
-    const allAccounts = Array.from(allAccountsMap.values());
-    if (allAccounts.length > 0) {
-      usedRpc = 'helius-gpa-v2';
-      const totalRpcTime = Date.now() - rpcStartTime;
-      console.log(`✅ [PERF] RPC account fetch SUCCESS via Helius gPA V2 in ${totalRpcTime}ms, accounts: ${allAccounts.length}`);
-      data = { result: allAccounts };
-    }
-  } catch (e) {
-    rpcErrors.push(`RPC Helius exception: ${e instanceof Error ? e.message : String(e)}`);
-  }
-}
-
-// Fallback to public RPCs if Helius not available or failed
-if (!data) {
-  for (const url of rpcEndpoints) {
-    if (url.includes('helius')) continue; // we already tried dedicated Helius flow above
-    const rpcCallStart = Date.now();
-    try {
-      const combined: any[] = [];
-      for (const programId of PROGRAM_IDS) {
-        const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 30000);
+        const timeoutId = setTimeout(() => controller.abort(), 15000);
         const resp = await fetch(url, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -296,17 +199,13 @@ if (!data) {
             id: 1,
             method: 'getProgramAccounts',
             params: [
-              programId,
+              'TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA',
               {
                 encoding: 'jsonParsed',
-                filters: programId === 'TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA'
-                  ? [
-                      { dataSize: 165 },
-                      { memcmp: { offset: 0, bytes: normalizedMint } }
-                    ]
-                  : [
-                      { memcmp: { offset: 0, bytes: normalizedMint } }
-                    ]
+                filters: [
+                  { dataSize: 165 },
+                  { memcmp: { offset: 0, bytes: tokenMint } }
+                ]
               }
             ]
           }),
@@ -314,45 +213,34 @@ if (!data) {
         });
         clearTimeout(timeoutId);
         if (!resp.ok) {
-          const msg = `RPC ${url} failed for ${programId}: ${resp.status}`;
+          const msg = `RPC ${url.includes('helius') ? 'Helius' : url} failed: ${resp.status}`;
           rpcErrors.push(msg);
           continue;
         }
         const json = await resp.json();
         if (json.error) {
-          const msg = `RPC ${url} error for ${programId}: ${json.error.message}`;
+          const msg = `RPC ${url.includes('helius') ? 'Helius' : url} error: ${json.error.message}`;
           rpcErrors.push(msg);
           continue;
         }
-        const res = json?.result || [];
-        combined.push(...res);
-      }
-
-      if (combined.length > 0) {
-        data = { result: combined };
+        data = json;
         usedRpc = url;
         const rpcCallTime = Date.now() - rpcCallStart;
         const totalRpcTime = Date.now() - rpcStartTime;
-        console.log(`✅ [PERF] RPC account fetch SUCCESS via public RPC in ${rpcCallTime}ms (total: ${totalRpcTime}ms), accounts: ${combined.length}`);
+        console.log(`✅ [PERF] RPC account fetch SUCCESS via ${url.includes('helius') ? 'Helius' : 'public RPC'} in ${rpcCallTime}ms (total: ${totalRpcTime}ms)`);
         break;
-      } else {
-        rpcErrors.push(`RPC ${url} returned 0 accounts for both programs`);
+      } catch (e) {
+        const rpcCallTime = Date.now() - rpcCallStart;
+        rpcErrors.push(`RPC ${url.includes('helius') ? 'Helius' : url} exception after ${rpcCallTime}ms: ${e instanceof Error ? e.message : String(e)}`);
         continue;
       }
-    } catch (e) {
-      const rpcCallTime = Date.now() - rpcCallStart;
-      rpcErrors.push(`RPC ${url} exception after ${rpcCallTime}ms: ${e instanceof Error ? e.message : String(e)}`);
-      continue;
     }
-  }
-}
 
-if (!data) {
-  const totalRpcTime = Date.now() - rpcStartTime;
-  console.log(`❌ [PERF] All RPC endpoints FAILED after ${totalRpcTime}ms — continuing with empty dataset to avoid UI error`);
-  usedRpc = 'none';
-  data = { result: [] };
-}
+    if (!data) {
+      const totalRpcTime = Date.now() - rpcStartTime;
+      console.log(`❌ [PERF] All RPC endpoints FAILED after ${totalRpcTime}ms`);
+      throw new Error(`All RPC endpoints failed. ${rpcErrors.join(' | ')}`);
+    }
 
     // BYPASS HISTORICAL BUYERS FETCH - Fill with ANON placeholders
     const buyersStartTime = Date.now();
@@ -648,8 +536,6 @@ if (!data) {
       tokenPriceUSD,
       priceSource,
       rpcSource: usedRpc,
-      rpcErrors,
-      normalizedMint,
       priceDiscoveryFailed,
       holders: rankedHolders,
       liquidityPools: lpWallets,

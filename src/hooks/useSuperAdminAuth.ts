@@ -1,44 +1,12 @@
 import { useEffect, useState } from 'react';
 import { useAuth } from './useAuth';
 import { supabase } from '@/integrations/supabase/client';
-import { usePreviewSuperAdmin } from './usePreviewSuperAdmin';
-
-const SUPER_ADMIN_EMAIL = 'admin@blackbox.farm';
-const SUPER_ADMIN_PASSWORD = 'SuperAdmin2024!';
 
 export const useSuperAdminAuth = () => {
-  const { user, loading, signIn } = useAuth();
+  const { user, loading } = useAuth();
   const [authReady, setAuthReady] = useState(false);
-  const isPreviewAdmin = usePreviewSuperAdmin();
 
-  // Auto-login for preview mode
-  useEffect(() => {
-    const autoLogin = async () => {
-      // If in preview mode and not authenticated, auto-login
-      if (isPreviewAdmin && !user && !loading) {
-        try {
-          const { error } = await signIn(SUPER_ADMIN_EMAIL, SUPER_ADMIN_PASSWORD);
-          if (error) {
-            // Ensure the super admin exists, then try again
-            try {
-              await supabase.functions.invoke('ensure-super-admin');
-              await signIn(SUPER_ADMIN_EMAIL, SUPER_ADMIN_PASSWORD);
-            } catch (ensureErr) {
-              console.warn('ensure-super-admin failed:', ensureErr);
-            }
-          }
-        } catch (error) {
-          console.warn('Preview auto-login failed:', error);
-        }
-      }
-    };
-
-    if (!loading) {
-      autoLogin();
-    }
-  }, [isPreviewAdmin, user, loading, signIn]);
-
-  // Claim preview data if user is authenticated
+  // Only claim preview data if user is authenticated (no auto-login)
   useEffect(() => {
     const claimPreviewData = async () => {
       if (user) {
@@ -48,6 +16,7 @@ export const useSuperAdminAuth = () => {
             console.warn('Failed to claim preview data:', error);
           } else if (data?.reassigned && Object.values(data.reassigned).some((count: any) => (count as number) > 0)) {
             console.log('Preview data claimed:', data.reassigned);
+            // Dispatch event to notify components to reload data
             window.dispatchEvent(new CustomEvent('preview-data-claimed', { detail: data.reassigned }));
           }
         } catch (error) {
@@ -57,9 +26,7 @@ export const useSuperAdminAuth = () => {
       setAuthReady(true);
     };
 
-    if (!loading) {
-      claimPreviewData();
-    }
+    claimPreviewData();
   }, [user, loading]);
 
   return { user, loading, authReady };
