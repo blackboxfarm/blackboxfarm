@@ -183,7 +183,7 @@ serve(async (req) => {
       console.warn('⚠️ WARNING: All price sources failed or returned $0 - USD calculations will be incorrect');
     }
     
-    // Get all token accounts for this mint (try multiple RPCs)
+    // Get all token accounts for this mint (try multiple RPCs and both SPL programs)
     const rpcStartTime = Date.now();
     console.log('⏱️ [PERF] Starting RPC account fetch...');
     let data: any = null;
@@ -192,44 +192,68 @@ serve(async (req) => {
         const rpcCallStart = Date.now();
         const controller = new AbortController();
         const timeoutId = setTimeout(() => controller.abort(), 15000);
-        const resp = await fetch(url, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            jsonrpc: '2.0',
-            id: 1,
-            method: 'getProgramAccounts',
-            params: [
-              'TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA',
-              {
-                encoding: 'jsonParsed',
-                filters: [
-                  { dataSize: 165 },
-                  { memcmp: { offset: 0, bytes: tokenMint } }
-                ]
-              }
-            ]
-          }),
-          signal: controller.signal
-        });
+
+        const makeCall = async (programId: string, filters: any[]) => {
+          const resp = await fetch(url, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              jsonrpc: '2.0',
+              id: 1,
+              method: 'getProgramAccounts',
+              params: [
+                programId,
+                {
+                  encoding: 'jsonParsed',
+                  filters
+                }
+              ]
+            }),
+            signal: controller.signal
+          });
+          if (!resp.ok) {
+            const msg = `RPC ${url.includes('helius') ? 'Helius' : url} failed: ${resp.status}`;
+            rpcErrors.push(msg);
+            return { result: [] };
+          }
+          const json = await resp.json();
+          if (json.error) {
+            const msg = `RPC ${url.includes('helius') ? 'Helius' : url} error: ${json.error.message}`;
+            rpcErrors.push(msg);
+            return { result: [] };
+          }
+          return json;
+        };
+
+        // 1) Try legacy SPL Token program (fixed data size 165)
+        let json = await makeCall('TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA', [
+          { dataSize: 165 },
+          { memcmp: { offset: 0, bytes: tokenMint } }
+        ]);
+        let resultCount = Array.isArray(json.result) ? json.result.length : 0;
+
+        // 2) If empty, try Token-2022 (variable account sizes -> no dataSize filter)
+        if (resultCount === 0) {
+          console.log('⚠️ [PERF] No accounts via legacy SPL. Trying Token-2022...');
+          json = await makeCall('TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb', [
+            { memcmp: { offset: 0, bytes: tokenMint } }
+          ]);
+          resultCount = Array.isArray(json.result) ? json.result.length : 0;
+        }
+
         clearTimeout(timeoutId);
-        if (!resp.ok) {
-          const msg = `RPC ${url.includes('helius') ? 'Helius' : url} failed: ${resp.status}`;
-          rpcErrors.push(msg);
-          continue;
-        }
-        const json = await resp.json();
-        if (json.error) {
-          const msg = `RPC ${url.includes('helius') ? 'Helius' : url} error: ${json.error.message}`;
-          rpcErrors.push(msg);
-          continue;
-        }
-        data = json;
-        usedRpc = url;
         const rpcCallTime = Date.now() - rpcCallStart;
         const totalRpcTime = Date.now() - rpcStartTime;
-        console.log(`✅ [PERF] RPC account fetch SUCCESS via ${url.includes('helius') ? 'Helius' : 'public RPC'} in ${rpcCallTime}ms (total: ${totalRpcTime}ms)`);
-        break;
+
+        if (resultCount > 0) {
+          data = json;
+          usedRpc = url;
+          console.log(`✅ [PERF] RPC account fetch SUCCESS via ${url.includes('helius') ? 'Helius' : 'public RPC'} in ${rpcCallTime}ms (total: ${totalRpcTime}ms) — ${resultCount} accounts`);
+          break;
+        } else {
+          console.log(`⚠️ [PERF] RPC ${url.includes('helius') ? 'Helius' : 'public RPC'} returned 0 accounts in ${rpcCallTime}ms; will try next endpoint if available`);
+          continue;
+        }
       } catch (e) {
         const rpcCallTime = Date.now() - rpcCallStart;
         rpcErrors.push(`RPC ${url.includes('helius') ? 'Helius' : url} exception after ${rpcCallTime}ms: ${e instanceof Error ? e.message : String(e)}`);
