@@ -186,12 +186,13 @@ serve(async (req) => {
     const rpcStartTime = Date.now();
     console.log('⏱️ [PERF] Starting RPC account fetch...');
     let data: any = null;
-    for (const url of rpcEndpoints) {
-      try {
-        const rpcCallStart = Date.now();
-        const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 15000);
-        const resp = await fetch(url, {
+for (const url of rpcEndpoints) {
+  let rpcCallStart = Date.now();
+  try {
+    rpcCallStart = Date.now();
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 15000);
+    const resp = await fetch(url, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
