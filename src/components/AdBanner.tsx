@@ -160,16 +160,16 @@ export function AdBanner({ size, position }: AdBannerProps) {
   }
 
   // Leaderboard (728x90 equivalent)
-  // Position 1 fixed at 450px, others full width
-  const leaderboardWidth = position === 1 ? 'w-[450px] flex-none' : 'w-full';
+  // Position 1 capped at 600px wide (natural 600x200), others capped at 728px
+  const leaderboardClasses = position === 1 ? 'max-w-[600px] w-full' : 'max-w-[728px] w-full';
   
   return (
-      <Card className={`mb-4 overflow-hidden cursor-pointer transition-all duration-300 hover:scale-105 hover:shadow-2xl hover:shadow-primary/20 ${leaderboardWidth} mx-auto`} onClick={handleClick}>
+      <Card className={`mb-4 overflow-hidden cursor-pointer transition-all duration-300 hover:scale-105 hover:shadow-2xl hover:shadow-primary/20 ${leaderboardClasses} mx-auto`} onClick={handleClick}>
         {displayData.image_url ? (
           <img 
             src={displayData.image_url} 
             alt={displayData.title}
-            className="w-full h-auto object-contain"
+            className="w-full h-auto object-contain max-h-[200px]"
           />
         ) : (
           <div className={`bg-gradient-to-r ${displayData.gradient} p-4 text-white`}>
