@@ -20,6 +20,8 @@ interface LiquidityCheckResult {
   } | null;
   checkedMethods: string[];
   error?: string;
+  lpAccount?: string | null;
+  lpSource?: 'solscan' | 'dexscreener' | 'heuristic';
 }
 
 export function LiquidityLockChecker() {
@@ -145,6 +147,25 @@ export function LiquidityLockChecker() {
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
+            {result.lpAccount && result.lpSource === 'solscan' && (
+              <div className="mb-3 p-3 bg-primary/10 rounded-lg border border-primary/20">
+                <div className="flex items-center gap-2 mb-1">
+                  <CheckCircle className="w-4 h-4 text-primary" />
+                  <span className="text-sm font-semibold text-primary">Verified by Solscan</span>
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  LP Pool: <code className="text-xs bg-background/50 px-1 rounded">{result.lpAccount.slice(0, 8)}...{result.lpAccount.slice(-6)}</code>
+                </p>
+                <a 
+                  href={`https://solscan.io/account/${result.lpAccount}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-xs text-primary hover:underline"
+                >
+                  View on Solscan →
+                </a>
+              </div>
+            )}
             {result.tokenInfo && (
               <div className="grid grid-cols-2 gap-4 p-4 bg-muted/20 rounded-lg">
                 <div>
@@ -165,6 +186,27 @@ export function LiquidityLockChecker() {
                 </div>
               </div>
             )}
+
+            <CardContent className="space-y-4">
+              {result.lpAccount && result.lpSource === 'solscan' && (
+                <div className="mb-3 p-3 bg-primary/10 rounded-lg border border-primary/20">
+                  <div className="flex items-center gap-2 mb-1">
+                    <CheckCircle className="w-4 h-4 text-primary" />
+                    <span className="text-sm font-semibold text-primary">Verified by Solscan</span>
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    LP Pool: <code className="text-xs bg-background/50 px-1 rounded">{result.lpAccount.slice(0, 8)}...{result.lpAccount.slice(-6)}</code>
+                  </p>
+                  <a 
+                    href={`https://solscan.io/account/${result.lpAccount}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-xs text-primary hover:underline"
+                  >
+                    View on Solscan →
+                  </a>
+                </div>
+              )}
 
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">

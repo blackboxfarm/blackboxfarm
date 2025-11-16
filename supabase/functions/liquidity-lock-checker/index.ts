@@ -27,18 +27,104 @@ serve(async (req) => {
     let result = {
       tokenMint,
       isLocked: false,
-      lockPercentage: null as number | null, // null = no data, 0 = confirmed 0%
+      lockPercentage: null as number | null,
       lockMechanism: 'unknown',
-      lockDuration: null as string | null, // actual lock duration if available
-      lockExpiry: null as string | null, // when lock expires if available
+      lockDuration: null as string | null,
+      lockExpiry: null as string | null,
       dexInfo: 'unknown',
       tokenInfo: null as { name: any; symbol: any; price: number } | null,
       error: null as string | null,
       checkedMethods: [] as string[],
-      dataQuality: 'unverified', // 'verified', 'estimated', 'unverified', 'failed'
-      actualData: {} as any, // store the raw data we got
-      assumptions: [] as string[] // track what we assumed vs verified
+      dataQuality: 'unverified',
+      actualData: {} as any,
+      assumptions: [] as string[],
+      lpAccount: null as string | null, // Verified LP account address
+      lpSource: 'heuristic' as 'solscan' | 'dexscreener' | 'heuristic' // Source of LP detection
     };
+
+    // Method 0: Solscan-first LP detection (primary source)
+    const SOLSCAN_API_KEY = Deno.env.get('SOLSCAN_API_KEY');
+    if (SOLSCAN_API_KEY) {
+      try {
+        console.log('🔍 [Solscan Primary] Fetching LP from Solscan markets...');
+        const solscanHeaders = {
+          'token': SOLSCAN_API_KEY,
+          'accept': 'application/json'
+        };
+
+        // Get markets for this token
+        const marketsResponse = await fetch(
+          `https://pro-api.solscan.io/v2.0/token/markets?address=${tokenMint}`,
+          { headers: solscanHeaders }
+        );
+
+        if (marketsResponse.ok) {
+          const marketsData = await marketsResponse.json();
+          console.log(`✅ Solscan markets found: ${marketsData?.data?.length || 0}`);
+          
+          if (marketsData?.data && marketsData.data.length > 0) {
+            // Pick highest liquidity market
+            const topMarket = marketsData.data.reduce((prev: any, curr: any) => 
+              (curr.liquidity_usd > prev.liquidity_usd) ? curr : prev
+            );
+            
+            result.actualData.solscanMarket = topMarket;
+            result.dexInfo = topMarket.market_name || 'Unknown DEX';
+            
+            // Get top holders to confirm LP
+            const holdersResponse = await fetch(
+              `https://pro-api.solscan.io/v2.0/token/holders?address=${tokenMint}&page=1&page_size=50`,
+              { headers: solscanHeaders }
+            );
+
+            if (holdersResponse.ok) {
+              const holdersData = await holdersResponse.json();
+              const holders = holdersData?.data || [];
+              
+              // Find AMM pool in holders (tagged with owner program matching known AMMs)
+              const knownAmmPrograms = [
+                '675kPX9MHTjS2zt1qfr1NYHuzeLXfQM9H24wFSUt1Mp8', // Raydium AMM v4
+                '6EF8rrecthR5Dkzon8Nwu78hRvfCKubJ14M5uBEwF6P', // Pump.fun
+                'LBUZKhRxPF3XUpBCjp4YzTKgLccjZhTSDM9YuVaPwxo', // Meteora
+              ];
+
+              const ammHolder = holders.find((h: any) => {
+                const ownerProgram = h.owner_program || h.owner;
+                return knownAmmPrograms.some(amm => ownerProgram?.includes(amm)) ||
+                       h.address === topMarket.pool_address ||
+                       h.address === topMarket.market_id;
+              });
+
+              if (ammHolder) {
+                result.lpAccount = ammHolder.address;
+                result.lpSource = 'solscan';
+                result.dataQuality = 'verified';
+                result.actualData.solscanLP = ammHolder;
+                console.log(`✅ [Solscan Verified] LP Account: ${result.lpAccount}`);
+                
+                // Check if Solscan indicates locked liquidity
+                if (topMarket.lock_info || topMarket.is_locked) {
+                  result.isLocked = true;
+                  result.lockMechanism = 'solscan_verified';
+                  result.lockPercentage = topMarket.locked_percentage || 100;
+                  if (topMarket.lock_expiry) {
+                    result.lockExpiry = topMarket.lock_expiry;
+                  }
+                  console.log(`🔒 [Solscan] Liquidity locked via ${result.lockMechanism}`);
+                }
+              } else {
+                console.log('⚠️ No AMM holder found in Solscan top holders, will use fallback');
+              }
+            }
+          }
+        }
+        result.checkedMethods.push('Solscan - Markets & Holders (Primary)');
+      } catch (e) {
+        console.log('⚠️ Solscan primary method failed:', e instanceof Error ? e.message : String(e));
+      }
+    } else {
+      console.log('⚠️ SOLSCAN_API_KEY not configured, skipping Solscan primary method');
+    }
 
     // Method 1: Get token info and DEX liquidity data from DexScreener
     let dexPairs = [];
