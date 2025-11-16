@@ -17,6 +17,7 @@ import { AdBanner } from '@/components/AdBanner';
 import { TokenMetadataDisplay } from '@/components/token/TokenMetadataDisplay';
 import { PremiumFeatureGate } from '@/components/premium/PremiumFeatureGate';
 import { HolderMovementFeed } from '@/components/premium/HolderMovementFeed';
+import { WhaleWarningSystem } from '@/components/premium/WhaleWarningSystem';
 import { RetentionAnalysis } from '@/components/premium/RetentionAnalysis';
 import { TokenHealthDashboard } from '@/components/premium/TokenHealthDashboard';
 import { useAuth } from '@/hooks/useAuth';
@@ -851,16 +852,19 @@ export function BaglessHoldersReport({ initialToken }: BaglessHoldersReportProps
 
           {/* Premium Features - Real-Time Whale Movements - Smart Conditional Display */}
           {tokenMint && (
-            <PremiumFeatureGate
-              isAuthenticated={!!user}
-              featureName="Real-Time Whale Movements"
-              featureDescription="Track live whale movements and detect significant holder activity in real-time."
-              featureIcon={<TrendingUp />}
-              onSignUpClick={() => setShowAuthModal(true)}
-              tokenMint={tokenMint}
-            >
-              <HolderMovementFeed tokenMint={tokenMint} hideWhenEmpty={true} tokenAge={tokenAge} />
-            </PremiumFeatureGate>
+            <>
+              <WhaleWarningSystem tokenMint={tokenMint} />
+              <PremiumFeatureGate
+                isAuthenticated={!!user}
+                featureName="Real-Time Whale Movements"
+                featureDescription="Track live whale movements and detect significant holder activity in real-time."
+                featureIcon={<TrendingUp />}
+                onSignUpClick={() => setShowAuthModal(true)}
+                tokenMint={tokenMint}
+              >
+                <HolderMovementFeed tokenMint={tokenMint} hideWhenEmpty={true} tokenAge={tokenAge} />
+              </PremiumFeatureGate>
+            </>
           )}
 
           <Card>
