@@ -326,20 +326,31 @@ serve(async (req) => {
             // Calculate percentage of total supply
             const percentageOfSupply = (balance / totalSupply) * 100;
             
-            // LP Detection Logic - FIXED VERSION
+            // LP Detection Logic - Solscan First, then Fallback
             let isLiquidityPool = false;
             let lpDetectionReason = '';
             let lpConfidence = 0;
             let detectedPlatform = '';
+            let lpSource = 'heuristic';
             
-            // Known LP wallet addresses (highest priority - these are THE liquidity pools)
+            // Method 0: Solscan-verified LP (highest priority)
+            if (verifiedLPAccount && owner === verifiedLPAccount) {
+              isLiquidityPool = true;
+              detectedPlatform = 'Solscan Verified';
+              lpDetectionReason = 'Matched Solscan-verified LP account';
+              lpConfidence = 100;
+              lpSource = 'solscan_verified';
+              console.log(`✅ [Solscan Verified] LP: ${owner} (${percentageOfSupply.toFixed(2)}%)`);
+            }
+            
+            // Fallback: Known LP wallet addresses
             const knownLPWallets = new Set([
               'CebN5WGQ4jvEPvsVU4EoHEpgzq1VV7AbicfhtW4xC9iM', // Pump.fun bonding curve
               '5Q544fKrFoe6tsEbD7S8EmxGTJYAKtTVhAW5Q5pge4j1', // Common Raydium LP
               '7YttLkHDoNj9wyDur5pM1ejNaAvT9X4eqaYcHQqtj2G5', // Common Raydium LP
             ]);
             
-            // Known DEX program IDs (the CORRECT way to detect LPs) - EXPANDED LIST
+            // Known DEX program IDs
             const knownDEXPrograms: Record<string, string> = {
               'Pump.fun AMM': '6EF8rrecthR5Dkzon8Nwu78hRvfCKubJ14M5uBEwF6P',
               'Raydium V4': '675kPX9MHTjS2zt1qfr1NYHuzeLXfQM9H24wFSUt1Mp8',
@@ -349,31 +360,18 @@ serve(async (req) => {
               'Orca V2': '9W959DqEETiGZocYWCQPaJ6sBmUzgfxXfqGeTEdp3aQP',
               'Meteora': 'LBUZKhRxPF3XUpBCjp4YzTKgLccjZhTSDM9YuVaPwxo',
               'Meteora DLMM': 'Eo7WjKq67rjJQSZxS6z3YkapzY3eMj6Xy8X5EQVn5UaB',
-              'Lifinity': '2wT8Yq49kHgDzXuPxZSaeLaH1qbmGXtEyPy64bL7aD3c',
-              'Phoenix': 'PhoeNiXZ8ByJGLkxNfZRnkUfjvmuYqLR89jjFHGqdXY',
-              'Fluxbeam': 'FLUXubRmkEi2q6K3Y9kBPg9248ggaZVsoSFhtJHSrm1X',
-              'Aldrin': 'CURVGoZn8zycx6FXwwevgBTB2gVvdbGTEpvMJDbgs2t4',
-              'Aldrin V2': 'AMM55ShdkoGRB5jVYPjWziwk8m5MpwyDgsMWHaMSQWH6',
-              'Cropper': 'CTMAxxk34HjKWxQ3QLZK1HpaLXmBveao3ESePXbiyfzh',
-              'GooseFX': 'GFXsSL5sSaDfNFQUYsHekbWBW1TsFdjDYzACh62tEHxn',
-              'Saber': 'SSwpkEEcbUqx4vtoEByFjSkhKdCT862DNVb52nZg1UZ',
-              'Serum': '9xQeWvG816bUx9EPjHmaT23yvVM2ZWbrrpZb9PusVFin',
-              'Openbook': 'srmqPvymJeFKQ4zGQed1GFppgkRHL9kaELCbyksJtPX',
-              'Bags.fm': 'BagsFxwZx3cKHLGWzgU3fLzGDhgSPrfSHjgQRJZVF9HL',
-              'Bonk.fun': 'BonK1YhkXwGnzPqqiM1ycLY61w8HNJ5KHZNsmJJNFbDN',
-              'Moonshot': 'MoonCVVNZFSYkqNXP6bxHLPL6QQJiMagDL3qcqUQTrG'
             };
             
-            // HIGHEST PRIORITY: Check if this is a known LP wallet address
-            if (knownLPWallets.has(owner)) {
+            // Check if this is a known LP wallet address
+            if (!isLiquidityPool && knownLPWallets.has(owner)) {
               isLiquidityPool = true;
               detectedPlatform = 'Known LP Wallet';
               lpDetectionReason = 'Identified known LP wallet address';
               lpConfidence = 99;
-              console.log(`✅ LP Detected: ${owner} is a known LP wallet (${percentageOfSupply.toFixed(2)}% of supply)`);
+              console.log(`✅ LP Detected: ${owner} is a known LP wallet (${percentageOfSupply.toFixed(2)}%)`);
             }
             
-            // PRIMARY DETECTION: Check the account owner (program ID)
+            // Check the account owner (program ID)
             if (!isLiquidityPool) {
               for (const [platform, programId] of Object.entries(knownDEXPrograms)) {
                 if (accountOwner === programId) {
@@ -417,6 +415,7 @@ serve(async (req) => {
               lpDetectionReason,
               lpConfidence,
               detectedPlatform,
+              lpSource,
               isDustWallet,
               isSmallWallet,
               isMediumWallet,

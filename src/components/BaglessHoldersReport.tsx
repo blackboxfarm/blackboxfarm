@@ -1104,6 +1104,53 @@ export function BaglessHoldersReport({ initialToken }: BaglessHoldersReportProps
                 </div>
               </div>
 
+              {/* LP Detection with Solscan Badge */}
+              {report.liquidityPools && report.liquidityPools.length > 0 && (
+                <div className="mb-4 md:mb-6 space-y-3">
+                  <h4 className="text-sm font-semibold flex items-center gap-2">
+                    <Droplets className="w-4 h-4" />
+                    Liquidity Pools Detected
+                  </h4>
+                  {report.liquidityPools.map((lp: any, idx: number) => (
+                    <div key={idx} className="flex items-center justify-between p-3 bg-blue-500/10 rounded-lg border border-blue-500/20">
+                      <div className="flex items-center gap-2">
+                        <Droplets className="w-4 h-4 text-blue-400" />
+                        <div>
+                          <div className="flex items-center gap-2">
+                            <div className="text-sm font-medium">Liquidity Pool {idx + 1}</div>
+                            {lp.source === 'solscan_verified' && (
+                              <Badge variant="default" className="text-xs gap-1">
+                                <CheckCircle className="w-3 h-3" />
+                                Solscan
+                              </Badge>
+                            )}
+                          </div>
+                          <div className="text-xs text-muted-foreground font-mono">
+                            {lp.address?.slice(0, 8)}...{lp.address?.slice(-6)}
+                          </div>
+                          {lp.source === 'solscan_verified' && (
+                            <a 
+                              href={`https://solscan.io/account/${lp.address}`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="text-xs text-primary hover:underline"
+                            >
+                              View on Solscan →
+                            </a>
+                          )}
+                        </div>
+                      </div>
+                      <div className="text-right">
+                        <div className="text-sm font-semibold">{lp.percentOfSupply?.toFixed(2)}%</div>
+                        <div className="text-xs text-muted-foreground">
+                          {lp.lpType} ({lp.confidence}%)
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+
               {/* LP Detection and Wallet Categories */}
               <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2 md:gap-3 mb-4 md:mb-6">
                 <div className="text-center p-2 rounded-lg bg-muted/30">
