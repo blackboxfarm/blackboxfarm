@@ -77,6 +77,63 @@ serve(async (req) => {
     // Initialize launchpad info (will be populated later)
     let launchpadInfo = { name: 'unknown', detected: false, confidence: 'low' as 'high' | 'medium' | 'low' };
     
+    // Initialize Solscan-verified LP account (global scope)
+    let verifiedLPAccount: string | null = null;
+    let verifiedLPSource: string | null = null;
+    
+    // Try to get LP from Solscan Pro API
+    const solscanApiKey = Deno.env.get('SOLSCAN_API_KEY');
+    if (solscanApiKey) {
+      try {
+        console.log('[Solscan] Fetching token markets...');
+        const marketsResp = await fetch(`https://pro-api.solscan.io/v2.0/token/markets?address=${tokenMint}`, {
+          headers: { 'token': solscanApiKey }
+        });
+        
+        if (marketsResp.ok) {
+          const marketsData = await marketsResp.json();
+          if (marketsData.success && marketsData.data?.length > 0) {
+            // Pick the market with highest liquidity
+            const topMarket = marketsData.data.sort((a: any, b: any) => (b.liquidity || 0) - (a.liquidity || 0))[0];
+            const poolAddress = topMarket.pool_address || topMarket.market_id;
+            
+            if (poolAddress) {
+              console.log(`[Solscan] Top market pool: ${poolAddress}`);
+              
+              // Verify via holders endpoint
+              const holdersResp = await fetch(`https://pro-api.solscan.io/v2.0/token/holders?address=${tokenMint}&page=1&page_size=50`, {
+                headers: { 'token': solscanApiKey }
+              });
+              
+              if (holdersResp.ok) {
+                const holdersData = await holdersResp.json();
+                if (holdersData.success && holdersData.data?.length > 0) {
+                  // Find the holder matching the pool address or AMM program
+                  const knownAMMs = [
+                    '675kPX9MHTjS2zt1qfr1NYHuzeLXfQM9H24wFSUt1Mp8', // Raydium AMM v4
+                    '6EF8rrecthR5Dkzon8Nwu78hRvfCKubJ14M5uBEwF6P',  // Pump.fun
+                    'LBUZKhRxPF3XUpBCjp4YzTKgLccjZhTSDM9YuVaPwxo',  // Meteora
+                  ];
+                  
+                  for (const holder of holdersData.data) {
+                    const holderOwner = holder.owner || holder.address;
+                    if (holderOwner === poolAddress || knownAMMs.includes(holder.owner_program || '')) {
+                      verifiedLPAccount = holderOwner;
+                      verifiedLPSource = 'solscan';
+                      console.log(`✅ [Solscan] Verified LP account: ${verifiedLPAccount}`);
+                      break;
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      } catch (error) {
+        console.error('[Solscan] API error:', error);
+      }
+    }
+    
     if (!manualPrice || manualPrice === 0) {
       const priceStartTime = Date.now();
       console.log('⏱️ [PERF] No manual price provided, trying multiple price sources...');
