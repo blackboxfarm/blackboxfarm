@@ -10,7 +10,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/u
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
-import { Loader2, Download, RefreshCw, Flag, AlertTriangle, Shield, TrendingUp, Diamond, Brain } from 'lucide-react';
+import { Loader2, Download, RefreshCw, Flag, AlertTriangle, Shield, TrendingUp, Diamond, Brain, Droplets, CheckCircle, Users, Wallet, DollarSign, BarChart3, Info, Search, Percent, ExternalLink, ChevronDown, ChevronUp, Eye, EyeOff, XCircle } from 'lucide-react';
 import { Progress } from '@/components/ui/progress';
 import { useTokenMetadata } from '@/hooks/useTokenMetadata';
 import { AdBanner } from '@/components/AdBanner';
