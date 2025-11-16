@@ -332,6 +332,13 @@ serve(async (req) => {
             let lpConfidence = 0;
             let detectedPlatform = '';
             
+            // Known LP wallet addresses (highest priority - these are THE liquidity pools)
+            const knownLPWallets = new Set([
+              'CebN5WGQ4jvEPvsVU4EoHEpgzq1VV7AbicfhtW4xC9iM', // Pump.fun bonding curve
+              '5Q544fKrFoe6tsEbD7S8EmxGTJYAKtTVhAW5Q5pge4j1', // Common Raydium LP
+              '7YttLkHDoNj9wyDur5pM1ejNaAvT9X4eqaYcHQqtj2G5', // Common Raydium LP
+            ]);
+            
             // Known DEX program IDs (the CORRECT way to detect LPs) - EXPANDED LIST
             const knownDEXPrograms: Record<string, string> = {
               'Pump.fun AMM': '6EF8rrecthR5Dkzon8Nwu78hRvfCKubJ14M5uBEwF6P',
@@ -357,24 +364,35 @@ serve(async (req) => {
               'Moonshot': 'MoonCVVNZFSYkqNXP6bxHLPL6QQJiMagDL3qcqUQTrG'
             };
             
+            // HIGHEST PRIORITY: Check if this is a known LP wallet address
+            if (knownLPWallets.has(owner)) {
+              isLiquidityPool = true;
+              detectedPlatform = 'Known LP Wallet';
+              lpDetectionReason = 'Identified known LP wallet address';
+              lpConfidence = 99;
+              console.log(`✅ LP Detected: ${owner} is a known LP wallet (${percentageOfSupply.toFixed(2)}% of supply)`);
+            }
+            
             // PRIMARY DETECTION: Check the account owner (program ID)
-            for (const [platform, programId] of Object.entries(knownDEXPrograms)) {
-              if (accountOwner === programId) {
-                isLiquidityPool = true;
-                detectedPlatform = platform;
-                lpDetectionReason = `Token account owned by ${platform} program`;
-                lpConfidence = 95;
-                console.log(`✅ LP Detected: ${owner} is owned by ${platform} (${programId})`);
-                break;
+            if (!isLiquidityPool) {
+              for (const [platform, programId] of Object.entries(knownDEXPrograms)) {
+                if (accountOwner === programId) {
+                  isLiquidityPool = true;
+                  detectedPlatform = platform;
+                  lpDetectionReason = `Token account owned by ${platform} program`;
+                  lpConfidence = 95;
+                  console.log(`✅ LP Detected: ${owner} is owned by ${platform} (${programId})`);
+                  break;
+                }
               }
             }
             
-            // FALLBACK DETECTION: Lower threshold (15%) for unrecognized LP programs
-            if (!isLiquidityPool && percentageOfSupply > 15) {
+            // FALLBACK DETECTION: Higher threshold (20%) for unrecognized LP programs
+            if (!isLiquidityPool && percentageOfSupply > 20) {
               isLiquidityPool = true;
               detectedPlatform = 'Unknown Platform';
               lpDetectionReason = `High concentration (${percentageOfSupply.toFixed(1)}%) - likely undetected LP`;
-              lpConfidence = 60;
+              lpConfidence = 65;
               console.log(`⚠️ Potential LP: ${owner} holds ${percentageOfSupply.toFixed(1)}% (owner program: ${accountOwner})`);
             }
             
