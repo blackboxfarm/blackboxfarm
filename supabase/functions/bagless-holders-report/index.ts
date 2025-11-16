@@ -354,8 +354,7 @@ serve(async (req) => {
               'Openbook': 'srmqPvymJeFKQ4zGQed1GFppgkRHL9kaELCbyksJtPX',
               'Bags.fm': 'BagsFxwZx3cKHLGWzgU3fLzGDhgSPrfSHjgQRJZVF9HL',
               'Bonk.fun': 'BonK1YhkXwGnzPqqiM1ycLY61w8HNJ5KHZNsmJJNFbDN',
-              'Moonshot': 'MoonCVVNZFSYkqNXP6bxHLPL6QQJiMagDL3qcqUQTrG',
-              'Token-2022': 'TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb'
+              'Moonshot': 'MoonCVVNZFSYkqNXP6bxHLPL6QQJiMagDL3qcqUQTrG'
             };
             
             // PRIMARY DETECTION: Check the account owner (program ID)
