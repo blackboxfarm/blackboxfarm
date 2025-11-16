@@ -850,20 +850,11 @@ export function BaglessHoldersReport({ initialToken }: BaglessHoldersReportProps
             );
           })()}
 
-          {/* Premium Features - Real-Time Whale Movements - Smart Conditional Display */}
+          {/* Real-Time Whale Movements - Now public, only shows when significant activity exists */}
           {tokenMint && (
             <>
               <WhaleWarningSystem tokenMint={tokenMint} />
-              <PremiumFeatureGate
-                isAuthenticated={!!user}
-                featureName="Real-Time Whale Movements"
-                featureDescription="Track live whale movements and detect significant holder activity in real-time."
-                featureIcon={<TrendingUp />}
-                onSignUpClick={() => setShowAuthModal(true)}
-                tokenMint={tokenMint}
-              >
-                <HolderMovementFeed tokenMint={tokenMint} hideWhenEmpty={true} tokenAge={tokenAge} />
-              </PremiumFeatureGate>
+              <HolderMovementFeed tokenMint={tokenMint} hideWhenEmpty={true} tokenAge={tokenAge} />
             </>
           )}
 
