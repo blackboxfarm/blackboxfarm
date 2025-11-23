@@ -115,6 +115,366 @@ export type Database = {
         }
         Relationships: []
       }
+      arb_balances: {
+        Row: {
+          base_token_base: number
+          created_at: string | null
+          eth_base: number
+          eth_mainnet: number
+          id: string
+          last_updated: string | null
+          total_value_usd: number
+          user_id: string
+        }
+        Insert: {
+          base_token_base?: number
+          created_at?: string | null
+          eth_base?: number
+          eth_mainnet?: number
+          id?: string
+          last_updated?: string | null
+          total_value_usd?: number
+          user_id: string
+        }
+        Update: {
+          base_token_base?: number
+          created_at?: string | null
+          eth_base?: number
+          eth_mainnet?: number
+          id?: string
+          last_updated?: string | null
+          total_value_usd?: number
+          user_id?: string
+        }
+        Relationships: []
+      }
+      arb_bot_config: {
+        Row: {
+          auto_trade_enabled: boolean
+          circuit_breaker_active: boolean
+          created_at: string | null
+          dry_run_enabled: boolean
+          enable_loop_a: boolean
+          enable_loop_b: boolean
+          enable_loop_c: boolean
+          id: string
+          max_bridge_fee_pct: number
+          max_daily_loss_eth: number
+          max_daily_trades: number
+          max_gas_per_tx_base: number
+          max_gas_per_tx_eth: number
+          max_loss_per_trade_eth: number
+          max_open_loops: number
+          max_price_impact_bps: number
+          max_slippage_bps_per_hop: number
+          min_profit_bps: number
+          polling_interval_sec: number
+          rebalance_mode: boolean
+          stale_quote_timeout_sec: number
+          trade_size_fixed_eth: number
+          trade_size_mode: string
+          trade_size_pct_balance: number
+          updated_at: string | null
+          user_id: string
+        }
+        Insert: {
+          auto_trade_enabled?: boolean
+          circuit_breaker_active?: boolean
+          created_at?: string | null
+          dry_run_enabled?: boolean
+          enable_loop_a?: boolean
+          enable_loop_b?: boolean
+          enable_loop_c?: boolean
+          id?: string
+          max_bridge_fee_pct?: number
+          max_daily_loss_eth?: number
+          max_daily_trades?: number
+          max_gas_per_tx_base?: number
+          max_gas_per_tx_eth?: number
+          max_loss_per_trade_eth?: number
+          max_open_loops?: number
+          max_price_impact_bps?: number
+          max_slippage_bps_per_hop?: number
+          min_profit_bps?: number
+          polling_interval_sec?: number
+          rebalance_mode?: boolean
+          stale_quote_timeout_sec?: number
+          trade_size_fixed_eth?: number
+          trade_size_mode?: string
+          trade_size_pct_balance?: number
+          updated_at?: string | null
+          user_id: string
+        }
+        Update: {
+          auto_trade_enabled?: boolean
+          circuit_breaker_active?: boolean
+          created_at?: string | null
+          dry_run_enabled?: boolean
+          enable_loop_a?: boolean
+          enable_loop_b?: boolean
+          enable_loop_c?: boolean
+          id?: string
+          max_bridge_fee_pct?: number
+          max_daily_loss_eth?: number
+          max_daily_trades?: number
+          max_gas_per_tx_base?: number
+          max_gas_per_tx_eth?: number
+          max_loss_per_trade_eth?: number
+          max_open_loops?: number
+          max_price_impact_bps?: number
+          max_slippage_bps_per_hop?: number
+          min_profit_bps?: number
+          polling_interval_sec?: number
+          rebalance_mode?: boolean
+          stale_quote_timeout_sec?: number
+          trade_size_fixed_eth?: number
+          trade_size_mode?: string
+          trade_size_pct_balance?: number
+          updated_at?: string | null
+          user_id?: string
+        }
+        Relationships: []
+      }
+      arb_daily_stats: {
+        Row: {
+          date: string
+          failed_loops: number
+          id: string
+          net_pnl_eth: number
+          successful_loops: number
+          total_gas_spent_eth: number
+          total_loops_executed: number
+          total_loss_eth: number
+          total_profit_eth: number
+          total_volume_eth: number
+          user_id: string
+        }
+        Insert: {
+          date: string
+          failed_loops?: number
+          id?: string
+          net_pnl_eth?: number
+          successful_loops?: number
+          total_gas_spent_eth?: number
+          total_loops_executed?: number
+          total_loss_eth?: number
+          total_profit_eth?: number
+          total_volume_eth?: number
+          user_id: string
+        }
+        Update: {
+          date?: string
+          failed_loops?: number
+          id?: string
+          net_pnl_eth?: number
+          successful_loops?: number
+          total_gas_spent_eth?: number
+          total_loops_executed?: number
+          total_loss_eth?: number
+          total_profit_eth?: number
+          total_volume_eth?: number
+          user_id?: string
+        }
+        Relationships: []
+      }
+      arb_loop_executions: {
+        Row: {
+          completed_at: string | null
+          created_at: string | null
+          error_message: string | null
+          final_amount_eth: number | null
+          id: string
+          legs: Json
+          loop_id: string
+          loop_type: string
+          realized_profit_bps: number | null
+          realized_profit_eth: number | null
+          started_at: string | null
+          starting_amount_eth: number
+          status: string
+          stranded_amount: number | null
+          stranded_asset: string | null
+          total_bridge_fees_eth: number | null
+          total_gas_spent_eth: number | null
+          total_swap_fees_eth: number | null
+          user_id: string
+        }
+        Insert: {
+          completed_at?: string | null
+          created_at?: string | null
+          error_message?: string | null
+          final_amount_eth?: number | null
+          id?: string
+          legs: Json
+          loop_id: string
+          loop_type: string
+          realized_profit_bps?: number | null
+          realized_profit_eth?: number | null
+          started_at?: string | null
+          starting_amount_eth: number
+          status?: string
+          stranded_amount?: number | null
+          stranded_asset?: string | null
+          total_bridge_fees_eth?: number | null
+          total_gas_spent_eth?: number | null
+          total_swap_fees_eth?: number | null
+          user_id: string
+        }
+        Update: {
+          completed_at?: string | null
+          created_at?: string | null
+          error_message?: string | null
+          final_amount_eth?: number | null
+          id?: string
+          legs?: Json
+          loop_id?: string
+          loop_type?: string
+          realized_profit_bps?: number | null
+          realized_profit_eth?: number | null
+          started_at?: string | null
+          starting_amount_eth?: number
+          status?: string
+          stranded_amount?: number | null
+          stranded_asset?: string | null
+          total_bridge_fees_eth?: number | null
+          total_gas_spent_eth?: number | null
+          total_swap_fees_eth?: number | null
+          user_id?: string
+        }
+        Relationships: []
+      }
+      arb_opportunities: {
+        Row: {
+          detected_at: string | null
+          executable: boolean
+          expected_final_eth: number
+          expected_profit_bps: number
+          expected_profit_eth: number
+          id: string
+          leg_breakdown: Json
+          loop_type: string
+          meets_gas_limits: boolean
+          meets_liquidity_depth: boolean
+          meets_profit_threshold: boolean
+          meets_slippage_threshold: boolean
+          skip_reason: string | null
+          trade_size_eth: number
+          user_id: string
+        }
+        Insert: {
+          detected_at?: string | null
+          executable: boolean
+          expected_final_eth: number
+          expected_profit_bps: number
+          expected_profit_eth: number
+          id?: string
+          leg_breakdown: Json
+          loop_type: string
+          meets_gas_limits: boolean
+          meets_liquidity_depth: boolean
+          meets_profit_threshold: boolean
+          meets_slippage_threshold: boolean
+          skip_reason?: string | null
+          trade_size_eth: number
+          user_id: string
+        }
+        Update: {
+          detected_at?: string | null
+          executable?: boolean
+          expected_final_eth?: number
+          expected_profit_bps?: number
+          expected_profit_eth?: number
+          id?: string
+          leg_breakdown?: Json
+          loop_type?: string
+          meets_gas_limits?: boolean
+          meets_liquidity_depth?: boolean
+          meets_profit_threshold?: boolean
+          meets_slippage_threshold?: boolean
+          skip_reason?: string | null
+          trade_size_eth?: number
+          user_id?: string
+        }
+        Relationships: []
+      }
+      arb_price_snapshots: {
+        Row: {
+          base_token_eth: number
+          base_token_usd: number
+          bridge_fee_base_to_eth: number | null
+          bridge_fee_eth_to_base: number | null
+          eth_base_usd: number
+          eth_mainnet_usd: number
+          gas_price_base_gwei: number | null
+          gas_price_eth_gwei: number | null
+          id: string
+          timestamp: string | null
+        }
+        Insert: {
+          base_token_eth: number
+          base_token_usd: number
+          bridge_fee_base_to_eth?: number | null
+          bridge_fee_eth_to_base?: number | null
+          eth_base_usd: number
+          eth_mainnet_usd: number
+          gas_price_base_gwei?: number | null
+          gas_price_eth_gwei?: number | null
+          id?: string
+          timestamp?: string | null
+        }
+        Update: {
+          base_token_eth?: number
+          base_token_usd?: number
+          bridge_fee_base_to_eth?: number | null
+          bridge_fee_eth_to_base?: number | null
+          eth_base_usd?: number
+          eth_mainnet_usd?: number
+          gas_price_base_gwei?: number | null
+          gas_price_eth_gwei?: number | null
+          id?: string
+          timestamp?: string | null
+        }
+        Relationships: []
+      }
+      arb_system_health: {
+        Row: {
+          base_rpc_error_rate: number | null
+          base_rpc_latency_ms: number | null
+          bridge_api_latency_ms: number | null
+          eth_rpc_error_rate: number | null
+          eth_rpc_latency_ms: number | null
+          id: string
+          status: string
+          swap_api_error_rate: number | null
+          swap_api_latency_ms: number | null
+          timestamp: string | null
+        }
+        Insert: {
+          base_rpc_error_rate?: number | null
+          base_rpc_latency_ms?: number | null
+          bridge_api_latency_ms?: number | null
+          eth_rpc_error_rate?: number | null
+          eth_rpc_latency_ms?: number | null
+          id?: string
+          status: string
+          swap_api_error_rate?: number | null
+          swap_api_latency_ms?: number | null
+          timestamp?: string | null
+        }
+        Update: {
+          base_rpc_error_rate?: number | null
+          base_rpc_latency_ms?: number | null
+          bridge_api_latency_ms?: number | null
+          eth_rpc_error_rate?: number | null
+          eth_rpc_latency_ms?: number | null
+          id?: string
+          status?: string
+          swap_api_error_rate?: number | null
+          swap_api_latency_ms?: number | null
+          timestamp?: string | null
+        }
+        Relationships: []
+      }
       banner_ads: {
         Row: {
           created_at: string | null
