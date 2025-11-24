@@ -160,7 +160,7 @@ export function ConfigurationTab() {
           dry_run_enabled: true,
           circuit_breaker_active: false,
           rebalance_mode: false,
-          polling_interval_sec: 60,
+          polling_interval_sec: 30, // Scan every 30 seconds
           stale_quote_timeout_sec: 10,
           initial_eth_mainnet: 0,
           initial_eth_base: 0,
