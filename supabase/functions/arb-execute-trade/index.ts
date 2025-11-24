@@ -79,38 +79,104 @@ Deno.serve(async (req) => {
     console.log(`Created execution ${execution.id} for loop ${loop_id}`);
 
     if (isDryRun) {
-      // Dry run mode - simulate the trade
-      const simulatedProfit = opportunity.expected_profit_eth * 0.95; // Assume 95% of expected profit
-      const simulatedGas = 0.002; // Simulated gas cost
-      const simulatedFees = opportunity.trade_size_eth * 0.003; // 0.3% fees
+      // Dry run mode - use EXACT real calculated values from opportunity
+      const legBreakdown = opportunity.leg_breakdown as any;
+      
+      // Extract actual calculated fees from opportunity analysis
+      const realBridgeFee = legBreakdown.fees?.bridge || 0;
+      const realGasMainnet = legBreakdown.fees?.gas_mainnet || 0;
+      const realGasBase = legBreakdown.fees?.gas_base || 0;
+      const realSwapFees = legBreakdown.fees?.swap || 0;
+      const totalGasSpent = realGasMainnet + realGasBase;
+      const totalBridgeFees = realBridgeFee;
+      const totalSwapFees = realSwapFees;
+      
+      // Use EXACT profit calculation - no multipliers
+      const realizedProfit = opportunity.expected_profit_eth;
+      const finalAmount = opportunity.expected_final_eth;
+      
+      // Create detailed execution log simulating real execution steps
+      const executionSteps = [];
+      
+      if (opportunity.loop_type.includes('Mainnet → Base')) {
+        executionSteps.push({
+          step: 1,
+          action: 'Approve ETH spending on Mainnet',
+          chain: 'mainnet',
+          gasUsed: realGasMainnet * 0.1,
+          status: 'simulated_success',
+          timestamp: new Date().toISOString()
+        });
+        
+        executionSteps.push({
+          step: 2,
+          action: `Bridge ${opportunity.trade_size_eth} ETH from Mainnet to Base`,
+          chain: 'mainnet',
+          amount: opportunity.trade_size_eth,
+          bridgeFee: realBridgeFee,
+          gasUsed: realGasMainnet * 0.4,
+          status: 'simulated_success',
+          timestamp: new Date(Date.now() + 1000).toISOString()
+        });
+        
+        executionSteps.push({
+          step: 3,
+          action: `Receive ${(opportunity.trade_size_eth - realBridgeFee).toFixed(6)} ETH on Base`,
+          chain: 'base',
+          received: opportunity.trade_size_eth - realBridgeFee,
+          status: 'simulated_success',
+          timestamp: new Date(Date.now() + 60000).toISOString()
+        });
+        
+        executionSteps.push({
+          step: 4,
+          action: 'Swap ETH at higher Base price',
+          chain: 'base',
+          swapFee: realSwapFees,
+          gasUsed: realGasBase * 0.5,
+          priceImpact: legBreakdown.price_diff / legBreakdown.price_mainnet,
+          status: 'simulated_success',
+          timestamp: new Date(Date.now() + 65000).toISOString()
+        });
+      }
 
+      // Update execution with real calculated values
       await supabase
         .from('arb_loop_executions')
         .update({
-          status: 'completed',
+          status: 'simulated',
           completed_at: new Date().toISOString(),
-          final_amount_eth: opportunity.expected_final_eth,
-          realized_profit_eth: simulatedProfit,
-          realized_profit_bps: Math.round((simulatedProfit / opportunity.trade_size_eth) * 10000),
-          total_gas_spent_eth: simulatedGas,
-          total_swap_fees_eth: simulatedFees,
-          total_bridge_fees_eth: 0,
+          final_amount_eth: finalAmount,
+          realized_profit_eth: realizedProfit,
+          realized_profit_bps: opportunity.expected_profit_bps,
+          total_gas_spent_eth: totalGasSpent,
+          total_swap_fees_eth: totalSwapFees,
+          total_bridge_fees_eth: totalBridgeFees,
+          legs: {
+            ...legBreakdown,
+            execution_steps: executionSteps,
+            simulation_mode: true
+          }
         })
         .eq('id', execution.id);
 
-      console.log(`Dry run completed - simulated profit: ${simulatedProfit} ETH`);
+      console.log(`✅ Dry run completed with REAL calculated values - profit: ${realizedProfit} ETH`);
+      console.log(`📊 Fees breakdown: Gas=${totalGasSpent}, Bridge=${totalBridgeFees}, Swap=${totalSwapFees}`);
 
-      // Update virtual balances for dry run
+      // Update virtual balances with EXACT calculated amounts
       const { data: currentBalances } = await supabase
         .from('arb_balances')
         .select('*')
-        .eq('user_id', userId)
+        .eq('user_id', user_id)
         .single();
 
       if (currentBalances && opportunity.loop_type.includes('Mainnet → Base')) {
-        // Loop A: Move ETH from Mainnet to Base
-        const newEthMainnet = currentBalances.eth_mainnet - opportunity.trade_size_eth;
-        const newEthBase = currentBalances.eth_base + opportunity.trade_size_eth + simulatedProfit - simulatedGas;
+        // Loop A: Move ETH from Mainnet to Base with EXACT calculated amounts
+        const tradeSizeUsed = opportunity.trade_size_eth;
+        const netReceived = finalAmount - tradeSizeUsed; // This is the actual profit after all fees
+        
+        const newEthMainnet = currentBalances.eth_mainnet - tradeSizeUsed;
+        const newEthBase = currentBalances.eth_base + tradeSizeUsed + netReceived;
         
         await supabase
           .from('arb_balances')
@@ -119,23 +185,31 @@ Deno.serve(async (req) => {
             eth_base: newEthBase,
             last_updated: new Date().toISOString()
           })
-          .eq('user_id', userId);
+          .eq('user_id', user_id);
 
-        console.log(`Dry run balance update: Mainnet ${currentBalances.eth_mainnet} → ${newEthMainnet}, Base ${currentBalances.eth_base} → ${newEthBase}`);
+        console.log(`💰 Balance update: Mainnet ${currentBalances.eth_mainnet.toFixed(6)} → ${newEthMainnet.toFixed(6)}, Base ${currentBalances.eth_base.toFixed(6)} → ${newEthBase.toFixed(6)}`);
       }
 
       // Update bot status back to idle
       await supabase
         .from('arb_bot_status')
         .update({ status: 'idle' })
-        .eq('user_id', userId);
+        .eq('user_id', user_id);
 
       return new Response(
         JSON.stringify({
           success: true,
           execution_id: execution.id,
           dry_run: true,
-          simulated_profit_eth: simulatedProfit,
+          realized_profit_eth: realizedProfit,
+          final_amount_eth: finalAmount,
+          fees: {
+            gas: totalGasSpent,
+            bridge: totalBridgeFees,
+            swap: totalSwapFees,
+            total: totalGasSpent + totalBridgeFees + totalSwapFees
+          },
+          execution_steps: executionSteps,
           balance_updated: true
         }),
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
