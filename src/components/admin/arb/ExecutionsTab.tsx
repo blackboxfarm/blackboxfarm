@@ -29,8 +29,26 @@ export function ExecutionsTab() {
 
   useEffect(() => {
     loadExecutions();
-    const interval = setInterval(loadExecutions, 10000); // Refresh every 10s
-    return () => clearInterval(interval);
+    
+    // Subscribe to real-time updates
+    const channel = supabase
+      .channel('arb-executions-changes')
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'arb_loop_executions',
+        },
+        () => {
+          loadExecutions();
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
   }, []);
 
   const loadExecutions = async () => {

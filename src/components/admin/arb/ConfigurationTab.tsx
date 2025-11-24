@@ -5,9 +5,10 @@ import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Badge } from "@/components/ui/badge";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
-import { Loader2 } from "lucide-react";
+import { Loader2, Activity, Play, Square } from "lucide-react";
 
 interface BotConfig {
   trade_size_mode: string;
@@ -34,15 +35,77 @@ interface BotConfig {
   stale_quote_timeout_sec: number;
 }
 
+interface BotStatus {
+  is_running: boolean;
+  status: 'idle' | 'scanning' | 'executing' | 'error' | 'stopped';
+  last_scan_at: string | null;
+  next_scan_at: string | null;
+  scan_count_today: number;
+  error_message: string | null;
+}
+
 export function ConfigurationTab() {
   const [config, setConfig] = useState<BotConfig | null>(null);
+  const [botStatus, setBotStatus] = useState<BotStatus | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const { toast } = useToast();
 
   useEffect(() => {
     loadConfig();
+    loadBotStatus();
+
+    // Subscribe to bot status changes
+    const channel = supabase
+      .channel('arb-bot-status-changes')
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'arb_bot_status',
+        },
+        () => {
+          loadBotStatus();
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
   }, []);
+
+  const loadBotStatus = async () => {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+
+      const { data, error } = await supabase
+        .from('arb_bot_status')
+        .select('*')
+        .eq('user_id', user.id)
+        .maybeSingle();
+
+      if (error) throw error;
+
+      if (data) {
+        setBotStatus(data as BotStatus);
+      } else {
+        // Create initial bot status
+        const { data: newStatus, error: createError } = await supabase
+          .from('arb_bot_status')
+          .insert({ user_id: user.id })
+          .select()
+          .single();
+
+        if (createError) throw createError;
+        setBotStatus(newStatus as BotStatus);
+      }
+    } catch (error: any) {
+      console.error('Error loading bot status:', error);
+    }
+  };
 
   const loadConfig = async () => {
     try {
@@ -107,6 +170,52 @@ export function ConfigurationTab() {
     }
   };
 
+  const startBot = async () => {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+
+      await supabase
+        .from('arb_bot_status')
+        .update({ is_running: true, status: 'idle' })
+        .eq('user_id', user.id);
+
+      toast({
+        title: "Bot Started",
+        description: "Arbitrage bot is now running",
+      });
+    } catch (error: any) {
+      toast({
+        title: "Error",
+        description: error.message,
+        variant: "destructive",
+      });
+    }
+  };
+
+  const stopBot = async () => {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+
+      await supabase
+        .from('arb_bot_status')
+        .update({ is_running: false, status: 'stopped' })
+        .eq('user_id', user.id);
+
+      toast({
+        title: "Bot Stopped",
+        description: "Arbitrage bot has been stopped",
+      });
+    } catch (error: any) {
+      toast({
+        title: "Error",
+        description: error.message,
+        variant: "destructive",
+      });
+    }
+  };
+
   const saveConfig = async () => {
     if (!config) return;
     setSaving(true);
@@ -147,8 +256,94 @@ export function ConfigurationTab() {
 
   if (!config) return null;
 
+  const getStatusBadge = () => {
+    if (!botStatus) return null;
+    
+    const variants: Record<string, { label: string; variant: "default" | "secondary" | "destructive" | "outline" }> = {
+      idle: { label: "Idle", variant: "secondary" },
+      scanning: { label: "Scanning", variant: "default" },
+      executing: { label: "Executing", variant: "default" },
+      error: { label: "Error", variant: "destructive" },
+      stopped: { label: "Stopped", variant: "outline" },
+    };
+
+    const status = variants[botStatus.status] || variants.stopped;
+    return <Badge variant={status.variant}>{status.label}</Badge>;
+  };
+
   return (
     <div className="space-y-6">
+      {/* Bot Control Section */}
+      <Card>
+        <CardHeader>
+          <div className="flex items-center justify-between">
+            <div>
+              <CardTitle className="flex items-center gap-2">
+                <Activity className="h-5 w-5" />
+                Bot Control
+              </CardTitle>
+              <CardDescription>Start or stop the arbitrage bot</CardDescription>
+            </div>
+            {getStatusBadge()}
+          </div>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="flex gap-4">
+            <Button
+              onClick={startBot}
+              disabled={botStatus?.is_running}
+              className="flex items-center gap-2"
+            >
+              <Play className="h-4 w-4" />
+              Start Bot
+            </Button>
+            <Button
+              onClick={stopBot}
+              disabled={!botStatus?.is_running}
+              variant="destructive"
+              className="flex items-center gap-2"
+            >
+              <Square className="h-4 w-4" />
+              Stop Bot
+            </Button>
+          </div>
+
+          {botStatus && (
+            <div className="grid grid-cols-2 gap-4 pt-4 border-t">
+              <div>
+                <Label className="text-sm text-muted-foreground">Last Scan</Label>
+                <p className="text-sm font-medium">
+                  {botStatus.last_scan_at 
+                    ? new Date(botStatus.last_scan_at).toLocaleTimeString() 
+                    : 'Never'}
+                </p>
+              </div>
+              <div>
+                <Label className="text-sm text-muted-foreground">Next Scan</Label>
+                <p className="text-sm font-medium">
+                  {botStatus.next_scan_at 
+                    ? new Date(botStatus.next_scan_at).toLocaleTimeString() 
+                    : 'N/A'}
+                </p>
+              </div>
+              <div>
+                <Label className="text-sm text-muted-foreground">Scans Today</Label>
+                <p className="text-sm font-medium">{botStatus.scan_count_today}</p>
+              </div>
+              <div>
+                <Label className="text-sm text-muted-foreground">Status</Label>
+                <p className="text-sm font-medium capitalize">{botStatus.status}</p>
+              </div>
+            </div>
+          )}
+
+          {botStatus?.error_message && (
+            <div className="p-3 bg-destructive/10 text-destructive rounded-md text-sm">
+              Error: {botStatus.error_message}
+            </div>
+          )}
+        </CardContent>
+      </Card>
       <Card>
         <CardHeader>
           <CardTitle>Trade Size Configuration</CardTitle>

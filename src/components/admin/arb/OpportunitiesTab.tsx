@@ -25,8 +25,26 @@ export function OpportunitiesTab() {
 
   useEffect(() => {
     loadOpportunities();
-    const interval = setInterval(loadOpportunities, 10000); // Refresh every 10s
-    return () => clearInterval(interval);
+    
+    // Subscribe to real-time updates
+    const channel = supabase
+      .channel('arb-opportunities-changes')
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'arb_opportunities',
+        },
+        () => {
+          loadOpportunities();
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
   }, []);
 
   const loadOpportunities = async () => {
