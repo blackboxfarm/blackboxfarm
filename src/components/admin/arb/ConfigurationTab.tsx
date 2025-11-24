@@ -36,7 +36,17 @@ interface BotConfig {
   initial_eth_mainnet: number;
   initial_eth_base: number;
   initial_base_tokens: number;
+  initial_usdc_mainnet: number;
+  initial_usdc_base: number;
   balance_aware_mode: boolean;
+  enable_usdc_to_eth: boolean;
+  enable_usdc_to_base: boolean;
+  enable_profit_taking: boolean;
+  enable_dynamic_rebalancing: boolean;
+  min_eth_gain_pct_for_sell: number;
+  min_base_gain_pct_for_sell: number;
+  partial_profit_take_pct: number;
+  max_usdc_deployment_pct: number;
 }
 
 interface BotStatus {
@@ -127,13 +137,13 @@ export function ConfigurationTab() {
       if (data) {
         setConfig(data);
       } else {
-        // Create default config
+        // Create default config - Strategic Deployer preset
         const defaultConfig = {
           user_id: user.id,
-          trade_size_mode: 'fixed',
+          trade_size_mode: 'percentage',
           trade_size_fixed_eth: 0.1,
-          trade_size_pct_balance: 10,
-          min_profit_bps: 50,
+          trade_size_pct_balance: 20,
+          min_profit_bps: 30,
           max_slippage_bps_per_hop: 50,
           max_price_impact_bps: 100,
           max_gas_per_tx_eth: 0.01,
@@ -142,20 +152,30 @@ export function ConfigurationTab() {
           max_loss_per_trade_eth: 0.05,
           max_daily_loss_eth: 0.5,
           max_daily_trades: 50,
-          max_open_loops: 3,
+          max_open_loops: 5,
           enable_loop_a: true,
           enable_loop_b: true,
-          enable_loop_c: false,
+          enable_loop_c: true,
           auto_trade_enabled: true,
           dry_run_enabled: true,
           circuit_breaker_active: false,
           rebalance_mode: false,
           polling_interval_sec: 60,
           stale_quote_timeout_sec: 10,
-          initial_eth_mainnet: 1.0,
-          initial_eth_base: 1.0,
-          initial_base_tokens: 1000.0,
-          balance_aware_mode: true
+          initial_eth_mainnet: 0,
+          initial_eth_base: 0,
+          initial_base_tokens: 0,
+          initial_usdc_mainnet: 3000,
+          initial_usdc_base: 0,
+          balance_aware_mode: true,
+          enable_usdc_to_eth: true,
+          enable_usdc_to_base: true,
+          enable_profit_taking: true,
+          enable_dynamic_rebalancing: true,
+          min_eth_gain_pct_for_sell: 5,
+          min_base_gain_pct_for_sell: 5,
+          partial_profit_take_pct: 50,
+          max_usdc_deployment_pct: 70
         };
 
         const { data: newConfig, error: insertError } = await supabase
@@ -356,26 +376,49 @@ export function ConfigurationTab() {
       <Card>
         <CardHeader>
           <CardTitle>Virtual Balances (Dry Run)</CardTitle>
-          <CardDescription>Initial balances for simulation mode</CardDescription>
+          <CardDescription>Initial capital allocation for strategic trading simulation</CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
-          <div className="space-y-2">
-            <Label>Initial ETH on Mainnet</Label>
-            <Input
-              type="number"
-              step="0.1"
-              value={config.initial_eth_mainnet}
-              onChange={(e) => setConfig({...config, initial_eth_mainnet: parseFloat(e.target.value)})}
-            />
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-2">
+              <Label>Initial USDC on Mainnet</Label>
+              <Input
+                type="number"
+                step="100"
+                value={config.initial_usdc_mainnet}
+                onChange={(e) => setConfig({...config, initial_usdc_mainnet: parseFloat(e.target.value)})}
+              />
+              <p className="text-xs text-muted-foreground">Base currency for deploying capital</p>
+            </div>
+            <div className="space-y-2">
+              <Label>Initial USDC on Base</Label>
+              <Input
+                type="number"
+                step="100"
+                value={config.initial_usdc_base}
+                onChange={(e) => setConfig({...config, initial_usdc_base: parseFloat(e.target.value)})}
+              />
+            </div>
           </div>
-          <div className="space-y-2">
-            <Label>Initial ETH on Base</Label>
-            <Input
-              type="number"
-              step="0.1"
-              value={config.initial_eth_base}
-              onChange={(e) => setConfig({...config, initial_eth_base: parseFloat(e.target.value)})}
-            />
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-2">
+              <Label>Initial ETH on Mainnet</Label>
+              <Input
+                type="number"
+                step="0.1"
+                value={config.initial_eth_mainnet}
+                onChange={(e) => setConfig({...config, initial_eth_mainnet: parseFloat(e.target.value)})}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>Initial ETH on Base</Label>
+              <Input
+                type="number"
+                step="0.1"
+                value={config.initial_eth_base}
+                onChange={(e) => setConfig({...config, initial_eth_base: parseFloat(e.target.value)})}
+              />
+            </div>
           </div>
           <div className="space-y-2">
             <Label>Initial BASE Tokens</Label>
@@ -385,6 +428,104 @@ export function ConfigurationTab() {
               value={config.initial_base_tokens}
               onChange={(e) => setConfig({...config, initial_base_tokens: parseFloat(e.target.value)})}
             />
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Strategic Trading Settings */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Strategic Trading Settings</CardTitle>
+          <CardDescription>Configure USDC deployment and profit-taking strategies</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="space-y-4">
+            <div className="flex items-center justify-between">
+              <div className="space-y-0.5">
+                <Label>Enable USDC to ETH Conversion</Label>
+                <p className="text-sm text-muted-foreground">Buy ETH when price is favorable</p>
+              </div>
+              <Switch
+                checked={config.enable_usdc_to_eth}
+                onCheckedChange={(checked) => setConfig({...config, enable_usdc_to_eth: checked})}
+              />
+            </div>
+            <div className="flex items-center justify-between">
+              <div className="space-y-0.5">
+                <Label>Enable USDC to BASE Conversion</Label>
+                <p className="text-sm text-muted-foreground">Buy BASE when ratio is good</p>
+              </div>
+              <Switch
+                checked={config.enable_usdc_to_base}
+                onCheckedChange={(checked) => setConfig({...config, enable_usdc_to_base: checked})}
+              />
+            </div>
+            <div className="flex items-center justify-between">
+              <div className="space-y-0.5">
+                <Label>Enable Profit Taking</Label>
+                <p className="text-sm text-muted-foreground">Sell positions back to USDC when profitable</p>
+              </div>
+              <Switch
+                checked={config.enable_profit_taking}
+                onCheckedChange={(checked) => setConfig({...config, enable_profit_taking: checked})}
+              />
+            </div>
+            <div className="flex items-center justify-between">
+              <div className="space-y-0.5">
+                <Label>Enable Dynamic Rebalancing</Label>
+                <p className="text-sm text-muted-foreground">Automatically rebalance portfolio</p>
+              </div>
+              <Switch
+                checked={config.enable_dynamic_rebalancing}
+                onCheckedChange={(checked) => setConfig({...config, enable_dynamic_rebalancing: checked})}
+              />
+            </div>
+          </div>
+          
+          <div className="grid grid-cols-2 gap-4 pt-4 border-t">
+            <div className="space-y-2">
+              <Label>Min ETH Gain % for Sell</Label>
+              <Input
+                type="number"
+                step="1"
+                value={config.min_eth_gain_pct_for_sell}
+                onChange={(e) => setConfig({...config, min_eth_gain_pct_for_sell: parseFloat(e.target.value)})}
+              />
+              <p className="text-xs text-muted-foreground">Only sell if gained at least this %</p>
+            </div>
+            <div className="space-y-2">
+              <Label>Min BASE Gain % for Sell</Label>
+              <Input
+                type="number"
+                step="1"
+                value={config.min_base_gain_pct_for_sell}
+                onChange={(e) => setConfig({...config, min_base_gain_pct_for_sell: parseFloat(e.target.value)})}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>Partial Profit Take %</Label>
+              <Input
+                type="number"
+                step="5"
+                min="0"
+                max="100"
+                value={config.partial_profit_take_pct}
+                onChange={(e) => setConfig({...config, partial_profit_take_pct: parseFloat(e.target.value)})}
+              />
+              <p className="text-xs text-muted-foreground">What % of position to sell (e.g., 50% = half)</p>
+            </div>
+            <div className="space-y-2">
+              <Label>Max USDC Deployment %</Label>
+              <Input
+                type="number"
+                step="5"
+                min="0"
+                max="100"
+                value={config.max_usdc_deployment_pct}
+                onChange={(e) => setConfig({...config, max_usdc_deployment_pct: parseFloat(e.target.value)})}
+              />
+              <p className="text-xs text-muted-foreground">Max % of USDC to deploy at once</p>
+            </div>
           </div>
         </CardContent>
       </Card>

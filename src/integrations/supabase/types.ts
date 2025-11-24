@@ -124,6 +124,8 @@ export type Database = {
           id: string
           last_updated: string | null
           total_value_usd: number
+          usdc_base: number
+          usdc_mainnet: number
           user_id: string
         }
         Insert: {
@@ -134,6 +136,8 @@ export type Database = {
           id?: string
           last_updated?: string | null
           total_value_usd?: number
+          usdc_base?: number
+          usdc_mainnet?: number
           user_id: string
         }
         Update: {
@@ -144,6 +148,8 @@ export type Database = {
           id?: string
           last_updated?: string | null
           total_value_usd?: number
+          usdc_base?: number
+          usdc_mainnet?: number
           user_id?: string
         }
         Relationships: []
@@ -155,13 +161,19 @@ export type Database = {
           circuit_breaker_active: boolean
           created_at: string | null
           dry_run_enabled: boolean
+          enable_dynamic_rebalancing: boolean
           enable_loop_a: boolean
           enable_loop_b: boolean
           enable_loop_c: boolean
+          enable_profit_taking: boolean
+          enable_usdc_to_base: boolean
+          enable_usdc_to_eth: boolean
           id: string
           initial_base_tokens: number
           initial_eth_base: number
           initial_eth_mainnet: number
+          initial_usdc_base: number
+          initial_usdc_mainnet: number
           max_bridge_fee_pct: number
           max_daily_loss_eth: number
           max_daily_trades: number
@@ -171,7 +183,11 @@ export type Database = {
           max_open_loops: number
           max_price_impact_bps: number
           max_slippage_bps_per_hop: number
+          max_usdc_deployment_pct: number
+          min_base_gain_pct_for_sell: number
+          min_eth_gain_pct_for_sell: number
           min_profit_bps: number
+          partial_profit_take_pct: number
           polling_interval_sec: number
           rebalance_mode: boolean
           stale_quote_timeout_sec: number
@@ -187,13 +203,19 @@ export type Database = {
           circuit_breaker_active?: boolean
           created_at?: string | null
           dry_run_enabled?: boolean
+          enable_dynamic_rebalancing?: boolean
           enable_loop_a?: boolean
           enable_loop_b?: boolean
           enable_loop_c?: boolean
+          enable_profit_taking?: boolean
+          enable_usdc_to_base?: boolean
+          enable_usdc_to_eth?: boolean
           id?: string
           initial_base_tokens?: number
           initial_eth_base?: number
           initial_eth_mainnet?: number
+          initial_usdc_base?: number
+          initial_usdc_mainnet?: number
           max_bridge_fee_pct?: number
           max_daily_loss_eth?: number
           max_daily_trades?: number
@@ -203,7 +225,11 @@ export type Database = {
           max_open_loops?: number
           max_price_impact_bps?: number
           max_slippage_bps_per_hop?: number
+          max_usdc_deployment_pct?: number
+          min_base_gain_pct_for_sell?: number
+          min_eth_gain_pct_for_sell?: number
           min_profit_bps?: number
+          partial_profit_take_pct?: number
           polling_interval_sec?: number
           rebalance_mode?: boolean
           stale_quote_timeout_sec?: number
@@ -219,13 +245,19 @@ export type Database = {
           circuit_breaker_active?: boolean
           created_at?: string | null
           dry_run_enabled?: boolean
+          enable_dynamic_rebalancing?: boolean
           enable_loop_a?: boolean
           enable_loop_b?: boolean
           enable_loop_c?: boolean
+          enable_profit_taking?: boolean
+          enable_usdc_to_base?: boolean
+          enable_usdc_to_eth?: boolean
           id?: string
           initial_base_tokens?: number
           initial_eth_base?: number
           initial_eth_mainnet?: number
+          initial_usdc_base?: number
+          initial_usdc_mainnet?: number
           max_bridge_fee_pct?: number
           max_daily_loss_eth?: number
           max_daily_trades?: number
@@ -235,7 +267,11 @@ export type Database = {
           max_open_loops?: number
           max_price_impact_bps?: number
           max_slippage_bps_per_hop?: number
+          max_usdc_deployment_pct?: number
+          min_base_gain_pct_for_sell?: number
+          min_eth_gain_pct_for_sell?: number
           min_profit_bps?: number
+          partial_profit_take_pct?: number
           polling_interval_sec?: number
           rebalance_mode?: boolean
           stale_quote_timeout_sec?: number
@@ -444,6 +480,57 @@ export type Database = {
           meets_slippage_threshold?: boolean
           skip_reason?: string | null
           trade_size_eth?: number
+          user_id?: string
+        }
+        Relationships: []
+      }
+      arb_positions: {
+        Row: {
+          amount: number
+          asset: string
+          chain: string
+          closed_at: string | null
+          created_at: string | null
+          current_price_usd: number | null
+          entry_price_usd: number
+          id: string
+          opened_at: string
+          status: string
+          unrealized_pnl_pct: number | null
+          unrealized_pnl_usd: number | null
+          updated_at: string | null
+          user_id: string
+        }
+        Insert: {
+          amount: number
+          asset: string
+          chain: string
+          closed_at?: string | null
+          created_at?: string | null
+          current_price_usd?: number | null
+          entry_price_usd: number
+          id?: string
+          opened_at?: string
+          status?: string
+          unrealized_pnl_pct?: number | null
+          unrealized_pnl_usd?: number | null
+          updated_at?: string | null
+          user_id: string
+        }
+        Update: {
+          amount?: number
+          asset?: string
+          chain?: string
+          closed_at?: string | null
+          created_at?: string | null
+          current_price_usd?: number | null
+          entry_price_usd?: number
+          id?: string
+          opened_at?: string
+          status?: string
+          unrealized_pnl_pct?: number | null
+          unrealized_pnl_usd?: number | null
+          updated_at?: string | null
           user_id?: string
         }
         Relationships: []
