@@ -235,6 +235,45 @@ export type Database = {
         }
         Relationships: []
       }
+      arb_bot_status: {
+        Row: {
+          created_at: string | null
+          error_message: string | null
+          id: string
+          is_running: boolean
+          last_scan_at: string | null
+          next_scan_at: string | null
+          scan_count_today: number | null
+          status: string
+          updated_at: string | null
+          user_id: string
+        }
+        Insert: {
+          created_at?: string | null
+          error_message?: string | null
+          id?: string
+          is_running?: boolean
+          last_scan_at?: string | null
+          next_scan_at?: string | null
+          scan_count_today?: number | null
+          status?: string
+          updated_at?: string | null
+          user_id: string
+        }
+        Update: {
+          created_at?: string | null
+          error_message?: string | null
+          id?: string
+          is_running?: boolean
+          last_scan_at?: string | null
+          next_scan_at?: string | null
+          scan_count_today?: number | null
+          status?: string
+          updated_at?: string | null
+          user_id?: string
+        }
+        Relationships: []
+      }
       arb_daily_stats: {
         Row: {
           date: string
@@ -4399,6 +4438,7 @@ export type Database = {
       }
       mask_sensitive_data: { Args: { input_text: string }; Returns: string }
       process_active_blackbox_commands: { Args: never; Returns: undefined }
+      schedule_arb_scanner: { Args: never; Returns: undefined }
       track_referral_signup: {
         Args: { new_user_id: string; referral_code_param: string }
         Returns: Json

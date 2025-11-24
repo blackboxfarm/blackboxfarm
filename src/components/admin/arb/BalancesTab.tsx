@@ -21,8 +21,26 @@ export function BalancesTab() {
 
   useEffect(() => {
     loadBalances();
-    const interval = setInterval(loadBalances, 30000); // Refresh every 30s
-    return () => clearInterval(interval);
+    
+    // Subscribe to real-time updates
+    const channel = supabase
+      .channel('arb-balances-changes')
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'arb_balances',
+        },
+        () => {
+          loadBalances();
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
   }, []);
 
   const loadBalances = async () => {

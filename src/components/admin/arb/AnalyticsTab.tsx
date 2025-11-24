@@ -24,6 +24,26 @@ export function AnalyticsTab() {
 
   useEffect(() => {
     loadStats();
+    
+    // Subscribe to real-time updates
+    const channel = supabase
+      .channel('arb-stats-changes')
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'arb_daily_stats',
+        },
+        () => {
+          loadStats();
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
   }, []);
 
   const loadStats = async () => {

@@ -137,3 +137,6 @@ verify_jwt = true
 [functions.arb-opportunity-scanner]
 verify_jwt = false
 
+[functions.arb-execute-trade]
+verify_jwt = false
+
