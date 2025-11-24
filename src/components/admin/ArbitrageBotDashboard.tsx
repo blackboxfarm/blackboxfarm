@@ -1,8 +1,12 @@
-import { Card } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { ExternalLink, Info } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { ConfigurationTab } from "./arb/ConfigurationTab";
+import { BalancesTab } from "./arb/BalancesTab";
+import { OpportunitiesTab } from "./arb/OpportunitiesTab";
+import { ExecutionsTab } from "./arb/ExecutionsTab";
+import { AnalyticsTab } from "./arb/AnalyticsTab";
 
 export const ArbitrageBotDashboard = () => {
   return (
@@ -71,83 +75,33 @@ export const ArbitrageBotDashboard = () => {
         </AlertDescription>
       </Alert>
 
-      <Tabs defaultValue="config" className="w-full">
+      <Tabs defaultValue="configuration" className="w-full">
         <TabsList className="grid w-full grid-cols-5">
-          <TabsTrigger value="config">Configuration</TabsTrigger>
+          <TabsTrigger value="configuration">Configuration</TabsTrigger>
           <TabsTrigger value="balances">Balances</TabsTrigger>
           <TabsTrigger value="opportunities">Opportunities</TabsTrigger>
           <TabsTrigger value="executions">Executions</TabsTrigger>
           <TabsTrigger value="analytics">Analytics</TabsTrigger>
         </TabsList>
 
-        <TabsContent value="config" className="space-y-4">
-          <Card className="p-6">
-            <h3 className="text-lg font-semibold mb-4">Bot Configuration</h3>
-            <p className="text-muted-foreground">
-              Configure trading parameters, profit thresholds, and risk management settings.
-            </p>
-            <div className="mt-4 p-4 bg-muted rounded-lg">
-              <p className="text-sm text-muted-foreground">
-                Configuration interface coming soon...
-              </p>
-            </div>
-          </Card>
+        <TabsContent value="configuration" className="space-y-4">
+          <ConfigurationTab />
         </TabsContent>
 
         <TabsContent value="balances" className="space-y-4">
-          <Card className="p-6">
-            <h3 className="text-lg font-semibold mb-4">Balance Tracking</h3>
-            <p className="text-muted-foreground">
-              Monitor ETH and BASE token balances across both chains.
-            </p>
-            <div className="mt-4 p-4 bg-muted rounded-lg">
-              <p className="text-sm text-muted-foreground">
-                Balance monitoring interface coming soon...
-              </p>
-            </div>
-          </Card>
+          <BalancesTab />
         </TabsContent>
 
         <TabsContent value="opportunities" className="space-y-4">
-          <Card className="p-6">
-            <h3 className="text-lg font-semibold mb-4">Arbitrage Opportunities</h3>
-            <p className="text-muted-foreground">
-              View detected arbitrage opportunities and their profitability analysis.
-            </p>
-            <div className="mt-4 p-4 bg-muted rounded-lg">
-              <p className="text-sm text-muted-foreground">
-                Opportunities scanner coming soon...
-              </p>
-            </div>
-          </Card>
+          <OpportunitiesTab />
         </TabsContent>
 
         <TabsContent value="executions" className="space-y-4">
-          <Card className="p-6">
-            <h3 className="text-lg font-semibold mb-4">Loop Executions</h3>
-            <p className="text-muted-foreground">
-              Track executed arbitrage loops and their performance.
-            </p>
-            <div className="mt-4 p-4 bg-muted rounded-lg">
-              <p className="text-sm text-muted-foreground">
-                Execution history coming soon...
-              </p>
-            </div>
-          </Card>
+          <ExecutionsTab />
         </TabsContent>
 
         <TabsContent value="analytics" className="space-y-4">
-          <Card className="p-6">
-            <h3 className="text-lg font-semibold mb-4">Analytics & Performance</h3>
-            <p className="text-muted-foreground">
-              View daily statistics, profit/loss reports, and system health metrics.
-            </p>
-            <div className="mt-4 p-4 bg-muted rounded-lg">
-              <p className="text-sm text-muted-foreground">
-                Analytics dashboard coming soon...
-              </p>
-            </div>
-          </Card>
+          <AnalyticsTab />
         </TabsContent>
       </Tabs>
     </div>

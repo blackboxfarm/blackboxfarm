@@ -130,3 +130,10 @@ verify_jwt = false
 
 [functions.manage-banner-ad]
 verify_jwt = false
+
+[functions.arb-refresh-balances]
+verify_jwt = true
+
+[functions.arb-opportunity-scanner]
+verify_jwt = false
+
