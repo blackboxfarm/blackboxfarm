@@ -412,8 +412,21 @@ async function checkLoopA(
     .select()
     .single();
 
+  // Auto-execute if enabled (works for both dry_run and real trading)
   if (executable && config.auto_trade_enabled && opportunity) {
-    console.log(`🚀 Auto-executing opportunity ${opportunity.id}`);
+    console.log(`🚀 Auto-executing opportunity ${opportunity.id} (dry_run: ${config.dry_run_enabled})`);
+    try {
+      const { data, error } = await supabase.functions.invoke('arb-execute-trade', {
+        body: { opportunityId: opportunity.id }
+      });
+      if (error) {
+        console.error('Execution error:', error);
+      } else {
+        console.log('✅ Execution result:', data);
+      }
+    } catch (err) {
+      console.error('Failed to invoke execution:', err);
+    }
   }
 }
 
