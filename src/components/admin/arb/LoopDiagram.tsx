@@ -93,9 +93,10 @@ export const LoopDiagram = ({
         <p className="text-sm text-muted-foreground">{loopInfo.description}</p>
       </CardHeader>
       <CardContent>
-        <div className="bg-background/50 rounded-lg p-4 overflow-x-auto">
-          <pre className="text-xs whitespace-pre">{loopInfo.diagram}</pre>
-        </div>
+        <div 
+          className="mermaid-diagram" 
+          dangerouslySetInnerHTML={{ __html: `<lov-presentation-mermaid>${loopInfo.diagram}</lov-presentation-mermaid>` }}
+        />
       </CardContent>
     </Card>
   );

@@ -3,6 +3,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { PriceFeedWidget } from "./PriceFeedWidget";
 import { LoopDiagram } from "./LoopDiagram";
 import { TradeSimulator } from "./TradeSimulator";
+import { LiveActivityMonitor } from "./LiveActivityMonitor";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Activity, AlertCircle, CheckCircle2 } from "lucide-react";
@@ -100,6 +101,9 @@ export const OverviewTab = () => {
         </CardContent>
       </Card>
 
+      {/* Live Activity Monitor */}
+      <LiveActivityMonitor />
+
       {/* Trade Simulator */}
       {latestPrices && (
         <TradeSimulator
@@ -111,7 +115,7 @@ export const OverviewTab = () => {
 
       {/* Loop Diagrams */}
       <div className="space-y-4">
-        <h3 className="text-lg font-semibold">Arbitrage Strategies</h3>
+        <h3 className="text-lg font-semibold">Arbitrage Strategy Flowcharts</h3>
         <div className="grid grid-cols-1 gap-4">
           <LoopDiagram 
             loopType="A" 
