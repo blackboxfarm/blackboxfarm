@@ -61,17 +61,29 @@ export function BalancesTab() {
       if (data) {
         setBalance(data);
       } else {
-        // Create initial balance record
+        // Get config to use initial values for dry-run
+        const { data: config } = await supabase
+          .from('arb_bot_config')
+          .select('*')
+          .eq('user_id', user.id)
+          .single();
+
+        const ethPrice = 3000; // Static for now
+        const initialEth = (config?.initial_eth_mainnet || 0) + (config?.initial_eth_base || 0);
+        const initialUsdc = (config?.initial_usdc_mainnet || 0) + (config?.initial_usdc_base || 0);
+        const totalValue = (initialEth * ethPrice) + initialUsdc + (config?.initial_base_tokens || 0);
+
+        // Create initial balance record from config
         const { data: newBalance, error: insertError } = await supabase
           .from('arb_balances')
           .insert({
             user_id: user.id,
-            eth_mainnet: 0,
-            eth_base: 0,
-            base_token_base: 0,
-            usdc_mainnet: 0,
-            usdc_base: 0,
-            total_value_usd: 0
+            eth_mainnet: config?.initial_eth_mainnet || 0,
+            eth_base: config?.initial_eth_base || 0,
+            base_token_base: config?.initial_base_tokens || 0,
+            usdc_mainnet: config?.initial_usdc_mainnet || 0,
+            usdc_base: config?.initial_usdc_base || 0,
+            total_value_usd: totalValue
           })
           .select()
           .single();
@@ -93,7 +105,51 @@ export function BalancesTab() {
 
   const refreshBalances = async () => {
     setRefreshing(true);
-    await supabase.functions.invoke('arb-refresh-balances');
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+
+      // Get config for initial values
+      const { data: config } = await supabase
+        .from('arb_bot_config')
+        .select('*')
+        .eq('user_id', user.id)
+        .single();
+
+      if (config?.dry_run_enabled) {
+        // In dry-run mode, reset to initial balances
+        const ethPrice = 3000;
+        const initialEth = (config.initial_eth_mainnet || 0) + (config.initial_eth_base || 0);
+        const initialUsdc = (config.initial_usdc_mainnet || 0) + (config.initial_usdc_base || 0);
+        const totalValue = (initialEth * ethPrice) + initialUsdc + (config.initial_base_tokens || 0);
+
+        await supabase
+          .from('arb_balances')
+          .upsert({
+            user_id: user.id,
+            eth_mainnet: config.initial_eth_mainnet || 0,
+            eth_base: config.initial_eth_base || 0,
+            base_token_base: config.initial_base_tokens || 0,
+            usdc_mainnet: config.initial_usdc_mainnet || 0,
+            usdc_base: config.initial_usdc_base || 0,
+            total_value_usd: totalValue
+          }, { onConflict: 'user_id' });
+
+        toast({
+          title: "Balances reset",
+          description: "Virtual balances reset to initial config values"
+        });
+      } else {
+        // Real mode - call the refresh function
+        await supabase.functions.invoke('arb-refresh-balances');
+      }
+    } catch (error: any) {
+      toast({
+        title: "Error refreshing",
+        description: error.message,
+        variant: "destructive"
+      });
+    }
     await loadBalances();
   };
 
