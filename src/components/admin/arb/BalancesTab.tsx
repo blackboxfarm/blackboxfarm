@@ -50,6 +50,13 @@ export function BalancesTab() {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
 
+      // Get config first
+      const { data: config } = await supabase
+        .from('arb_bot_config')
+        .select('*')
+        .eq('user_id', user.id)
+        .single();
+
       const { data, error } = await supabase
         .from('arb_balances')
         .select('*')
@@ -58,25 +65,24 @@ export function BalancesTab() {
 
       if (error && error.code !== 'PGRST116') throw error;
 
-      if (data) {
-        setBalance(data);
-      } else {
-        // Get config to use initial values for dry-run
-        const { data: config } = await supabase
-          .from('arb_bot_config')
-          .select('*')
-          .eq('user_id', user.id)
-          .single();
+      // Check if balances are all zero and need initialization
+      const needsInit = !data || (
+        data.eth_mainnet === 0 && 
+        data.eth_base === 0 && 
+        data.usdc_mainnet === 0 && 
+        data.usdc_base === 0 && 
+        data.base_token_base === 0
+      );
 
-        const ethPrice = 3000; // Static for now
+      if (needsInit) {
+        const ethPrice = 3000;
         const initialEth = (config?.initial_eth_mainnet || 0) + (config?.initial_eth_base || 0);
         const initialUsdc = (config?.initial_usdc_mainnet || 0) + (config?.initial_usdc_base || 0);
         const totalValue = (initialEth * ethPrice) + initialUsdc + (config?.initial_base_tokens || 0);
 
-        // Create initial balance record from config
-        const { data: newBalance, error: insertError } = await supabase
+        const { data: newBalance, error: upsertError } = await supabase
           .from('arb_balances')
-          .insert({
+          .upsert({
             user_id: user.id,
             eth_mainnet: config?.initial_eth_mainnet || 0,
             eth_base: config?.initial_eth_base || 0,
@@ -84,12 +90,14 @@ export function BalancesTab() {
             usdc_mainnet: config?.initial_usdc_mainnet || 0,
             usdc_base: config?.initial_usdc_base || 0,
             total_value_usd: totalValue
-          })
+          }, { onConflict: 'user_id' })
           .select()
           .single();
 
-        if (insertError) throw insertError;
+        if (upsertError) throw upsertError;
         setBalance(newBalance);
+      } else {
+        setBalance(data);
       }
     } catch (error: any) {
       toast({
