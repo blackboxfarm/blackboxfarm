@@ -100,11 +100,35 @@ Deno.serve(async (req) => {
 
       console.log(`Dry run completed - simulated profit: ${simulatedProfit} ETH`);
 
+      // Update virtual balances for dry run
+      const { data: currentBalances } = await supabase
+        .from('arb_balances')
+        .select('*')
+        .eq('user_id', userId)
+        .single();
+
+      if (currentBalances && opportunity.loop_type.includes('Mainnet → Base')) {
+        // Loop A: Move ETH from Mainnet to Base
+        const newEthMainnet = currentBalances.eth_mainnet - opportunity.trade_size_eth;
+        const newEthBase = currentBalances.eth_base + opportunity.trade_size_eth + simulatedProfit - simulatedGas;
+        
+        await supabase
+          .from('arb_balances')
+          .update({
+            eth_mainnet: newEthMainnet,
+            eth_base: newEthBase,
+            last_updated: new Date().toISOString()
+          })
+          .eq('user_id', userId);
+
+        console.log(`Dry run balance update: Mainnet ${currentBalances.eth_mainnet} → ${newEthMainnet}, Base ${currentBalances.eth_base} → ${newEthBase}`);
+      }
+
       // Update bot status back to idle
       await supabase
         .from('arb_bot_status')
         .update({ status: 'idle' })
-        .eq('user_id', user_id);
+        .eq('user_id', userId);
 
       return new Response(
         JSON.stringify({
@@ -112,6 +136,7 @@ Deno.serve(async (req) => {
           execution_id: execution.id,
           dry_run: true,
           simulated_profit_eth: simulatedProfit,
+          balance_updated: true
         }),
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
