@@ -33,6 +33,10 @@ interface BotConfig {
   rebalance_mode: boolean;
   polling_interval_sec: number;
   stale_quote_timeout_sec: number;
+  initial_eth_mainnet: number;
+  initial_eth_base: number;
+  initial_base_tokens: number;
+  balance_aware_mode: boolean;
 }
 
 interface BotStatus {
@@ -147,7 +151,11 @@ export function ConfigurationTab() {
           circuit_breaker_active: false,
           rebalance_mode: false,
           polling_interval_sec: 60,
-          stale_quote_timeout_sec: 10
+          stale_quote_timeout_sec: 10,
+          initial_eth_mainnet: 1.0,
+          initial_eth_base: 1.0,
+          initial_base_tokens: 1000.0,
+          balance_aware_mode: true
         };
 
         const { data: newConfig, error: insertError } = await supabase
@@ -344,6 +352,43 @@ export function ConfigurationTab() {
           )}
         </CardContent>
       </Card>
+      {/* Virtual Balances Card */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Virtual Balances (Dry Run)</CardTitle>
+          <CardDescription>Initial balances for simulation mode</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="space-y-2">
+            <Label>Initial ETH on Mainnet</Label>
+            <Input
+              type="number"
+              step="0.1"
+              value={config.initial_eth_mainnet}
+              onChange={(e) => setConfig({...config, initial_eth_mainnet: parseFloat(e.target.value)})}
+            />
+          </div>
+          <div className="space-y-2">
+            <Label>Initial ETH on Base</Label>
+            <Input
+              type="number"
+              step="0.1"
+              value={config.initial_eth_base}
+              onChange={(e) => setConfig({...config, initial_eth_base: parseFloat(e.target.value)})}
+            />
+          </div>
+          <div className="space-y-2">
+            <Label>Initial BASE Tokens</Label>
+            <Input
+              type="number"
+              step="10"
+              value={config.initial_base_tokens}
+              onChange={(e) => setConfig({...config, initial_base_tokens: parseFloat(e.target.value)})}
+            />
+          </div>
+        </CardContent>
+      </Card>
+
       <Card>
         <CardHeader>
           <CardTitle>Trade Size Configuration</CardTitle>
@@ -564,6 +609,16 @@ export function ConfigurationTab() {
             <Switch
               checked={config.dry_run_enabled}
               onCheckedChange={(checked) => setConfig({ ...config, dry_run_enabled: checked })}
+            />
+          </div>
+          <div className="flex items-center justify-between">
+            <div>
+              <Label>Balance-Aware Mode</Label>
+              <p className="text-sm text-muted-foreground">Only detect opportunities you can execute with current balance</p>
+            </div>
+            <Switch
+              checked={config.balance_aware_mode}
+              onCheckedChange={(checked) => setConfig({ ...config, balance_aware_mode: checked })}
             />
           </div>
           <div className="flex items-center justify-between">

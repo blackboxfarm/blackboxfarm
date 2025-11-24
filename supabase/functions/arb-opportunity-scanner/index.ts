@@ -166,68 +166,119 @@ async function fetchBaseTokenPrice(apiKey: string): Promise<number> {
   }
 }
 
-async function checkLoopA(supabase: any, config: any, ethMainnet: number, ethBase: number) {
-  const tradeSize = config.trade_size_mode === 'fixed' 
-    ? config.trade_size_fixed_eth 
-    : 0.1; // Would calculate from balance
-
-  // Simplified arbitrage calculation
-  const priceDiffBps = Math.abs(ethMainnet - ethBase) / ethMainnet * 10000;
-  const estimatedProfitBps = priceDiffBps - 100; // Subtract estimated fees
-  const estimatedProfitEth = (estimatedProfitBps / 10000) * tradeSize;
-
-  const executable = 
-    estimatedProfitBps >= config.min_profit_bps &&
-    estimatedProfitBps <= config.max_price_impact_bps;
-
-  const { data: opportunity, error } = await supabase.from('arb_opportunities').insert({
-    user_id: config.user_id,
-    loop_type: 'LOOP_A',
-    trade_size_eth: tradeSize,
-    expected_profit_eth: estimatedProfitEth,
-    expected_profit_bps: estimatedProfitBps,
-    expected_final_eth: tradeSize + estimatedProfitEth,
-    executable,
-    skip_reason: executable ? null : 'Below profit threshold',
-    meets_profit_threshold: estimatedProfitBps >= config.min_profit_bps,
-    meets_slippage_threshold: true,
-    meets_gas_limits: true,
-    meets_liquidity_depth: true,
-    leg_breakdown: {
-      eth_to_base: ethMainnet,
-      base_to_eth: ethBase
-    },
-    detected_at: new Date().toISOString()
-  }).select().single();
-
-  if (error) {
-    console.error('Failed to create opportunity:', error);
+async function checkLoopA(
+  supabase: any,
+  config: any,
+  ethMainnet: number,
+  ethBase: number
+) {
+  const userId = config.user_id;
+  
+  // Fetch user's current balances
+  const { data: balances } = await supabase
+    .from('arb_balances')
+    .select('*')
+    .eq('user_id', userId)
+    .single();
+  
+  if (!balances) {
+    console.log('No balance record found for user, skipping Loop A');
     return;
   }
 
-  // Auto-execute if enabled and opportunity is executable
-  if (config.auto_trade_enabled && executable && opportunity) {
-    console.log(`Auto-executing opportunity ${opportunity.id} for user ${config.user_id}`);
-    
-    try {
-      const { data: executeResult, error: executeError } = await supabase.functions.invoke(
-        'arb-execute-trade',
-        {
-          body: {
-            opportunity_id: opportunity.id,
-            user_id: config.user_id
-          }
-        }
-      );
+  // Check if user has ETH on mainnet to execute this opportunity
+  const availableEthMainnet = balances.eth_mainnet;
+  if (availableEthMainnet <= 0) {
+    console.log('No ETH on mainnet, skipping Loop A');
+    return;
+  }
 
-      if (executeError) {
-        console.error('Auto-execution failed:', executeError);
-      } else {
-        console.log('Auto-execution result:', executeResult);
+  // Calculate trade size based on mode and available balance
+  let tradeSize = config.trade_size_mode === 'fixed' 
+    ? config.trade_size_fixed_eth 
+    : (availableEthMainnet * config.trade_size_pct_balance / 100);
+  
+  // Cap trade size at available balance
+  tradeSize = Math.min(tradeSize, availableEthMainnet);
+
+  // Calculate realistic fees
+  const bridgeFeeRate = config.max_bridge_fee_pct / 100; // e.g., 0.005 for 0.5%
+  const bridgeFee = tradeSize * bridgeFeeRate;
+  
+  // Realistic gas estimates in ETH
+  const gasMainnet = 0.015; // ~$20-50 at typical ETH prices
+  const gasBase = 0.0001; // ~$0.10 on Base (much cheaper)
+  const totalGas = gasMainnet + gasBase;
+  
+  // Swap fee (0.3% per hop, assuming 1 hop on each side)
+  const swapFeeRate = 0.003;
+  const swapFees = tradeSize * swapFeeRate * 2; // Buy + sell
+  
+  // Calculate net profit
+  const priceDiff = ethBase - ethMainnet;
+  const grossProfit = priceDiff * tradeSize;
+  const totalFees = bridgeFee + totalGas + swapFees;
+  const netProfit = grossProfit - totalFees;
+  const profitBps = Math.round((netProfit / tradeSize) * 10000);
+
+  // Check if meets thresholds
+  const meetsProfit = profitBps >= config.min_profit_bps;
+  const meetsGas = totalGas <= (config.max_gas_per_tx_eth + config.max_gas_per_tx_base);
+  const meetsSlippage = Math.abs(priceDiff / ethMainnet * 10000) <= config.max_slippage_bps_per_hop;
+  const hasBalance = tradeSize > 0 && tradeSize <= availableEthMainnet;
+  const meetsLiquidity = tradeSize <= 10; // Assume max 10 ETH liquidity for now
+  
+  const executable = meetsProfit && meetsSlippage && meetsGas && meetsLiquidity && hasBalance && config.balance_aware_mode;
+  
+  let skipReason = null;
+  if (!executable) {
+    if (!meetsProfit) skipReason = `Profit ${profitBps}bps < threshold ${config.min_profit_bps}bps`;
+    else if (!hasBalance) skipReason = `Insufficient balance: ${availableEthMainnet.toFixed(4)} ETH`;
+    else if (!meetsGas) skipReason = `Gas too high: ${totalGas.toFixed(6)} ETH`;
+    else if (!meetsSlippage) skipReason = `Slippage too high`;
+    else if (!meetsLiquidity) skipReason = `Trade size exceeds liquidity`;
+  }
+
+  // Log opportunity
+  const { data: opportunity } = await supabase
+    .from('arb_opportunities')
+    .insert({
+      user_id: userId,
+      loop_type: 'Loop A: ETH Mainnet → Base',
+      trade_size_eth: tradeSize,
+      expected_profit_eth: netProfit,
+      expected_profit_bps: profitBps,
+      expected_final_eth: tradeSize + netProfit,
+      executable,
+      skip_reason: skipReason,
+      meets_profit_threshold: meetsProfit,
+      meets_slippage_threshold: meetsSlippage,
+      meets_gas_limits: meetsGas,
+      meets_liquidity_depth: meetsLiquidity,
+      leg_breakdown: {
+        available_balance: availableEthMainnet,
+        trade_size: tradeSize,
+        price_mainnet: ethMainnet,
+        price_base: ethBase,
+        price_diff: priceDiff,
+        gross_profit: grossProfit,
+        fees: {
+          bridge: bridgeFee,
+          gas_mainnet: gasMainnet,
+          gas_base: gasBase,
+          swap: swapFees,
+          total: totalFees
+        },
+        net_profit: netProfit
       }
-    } catch (err) {
-      console.error('Error during auto-execution:', err);
-    }
+    })
+    .select()
+    .single();
+
+  // Auto-execute if enabled and executable
+  if (executable && config.auto_trade_enabled && opportunity) {
+    console.log(`Auto-executing opportunity ${opportunity.id}`);
+    // Trigger execution (will be handled by arb-execute-trade function)
   }
 }
 

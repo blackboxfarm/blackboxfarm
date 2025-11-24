@@ -151,6 +151,7 @@ export type Database = {
       arb_bot_config: {
         Row: {
           auto_trade_enabled: boolean
+          balance_aware_mode: boolean
           circuit_breaker_active: boolean
           created_at: string | null
           dry_run_enabled: boolean
@@ -158,6 +159,9 @@ export type Database = {
           enable_loop_b: boolean
           enable_loop_c: boolean
           id: string
+          initial_base_tokens: number
+          initial_eth_base: number
+          initial_eth_mainnet: number
           max_bridge_fee_pct: number
           max_daily_loss_eth: number
           max_daily_trades: number
@@ -179,6 +183,7 @@ export type Database = {
         }
         Insert: {
           auto_trade_enabled?: boolean
+          balance_aware_mode?: boolean
           circuit_breaker_active?: boolean
           created_at?: string | null
           dry_run_enabled?: boolean
@@ -186,6 +191,9 @@ export type Database = {
           enable_loop_b?: boolean
           enable_loop_c?: boolean
           id?: string
+          initial_base_tokens?: number
+          initial_eth_base?: number
+          initial_eth_mainnet?: number
           max_bridge_fee_pct?: number
           max_daily_loss_eth?: number
           max_daily_trades?: number
@@ -207,6 +215,7 @@ export type Database = {
         }
         Update: {
           auto_trade_enabled?: boolean
+          balance_aware_mode?: boolean
           circuit_breaker_active?: boolean
           created_at?: string | null
           dry_run_enabled?: boolean
@@ -214,6 +223,9 @@ export type Database = {
           enable_loop_b?: boolean
           enable_loop_c?: boolean
           id?: string
+          initial_base_tokens?: number
+          initial_eth_base?: number
+          initial_eth_mainnet?: number
           max_bridge_fee_pct?: number
           max_daily_loss_eth?: number
           max_daily_trades?: number
@@ -4409,6 +4421,10 @@ export type Database = {
           _user_id: string
         }
         Returns: boolean
+      }
+      initialize_arb_balances_for_user: {
+        Args: { p_user_id: string }
+        Returns: undefined
       }
       is_super_admin: { Args: { _user_id: string }; Returns: boolean }
       log_auth_failure: {
