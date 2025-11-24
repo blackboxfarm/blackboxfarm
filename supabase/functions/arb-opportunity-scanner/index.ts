@@ -180,7 +180,7 @@ async function checkLoopA(supabase: any, config: any, ethMainnet: number, ethBas
     estimatedProfitBps >= config.min_profit_bps &&
     estimatedProfitBps <= config.max_price_impact_bps;
 
-  await supabase.from('arb_opportunities').insert({
+  const { data: opportunity, error } = await supabase.from('arb_opportunities').insert({
     user_id: config.user_id,
     loop_type: 'LOOP_A',
     trade_size_eth: tradeSize,
@@ -198,7 +198,37 @@ async function checkLoopA(supabase: any, config: any, ethMainnet: number, ethBas
       base_to_eth: ethBase
     },
     detected_at: new Date().toISOString()
-  });
+  }).select().single();
+
+  if (error) {
+    console.error('Failed to create opportunity:', error);
+    return;
+  }
+
+  // Auto-execute if enabled and opportunity is executable
+  if (config.auto_trade_enabled && executable && opportunity) {
+    console.log(`Auto-executing opportunity ${opportunity.id} for user ${config.user_id}`);
+    
+    try {
+      const { data: executeResult, error: executeError } = await supabase.functions.invoke(
+        'arb-execute-trade',
+        {
+          body: {
+            opportunity_id: opportunity.id,
+            user_id: config.user_id
+          }
+        }
+      );
+
+      if (executeError) {
+        console.error('Auto-execution failed:', executeError);
+      } else {
+        console.log('Auto-execution result:', executeResult);
+      }
+    } catch (err) {
+      console.error('Error during auto-execution:', err);
+    }
+  }
 }
 
 async function checkLoopB(supabase: any, config: any, basePrice: number) {
