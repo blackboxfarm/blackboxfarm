@@ -142,7 +142,7 @@ export function ConfigurationTab() {
           enable_loop_a: true,
           enable_loop_b: true,
           enable_loop_c: false,
-          auto_trade_enabled: false,
+          auto_trade_enabled: true,
           dry_run_enabled: true,
           circuit_breaker_active: false,
           rebalance_mode: false,
