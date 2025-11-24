@@ -2,6 +2,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { ExternalLink, Info } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { OverviewTab } from "./arb/OverviewTab";
 import { ConfigurationTab } from "./arb/ConfigurationTab";
 import { BalancesTab } from "./arb/BalancesTab";
 import { OpportunitiesTab } from "./arb/OpportunitiesTab";
@@ -75,14 +76,19 @@ export const ArbitrageBotDashboard = () => {
         </AlertDescription>
       </Alert>
 
-      <Tabs defaultValue="configuration" className="w-full">
-        <TabsList className="grid w-full grid-cols-5">
+      <Tabs defaultValue="overview" className="w-full">
+        <TabsList className="grid w-full grid-cols-6">
+          <TabsTrigger value="overview">Overview</TabsTrigger>
           <TabsTrigger value="configuration">Configuration</TabsTrigger>
           <TabsTrigger value="balances">Balances</TabsTrigger>
           <TabsTrigger value="opportunities">Opportunities</TabsTrigger>
           <TabsTrigger value="executions">Executions</TabsTrigger>
           <TabsTrigger value="analytics">Analytics</TabsTrigger>
         </TabsList>
+
+        <TabsContent value="overview" className="space-y-4">
+          <OverviewTab />
+        </TabsContent>
 
         <TabsContent value="configuration" className="space-y-4">
           <ConfigurationTab />
