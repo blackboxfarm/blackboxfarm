@@ -9,6 +9,8 @@ interface Balance {
   eth_mainnet: number;
   eth_base: number;
   base_token_base: number;
+  usdc_mainnet: number;
+  usdc_base: number;
   total_value_usd: number;
   last_updated: string;
 }
@@ -67,6 +69,8 @@ export function BalancesTab() {
             eth_mainnet: 0,
             eth_base: 0,
             base_token_base: 0,
+            usdc_mainnet: 0,
+            usdc_base: 0,
             total_value_usd: 0
           })
           .select()
@@ -118,10 +122,29 @@ export function BalancesTab() {
         </Button>
       </div>
 
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+      <div className="grid gap-4 md:grid-cols-3 lg:grid-cols-6">
         <Card>
           <CardHeader className="pb-2">
-            <CardDescription>ETH on Mainnet</CardDescription>
+            <CardDescription>USDC (Mainnet)</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">${balance.usdc_mainnet.toFixed(2)}</div>
+            <p className="text-xs text-muted-foreground mt-1">Available to deploy</p>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="pb-2">
+            <CardDescription>USDC (Base)</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">${balance.usdc_base.toFixed(2)}</div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="pb-2">
+            <CardDescription>ETH (Mainnet)</CardDescription>
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">{balance.eth_mainnet.toFixed(4)} ETH</div>
@@ -130,7 +153,7 @@ export function BalancesTab() {
 
         <Card>
           <CardHeader className="pb-2">
-            <CardDescription>ETH on Base</CardDescription>
+            <CardDescription>ETH (Base)</CardDescription>
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">{balance.eth_base.toFixed(4)} ETH</div>
@@ -139,16 +162,16 @@ export function BalancesTab() {
 
         <Card>
           <CardHeader className="pb-2">
-            <CardDescription>BASE Token on Base</CardDescription>
+            <CardDescription>BASE Token</CardDescription>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{balance.base_token_base.toFixed(2)} BASE</div>
+            <div className="text-2xl font-bold">{balance.base_token_base.toFixed(2)}</div>
           </CardContent>
         </Card>
 
-        <Card>
+        <Card className="bg-primary/5">
           <CardHeader className="pb-2">
-            <CardDescription>Total Value</CardDescription>
+            <CardDescription>Total Portfolio Value</CardDescription>
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">${balance.total_value_usd.toFixed(2)}</div>
@@ -158,42 +181,116 @@ export function BalancesTab() {
 
       <Card>
         <CardHeader>
-          <CardTitle>Balance Distribution</CardTitle>
-          <CardDescription>How your funds are allocated across chains</CardDescription>
+          <CardTitle>Portfolio Allocation</CardTitle>
+          <CardDescription>Asset distribution across chains and currencies</CardDescription>
         </CardHeader>
         <CardContent>
           <div className="space-y-4">
             <div>
               <div className="flex justify-between mb-2">
-                <span className="text-sm">ETH Mainnet</span>
-                <span className="text-sm font-medium">
-                  {((balance.eth_mainnet / (balance.eth_mainnet + balance.eth_base)) * 100 || 0).toFixed(1)}%
+                <span className="text-sm font-medium">USDC (Total)</span>
+                <span className="text-sm">${(balance.usdc_mainnet + balance.usdc_base).toFixed(2)}</span>
+                <span className="text-sm text-muted-foreground">
+                  {(((balance.usdc_mainnet + balance.usdc_base) / balance.total_value_usd) * 100 || 0).toFixed(1)}%
                 </span>
               </div>
               <div className="w-full bg-secondary h-2 rounded-full overflow-hidden">
                 <div
-                  className="bg-primary h-full"
-                  style={{ width: `${(balance.eth_mainnet / (balance.eth_mainnet + balance.eth_base)) * 100 || 0}%` }}
+                  className="bg-green-500 h-full transition-all"
+                  style={{ width: `${((balance.usdc_mainnet + balance.usdc_base) / balance.total_value_usd) * 100 || 0}%` }}
                 />
+              </div>
+              <div className="flex gap-4 mt-1 text-xs text-muted-foreground">
+                <span>Mainnet: ${balance.usdc_mainnet.toFixed(2)}</span>
+                <span>Base: ${balance.usdc_base.toFixed(2)}</span>
               </div>
             </div>
             <div>
               <div className="flex justify-between mb-2">
-                <span className="text-sm">ETH Base</span>
-                <span className="text-sm font-medium">
-                  {((balance.eth_base / (balance.eth_mainnet + balance.eth_base)) * 100 || 0).toFixed(1)}%
+                <span className="text-sm font-medium">ETH (Total)</span>
+                <span className="text-sm">{(balance.eth_mainnet + balance.eth_base).toFixed(4)} ETH</span>
+                <span className="text-sm text-muted-foreground">
+                  {(((balance.eth_mainnet + balance.eth_base) * 3000) / balance.total_value_usd * 100 || 0).toFixed(1)}%
                 </span>
               </div>
               <div className="w-full bg-secondary h-2 rounded-full overflow-hidden">
                 <div
-                  className="bg-accent h-full"
-                  style={{ width: `${(balance.eth_base / (balance.eth_mainnet + balance.eth_base)) * 100 || 0}%` }}
+                  className="bg-primary h-full transition-all"
+                  style={{ width: `${((balance.eth_mainnet + balance.eth_base) * 3000) / balance.total_value_usd * 100 || 0}%` }}
+                />
+              </div>
+              <div className="flex gap-4 mt-1 text-xs text-muted-foreground">
+                <span>Mainnet: {balance.eth_mainnet.toFixed(4)}</span>
+                <span>Base: {balance.eth_base.toFixed(4)}</span>
+              </div>
+            </div>
+            <div>
+              <div className="flex justify-between mb-2">
+                <span className="text-sm font-medium">BASE Token</span>
+                <span className="text-sm">{balance.base_token_base.toFixed(2)} BASE</span>
+                <span className="text-sm text-muted-foreground">
+                  {((balance.base_token_base / balance.total_value_usd) * 100 || 0).toFixed(1)}%
+                </span>
+              </div>
+              <div className="w-full bg-secondary h-2 rounded-full overflow-hidden">
+                <div
+                  className="bg-accent h-full transition-all"
+                  style={{ width: `${(balance.base_token_base / balance.total_value_usd) * 100 || 0}%` }}
                 />
               </div>
             </div>
           </div>
         </CardContent>
       </Card>
+
+      <div className="grid gap-4 md:grid-cols-2">
+        <Card>
+          <CardHeader>
+            <CardTitle>Deployment Status</CardTitle>
+            <CardDescription>How much capital is deployed vs. available</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-2">
+            <div className="flex justify-between">
+              <span className="text-sm">Available USDC</span>
+              <span className="text-sm font-bold text-green-600">${(balance.usdc_mainnet + balance.usdc_base).toFixed(2)}</span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-sm">Deployed in Positions</span>
+              <span className="text-sm font-bold">
+                ${((balance.eth_mainnet + balance.eth_base) * 3000 + balance.base_token_base).toFixed(2)}
+              </span>
+            </div>
+            <div className="flex justify-between pt-2 border-t">
+              <span className="text-sm font-medium">Total Portfolio</span>
+              <span className="text-sm font-bold">${balance.total_value_usd.toFixed(2)}</span>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle>Strategy Summary</CardTitle>
+            <CardDescription>Current trading strategy status</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-2">
+            <div className="flex justify-between">
+              <span className="text-sm">Reserve %</span>
+              <span className="text-sm font-medium">
+                {(((balance.usdc_mainnet + balance.usdc_base) / balance.total_value_usd) * 100 || 0).toFixed(1)}%
+              </span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-sm">Deployed %</span>
+              <span className="text-sm font-medium">
+                {((1 - (balance.usdc_mainnet + balance.usdc_base) / balance.total_value_usd) * 100 || 0).toFixed(1)}%
+              </span>
+            </div>
+            <p className="text-xs text-muted-foreground pt-2">
+              Bot will deploy USDC when opportunities arise and take profits back to USDC
+            </p>
+          </CardContent>
+        </Card>
+      </div>
     </div>
   );
 }
