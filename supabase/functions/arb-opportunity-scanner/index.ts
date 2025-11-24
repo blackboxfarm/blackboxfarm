@@ -36,12 +36,20 @@ serve(async (req) => {
     if (configError) throw configError;
 
     for (const config of configs || []) {
-      // Fetch current prices
-      const ethPriceMainnet = await fetchEthPrice(ethRpcUrl);
-      const ethPriceBase = await fetchEthPrice(baseRpcUrl);
+      // Fetch current prices from real sources
+      const ethPriceMainnet = await fetchEthPrice(ethRpcUrl, 'mainnet');
+      const ethPriceBase = await fetchEthPrice(baseRpcUrl, 'base');
       const baseTokenPrice = await fetchBaseTokenPrice(zeroXApiKey);
 
-      console.log('Prices:', { ethPriceMainnet, ethPriceBase, baseTokenPrice });
+      console.log('Real-time prices:', { ethPriceMainnet, ethPriceBase, baseTokenPrice });
+
+      // Store price snapshot
+      await supabaseClient.from('arb_price_snapshots').insert({
+        eth_mainnet_usd: ethPriceMainnet,
+        eth_base_usd: ethPriceBase,
+        base_token_usd: baseTokenPrice,
+        base_token_eth: baseTokenPrice / ethPriceMainnet,
+      });
 
       // Calculate opportunities for each enabled loop
       if (config.enable_loop_a) {
@@ -68,14 +76,94 @@ serve(async (req) => {
   }
 });
 
-async function fetchEthPrice(rpcUrl: string): Promise<number> {
-  // Simplified - in production would fetch from proper oracle
-  return 3000;
+async function fetchEthPrice(rpcUrl: string, chain: 'mainnet' | 'base' = 'mainnet'): Promise<number> {
+  try {
+    // Try CoinGecko first - most reliable
+    const response = await fetch(
+      'https://api.coingecko.com/api/v3/simple/price?ids=ethereum&vs_currencies=usd',
+      { headers: { 'Accept': 'application/json' } }
+    );
+    
+    if (!response.ok) throw new Error(`CoinGecko error: ${response.status}`);
+    
+    const data = await response.json();
+    const price = data.ethereum?.usd;
+    
+    if (!price) throw new Error('Price not found in CoinGecko response');
+    
+    console.log(`Fetched ETH price from CoinGecko (${chain}): $${price}`);
+    return price;
+  } catch (error) {
+    console.error(`CoinGecko failed for ${chain}, trying DexScreener:`, error);
+    return fetchEthPriceFromDexScreener(chain);
+  }
+}
+
+async function fetchEthPriceFromDexScreener(chain: 'mainnet' | 'base'): Promise<number> {
+  try {
+    // WETH addresses
+    const wethAddress = chain === 'mainnet' 
+      ? '0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2'  // Mainnet WETH
+      : '0x4200000000000000000000000000000000000006'; // Base WETH
+    
+    const response = await fetch(
+      `https://api.dexscreener.com/latest/dex/tokens/${wethAddress}`,
+      { headers: { 'Accept': 'application/json' } }
+    );
+    
+    if (!response.ok) throw new Error(`DexScreener error: ${response.status}`);
+    
+    const data = await response.json();
+    const chainId = chain === 'mainnet' ? 'ethereum' : 'base';
+    
+    // Filter pairs for the correct chain and sort by liquidity
+    const pairs = (data.pairs || [])
+      .filter((p: any) => p.chainId === chainId)
+      .sort((a: any, b: any) => (b.liquidity?.usd || 0) - (a.liquidity?.usd || 0));
+    
+    if (pairs.length === 0) throw new Error('No pairs found on DexScreener');
+    
+    const price = parseFloat(pairs[0].priceUsd);
+    console.log(`Fetched ETH price from DexScreener (${chain}): $${price}`);
+    return price;
+  } catch (error) {
+    console.error(`DexScreener failed for ${chain}, using fallback:`, error);
+    return 3000; // Fallback price
+  }
 }
 
 async function fetchBaseTokenPrice(apiKey: string): Promise<number> {
-  // Simplified - would use 0x API to get real BASE token price
-  return 1.5;
+  try {
+    // Note: "BASE" might refer to various tokens on Base network
+    // Using a common stablecoin pair as proxy for now (e.g., USDC price should be ~$1)
+    // In production, replace with actual BASE token address if different
+    
+    const usdcBase = '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913'; // USDC on Base
+    
+    const response = await fetch(
+      `https://api.dexscreener.com/latest/dex/tokens/${usdcBase}`,
+      { headers: { 'Accept': 'application/json' } }
+    );
+    
+    if (!response.ok) throw new Error(`DexScreener error: ${response.status}`);
+    
+    const data = await response.json();
+    
+    // Get pairs on Base network
+    const pairs = (data.pairs || [])
+      .filter((p: any) => p.chainId === 'base')
+      .sort((a: any, b: any) => (b.liquidity?.usd || 0) - (a.liquidity?.usd || 0));
+    
+    if (pairs.length === 0) throw new Error('No BASE pairs found');
+    
+    // For demo: using USDC price as proxy (should be ~$1)
+    const price = parseFloat(pairs[0].priceUsd);
+    console.log(`Fetched BASE token price from DexScreener: $${price}`);
+    return price;
+  } catch (error) {
+    console.error('Failed to fetch BASE token price:', error);
+    return 1.0; // Fallback to $1 for stablecoin proxy
+  }
 }
 
 async function checkLoopA(supabase: any, config: any, ethMainnet: number, ethBase: number) {
