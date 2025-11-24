@@ -8,7 +8,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Badge } from "@/components/ui/badge";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
-import { Loader2, Activity, Play, Square } from "lucide-react";
+import { Loader2, Activity, Play, Square, Timer } from "lucide-react";
 
 interface BotConfig {
   trade_size_mode: string;
@@ -244,6 +244,28 @@ export function ConfigurationTab() {
     }
   };
 
+  const setupCron = async () => {
+    try {
+      setSaving(true);
+      const { data, error } = await supabase.functions.invoke('setup-arb-cron');
+      
+      if (error) throw error;
+      
+      toast({
+        title: "Cron Job Activated",
+        description: "Automated scanning is now running every minute.",
+      });
+    } catch (error: any) {
+      toast({
+        title: "Setup Error",
+        description: error.message || "Failed to set up automated scanning",
+        variant: "destructive",
+      });
+    } finally {
+      setSaving(false);
+    }
+  };
+
   const saveConfig = async () => {
     if (!config) return;
     setSaving(true);
@@ -333,6 +355,15 @@ export function ConfigurationTab() {
             >
               <Square className="h-4 w-4" />
               Stop Bot
+            </Button>
+            <Button
+              onClick={setupCron}
+              disabled={saving}
+              variant="outline"
+              className="flex items-center gap-2"
+            >
+              {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Timer className="h-4 w-4" />}
+              Setup Auto-Scan
             </Button>
           </div>
 
