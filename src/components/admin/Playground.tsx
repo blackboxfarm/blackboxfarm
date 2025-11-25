@@ -10,6 +10,13 @@ interface Wallet {
   sol: number;
 }
 
+interface SellStrategy {
+  startPrice: number;
+  sellAmount: number;
+  priceStep: number;
+  sellType: 'tokens' | 'percent';
+}
+
 export const Playground = () => {
   const [pricePoints, setPricePoints] = useState<number[]>([0.00001, 0.00005, 0.0001, 0.0005, 0.001]);
   const [customPrice, setCustomPrice] = useState('');
@@ -32,6 +39,20 @@ export const Playground = () => {
   const totalTokens = allWallets.reduce((sum, w) => sum + w.tokens, 0);
   const totalSol = allWallets.reduce((sum, w) => sum + w.sol, 0);
 
+  // Sell strategies for each wallet
+  const [strategies, setStrategies] = useState<Record<number, SellStrategy>>(() => {
+    const initial: Record<number, SellStrategy> = {};
+    allWallets.forEach(w => {
+      initial[w.id] = {
+        startPrice: 0.00004,
+        sellAmount: 1_000_000,
+        priceStep: 0.00001,
+        sellType: 'tokens'
+      };
+    });
+    return initial;
+  });
+
   const calculateProfit = (wallet: Wallet, pricePerToken: number) => {
     const tokenValue = wallet.tokens * pricePerToken;
     const totalValue = tokenValue + wallet.sol;
@@ -45,6 +66,60 @@ export const Playground = () => {
       setPricePoints([...pricePoints, price].sort((a, b) => a - b));
       setCustomPrice('');
     }
+  };
+
+  const updateStrategy = (walletId: number, field: keyof SellStrategy, value: any) => {
+    setStrategies(prev => ({
+      ...prev,
+      [walletId]: {
+        ...prev[walletId],
+        [field]: value
+      }
+    }));
+  };
+
+  const calculateStrategyProfit = (wallet: Wallet, strategy: SellStrategy): number => {
+    let remainingTokens = wallet.tokens;
+    let totalProfit = 0;
+    let currentPrice = strategy.startPrice;
+    
+    // Sort price points to process in order
+    const sortedPrices = [...pricePoints].sort((a, b) => a - b);
+    
+    for (const price of sortedPrices) {
+      if (price < strategy.startPrice || remainingTokens <= 0) continue;
+      
+      // Calculate how many steps we've taken from start price
+      const priceIncrease = price - currentPrice;
+      if (priceIncrease < strategy.priceStep) continue;
+      
+      const steps = Math.floor(priceIncrease / strategy.priceStep);
+      
+      for (let step = 0; step < steps && remainingTokens > 0; step++) {
+        const sellPrice = currentPrice + (strategy.priceStep * (step + 1));
+        
+        let tokensToSell: number;
+        if (strategy.sellType === 'tokens') {
+          tokensToSell = Math.min(strategy.sellAmount, remainingTokens);
+        } else {
+          // Percentage based
+          tokensToSell = Math.min((remainingTokens * strategy.sellAmount) / 100, remainingTokens);
+        }
+        
+        totalProfit += tokensToSell * sellPrice;
+        remainingTokens -= tokensToSell;
+      }
+      
+      currentPrice = price;
+    }
+    
+    // Add value of remaining tokens at highest price
+    if (remainingTokens > 0 && sortedPrices.length > 0) {
+      const highestPrice = sortedPrices[sortedPrices.length - 1];
+      totalProfit += remainingTokens * highestPrice;
+    }
+    
+    return totalProfit;
   };
 
   return (
@@ -106,21 +181,69 @@ export const Playground = () => {
               </TableHeader>
               <TableBody>
                 {largeWallets.map(wallet => (
-                  <TableRow key={wallet.id}>
-                    <TableCell className="font-medium">W{wallet.id}</TableCell>
-                    <TableCell>{(wallet.tokens / 1_000_000).toFixed(1)}M</TableCell>
-                    <TableCell>{wallet.sol} SOL</TableCell>
-                    {pricePoints.map(price => {
-                      const { profit } = calculateProfit(wallet, price);
-                      return (
-                        <TableCell key={price} className="text-right">
-                          <span className={profit > 0 ? 'text-green-500' : 'text-muted-foreground'}>
-                            ${profit.toFixed(2)}
-                          </span>
-                        </TableCell>
-                      );
-                    })}
-                  </TableRow>
+                  <>
+                    <TableRow key={wallet.id}>
+                      <TableCell className="font-medium">W{wallet.id}</TableCell>
+                      <TableCell>{(wallet.tokens / 1_000_000).toFixed(1)}M</TableCell>
+                      <TableCell>{wallet.sol} SOL</TableCell>
+                      {pricePoints.map(price => {
+                        const { profit } = calculateProfit(wallet, price);
+                        return (
+                          <TableCell key={price} className="text-right">
+                            <span className={profit > 0 ? 'text-green-500' : 'text-muted-foreground'}>
+                              ${profit.toFixed(2)}
+                            </span>
+                          </TableCell>
+                        );
+                      })}
+                    </TableRow>
+                    <TableRow key={`${wallet.id}-strategy`} className="bg-muted/30">
+                      <TableCell colSpan={3} className="text-xs">
+                        <div className="flex gap-2 items-center">
+                          <span className="text-muted-foreground">Strategy:</span>
+                          <Input
+                            type="number"
+                            step="0.00001"
+                            placeholder="Start $"
+                            value={strategies[wallet.id]?.startPrice || ''}
+                            onChange={(e) => updateStrategy(wallet.id, 'startPrice', parseFloat(e.target.value) || 0)}
+                            className="w-24 h-7 text-xs"
+                          />
+                          <span className="text-muted-foreground">sell</span>
+                          <Input
+                            type="number"
+                            placeholder="Amount"
+                            value={strategies[wallet.id]?.sellAmount || ''}
+                            onChange={(e) => updateStrategy(wallet.id, 'sellAmount', parseFloat(e.target.value) || 0)}
+                            className="w-24 h-7 text-xs"
+                          />
+                          <select
+                            value={strategies[wallet.id]?.sellType || 'tokens'}
+                            onChange={(e) => updateStrategy(wallet.id, 'sellType', e.target.value)}
+                            className="h-7 text-xs bg-background border border-input rounded px-2"
+                          >
+                            <option value="tokens">tokens</option>
+                            <option value="percent">%</option>
+                          </select>
+                          <span className="text-muted-foreground">every</span>
+                          <Input
+                            type="number"
+                            step="0.00001"
+                            placeholder="Step"
+                            value={strategies[wallet.id]?.priceStep || ''}
+                            onChange={(e) => updateStrategy(wallet.id, 'priceStep', parseFloat(e.target.value) || 0)}
+                            className="w-24 h-7 text-xs"
+                          />
+                          <span className="text-muted-foreground">rise</span>
+                        </div>
+                      </TableCell>
+                      <TableCell colSpan={pricePoints.length} className="text-right">
+                        <span className="text-green-500 font-bold text-sm">
+                          Total: ${calculateStrategyProfit(wallet, strategies[wallet.id] || { startPrice: 0, sellAmount: 0, priceStep: 0, sellType: 'tokens' }).toFixed(2)}
+                        </span>
+                      </TableCell>
+                    </TableRow>
+                  </>
                 ))}
                 <TableRow className="font-bold bg-muted/50">
                   <TableCell>Subtotal</TableCell>
@@ -164,21 +287,69 @@ export const Playground = () => {
               </TableHeader>
               <TableBody>
                 {mediumWallets.map(wallet => (
-                  <TableRow key={wallet.id}>
-                    <TableCell className="font-medium">W{wallet.id}</TableCell>
-                    <TableCell>{(wallet.tokens / 1_000_000).toFixed(1)}M</TableCell>
-                    <TableCell>{wallet.sol} SOL</TableCell>
-                    {pricePoints.map(price => {
-                      const { profit } = calculateProfit(wallet, price);
-                      return (
-                        <TableCell key={price} className="text-right">
-                          <span className={profit > 0 ? 'text-green-500' : 'text-muted-foreground'}>
-                            ${profit.toFixed(2)}
-                          </span>
-                        </TableCell>
-                      );
-                    })}
-                  </TableRow>
+                  <>
+                    <TableRow key={wallet.id}>
+                      <TableCell className="font-medium">W{wallet.id}</TableCell>
+                      <TableCell>{(wallet.tokens / 1_000_000).toFixed(1)}M</TableCell>
+                      <TableCell>{wallet.sol} SOL</TableCell>
+                      {pricePoints.map(price => {
+                        const { profit } = calculateProfit(wallet, price);
+                        return (
+                          <TableCell key={price} className="text-right">
+                            <span className={profit > 0 ? 'text-green-500' : 'text-muted-foreground'}>
+                              ${profit.toFixed(2)}
+                            </span>
+                          </TableCell>
+                        );
+                      })}
+                    </TableRow>
+                    <TableRow key={`${wallet.id}-strategy`} className="bg-muted/30">
+                      <TableCell colSpan={3} className="text-xs">
+                        <div className="flex gap-2 items-center">
+                          <span className="text-muted-foreground">Strategy:</span>
+                          <Input
+                            type="number"
+                            step="0.00001"
+                            placeholder="Start $"
+                            value={strategies[wallet.id]?.startPrice || ''}
+                            onChange={(e) => updateStrategy(wallet.id, 'startPrice', parseFloat(e.target.value) || 0)}
+                            className="w-24 h-7 text-xs"
+                          />
+                          <span className="text-muted-foreground">sell</span>
+                          <Input
+                            type="number"
+                            placeholder="Amount"
+                            value={strategies[wallet.id]?.sellAmount || ''}
+                            onChange={(e) => updateStrategy(wallet.id, 'sellAmount', parseFloat(e.target.value) || 0)}
+                            className="w-24 h-7 text-xs"
+                          />
+                          <select
+                            value={strategies[wallet.id]?.sellType || 'tokens'}
+                            onChange={(e) => updateStrategy(wallet.id, 'sellType', e.target.value)}
+                            className="h-7 text-xs bg-background border border-input rounded px-2"
+                          >
+                            <option value="tokens">tokens</option>
+                            <option value="percent">%</option>
+                          </select>
+                          <span className="text-muted-foreground">every</span>
+                          <Input
+                            type="number"
+                            step="0.00001"
+                            placeholder="Step"
+                            value={strategies[wallet.id]?.priceStep || ''}
+                            onChange={(e) => updateStrategy(wallet.id, 'priceStep', parseFloat(e.target.value) || 0)}
+                            className="w-24 h-7 text-xs"
+                          />
+                          <span className="text-muted-foreground">rise</span>
+                        </div>
+                      </TableCell>
+                      <TableCell colSpan={pricePoints.length} className="text-right">
+                        <span className="text-green-500 font-bold text-sm">
+                          Total: ${calculateStrategyProfit(wallet, strategies[wallet.id] || { startPrice: 0, sellAmount: 0, priceStep: 0, sellType: 'tokens' }).toFixed(2)}
+                        </span>
+                      </TableCell>
+                    </TableRow>
+                  </>
                 ))}
                 <TableRow className="font-bold bg-muted/50">
                   <TableCell>Subtotal</TableCell>
