@@ -15,14 +15,6 @@ export function WalletBalanceMonitor() {
     refreshBalances 
   } = useRealtimeBalances();
 
-  // Auto-trigger refresh on mount to check for your testuser wallet
-  React.useEffect(() => {
-    const triggerRefresh = async () => {
-      console.log('🔄 Auto-refreshing wallet balances...');
-      await refreshBalances();
-    };
-    triggerRefresh();
-  }, [refreshBalances]);
 
   // Manual refresh for testing
   const handleManualRefresh = async () => {
