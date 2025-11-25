@@ -78,6 +78,32 @@ export const Playground = () => {
     }));
   };
 
+  const calculateFinalSellPrice = (wallet: Wallet, strategy: SellStrategy): number => {
+    if (!strategy.startPrice || !strategy.sellAmount || !strategy.priceStep) return 0;
+    
+    let remainingTokens = wallet.tokens;
+    let currentPrice = strategy.startPrice;
+    let steps = 0;
+    
+    if (strategy.sellType === 'tokens') {
+      // Fixed token amount per step
+      steps = Math.ceil(remainingTokens / strategy.sellAmount);
+      return currentPrice + (steps * strategy.priceStep);
+    } else {
+      // Percentage based - need to iterate
+      while (remainingTokens > 0.01) { // Stop when less than 0.01 tokens remain
+        const tokensToSell = (remainingTokens * strategy.sellAmount) / 100;
+        remainingTokens -= tokensToSell;
+        currentPrice += strategy.priceStep;
+        steps++;
+        
+        // Safety break after 10000 steps
+        if (steps > 10000) break;
+      }
+      return currentPrice;
+    }
+  };
+
   const calculateStrategyProfit = (wallet: Wallet, strategy: SellStrategy): number => {
     let remainingTokens = wallet.tokens;
     let totalProfit = 0;
@@ -199,7 +225,7 @@ export const Playground = () => {
                     </TableRow>
                     <TableRow key={`${wallet.id}-strategy`} className="bg-muted/30">
                       <TableCell colSpan={3} className="text-xs">
-                        <div className="flex gap-2 items-center">
+                        <div className="flex gap-2 items-center flex-wrap">
                           <span className="text-muted-foreground">Strategy:</span>
                           <Input
                             type="number"
@@ -235,6 +261,11 @@ export const Playground = () => {
                             className="w-24 h-7 text-xs"
                           />
                           <span className="text-muted-foreground">rise</span>
+                          {strategies[wallet.id]?.startPrice > 0 && strategies[wallet.id]?.sellAmount > 0 && strategies[wallet.id]?.priceStep > 0 && (
+                            <span className="text-cyan-400 font-mono ml-2">
+                              → Final: ${calculateFinalSellPrice(wallet, strategies[wallet.id]).toFixed(6)}
+                            </span>
+                          )}
                         </div>
                       </TableCell>
                       <TableCell colSpan={pricePoints.length} className="text-right">
@@ -305,7 +336,7 @@ export const Playground = () => {
                     </TableRow>
                     <TableRow key={`${wallet.id}-strategy`} className="bg-muted/30">
                       <TableCell colSpan={3} className="text-xs">
-                        <div className="flex gap-2 items-center">
+                        <div className="flex gap-2 items-center flex-wrap">
                           <span className="text-muted-foreground">Strategy:</span>
                           <Input
                             type="number"
@@ -341,6 +372,11 @@ export const Playground = () => {
                             className="w-24 h-7 text-xs"
                           />
                           <span className="text-muted-foreground">rise</span>
+                          {strategies[wallet.id]?.startPrice > 0 && strategies[wallet.id]?.sellAmount > 0 && strategies[wallet.id]?.priceStep > 0 && (
+                            <span className="text-cyan-400 font-mono ml-2">
+                              → Final: ${calculateFinalSellPrice(wallet, strategies[wallet.id]).toFixed(6)}
+                            </span>
+                          )}
                         </div>
                       </TableCell>
                       <TableCell colSpan={pricePoints.length} className="text-right">
