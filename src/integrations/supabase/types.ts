@@ -115,10 +115,64 @@ export type Database = {
         }
         Relationships: []
       }
+      airdrop_configs: {
+        Row: {
+          amount_per_wallet: number
+          created_at: string
+          execution_count: number
+          id: string
+          last_executed_at: string | null
+          memo: string | null
+          name: string
+          recipients: Json
+          status: string
+          token_mint: string
+          updated_at: string
+          wallet_id: string
+        }
+        Insert: {
+          amount_per_wallet: number
+          created_at?: string
+          execution_count?: number
+          id?: string
+          last_executed_at?: string | null
+          memo?: string | null
+          name?: string
+          recipients?: Json
+          status?: string
+          token_mint: string
+          updated_at?: string
+          wallet_id: string
+        }
+        Update: {
+          amount_per_wallet?: number
+          created_at?: string
+          execution_count?: number
+          id?: string
+          last_executed_at?: string | null
+          memo?: string | null
+          name?: string
+          recipients?: Json
+          status?: string
+          token_mint?: string
+          updated_at?: string
+          wallet_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "airdrop_configs_wallet_id_fkey"
+            columns: ["wallet_id"]
+            isOneToOne: false
+            referencedRelation: "airdrop_wallets"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       airdrop_distributions: {
         Row: {
           amount_per_wallet: number
           completed_at: string | null
+          config_id: string | null
           created_at: string
           id: string
           memo: string | null
@@ -132,6 +186,7 @@ export type Database = {
         Insert: {
           amount_per_wallet: number
           completed_at?: string | null
+          config_id?: string | null
           created_at?: string
           id?: string
           memo?: string | null
@@ -145,6 +200,7 @@ export type Database = {
         Update: {
           amount_per_wallet?: number
           completed_at?: string | null
+          config_id?: string | null
           created_at?: string
           id?: string
           memo?: string | null
@@ -156,6 +212,13 @@ export type Database = {
           wallet_id?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "airdrop_distributions_config_id_fkey"
+            columns: ["config_id"]
+            isOneToOne: false
+            referencedRelation: "airdrop_configs"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "airdrop_distributions_wallet_id_fkey"
             columns: ["wallet_id"]
@@ -170,6 +233,7 @@ export type Database = {
           created_at: string
           id: string
           is_active: boolean | null
+          is_archived: boolean | null
           nickname: string | null
           pubkey: string
           secret_key_encrypted: string
@@ -181,6 +245,7 @@ export type Database = {
           created_at?: string
           id?: string
           is_active?: boolean | null
+          is_archived?: boolean | null
           nickname?: string | null
           pubkey: string
           secret_key_encrypted: string
@@ -192,6 +257,7 @@ export type Database = {
           created_at?: string
           id?: string
           is_active?: boolean | null
+          is_archived?: boolean | null
           nickname?: string | null
           pubkey?: string
           secret_key_encrypted?: string
