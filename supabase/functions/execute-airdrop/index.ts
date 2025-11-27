@@ -1,10 +1,81 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { 
+  Connection, 
+  Keypair, 
+  PublicKey, 
+  Transaction,
+  TransactionInstruction,
+  ComputeBudgetProgram
+} from "https://esm.sh/@solana/web3.js@1.98.0";
+import { 
+  createTransferInstruction,
+  getAssociatedTokenAddress,
+  createAssociatedTokenAccountInstruction,
+  getAccount,
+  TOKEN_PROGRAM_ID,
+  ASSOCIATED_TOKEN_PROGRAM_ID
+} from "https://esm.sh/@solana/spl-token@0.4.9";
+import { decode as bs58Decode } from "https://esm.sh/bs58@6.0.0";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
+
+// Decrypt wallet secret (base64 encoded)
+async function decryptWalletSecret(encryptedSecret: string): Promise<string> {
+  try {
+    // Check if it's AES-GCM encrypted (longer base64) or simple base64
+    const decoded = atob(encryptedSecret);
+    
+    // If it's longer than 64 chars, it's likely AES-GCM encrypted
+    if (decoded.length > 64) {
+      const keyString = Deno.env.get('ENCRYPTION_KEY');
+      if (!keyString) {
+        throw new Error('ENCRYPTION_KEY not set');
+      }
+      
+      const keyBytes = new TextEncoder().encode(keyString.padEnd(32, '0').slice(0, 32));
+      const encryptionKey = await crypto.subtle.importKey(
+        'raw',
+        keyBytes,
+        { name: 'AES-GCM' },
+        false,
+        ['decrypt']
+      );
+      
+      const combined = new Uint8Array(decoded.split('').map(char => char.charCodeAt(0)));
+      const iv = combined.slice(0, 12);
+      const encrypted = combined.slice(12);
+      
+      const decrypted = await crypto.subtle.decrypt(
+        { name: 'AES-GCM', iv },
+        encryptionKey,
+        encrypted
+      );
+      
+      return new TextDecoder().decode(decrypted);
+    }
+    
+    // Simple base64 encoded
+    return decoded;
+  } catch (error) {
+    console.error('Decryption error:', error);
+    // Try as plain base64
+    return atob(encryptedSecret);
+  }
+}
+
+// Create memo instruction
+function createMemoInstruction(memo: string, signer: PublicKey): TransactionInstruction {
+  const MEMO_PROGRAM_ID = new PublicKey('MemoSq4gqABAXKb96qnH8TysNcWxMyWCqXgDLGmfcHr');
+  return new TransactionInstruction({
+    keys: [{ pubkey: signer, isSigner: true, isWritable: false }],
+    programId: MEMO_PROGRAM_ID,
+    data: Buffer.from(memo, 'utf-8'),
+  });
+}
 
 serve(async (req) => {
   if (req.method === "OPTIONS") {
@@ -14,6 +85,7 @@ serve(async (req) => {
   try {
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+    const heliusApiKey = Deno.env.get("HELIUS_API_KEY");
     
     // Get user from auth header
     const authHeader = req.headers.get("Authorization");
@@ -56,13 +128,25 @@ serve(async (req) => {
       });
     }
 
-    // Validate recipients are valid Solana addresses (basic check)
-    const validRecipients = recipients.filter((r: string) => r.length >= 32 && r.length <= 44);
-    if (validRecipients.length !== recipients.length) {
-      console.warn(`Filtered ${recipients.length - validRecipients.length} invalid addresses`);
+    // Validate recipients are valid Solana addresses
+    const validRecipients: string[] = [];
+    for (const r of recipients) {
+      try {
+        new PublicKey(r);
+        validRecipients.push(r);
+      } catch {
+        console.warn(`Invalid address skipped: ${r}`);
+      }
     }
 
-    // Get wallet info
+    if (validRecipients.length === 0) {
+      return new Response(JSON.stringify({ error: "No valid recipient addresses" }), {
+        status: 400,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    // Get wallet info with encrypted secret
     const { data: wallet, error: walletError } = await supabaseAdmin
       .from('airdrop_wallets')
       .select('*')
@@ -76,7 +160,7 @@ serve(async (req) => {
       });
     }
 
-    console.log(`📤 Creating airdrop distribution: ${amount_per_wallet} tokens to ${validRecipients.length} recipients`);
+    console.log(`📤 Starting airdrop: ${amount_per_wallet} tokens to ${validRecipients.length} recipients`);
 
     // Create distribution record
     const { data: distribution, error: distError } = await supabaseAdmin
@@ -88,7 +172,7 @@ serve(async (req) => {
         memo: memo || null,
         recipient_count: validRecipients.length,
         recipients: validRecipients,
-        status: 'pending',
+        status: 'processing',
       })
       .select()
       .single();
@@ -98,36 +182,231 @@ serve(async (req) => {
       throw new Error('Failed to create distribution record');
     }
 
-    // TODO: In production, this would:
-    // 1. Decrypt the wallet secret key
-    // 2. Create SPL token transfer instructions for each recipient
-    // 3. Add memo instruction if provided
-    // 4. Batch transactions (max ~5-10 recipients per tx due to size limits)
-    // 5. Sign and send transactions
-    // 6. Update distribution status and signatures
-    
-    // For now, we just record the distribution
-    console.log(`✅ Distribution ${distribution.id} created successfully`);
+    // Decrypt wallet secret key
+    let secretKeyString: string;
+    try {
+      secretKeyString = await decryptWalletSecret(wallet.secret_key_encrypted);
+    } catch (error) {
+      console.error('Failed to decrypt wallet secret:', error);
+      await supabaseAdmin
+        .from('airdrop_distributions')
+        .update({ status: 'failed' })
+        .eq('id', distribution.id);
+      throw new Error('Failed to decrypt wallet secret');
+    }
 
-    // Update status to show it's recorded (actual execution would be async)
+    // Parse the secret key
+    let senderKeypair: Keypair;
+    try {
+      // Try as base58 first
+      const secretKeyBytes = bs58Decode(secretKeyString);
+      senderKeypair = Keypair.fromSecretKey(secretKeyBytes);
+    } catch {
+      try {
+        // Try as JSON array
+        const secretKeyArray = JSON.parse(secretKeyString);
+        senderKeypair = Keypair.fromSecretKey(new Uint8Array(secretKeyArray));
+      } catch {
+        console.error('Failed to parse secret key');
+        await supabaseAdmin
+          .from('airdrop_distributions')
+          .update({ status: 'failed' })
+          .eq('id', distribution.id);
+        throw new Error('Invalid secret key format');
+      }
+    }
+
+    // Verify keypair matches stored pubkey
+    if (senderKeypair.publicKey.toBase58() !== wallet.pubkey) {
+      console.error('Keypair mismatch');
+      await supabaseAdmin
+        .from('airdrop_distributions')
+        .update({ status: 'failed' })
+        .eq('id', distribution.id);
+      throw new Error('Wallet keypair mismatch');
+    }
+
+    // Setup Solana connection
+    const rpcUrl = heliusApiKey 
+      ? `https://mainnet.helius-rpc.com/?api-key=${heliusApiKey}`
+      : 'https://api.mainnet-beta.solana.com';
+    const connection = new Connection(rpcUrl, 'confirmed');
+
+    const tokenMintPubkey = new PublicKey(token_mint);
+    const senderPubkey = senderKeypair.publicKey;
+
+    // Get sender's token account
+    const senderTokenAccount = await getAssociatedTokenAddress(
+      tokenMintPubkey,
+      senderPubkey
+    );
+
+    // Verify sender has enough tokens
+    let senderTokenInfo;
+    try {
+      senderTokenInfo = await getAccount(connection, senderTokenAccount);
+    } catch (error) {
+      console.error('Sender token account not found');
+      await supabaseAdmin
+        .from('airdrop_distributions')
+        .update({ status: 'failed' })
+        .eq('id', distribution.id);
+      throw new Error('Sender does not have a token account for this mint');
+    }
+
+    // Get token decimals from mint
+    const mintInfo = await connection.getParsedAccountInfo(tokenMintPubkey);
+    const decimals = (mintInfo.value?.data as any)?.parsed?.info?.decimals || 9;
+    
+    const amountInSmallestUnit = BigInt(Math.floor(amount_per_wallet * Math.pow(10, decimals)));
+    const totalRequired = amountInSmallestUnit * BigInt(validRecipients.length);
+
+    if (senderTokenInfo.amount < totalRequired) {
+      console.error(`Insufficient tokens. Have: ${senderTokenInfo.amount}, Need: ${totalRequired}`);
+      await supabaseAdmin
+        .from('airdrop_distributions')
+        .update({ status: 'failed' })
+        .eq('id', distribution.id);
+      throw new Error(`Insufficient token balance. Have: ${Number(senderTokenInfo.amount) / Math.pow(10, decimals)}, Need: ${amount_per_wallet * validRecipients.length}`);
+    }
+
+    // Batch recipients (max 5 per transaction for safety)
+    const BATCH_SIZE = 5;
+    const batches: string[][] = [];
+    for (let i = 0; i < validRecipients.length; i += BATCH_SIZE) {
+      batches.push(validRecipients.slice(i, i + BATCH_SIZE));
+    }
+
+    console.log(`📦 Processing ${batches.length} batches...`);
+
+    const signatures: string[] = [];
+    const errors: string[] = [];
+
+    for (let batchIndex = 0; batchIndex < batches.length; batchIndex++) {
+      const batch = batches[batchIndex];
+      console.log(`Processing batch ${batchIndex + 1}/${batches.length} with ${batch.length} recipients`);
+
+      try {
+        const transaction = new Transaction();
+        
+        // Add compute budget for complex transactions
+        transaction.add(
+          ComputeBudgetProgram.setComputeUnitLimit({ units: 400000 }),
+          ComputeBudgetProgram.setComputeUnitPrice({ microLamports: 1000 })
+        );
+
+        for (const recipientAddress of batch) {
+          const recipientPubkey = new PublicKey(recipientAddress);
+          const recipientTokenAccount = await getAssociatedTokenAddress(
+            tokenMintPubkey,
+            recipientPubkey
+          );
+
+          // Check if recipient token account exists
+          let accountExists = false;
+          try {
+            await getAccount(connection, recipientTokenAccount);
+            accountExists = true;
+          } catch {
+            // Account doesn't exist, will create it
+          }
+
+          // Create associated token account if needed
+          if (!accountExists) {
+            transaction.add(
+              createAssociatedTokenAccountInstruction(
+                senderPubkey,
+                recipientTokenAccount,
+                recipientPubkey,
+                tokenMintPubkey,
+                TOKEN_PROGRAM_ID,
+                ASSOCIATED_TOKEN_PROGRAM_ID
+              )
+            );
+          }
+
+          // Add transfer instruction
+          transaction.add(
+            createTransferInstruction(
+              senderTokenAccount,
+              recipientTokenAccount,
+              senderPubkey,
+              amountInSmallestUnit,
+              [],
+              TOKEN_PROGRAM_ID
+            )
+          );
+        }
+
+        // Add memo if provided (only once per transaction)
+        if (memo && memo.trim()) {
+          transaction.add(createMemoInstruction(memo.slice(0, 280), senderPubkey));
+        }
+
+        // Get recent blockhash
+        const { blockhash, lastValidBlockHeight } = await connection.getLatestBlockhash('confirmed');
+        transaction.recentBlockhash = blockhash;
+        transaction.feePayer = senderPubkey;
+
+        // Sign and send
+        transaction.sign(senderKeypair);
+        
+        const signature = await connection.sendRawTransaction(transaction.serialize(), {
+          skipPreflight: false,
+          maxRetries: 3,
+        });
+
+        console.log(`✅ Batch ${batchIndex + 1} sent: ${signature}`);
+
+        // Confirm transaction
+        await connection.confirmTransaction({
+          blockhash,
+          lastValidBlockHeight,
+          signature,
+        }, 'confirmed');
+
+        signatures.push(signature);
+        
+        // Small delay between batches to avoid rate limiting
+        if (batchIndex < batches.length - 1) {
+          await new Promise(resolve => setTimeout(resolve, 500));
+        }
+
+      } catch (error: any) {
+        console.error(`❌ Batch ${batchIndex + 1} failed:`, error);
+        errors.push(`Batch ${batchIndex + 1}: ${error.message || String(error)}`);
+      }
+    }
+
+    // Update distribution record with results
+    const finalStatus = errors.length === 0 ? 'completed' : 
+                        signatures.length === 0 ? 'failed' : 'partial';
+
     await supabaseAdmin
       .from('airdrop_distributions')
-      .update({ status: 'recorded' })
+      .update({ 
+        status: finalStatus,
+        transaction_signatures: signatures,
+        completed_at: new Date().toISOString(),
+      })
       .eq('id', distribution.id);
 
+    console.log(`🏁 Airdrop ${finalStatus}: ${signatures.length} successful, ${errors.length} failed`);
+
     return new Response(JSON.stringify({
-      success: true,
+      success: errors.length === 0,
       distribution_id: distribution.id,
       recipient_count: validRecipients.length,
       total_tokens: amount_per_wallet * validRecipients.length,
-      memo_length: memo?.length || 0,
-      status: 'recorded',
-      message: 'Distribution recorded. Actual token transfers will be processed.',
+      signatures,
+      errors: errors.length > 0 ? errors : undefined,
+      status: finalStatus,
+      message: `Airdrop ${finalStatus}. ${signatures.length} transactions sent.`,
     }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
 
-  } catch (error) {
+  } catch (error: any) {
     console.error('Error:', error);
     return new Response(JSON.stringify({ error: error.message }), {
       status: 500,
