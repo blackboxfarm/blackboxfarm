@@ -115,6 +115,92 @@ export type Database = {
         }
         Relationships: []
       }
+      airdrop_distributions: {
+        Row: {
+          amount_per_wallet: number
+          completed_at: string | null
+          created_at: string
+          id: string
+          memo: string | null
+          recipient_count: number
+          recipients: Json
+          status: string | null
+          token_mint: string
+          transaction_signatures: Json | null
+          wallet_id: string
+        }
+        Insert: {
+          amount_per_wallet: number
+          completed_at?: string | null
+          created_at?: string
+          id?: string
+          memo?: string | null
+          recipient_count: number
+          recipients: Json
+          status?: string | null
+          token_mint: string
+          transaction_signatures?: Json | null
+          wallet_id: string
+        }
+        Update: {
+          amount_per_wallet?: number
+          completed_at?: string | null
+          created_at?: string
+          id?: string
+          memo?: string | null
+          recipient_count?: number
+          recipients?: Json
+          status?: string | null
+          token_mint?: string
+          transaction_signatures?: Json | null
+          wallet_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "airdrop_distributions_wallet_id_fkey"
+            columns: ["wallet_id"]
+            isOneToOne: false
+            referencedRelation: "airdrop_wallets"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      airdrop_wallets: {
+        Row: {
+          created_at: string
+          id: string
+          is_active: boolean | null
+          nickname: string | null
+          pubkey: string
+          secret_key_encrypted: string
+          sol_balance: number | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          is_active?: boolean | null
+          nickname?: string | null
+          pubkey: string
+          secret_key_encrypted: string
+          sol_balance?: number | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          is_active?: boolean | null
+          nickname?: string | null
+          pubkey?: string
+          secret_key_encrypted?: string
+          sol_balance?: number | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       arb_balances: {
         Row: {
           base_token_base: number
