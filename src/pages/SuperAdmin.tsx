@@ -19,6 +19,7 @@ import { HtmlScrapes } from "@/components/admin/HtmlScrapes";
 import { TokenSets } from "@/components/admin/TokenSets";
 import { ArbitrageBotDashboard } from "@/components/admin/ArbitrageBotDashboard";
 import { Playground } from "@/components/admin/Playground";
+import { AirdropManager } from "@/components/admin/AirdropManager";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import TransactionHistoryWindow from "@/components/blackbox/TransactionHistoryWindow";
@@ -109,6 +110,7 @@ export default function SuperAdmin() {
             <TabsTrigger value="token-sets" className="flex-shrink-0 data-[state=active]:bg-gradient-to-r data-[state=active]:from-purple-500/30 data-[state=active]:to-purple-500/20">Token Sets</TabsTrigger>
             <TabsTrigger value="arbitrage" className="flex-shrink-0 data-[state=active]:bg-gradient-to-r data-[state=active]:from-orange-500/30 data-[state=active]:to-orange-500/20">Arbitrage Bot</TabsTrigger>
             <TabsTrigger value="playground" className="flex-shrink-0 data-[state=active]:bg-gradient-to-r data-[state=active]:from-cyan-500/30 data-[state=active]:to-cyan-500/20">Playground</TabsTrigger>
+            <TabsTrigger value="airdrops" className="flex-shrink-0 data-[state=active]:bg-gradient-to-r data-[state=active]:from-pink-500/30 data-[state=active]:to-pink-500/20">Airdrops</TabsTrigger>
             <TabsTrigger value="banners" className="flex-shrink-0">Banners</TabsTrigger>
             <TabsTrigger value="surveys" className="flex-shrink-0">Surveys</TabsTrigger>
           </TabsList>
@@ -190,6 +192,10 @@ export default function SuperAdmin() {
 
           <TabsContent value="playground">
             <Playground />
+          </TabsContent>
+
+          <TabsContent value="airdrops">
+            <AirdropManager />
           </TabsContent>
 
           <TabsContent value="banners">
