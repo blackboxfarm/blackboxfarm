@@ -99,7 +99,7 @@ function createMemoInstruction(memo: string, signer: PublicKey): TransactionInst
   return new TransactionInstruction({
     keys: [{ pubkey: signer, isSigner: true, isWritable: false }],
     programId: MEMO_PROGRAM_ID,
-    data: Buffer.from(memo, 'utf-8'),
+    data: new TextEncoder().encode(memo),
   });
 }
 
@@ -145,7 +145,7 @@ serve(async (req) => {
       });
     }
 
-    const { wallet_id, token_mint, amount_per_wallet, memo, recipients } = await req.json();
+    const { wallet_id, token_mint, amount_per_wallet, memo, recipients, config_id } = await req.json();
 
     if (!wallet_id || !token_mint || !amount_per_wallet || !recipients?.length) {
       return new Response(JSON.stringify({ error: "Missing required fields" }), {
@@ -193,6 +193,7 @@ serve(async (req) => {
       .from('airdrop_distributions')
       .insert({
         wallet_id,
+        config_id: config_id || null,
         token_mint,
         amount_per_wallet,
         memo: memo || null,

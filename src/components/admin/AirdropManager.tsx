@@ -728,11 +728,9 @@ export function AirdropManager() {
                               </div>
 
                               <div className="flex items-center gap-1">
-                                {config.execution_count > 0 && (
-                                  <Button variant="ghost" size="icon" onClick={() => openHistory(config.id)} title="View history">
-                                    <History className="h-4 w-4" />
-                                  </Button>
-                                )}
+                                <Button variant="ghost" size="icon" onClick={() => openHistory(config.id)} title="View history">
+                                  <History className="h-4 w-4" />
+                                </Button>
 
                                 {config.status === "draft" && (
                                   <>
@@ -767,10 +765,15 @@ export function AirdropManager() {
                                 )}
 
                                 {config.status === "executed" && (
-                                  <Button variant="outline" size="sm" onClick={() => openExecuteDialog(config)} className="ml-2">
-                                    <RotateCcw className="h-4 w-4 mr-1" />
-                                    Re-execute
-                                  </Button>
+                                  <>
+                                    <Button variant="ghost" size="icon" onClick={() => openConfigDialog(wallet.id, config)} title="Edit">
+                                      <Edit className="h-4 w-4" />
+                                    </Button>
+                                    <Button variant="outline" size="sm" onClick={() => openExecuteDialog(config)} className="ml-2">
+                                      <RotateCcw className="h-4 w-4 mr-1" />
+                                      Re-execute
+                                    </Button>
+                                  </>
                                 )}
                               </div>
                             </div>
