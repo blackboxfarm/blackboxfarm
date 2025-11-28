@@ -322,10 +322,6 @@ export function AirdropManager() {
       toast.error("Please enter a valid amount");
       return;
     }
-    if (recipients.length === 0) {
-      toast.error("Please enter at least one valid recipient");
-      return;
-    }
 
     setLoading(true);
     try {
