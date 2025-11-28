@@ -1,6 +1,7 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2?target=deno";
 import { Connection, PublicKey } from "https://esm.sh/@solana/web3.js@1.95.3";
+import { TOKEN_PROGRAM_ID } from "https://esm.sh/@solana/spl-token@0.4.6";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -11,6 +12,12 @@ interface WalletBalance {
   pubkey: string;
   balance: number;
   lastUpdate: string;
+}
+
+interface TokenBalance {
+  mint: string;
+  balance: number;
+  decimals: number;
 }
 
 const logStep = (step: string, details?: any) => {
@@ -52,8 +59,30 @@ serve(async (req) => {
       
       try {
         const publicKey = new PublicKey(body.pubkey);
+        
+        // Get SOL balance
         const balance = await connection.getBalance(publicKey);
         const solBalance = balance / 1_000_000_000;
+
+        // Get all token accounts
+        const tokenAccounts = await connection.getParsedTokenAccountsByOwner(
+          publicKey,
+          { programId: TOKEN_PROGRAM_ID }
+        );
+
+        const tokens: TokenBalance[] = tokenAccounts.value
+          .map((account) => {
+            const parsed = account.account.data.parsed;
+            const info = parsed.info;
+            return {
+              mint: info.mint,
+              balance: parseFloat(info.tokenAmount.uiAmountString || "0"),
+              decimals: info.tokenAmount.decimals
+            };
+          })
+          .filter((t) => t.balance > 0); // Only include tokens with balance
+
+        logStep("Token accounts found", { count: tokens.length });
 
         // Update airdrop_wallets table
         const { error: updateError } = await supabaseServiceClient
@@ -65,12 +94,13 @@ serve(async (req) => {
           throw new Error(`Database update failed: ${updateError.message}`);
         }
 
-        logStep("Single wallet balance updated", { pubkey: body.pubkey.slice(0, 8) + "...", balance: solBalance });
+        logStep("Single wallet balance updated", { pubkey: body.pubkey.slice(0, 8) + "...", solBalance, tokenCount: tokens.length });
 
         return new Response(JSON.stringify({ 
           success: true,
           sol_balance: solBalance,
           lamports: balance,
+          tokens,
           timestamp: new Date().toISOString()
         }), {
           headers: { ...corsHeaders, "Content-Type": "application/json" },

@@ -52,6 +52,12 @@ interface AirdropDistribution {
   transaction_signatures: string[] | null;
 }
 
+interface TokenBalance {
+  mint: string;
+  balance: number;
+  decimals: number;
+}
+
 const MEMO_MAX_CHARS = 280;
 
 export function AirdropManager() {
@@ -87,6 +93,7 @@ export function AirdropManager() {
   const [executeDialogOpen, setExecuteDialogOpen] = useState(false);
   const [executeConfig, setExecuteConfig] = useState<AirdropConfig | null>(null);
   const [refreshingWallet, setRefreshingWallet] = useState<string | null>(null);
+  const [walletTokens, setWalletTokens] = useState<Record<string, TokenBalance[]>>({});
 
   const loadWallets = useCallback(async () => {
     const { data, error } = await supabase
@@ -194,13 +201,18 @@ export function AirdropManager() {
       if (data.error) throw new Error(data.error);
 
       const solBalance = data.sol_balance;
+      const tokens = data.tokens || [];
 
       // Update local state
       setWallets((prev) =>
         prev.map((w) => (w.id === walletId ? { ...w, sol_balance: solBalance } : w))
       );
 
-      toast.success(`Balance updated: ${solBalance.toFixed(4)} SOL`);
+      // Store token balances
+      setWalletTokens((prev) => ({ ...prev, [walletId]: tokens }));
+
+      const tokenCount = tokens.length;
+      toast.success(`Balance updated: ${solBalance.toFixed(4)} SOL${tokenCount > 0 ? ` + ${tokenCount} tokens` : ""}`);
     } catch (error: any) {
       toast.error(error.message || "Failed to refresh balance");
     } finally {
@@ -559,6 +571,33 @@ export function AirdropManager() {
               <CollapsibleContent>
                 <CardContent className="pt-0">
                   <div className="border-t pt-4">
+                    {/* Token Balances Section */}
+                    {walletTokens[wallet.id] && walletTokens[wallet.id].length > 0 && (
+                      <div className="mb-6">
+                        <h3 className="font-medium mb-3">Token Balances ({walletTokens[wallet.id].length})</h3>
+                        <div className="space-y-2 max-h-48 overflow-y-auto">
+                          {walletTokens[wallet.id].map((token) => (
+                            <div key={token.mint} className="flex items-center justify-between py-2 px-3 bg-muted/30 rounded-lg">
+                              <div className="flex items-center gap-2">
+                                <span className="font-mono text-sm">{token.mint.slice(0, 8)}...{token.mint.slice(-6)}</span>
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  className="h-6 w-6"
+                                  onClick={() => copyToClipboard(token.mint)}
+                                  title="Copy token address"
+                                >
+                                  <Copy className="h-3 w-3" />
+                                </Button>
+                              </div>
+                              <span className="font-mono font-medium">{token.balance.toLocaleString()}</span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Airdrop Configurations Section */}
                     <div className="flex items-center justify-between mb-4">
                       <h3 className="font-medium">Airdrop Configurations</h3>
                       {!wallet.is_archived && (
