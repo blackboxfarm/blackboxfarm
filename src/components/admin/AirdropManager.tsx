@@ -12,6 +12,7 @@ import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { Plus, Copy, Trash2, ChevronDown, ChevronRight, Lock, Unlock, Play, History, Edit, Archive, RotateCcw, RefreshCw } from "lucide-react";
 import { format } from "date-fns";
+import type { Json } from "@/integrations/supabase/types";
 
 interface AirdropWallet {
   id: string;
@@ -23,6 +24,11 @@ interface AirdropWallet {
   is_archived: boolean;
 }
 
+interface Recipient {
+  address: string;
+  label?: string;
+}
+
 interface AirdropConfig {
   id: string;
   wallet_id: string;
@@ -30,7 +36,7 @@ interface AirdropConfig {
   token_mint: string;
   amount_per_wallet: number;
   memo: string | null;
-  recipients: string[];
+  recipients: Recipient[];
   status: 'draft' | 'locked' | 'executed';
   execution_count: number;
   last_executed_at: string | null;
@@ -128,11 +134,24 @@ export function AirdropManager() {
       return;
     }
 
-    const mappedConfigs: AirdropConfig[] = (data || []).map((c) => ({
-      ...c,
-      status: c.status as 'draft' | 'locked' | 'executed',
-      recipients: Array.isArray(c.recipients) ? (c.recipients as string[]) : []
-    }));
+    const mappedConfigs: AirdropConfig[] = (data || []).map((c) => {
+      // Handle both old string[] format and new Recipient[] format
+      const rawRecipients = Array.isArray(c.recipients) ? c.recipients : [];
+      const recipients: Recipient[] = rawRecipients.map((r: unknown) => {
+        if (typeof r === 'string') {
+          return { address: r };
+        }
+        if (r && typeof r === 'object' && 'address' in r) {
+          return r as Recipient;
+        }
+        return { address: String(r) };
+      });
+      return {
+        ...c,
+        status: c.status as 'draft' | 'locked' | 'executed',
+        recipients
+      };
+    });
 
     setConfigs((prev) => ({
       ...prev,
@@ -239,12 +258,16 @@ export function AirdropManager() {
     setSelectedWalletId(walletId);
     if (config) {
       setEditingConfig(config);
+      // Format recipients with labels for display in textarea
+      const recipientsText = config.recipients
+        .map(r => r.label ? `${r.label}:${r.address}` : r.address)
+        .join("\n");
       setConfigForm({
         name: config.name,
         token_mint: config.token_mint,
         amount_per_wallet: config.amount_per_wallet.toString(),
         memo: config.memo || "",
-        recipients: config.recipients.join("\n")
+        recipients: recipientsText
       });
     } else {
       setEditingConfig(null);
@@ -259,13 +282,33 @@ export function AirdropManager() {
     setConfigDialogOpen(true);
   };
 
+  // Smart recipient parsing helper (reusable)
+  const parseRecipientsFromText = (input: string): Recipient[] => {
+    return input
+      .split(/[\n,]/)
+      .map((line) => line.trim())
+      .filter((line) => line.length > 0)
+      .map((line) => {
+        if (line.includes(':')) {
+          const parts = line.split(':').map(p => p.trim());
+          if (parts.length >= 2) {
+            const isAddress = (s: string) => s.length >= 32 && s.length <= 44 && /^[1-9A-HJ-NP-Za-km-z]+$/.test(s);
+            if (isAddress(parts[0])) {
+              return { address: parts[0], label: parts.slice(1).join(':').trim() || undefined };
+            } else if (isAddress(parts[1])) {
+              return { address: parts[1], label: parts[0] || undefined };
+            }
+          }
+        }
+        return { address: line, label: undefined };
+      })
+      .filter((r) => r.address.length >= 32 && r.address.length <= 44);
+  };
+
   const saveConfig = async () => {
     if (!selectedWalletId) return;
 
-    const recipients = configForm.recipients
-      .split(/[\n,]/)
-      .map((r) => r.trim())
-      .filter((r) => r.length >= 32 && r.length <= 44);
+    const recipients = parseRecipientsFromText(configForm.recipients);
 
     if (!configForm.name.trim()) {
       toast.error("Please enter a name");
@@ -294,7 +337,7 @@ export function AirdropManager() {
             token_mint: configForm.token_mint,
             amount_per_wallet: parseFloat(configForm.amount_per_wallet),
             memo: configForm.memo || null,
-            recipients: recipients
+            recipients: recipients as unknown as Json[]
           })
           .eq("id", editingConfig.id);
 
@@ -307,7 +350,7 @@ export function AirdropManager() {
           token_mint: configForm.token_mint,
           amount_per_wallet: parseFloat(configForm.amount_per_wallet),
           memo: configForm.memo || null,
-          recipients: recipients
+          recipients: recipients as unknown as Json[]
         });
 
         if (error) throw error;
@@ -350,13 +393,16 @@ export function AirdropManager() {
 
     setLoading(true);
     try {
+      // Extract just the addresses for the edge function
+      const recipientAddresses = executeConfig.recipients.map(r => r.address);
+      
       const { data, error } = await supabase.functions.invoke("execute-airdrop", {
         body: {
           wallet_id: executeConfig.wallet_id,
           config_id: executeConfig.id,
           token_mint: executeConfig.token_mint,
           amount_per_wallet: executeConfig.amount_per_wallet,
-          recipients: executeConfig.recipients,
+          recipients: recipientAddresses,
           memo: executeConfig.memo
         }
       });
@@ -477,9 +523,9 @@ export function AirdropManager() {
     }
   };
 
-  const parsedRecipientCount = configForm.recipients
-    .split(/[\n,]/)
-    .filter((r) => r.trim().length >= 32).length;
+  const parsedRecipients = parseRecipientsFromText(configForm.recipients);
+  const parsedRecipientCount = parsedRecipients.length;
+  const labeledRecipientCount = parsedRecipients.filter(r => r.label).length;
 
   return (
     <div className="space-y-6">
@@ -793,11 +839,14 @@ export function AirdropManager() {
             <div>
               <Label>
                 Recipient Wallet Addresses <Badge variant="secondary">{parsedRecipientCount} detected</Badge>
+                {labeledRecipientCount > 0 && (
+                  <Badge variant="outline" className="ml-2">{labeledRecipientCount} labeled</Badge>
+                )}
               </Label>
               <Textarea
                 value={configForm.recipients}
                 onChange={(e) => setConfigForm((prev) => ({ ...prev, recipients: e.target.value }))}
-                placeholder="Paste wallet addresses (one per line or comma-separated)"
+                placeholder={"Paste wallet addresses (one per line or comma-separated)\n\nSupported formats:\nABC123...xyz (address only)\nMyLabel:ABC123...xyz (label:address)\nABC123...xyz:MyLabel (address:label)"}
                 rows={8}
                 className="font-mono text-sm"
               />
