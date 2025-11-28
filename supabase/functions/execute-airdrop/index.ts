@@ -16,7 +16,7 @@ import {
   TOKEN_PROGRAM_ID,
   ASSOCIATED_TOKEN_PROGRAM_ID
 } from "https://esm.sh/@solana/spl-token@0.4.9";
-import { decode as bs58Decode } from "https://esm.sh/bs58@6.0.0";
+import bs58 from "https://esm.sh/bs58@5.0.0";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -199,7 +199,7 @@ serve(async (req) => {
     let senderKeypair: Keypair;
     try {
       // Try as base58 first
-      const secretKeyBytes = bs58Decode(secretKeyString);
+      const secretKeyBytes = bs58.decode(secretKeyString);
       senderKeypair = Keypair.fromSecretKey(secretKeyBytes);
     } catch {
       try {
