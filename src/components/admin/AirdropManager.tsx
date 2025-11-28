@@ -10,7 +10,7 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
-import { Plus, Copy, Trash2, ChevronDown, ChevronRight, Lock, Unlock, Play, History, Edit, Archive, RotateCcw } from "lucide-react";
+import { Plus, Copy, Trash2, ChevronDown, ChevronRight, Lock, Unlock, Play, History, Edit, Archive, RotateCcw, RefreshCw } from "lucide-react";
 import { format } from "date-fns";
 
 interface AirdropWallet {
@@ -86,6 +86,7 @@ export function AirdropManager() {
 
   const [executeDialogOpen, setExecuteDialogOpen] = useState(false);
   const [executeConfig, setExecuteConfig] = useState<AirdropConfig | null>(null);
+  const [refreshingWallet, setRefreshingWallet] = useState<string | null>(null);
 
   const loadWallets = useCallback(async () => {
     const { data, error } = await supabase
@@ -179,6 +180,50 @@ export function AirdropManager() {
       toast.error(error.message || "Failed to create wallet");
     } finally {
       setLoading(false);
+    }
+  };
+
+  const refreshWalletBalance = async (walletId: string, pubkey: string) => {
+    setRefreshingWallet(walletId);
+    try {
+      // Fetch balance from Solana mainnet RPC
+      const response = await fetch("https://api.mainnet-beta.solana.com", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          jsonrpc: "2.0",
+          id: 1,
+          method: "getBalance",
+          params: [pubkey]
+        })
+      });
+
+      const result = await response.json();
+      
+      if (result.error) {
+        throw new Error(result.error.message || "Failed to fetch balance");
+      }
+
+      const solBalance = (result.result?.value || 0) / 1_000_000_000; // Convert lamports to SOL
+
+      // Update database
+      const { error } = await supabase
+        .from("airdrop_wallets")
+        .update({ sol_balance: solBalance })
+        .eq("id", walletId);
+
+      if (error) throw error;
+
+      // Update local state
+      setWallets((prev) =>
+        prev.map((w) => (w.id === walletId ? { ...w, sol_balance: solBalance } : w))
+      );
+
+      toast.success(`Balance updated: ${solBalance.toFixed(4)} SOL`);
+    } catch (error: any) {
+      toast.error(error.message || "Failed to refresh balance");
+    } finally {
+      setRefreshingWallet(null);
     }
   };
 
@@ -492,9 +537,24 @@ export function AirdropManager() {
                     </div>
                   </CollapsibleTrigger>
                   <div className="flex items-center gap-4">
-                    <div className="text-right">
-                      <div className="text-sm text-muted-foreground">SOL Balance</div>
-                      <div className="font-mono font-medium">{(wallet.sol_balance || 0).toFixed(4)} SOL</div>
+                    <div className="flex items-center gap-2">
+                      <div className="text-right">
+                        <div className="text-sm text-muted-foreground">SOL Balance</div>
+                        <div className="font-mono font-medium">{(wallet.sol_balance || 0).toFixed(4)} SOL</div>
+                      </div>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-8 w-8"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          refreshWalletBalance(wallet.id, wallet.pubkey);
+                        }}
+                        disabled={refreshingWallet === wallet.id}
+                        title="Refresh balance"
+                      >
+                        <RefreshCw className={`h-4 w-4 ${refreshingWallet === wallet.id ? "animate-spin" : ""}`} />
+                      </Button>
                     </div>
                     {wallet.is_archived ? (
                       <Button variant="outline" size="icon" onClick={() => restoreWallet(wallet.id)} title="Restore wallet">
