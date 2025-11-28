@@ -532,11 +532,19 @@ export function AirdropManager() {
                     </div>
                   </CollapsibleTrigger>
                   <div className="flex items-center gap-4">
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-4">
                       <div className="text-right">
                         <div className="text-sm text-muted-foreground">SOL Balance</div>
                         <div className="font-mono font-medium">{(wallet.sol_balance || 0).toFixed(4)} SOL</div>
                       </div>
+                      {walletTokens[wallet.id] && walletTokens[wallet.id].length > 0 && (
+                        <div className="text-right">
+                          <div className="text-sm text-muted-foreground">Tokens</div>
+                          <Badge variant="secondary" className="font-mono">
+                            {walletTokens[wallet.id].length} token{walletTokens[wallet.id].length > 1 ? 's' : ''}
+                          </Badge>
+                        </div>
+                      )}
                       <Button
                         variant="ghost"
                         size="icon"
