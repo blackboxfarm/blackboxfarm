@@ -23,57 +23,71 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
-// Decrypt wallet secret - handles both simple base64 and AES-GCM encryption
+// Decrypt wallet secret - handles raw base58, base64, and AES-GCM encryption
 async function decryptWalletSecret(encryptedSecret: string): Promise<string> {
+  // Base58 valid characters (no 0, O, I, l)
+  const isBase58 = /^[1-9A-HJ-NP-Za-km-z]+$/.test(encryptedSecret);
+  
+  // Check if it's already a raw base58 private key (Solana private keys are 87-88 chars in base58)
+  if (isBase58 && encryptedSecret.length >= 80 && encryptedSecret.length <= 90) {
+    console.log('Secret appears to be raw base58 private key');
+    return encryptedSecret;
+  }
+  
+  // Check if it's a JSON array (raw secret key bytes)
+  if (encryptedSecret.startsWith('[') && encryptedSecret.endsWith(']')) {
+    console.log('Secret is JSON array format');
+    return encryptedSecret;
+  }
+
   try {
-    // First, try simple base64 decoding (matches encrypt_wallet_secret SQL function)
+    // Try simple base64 decoding
     const decoded = atob(encryptedSecret);
     
-    // If it decodes to a valid secret key format (base58 or JSON array), return it
-    // Base58 chars are alphanumeric without 0, O, I, l
-    const isBase58 = /^[1-9A-HJ-NP-Za-km-z]+$/.test(decoded);
-    const isJsonArray = decoded.startsWith('[') && decoded.endsWith(']');
+    // Check if decoded value is valid
+    const decodedIsBase58 = /^[1-9A-HJ-NP-Za-km-z]+$/.test(decoded);
+    const decodedIsJsonArray = decoded.startsWith('[') && decoded.endsWith(']');
     
-    if (isBase58 || isJsonArray) {
+    if (decodedIsBase58 || decodedIsJsonArray) {
       console.log('Decrypted using simple base64');
       return decoded;
     }
     
-    // If simple base64 didn't produce a valid format, try AES-GCM
+    // Try AES-GCM decryption
     const keyString = Deno.env.get('ENCRYPTION_KEY');
-    if (!keyString) {
-      // No encryption key, return the base64 decoded value as fallback
-      return decoded;
+    if (keyString) {
+      const keyBytes = new TextEncoder().encode(keyString.padEnd(32, '0').slice(0, 32));
+      const encryptionKey = await crypto.subtle.importKey(
+        'raw',
+        keyBytes,
+        { name: 'AES-GCM' },
+        false,
+        ['decrypt']
+      );
+
+      const combined = new Uint8Array(
+        atob(encryptedSecret).split('').map(char => char.charCodeAt(0))
+      );
+
+      const iv = combined.slice(0, 12);
+      const encrypted = combined.slice(12);
+
+      const decrypted = await crypto.subtle.decrypt(
+        { name: 'AES-GCM', iv },
+        encryptionKey,
+        encrypted
+      );
+
+      console.log('Decrypted using AES-GCM');
+      return new TextDecoder().decode(decrypted);
     }
-
-    const keyBytes = new TextEncoder().encode(keyString.padEnd(32, '0').slice(0, 32));
-    const encryptionKey = await crypto.subtle.importKey(
-      'raw',
-      keyBytes,
-      { name: 'AES-GCM' },
-      false,
-      ['decrypt']
-    );
-
-    const combined = new Uint8Array(
-      atob(encryptedSecret).split('').map(char => char.charCodeAt(0))
-    );
-
-    const iv = combined.slice(0, 12);
-    const encrypted = combined.slice(12);
-
-    const decrypted = await crypto.subtle.decrypt(
-      { name: 'AES-GCM', iv },
-      encryptionKey,
-      encrypted
-    );
-
-    console.log('Decrypted using AES-GCM');
-    return new TextDecoder().decode(decrypted);
+    
+    // Return base64 decoded as fallback
+    return decoded;
   } catch (error) {
-    console.error('Decryption error, trying plain base64:', error);
-    // Last resort: return base64 decoded value
-    return atob(encryptedSecret);
+    console.error('Decryption error:', error);
+    // If all else fails, return the original value (might be raw base58)
+    return encryptedSecret;
   }
 }
 
