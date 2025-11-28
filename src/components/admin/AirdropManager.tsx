@@ -10,7 +10,7 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
-import { Plus, Copy, Trash2, ChevronDown, ChevronRight, Lock, Unlock, Play, History, Edit, Archive, RotateCcw, RefreshCw } from "lucide-react";
+import { Plus, Copy, Trash2, ChevronDown, ChevronRight, Lock, Unlock, Play, History, Edit, Archive, RotateCcw, RefreshCw, ExternalLink } from "lucide-react";
 import { format } from "date-fns";
 import type { Json } from "@/integrations/supabase/types";
 
@@ -102,6 +102,7 @@ export function AirdropManager() {
   const [executeConfig, setExecuteConfig] = useState<AirdropConfig | null>(null);
   const [refreshingWallet, setRefreshingWallet] = useState<string | null>(null);
   const [walletTokens, setWalletTokens] = useState<Record<string, TokenBalance[]>>({});
+  const [tokenNames, setTokenNames] = useState<Record<string, string>>({});
 
   const loadWallets = useCallback(async () => {
     const { data, error } = await supabase
@@ -181,6 +182,24 @@ export function AirdropManager() {
       [configId]: mappedDists
     }));
   }, []);
+
+  // Fetch token name/symbol from metadata
+  const fetchTokenName = useCallback(async (tokenMint: string) => {
+    if (tokenNames[tokenMint]) return; // Already cached
+    
+    try {
+      const { data, error } = await supabase.functions.invoke("token-metadata", {
+        body: { mint: tokenMint }
+      });
+      
+      if (!error && data) {
+        const name = data.name || data.symbol || tokenMint.slice(0, 8);
+        setTokenNames(prev => ({ ...prev, [tokenMint]: name }));
+      }
+    } catch (e) {
+      console.log("Failed to fetch token name:", e);
+    }
+  }, [tokenNames]);
 
   useEffect(() => {
     loadWallets();
@@ -684,7 +703,22 @@ export function AirdropManager() {
                                   )}
                                 </div>
                                 <div className="text-sm text-muted-foreground space-y-0.5">
-                                  <div className="font-mono">Token: {config.token_mint.slice(0, 8)}...{config.token_mint.slice(-6)}</div>
+                                  <div className="font-mono flex items-center gap-2">
+                                    Token: {tokenNames[config.token_mint] && (
+                                      <span className="text-foreground font-semibold">{tokenNames[config.token_mint]}</span>
+                                    )}
+                                    <span className="text-xs opacity-70">({config.token_mint.slice(0, 8)}...{config.token_mint.slice(-6)})</span>
+                                    {!tokenNames[config.token_mint] && (
+                                      <Button 
+                                        variant="ghost" 
+                                        size="sm" 
+                                        className="h-5 px-2 text-xs"
+                                        onClick={() => fetchTokenName(config.token_mint)}
+                                      >
+                                        Load name
+                                      </Button>
+                                    )}
+                                  </div>
                                   <div>{config.amount_per_wallet.toLocaleString()} tokens → {config.recipients.length} recipients</div>
                                   {config.memo && <div className="italic">Memo: {config.memo}</div>}
                                   {config.last_executed_at && (
@@ -922,7 +956,7 @@ export function AirdropManager() {
               <p className="text-muted-foreground text-center py-4">No execution history</p>
             ) : (
               (distributions[historyConfigId || ""] || []).map((dist) => (
-                <div key={dist.id} className="border rounded-lg p-3 space-y-1">
+                <div key={dist.id} className="border rounded-lg p-3 space-y-2">
                   <div className="flex items-center justify-between">
                     <span className="font-medium">{format(new Date(dist.created_at), "MMM d, yyyy HH:mm")}</span>
                     <Badge variant={dist.status === "completed" ? "default" : "destructive"}>{dist.status}</Badge>
@@ -930,9 +964,30 @@ export function AirdropManager() {
                   <div className="text-sm text-muted-foreground">
                     {dist.recipient_count} recipients • {dist.amount_per_wallet.toLocaleString()} tokens each
                   </div>
-                  {dist.transaction_signatures && (
-                    <div className="text-xs text-muted-foreground">
-                      {(dist.transaction_signatures as string[]).length} transaction(s)
+                  {dist.transaction_signatures && dist.transaction_signatures.length > 0 && (
+                    <div className="space-y-1">
+                      <div className="text-xs text-muted-foreground font-medium">
+                        {dist.transaction_signatures.length} transaction(s):
+                      </div>
+                      <div className="flex flex-wrap gap-1">
+                        {(dist.transaction_signatures as string[]).slice(0, 5).map((sig, idx) => (
+                          <a
+                            key={sig}
+                            href={`https://solscan.io/tx/${sig}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="inline-flex items-center gap-1 text-xs font-mono bg-muted px-2 py-1 rounded hover:bg-primary/20 transition-colors"
+                          >
+                            TX {idx + 1}: {sig.slice(0, 8)}...
+                            <ExternalLink className="h-3 w-3" />
+                          </a>
+                        ))}
+                        {dist.transaction_signatures.length > 5 && (
+                          <span className="text-xs text-muted-foreground px-2 py-1">
+                            +{dist.transaction_signatures.length - 5} more
+                          </span>
+                        )}
+                      </div>
                     </div>
                   )}
                 </div>
