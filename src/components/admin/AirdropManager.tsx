@@ -970,7 +970,7 @@ export function AirdropManager() {
                   {dist.transaction_signatures && dist.transaction_signatures.length > 0 && (
                     <div className="space-y-1">
                       <div className="text-xs text-muted-foreground font-medium">
-                        {dist.transaction_signatures.length} transaction(s):
+                        {dist.transaction_signatures.length} batched transaction(s) <span className="opacity-70">(5 recipients per tx)</span>:
                       </div>
                       <div className="flex flex-wrap gap-1">
                         {(dist.transaction_signatures as string[]).slice(0, 5).map((sig, idx) => (
