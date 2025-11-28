@@ -56,6 +56,8 @@ interface TokenBalance {
   mint: string;
   balance: number;
   decimals: number;
+  symbol?: string | null;
+  name?: string | null;
 }
 
 const MEMO_MAX_CHARS = 280;
@@ -579,7 +581,10 @@ export function AirdropManager() {
                           {walletTokens[wallet.id].map((token) => (
                             <div key={token.mint} className="flex items-center justify-between py-2 px-3 bg-muted/30 rounded-lg">
                               <div className="flex items-center gap-2">
-                                <span className="font-mono text-sm">{token.mint.slice(0, 8)}...{token.mint.slice(-6)}</span>
+                                <div className="flex flex-col">
+                                  {token.symbol && <span className="font-medium text-sm">{token.symbol}</span>}
+                                  <span className="font-mono text-xs text-muted-foreground">{token.mint.slice(0, 8)}...{token.mint.slice(-6)}</span>
+                                </div>
                                 <Button
                                   variant="ghost"
                                   size="icon"
@@ -594,6 +599,11 @@ export function AirdropManager() {
                             </div>
                           ))}
                         </div>
+                      </div>
+                    )}
+                    {walletTokens[wallet.id] && walletTokens[wallet.id].length === 0 && (
+                      <div className="mb-6 text-sm text-muted-foreground">
+                        No SPL tokens found. Click refresh to check for tokens.
                       </div>
                     )}
 
