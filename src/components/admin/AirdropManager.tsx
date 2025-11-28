@@ -967,6 +967,11 @@ export function AirdropManager() {
                   <div className="text-sm text-muted-foreground">
                     {dist.recipient_count} recipients • {dist.amount_per_wallet.toLocaleString()} tokens each
                   </div>
+                  {dist.memo && (
+                    <div className="text-xs bg-muted/50 rounded px-2 py-1 font-mono break-all">
+                      📝 Memo: {dist.memo}
+                    </div>
+                  )}
                   {dist.transaction_signatures && dist.transaction_signatures.length > 0 && (
                     <div className="space-y-1">
                       <div className="text-xs text-muted-foreground font-medium">
