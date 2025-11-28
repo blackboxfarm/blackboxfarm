@@ -23,39 +23,58 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
-// Decrypt wallet secret using AES-256-GCM (matches SecureStorage from _shared/encryption.ts)
+// Decrypt wallet secret - handles both simple base64 and AES-GCM encryption
 async function decryptWalletSecret(encryptedSecret: string): Promise<string> {
-  const keyString = Deno.env.get('ENCRYPTION_KEY');
-  if (!keyString) {
-    throw new Error('ENCRYPTION_KEY environment variable not set');
+  try {
+    // First, try simple base64 decoding (matches encrypt_wallet_secret SQL function)
+    const decoded = atob(encryptedSecret);
+    
+    // If it decodes to a valid secret key format (base58 or JSON array), return it
+    // Base58 chars are alphanumeric without 0, O, I, l
+    const isBase58 = /^[1-9A-HJ-NP-Za-km-z]+$/.test(decoded);
+    const isJsonArray = decoded.startsWith('[') && decoded.endsWith(']');
+    
+    if (isBase58 || isJsonArray) {
+      console.log('Decrypted using simple base64');
+      return decoded;
+    }
+    
+    // If simple base64 didn't produce a valid format, try AES-GCM
+    const keyString = Deno.env.get('ENCRYPTION_KEY');
+    if (!keyString) {
+      // No encryption key, return the base64 decoded value as fallback
+      return decoded;
+    }
+
+    const keyBytes = new TextEncoder().encode(keyString.padEnd(32, '0').slice(0, 32));
+    const encryptionKey = await crypto.subtle.importKey(
+      'raw',
+      keyBytes,
+      { name: 'AES-GCM' },
+      false,
+      ['decrypt']
+    );
+
+    const combined = new Uint8Array(
+      atob(encryptedSecret).split('').map(char => char.charCodeAt(0))
+    );
+
+    const iv = combined.slice(0, 12);
+    const encrypted = combined.slice(12);
+
+    const decrypted = await crypto.subtle.decrypt(
+      { name: 'AES-GCM', iv },
+      encryptionKey,
+      encrypted
+    );
+
+    console.log('Decrypted using AES-GCM');
+    return new TextDecoder().decode(decrypted);
+  } catch (error) {
+    console.error('Decryption error, trying plain base64:', error);
+    // Last resort: return base64 decoded value
+    return atob(encryptedSecret);
   }
-
-  // Convert the key string to a proper crypto key
-  const keyBytes = new TextEncoder().encode(keyString.padEnd(32, '0').slice(0, 32));
-  const encryptionKey = await crypto.subtle.importKey(
-    'raw',
-    keyBytes,
-    { name: 'AES-GCM' },
-    false,
-    ['decrypt']
-  );
-
-  // Decode from base64
-  const combined = new Uint8Array(
-    atob(encryptedSecret).split('').map(char => char.charCodeAt(0))
-  );
-
-  // Extract IV and encrypted data
-  const iv = combined.slice(0, 12);
-  const encrypted = combined.slice(12);
-
-  const decrypted = await crypto.subtle.decrypt(
-    { name: 'AES-GCM', iv },
-    encryptionKey,
-    encrypted
-  );
-
-  return new TextDecoder().decode(decrypted);
 }
 
 // Create memo instruction
