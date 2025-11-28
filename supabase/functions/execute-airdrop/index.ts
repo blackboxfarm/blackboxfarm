@@ -259,24 +259,53 @@ serve(async (req) => {
     const tokenMintPubkey = new PublicKey(token_mint);
     const senderPubkey = senderKeypair.publicKey;
 
-    // Get sender's token account
-    const senderTokenAccount = await getAssociatedTokenAddress(
-      tokenMintPubkey,
-      senderPubkey
-    );
+    // Get ALL token accounts for this wallet and mint (not just ATA)
+    console.log(`Looking for token accounts for wallet ${senderPubkey.toBase58()} and mint ${token_mint}`);
+    
+    const tokenAccounts = await connection.getTokenAccountsByOwner(senderPubkey, {
+      mint: tokenMintPubkey,
+    });
 
-    // Verify sender has enough tokens
-    let senderTokenInfo;
-    try {
-      senderTokenInfo = await getAccount(connection, senderTokenAccount);
-    } catch (error) {
-      console.error('Sender token account not found');
+    console.log(`Found ${tokenAccounts.value.length} token accounts for this mint`);
+
+    if (tokenAccounts.value.length === 0) {
+      console.error('No token accounts found for this mint');
       await supabaseAdmin
         .from('airdrop_distributions')
         .update({ status: 'failed' })
         .eq('id', distribution.id);
-      throw new Error('Sender does not have a token account for this mint');
+      throw new Error('Sender does not have any token account for this mint');
     }
+
+    // Use the first token account that has tokens (or the ATA if it exists)
+    let senderTokenAccount: PublicKey | null = null;
+    let senderTokenBalance = BigInt(0);
+
+    for (const { pubkey, account } of tokenAccounts.value) {
+      const accountData = account.data;
+      // Parse SPL token account data - balance is at offset 64, 8 bytes (u64)
+      const balance = BigInt(new DataView(accountData.buffer, accountData.byteOffset + 64, 8).getBigUint64(0, true));
+      console.log(`Token account ${pubkey.toBase58()} has balance: ${balance}`);
+      
+      if (balance > senderTokenBalance) {
+        senderTokenAccount = pubkey;
+        senderTokenBalance = balance;
+      }
+    }
+
+    if (!senderTokenAccount || senderTokenBalance === BigInt(0)) {
+      console.error('No token account with balance found');
+      await supabaseAdmin
+        .from('airdrop_distributions')
+        .update({ status: 'failed' })
+        .eq('id', distribution.id);
+      throw new Error('Sender token accounts have zero balance');
+    }
+
+    console.log(`Using token account ${senderTokenAccount.toBase58()} with balance ${senderTokenBalance}`);
+
+    // Get sender token account info for verification
+    const senderTokenInfo = await getAccount(connection, senderTokenAccount);
 
     // Get token decimals from mint
     const mintInfo = await connection.getParsedAccountInfo(tokenMintPubkey);
