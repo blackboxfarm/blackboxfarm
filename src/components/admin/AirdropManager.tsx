@@ -186,33 +186,14 @@ export function AirdropManager() {
   const refreshWalletBalance = async (walletId: string, pubkey: string) => {
     setRefreshingWallet(walletId);
     try {
-      // Fetch balance from Solana mainnet RPC
-      const response = await fetch("https://api.mainnet-beta.solana.com", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          jsonrpc: "2.0",
-          id: 1,
-          method: "getBalance",
-          params: [pubkey]
-        })
+      const { data, error } = await supabase.functions.invoke("refresh-wallet-balances", {
+        body: { wallet_id: walletId, pubkey }
       });
 
-      const result = await response.json();
-      
-      if (result.error) {
-        throw new Error(result.error.message || "Failed to fetch balance");
-      }
-
-      const solBalance = (result.result?.value || 0) / 1_000_000_000; // Convert lamports to SOL
-
-      // Update database
-      const { error } = await supabase
-        .from("airdrop_wallets")
-        .update({ sol_balance: solBalance })
-        .eq("id", walletId);
-
       if (error) throw error;
+      if (data.error) throw new Error(data.error);
+
+      const solBalance = data.sol_balance;
 
       // Update local state
       setWallets((prev) =>

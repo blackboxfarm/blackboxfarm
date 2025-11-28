@@ -24,17 +24,67 @@ serve(async (req) => {
   }
 
   try {
-    logStep("Starting wallet balance refresh");
-
     const supabaseServiceClient = createClient(
       Deno.env.get("SUPABASE_URL") ?? "",
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "",
       { auth: { persistSession: false } }
     );
 
-    const rpcUrl = Deno.env.get("SOLANA_RPC_URL") || "https://api.mainnet-beta.solana.com";
+    // Use Helius if available, otherwise fallback to public RPC
+    const heliusKey = Deno.env.get("HELIUS_API_KEY");
+    const rpcUrl = heliusKey 
+      ? `https://mainnet.helius-rpc.com/?api-key=${heliusKey}`
+      : (Deno.env.get("SOLANA_RPC_URL") || "https://api.mainnet-beta.solana.com");
     const connection = new Connection(rpcUrl, { commitment: "confirmed" });
-    logStep("Connected to Solana RPC", { rpcUrl });
+    logStep("Connected to Solana RPC", { hasHelius: !!heliusKey });
+
+    // Check if this is a single wallet refresh request
+    let body: any = {};
+    try {
+      body = await req.json();
+    } catch {
+      // No body provided, proceed with bulk refresh
+    }
+
+    // Single wallet refresh mode
+    if (body.wallet_id && body.pubkey) {
+      logStep("Single wallet refresh", { pubkey: body.pubkey.slice(0, 8) + "..." });
+      
+      try {
+        const publicKey = new PublicKey(body.pubkey);
+        const balance = await connection.getBalance(publicKey);
+        const solBalance = balance / 1_000_000_000;
+
+        // Update airdrop_wallets table
+        const { error: updateError } = await supabaseServiceClient
+          .from("airdrop_wallets")
+          .update({ sol_balance: solBalance })
+          .eq("id", body.wallet_id);
+
+        if (updateError) {
+          throw new Error(`Database update failed: ${updateError.message}`);
+        }
+
+        logStep("Single wallet balance updated", { pubkey: body.pubkey.slice(0, 8) + "...", balance: solBalance });
+
+        return new Response(JSON.stringify({ 
+          success: true,
+          sol_balance: solBalance,
+          lamports: balance,
+          timestamp: new Date().toISOString()
+        }), {
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+          status: 200,
+        });
+      } catch (error) {
+        const errorMsg = error instanceof Error ? error.message : String(error);
+        logStep("Single wallet refresh failed", { error: errorMsg });
+        throw new Error(errorMsg);
+      }
+    }
+
+    // Bulk refresh mode (original functionality)
+    logStep("Starting bulk wallet balance refresh");
 
     // Get all active wallets from different pools
     const { data: walletPools, error: poolError } = await supabaseServiceClient
