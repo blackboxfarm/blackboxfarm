@@ -12,10 +12,12 @@ import {
   createTransferInstruction,
   getAssociatedTokenAddress,
   createAssociatedTokenAccountInstruction,
-  getAccount,
   TOKEN_PROGRAM_ID,
   ASSOCIATED_TOKEN_PROGRAM_ID
 } from "https://esm.sh/@solana/spl-token@0.4.9";
+
+// Token-2022 program ID
+const TOKEN_2022_PROGRAM_ID = new PublicKey('TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb');
 import bs58 from "https://esm.sh/bs58@5.0.0";
 
 const corsHeaders = {
@@ -304,23 +306,29 @@ serve(async (req) => {
 
     console.log(`Using token account ${senderTokenAccount.toBase58()} with balance ${senderTokenBalance}`);
 
-    // Get sender token account info for verification
-    const senderTokenInfo = await getAccount(connection, senderTokenAccount);
-
-    // Get token decimals from mint
+    // Get token decimals from mint and detect token program
     const mintInfo = await connection.getParsedAccountInfo(tokenMintPubkey);
-    const decimals = (mintInfo.value?.data as any)?.parsed?.info?.decimals || 9;
+    const decimals = (mintInfo.value?.data as any)?.parsed?.info?.decimals || 6;
+    
+    // Detect which token program owns this mint (SPL Token or Token-2022)
+    const mintOwner = mintInfo.value?.owner;
+    const isToken2022 = mintOwner?.equals(TOKEN_2022_PROGRAM_ID) || false;
+    const tokenProgramId = isToken2022 ? TOKEN_2022_PROGRAM_ID : TOKEN_PROGRAM_ID;
+    
+    console.log(`Token decimals: ${decimals}, Program: ${isToken2022 ? 'Token-2022' : 'SPL Token'}`);
     
     const amountInSmallestUnit = BigInt(Math.floor(amount_per_wallet * Math.pow(10, decimals)));
     const totalRequired = amountInSmallestUnit * BigInt(validRecipients.length);
 
-    if (senderTokenInfo.amount < totalRequired) {
-      console.error(`Insufficient tokens. Have: ${senderTokenInfo.amount}, Need: ${totalRequired}`);
+    console.log(`Amount per wallet: ${amountInSmallestUnit}, Total required: ${totalRequired}, Have: ${senderTokenBalance}`);
+
+    if (senderTokenBalance < totalRequired) {
+      console.error(`Insufficient tokens. Have: ${senderTokenBalance}, Need: ${totalRequired}`);
       await supabaseAdmin
         .from('airdrop_distributions')
         .update({ status: 'failed' })
         .eq('id', distribution.id);
-      throw new Error(`Insufficient token balance. Have: ${Number(senderTokenInfo.amount) / Math.pow(10, decimals)}, Need: ${amount_per_wallet * validRecipients.length}`);
+      throw new Error(`Insufficient token balance. Have: ${Number(senderTokenBalance) / Math.pow(10, decimals)}, Need: ${amount_per_wallet * validRecipients.length}`);
     }
 
     // Batch recipients (max 5 per transaction for safety)
@@ -350,18 +358,23 @@ serve(async (req) => {
 
         for (const recipientAddress of batch) {
           const recipientPubkey = new PublicKey(recipientAddress);
+          
+          // Get ATA with correct program ID
           const recipientTokenAccount = await getAssociatedTokenAddress(
             tokenMintPubkey,
-            recipientPubkey
+            recipientPubkey,
+            false, // allowOwnerOffCurve
+            tokenProgramId,
+            ASSOCIATED_TOKEN_PROGRAM_ID
           );
 
-          // Check if recipient token account exists
+          // Check if recipient token account exists using getAccountInfo (works for both programs)
           let accountExists = false;
           try {
-            await getAccount(connection, recipientTokenAccount);
-            accountExists = true;
+            const accountInfo = await connection.getAccountInfo(recipientTokenAccount);
+            accountExists = accountInfo !== null;
           } catch {
-            // Account doesn't exist, will create it
+            // Account doesn't exist
           }
 
           // Create associated token account if needed
@@ -372,7 +385,7 @@ serve(async (req) => {
                 recipientTokenAccount,
                 recipientPubkey,
                 tokenMintPubkey,
-                TOKEN_PROGRAM_ID,
+                tokenProgramId,
                 ASSOCIATED_TOKEN_PROGRAM_ID
               )
             );
@@ -386,7 +399,7 @@ serve(async (req) => {
               senderPubkey,
               amountInSmallestUnit,
               [],
-              TOKEN_PROGRAM_ID
+              tokenProgramId
             )
           );
         }
