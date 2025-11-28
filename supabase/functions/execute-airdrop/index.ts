@@ -23,48 +23,39 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
-// Decrypt wallet secret (base64 encoded)
+// Decrypt wallet secret using AES-256-GCM (matches SecureStorage from _shared/encryption.ts)
 async function decryptWalletSecret(encryptedSecret: string): Promise<string> {
-  try {
-    // Check if it's AES-GCM encrypted (longer base64) or simple base64
-    const decoded = atob(encryptedSecret);
-    
-    // If it's longer than 64 chars, it's likely AES-GCM encrypted
-    if (decoded.length > 64) {
-      const keyString = Deno.env.get('ENCRYPTION_KEY');
-      if (!keyString) {
-        throw new Error('ENCRYPTION_KEY not set');
-      }
-      
-      const keyBytes = new TextEncoder().encode(keyString.padEnd(32, '0').slice(0, 32));
-      const encryptionKey = await crypto.subtle.importKey(
-        'raw',
-        keyBytes,
-        { name: 'AES-GCM' },
-        false,
-        ['decrypt']
-      );
-      
-      const combined = new Uint8Array(decoded.split('').map(char => char.charCodeAt(0)));
-      const iv = combined.slice(0, 12);
-      const encrypted = combined.slice(12);
-      
-      const decrypted = await crypto.subtle.decrypt(
-        { name: 'AES-GCM', iv },
-        encryptionKey,
-        encrypted
-      );
-      
-      return new TextDecoder().decode(decrypted);
-    }
-    
-    // Simple base64 encoded
-    return decoded;
-  } catch (error) {
-    console.error('Decryption error:', error);
-    // Try as plain base64
-    return atob(encryptedSecret);
+  const keyString = Deno.env.get('ENCRYPTION_KEY');
+  if (!keyString) {
+    throw new Error('ENCRYPTION_KEY environment variable not set');
   }
+
+  // Convert the key string to a proper crypto key
+  const keyBytes = new TextEncoder().encode(keyString.padEnd(32, '0').slice(0, 32));
+  const encryptionKey = await crypto.subtle.importKey(
+    'raw',
+    keyBytes,
+    { name: 'AES-GCM' },
+    false,
+    ['decrypt']
+  );
+
+  // Decode from base64
+  const combined = new Uint8Array(
+    atob(encryptedSecret).split('').map(char => char.charCodeAt(0))
+  );
+
+  // Extract IV and encrypted data
+  const iv = combined.slice(0, 12);
+  const encrypted = combined.slice(12);
+
+  const decrypted = await crypto.subtle.decrypt(
+    { name: 'AES-GCM', iv },
+    encryptionKey,
+    encrypted
+  );
+
+  return new TextDecoder().decode(decrypted);
 }
 
 // Create memo instruction
