@@ -69,8 +69,44 @@ serve(async (req) => {
 
         let tokens: TokenBalance[] = [];
 
-        // Try Helius DAS API first if available (more reliable)
-        if (heliusKey) {
+        // Use Solscan API for token portfolio (most reliable)
+        try {
+          logStep("Fetching tokens from Solscan API");
+          const solscanResponse = await fetch(
+            `https://api.solscan.io/v2/account/tokens?address=${body.pubkey}&page=1&page_size=50`,
+            {
+              headers: {
+                'Accept': 'application/json',
+                'User-Agent': 'Mozilla/5.0'
+              }
+            }
+          );
+          
+          if (solscanResponse.ok) {
+            const solscanData = await solscanResponse.json();
+            logStep("Solscan API response", { success: solscanData.success, dataLength: solscanData.data?.length });
+            
+            if (solscanData.success && solscanData.data) {
+              tokens = solscanData.data
+                .filter((item: any) => item.amount > 0)
+                .map((item: any) => ({
+                  mint: item.tokenAddress,
+                  balance: item.amount / Math.pow(10, item.decimals || 0),
+                  decimals: item.decimals || 0,
+                  symbol: item.tokenSymbol || null,
+                  name: item.tokenName || null
+                }));
+              logStep("Tokens from Solscan", { count: tokens.length });
+            }
+          } else {
+            logStep("Solscan API failed", { status: solscanResponse.status });
+          }
+        } catch (solscanError) {
+          logStep("Solscan API error", { error: String(solscanError) });
+        }
+
+        // Fallback to Helius DAS API if Solscan didn't work
+        if (tokens.length === 0 && heliusKey) {
           try {
             logStep("Trying Helius DAS API for tokens");
             const response = await fetch(`https://mainnet.helius-rpc.com/?api-key=${heliusKey}`, {
@@ -84,15 +120,11 @@ serve(async (req) => {
                   ownerAddress: body.pubkey,
                   page: 1,
                   limit: 100,
-                  displayOptions: {
-                    showFungible: true,
-                    showNativeBalance: false
-                  }
+                  displayOptions: { showFungible: true, showNativeBalance: false }
                 }
               })
             });
             const dasResult = await response.json();
-            logStep("Helius DAS response", { hasItems: !!dasResult.result?.items?.length });
             
             if (dasResult.result?.items) {
               tokens = dasResult.result.items
@@ -105,21 +137,20 @@ serve(async (req) => {
                   name: item.content?.metadata?.name || null
                 }))
                 .filter((t: TokenBalance) => t.balance > 0);
-              logStep("Tokens from Helius DAS", { count: tokens.length, tokens: tokens.map(t => ({ mint: t.mint.slice(0,8), balance: t.balance })) });
+              logStep("Tokens from Helius DAS", { count: tokens.length });
             }
           } catch (dasError) {
-            logStep("Helius DAS failed, falling back to standard RPC", { error: String(dasError) });
+            logStep("Helius DAS failed", { error: String(dasError) });
           }
         }
 
-        // Fallback to standard RPC if DAS didn't work or Helius unavailable
+        // Last fallback: standard RPC
         if (tokens.length === 0) {
           logStep("Using standard RPC for token accounts");
           const tokenAccounts = await connection.getParsedTokenAccountsByOwner(
             publicKey,
             { programId: TOKEN_PROGRAM_ID }
           );
-          logStep("Standard RPC response", { accountCount: tokenAccounts.value.length });
 
           tokens = tokenAccounts.value
             .map((account) => {
@@ -132,6 +163,7 @@ serve(async (req) => {
               };
             })
             .filter((t) => t.balance > 0);
+          logStep("Tokens from standard RPC", { count: tokens.length });
         }
 
         logStep("Token accounts found", { count: tokens.length });
