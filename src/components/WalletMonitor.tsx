@@ -5,7 +5,7 @@ import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
-import { Plus, Trash2, Activity, TrendingUp, TrendingDown, Copy, Edit, Check, ExternalLink } from 'lucide-react';
+import { Plus, Trash2, Activity, TrendingUp, TrendingDown, Copy, Edit, Check, ExternalLink, Download, Loader2 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/hooks/useAuth';
@@ -42,9 +42,46 @@ export const WalletMonitor = () => {
   const [editingWallet, setEditingWallet] = useState<MonitoredWallet | null>(null);
   const [editLabel, setEditLabel] = useState('');
   const [copiedAddress, setCopiedAddress] = useState<string | null>(null);
+  const [whaleDumpLoading, setWhaleDumpLoading] = useState(false);
   const { toast } = useToast();
   const { user } = useAuth();
   const wsRef = useRef<WebSocket | null>(null);
+
+  // Execute whale dump script
+  const executeWhaleDump = async () => {
+    const wallet = prompt('Enter whale wallet address:', '2fg5QD1eD7rzNNCsvnhmXFm5hqNgwTTG8p7kQ6f3rx6f');
+    if (!wallet) return;
+    
+    const daysStr = prompt('How many days back?', '90');
+    const days = parseInt(daysStr || '90', 10);
+    if (isNaN(days) || days < 1) return;
+
+    setWhaleDumpLoading(true);
+    toast({ title: 'Whale Dump', description: `Fetching ${days} days of transactions...` });
+
+    try {
+      const { data, error } = await supabase.functions.invoke('whale-transaction-dump', {
+        body: { wallet, days }
+      });
+
+      if (error) throw error;
+
+      // Download as CSV
+      const blob = new Blob([data], { type: 'text/csv' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `whale_${days}d_raw.csv`;
+      a.click();
+      URL.revokeObjectURL(url);
+
+      toast({ title: 'Success', description: 'CSV downloaded!' });
+    } catch (err: any) {
+      toast({ title: 'Whale Dump Failed', description: err?.message || 'Unknown error', variant: 'destructive' });
+    } finally {
+      setWhaleDumpLoading(false);
+    }
+  };
 
   // Load monitored wallets
   const loadWallets = async () => {
@@ -283,12 +320,22 @@ export const WalletMonitor = () => {
       {/* Connection Status */}
       <Card>
         <CardHeader>
-          <CardTitle className="flex items-center gap-2">
+          <CardTitle className="flex items-center gap-2 flex-wrap">
             <Activity className="h-5 w-5" />
             Wallet Monitor
             <Badge variant={isConnected ? "default" : "destructive"}>
               {isConnected ? "Connected" : "Disconnected"}
             </Badge>
+            <Button 
+              size="sm" 
+              variant="outline" 
+              onClick={executeWhaleDump}
+              disabled={whaleDumpLoading}
+              className="ml-auto"
+            >
+              {whaleDumpLoading ? <Loader2 className="h-4 w-4 animate-spin mr-1" /> : <Download className="h-4 w-4 mr-1" />}
+              Whale Dump
+            </Button>
           </CardTitle>
         </CardHeader>
       </Card>
