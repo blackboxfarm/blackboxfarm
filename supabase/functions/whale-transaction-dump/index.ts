@@ -41,7 +41,10 @@ serve(async (req) => {
         body: JSON.stringify({ jsonrpc: '2.0', id: 1, method, params }),
       });
       const json = await res.json();
-      if (json.error) throw new Error(json.error.message || 'RPC error');
+      if (json.error) {
+        console.error(`RPC error for ${method}:`, json.error);
+        throw new Error(json.error.message || 'RPC error');
+      }
       return json.result;
     }
 
@@ -56,7 +59,7 @@ serve(async (req) => {
         : [wallet, { limit: 1000 }];
 
       const sigs = await rpc('getSignaturesForAddress', params);
-      if (!sigs.length) break;
+      if (!sigs || !sigs.length) break;
 
       for (const s of sigs) {
         if (!s.blockTime) continue;
@@ -76,20 +79,27 @@ serve(async (req) => {
     allSigs.sort((a, b) => a.blockTime - b.blockTime);
     console.log(`Total signatures: ${allSigs.length}`);
 
-    // Fetch transaction details in batches
+    // Fetch transaction details - use getTransaction (singular) for each
     const results: any[] = [];
 
-    for (let i = 0; i < allSigs.length; i += 100) {
-      const batch = allSigs.slice(i, i + 100);
-      const sigList = batch.map((s: any) => s.signature);
-
+    for (let i = 0; i < allSigs.length; i += 50) {
+      const batch = allSigs.slice(i, i + 50);
       console.log(`Fetching tx details ${i}/${allSigs.length}`);
 
-      const txs = await rpc('getTransactions', [sigList, { maxSupportedTransactionVersion: 0 }]);
+      // Fetch in parallel batches
+      const txPromises = batch.map(async (sigObj: any) => {
+        try {
+          const tx = await rpc('getTransaction', [sigObj.signature, { encoding: 'jsonParsed', maxSupportedTransactionVersion: 0 }]);
+          return { sig: sigObj.signature, tx };
+        } catch (e) {
+          console.error(`Failed to fetch tx ${sigObj.signature}:`, e);
+          return { sig: sigObj.signature, tx: null };
+        }
+      });
 
-      for (let j = 0; j < txs.length; j++) {
-        const tx = txs[j];
-        const sig = sigList[j];
+      const txResults = await Promise.all(txPromises);
+
+      for (const { sig, tx } of txResults) {
         if (!tx) continue;
 
         const blockTime = tx.blockTime || null;
@@ -141,6 +151,8 @@ serve(async (req) => {
       [r.datetime, r.signature, r.solChange, r.label, JSON.stringify(r.programs), JSON.stringify(r.logSample)].join(',')
     );
     const csv = header + lines.join('\n');
+
+    console.log(`Generated CSV with ${results.length} transactions`);
 
     return new Response(csv, {
       headers: {
