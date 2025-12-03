@@ -9,37 +9,13 @@ const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
 const PUMP_PROGRAM_ID = "6EF8rrecthR5Dkzon8Nwu78hRvfCKubJ14M5uBEwF6P";
 
-// Fetch current bonding curve % for a Pump.fun token
-async function getBondingCurvePercent(mint: string, heliusApiKey: string): Promise<string> {
-  try {
-    // Get token info from Helius DAS API
-    const response = await fetch(`https://api.helius.xyz/v0/token-metadata?api-key=${heliusApiKey}`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ mintAccounts: [mint] })
-    });
-    
-    if (!response.ok) return 'N/A';
-    
-    const data = await response.json();
-    if (!data || !data[0]) return 'N/A';
-    
-    const tokenInfo = data[0];
-    
-    // For Pump.fun tokens, check if graduated (no longer on bonding curve)
-    // If token has significant liquidity on Raydium, it's graduated (100%)
-    // Otherwise estimate based on supply info
-    
-    // Simple heuristic: if onChainAccountInfo shows it's still on pump.fun curve
-    // we'd need to query the bonding curve account directly
-    // For now, return "active" or "graduated" based on source
-    
-    return 'current'; // Placeholder - would need pump.fun specific API
-  } catch (e) {
-    console.error(`Bonding curve lookup failed for ${mint}:`, e);
-    return 'N/A';
-  }
-}
+// Minimum thresholds to filter out dust/spam
+const MIN_SOL_CHANGE = 0.001; // Ignore SOL transfers under 0.001 SOL
+const MIN_TOKEN_VALUE_APPROX = 0.0001; // Ignore tiny token amounts
+
+// Transaction types we care about for trading analysis
+const RELEVANT_TYPES = ['SWAP', 'TRANSFER', 'TOKEN_MINT', 'UNKNOWN'];
+const RELEVANT_SOURCES = ['PUMP_FUN', 'RAYDIUM', 'JUPITER', 'ORCA', 'METEORA', 'MOONSHOT', 'UNKNOWN', ''];
 
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
@@ -73,6 +49,7 @@ serve(async (req) => {
     console.log(`Days requested: ${days}`);
     console.log(`Max TX limit: ${maxTx}`);
     console.log(`Cutoff date: ${cutoffDate}`);
+    console.log(`Filtering: Only swaps/trades with SOL > ${MIN_SOL_CHANGE}`);
 
     const results: any[] = [];
     let before: string | undefined;
@@ -80,13 +57,14 @@ serve(async (req) => {
     let pageCount = 0;
     let stopReason = 'UNKNOWN';
     let oldestDateReached = '';
-    const mintBondingCache = new Map<string, string>();
+    let totalTxScanned = 0;
+    let filteredOutCount = 0;
 
     while (!done && results.length < maxTx) {
       pageCount++;
       const url = before ? `${API_URL}&before=${before}` : API_URL;
       
-      console.log(`Page ${pageCount}: fetching... (have ${results.length} rows so far)`);
+      console.log(`Page ${pageCount}: fetching... (${results.length} trades found, ${filteredOutCount} filtered out)`);
 
       let res: Response;
       let retryCount = 0;
@@ -99,7 +77,7 @@ serve(async (req) => {
         
         if (res.status === 429) {
           retryCount++;
-          const waitTime = Math.min(5000 * Math.pow(2, retryCount - 1), 30000); // 5s, 10s, 20s, 30s max
+          const waitTime = Math.min(5000 * Math.pow(2, retryCount - 1), 30000);
           console.log(`Rate limited (attempt ${retryCount}/${maxRetries}), waiting ${waitTime/1000}s...`);
           await sleep(waitTime);
           continue;
@@ -120,16 +98,22 @@ serve(async (req) => {
       const txs = await res.json();
       
       if (!txs || !txs.length) {
+        stopReason = 'NO_MORE_TX';
         console.log('No more transactions');
         break;
       }
 
-      console.log(`Page ${pageCount}: got ${txs.length} transactions`);
+      console.log(`Page ${pageCount}: got ${txs.length} raw transactions`);
 
       for (const tx of txs) {
+        totalTxScanned++;
         const blockTime = tx.timestamp || null;
+        const sig = tx.signature || '';
         
-        // Track oldest date we've seen
+        // Always update before cursor
+        before = sig;
+        
+        // Track oldest date
         if (blockTime) {
           oldestDateReached = new Date(blockTime * 1000).toISOString();
         }
@@ -143,17 +127,16 @@ serve(async (req) => {
 
         if (results.length >= maxTx) {
           stopReason = 'HIT_MAX_TX';
-          console.log(`⚠ Hit max TX limit (${maxTx}) at ${oldestDateReached} - increase maxTx for more data`);
+          console.log(`⚠ Hit max TX limit (${maxTx}) at ${oldestDateReached}`);
           done = true;
           break;
         }
 
-        const dt = blockTime ? new Date(blockTime * 1000).toISOString() : '';
-        const sig = tx.signature || '';
-        const fee = tx.fee ? (tx.fee / 1e9).toFixed(9) : '0';
         const txType = tx.type || '';
         const source = tx.source || '';
         const description = tx.description || '';
+        const fee = tx.fee ? (tx.fee / 1e9).toFixed(9) : '0';
+        const dt = blockTime ? new Date(blockTime * 1000).toISOString() : '';
 
         // Calculate SOL change from native transfers
         let solChange = 0;
@@ -168,79 +151,116 @@ serve(async (req) => {
           }
         }
 
-        // Determine if this is a Pump.fun transaction
+        // Determine if this is a DEX/trading transaction
         const isPumpFun = source === 'PUMP_FUN' || 
           (tx.instructions || []).some((ix: any) => ix.programId === PUMP_PROGRAM_ID);
+        const isDexTrade = ['PUMP_FUN', 'RAYDIUM', 'JUPITER', 'ORCA', 'METEORA', 'MOONSHOT'].includes(source);
+        const isSwap = txType === 'SWAP';
 
         // Parse token transfers
         const tokenTransfers = tx.tokenTransfers || [];
         
+        // === FILTERING LOGIC ===
+        
+        // Skip pure SOL transfers that are dust (spam/fees distribution)
         if (tokenTransfers.length === 0) {
-          // No token transfers - still log the transaction (e.g., SOL transfers)
-          results.push({
-            datetime: dt,
-            signature: sig,
-            mint: '',
-            token_symbol: '',
-            action: solChange > 0 ? 'RECEIVE_SOL' : solChange < 0 ? 'SEND_SOL' : 'OTHER',
-            token_amount: '0',
-            sol_change: solChange.toFixed(9),
-            type: txType,
-            source: source,
-            bonding_pct: '',
-            description: description.substring(0, 200),
-            fee: fee,
-          });
-        } else {
-          // Process each token transfer
-          for (const tt of tokenTransfers) {
-            const mint = tt.mint || '';
-            const tokenAmount = tt.tokenAmount || 0;
-            const fromAccount = tt.fromUserAccount || '';
-            const toAccount = tt.toUserAccount || '';
-            
-            // Determine BUY vs SELL
-            let action = 'TRANSFER';
-            if (toAccount === wallet) {
-              action = 'BUY';
-            } else if (fromAccount === wallet) {
-              action = 'SELL';
-            }
-
-            // Get bonding curve % for Pump.fun tokens (cached)
-            let bondingPct = '';
-            if (isPumpFun && mint) {
-              if (mintBondingCache.has(mint)) {
-                bondingPct = mintBondingCache.get(mint)!;
-              } else {
-                // For performance, we'll mark as "PUMP" and skip expensive lookups
-                // Real bonding curve % would require querying pump.fun's bonding curve account
-                bondingPct = 'PUMP';
-                mintBondingCache.set(mint, bondingPct);
-              }
-            }
-
+          if (Math.abs(solChange) < MIN_SOL_CHANGE) {
+            filteredOutCount++;
+            continue; // Skip dust SOL transfers
+          }
+          
+          // Skip system program dust distributions
+          if (source === 'SYSTEM_PROGRAM' && Math.abs(solChange) < 0.01) {
+            filteredOutCount++;
+            continue;
+          }
+          
+          // Only log significant SOL movements (> 0.01 SOL)
+          if (Math.abs(solChange) >= 0.01) {
             results.push({
               datetime: dt,
               signature: sig,
-              mint: mint,
-              token_symbol: tt.tokenStandard === 'Fungible' ? (tt.symbol || '') : '',
-              action: action,
-              token_amount: tokenAmount.toString(),
-              sol_change: solChange.toFixed(9),
+              mint: 'SOL',
+              token_symbol: 'SOL',
+              action: solChange > 0 ? 'RECEIVE' : 'SEND',
+              token_amount: Math.abs(solChange).toFixed(6),
+              sol_change: solChange.toFixed(6),
               type: txType,
               source: source,
-              bonding_pct: bondingPct,
-              description: description.substring(0, 200),
+              bonding_pct: '',
+              description: description.substring(0, 150),
               fee: fee,
             });
+          } else {
+            filteredOutCount++;
           }
+          continue;
         }
 
-        before = sig;
+        // Process token transfers - focus on actual trades
+        for (const tt of tokenTransfers) {
+          const mint = tt.mint || '';
+          const tokenAmount = tt.tokenAmount || 0;
+          const fromAccount = tt.fromUserAccount || '';
+          const toAccount = tt.toUserAccount || '';
+          
+          // Determine BUY vs SELL
+          let action = 'TRANSFER';
+          if (toAccount === wallet) {
+            action = 'BUY';
+          } else if (fromAccount === wallet) {
+            action = 'SELL';
+          }
+
+          // Skip if not a meaningful trade:
+          // 1. Must have token movement involving our wallet
+          // 2. For swaps, should have SOL change
+          // 3. Skip tiny amounts
+          
+          if (action === 'TRANSFER' && !isDexTrade && !isSwap) {
+            // Skip non-swap transfers unless they're significant
+            if (Math.abs(solChange) < MIN_SOL_CHANGE) {
+              filteredOutCount++;
+              continue;
+            }
+          }
+
+          // For BUY/SELL on DEX, always include
+          // For transfers, only include if significant SOL involved
+          const isSignificantTrade = 
+            (isDexTrade || isSwap) || 
+            (action !== 'TRANSFER') ||
+            Math.abs(solChange) >= MIN_SOL_CHANGE;
+
+          if (!isSignificantTrade) {
+            filteredOutCount++;
+            continue;
+          }
+
+          // Get bonding indicator for Pump.fun tokens
+          let bondingPct = '';
+          if (isPumpFun) {
+            bondingPct = 'PUMP';
+          }
+
+          results.push({
+            datetime: dt,
+            signature: sig,
+            mint: mint,
+            token_symbol: tt.symbol || '',
+            action: action,
+            token_amount: tokenAmount.toString(),
+            sol_change: solChange.toFixed(6),
+            type: txType,
+            source: source,
+            bonding_pct: bondingPct,
+            description: description.substring(0, 150),
+            fee: fee,
+          });
+        }
       }
 
-      // Slower rate to avoid rate limiting - 500ms between pages
+      // Rate limiting delay
       await sleep(500);
     }
 
@@ -261,7 +281,7 @@ serve(async (req) => {
         r.type,
         r.source,
         r.bonding_pct,
-        JSON.stringify(r.description),
+        `"${(r.description || '').replace(/"/g, "'")}"`,
         r.fee
       ].join(',')
     );
@@ -269,18 +289,17 @@ serve(async (req) => {
 
     console.log(`=== WHALE DUMP COMPLETE ===`);
     console.log(`Stop reason: ${stopReason}`);
-    console.log(`Total rows: ${results.length}`);
+    console.log(`Total TX scanned: ${totalTxScanned}`);
+    console.log(`Filtered out (dust/spam): ${filteredOutCount}`);
+    console.log(`Meaningful trades: ${results.length}`);
     console.log(`Pages fetched: ${pageCount}`);
-    console.log(`Oldest date reached: ${oldestDateReached}`);
-    if (stopReason === 'HIT_MAX_TX') {
-      console.log(`⚠ WARNING: Did not reach full ${days} days - increase maxTx parameter for more data`);
-    }
+    console.log(`Date range: ${results.length > 0 ? results[0].datetime : 'N/A'} to ${results.length > 0 ? results[results.length-1].datetime : 'N/A'}`);
 
     return new Response(csv, {
       headers: {
         ...corsHeaders,
         'Content-Type': 'text/csv',
-        'Content-Disposition': `attachment; filename="whale_${days}d_${stopReason}_${results.length}rows.csv"`,
+        'Content-Disposition': `attachment; filename="whale_${days}d_${results.length}trades.csv"`,
       },
     });
 
