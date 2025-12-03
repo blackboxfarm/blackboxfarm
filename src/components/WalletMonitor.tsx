@@ -107,17 +107,17 @@ export const WalletMonitor = () => {
     }
   }, [whaleDumpProgress?.status, whaleDumpProgress?.startTime, whaleDumpProgress?.estimatedMinutes]);
 
-  // Execute whale dump script
+  // Execute whale dump script - TEST DEFAULTS: 2 days, 2000 tx
   const executeWhaleDump = async () => {
     const wallet = prompt('Enter whale wallet address:', '2fg5QD1eD7rzNNCsvnhmXFm5hqNgwTTG8p7kQ6f3rx6f');
     if (!wallet) return;
     
-    const daysStr = prompt('How many days back?', '90');
-    const days = parseInt(daysStr || '90', 10);
+    const daysStr = prompt('How many days back?', '2');
+    const days = parseInt(daysStr || '2', 10);
     if (isNaN(days) || days < 1) return;
 
     // Calculate suggested maxTx based on days (estimate ~500 txs/day for active whale)
-    const suggestedMax = Math.max(10000, days * 500);
+    const suggestedMax = Math.max(2000, days * 500);
     const maxTxStr = prompt(`Max transactions to fetch? (suggested: ${suggestedMax} for ${days} days)`, suggestedMax.toString());
     const maxTx = parseInt(maxTxStr || suggestedMax.toString(), 10);
     if (isNaN(maxTx) || maxTx < 100) return;
