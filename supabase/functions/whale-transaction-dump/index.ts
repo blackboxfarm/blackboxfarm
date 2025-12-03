@@ -88,17 +88,33 @@ serve(async (req) => {
       
       console.log(`Page ${pageCount}: fetching... (have ${results.length} rows so far)`);
 
-      const res = await fetch(url);
+      let res: Response;
+      let retryCount = 0;
+      const maxRetries = 5;
       
-      if (!res.ok) {
-        const errText = await res.text();
-        console.error(`API error: ${res.status} - ${errText}`);
+      while (retryCount < maxRetries) {
+        res = await fetch(url);
+        
+        if (res.ok) break;
+        
         if (res.status === 429) {
-          console.log('Rate limited, waiting 2s...');
-          await sleep(2000);
+          retryCount++;
+          const waitTime = Math.min(5000 * Math.pow(2, retryCount - 1), 30000); // 5s, 10s, 20s, 30s max
+          console.log(`Rate limited (attempt ${retryCount}/${maxRetries}), waiting ${waitTime/1000}s...`);
+          await sleep(waitTime);
           continue;
         }
+        
+        const errText = await res.text();
+        console.error(`API error: ${res.status} - ${errText.substring(0, 200)}`);
         throw new Error(`API error: ${res.status}`);
+      }
+      
+      if (!res!.ok) {
+        stopReason = 'RATE_LIMITED';
+        console.log(`⚠ Stopped due to persistent rate limiting after ${maxRetries} retries`);
+        done = true;
+        break;
       }
 
       const txs = await res.json();
@@ -224,7 +240,8 @@ serve(async (req) => {
         before = sig;
       }
 
-      await sleep(200);
+      // Slower rate to avoid rate limiting - 500ms between pages
+      await sleep(500);
     }
 
     // Sort chronologically (oldest first)
