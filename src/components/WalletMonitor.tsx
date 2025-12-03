@@ -56,12 +56,18 @@ export const WalletMonitor = () => {
     const days = parseInt(daysStr || '90', 10);
     if (isNaN(days) || days < 1) return;
 
+    // Calculate suggested maxTx based on days (estimate ~500 txs/day for active whale)
+    const suggestedMax = Math.max(10000, days * 500);
+    const maxTxStr = prompt(`Max transactions to fetch? (suggested: ${suggestedMax} for ${days} days)`, suggestedMax.toString());
+    const maxTx = parseInt(maxTxStr || suggestedMax.toString(), 10);
+    if (isNaN(maxTx) || maxTx < 100) return;
+
     setWhaleDumpLoading(true);
-    toast({ title: 'Whale Dump', description: `Fetching ${days} days of transactions...` });
+    toast({ title: 'Whale Dump', description: `Fetching up to ${maxTx} transactions over ${days} days...` });
 
     try {
       const { data, error } = await supabase.functions.invoke('whale-transaction-dump', {
-        body: { wallet, days }
+        body: { wallet, days, maxTx }
       });
 
       if (error) throw error;
