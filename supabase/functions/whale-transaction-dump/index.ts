@@ -328,25 +328,17 @@ serve(async (req) => {
     // Sort chronologically
     results.sort((a, b) => new Date(a.datetime).getTime() - new Date(b.datetime).getTime());
 
-    // Generate CSV with all the data user wants
-    const header = 'datetime,signature,mint,symbol,name,action,token_amount,sol_change,type,source,is_pump,bonding_status,fee\n';
-    const lines = results.map(r =>
-      [
-        r.datetime,
-        r.signature,
+    // Generate clean CSV with exactly what user asked for
+    const header = 'mint,side,sol_change,token_amount,curve_progress\n';
+    const lines = results
+      .filter(r => r.mint && r.mint !== 'SOL') // Only token trades
+      .map(r => [
         r.mint,
-        r.token_symbol,
-        `"${(r.token_name || '').replace(/"/g, "'")}"`,
-        r.action,
-        r.token_amount,
+        r.action === 'BUY' ? 'BUY' : 'SELL',
         r.sol_change,
-        r.type,
-        r.source,
-        r.is_pump ? 'YES' : '',
-        r.bonding_pct,
-        r.fee
-      ].join(',')
-    );
+        r.token_amount,
+        r.is_pump ? 'ON_CURVE' : ''
+      ].join(','));
     const csv = header + lines.join('\n');
 
     console.log(`=== WHALE DUMP COMPLETE ===`);
