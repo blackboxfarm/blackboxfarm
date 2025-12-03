@@ -47,7 +47,7 @@ serve(async (req) => {
   }
 
   try {
-    const { wallet, days = 30, maxTx = 2000 } = await req.json();
+    const { wallet, days = 30, maxTx = 50000 } = await req.json();
     
     if (!wallet) {
       return new Response(
@@ -66,15 +66,20 @@ serve(async (req) => {
 
     const API_URL = `https://api.helius.xyz/v0/addresses/${wallet}/transactions?api-key=${HELIUS_API_KEY}`;
     const cutoffTs = Math.floor(Date.now() / 1000) - days * 24 * 60 * 60;
+    const cutoffDate = new Date(cutoffTs * 1000).toISOString();
 
     console.log(`=== WHALE DUMP START ===`);
     console.log(`Wallet: ${wallet}`);
-    console.log(`Days: ${days}, Max TX: ${maxTx}`);
+    console.log(`Days requested: ${days}`);
+    console.log(`Max TX limit: ${maxTx}`);
+    console.log(`Cutoff date: ${cutoffDate}`);
 
     const results: any[] = [];
     let before: string | undefined;
     let done = false;
     let pageCount = 0;
+    let stopReason = 'UNKNOWN';
+    let oldestDateReached = '';
     const mintBondingCache = new Map<string, string>();
 
     while (!done && results.length < maxTx) {
@@ -108,14 +113,21 @@ serve(async (req) => {
       for (const tx of txs) {
         const blockTime = tx.timestamp || null;
         
+        // Track oldest date we've seen
+        if (blockTime) {
+          oldestDateReached = new Date(blockTime * 1000).toISOString();
+        }
+
         if (blockTime && blockTime < cutoffTs) {
-          console.log(`Hit cutoff at ${new Date(blockTime * 1000).toISOString()}`);
+          stopReason = 'DATE_CUTOFF';
+          console.log(`✓ Hit date cutoff at ${oldestDateReached} - requested ${days} days reached!`);
           done = true;
           break;
         }
 
         if (results.length >= maxTx) {
-          console.log(`Hit max tx limit: ${maxTx}`);
+          stopReason = 'HIT_MAX_TX';
+          console.log(`⚠ Hit max TX limit (${maxTx}) at ${oldestDateReached} - increase maxTx for more data`);
           done = true;
           break;
         }
@@ -239,14 +251,19 @@ serve(async (req) => {
     const csv = header + lines.join('\n');
 
     console.log(`=== WHALE DUMP COMPLETE ===`);
+    console.log(`Stop reason: ${stopReason}`);
     console.log(`Total rows: ${results.length}`);
     console.log(`Pages fetched: ${pageCount}`);
+    console.log(`Oldest date reached: ${oldestDateReached}`);
+    if (stopReason === 'HIT_MAX_TX') {
+      console.log(`⚠ WARNING: Did not reach full ${days} days - increase maxTx parameter for more data`);
+    }
 
     return new Response(csv, {
       headers: {
         ...corsHeaders,
         'Content-Type': 'text/csv',
-        'Content-Disposition': `attachment; filename="whale_${days}d_${results.length}rows.csv"`,
+        'Content-Disposition': `attachment; filename="whale_${days}d_${stopReason}_${results.length}rows.csv"`,
       },
     });
 
