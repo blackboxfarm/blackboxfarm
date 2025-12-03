@@ -33,6 +33,30 @@ interface WalletTransaction {
   monitored_wallet_id: string;
 }
 
+// Progress state for whale dump
+interface WhaleDumpProgress {
+  status: 'idle' | 'fetching' | 'complete' | 'error';
+  wallet: string;
+  days: number;
+  maxTx: number;
+  startTime: number;
+  estimatedMinutes: number;
+  currentMessage: string;
+}
+
+const WHALE_DUMP_MESSAGES = [
+  "🐋 Connecting to Helius API...",
+  "📡 Fetching transaction history...",
+  "🔍 Scanning blockchain data...",
+  "💾 Processing token transfers...",
+  "📊 Analyzing trading patterns...",
+  "🔄 Handling rate limits gracefully...",
+  "⏳ Still working... whales have lots of trades!",
+  "🎯 Making progress through history...",
+  "📈 Parsing swap transactions...",
+  "🔗 Following the money trail...",
+];
+
 export const WalletMonitor = () => {
   const [wallets, setWallets] = useState<MonitoredWallet[]>([]);
   const [transactions, setTransactions] = useState<WalletTransaction[]>([]);
@@ -43,9 +67,45 @@ export const WalletMonitor = () => {
   const [editLabel, setEditLabel] = useState('');
   const [copiedAddress, setCopiedAddress] = useState<string | null>(null);
   const [whaleDumpLoading, setWhaleDumpLoading] = useState(false);
+  const [whaleDumpProgress, setWhaleDumpProgress] = useState<WhaleDumpProgress | null>(null);
+  const [progressPercent, setProgressPercent] = useState(0);
+  const [currentMessageIndex, setCurrentMessageIndex] = useState(0);
   const { toast } = useToast();
   const { user } = useAuth();
   const wsRef = useRef<WebSocket | null>(null);
+  const progressIntervalRef = useRef<NodeJS.Timeout | null>(null);
+
+  // Animate progress bar and messages
+  useEffect(() => {
+    if (whaleDumpProgress?.status === 'fetching') {
+      // Simulate progress based on estimated time
+      const totalMs = whaleDumpProgress.estimatedMinutes * 60 * 1000;
+      const startTime = whaleDumpProgress.startTime;
+      
+      progressIntervalRef.current = setInterval(() => {
+        const elapsed = Date.now() - startTime;
+        // Use logarithmic curve so it slows down as it approaches 95%
+        const rawProgress = Math.min(95, (elapsed / totalMs) * 100);
+        const smoothProgress = Math.min(95, rawProgress * 0.8 + Math.log10(rawProgress + 1) * 20);
+        setProgressPercent(Math.round(smoothProgress));
+        
+        // Rotate messages every 8 seconds
+        setCurrentMessageIndex(prev => (prev + 1) % WHALE_DUMP_MESSAGES.length);
+      }, 8000);
+
+      // Initial message rotation
+      const msgInterval = setInterval(() => {
+        setCurrentMessageIndex(prev => (prev + 1) % WHALE_DUMP_MESSAGES.length);
+      }, 4000);
+
+      return () => {
+        if (progressIntervalRef.current) clearInterval(progressIntervalRef.current);
+        clearInterval(msgInterval);
+      };
+    } else if (whaleDumpProgress?.status === 'complete') {
+      setProgressPercent(100);
+    }
+  }, [whaleDumpProgress?.status, whaleDumpProgress?.startTime, whaleDumpProgress?.estimatedMinutes]);
 
   // Execute whale dump script
   const executeWhaleDump = async () => {
@@ -62,8 +122,22 @@ export const WalletMonitor = () => {
     const maxTx = parseInt(maxTxStr || suggestedMax.toString(), 10);
     if (isNaN(maxTx) || maxTx < 100) return;
 
+    // Estimate time: ~500ms per page, ~100 txs per page, with rate limit handling
+    const estimatedPages = Math.ceil(maxTx / 100);
+    const estimatedMinutes = Math.max(1, Math.ceil((estimatedPages * 0.6) / 60)); // ~600ms per page avg
+
     setWhaleDumpLoading(true);
-    toast({ title: 'Whale Dump', description: `Fetching up to ${maxTx} transactions over ${days} days...` });
+    setProgressPercent(0);
+    setCurrentMessageIndex(0);
+    setWhaleDumpProgress({
+      status: 'fetching',
+      wallet,
+      days,
+      maxTx,
+      startTime: Date.now(),
+      estimatedMinutes,
+      currentMessage: WHALE_DUMP_MESSAGES[0],
+    });
 
     try {
       const { data, error } = await supabase.functions.invoke('whale-transaction-dump', {
@@ -71,6 +145,9 @@ export const WalletMonitor = () => {
       });
 
       if (error) throw error;
+
+      setWhaleDumpProgress(prev => prev ? { ...prev, status: 'complete' } : null);
+      setProgressPercent(100);
 
       // Download as CSV
       const blob = new Blob([data], { type: 'text/csv' });
@@ -81,9 +158,22 @@ export const WalletMonitor = () => {
       a.click();
       URL.revokeObjectURL(url);
 
-      toast({ title: 'Success', description: 'CSV downloaded!' });
+      toast({ title: '✅ Whale Dump Complete', description: 'CSV downloaded!' });
+      
+      // Clear progress after 3 seconds
+      setTimeout(() => {
+        setWhaleDumpProgress(null);
+        setProgressPercent(0);
+      }, 3000);
     } catch (err: any) {
+      setWhaleDumpProgress(prev => prev ? { ...prev, status: 'error' } : null);
       toast({ title: 'Whale Dump Failed', description: err?.message || 'Unknown error', variant: 'destructive' });
+      
+      // Clear progress after 5 seconds on error
+      setTimeout(() => {
+        setWhaleDumpProgress(null);
+        setProgressPercent(0);
+      }, 5000);
     } finally {
       setWhaleDumpLoading(false);
     }
@@ -344,6 +434,58 @@ export const WalletMonitor = () => {
             </Button>
           </CardTitle>
         </CardHeader>
+        
+        {/* Whale Dump Progress Widget */}
+        {whaleDumpProgress && (
+          <CardContent className="pt-0">
+            <div className="bg-gradient-to-r from-blue-500/10 via-purple-500/10 to-cyan-500/10 rounded-lg p-4 border border-primary/20 animate-pulse-slow">
+              <div className="flex items-center gap-3 mb-3">
+                <div className="relative">
+                  <div className="w-10 h-10 rounded-full bg-primary/20 flex items-center justify-center">
+                    <span className="text-2xl animate-bounce">🐋</span>
+                  </div>
+                  {whaleDumpProgress.status === 'fetching' && (
+                    <div className="absolute -top-1 -right-1 w-3 h-3 bg-green-500 rounded-full animate-ping" />
+                  )}
+                </div>
+                <div className="flex-1">
+                  <div className="font-semibold text-sm">
+                    {whaleDumpProgress.status === 'fetching' && 'Processing Whale Data...'}
+                    {whaleDumpProgress.status === 'complete' && '✅ Download Complete!'}
+                    {whaleDumpProgress.status === 'error' && '❌ Error Occurred'}
+                  </div>
+                  <div className="text-xs text-muted-foreground">
+                    {truncateAddress(whaleDumpProgress.wallet)} • {whaleDumpProgress.days} days • up to {whaleDumpProgress.maxTx.toLocaleString()} txs
+                  </div>
+                </div>
+                <div className="text-right">
+                  <div className="text-2xl font-bold text-primary">{progressPercent}%</div>
+                  <div className="text-xs text-muted-foreground">
+                    ~{whaleDumpProgress.estimatedMinutes} min est.
+                  </div>
+                </div>
+              </div>
+              
+              {/* Progress Bar */}
+              <div className="relative h-3 bg-muted rounded-full overflow-hidden mb-2">
+                <div 
+                  className="absolute inset-y-0 left-0 bg-gradient-to-r from-blue-500 via-purple-500 to-cyan-500 rounded-full transition-all duration-1000 ease-out"
+                  style={{ width: `${progressPercent}%` }}
+                />
+                {whaleDumpProgress.status === 'fetching' && (
+                  <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/20 to-transparent animate-shimmer" />
+                )}
+              </div>
+              
+              {/* Status Message */}
+              <div className="text-xs text-center text-muted-foreground italic transition-all duration-500">
+                {whaleDumpProgress.status === 'fetching' && WHALE_DUMP_MESSAGES[currentMessageIndex]}
+                {whaleDumpProgress.status === 'complete' && '🎉 All done! Your CSV has been downloaded.'}
+                {whaleDumpProgress.status === 'error' && 'Check the console for error details.'}
+              </div>
+            </div>
+          </CardContent>
+        )}
       </Card>
 
       {/* Add New Wallet */}
