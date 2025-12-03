@@ -252,7 +252,17 @@ export const WalletMonitor = () => {
   }, [user]);
 
   const formatTime = (timestamp: string) => {
-    return new Date(timestamp).toLocaleTimeString();
+    const date = new Date(timestamp);
+    const today = new Date();
+    const isToday = date.toDateString() === today.toDateString();
+    const yesterday = new Date(today);
+    yesterday.setDate(yesterday.getDate() - 1);
+    const isYesterday = date.toDateString() === yesterday.toDateString();
+    
+    const time = date.toLocaleTimeString();
+    if (isToday) return time;
+    if (isYesterday) return `Yesterday ${time}`;
+    return `${date.toLocaleDateString()} ${time}`;
   };
 
   const formatAmount = (amountSol: number, amountUsd?: number) => {
