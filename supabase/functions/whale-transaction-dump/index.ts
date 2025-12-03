@@ -5,13 +5,16 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
+// Rate limit helper - wait between requests
+const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
+
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
   }
 
   try {
-    const { wallet, days = 90 } = await req.json();
+    const { wallet, days = 30, maxTx = 2000 } = await req.json();
     
     if (!wallet) {
       return new Response(
@@ -28,126 +31,146 @@ serve(async (req) => {
       );
     }
 
-    const RPC_URL = `https://mainnet.helius-rpc.com/?api-key=${HELIUS_API_KEY}`;
+    // Use Helius enhanced transactions API - much faster
+    const API_URL = `https://api.helius.xyz/v0/addresses/${wallet}/transactions?api-key=${HELIUS_API_KEY}`;
     const cutoffTs = Math.floor(Date.now() / 1000) - days * 24 * 60 * 60;
 
-    console.log(`Fetching ${days} days of transactions for wallet: ${wallet}`);
+    console.log(`=== WHALE DUMP START ===`);
+    console.log(`Wallet: ${wallet}`);
+    console.log(`Days: ${days}, Max TX: ${maxTx}`);
+    console.log(`Cutoff: ${new Date(cutoffTs * 1000).toISOString()}`);
 
-    // Use Helius's getTransactionsForAddress method (returns full tx details)
     const results: any[] = [];
     let before: string | undefined;
     let done = false;
-    let totalFetched = 0;
+    let pageCount = 0;
 
-    while (!done) {
-      const params: any[] = [
-        wallet,
-        {
-          transactionDetails: 'full',
-          limit: 100,
-          ...(before ? { before } : {})
+    while (!done && results.length < maxTx) {
+      pageCount++;
+      const url = before ? `${API_URL}&before=${before}` : API_URL;
+      
+      console.log(`Page ${pageCount}: fetching... (have ${results.length} tx so far)`);
+
+      const res = await fetch(url);
+      
+      if (!res.ok) {
+        const errText = await res.text();
+        console.error(`API error: ${res.status} - ${errText}`);
+        if (res.status === 429) {
+          console.log('Rate limited, waiting 2s...');
+          await sleep(2000);
+          continue;
         }
-      ];
-
-      console.log(`Fetching batch, before: ${before || 'none'}`);
-
-      const res = await fetch(RPC_URL, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'getTransactionsForAddress', params }),
-      });
-      
-      const json = await res.json();
-      
-      if (json.error) {
-        console.error('RPC error:', json.error);
-        throw new Error(json.error.message || 'RPC error');
+        throw new Error(`API error: ${res.status}`);
       }
 
-      const txs = json.result || [];
-      if (!txs.length) break;
+      const txs = await res.json();
+      
+      if (!txs || !txs.length) {
+        console.log('No more transactions');
+        break;
+      }
 
-      totalFetched += txs.length;
-      console.log(`Fetched ${txs.length} transactions, total: ${totalFetched}`);
+      console.log(`Page ${pageCount}: got ${txs.length} transactions`);
 
       for (const tx of txs) {
-        const blockTime = tx.blockTime || null;
+        const blockTime = tx.timestamp || null;
         
-        // Check if we've gone past our cutoff
+        // Check cutoff
         if (blockTime && blockTime < cutoffTs) {
+          console.log(`Hit cutoff at ${new Date(blockTime * 1000).toISOString()}`);
+          done = true;
+          break;
+        }
+
+        // Check max
+        if (results.length >= maxTx) {
+          console.log(`Hit max tx limit: ${maxTx}`);
           done = true;
           break;
         }
 
         const dt = blockTime ? new Date(blockTime * 1000).toISOString() : '';
-        const sig = tx.signature || tx.transaction?.signatures?.[0] || '';
+        const sig = tx.signature || '';
 
-        const meta = tx.meta || {};
-        const preBalances = meta.preBalances || [];
-        const postBalances = meta.postBalances || [];
-        const accountKeys = tx.transaction?.message?.accountKeys || [];
-
-        let solChangeLamports = 0;
-        for (let idx = 0; idx < accountKeys.length; idx++) {
-          const key = typeof accountKeys[idx] === 'string' ? accountKeys[idx] : accountKeys[idx]?.pubkey;
-          if (key === wallet) {
-            solChangeLamports = (postBalances[idx] || 0) - (preBalances[idx] || 0);
-            break;
+        // Calculate SOL change from native transfers
+        let solChange = 0;
+        if (tx.nativeTransfers) {
+          for (const nt of tx.nativeTransfers) {
+            if (nt.toUserAccount === wallet) {
+              solChange += (nt.amount || 0) / 1e9;
+            }
+            if (nt.fromUserAccount === wallet) {
+              solChange -= (nt.amount || 0) / 1e9;
+            }
           }
         }
-        const solChange = solChangeLamports / 1e9;
 
-        const logs = meta.logMessages || [];
-        const instructions = tx.transaction?.message?.instructions || [];
-        const programs = instructions
-          .map((ix: any) => {
-            if (ix.programId) return ix.programId;
-            const key = accountKeys[ix.programIdIndex];
-            return typeof key === 'string' ? key : key?.pubkey || '';
-          })
+        // Get program info
+        const programs = (tx.instructions || [])
+          .map((ix: any) => ix.programId || '')
           .filter(Boolean)
           .join('|');
 
-        let label = 'OTHER';
-        if (programs.toLowerCase().includes('pump')) label = 'PUMPFUN';
-        if (programs.toLowerCase().includes('rayd')) label = 'RAYDIUM';
+        // Determine label from type or programs
+        let label = tx.type || 'OTHER';
+        if (programs.toLowerCase().includes('pump') || tx.source === 'PUMP_FUN') label = 'PUMPFUN';
+        if (programs.toLowerCase().includes('rayd') || tx.source === 'RAYDIUM') label = 'RAYDIUM';
+
+        // Get description
+        const description = tx.description || '';
 
         results.push({
           datetime: dt,
           signature: sig,
           solChange: solChange.toFixed(9),
+          type: tx.type || '',
+          source: tx.source || '',
           label,
-          programs,
-          logSample: logs.slice(0, 3).join(' || '),
+          description: description.substring(0, 200),
+          fee: tx.fee ? (tx.fee / 1e9).toFixed(9) : '0',
         });
 
-        before = sig; // Use last signature for pagination
+        before = sig;
       }
 
-      if (txs.length < 100) break; // No more pages
+      // Small delay between pages to avoid rate limits
+      await sleep(200);
     }
 
-    // Sort chronologically
+    // Sort chronologically (oldest first)
     results.sort((a, b) => new Date(a.datetime).getTime() - new Date(b.datetime).getTime());
 
     // Generate CSV
-    const header = 'datetime,signature,sol_change,label,programs,log_sample\n';
+    const header = 'datetime,signature,sol_change,type,source,label,description,fee\n';
     const lines = results.map(r =>
-      [r.datetime, r.signature, r.solChange, r.label, JSON.stringify(r.programs), JSON.stringify(r.logSample)].join(',')
+      [
+        r.datetime,
+        r.signature,
+        r.solChange,
+        r.type,
+        r.source,
+        r.label,
+        JSON.stringify(r.description),
+        r.fee
+      ].join(',')
     );
     const csv = header + lines.join('\n');
 
-    console.log(`Generated CSV with ${results.length} transactions`);
+    console.log(`=== WHALE DUMP COMPLETE ===`);
+    console.log(`Total transactions: ${results.length}`);
+    console.log(`Pages fetched: ${pageCount}`);
 
     return new Response(csv, {
       headers: {
         ...corsHeaders,
         'Content-Type': 'text/csv',
-        'Content-Disposition': `attachment; filename="whale_${days}d_raw.csv"`,
+        'Content-Disposition': `attachment; filename="whale_${days}d_${results.length}tx.csv"`,
       },
     });
 
   } catch (error) {
+    console.error('=== WHALE DUMP ERROR ===');
     console.error('Error:', error);
     return new Response(
       JSON.stringify({ error: error.message }),
