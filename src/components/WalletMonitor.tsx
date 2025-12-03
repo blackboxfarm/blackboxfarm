@@ -4,12 +4,12 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { Plus, Trash2, Activity, TrendingUp, TrendingDown } from 'lucide-react';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
+import { Plus, Trash2, Activity, TrendingUp, TrendingDown, Copy, Edit, Check, ExternalLink } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/hooks/useAuth';
 import { RequireAuth } from '@/components/RequireAuth';
-
 interface MonitoredWallet {
   id: string;
   wallet_address: string;
@@ -39,6 +39,9 @@ export const WalletMonitor = () => {
   const [newWalletAddress, setNewWalletAddress] = useState('');
   const [newWalletLabel, setNewWalletLabel] = useState('');
   const [isConnected, setIsConnected] = useState(false);
+  const [editingWallet, setEditingWallet] = useState<MonitoredWallet | null>(null);
+  const [editLabel, setEditLabel] = useState('');
+  const [copiedAddress, setCopiedAddress] = useState<string | null>(null);
   const { toast } = useToast();
   const { user } = useAuth();
   const wsRef = useRef<WebSocket | null>(null);
@@ -149,6 +152,34 @@ export const WalletMonitor = () => {
     }
 
     toast({ title: 'Wallet removed', description: 'No longer monitoring this wallet' });
+  };
+
+  // Update wallet label
+  const updateWalletLabel = async () => {
+    if (!editingWallet || !editLabel.trim()) return;
+
+    const { error } = await supabase
+      .from('monitored_wallets')
+      .update({ label: editLabel.trim() })
+      .eq('id', editingWallet.id);
+
+    if (error) {
+      toast({ title: 'Error updating wallet', description: error.message, variant: 'destructive' });
+      return;
+    }
+
+    await loadWallets();
+    setEditingWallet(null);
+    setEditLabel('');
+    toast({ title: 'Wallet updated', description: 'Label has been updated' });
+  };
+
+  // Copy address to clipboard
+  const copyAddress = async (address: string) => {
+    await navigator.clipboard.writeText(address);
+    setCopiedAddress(address);
+    toast({ title: 'Copied', description: 'Wallet address copied to clipboard' });
+    setTimeout(() => setCopiedAddress(null), 2000);
   };
 
   // Setup websocket connection
@@ -287,20 +318,56 @@ export const WalletMonitor = () => {
           <CardContent>
             <div className="space-y-2">
               {wallets.map((wallet) => (
-                <div key={wallet.id} className="flex items-center justify-between p-3 bg-muted/50 rounded-md">
-                  <div>
+                <div key={wallet.id} className="flex items-center justify-between p-3 bg-muted/50 rounded-md gap-2">
+                  <div className="flex-1 min-w-0">
                     <div className="font-medium">{wallet.label}</div>
-                    <div className="text-sm text-muted-foreground">
-                      {truncateAddress(wallet.wallet_address)}
+                    <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                      <code className="font-mono text-xs bg-background/50 px-1 py-0.5 rounded truncate max-w-[200px] sm:max-w-none">
+                        {wallet.wallet_address}
+                      </code>
+                      <Button
+                        size="icon"
+                        variant="ghost"
+                        className="h-6 w-6 shrink-0"
+                        onClick={() => copyAddress(wallet.wallet_address)}
+                      >
+                        {copiedAddress === wallet.wallet_address ? (
+                          <Check className="h-3 w-3 text-green-500" />
+                        ) : (
+                          <Copy className="h-3 w-3" />
+                        )}
+                      </Button>
+                      <a
+                        href={`https://solscan.io/account/${wallet.wallet_address}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="shrink-0"
+                      >
+                        <Button size="icon" variant="ghost" className="h-6 w-6">
+                          <ExternalLink className="h-3 w-3" />
+                        </Button>
+                      </a>
                     </div>
                   </div>
-                  <Button
-                    size="sm"
-                    variant="destructive"
-                    onClick={() => removeWallet(wallet.id)}
-                  >
-                    <Trash2 className="h-4 w-4" />
-                  </Button>
+                  <div className="flex gap-1 shrink-0">
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => {
+                        setEditingWallet(wallet);
+                        setEditLabel(wallet.label);
+                      }}
+                    >
+                      <Edit className="h-4 w-4" />
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="destructive"
+                      onClick={() => removeWallet(wallet.id)}
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
+                  </div>
                 </div>
               ))}
             </div>
@@ -371,6 +438,55 @@ export const WalletMonitor = () => {
         </CardContent>
       </Card>
     </div>
+
+    {/* Edit Wallet Dialog */}
+    <Dialog open={!!editingWallet} onOpenChange={(open) => !open && setEditingWallet(null)}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Edit Monitored Wallet</DialogTitle>
+        </DialogHeader>
+        {editingWallet && (
+          <div className="space-y-4">
+            <div>
+              <label className="text-sm font-medium">Wallet Address</label>
+              <div className="flex items-center gap-2 mt-1">
+                <code className="text-xs font-mono bg-muted p-2 rounded flex-1 break-all">
+                  {editingWallet.wallet_address}
+                </code>
+                <Button
+                  size="icon"
+                  variant="outline"
+                  onClick={() => copyAddress(editingWallet.wallet_address)}
+                >
+                  {copiedAddress === editingWallet.wallet_address ? (
+                    <Check className="h-4 w-4 text-green-500" />
+                  ) : (
+                    <Copy className="h-4 w-4" />
+                  )}
+                </Button>
+              </div>
+            </div>
+            <div>
+              <label className="text-sm font-medium">Label</label>
+              <Input
+                value={editLabel}
+                onChange={(e) => setEditLabel(e.target.value)}
+                placeholder="Enter a label"
+                className="mt-1"
+              />
+            </div>
+          </div>
+        )}
+        <DialogFooter>
+          <Button variant="outline" onClick={() => setEditingWallet(null)}>
+            Cancel
+          </Button>
+          <Button onClick={updateWalletLabel} disabled={!editLabel.trim()}>
+            Save
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
     </div>
     </RequireAuth>
   );
