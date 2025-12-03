@@ -147,6 +147,10 @@ serve(async (req) => {
       );
     }
 
+    // Track start time - edge functions timeout at ~60s, we'll stop at 50s to be safe
+    const startTime = Date.now();
+    const MAX_RUNTIME_MS = 50000; // 50 seconds max
+
     const API_URL = `https://api.helius.xyz/v0/addresses/${wallet}/transactions?api-key=${HELIUS_API_KEY}`;
     const cutoffTs = Math.floor(Date.now() / 1000) - days * 24 * 60 * 60;
     const cutoffDate = new Date(cutoffTs * 1000).toISOString();
@@ -167,6 +171,14 @@ serve(async (req) => {
 
     // Phase 1: Collect all transactions
     while (!done && results.length < maxTx) {
+      // Check timeout - stop gracefully if running too long
+      if (Date.now() - startTime > MAX_RUNTIME_MS) {
+        stopReason = 'TIMEOUT_GRACEFUL';
+        console.log('Approaching timeout, returning partial results...');
+        done = true;
+        break;
+      }
+
       pageCount++;
       const url = before ? `${API_URL}&before=${before}` : API_URL;
       
@@ -174,15 +186,23 @@ serve(async (req) => {
 
       let res: Response;
       let retryCount = 0;
-      const maxRetries = 5;
+      const maxRetries = 3; // Reduced from 5
       
       while (retryCount < maxRetries) {
+        // Check timeout before each retry too
+        if (Date.now() - startTime > MAX_RUNTIME_MS) {
+          stopReason = 'TIMEOUT_GRACEFUL';
+          done = true;
+          break;
+        }
+        
         res = await fetch(url);
         if (res.ok) break;
         
         if (res.status === 429) {
           retryCount++;
-          const waitTime = Math.min(5000 * Math.pow(2, retryCount - 1), 30000);
+          // Much shorter waits: 1s, 2s, 4s max
+          const waitTime = Math.min(1000 * Math.pow(2, retryCount - 1), 4000);
           console.log(`Rate limited, waiting ${waitTime/1000}s...`);
           await sleep(waitTime);
           continue;
@@ -190,8 +210,8 @@ serve(async (req) => {
         throw new Error(`API error: ${res.status}`);
       }
       
-      if (!res!.ok) {
-        stopReason = 'RATE_LIMITED';
+      if (done || !res!.ok) {
+        if (!done) stopReason = 'RATE_LIMITED';
         done = true;
         break;
       }
@@ -306,14 +326,15 @@ serve(async (req) => {
         }
       }
 
-      await sleep(500);
+      await sleep(300); // Reduced from 500ms
     }
 
     console.log(`Phase 1 complete: ${results.length} trades, ${uniqueMints.size} unique mints`);
 
-    // Phase 2: Enrich with token metadata
-    if (uniqueMints.size > 0) {
-      console.log(`Fetching metadata for ${uniqueMints.size} tokens...`);
+    // Phase 2: Enrich with token metadata (only if we have time left)
+    const timeRemaining = MAX_RUNTIME_MS - (Date.now() - startTime);
+    if (uniqueMints.size > 0 && timeRemaining > 5000) {
+      console.log(`Fetching metadata for ${uniqueMints.size} tokens (${Math.round(timeRemaining/1000)}s remaining)...`);
       const metadata = await getTokenMetadata(Array.from(uniqueMints), HELIUS_API_KEY);
       
       for (const r of results) {
@@ -323,6 +344,8 @@ serve(async (req) => {
           r.token_name = meta.name || '';
         }
       }
+    } else if (uniqueMints.size > 0) {
+      console.log('Skipping metadata enrichment due to time constraints');
     }
 
     // Sort chronologically
