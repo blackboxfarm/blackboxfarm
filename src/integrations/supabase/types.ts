@@ -2431,6 +2431,156 @@ export type Database = {
         }
         Relationships: []
       }
+      mega_whale_alert_config: {
+        Row: {
+          auto_buy_amount_sol: number | null
+          auto_buy_max_wait_minutes: number | null
+          auto_buy_on_mint: boolean | null
+          auto_buy_wait_for_buys: number | null
+          coordinated_buy_count: number | null
+          coordinated_buy_window_minutes: number | null
+          created_at: string | null
+          email_address: string | null
+          funding_burst_count: number | null
+          funding_burst_window_minutes: number | null
+          id: string
+          notify_browser: boolean | null
+          notify_email: boolean | null
+          notify_telegram: boolean | null
+          profit_taking_threshold_percent: number | null
+          telegram_chat_id: string | null
+          updated_at: string | null
+          user_id: string
+        }
+        Insert: {
+          auto_buy_amount_sol?: number | null
+          auto_buy_max_wait_minutes?: number | null
+          auto_buy_on_mint?: boolean | null
+          auto_buy_wait_for_buys?: number | null
+          coordinated_buy_count?: number | null
+          coordinated_buy_window_minutes?: number | null
+          created_at?: string | null
+          email_address?: string | null
+          funding_burst_count?: number | null
+          funding_burst_window_minutes?: number | null
+          id?: string
+          notify_browser?: boolean | null
+          notify_email?: boolean | null
+          notify_telegram?: boolean | null
+          profit_taking_threshold_percent?: number | null
+          telegram_chat_id?: string | null
+          updated_at?: string | null
+          user_id: string
+        }
+        Update: {
+          auto_buy_amount_sol?: number | null
+          auto_buy_max_wait_minutes?: number | null
+          auto_buy_on_mint?: boolean | null
+          auto_buy_wait_for_buys?: number | null
+          coordinated_buy_count?: number | null
+          coordinated_buy_window_minutes?: number | null
+          created_at?: string | null
+          email_address?: string | null
+          funding_burst_count?: number | null
+          funding_burst_window_minutes?: number | null
+          id?: string
+          notify_browser?: boolean | null
+          notify_email?: boolean | null
+          notify_telegram?: boolean | null
+          profit_taking_threshold_percent?: number | null
+          telegram_chat_id?: string | null
+          updated_at?: string | null
+          user_id?: string
+        }
+        Relationships: []
+      }
+      mega_whale_auto_trades: {
+        Row: {
+          amount_sol: number
+          buys_detected: number | null
+          buys_required: number | null
+          created_at: string | null
+          error_message: string | null
+          executed_at: string | null
+          execution_price: number | null
+          id: string
+          mega_whale_id: string | null
+          monitoring_expires_at: string | null
+          monitoring_started_at: string | null
+          pattern_alert_id: string | null
+          status: string
+          token_mint: string
+          token_name: string | null
+          token_symbol: string | null
+          tokens_received: number | null
+          trade_type: string
+          transaction_signature: string | null
+          updated_at: string | null
+          user_id: string
+        }
+        Insert: {
+          amount_sol: number
+          buys_detected?: number | null
+          buys_required?: number | null
+          created_at?: string | null
+          error_message?: string | null
+          executed_at?: string | null
+          execution_price?: number | null
+          id?: string
+          mega_whale_id?: string | null
+          monitoring_expires_at?: string | null
+          monitoring_started_at?: string | null
+          pattern_alert_id?: string | null
+          status?: string
+          token_mint: string
+          token_name?: string | null
+          token_symbol?: string | null
+          tokens_received?: number | null
+          trade_type?: string
+          transaction_signature?: string | null
+          updated_at?: string | null
+          user_id: string
+        }
+        Update: {
+          amount_sol?: number
+          buys_detected?: number | null
+          buys_required?: number | null
+          created_at?: string | null
+          error_message?: string | null
+          executed_at?: string | null
+          execution_price?: number | null
+          id?: string
+          mega_whale_id?: string | null
+          monitoring_expires_at?: string | null
+          monitoring_started_at?: string | null
+          pattern_alert_id?: string | null
+          status?: string
+          token_mint?: string
+          token_name?: string | null
+          token_symbol?: string | null
+          tokens_received?: number | null
+          trade_type?: string
+          transaction_signature?: string | null
+          updated_at?: string | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "mega_whale_auto_trades_mega_whale_id_fkey"
+            columns: ["mega_whale_id"]
+            isOneToOne: false
+            referencedRelation: "mega_whales"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "mega_whale_auto_trades_pattern_alert_id_fkey"
+            columns: ["pattern_alert_id"]
+            isOneToOne: false
+            referencedRelation: "mega_whale_pattern_alerts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       mega_whale_offspring: {
         Row: {
           created_at: string | null
@@ -2496,6 +2646,65 @@ export type Database = {
             columns: ["parent_offspring_id"]
             isOneToOne: false
             referencedRelation: "mega_whale_offspring"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      mega_whale_pattern_alerts: {
+        Row: {
+          alert_type: string
+          created_at: string | null
+          description: string | null
+          expires_at: string | null
+          id: string
+          is_notified_browser: boolean | null
+          is_notified_email: boolean | null
+          is_notified_telegram: boolean | null
+          is_read: boolean | null
+          mega_whale_id: string | null
+          metadata: Json | null
+          severity: string
+          title: string
+          user_id: string
+        }
+        Insert: {
+          alert_type: string
+          created_at?: string | null
+          description?: string | null
+          expires_at?: string | null
+          id?: string
+          is_notified_browser?: boolean | null
+          is_notified_email?: boolean | null
+          is_notified_telegram?: boolean | null
+          is_read?: boolean | null
+          mega_whale_id?: string | null
+          metadata?: Json | null
+          severity?: string
+          title: string
+          user_id: string
+        }
+        Update: {
+          alert_type?: string
+          created_at?: string | null
+          description?: string | null
+          expires_at?: string | null
+          id?: string
+          is_notified_browser?: boolean | null
+          is_notified_email?: boolean | null
+          is_notified_telegram?: boolean | null
+          is_read?: boolean | null
+          mega_whale_id?: string | null
+          metadata?: Json | null
+          severity?: string
+          title?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "mega_whale_pattern_alerts_mega_whale_id_fkey"
+            columns: ["mega_whale_id"]
+            isOneToOne: false
+            referencedRelation: "mega_whales"
             referencedColumns: ["id"]
           },
         ]
