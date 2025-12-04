@@ -12,6 +12,7 @@ interface ActivityItem {
   type: 'whale_buy' | 'frenzy_detected' | 'auto_buy';
   wallet_address?: string;
   wallet_nickname?: string;
+  wallet_avatar?: string;
   token_mint: string;
   token_symbol?: string;
   token_image?: string;
@@ -78,6 +79,7 @@ export function FrenzyActivityFeed({
             token_image: event.token_image,
             wallet_address: firstWallet.address,
             wallet_nickname: firstWallet.nickname,
+            wallet_avatar: firstWallet.avatar_url,
             sol_amount: firstWallet.sol_amount,
             token_amount: firstWallet.token_amount,
             price_per_token: firstWallet.price_per_token,
@@ -134,6 +136,7 @@ export function FrenzyActivityFeed({
           token_image: event.token_image,
           wallet_address: firstWallet.address,
           wallet_nickname: firstWallet.nickname,
+          wallet_avatar: firstWallet.avatar_url,
           sol_amount: firstWallet.sol_amount,
           token_amount: firstWallet.token_amount,
           price_per_token: firstWallet.price_per_token,
@@ -235,9 +238,11 @@ export function FrenzyActivityFeed({
           ) : (
             <div className="space-y-1">
               {/* Header row */}
-              <div className="grid grid-cols-[40px_1fr_100px_90px_100px_70px_60px] gap-2 px-2 py-1 text-xs font-medium text-muted-foreground border-b border-border/50">
-                <div></div>
-                <div>Whale / Token</div>
+              <div className="grid grid-cols-[40px_40px_120px_140px_80px_100px_90px_70px_50px] gap-2 px-2 py-1 text-xs font-medium text-muted-foreground border-b border-border/50">
+                <div>Whale</div>
+                <div>Token</div>
+                <div>Whale</div>
+                <div>Ticker</div>
                 <div className="text-right">SOL</div>
                 <div className="text-right">Price</div>
                 <div>Type</div>
@@ -249,8 +254,27 @@ export function FrenzyActivityFeed({
               {activities.map((activity) => (
                 <div
                   key={activity.id}
-                  className={`grid grid-cols-[40px_1fr_100px_90px_100px_70px_60px] gap-2 px-2 py-2 rounded-lg items-center transition-colors ${getRowBgColor(activity)}`}
+                  className={`grid grid-cols-[40px_40px_120px_140px_80px_100px_90px_70px_50px] gap-2 px-2 py-2 rounded-lg items-center transition-colors ${getRowBgColor(activity)}`}
                 >
+                  {/* Whale avatar */}
+                  <div className="flex-shrink-0">
+                    {activity.wallet_avatar ? (
+                      <img 
+                        src={activity.wallet_avatar} 
+                        alt={activity.wallet_nickname || 'Whale'} 
+                        className="w-8 h-8 rounded-full object-cover border border-border"
+                        onError={(e) => { 
+                          e.currentTarget.onerror = null;
+                          e.currentTarget.style.display = 'none';
+                          e.currentTarget.nextElementSibling?.classList.remove('hidden');
+                        }}
+                      />
+                    ) : null}
+                    <div className={`w-8 h-8 rounded-full bg-muted flex items-center justify-center text-sm ${activity.wallet_avatar ? 'hidden' : ''}`}>
+                      🐋
+                    </div>
+                  </div>
+
                   {/* Token image */}
                   <div className="flex-shrink-0">
                     {activity.token_image ? (
@@ -260,37 +284,39 @@ export function FrenzyActivityFeed({
                         className="w-8 h-8 rounded-full object-cover border border-border"
                         onError={(e) => { 
                           e.currentTarget.onerror = null;
-                          e.currentTarget.src = ''; 
-                          e.currentTarget.className = 'hidden';
+                          e.currentTarget.style.display = 'none';
+                          e.currentTarget.nextElementSibling?.classList.remove('hidden');
                         }}
                       />
-                    ) : (
-                      <div className="w-8 h-8 rounded-full bg-muted flex items-center justify-center text-sm">
-                        {activity.type === 'auto_buy' ? (
-                          <Zap className="h-4 w-4 text-yellow-500" />
-                        ) : activity.whale_count && activity.whale_count >= minWhalesForFrenzy ? (
-                          '🔥'
-                        ) : (
-                          '🐋'
-                        )}
-                      </div>
-                    )}
+                    ) : null}
+                    <div className={`w-8 h-8 rounded-full bg-muted flex items-center justify-center text-xs font-mono ${activity.token_image ? 'hidden' : ''}`}>
+                      {activity.token_symbol?.slice(0, 2) || '??'}
+                    </div>
                   </div>
 
-                  {/* Whale & Token */}
+                  {/* Whale name */}
                   <div className="min-w-0">
-                    <div className="text-sm font-medium truncate">
+                    <div className="text-sm font-medium truncate text-foreground">
+                      {getWalletDisplay(activity)}
+                    </div>
+                  </div>
+
+                  {/* Token ticker - linked */}
+                  <div className="min-w-0">
+                    <a 
+                      href={`https://trade.padre.gg/${activity.token_mint}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-sm font-medium text-primary hover:underline truncate block"
+                    >
                       {activity.token_symbol ? (
-                        <span className="text-primary">${activity.token_symbol}</span>
+                        `$${activity.token_symbol}`
                       ) : (
-                        <span className="text-muted-foreground font-mono text-xs">
+                        <span className="font-mono text-xs">
                           {activity.token_mint.slice(0, 8)}...
                         </span>
                       )}
-                    </div>
-                    <div className="text-xs text-muted-foreground truncate">
-                      {getWalletDisplay(activity)}
-                    </div>
+                    </a>
                   </div>
 
                   {/* SOL Amount */}
@@ -298,9 +324,6 @@ export function FrenzyActivityFeed({
                     <span className="text-sm font-medium text-foreground">
                       {formatSol(activity.sol_amount)}
                     </span>
-                    {activity.sol_amount && activity.sol_amount > 0 && (
-                      <span className="text-xs text-muted-foreground ml-1">SOL</span>
-                    )}
                   </div>
 
                   {/* Price */}
