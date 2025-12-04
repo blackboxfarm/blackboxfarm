@@ -2500,6 +2500,87 @@ export type Database = {
         }
         Relationships: []
       }
+      mega_whale_auto_buy_config: {
+        Row: {
+          buy_amount_sol: number | null
+          buys_today: number | null
+          created_at: string | null
+          id: string
+          is_enabled: boolean | null
+          last_buy_reset: string | null
+          max_daily_buys: number | null
+          min_launcher_score: number | null
+          slippage_bps: number | null
+          updated_at: string | null
+          user_id: string
+        }
+        Insert: {
+          buy_amount_sol?: number | null
+          buys_today?: number | null
+          created_at?: string | null
+          id?: string
+          is_enabled?: boolean | null
+          last_buy_reset?: string | null
+          max_daily_buys?: number | null
+          min_launcher_score?: number | null
+          slippage_bps?: number | null
+          updated_at?: string | null
+          user_id: string
+        }
+        Update: {
+          buy_amount_sol?: number | null
+          buys_today?: number | null
+          created_at?: string | null
+          id?: string
+          is_enabled?: boolean | null
+          last_buy_reset?: string | null
+          max_daily_buys?: number | null
+          min_launcher_score?: number | null
+          slippage_bps?: number | null
+          updated_at?: string | null
+          user_id?: string
+        }
+        Relationships: []
+      }
+      mega_whale_auto_buy_wallets: {
+        Row: {
+          created_at: string | null
+          id: string
+          is_active: boolean | null
+          pubkey: string
+          secret_key_encrypted: string
+          sol_balance: number | null
+          total_buys: number | null
+          total_sol_spent: number | null
+          updated_at: string | null
+          user_id: string
+        }
+        Insert: {
+          created_at?: string | null
+          id?: string
+          is_active?: boolean | null
+          pubkey: string
+          secret_key_encrypted: string
+          sol_balance?: number | null
+          total_buys?: number | null
+          total_sol_spent?: number | null
+          updated_at?: string | null
+          user_id: string
+        }
+        Update: {
+          created_at?: string | null
+          id?: string
+          is_active?: boolean | null
+          pubkey?: string
+          secret_key_encrypted?: string
+          sol_balance?: number | null
+          total_buys?: number | null
+          total_sol_spent?: number | null
+          updated_at?: string | null
+          user_id?: string
+        }
+        Relationships: []
+      }
       mega_whale_auto_trades: {
         Row: {
           amount_sol: number
@@ -2587,17 +2668,92 @@ export type Database = {
           },
         ]
       }
+      mega_whale_mint_alerts: {
+        Row: {
+          auto_buy_amount_sol: number | null
+          auto_buy_status: string | null
+          auto_buy_triggered: boolean | null
+          auto_buy_tx: string | null
+          created_at: string | null
+          detected_at: string | null
+          funding_chain: Json | null
+          id: string
+          launcher_score: number | null
+          mega_whale_id: string | null
+          minter_wallet: string
+          offspring_id: string | null
+          token_mint: string
+          token_name: string | null
+          token_symbol: string | null
+        }
+        Insert: {
+          auto_buy_amount_sol?: number | null
+          auto_buy_status?: string | null
+          auto_buy_triggered?: boolean | null
+          auto_buy_tx?: string | null
+          created_at?: string | null
+          detected_at?: string | null
+          funding_chain?: Json | null
+          id?: string
+          launcher_score?: number | null
+          mega_whale_id?: string | null
+          minter_wallet: string
+          offspring_id?: string | null
+          token_mint: string
+          token_name?: string | null
+          token_symbol?: string | null
+        }
+        Update: {
+          auto_buy_amount_sol?: number | null
+          auto_buy_status?: string | null
+          auto_buy_triggered?: boolean | null
+          auto_buy_tx?: string | null
+          created_at?: string | null
+          detected_at?: string | null
+          funding_chain?: Json | null
+          id?: string
+          launcher_score?: number | null
+          mega_whale_id?: string | null
+          minter_wallet?: string
+          offspring_id?: string | null
+          token_mint?: string
+          token_name?: string | null
+          token_symbol?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "mega_whale_mint_alerts_mega_whale_id_fkey"
+            columns: ["mega_whale_id"]
+            isOneToOne: false
+            referencedRelation: "mega_whales"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "mega_whale_mint_alerts_offspring_id_fkey"
+            columns: ["offspring_id"]
+            isOneToOne: false
+            referencedRelation: "mega_whale_offspring"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       mega_whale_offspring: {
         Row: {
           created_at: string | null
           depth_level: number
           first_funded_at: string | null
+          has_minted: boolean | null
           id: string
           is_active_trader: boolean | null
+          is_monitored: boolean | null
           is_pump_fun_dev: boolean | null
           last_activity_at: string | null
+          last_scored_at: string | null
+          launcher_score: number | null
           mega_whale_id: string
+          minted_token: string | null
           parent_offspring_id: string | null
+          score_factors: Json | null
           tokens_bought: Json | null
           tokens_minted: Json | null
           tokens_sold: Json | null
@@ -2609,12 +2765,18 @@ export type Database = {
           created_at?: string | null
           depth_level?: number
           first_funded_at?: string | null
+          has_minted?: boolean | null
           id?: string
           is_active_trader?: boolean | null
+          is_monitored?: boolean | null
           is_pump_fun_dev?: boolean | null
           last_activity_at?: string | null
+          last_scored_at?: string | null
+          launcher_score?: number | null
           mega_whale_id: string
+          minted_token?: string | null
           parent_offspring_id?: string | null
+          score_factors?: Json | null
           tokens_bought?: Json | null
           tokens_minted?: Json | null
           tokens_sold?: Json | null
@@ -2626,12 +2788,18 @@ export type Database = {
           created_at?: string | null
           depth_level?: number
           first_funded_at?: string | null
+          has_minted?: boolean | null
           id?: string
           is_active_trader?: boolean | null
+          is_monitored?: boolean | null
           is_pump_fun_dev?: boolean | null
           last_activity_at?: string | null
+          last_scored_at?: string | null
+          launcher_score?: number | null
           mega_whale_id?: string
+          minted_token?: string | null
           parent_offspring_id?: string | null
+          score_factors?: Json | null
           tokens_bought?: Json | null
           tokens_minted?: Json | null
           tokens_sold?: Json | null
@@ -5319,6 +5487,7 @@ export type Database = {
       }
       mask_sensitive_data: { Args: { input_text: string }; Returns: string }
       process_active_blackbox_commands: { Args: never; Returns: undefined }
+      reset_daily_auto_buy_counts: { Args: never; Returns: undefined }
       schedule_arb_scanner: { Args: never; Returns: undefined }
       track_referral_signup: {
         Args: { new_user_id: string; referral_code_param: string }
