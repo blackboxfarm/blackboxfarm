@@ -4355,6 +4355,129 @@ export type Database = {
           },
         ]
       }
+      whale_frenzy_config: {
+        Row: {
+          auto_buy_enabled: boolean
+          buy_amount_sol: number
+          cooldown_seconds: number
+          created_at: string
+          id: string
+          is_active: boolean
+          max_slippage_bps: number
+          min_whales_for_frenzy: number
+          time_window_seconds: number
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          auto_buy_enabled?: boolean
+          buy_amount_sol?: number
+          cooldown_seconds?: number
+          created_at?: string
+          id?: string
+          is_active?: boolean
+          max_slippage_bps?: number
+          min_whales_for_frenzy?: number
+          time_window_seconds?: number
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          auto_buy_enabled?: boolean
+          buy_amount_sol?: number
+          cooldown_seconds?: number
+          created_at?: string
+          id?: string
+          is_active?: boolean
+          max_slippage_bps?: number
+          min_whales_for_frenzy?: number
+          time_window_seconds?: number
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      whale_frenzy_events: {
+        Row: {
+          auto_buy_amount_sol: number | null
+          auto_buy_error: string | null
+          auto_buy_executed: boolean
+          auto_buy_signature: string | null
+          created_at: string
+          detected_at: string
+          first_buy_at: string | null
+          id: string
+          last_buy_at: string | null
+          participating_wallets: Json
+          token_mint: string
+          token_name: string | null
+          token_symbol: string | null
+          user_id: string
+          whale_count: number
+        }
+        Insert: {
+          auto_buy_amount_sol?: number | null
+          auto_buy_error?: string | null
+          auto_buy_executed?: boolean
+          auto_buy_signature?: string | null
+          created_at?: string
+          detected_at?: string
+          first_buy_at?: string | null
+          id?: string
+          last_buy_at?: string | null
+          participating_wallets?: Json
+          token_mint: string
+          token_name?: string | null
+          token_symbol?: string | null
+          user_id: string
+          whale_count: number
+        }
+        Update: {
+          auto_buy_amount_sol?: number | null
+          auto_buy_error?: string | null
+          auto_buy_executed?: boolean
+          auto_buy_signature?: string | null
+          created_at?: string
+          detected_at?: string
+          first_buy_at?: string | null
+          id?: string
+          last_buy_at?: string | null
+          participating_wallets?: Json
+          token_mint?: string
+          token_name?: string | null
+          token_symbol?: string | null
+          user_id?: string
+          whale_count?: number
+        }
+        Relationships: []
+      }
+      whale_wallets: {
+        Row: {
+          created_at: string
+          id: string
+          is_active: boolean
+          nickname: string | null
+          user_id: string
+          wallet_address: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          is_active?: boolean
+          nickname?: string | null
+          user_id: string
+          wallet_address: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          is_active?: boolean
+          nickname?: string | null
+          user_id?: string
+          wallet_address?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       developer_genealogy: {
