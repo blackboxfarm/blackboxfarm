@@ -16,10 +16,11 @@ import {
   Crown, Plus, Trash2, Search, Activity, Bell, 
   RefreshCw, ExternalLink, GitBranch, Coins, 
   TrendingUp, TrendingDown, Radio, WifiOff, Eye,
-  Zap, Settings, Mail, Send, Bot, DollarSign
+  Zap, Settings, Mail, Send, Bot, DollarSign, Wallet
 } from 'lucide-react';
 import { Switch } from '@/components/ui/switch';
 import { format } from 'date-fns';
+import { MegaWhaleWalletManager } from './MegaWhaleWalletManager';
 
 interface MegaWhale {
   id: string;
@@ -533,6 +534,9 @@ export function MegaWhaleDashboard() {
               </Badge>
             )}
           </TabsTrigger>
+          <TabsTrigger value="wallet" className="flex items-center gap-2">
+            <Wallet className="h-4 w-4" /> Wallet
+          </TabsTrigger>
           <TabsTrigger value="settings" className="flex items-center gap-2">
             <Settings className="h-4 w-4" /> Settings
           </TabsTrigger>
@@ -925,6 +929,10 @@ export function MegaWhaleDashboard() {
               </ScrollArea>
             </CardContent>
           </Card>
+        </TabsContent>
+
+        <TabsContent value="wallet" className="space-y-4">
+          {user?.id && <MegaWhaleWalletManager userId={user.id} />}
         </TabsContent>
 
         <TabsContent value="settings" className="space-y-4">
