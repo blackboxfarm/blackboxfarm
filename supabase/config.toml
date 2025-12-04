@@ -165,3 +165,12 @@ verify_jwt = false
 
 [functions.telegram-bot-webhook]
 verify_jwt = false
+
+[functions.mega-whale-launcher-scorer]
+verify_jwt = false
+
+[functions.mega-whale-mint-monitor]
+verify_jwt = false
+
+[functions.mega-whale-auto-buyer]
+verify_jwt = false
