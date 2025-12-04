@@ -4534,6 +4534,7 @@ export type Database = {
           id: string
           is_active: boolean
           nickname: string | null
+          twitter_handle: string | null
           user_id: string
           wallet_address: string
         }
@@ -4542,6 +4543,7 @@ export type Database = {
           id?: string
           is_active?: boolean
           nickname?: string | null
+          twitter_handle?: string | null
           user_id: string
           wallet_address: string
         }
@@ -4550,6 +4552,7 @@ export type Database = {
           id?: string
           is_active?: boolean
           nickname?: string | null
+          twitter_handle?: string | null
           user_id?: string
           wallet_address?: string
         }

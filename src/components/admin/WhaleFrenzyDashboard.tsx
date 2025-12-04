@@ -38,6 +38,7 @@ interface WhaleWallet {
   user_id: string;
   wallet_address: string;
   nickname: string | null;
+  twitter_handle: string | null;
   is_active: boolean;
   created_at: string;
 }
@@ -59,6 +60,7 @@ interface FrenzyEvent {
 interface ParsedWallet {
   address: string;
   nickname: string | null;
+  twitter: string | null;
   valid: boolean;
   error?: string;
 }
@@ -68,56 +70,56 @@ const BASE58_REGEX = /^[1-9A-HJ-NP-Za-km-z]{32,44}$/;
 
 // KOLscan Top 50 Whale Wallets (Daily Leaderboard - Dec 2024)
 const KOLSCAN_TOP_50 = [
-  { address: 'J6TDXvarvpBdPXTaTU8eJbtso1PUCYKGkVtMKUUY8iEa', nickname: 'Pain' },
-  { address: 'CyaE1VxvBrahnPWkqm5VsdCvyS2QmNht2UFrKJHga54o', nickname: 'Cented' },
-  { address: '6mWEJG9LoRdto8TwTdZxmnJpkXpTsEerizcGiCNZvzXd', nickname: 'slingoor' },
-  { address: 'B3wagQZiZU2hKa5pUCj6rrdhWsX3Q6WfTTnki9PjwzMh', nickname: 'xander' },
-  { address: 'DZAa55HwXgv5hStwaTEJGXZz1DhHejvpb7Yr762urXam', nickname: 'ozark' },
-  { address: '87rRdssFiTJKY4MGARa4G5vQ31hmR7MxSmhzeaJ5AAxJ', nickname: 'Dior' },
-  { address: '3H9LVHarjBoZ2YPEsgFbVD1zuERCGwfp4AeyHoHsFSEC', nickname: 'JADAWGS' },
-  { address: '2fg5QD1eD7rzNNCsvnhmXFm5hqNgwTTG8p7kQ6f3rx6f', nickname: 'Cupsey' },
-  { address: 'DYmsQudNqJyyDvq86XmzAvrU9T7xwfQEwh6gPQw9TPNF', nickname: 'unprofitable' },
-  { address: '4nvNc7dDEqKKLM4Sr9Kgk3t1of6f8G66kT64VoC95LYh', nickname: 'MAMBA' },
-  { address: '78N177fzNJpp8pG49xDv1efYcTMSzo9tPTKEA9mAVkh2', nickname: 'Sheep' },
-  { address: '4BdKaxN8G6ka4GYtQQWk4G4dZRUTX2vQH9GcXdBREFUk', nickname: 'Jijo' },
-  { address: '5B79fMkcFeRTiwm7ehsZsFiKsC7m7n1Bgv9yLxPp9q2X', nickname: 'bandit' },
-  { address: 'B32QbbdDAyhvUQzjcaM5j6ZVKwjCxAwGH5Xgvb9SJqnC', nickname: 'Kadenox' },
-  { address: 'Bi4rd5FH5bYEN8scZ7wevxNZyNmKHdaBcvewdPFxYdLt', nickname: 'theo' },
-  { address: 'Ez2jp3rwXUbaTx7XwiHGaWVgTPFdzJoSg8TopqbxfaJN', nickname: 'Keano' },
-  { address: '71PCu3E4JP5RDBoY6wJteqzxkKNXLyE1byg5BTAL9UtQ', nickname: 'Ramset' },
-  { address: '4cXnf2z85UiZ5cyKsPMEULq1yufAtpkatmX4j4DBZqj2', nickname: 'WaiterG' },
-  { address: 'xyzfhxfy8NhfeNG3Um3WaUvFXzNuHkrhrZMD8dsStB6', nickname: 'Gasp' },
-  { address: 'DjM7Tu7whh6P3pGVBfDzwXAx2zaw51GJWrJE3PwtuN7s', nickname: 'LUKEY' },
-  { address: '5T229oePmJGE5Cefys8jE9Jq8C7qfGNNWy3RVA7SmwEP', nickname: 'Tuults' },
-  { address: 'BtMBMPkoNbnLF9Xn552guQq528KKXcsNBNNBre3oaQtr', nickname: 'Letterbomb' },
-  { address: '39q2g5tTQn9n7KnuapzwS2smSx3NGYqBoea11tBjsGEt', nickname: 'Walta' },
-  { address: '5sNnKuWKUtZkdC1eFNyqz3XHpNoCRQ1D1DfHcNHMV7gn', nickname: 'cryptovillain26' },
-  { address: '8AtQ4ka3dgtrH1z4Uq3Tm4YdMN3cK5RRj1eKuGNnvenm', nickname: 'peacefuldestroy' },
-  { address: '4AHgEkTsGqY77qtde4UJn9yZCrbGcM7UM3vjT3qM4G5H', nickname: 'BagCalls' },
-  { address: '4uCT4g7YHH4xxfmfNfKUDenwGrRNGoZ9Ay1XFxfUGhQG', nickname: 'chingchongslayer' },
-  { address: 'uS74rigLoPmKdi169RPUB4VSF6T9PqChTpG5jWzVhVp', nickname: 'para' },
-  { address: '215nhcAHjQQGgwpQSJQ7zR26etbjjtVdW74NLzwEgQjP', nickname: 'OGAntD' },
-  { address: '7tiRXPM4wwBMRMYzmywRAE6jveS3gDbNyxgRrEoU6RLA', nickname: 'Qtdegen' },
-  { address: '2W14ahXD3XBfWJchQ4K5NLXmguWWcTTUTuHDhEzeuvP3', nickname: 'Veloce' },
-  { address: 'PMJA8UQDyWTFw2Smhyp9jGA6aTaP7jKHR7BPudrgyYN', nickname: 'chester' },
-  { address: 'FsG3BaPmRTdSrPaivbgJsFNCCa8cPfkUtk8VLWXkHpHP', nickname: 'Reljoo' },
-  { address: 'DEdEW3SMPU2dCfXEcgj2YppmX9H3bnMDJaU4ctn2BQDQ', nickname: 'King Solomon' },
-  { address: 'Dxudj2DQ5odnqgZvUocaeWc1eYC78Q8vfmVtPpvTrRNh', nickname: 'storm' },
-  { address: 'FTg1gqW7vPm4kdU1LPM7JJnizbgPdRDy2PitKw6mY27j', nickname: '7' },
-  { address: '5fHJszey2UdB2nETS1y6NS2wSG4ic9byKtbgJzaYzGeV', nickname: 'k4ye' },
-  { address: 'DYAn4XpAkN5mhiXkRB7dGq4Jadnx6XYgu8L5b3WGhbrt', nickname: 'The Doc' },
-  { address: '6S8GezkxYUfZy9JPtYnanbcZTMB87Wjt1qx3c6ELajKC', nickname: 'Nyhrox' },
-  { address: '4sAUSQFdvWRBxR8UoLBYbw8CcXuwXWxnN8pXa4mtm5nU', nickname: 'Scharo' },
-  { address: 'G2mgnzpr59vYjKpwU9q5zVfS9yQ9HezMwjuqF7LACvR4', nickname: 'fz7' },
-  { address: 'AeLaMjzxErZt4drbWVWvcxpVyo8p94xu5vrg41eZPFe3', nickname: '1s1mple' },
-  { address: '99xnE2zEFi8YhmKDaikc1EvH6ELTQJppnqUwMzmpLXrs', nickname: 'Coler' },
-  { address: 'ETU3GyrUsv6UztQJxHgsBX2UoJFmq79WJe3JyDpAqGMz', nickname: 'MACXBT' },
-  { address: 'EA4MXkyF8C2NzY8fw2acJPuarmoU271KRCCAYpLzMBJr', nickname: 'Grimace' },
-  { address: '2octNbV8QTtaFMJtbWhtkqMQt3deBe4D8mYcNworhv3t', nickname: 'Sugus' },
-  { address: '9f5ywdCDA4QhSktBomozpHmZfSLqS6J9VqCrRehYWh1p', nickname: 'matsu' },
-  { address: 'ADC1QV9raLnGGDbnWdnsxazeZ4Tsiho4vrWadYswA2ph', nickname: 'Ducky' },
-  { address: 'AGqjivJr1dSv73TVUvdtqAwogzmThzvYMVXjGWg2FYLm', nickname: 'noob mini' },
-  { address: 'EP5mvfhGv6x1XR33Fd8eioiYjtRXAawafPmkz9xBpDvG', nickname: 'Zemrics' },
+  { address: 'J6TDXvarvpBdPXTaTU8eJbtso1PUCYKGkVtMKUUY8iEa', nickname: 'Pain', twitter: 'Pain_kills69' },
+  { address: 'CyaE1VxvBrahnPWkqm5VsdCvyS2QmNht2UFrKJHga54o', nickname: 'Cented', twitter: 'CentedSolana' },
+  { address: '6mWEJG9LoRdto8TwTdZxmnJpkXpTsEerizcGiCNZvzXd', nickname: 'slingoor', twitter: 'slingdotfun' },
+  { address: 'B3wagQZiZU2hKa5pUCj6rrdhWsX3Q6WfTTnki9PjwzMh', nickname: 'xander', twitter: 'xanderisnothere' },
+  { address: 'DZAa55HwXgv5hStwaTEJGXZz1DhHejvpb7Yr762urXam', nickname: 'ozark', twitter: 'OzarkCalls' },
+  { address: '87rRdssFiTJKY4MGARa4G5vQ31hmR7MxSmhzeaJ5AAxJ', nickname: 'Dior', twitter: 'DiorSOL' },
+  { address: '3H9LVHarjBoZ2YPEsgFbVD1zuERCGwfp4AeyHoHsFSEC', nickname: 'JADAWGS', twitter: 'JasonXBT' },
+  { address: '2fg5QD1eD7rzNNCsvnhmXFm5hqNgwTTG8p7kQ6f3rx6f', nickname: 'Cupsey', twitter: 'CupseySOL' },
+  { address: 'DYmsQudNqJyyDvq86XmzAvrU9T7xwfQEwh6gPQw9TPNF', nickname: 'unprofitable', twitter: 'unprofitabIe' },
+  { address: '4nvNc7dDEqKKLM4Sr9Kgk3t1of6f8G66kT64VoC95LYh', nickname: 'MAMBA', twitter: 'maboroshisol' },
+  { address: '78N177fzNJpp8pG49xDv1efYcTMSzo9tPTKEA9mAVkh2', nickname: 'Sheep', twitter: 'sheepsolana' },
+  { address: '4BdKaxN8G6ka4GYtQQWk4G4dZRUTX2vQH9GcXdBREFUk', nickname: 'Jijo', twitter: 'jijocrypto' },
+  { address: '5B79fMkcFeRTiwm7ehsZsFiKsC7m7n1Bgv9yLxPp9q2X', nickname: 'bandit', twitter: 'banditsol' },
+  { address: 'B32QbbdDAyhvUQzjcaM5j6ZVKwjCxAwGH5Xgvb9SJqnC', nickname: 'Kadenox', twitter: 'Kadenox_' },
+  { address: 'Bi4rd5FH5bYEN8scZ7wevxNZyNmKHdaBcvewdPFxYdLt', nickname: 'theo', twitter: 'Theoodorus' },
+  { address: 'Ez2jp3rwXUbaTx7XwiHGaWVgTPFdzJoSg8TopqbxfaJN', nickname: 'Keano', twitter: 'KeanoBets' },
+  { address: '71PCu3E4JP5RDBoY6wJteqzxkKNXLyE1byg5BTAL9UtQ', nickname: 'Ramset', twitter: 'Ramsettrades' },
+  { address: '4cXnf2z85UiZ5cyKsPMEULq1yufAtpkatmX4j4DBZqj2', nickname: 'WaiterG', twitter: 'WaiterGSol' },
+  { address: 'xyzfhxfy8NhfeNG3Um3WaUvFXzNuHkrhrZMD8dsStB6', nickname: 'Gasp', twitter: 'GaspSOL' },
+  { address: 'DjM7Tu7whh6P3pGVBfDzwXAx2zaw51GJWrJE3PwtuN7s', nickname: 'LUKEY', twitter: 'LukeySOL' },
+  { address: '5T229oePmJGE5Cefys8jE9Jq8C7qfGNNWy3RVA7SmwEP', nickname: 'Tuults', twitter: 'Tuults' },
+  { address: 'BtMBMPkoNbnLF9Xn552guQq528KKXcsNBNNBre3oaQtr', nickname: 'Letterbomb', twitter: 'LetterbombSOL' },
+  { address: '39q2g5tTQn9n7KnuapzwS2smSx3NGYqBoea11tBjsGEt', nickname: 'Walta', twitter: 'WaltaSol' },
+  { address: '5sNnKuWKUtZkdC1eFNyqz3XHpNoCRQ1D1DfHcNHMV7gn', nickname: 'cryptovillain26', twitter: 'cryptovillain26' },
+  { address: '8AtQ4ka3dgtrH1z4Uq3Tm4YdMN3cK5RRj1eKuGNnvenm', nickname: 'peacefuldestroy', twitter: 'peacefuldestroy' },
+  { address: '4AHgEkTsGqY77qtde4UJn9yZCrbGcM7UM3vjT3qM4G5H', nickname: 'BagCalls', twitter: 'BagCalls' },
+  { address: '4uCT4g7YHH4xxfmfNfKUDenwGrRNGoZ9Ay1XFxfUGhQG', nickname: 'chingchongslayer', twitter: null },
+  { address: 'uS74rigLoPmKdi169RPUB4VSF6T9PqChTpG5jWzVhVp', nickname: 'para', twitter: 'paraSOL_' },
+  { address: '215nhcAHjQQGgwpQSJQ7zR26etbjjtVdW74NLzwEgQjP', nickname: 'OGAntD', twitter: 'OGAntD' },
+  { address: '7tiRXPM4wwBMRMYzmywRAE6jveS3gDbNyxgRrEoU6RLA', nickname: 'Qtdegen', twitter: 'Qtdegen' },
+  { address: '2W14ahXD3XBfWJchQ4K5NLXmguWWcTTUTuHDhEzeuvP3', nickname: 'Veloce', twitter: 'Veloce_SOL' },
+  { address: 'PMJA8UQDyWTFw2Smhyp9jGA6aTaP7jKHR7BPudrgyYN', nickname: 'chester', twitter: 'chesterSOL' },
+  { address: 'FsG3BaPmRTdSrPaivbgJsFNCCa8cPfkUtk8VLWXkHpHP', nickname: 'Reljoo', twitter: 'Reljoo_' },
+  { address: 'DEdEW3SMPU2dCfXEcgj2YppmX9H3bnMDJaU4ctn2BQDQ', nickname: 'King Solomon', twitter: 'KingSolomonSOL' },
+  { address: 'Dxudj2DQ5odnqgZvUocaeWc1eYC78Q8vfmVtPpvTrRNh', nickname: 'storm', twitter: 'stormsolana' },
+  { address: 'FTg1gqW7vPm4kdU1LPM7JJnizbgPdRDy2PitKw6mY27j', nickname: '7', twitter: 'SevenSOL_' },
+  { address: '5fHJszey2UdB2nETS1y6NS2wSG4ic9byKtbgJzaYzGeV', nickname: 'k4ye', twitter: 'k4ye_sol' },
+  { address: 'DYAn4XpAkN5mhiXkRB7dGq4Jadnx6XYgu8L5b3WGhbrt', nickname: 'The Doc', twitter: 'TheDocSOL' },
+  { address: '6S8GezkxYUfZy9JPtYnanbcZTMB87Wjt1qx3c6ELajKC', nickname: 'Nyhrox', twitter: 'Nyhrox' },
+  { address: '4sAUSQFdvWRBxR8UoLBYbw8CcXuwXWxnN8pXa4mtm5nU', nickname: 'Scharo', twitter: 'ScharoTrading' },
+  { address: 'G2mgnzpr59vYjKpwU9q5zVfS9yQ9HezMwjuqF7LACvR4', nickname: 'fz7', twitter: 'fz7_sol' },
+  { address: 'AeLaMjzxErZt4drbWVWvcxpVyo8p94xu5vrg41eZPFe3', nickname: '1s1mple', twitter: '1s1mple_sol' },
+  { address: '99xnE2zEFi8YhmKDaikc1EvH6ELTQJppnqUwMzmpLXrs', nickname: 'Coler', twitter: 'ColerSOL' },
+  { address: 'ETU3GyrUsv6UztQJxHgsBX2UoJFmq79WJe3JyDpAqGMz', nickname: 'MACXBT', twitter: 'MACXBT' },
+  { address: 'EA4MXkyF8C2NzY8fw2acJPuarmoU271KRCCAYpLzMBJr', nickname: 'Grimace', twitter: 'GrimaceSOL' },
+  { address: '2octNbV8QTtaFMJtbWhtkqMQt3deBe4D8mYcNworhv3t', nickname: 'Sugus', twitter: 'SugusSOL' },
+  { address: '9f5ywdCDA4QhSktBomozpHmZfSLqS6J9VqCrRehYWh1p', nickname: 'matsu', twitter: 'matsu_sol' },
+  { address: 'ADC1QV9raLnGGDbnWdnsxazeZ4Tsiho4vrWadYswA2ph', nickname: 'Ducky', twitter: 'DuckySOL' },
+  { address: 'AGqjivJr1dSv73TVUvdtqAwogzmThzvYMVXjGWg2FYLm', nickname: 'noob mini', twitter: 'noobmini_sol' },
+  { address: 'EP5mvfhGv6x1XR33Fd8eioiYjtRXAawafPmkz9xBpDvG', nickname: 'Zemrics', twitter: 'Zemrics' },
 ];
 
 function parseWalletInput(input: string, existingAddresses: Set<string>): ParsedWallet[] {
@@ -125,26 +127,27 @@ function parseWalletInput(input: string, existingAddresses: Set<string>): Parsed
   const seen = new Set<string>();
   
   return lines.map(line => {
-    const [address, nickname] = line.split(',').map(s => s.trim());
+    const parts = line.split(',').map(s => s.trim());
+    const [address, nickname, twitter] = parts;
     
     if (!address) {
-      return { address: '', nickname: null, valid: false, error: 'Empty line' };
+      return { address: '', nickname: null, twitter: null, valid: false, error: 'Empty line' };
     }
     
     if (!BASE58_REGEX.test(address)) {
-      return { address, nickname: nickname || null, valid: false, error: 'Invalid Solana address format' };
+      return { address, nickname: nickname || null, twitter: twitter || null, valid: false, error: 'Invalid Solana address format' };
     }
     
     if (existingAddresses.has(address)) {
-      return { address, nickname: nickname || null, valid: false, error: 'Already in your list' };
+      return { address, nickname: nickname || null, twitter: twitter || null, valid: false, error: 'Already in your list' };
     }
     
     if (seen.has(address)) {
-      return { address, nickname: nickname || null, valid: false, error: 'Duplicate in paste' };
+      return { address, nickname: nickname || null, twitter: twitter || null, valid: false, error: 'Duplicate in paste' };
     }
     
     seen.add(address);
-    return { address, nickname: nickname || null, valid: true };
+    return { address, nickname: nickname || null, twitter: twitter || null, valid: true };
   });
 }
 
@@ -262,7 +265,8 @@ export function WhaleFrenzyDashboard() {
       const walletsToInsert = validWallets.map(w => ({
         user_id: user.id,
         wallet_address: w.address,
-        nickname: w.nickname
+        nickname: w.nickname,
+        twitter_handle: w.twitter
       }));
 
       const { error } = await supabase
@@ -557,10 +561,10 @@ export function WhaleFrenzyDashboard() {
                   size="sm"
                   onClick={() => {
                     const kolscanData = KOLSCAN_TOP_50
-                      .map(w => `${w.address},${w.nickname}`)
+                      .map(w => `${w.address},${w.nickname},${w.twitter || ''}`)
                       .join('\n');
                     setBulkWalletInput(kolscanData);
-                    toast.success('Loaded KOLscan Top 50 wallets');
+                    toast.success('Loaded KOLscan Top 50 wallets with Twitter handles');
                   }}
                 >
                   <Upload className="h-4 w-4 mr-2" />
@@ -568,7 +572,7 @@ export function WhaleFrenzyDashboard() {
                 </Button>
               </div>
               <Textarea
-                placeholder={`Paste wallet addresses here, one per line...\n\nExamples:\nAbc123xyz789...\nDef456abc123...,WhaleKing\nGhi789def456...,BigBuyer`}
+                placeholder={`Paste wallet addresses here, one per line...\n\nFormat: address,nickname,twitter_handle\n\nExamples:\nAbc123xyz789...\nDef456abc123...,WhaleKing,@whaleking\nGhi789def456...,BigBuyer,bigbuyer_sol`}
                 value={bulkWalletInput}
                 onChange={(e) => setBulkWalletInput(e.target.value)}
                 className="min-h-[150px] font-mono text-sm"
