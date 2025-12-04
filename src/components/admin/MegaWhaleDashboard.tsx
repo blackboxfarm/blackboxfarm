@@ -94,6 +94,7 @@ interface AlertConfig {
   email_address: string | null;
   telegram_chat_id: string | null;
   additional_telegram_ids: string[] | null;
+  pending_telegram_ids: { user_id: string; username: string; requested_at: string }[] | null;
   auto_buy_on_mint: boolean;
   auto_buy_amount_sol: number;
   auto_buy_wait_for_buys: number;
@@ -897,21 +898,99 @@ export function MegaWhaleDashboard() {
             </CardContent>
           </Card>
 
+          {/* Pending Approval Requests */}
+          {alertConfig?.pending_telegram_ids && alertConfig.pending_telegram_ids.length > 0 && (
+            <Card className="border-yellow-500/50">
+              <CardHeader>
+                <CardTitle className="text-lg flex items-center gap-2">
+                  <Bell className="h-5 w-5 text-yellow-500" /> Pending Approval Requests
+                  <Badge variant="outline" className="ml-2">{alertConfig.pending_telegram_ids.length}</Badge>
+                </CardTitle>
+                <CardDescription>
+                  These users sent /addme to your bot. Approve them to receive alerts.
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-2">
+                  {alertConfig.pending_telegram_ids.map((pending) => (
+                    <div key={pending.user_id} className="flex items-center justify-between p-3 rounded-lg border bg-card">
+                      <div className="flex items-center gap-3">
+                        <Bot className="h-5 w-5 text-muted-foreground" />
+                        <div>
+                          <p className="font-medium">@{pending.username}</p>
+                          <p className="text-xs text-muted-foreground">ID: {pending.user_id} • Requested: {format(new Date(pending.requested_at), 'MMM d, HH:mm')}</p>
+                        </div>
+                      </div>
+                      <div className="flex gap-2">
+                        <Button 
+                          size="sm" 
+                          onClick={async () => {
+                            // Approve: move from pending to approved
+                            const newPending = (alertConfig.pending_telegram_ids || []).filter(p => p.user_id !== pending.user_id);
+                            const newApproved = [...(alertConfig.additional_telegram_ids || []), pending.user_id];
+                            
+                            const { error } = await supabase
+                              .from('mega_whale_alert_config')
+                              .update({ 
+                                pending_telegram_ids: newPending,
+                                additional_telegram_ids: newApproved 
+                              })
+                              .eq('user_id', user?.id);
+                            
+                            if (!error) {
+                              setAlertConfig(prev => prev ? { 
+                                ...prev, 
+                                pending_telegram_ids: newPending,
+                                additional_telegram_ids: newApproved 
+                              } : null);
+                              toast.success(`Approved @${pending.username}!`);
+                            }
+                          }}
+                        >
+                          Approve
+                        </Button>
+                        <Button 
+                          size="sm" 
+                          variant="outline"
+                          onClick={async () => {
+                            // Reject: remove from pending
+                            const newPending = (alertConfig.pending_telegram_ids || []).filter(p => p.user_id !== pending.user_id);
+                            
+                            const { error } = await supabase
+                              .from('mega_whale_alert_config')
+                              .update({ pending_telegram_ids: newPending })
+                              .eq('user_id', user?.id);
+                            
+                            if (!error) {
+                              setAlertConfig(prev => prev ? { ...prev, pending_telegram_ids: newPending } : null);
+                              toast.success(`Rejected @${pending.username}`);
+                            }
+                          }}
+                        >
+                          Reject
+                        </Button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
           {/* Additional Telegram Recipients */}
           <Card>
             <CardHeader>
               <CardTitle className="text-lg flex items-center gap-2">
-                <Bot className="h-5 w-5" /> Additional Telegram Recipients
+                <Bot className="h-5 w-5" /> Approved Telegram Recipients
               </CardTitle>
               <CardDescription>
-                Add friends' Telegram user IDs to also receive alerts. 
-                <span className="text-yellow-600 font-medium"> Important:</span> They must first message your bot before it can send them notifications.
+                Friends can request access by messaging your bot with /addme - you'll see their requests above to approve.
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="flex gap-2">
                 <Input
-                  placeholder="Enter Telegram User ID (e.g., 123456789)"
+                  placeholder="Or manually add Telegram User ID"
                   value={newTelegramId}
                   onChange={(e) => setNewTelegramId(e.target.value)}
                   className="max-w-xs"
@@ -930,18 +1009,18 @@ export function MegaWhaleDashboard() {
               </div>
               
               <div className="text-xs text-muted-foreground bg-muted/50 p-3 rounded-lg">
-                <p className="font-medium mb-1">How to get a Telegram User ID:</p>
+                <p className="font-medium mb-1">How friends can request access:</p>
                 <ol className="list-decimal list-inside space-y-1">
-                  <li>Have your friend message @userinfobot on Telegram</li>
-                  <li>The bot will reply with their User ID</li>
-                  <li>They must also send a message to your notification bot first</li>
+                  <li>They message your bot with <code className="bg-muted px-1 rounded">/addme</code></li>
+                  <li>Their request appears in "Pending Approval" above</li>
+                  <li>You approve or reject them</li>
                 </ol>
               </div>
 
               {/* Current Recipients List */}
               {alertConfig?.additional_telegram_ids && alertConfig.additional_telegram_ids.length > 0 && (
                 <div className="space-y-2">
-                  <Label className="text-sm font-medium">Current Recipients:</Label>
+                  <Label className="text-sm font-medium">Approved Recipients:</Label>
                   <div className="flex flex-wrap gap-2">
                     {alertConfig.additional_telegram_ids.map((id) => (
                       <Badge key={id} variant="secondary" className="flex items-center gap-1 px-3 py-1">

@@ -162,3 +162,6 @@ verify_jwt = false
 
 [functions.mega-whale-auto-trader]
 verify_jwt = false
+
+[functions.telegram-bot-webhook]
+verify_jwt = false
