@@ -894,7 +894,7 @@ export function MegaWhaleDashboard() {
                                   className="font-bold text-lg hover:text-primary flex items-center gap-1"
                                   title={alert.token_mint}
                                 >
-                                  ${alert.token_symbol || alert.token_mint.slice(0, 8)}
+                                  {`$${alert.token_symbol || alert.token_mint.slice(0, 8)}`}
                                   <ExternalLink className="h-3 w-3" />
                                 </a>
                                 <Badge variant={
