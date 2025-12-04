@@ -1,9 +1,8 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.38.4";
 import { Connection, Keypair, PublicKey, SystemProgram, Transaction, LAMPORTS_PER_SOL } from "https://esm.sh/@solana/web3.js@1.87.6";
-import { encode as base58Encode, decode as base58Decode } from "https://esm.sh/bs58@5.0.0";
+import bs58 from "https://esm.sh/bs58@5.0.0";
 import { getAssociatedTokenAddress, createTransferInstruction, TOKEN_PROGRAM_ID, createAssociatedTokenAccountInstruction, getAccount } from "https://esm.sh/@solana/spl-token@0.3.9";
-
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
@@ -142,7 +141,7 @@ serve(async (req) => {
       
       // Decrypt secret key (handles both AES and legacy base64)
       const secretKeyDecrypted = await decryptSecret(wallet.secret_key_encrypted);
-      const secretKey = base58Decode(secretKeyDecrypted);
+      const secretKey = bs58.decode(secretKeyDecrypted);
       const keypair = Keypair.fromSecretKey(secretKey);
 
       const recipientPubkey = new PublicKey(recipient);
@@ -201,7 +200,7 @@ serve(async (req) => {
       
       // Decrypt secret key (handles both AES and legacy base64)
       const secretKeyDecrypted = await decryptSecret(wallet.secret_key_encrypted);
-      const secretKey = base58Decode(secretKeyDecrypted);
+      const secretKey = bs58.decode(secretKeyDecrypted);
       const keypair = Keypair.fromSecretKey(secretKey);
 
       const mintPubkey = new PublicKey(token_mint);
