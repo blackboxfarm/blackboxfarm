@@ -129,6 +129,10 @@ Deno.serve(async (req) => {
               offspringCreated++;
               allTrackedAddresses.add(transfer.toUserAccount);
               offspringMap.set(transfer.toUserAccount, newOffspring);
+              
+              // Atomically increment offspring count
+              await supabase.rpc('increment_offspring_count', { whale_id: megaWhale.id, amount: 1 });
+              
               console.log(`[MEGA-WHALE-WEBHOOK] New offspring detected: ${transfer.toUserAccount} from ${megaWhale.nickname || megaWhale.wallet_address.slice(0, 8)}`);
             }
           }
@@ -166,6 +170,10 @@ Deno.serve(async (req) => {
                 offspringCreated++;
                 allTrackedAddresses.add(transfer.toUserAccount);
                 offspringMap.set(transfer.toUserAccount, newOffspring);
+                
+                // Atomically increment offspring count
+                await supabase.rpc('increment_offspring_count', { whale_id: megaWhale.id, amount: 1 });
+                
                 console.log(`[MEGA-WHALE-WEBHOOK] Depth ${newOffspring.depth_level} offspring: ${transfer.toUserAccount}`);
               }
             }
@@ -314,16 +322,7 @@ Deno.serve(async (req) => {
       }
     }
 
-    // Update total offspring counts
-    for (const megaWhale of megaWhales) {
-      const offspringCount = (offspringByWhale.get(megaWhale.id)?.length || 0) + 
-        (offspringCreated > 0 ? offspringCreated : 0);
-      
-      await supabase
-        .from('mega_whales')
-        .update({ total_offspring_wallets: offspringCount })
-        .eq('id', megaWhale.id);
-    }
+    // Note: offspring counts are now updated atomically via RPC when each offspring is created
 
     console.log(`[MEGA-WHALE-WEBHOOK] Complete: ${alertsCreated} alerts, ${offspringCreated} new offspring`);
 

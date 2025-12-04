@@ -459,7 +459,9 @@ export function MegaWhaleDashboard() {
                           </Badge>
                         </TableCell>
                         <TableCell>
-                          <span className="font-medium">{whale.total_offspring_wallets}</span>
+                          <span className="font-medium">
+                            {offspring.filter(o => o.mega_whale_id === whale.id).length}
+                          </span>
                         </TableCell>
                         <TableCell>
                           <span className="font-medium">{whale.total_tokens_minted}</span>

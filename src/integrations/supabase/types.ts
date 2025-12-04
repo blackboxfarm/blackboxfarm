@@ -5068,6 +5068,10 @@ export type Database = {
         }
         Returns: boolean
       }
+      increment_offspring_count: {
+        Args: { amount?: number; whale_id: string }
+        Returns: undefined
+      }
       initialize_arb_balances_for_user: {
         Args: { p_user_id: string }
         Returns: undefined
