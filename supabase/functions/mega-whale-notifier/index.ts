@@ -108,21 +108,28 @@ Deno.serve(async (req) => {
       }
     }
 
-    // Send Telegram
-    if (config?.notify_telegram && config?.telegram_chat_id && telegramBotToken) {
-      try {
-        const severityEmoji = {
-          critical: '🚨',
-          high: '⚠️',
-          medium: '📊',
-          low: 'ℹ️'
-        }[patternAlert.severity] || '📊';
+    // Send Telegram to primary and additional recipients
+    if (config?.notify_telegram && telegramBotToken) {
+      const chatIds: string[] = [];
+      if (config.telegram_chat_id) chatIds.push(config.telegram_chat_id);
+      if (config.additional_telegram_ids?.length) {
+        chatIds.push(...config.additional_telegram_ids);
+      }
 
-        const title = patternAlert.title || patternAlert.pattern_type || 'Alert';
-        const description = patternAlert.description || '';
-        const alertType = patternAlert.alert_type || patternAlert.pattern_type || 'unknown';
+      if (chatIds.length > 0) {
+        try {
+          const severityEmoji = {
+            critical: '🚨',
+            high: '⚠️',
+            medium: '📊',
+            low: 'ℹ️'
+          }[patternAlert.severity] || '📊';
 
-        const message = `${severityEmoji} *${escapeMarkdown(title)}*
+          const title = patternAlert.title || patternAlert.pattern_type || 'Alert';
+          const description = patternAlert.description || '';
+          const alertType = patternAlert.alert_type || patternAlert.pattern_type || 'unknown';
+
+          const message = `${severityEmoji} *${escapeMarkdown(title)}*
 
 ${escapeMarkdown(description)}
 
@@ -131,25 +138,35 @@ ${escapeMarkdown(description)}
 ${patternAlert.metadata?.token_mint ? `*Token:* \`${patternAlert.metadata.token_mint}\`` : ''}
 ${patternAlert.metadata?.wallets_involved ? `*Wallets:* ${patternAlert.metadata.wallets_involved}` : ''}`;
 
-        const response = await fetch(
-          `https://api.telegram.org/bot${telegramBotToken}/sendMessage`,
-          {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              chat_id: config.telegram_chat_id,
-              text: message,
-              parse_mode: 'Markdown'
-            })
-          }
-        );
+          // Send to all recipients
+          const sendPromises = chatIds.map(async (chatId) => {
+            const response = await fetch(
+              `https://api.telegram.org/bot${telegramBotToken}/sendMessage`,
+              {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  chat_id: chatId,
+                  text: message,
+                  parse_mode: 'Markdown'
+                })
+              }
+            );
+            if (response.ok) {
+              console.log(`[NOTIFIER] Telegram sent to ${chatId}`);
+              return true;
+            } else {
+              const err = await response.text();
+              console.error(`[NOTIFIER] Telegram failed for ${chatId}:`, err);
+              return false;
+            }
+          });
 
-        if (response.ok) {
-          results.telegram_sent = true;
-          console.log(`[NOTIFIER] Telegram sent to ${config.telegram_chat_id}`);
+          const sendResults = await Promise.all(sendPromises);
+          results.telegram_sent = sendResults.some(r => r);
+        } catch (e) {
+          console.error('[NOTIFIER] Telegram error:', e);
         }
-      } catch (e) {
-        console.error('[NOTIFIER] Telegram error:', e);
       }
     }
 
