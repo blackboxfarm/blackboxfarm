@@ -118,12 +118,16 @@ Deno.serve(async (req) => {
           low: 'ℹ️'
         }[patternAlert.severity] || '📊';
 
-        const message = `${severityEmoji} *${escapeMarkdown(patternAlert.title)}*
+        const title = patternAlert.title || patternAlert.pattern_type || 'Alert';
+        const description = patternAlert.description || '';
+        const alertType = patternAlert.alert_type || patternAlert.pattern_type || 'unknown';
 
-${escapeMarkdown(patternAlert.description)}
+        const message = `${severityEmoji} *${escapeMarkdown(title)}*
 
-*Type:* \`${patternAlert.alert_type}\`
-*Severity:* ${patternAlert.severity.toUpperCase()}
+${escapeMarkdown(description)}
+
+*Type:* \`${alertType}\`
+*Severity:* ${(patternAlert.severity || 'info').toUpperCase()}
 ${patternAlert.metadata?.token_mint ? `*Token:* \`${patternAlert.metadata.token_mint}\`` : ''}
 ${patternAlert.metadata?.wallets_involved ? `*Wallets:* ${patternAlert.metadata.wallets_involved}` : ''}`;
 
@@ -175,6 +179,7 @@ ${patternAlert.metadata?.wallets_involved ? `*Wallets:* ${patternAlert.metadata.
   }
 });
 
-function escapeMarkdown(text: string): string {
-  return text.replace(/[_*[\]()~`>#+-=|{}.!]/g, '\\$&');
+function escapeMarkdown(text: string | undefined | null): string {
+  if (!text) return '';
+  return String(text).replace(/[_*[\]()~`>#+-=|{}.!]/g, '\\$&');
 }
