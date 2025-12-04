@@ -202,7 +202,11 @@ export function MegaWhaleDashboard() {
       });
 
       if (error) throw error;
-      toast.success(`Scan complete: ${data.scan_result?.offspring_found || 0} offspring found`);
+      const scanResult = data.scan_result || {};
+      const message = scanResult.new_offspring > 0 
+        ? `Found ${scanResult.new_offspring} new offspring (${scanResult.total_scanned} scanned)`
+        : `No new offspring found (${scanResult.total_scanned} wallets scanned)`;
+      toast.success('Scan complete', { description: message });
       loadData();
     } catch (error: any) {
       toast.error(error.message || 'Failed to scan');
