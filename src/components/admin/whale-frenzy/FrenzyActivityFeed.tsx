@@ -119,15 +119,18 @@ export function FrenzyActivityFeed({
     }
   };
 
-  const getActivityIcon = (type: ActivityItem['type']) => {
-    switch (type) {
-      case 'whale_buy':
-        return <span className="text-lg">🐋</span>;
-      case 'frenzy_detected':
-        return <span className="text-lg">🔥</span>;
-      case 'auto_buy':
-        return <Zap className="h-4 w-4 text-yellow-500" />;
+  const getActivityIcon = (activity: ActivityItem) => {
+    if (activity.type === 'auto_buy') {
+      return <Zap className="h-4 w-4 text-yellow-500" />;
     }
+    if (activity.type === 'whale_buy') {
+      return <span className="text-lg">🐋</span>;
+    }
+    // frenzy_detected - icon based on whale count
+    const count = activity.whale_count || 1;
+    if (count >= 3) return <span className="text-lg">🔥</span>;
+    if (count === 2) return <span className="text-lg">👀</span>;
+    return <span className="text-lg">🐋</span>;
   };
 
   const getActivityColor = (type: ActivityItem['type']) => {
@@ -141,37 +144,59 @@ export function FrenzyActivityFeed({
     }
   };
 
-  const getActivityMessage = (activity: ActivityItem) => {
-    switch (activity.type) {
-      case 'whale_buy':
-        return (
-          <>
-            <span className="font-medium">{activity.wallet_nickname || activity.wallet_address?.slice(0, 8)}</span>
-            {' bought '}
-            <span className="font-medium">{activity.token_symbol || activity.token_mint.slice(0, 8)}</span>
-          </>
-        );
-      case 'frenzy_detected':
-        return (
-          <>
-            <span className="font-bold text-orange-500">FRENZY!</span>
-            {' '}
-            <span className="font-medium">{activity.whale_count}</span>
-            {' whales on '}
-            <span className="font-medium">{activity.token_symbol || activity.token_mint.slice(0, 8)}</span>
-          </>
-        );
-      case 'auto_buy':
-        return (
-          <>
-            <span className="font-bold text-green-500">AUTO-BUY</span>
-            {': '}
-            <span className="font-medium">{activity.amount_sol} SOL</span>
-            {' on '}
-            <span className="font-medium">{activity.token_symbol || activity.token_mint.slice(0, 8)}</span>
-          </>
-        );
+  const getActivityLabel = (activity: ActivityItem) => {
+    if (activity.type === 'auto_buy') {
+      return { label: 'AUTO-BUY', className: 'text-green-500' };
     }
+    if (activity.type === 'whale_buy') {
+      return { label: 'Whale Buy', className: 'text-blue-500' };
+    }
+    // frenzy_detected - label based on whale count
+    const count = activity.whale_count || 1;
+    if (count >= 3) return { label: '🔥 FRENZY!', className: 'text-orange-500' };
+    if (count === 2) return { label: 'Double Buy', className: 'text-yellow-500' };
+    return { label: 'Whale Buy', className: 'text-blue-400' };
+  };
+
+  const getActivityMessage = (activity: ActivityItem) => {
+    const { label, className } = getActivityLabel(activity);
+    const tokenDisplay = activity.token_symbol || activity.token_mint.slice(0, 8);
+    
+    if (activity.type === 'auto_buy') {
+      return (
+        <>
+          <span className={`font-bold ${className}`}>{label}</span>
+          {': '}
+          <span className="font-medium">{activity.amount_sol} SOL</span>
+          {' on '}
+          <span className="font-medium">{tokenDisplay}</span>
+        </>
+      );
+    }
+    
+    const count = activity.whale_count || 1;
+    return (
+      <>
+        <span className={`font-bold ${className}`}>{label}</span>
+        {count > 1 && (
+          <>
+            {' '}
+            <span className="font-medium">{count} whales</span>
+          </>
+        )}
+        {' on '}
+        <span className="font-medium">{tokenDisplay}</span>
+      </>
+    );
+  };
+
+  const getActivityBorderColor = (activity: ActivityItem) => {
+    if (activity.type === 'auto_buy') return 'border-l-green-500 bg-green-500/5';
+    if (activity.type === 'whale_buy') return 'border-l-blue-500';
+    const count = activity.whale_count || 1;
+    if (count >= 3) return 'border-l-orange-500 bg-orange-500/10';
+    if (count === 2) return 'border-l-yellow-500 bg-yellow-500/5';
+    return 'border-l-blue-400 bg-blue-500/5';
   };
 
   // Calculate urgency based on recent activity
@@ -221,16 +246,10 @@ export function FrenzyActivityFeed({
               activities.map((activity) => (
                 <div
                   key={activity.id}
-                  className={`flex items-start gap-3 p-2 rounded-lg bg-muted/50 border-l-2 ${
-                    activity.type === 'frenzy_detected' 
-                      ? 'border-l-orange-500 bg-orange-500/5' 
-                      : activity.type === 'auto_buy'
-                      ? 'border-l-green-500 bg-green-500/5'
-                      : 'border-l-blue-500'
-                  }`}
+                  className={`flex items-start gap-3 p-2 rounded-lg bg-muted/50 border-l-2 ${getActivityBorderColor(activity)}`}
                 >
                   <div className="mt-0.5">
-                    {getActivityIcon(activity.type)}
+                    {getActivityIcon(activity)}
                   </div>
                   <div className="flex-1 min-w-0">
                     <p className="text-sm">
