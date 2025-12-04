@@ -14,7 +14,7 @@ import { toast } from 'sonner';
 import { 
   Flame, Plus, Trash2, Settings, Activity, History, 
   RefreshCw, Wallet, AlertTriangle, CheckCircle, XCircle, Upload,
-  Monitor, Gamepad2, PlayCircle
+  Monitor, Gamepad2, PlayCircle, Radio, WifiOff
 } from 'lucide-react';
 import { format } from 'date-fns';
 import { FrenzyActivityFeed } from './whale-frenzy/FrenzyActivityFeed';
@@ -172,6 +172,12 @@ export function WhaleFrenzyDashboard() {
   const [whaleWallets, setWhaleWallets] = useState<WhaleWallet[]>([]);
   const [frenzyEvents, setFrenzyEvents] = useState<FrenzyEvent[]>([]);
   const [bulkWalletInput, setBulkWalletInput] = useState('');
+  const [monitoringStatus, setMonitoringStatus] = useState<{
+    active: boolean;
+    addressCount: number;
+    webhookId: string | null;
+  }>({ active: false, addressCount: 0, webhookId: null });
+  const [togglingMonitoring, setTogglingMonitoring] = useState(false);
 
   useEffect(() => {
     if (user?.id) {
@@ -339,6 +345,61 @@ export function WhaleFrenzyDashboard() {
     }
   };
 
+  const checkMonitoringStatus = async () => {
+    if (!user?.id) return;
+    try {
+      const { data, error } = await supabase.functions.invoke('helius-webhook-manager', {
+        body: { action: 'status', user_id: user.id }
+      });
+      if (!error && data) {
+        setMonitoringStatus({
+          active: data.active || false,
+          addressCount: data.addressCount || 0,
+          webhookId: data.webhookId || null
+        });
+      }
+    } catch (e) {
+      console.error('Error checking monitoring status:', e);
+    }
+  };
+
+  const toggleMonitoring = async () => {
+    if (!user?.id) return;
+    setTogglingMonitoring(true);
+    
+    try {
+      const action = monitoringStatus.active ? 'delete' : 'create';
+      const { data, error } = await supabase.functions.invoke('helius-webhook-manager', {
+        body: { action, user_id: user.id }
+      });
+
+      if (error) throw error;
+
+      if (action === 'create') {
+        toast.success(`Real-time monitoring enabled for ${data.addressCount} wallets`);
+        setMonitoringStatus({
+          active: true,
+          addressCount: data.addressCount,
+          webhookId: data.webhookId
+        });
+      } else {
+        toast.success('Real-time monitoring disabled');
+        setMonitoringStatus({ active: false, addressCount: 0, webhookId: null });
+      }
+    } catch (error: any) {
+      toast.error(error.message || 'Failed to toggle monitoring');
+    } finally {
+      setTogglingMonitoring(false);
+    }
+  };
+
+  // Check monitoring status on load
+  useEffect(() => {
+    if (user?.id) {
+      checkMonitoringStatus();
+    }
+  }, [user?.id]);
+
   if (loading) {
     return (
       <div className="flex items-center justify-center p-8">
@@ -359,10 +420,35 @@ export function WhaleFrenzyDashboard() {
             Monitor whale wallets and detect coordinated buying activity
           </p>
         </div>
-        <Button onClick={checkFrenzy} variant="outline">
-          <RefreshCw className="h-4 w-4 mr-2" />
-          Check Now
-        </Button>
+        <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2 px-3 py-2 rounded-lg border bg-card">
+            {monitoringStatus.active ? (
+              <>
+                <Radio className="h-4 w-4 text-green-500 animate-pulse" />
+                <span className="text-sm font-medium text-green-600">
+                  Live ({monitoringStatus.addressCount} wallets)
+                </span>
+              </>
+            ) : (
+              <>
+                <WifiOff className="h-4 w-4 text-muted-foreground" />
+                <span className="text-sm text-muted-foreground">Offline</span>
+              </>
+            )}
+            <Button 
+              size="sm" 
+              variant={monitoringStatus.active ? "destructive" : "default"}
+              onClick={toggleMonitoring}
+              disabled={togglingMonitoring || whaleWallets.length === 0}
+            >
+              {togglingMonitoring ? 'Processing...' : monitoringStatus.active ? 'Stop' : 'Start Monitoring'}
+            </Button>
+          </div>
+          <Button onClick={checkFrenzy} variant="outline">
+            <RefreshCw className="h-4 w-4 mr-2" />
+            Check Now
+          </Button>
+        </div>
       </div>
 
       <Tabs value={activeTab} onValueChange={setActiveTab}>

@@ -144,3 +144,9 @@ verify_jwt = false
 
 [functions.update-fantasy-prices]
 verify_jwt = false
+
+[functions.helius-whale-webhook]
+verify_jwt = false
+
+[functions.helius-webhook-manager]
+verify_jwt = false
