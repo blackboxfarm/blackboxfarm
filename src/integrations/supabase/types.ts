@@ -2433,6 +2433,7 @@ export type Database = {
       }
       mega_whale_alert_config: {
         Row: {
+          additional_telegram_ids: string[] | null
           auto_buy_amount_sol: number | null
           auto_buy_max_wait_minutes: number | null
           auto_buy_on_mint: boolean | null
@@ -2453,6 +2454,7 @@ export type Database = {
           user_id: string
         }
         Insert: {
+          additional_telegram_ids?: string[] | null
           auto_buy_amount_sol?: number | null
           auto_buy_max_wait_minutes?: number | null
           auto_buy_on_mint?: boolean | null
@@ -2473,6 +2475,7 @@ export type Database = {
           user_id: string
         }
         Update: {
+          additional_telegram_ids?: string[] | null
           auto_buy_amount_sol?: number | null
           auto_buy_max_wait_minutes?: number | null
           auto_buy_on_mint?: boolean | null

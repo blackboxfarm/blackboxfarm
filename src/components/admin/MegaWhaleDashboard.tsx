@@ -93,6 +93,7 @@ interface AlertConfig {
   notify_browser: boolean;
   email_address: string | null;
   telegram_chat_id: string | null;
+  additional_telegram_ids: string[] | null;
   auto_buy_on_mint: boolean;
   auto_buy_amount_sol: number;
   auto_buy_wait_for_buys: number;
@@ -130,6 +131,11 @@ export function MegaWhaleDashboard() {
   const [newNotes, setNewNotes] = useState('');
   const [adding, setAdding] = useState(false);
   const [scanning, setScanning] = useState<string | null>(null);
+  
+  // Settings state
+  const [sendingTest, setSendingTest] = useState(false);
+  const [newTelegramId, setNewTelegramId] = useState('');
+  const [addingTelegramId, setAddingTelegramId] = useState(false);
 
   useEffect(() => {
     if (user?.id) {
@@ -159,7 +165,7 @@ export function MegaWhaleDashboard() {
         .eq('user_id', user.id)
         .single();
       
-      setAlertConfig(configData as AlertConfig || null);
+      setAlertConfig(configData as unknown as AlertConfig || null);
 
       // Load pattern alerts
       const { data: patternData } = await supabase
@@ -317,6 +323,84 @@ export function MegaWhaleDashboard() {
 
   const unreadCount = alerts.filter(a => !a.is_read).length;
 
+  const sendTestNotification = async () => {
+    if (!user?.id) return;
+    setSendingTest(true);
+    
+    try {
+      const { error } = await supabase.functions.invoke('mega-whale-notifier', {
+        body: {
+          alert: {
+            id: 'test-' + Date.now(),
+            user_id: user.id,
+            alert_type: 'test_notification',
+            severity: 'info',
+            title: 'Test Notification',
+            description: 'This is a test notification from MEGA WHALE Tracker. If you received this, your notifications are working correctly!',
+            metadata: { test: true, timestamp: new Date().toISOString() }
+          }
+        }
+      });
+      
+      if (error) throw error;
+      toast.success('Test notification sent! Check your email and Telegram.');
+    } catch (error: any) {
+      toast.error(error.message || 'Failed to send test notification');
+    } finally {
+      setSendingTest(false);
+    }
+  };
+
+  const addTelegramRecipient = async () => {
+    if (!user?.id || !newTelegramId.trim()) return;
+    setAddingTelegramId(true);
+    
+    try {
+      const currentIds = alertConfig?.additional_telegram_ids || [];
+      if (currentIds.includes(newTelegramId.trim())) {
+        toast.error('This Telegram ID is already added');
+        return;
+      }
+      
+      const updatedIds = [...currentIds, newTelegramId.trim()];
+      
+      const { error } = await supabase
+        .from('mega_whale_alert_config')
+        .update({ additional_telegram_ids: updatedIds })
+        .eq('user_id', user.id);
+      
+      if (error) throw error;
+      
+      setAlertConfig(prev => prev ? { ...prev, additional_telegram_ids: updatedIds } : null);
+      setNewTelegramId('');
+      toast.success('Telegram recipient added! They must have messaged the bot first.');
+    } catch (error: any) {
+      toast.error(error.message || 'Failed to add Telegram ID');
+    } finally {
+      setAddingTelegramId(false);
+    }
+  };
+
+  const removeTelegramRecipient = async (idToRemove: string) => {
+    if (!user?.id) return;
+    
+    try {
+      const updatedIds = (alertConfig?.additional_telegram_ids || []).filter(id => id !== idToRemove);
+      
+      const { error } = await supabase
+        .from('mega_whale_alert_config')
+        .update({ additional_telegram_ids: updatedIds })
+        .eq('user_id', user.id);
+      
+      if (error) throw error;
+      
+      setAlertConfig(prev => prev ? { ...prev, additional_telegram_ids: updatedIds } : null);
+      toast.success('Telegram recipient removed');
+    } catch (error: any) {
+      toast.error(error.message || 'Failed to remove Telegram ID');
+    }
+  };
+
   if (loading) {
     return (
       <div className="flex items-center justify-center p-8">
@@ -411,6 +495,9 @@ export function MegaWhaleDashboard() {
                 {unreadCount}
               </Badge>
             )}
+          </TabsTrigger>
+          <TabsTrigger value="settings" className="flex items-center gap-2">
+            <Settings className="h-4 w-4" /> Settings
           </TabsTrigger>
         </TabsList>
 
@@ -768,6 +855,115 @@ export function MegaWhaleDashboard() {
                   )}
                 </div>
               </ScrollArea>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="settings" className="space-y-4">
+          {/* Test Notification */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-lg flex items-center gap-2">
+                <Send className="h-5 w-5" /> Test Notifications
+              </CardTitle>
+              <CardDescription>
+                Send a test notification to verify your email and Telegram are configured correctly
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="flex items-center gap-4">
+                <Button 
+                  onClick={sendTestNotification} 
+                  disabled={sendingTest || !alertConfig}
+                >
+                  {sendingTest ? (
+                    <>
+                      <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
+                      Sending...
+                    </>
+                  ) : (
+                    <>
+                      <Send className="h-4 w-4 mr-2" />
+                      Send Test Notification
+                    </>
+                  )}
+                </Button>
+                {!alertConfig && (
+                  <span className="text-sm text-muted-foreground">
+                    Configure alert settings first
+                  </span>
+                )}
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Additional Telegram Recipients */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-lg flex items-center gap-2">
+                <Bot className="h-5 w-5" /> Additional Telegram Recipients
+              </CardTitle>
+              <CardDescription>
+                Add friends' Telegram user IDs to also receive alerts. 
+                <span className="text-yellow-600 font-medium"> Important:</span> They must first message your bot before it can send them notifications.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="flex gap-2">
+                <Input
+                  placeholder="Enter Telegram User ID (e.g., 123456789)"
+                  value={newTelegramId}
+                  onChange={(e) => setNewTelegramId(e.target.value)}
+                  className="max-w-xs"
+                />
+                <Button 
+                  onClick={addTelegramRecipient}
+                  disabled={addingTelegramId || !newTelegramId.trim()}
+                >
+                  {addingTelegramId ? (
+                    <RefreshCw className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <Plus className="h-4 w-4" />
+                  )}
+                  Add
+                </Button>
+              </div>
+              
+              <div className="text-xs text-muted-foreground bg-muted/50 p-3 rounded-lg">
+                <p className="font-medium mb-1">How to get a Telegram User ID:</p>
+                <ol className="list-decimal list-inside space-y-1">
+                  <li>Have your friend message @userinfobot on Telegram</li>
+                  <li>The bot will reply with their User ID</li>
+                  <li>They must also send a message to your notification bot first</li>
+                </ol>
+              </div>
+
+              {/* Current Recipients List */}
+              {alertConfig?.additional_telegram_ids && alertConfig.additional_telegram_ids.length > 0 && (
+                <div className="space-y-2">
+                  <Label className="text-sm font-medium">Current Recipients:</Label>
+                  <div className="flex flex-wrap gap-2">
+                    {alertConfig.additional_telegram_ids.map((id) => (
+                      <Badge key={id} variant="secondary" className="flex items-center gap-1 px-3 py-1">
+                        <Bot className="h-3 w-3" />
+                        {id}
+                        <button
+                          onClick={() => removeTelegramRecipient(id)}
+                          className="ml-1 hover:text-destructive"
+                        >
+                          <Trash2 className="h-3 w-3" />
+                        </button>
+                      </Badge>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {alertConfig?.telegram_chat_id && (
+                <div className="text-sm text-muted-foreground">
+                  <span className="font-medium">Your Telegram ID:</span> {alertConfig.telegram_chat_id}
+                </div>
+              )}
             </CardContent>
           </Card>
         </TabsContent>
