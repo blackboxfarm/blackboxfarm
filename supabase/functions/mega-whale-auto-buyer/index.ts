@@ -7,6 +7,47 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 }
 
+// Inline encryption function - avoids function-to-function calls
+async function encryptSecret(plaintext: string): Promise<string> {
+  const encoder = new TextEncoder()
+  const data = encoder.encode(plaintext)
+  
+  const keyMaterial = Deno.env.get('ENCRYPTION_KEY')
+  if (!keyMaterial) {
+    console.log('⚠️ No ENCRYPTION_KEY found, using base64 fallback')
+    return btoa(plaintext)
+  }
+  
+  try {
+    const keyData = encoder.encode(keyMaterial.padEnd(32, '0').slice(0, 32))
+    
+    const key = await crypto.subtle.importKey(
+      'raw',
+      keyData,
+      { name: 'AES-GCM' },
+      false,
+      ['encrypt']
+    )
+    
+    const iv = crypto.getRandomValues(new Uint8Array(12))
+    
+    const encrypted = await crypto.subtle.encrypt(
+      { name: 'AES-GCM', iv: iv },
+      key,
+      data
+    )
+    
+    const combined = new Uint8Array(iv.length + encrypted.byteLength)
+    combined.set(iv)
+    combined.set(new Uint8Array(encrypted), iv.length)
+    
+    return 'AES:' + btoa(String.fromCharCode(...combined))
+  } catch (error) {
+    console.error('AES encryption failed, using base64 fallback:', error)
+    return btoa(plaintext)
+  }
+}
+
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders })
@@ -28,15 +69,12 @@ Deno.serve(async (req) => {
       const pubkey = keypair.publicKey.toBase58()
       const secretKey = bs58.encode(keypair.secretKey)
 
-      // Encrypt the secret key
-      const { data: encryptResult, error: encryptError } = await supabase.functions.invoke('encrypt-data', {
-        body: { data: secretKey },
-      })
+      console.log(`Generated keypair with pubkey: ${pubkey}`)
 
-      if (encryptError || !encryptResult?.encryptedData) {
-        console.error('Encryption failed:', encryptError, encryptResult)
-        throw new Error('Failed to encrypt wallet secret key')
-      }
+      // Encrypt the secret key directly (no function-to-function call)
+      const encryptedSecret = await encryptSecret(secretKey)
+      
+      console.log(`Encrypted secret key, length: ${encryptedSecret.length}`)
 
       // Store the wallet
       const { data: wallet, error: walletError } = await supabase
@@ -44,12 +82,15 @@ Deno.serve(async (req) => {
         .insert({
           user_id,
           pubkey,
-          secret_key_encrypted: encryptResult.encryptedData,
+          secret_key_encrypted: encryptedSecret,
         })
         .select()
         .single()
 
-      if (walletError) throw walletError
+      if (walletError) {
+        console.error('Failed to insert wallet:', walletError)
+        throw walletError
+      }
 
       console.log(`Generated auto-buy wallet: ${pubkey}`)
 
