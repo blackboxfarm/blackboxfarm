@@ -11,6 +11,50 @@ const corsHeaders = {
 
 const RPC_URL = Deno.env.get('HELIUS_RPC_URL') || 'https://api.mainnet-beta.solana.com';
 
+// Decrypt secret key - handles both AES and legacy base64
+async function decryptSecret(encrypted: string): Promise<string> {
+  // Check if it's AES encrypted (has prefix)
+  if (encrypted.startsWith('AES:')) {
+    const keyMaterial = Deno.env.get('ENCRYPTION_KEY')
+    if (!keyMaterial) {
+      console.error('No ENCRYPTION_KEY for AES decryption')
+      throw new Error('Decryption key not configured')
+    }
+    
+    try {
+      const encoder = new TextEncoder()
+      const keyData = encoder.encode(keyMaterial.padEnd(32, '0').slice(0, 32))
+      
+      const key = await crypto.subtle.importKey(
+        'raw',
+        keyData,
+        { name: 'AES-GCM' },
+        false,
+        ['decrypt']
+      )
+      
+      // Remove AES: prefix and decode base64
+      const combined = Uint8Array.from(atob(encrypted.slice(4)), c => c.charCodeAt(0))
+      const iv = combined.slice(0, 12)
+      const ciphertext = combined.slice(12)
+      
+      const decrypted = await crypto.subtle.decrypt(
+        { name: 'AES-GCM', iv },
+        key,
+        ciphertext
+      )
+      
+      return new TextDecoder().decode(decrypted)
+    } catch (error) {
+      console.error('AES decryption failed:', error)
+      throw new Error('Failed to decrypt wallet secret')
+    }
+  }
+  
+  // Legacy base64 format
+  return atob(encrypted)
+}
+
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
@@ -96,8 +140,8 @@ serve(async (req) => {
 
       const connection = new Connection(RPC_URL, 'confirmed');
       
-      // Decrypt secret key
-      const secretKeyDecrypted = atob(wallet.secret_key_encrypted);
+      // Decrypt secret key (handles both AES and legacy base64)
+      const secretKeyDecrypted = await decryptSecret(wallet.secret_key_encrypted);
       const secretKey = base58Decode(secretKeyDecrypted);
       const keypair = Keypair.fromSecretKey(secretKey);
 
@@ -155,8 +199,8 @@ serve(async (req) => {
 
       const connection = new Connection(RPC_URL, 'confirmed');
       
-      // Decrypt secret key
-      const secretKeyDecrypted = atob(wallet.secret_key_encrypted);
+      // Decrypt secret key (handles both AES and legacy base64)
+      const secretKeyDecrypted = await decryptSecret(wallet.secret_key_encrypted);
       const secretKey = base58Decode(secretKeyDecrypted);
       const keypair = Keypair.fromSecretKey(secretKey);
 
@@ -234,6 +278,7 @@ serve(async (req) => {
       }
 
       // Call raydium-swap to sell
+      const decryptedSecret = await decryptSecret(wallet.secret_key_encrypted);
       const { data: swapResult, error: swapError } = await supabase.functions.invoke('raydium-swap', {
         body: {
           action: 'swap',
@@ -241,7 +286,7 @@ serve(async (req) => {
           outputMint: 'So11111111111111111111111111111111111111112', // SOL
           amount: amount,
           slippageBps: 1500,
-          walletSecretBase58: atob(wallet.secret_key_encrypted)
+          walletSecretBase58: decryptedSecret
         }
       });
 
@@ -270,6 +315,7 @@ serve(async (req) => {
       }
 
       // Call raydium-swap to buy
+      const decryptedSecretBuy = await decryptSecret(wallet.secret_key_encrypted);
       const { data: swapResult, error: swapError } = await supabase.functions.invoke('raydium-swap', {
         body: {
           action: 'swap',
@@ -277,7 +323,7 @@ serve(async (req) => {
           outputMint: token_mint,
           amount: amount * LAMPORTS_PER_SOL, // Convert SOL to lamports
           slippageBps: 1500,
-          walletSecretBase58: atob(wallet.secret_key_encrypted)
+          walletSecretBase58: decryptedSecretBuy
         }
       });
 
