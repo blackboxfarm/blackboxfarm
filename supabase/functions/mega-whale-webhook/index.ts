@@ -97,6 +97,10 @@ Deno.serve(async (req) => {
 
     let alertsCreated = 0;
     let offspringCreated = 0;
+    
+    // Track patterns for this batch
+    const fundingsByWhale = new Map<string, { count: number; addresses: string[]; total_sol: number }>();
+    const buysByToken = new Map<string, { buyers: string[]; whale_id: string; user_id: string }>();
 
     for (const tx of transactions) {
       const feePayer = tx.feePayer;
@@ -111,6 +115,13 @@ Deno.serve(async (req) => {
           if (transfer.fromUserAccount === feePayer && 
               transfer.amount > 0.001 * 1e9 && // More than 0.001 SOL
               !allTrackedAddresses.has(transfer.toUserAccount)) {
+            
+            // Track funding for pattern detection
+            const existing = fundingsByWhale.get(megaWhale.id) || { count: 0, addresses: [], total_sol: 0 };
+            existing.count++;
+            existing.addresses.push(transfer.toUserAccount);
+            existing.total_sol += transfer.amount / 1e9;
+            fundingsByWhale.set(megaWhale.id, existing);
             
             // New offspring wallet detected at depth 1
             const { data: newOffspring, error } = await supabase
@@ -213,6 +224,21 @@ Deno.serve(async (req) => {
               }
             }
 
+            // Track coordinated buys
+            if (isBuy) {
+              const tokenKey = `${megaWhale.id}:${transfer.mint}`;
+              const existing = buysByToken.get(tokenKey) || { buyers: [], whale_id: megaWhale.id, user_id: megaWhale.user_id };
+              if (!existing.buyers.includes(feePayer)) {
+                existing.buyers.push(feePayer);
+              }
+              buysByToken.set(tokenKey, existing);
+              
+              // Notify auto-trader of buy activity
+              await supabase.functions.invoke('mega-whale-auto-trader', {
+                body: { action: 'increment_buy_count', token_mint: transfer.mint }
+              }).catch(() => {}); // Don't fail if auto-trader isn't ready
+            }
+
             // Build funding chain
             const fundingChain = await buildFundingChain(supabase, offspring, megaWhale);
 
@@ -245,31 +271,9 @@ Deno.serve(async (req) => {
             }
 
             // Update offspring with token activity
-            const tokenEntry = {
-              mint: transfer.mint,
-              symbol: tokenMeta?.symbol,
-              amount: transfer.tokenAmount,
-              sol_amount: solAmount,
-              timestamp
-            };
-
-            if (isBuy) {
-              await supabase.rpc('append_to_jsonb_array', {
-                table_name: 'mega_whale_offspring',
-                column_name: 'tokens_bought',
-                row_id: offspring.id,
-                new_value: tokenEntry
-              }).catch(() => {
-                // Fallback if RPC doesn't exist
-                supabase.from('mega_whale_offspring')
-                  .update({ is_active_trader: true, last_activity_at: timestamp })
-                  .eq('id', offspring.id);
-              });
-            } else {
-              await supabase.from('mega_whale_offspring')
-                .update({ is_active_trader: true, last_activity_at: timestamp })
-                .eq('id', offspring.id);
-            }
+            await supabase.from('mega_whale_offspring')
+              .update({ is_active_trader: true, last_activity_at: timestamp })
+              .eq('id', offspring.id);
           }
         }
 
@@ -315,6 +319,52 @@ Deno.serve(async (req) => {
                   .eq('id', megaWhale.id);
 
                 console.log(`[MEGA-WHALE-WEBHOOK] TOKEN MINT ALERT: ${tokenMeta?.symbol || transfer.mint.slice(0, 8)} by depth-${offspring.depth_level} offspring`);
+                
+                // Create pattern alert for mint
+                await createPatternAlert(supabase, {
+                  user_id: megaWhale.user_id,
+                  mega_whale_id: megaWhale.id,
+                  alert_type: 'new_launch_imminent',
+                  severity: 'critical',
+                  title: `🚀 New Token Minted: ${tokenMeta?.symbol || 'Unknown'}`,
+                  description: `Offspring wallet at depth ${offspring.depth_level} just minted a new token. This could be a new launch opportunity.`,
+                  metadata: {
+                    token_mint: transfer.mint,
+                    token_symbol: tokenMeta?.symbol,
+                    token_name: tokenMeta?.name,
+                    creator_wallet: feePayer,
+                    signature: tx.signature
+                  }
+                });
+                
+                // Check if user has auto-buy enabled and create pending trade
+                const { data: alertConfig } = await supabase
+                  .from('mega_whale_alert_config')
+                  .select('*')
+                  .eq('user_id', megaWhale.user_id)
+                  .single();
+                
+                if (alertConfig?.auto_buy_on_mint) {
+                  const { error: tradeError } = await supabase
+                    .from('mega_whale_auto_trades')
+                    .insert({
+                      user_id: megaWhale.user_id,
+                      mega_whale_id: megaWhale.id,
+                      token_mint: transfer.mint,
+                      token_symbol: tokenMeta?.symbol,
+                      token_name: tokenMeta?.name,
+                      trade_type: 'buy',
+                      status: 'pending',
+                      amount_sol: alertConfig.auto_buy_amount_sol || 0.5,
+                      buys_required: alertConfig.auto_buy_wait_for_buys || 5,
+                      monitoring_started_at: new Date().toISOString(),
+                      monitoring_expires_at: new Date(Date.now() + (alertConfig.auto_buy_max_wait_minutes || 5) * 60 * 1000).toISOString()
+                    });
+                  
+                  if (!tradeError) {
+                    console.log(`[MEGA-WHALE-WEBHOOK] Auto-trade pending for ${tokenMeta?.symbol}, waiting for ${alertConfig.auto_buy_wait_for_buys} buys`);
+                  }
+                }
               }
             }
           }
@@ -322,7 +372,70 @@ Deno.serve(async (req) => {
       }
     }
 
-    // Note: offspring counts are now updated atomically via RPC when each offspring is created
+    // PATTERN DETECTION - Check for funding bursts
+    for (const [whaleId, funding] of fundingsByWhale) {
+      const megaWhale = megaWhales.find(mw => mw.id === whaleId);
+      if (!megaWhale) continue;
+      
+      // Get user's config for thresholds
+      const { data: alertConfig } = await supabase
+        .from('mega_whale_alert_config')
+        .select('*')
+        .eq('user_id', megaWhale.user_id)
+        .single();
+      
+      const threshold = alertConfig?.funding_burst_count || 5;
+      
+      if (funding.count >= threshold) {
+        await createPatternAlert(supabase, {
+          user_id: megaWhale.user_id,
+          mega_whale_id: megaWhale.id,
+          alert_type: 'funding_burst',
+          severity: 'high',
+          title: `⚡ Funding Burst: ${funding.count} wallets funded`,
+          description: `${megaWhale.nickname || 'Mega whale'} just funded ${funding.count} wallets with ${funding.total_sol.toFixed(2)} SOL total. This often indicates imminent bundle/launch activity.`,
+          metadata: {
+            wallets_funded: funding.count,
+            total_sol: funding.total_sol,
+            addresses: funding.addresses.slice(0, 10) // First 10 for reference
+          }
+        });
+      }
+    }
+    
+    // PATTERN DETECTION - Check for coordinated buys
+    for (const [tokenKey, buyData] of buysByToken) {
+      const [whaleId, tokenMint] = tokenKey.split(':');
+      const megaWhale = megaWhales.find(mw => mw.id === whaleId);
+      if (!megaWhale) continue;
+      
+      const { data: alertConfig } = await supabase
+        .from('mega_whale_alert_config')
+        .select('*')
+        .eq('user_id', megaWhale.user_id)
+        .single();
+      
+      const threshold = alertConfig?.coordinated_buy_count || 3;
+      
+      if (buyData.buyers.length >= threshold) {
+        const tokenMeta = await fetchTokenMetadata(supabase, tokenMint);
+        
+        await createPatternAlert(supabase, {
+          user_id: megaWhale.user_id,
+          mega_whale_id: megaWhale.id,
+          alert_type: 'coordinated_buy',
+          severity: 'high',
+          title: `🎯 Coordinated Buy: ${tokenMeta?.symbol || tokenMint.slice(0, 8)}`,
+          description: `${buyData.buyers.length} offspring wallets are buying ${tokenMeta?.symbol || 'this token'} simultaneously. This is a strong pump signal.`,
+          metadata: {
+            token_mint: tokenMint,
+            token_symbol: tokenMeta?.symbol,
+            buyers_count: buyData.buyers.length,
+            buyer_addresses: buyData.buyers.slice(0, 5)
+          }
+        });
+      }
+    }
 
     console.log(`[MEGA-WHALE-WEBHOOK] Complete: ${alertsCreated} alerts, ${offspringCreated} new offspring`);
 
@@ -343,6 +456,46 @@ Deno.serve(async (req) => {
     );
   }
 });
+
+async function createPatternAlert(supabase: any, alert: {
+  user_id: string;
+  mega_whale_id: string;
+  alert_type: string;
+  severity: string;
+  title: string;
+  description: string;
+  metadata?: any;
+}): Promise<void> {
+  try {
+    const { data: newAlert, error } = await supabase
+      .from('mega_whale_pattern_alerts')
+      .insert({
+        user_id: alert.user_id,
+        mega_whale_id: alert.mega_whale_id,
+        alert_type: alert.alert_type,
+        severity: alert.severity,
+        title: alert.title,
+        description: alert.description,
+        metadata: alert.metadata || {},
+        expires_at: new Date(Date.now() + 60 * 60 * 1000).toISOString()
+      })
+      .select()
+      .single();
+
+    if (error) {
+      console.error('[MEGA-WHALE-WEBHOOK] Failed to create pattern alert:', error);
+      return;
+    }
+
+    await supabase.functions.invoke('mega-whale-notifier', {
+      body: { alert_id: newAlert.id }
+    }).catch((e: any) => console.error('[MEGA-WHALE-WEBHOOK] Notification error:', e));
+
+    console.log(`[MEGA-WHALE-WEBHOOK] Pattern alert created: ${alert.alert_type} - ${alert.title}`);
+  } catch (e) {
+    console.error('[MEGA-WHALE-WEBHOOK] createPatternAlert error:', e);
+  }
+}
 
 async function fetchTokenMetadata(supabase: any, mint: string): Promise<{ symbol?: string; name?: string; image?: string } | null> {
   try {

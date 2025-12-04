@@ -15,8 +15,10 @@ import { toast } from 'sonner';
 import { 
   Crown, Plus, Trash2, Search, Activity, Bell, 
   RefreshCw, ExternalLink, GitBranch, Coins, 
-  TrendingUp, TrendingDown, Radio, WifiOff, Eye
+  TrendingUp, TrendingDown, Radio, WifiOff, Eye,
+  Zap, Settings, Mail, Send, Bot, DollarSign
 } from 'lucide-react';
+import { Switch } from '@/components/ui/switch';
 import { format } from 'date-fns';
 
 interface MegaWhale {
@@ -64,6 +66,39 @@ interface TokenAlert {
   metadata: any;
 }
 
+interface PatternAlert {
+  id: string;
+  user_id: string;
+  mega_whale_id: string | null;
+  alert_type: string;
+  severity: string;
+  title: string;
+  description: string | null;
+  metadata: any;
+  is_read: boolean;
+  created_at: string;
+  expires_at: string | null;
+}
+
+interface AlertConfig {
+  id: string;
+  user_id: string;
+  funding_burst_count: number;
+  funding_burst_window_minutes: number;
+  coordinated_buy_count: number;
+  coordinated_buy_window_minutes: number;
+  profit_taking_threshold_percent: number;
+  notify_email: boolean;
+  notify_telegram: boolean;
+  notify_browser: boolean;
+  email_address: string | null;
+  telegram_chat_id: string | null;
+  auto_buy_on_mint: boolean;
+  auto_buy_amount_sol: number;
+  auto_buy_wait_for_buys: number;
+  auto_buy_max_wait_minutes: number;
+}
+
 const CEX_OPTIONS = [
   { value: 'robinhood', label: 'Robinhood' },
   { value: 'coinbase', label: 'Coinbase' },
@@ -82,8 +117,11 @@ export function MegaWhaleDashboard() {
   const [megaWhales, setMegaWhales] = useState<MegaWhale[]>([]);
   const [offspring, setOffspring] = useState<Offspring[]>([]);
   const [alerts, setAlerts] = useState<TokenAlert[]>([]);
+  const [patternAlerts, setPatternAlerts] = useState<PatternAlert[]>([]);
+  const [alertConfig, setAlertConfig] = useState<AlertConfig | null>(null);
   const [selectedWhale, setSelectedWhale] = useState<string | null>(null);
   const [monitoringActive, setMonitoringActive] = useState(false);
+  const [savingConfig, setSavingConfig] = useState(false);
   
   // Add whale form
   const [newWallet, setNewWallet] = useState('');
@@ -114,8 +152,26 @@ export function MegaWhaleDashboard() {
       setMegaWhales(whalesData || []);
       setMonitoringActive(whalesData?.some(w => w.helius_webhook_id) || false);
 
+      // Load alert config
+      const { data: configData } = await supabase
+        .from('mega_whale_alert_config')
+        .select('*')
+        .eq('user_id', user.id)
+        .single();
+      
+      setAlertConfig(configData as AlertConfig || null);
+
+      // Load pattern alerts
+      const { data: patternData } = await supabase
+        .from('mega_whale_pattern_alerts')
+        .select('*')
+        .eq('user_id', user.id)
+        .order('created_at', { ascending: false })
+        .limit(50);
+      
+      setPatternAlerts((patternData as PatternAlert[]) || []);
+
       if (whalesData?.length) {
-        // Load offspring for all whales
         const { data: offspringData } = await supabase
           .from('mega_whale_offspring')
           .select('*')
@@ -124,7 +180,6 @@ export function MegaWhaleDashboard() {
 
         setOffspring(offspringData || []);
 
-        // Load alerts
         const { data: alertsData } = await supabase
           .from('mega_whale_token_alerts')
           .select('*')

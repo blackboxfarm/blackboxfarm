@@ -156,3 +156,9 @@ verify_jwt = false
 
 [functions.mega-whale-manager]
 verify_jwt = false
+
+[functions.mega-whale-notifier]
+verify_jwt = false
+
+[functions.mega-whale-auto-trader]
+verify_jwt = false
