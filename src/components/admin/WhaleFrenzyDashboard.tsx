@@ -66,6 +66,60 @@ interface ParsedWallet {
 // Base58 character set for Solana addresses
 const BASE58_REGEX = /^[1-9A-HJ-NP-Za-km-z]{32,44}$/;
 
+// KOLscan Top 50 Whale Wallets (Daily Leaderboard - Dec 2024)
+const KOLSCAN_TOP_50 = [
+  { address: 'J6TDXvarvpBdPXTaTU8eJbtso1PUCYKGkVtMKUUY8iEa', nickname: 'Pain' },
+  { address: 'CyaE1VxvBrahnPWkqm5VsdCvyS2QmNht2UFrKJHga54o', nickname: 'Cented' },
+  { address: '6mWEJG9LoRdto8TwTdZxmnJpkXpTsEerizcGiCNZvzXd', nickname: 'slingoor' },
+  { address: 'B3wagQZiZU2hKa5pUCj6rrdhWsX3Q6WfTTnki9PjwzMh', nickname: 'xander' },
+  { address: 'DZAa55HwXgv5hStwaTEJGXZz1DhHejvpb7Yr762urXam', nickname: 'ozark' },
+  { address: '87rRdssFiTJKY4MGARa4G5vQ31hmR7MxSmhzeaJ5AAxJ', nickname: 'Dior' },
+  { address: '3H9LVHarjBoZ2YPEsgFbVD1zuERCGwfp4AeyHoHsFSEC', nickname: 'JADAWGS' },
+  { address: '2fg5QD1eD7rzNNCsvnhmXFm5hqNgwTTG8p7kQ6f3rx6f', nickname: 'Cupsey' },
+  { address: 'DYmsQudNqJyyDvq86XmzAvrU9T7xwfQEwh6gPQw9TPNF', nickname: 'unprofitable' },
+  { address: '4nvNc7dDEqKKLM4Sr9Kgk3t1of6f8G66kT64VoC95LYh', nickname: 'MAMBA' },
+  { address: '78N177fzNJpp8pG49xDv1efYcTMSzo9tPTKEA9mAVkh2', nickname: 'Sheep' },
+  { address: '4BdKaxN8G6ka4GYtQQWk4G4dZRUTX2vQH9GcXdBREFUk', nickname: 'Jijo' },
+  { address: '5B79fMkcFeRTiwm7ehsZsFiKsC7m7n1Bgv9yLxPp9q2X', nickname: 'bandit' },
+  { address: 'B32QbbdDAyhvUQzjcaM5j6ZVKwjCxAwGH5Xgvb9SJqnC', nickname: 'Kadenox' },
+  { address: 'Bi4rd5FH5bYEN8scZ7wevxNZyNmKHdaBcvewdPFxYdLt', nickname: 'theo' },
+  { address: 'Ez2jp3rwXUbaTx7XwiHGaWVgTPFdzJoSg8TopqbxfaJN', nickname: 'Keano' },
+  { address: '71PCu3E4JP5RDBoY6wJteqzxkKNXLyE1byg5BTAL9UtQ', nickname: 'Ramset' },
+  { address: '4cXnf2z85UiZ5cyKsPMEULq1yufAtpkatmX4j4DBZqj2', nickname: 'WaiterG' },
+  { address: 'xyzfhxfy8NhfeNG3Um3WaUvFXzNuHkrhrZMD8dsStB6', nickname: 'Gasp' },
+  { address: 'DjM7Tu7whh6P3pGVBfDzwXAx2zaw51GJWrJE3PwtuN7s', nickname: 'LUKEY' },
+  { address: '5T229oePmJGE5Cefys8jE9Jq8C7qfGNNWy3RVA7SmwEP', nickname: 'Tuults' },
+  { address: 'BtMBMPkoNbnLF9Xn552guQq528KKXcsNBNNBre3oaQtr', nickname: 'Letterbomb' },
+  { address: '39q2g5tTQn9n7KnuapzwS2smSx3NGYqBoea11tBjsGEt', nickname: 'Walta' },
+  { address: '5sNnKuWKUtZkdC1eFNyqz3XHpNoCRQ1D1DfHcNHMV7gn', nickname: 'cryptovillain26' },
+  { address: '8AtQ4ka3dgtrH1z4Uq3Tm4YdMN3cK5RRj1eKuGNnvenm', nickname: 'peacefuldestroy' },
+  { address: '4AHgEkTsGqY77qtde4UJn9yZCrbGcM7UM3vjT3qM4G5H', nickname: 'BagCalls' },
+  { address: '4uCT4g7YHH4xxfmfNfKUDenwGrRNGoZ9Ay1XFxfUGhQG', nickname: 'chingchongslayer' },
+  { address: 'uS74rigLoPmKdi169RPUB4VSF6T9PqChTpG5jWzVhVp', nickname: 'para' },
+  { address: '215nhcAHjQQGgwpQSJQ7zR26etbjjtVdW74NLzwEgQjP', nickname: 'OGAntD' },
+  { address: '7tiRXPM4wwBMRMYzmywRAE6jveS3gDbNyxgRrEoU6RLA', nickname: 'Qtdegen' },
+  { address: '2W14ahXD3XBfWJchQ4K5NLXmguWWcTTUTuHDhEzeuvP3', nickname: 'Veloce' },
+  { address: 'PMJA8UQDyWTFw2Smhyp9jGA6aTaP7jKHR7BPudrgyYN', nickname: 'chester' },
+  { address: 'FsG3BaPmRTdSrPaivbgJsFNCCa8cPfkUtk8VLWXkHpHP', nickname: 'Reljoo' },
+  { address: 'DEdEW3SMPU2dCfXEcgj2YppmX9H3bnMDJaU4ctn2BQDQ', nickname: 'King Solomon' },
+  { address: 'Dxudj2DQ5odnqgZvUocaeWc1eYC78Q8vfmVtPpvTrRNh', nickname: 'storm' },
+  { address: 'FTg1gqW7vPm4kdU1LPM7JJnizbgPdRDy2PitKw6mY27j', nickname: '7' },
+  { address: '5fHJszey2UdB2nETS1y6NS2wSG4ic9byKtbgJzaYzGeV', nickname: 'k4ye' },
+  { address: 'DYAn4XpAkN5mhiXkRB7dGq4Jadnx6XYgu8L5b3WGhbrt', nickname: 'The Doc' },
+  { address: '6S8GezkxYUfZy9JPtYnanbcZTMB87Wjt1qx3c6ELajKC', nickname: 'Nyhrox' },
+  { address: '4sAUSQFdvWRBxR8UoLBYbw8CcXuwXWxnN8pXa4mtm5nU', nickname: 'Scharo' },
+  { address: 'G2mgnzpr59vYjKpwU9q5zVfS9yQ9HezMwjuqF7LACvR4', nickname: 'fz7' },
+  { address: 'AeLaMjzxErZt4drbWVWvcxpVyo8p94xu5vrg41eZPFe3', nickname: '1s1mple' },
+  { address: '99xnE2zEFi8YhmKDaikc1EvH6ELTQJppnqUwMzmpLXrs', nickname: 'Coler' },
+  { address: 'ETU3GyrUsv6UztQJxHgsBX2UoJFmq79WJe3JyDpAqGMz', nickname: 'MACXBT' },
+  { address: 'EA4MXkyF8C2NzY8fw2acJPuarmoU271KRCCAYpLzMBJr', nickname: 'Grimace' },
+  { address: '2octNbV8QTtaFMJtbWhtkqMQt3deBe4D8mYcNworhv3t', nickname: 'Sugus' },
+  { address: '9f5ywdCDA4QhSktBomozpHmZfSLqS6J9VqCrRehYWh1p', nickname: 'matsu' },
+  { address: 'ADC1QV9raLnGGDbnWdnsxazeZ4Tsiho4vrWadYswA2ph', nickname: 'Ducky' },
+  { address: 'AGqjivJr1dSv73TVUvdtqAwogzmThzvYMVXjGWg2FYLm', nickname: 'noob mini' },
+  { address: 'EP5mvfhGv6x1XR33Fd8eioiYjtRXAawafPmkz9xBpDvG', nickname: 'Zemrics' },
+];
+
 function parseWalletInput(input: string, existingAddresses: Set<string>): ParsedWallet[] {
   const lines = input.split('\n').map(line => line.trim()).filter(Boolean);
   const seen = new Set<string>();
@@ -497,6 +551,22 @@ export function WhaleFrenzyDashboard() {
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
+              <div className="flex gap-2 mb-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => {
+                    const kolscanData = KOLSCAN_TOP_50
+                      .map(w => `${w.address},${w.nickname}`)
+                      .join('\n');
+                    setBulkWalletInput(kolscanData);
+                    toast.success('Loaded KOLscan Top 50 wallets');
+                  }}
+                >
+                  <Upload className="h-4 w-4 mr-2" />
+                  Import KOLscan Top 50
+                </Button>
+              </div>
               <Textarea
                 placeholder={`Paste wallet addresses here, one per line...\n\nExamples:\nAbc123xyz789...\nDef456abc123...,WhaleKing\nGhi789def456...,BigBuyer`}
                 value={bulkWalletInput}
