@@ -59,7 +59,8 @@ Deno.serve(async (req) => {
 
     const supabase = createClient(supabaseUrl, supabaseKey)
 
-    const { action, user_id, alert_id, token_mint, launcher_score } = await req.json()
+    const body = await req.json()
+    const { action, user_id, alert_id, token_mint, launcher_score, config } = body
 
     console.log(`Auto-buyer action: ${action}`)
 
@@ -151,8 +152,6 @@ Deno.serve(async (req) => {
     }
 
     if (action === 'update_config') {
-      const { config } = await req.json()
-      
       const { data, error } = await supabase
         .from('mega_whale_auto_buy_config')
         .upsert({
