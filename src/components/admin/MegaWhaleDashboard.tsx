@@ -525,12 +525,12 @@ export function MegaWhaleDashboard() {
                   </CardDescription>
                 </div>
                 {megaWhales.length > 0 && (
-                  <Select value={selectedWhale || ''} onValueChange={(v) => setSelectedWhale(v || null)}>
+                  <Select value={selectedWhale || 'all'} onValueChange={(v) => setSelectedWhale(v === 'all' ? null : v)}>
                     <SelectTrigger className="w-[200px]">
                       <SelectValue placeholder="Filter by whale..." />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="">All Whales</SelectItem>
+                      <SelectItem value="all">All Whales</SelectItem>
                       {megaWhales.map(w => (
                         <SelectItem key={w.id} value={w.id}>
                           {w.nickname || w.wallet_address.slice(0, 8)}
@@ -619,12 +619,12 @@ export function MegaWhaleDashboard() {
                   </CardDescription>
                 </div>
                 {megaWhales.length > 0 && (
-                  <Select value={selectedWhale || ''} onValueChange={(v) => setSelectedWhale(v || null)}>
+                  <Select value={selectedWhale || 'all'} onValueChange={(v) => setSelectedWhale(v === 'all' ? null : v)}>
                     <SelectTrigger className="w-[200px]">
                       <SelectValue placeholder="Filter by whale..." />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="">All Whales</SelectItem>
+                      <SelectItem value="all">All Whales</SelectItem>
                       {megaWhales.map(w => (
                         <SelectItem key={w.id} value={w.id}>
                           {w.nickname || w.wallet_address.slice(0, 8)}
