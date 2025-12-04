@@ -136,10 +136,56 @@ Deno.serve(async (req) => {
 
     const configMap = new Map(configs?.map(c => [c.user_id, c]) || [])
 
+    // Fetch token metadata for symbols and images
+    const uniqueTokens = [...new Set(whaleBuys.map(b => b.token_mint))]
+    const tokenMetadata = new Map<string, { symbol?: string; image?: string }>()
+    
+    for (const mint of uniqueTokens) {
+      try {
+        // Try to get from our cache first
+        const { data: cached } = await supabase
+          .from('token_metadata')
+          .select('symbol, image_uri')
+          .eq('mint_address', mint)
+          .single()
+        
+        if (cached) {
+          tokenMetadata.set(mint, { symbol: cached.symbol, image: cached.image_uri })
+        } else {
+          // Fetch from Helius DAS API
+          const heliusKey = Deno.env.get('HELIUS_API_KEY')
+          if (heliusKey) {
+            const response = await fetch(`https://mainnet.helius-rpc.com/?api-key=${heliusKey}`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                jsonrpc: '2.0',
+                id: 'token-metadata',
+                method: 'getAsset',
+                params: { id: mint }
+              })
+            })
+            const result = await response.json()
+            if (result.result?.content?.metadata) {
+              const meta = result.result.content
+              tokenMetadata.set(mint, { 
+                symbol: meta.metadata?.symbol, 
+                image: meta.links?.image || meta.files?.[0]?.uri 
+              })
+            }
+          }
+        }
+      } catch (e) {
+        console.log(`Could not fetch metadata for ${mint.slice(0, 8)}:`, e)
+      }
+    }
+
     // Store EACH whale buy as an event (whale_count = 1)
     for (const buy of whaleBuys) {
       const config = configMap.get(buy.user_id)
       if (!config) continue
+
+      const meta = tokenMetadata.get(buy.token_mint) || {}
 
       // Create whale buy event
       const { error: eventError } = await supabase
@@ -147,6 +193,8 @@ Deno.serve(async (req) => {
         .insert({
           user_id: buy.user_id,
           token_mint: buy.token_mint,
+          token_symbol: meta.symbol || null,
+          token_image: meta.image || null,
           whale_count: 1,
           participating_wallets: [{
             address: buy.wallet_address,
@@ -167,7 +215,7 @@ Deno.serve(async (req) => {
       if (eventError) {
         console.error('Error creating whale buy event:', eventError)
       } else {
-        console.log(`📝 Recorded whale buy: ${buy.nickname || buy.wallet_address.slice(0, 8)} -> ${buy.token_mint.slice(0, 8)}`)
+        console.log(`📝 Recorded whale buy: ${buy.nickname || buy.wallet_address.slice(0, 8)} -> ${meta.symbol || buy.token_mint.slice(0, 8)}`)
       }
     }
 
