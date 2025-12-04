@@ -333,14 +333,29 @@ export function MegaWhaleDashboard() {
     : offspring;
 
   // Filter alerts by type and whale
-  const filteredAlerts = alerts.filter(a => {
+  const rawFilteredAlerts = alerts.filter(a => {
     const whaleMatch = !selectedWhale || a.mega_whale_id === selectedWhale;
     const typeMatch = alertTypeFilter === 'all' || a.alert_type === alertTypeFilter;
     return whaleMatch && typeMatch;
   });
 
+  // Deduplicate mint alerts by token_mint - show only ONE alert per unique token
+  const filteredAlerts = alertTypeFilter === 'token_mint' 
+    ? Object.values(
+        rawFilteredAlerts.reduce((acc, alert) => {
+          // Keep only the latest alert per token_mint
+          if (!acc[alert.token_mint] || new Date(alert.detected_at) > new Date(acc[alert.token_mint].detected_at)) {
+            acc[alert.token_mint] = alert;
+          }
+          return acc;
+        }, {} as Record<string, TokenAlert>)
+      ).sort((a, b) => new Date(b.detected_at).getTime() - new Date(a.detected_at).getTime())
+    : rawFilteredAlerts;
+
   const unreadCount = alerts.filter(a => !a.is_read).length;
-  const mintCount = mintAlerts.length;
+  // Count UNIQUE minted tokens, not total alerts
+  const uniqueMintedTokens = new Set(mintAlerts.map(a => a.token_mint));
+  const mintCount = uniqueMintedTokens.size;
 
   const sendTestNotification = async () => {
     if (!user?.id) return;
@@ -875,9 +890,11 @@ export function MegaWhaleDashboard() {
                                   {alert.alert_type.replace('_', ' ').toUpperCase()}
                                 </Badge>
                               </div>
-                              <p className="text-xs text-muted-foreground mt-1">
+                              <p className="text-sm font-medium mt-1">
                                 {alert.token_name || 'Unknown Token'}
-                                {alert.amount_sol && ` • ${alert.amount_sol.toFixed(4)} SOL`}
+                              </p>
+                              <p className="text-xs text-muted-foreground">
+                                {alert.amount_sol ? `${alert.amount_sol.toFixed(4)} SOL` : ''}
                               </p>
                             </div>
                           </div>
