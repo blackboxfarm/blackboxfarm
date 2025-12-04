@@ -177,3 +177,6 @@ verify_jwt = false
 
 [functions.mega-whale-wallet-transfer]
 verify_jwt = false
+
+[functions.mega-whale-position-monitor]
+verify_jwt = false
