@@ -12,7 +12,7 @@ import { toast } from 'sonner';
 import { 
   Wallet, Plus, RefreshCw, Copy, Send, ArrowDownLeft, 
   ShoppingCart, DollarSign, Coins, Settings, History,
-  QrCode, ExternalLink, Loader2, ArrowUpRight, Trash2
+  QrCode, ExternalLink, Loader2, ArrowUpRight, Trash2, Zap
 } from 'lucide-react';
 import {
   Dialog,
@@ -49,6 +49,12 @@ interface AutoBuyConfig {
   min_launcher_score: number;
   slippage_bps: number;
   buys_today: number;
+  // Smart auto-buy settings
+  auto_buy_min_market_cap: number;
+  auto_buy_max_market_cap: number;
+  auto_buy_min_holders: number;
+  auto_buy_min_age_minutes: number;
+  auto_buy_require_dev_buy: boolean;
 }
 
 interface MegaWhaleWalletManagerProps {
@@ -579,6 +585,82 @@ export function MegaWhaleWalletManager({ userId }: MegaWhaleWalletManagerProps) 
                       <p className="text-xs text-muted-foreground">
                         Used today: {config.buys_today}
                       </p>
+                    </div>
+                  </div>
+
+                  {/* Smart Auto-Buy Settings */}
+                  <div className="border-t pt-4 mt-4">
+                    <h4 className="font-semibold mb-3 flex items-center gap-2">
+                      <Zap className="h-4 w-4 text-yellow-500" />
+                      Smart Buyability Settings
+                    </h4>
+                    <p className="text-xs text-muted-foreground mb-4">
+                      Configure market conditions required before auto-buying. Prevents buying failed launches or test tokens.
+                    </p>
+                    
+                    <div className="grid grid-cols-2 gap-4">
+                      <div className="space-y-2">
+                        <Label>Min Market Cap ($)</Label>
+                        <Input 
+                          type="number"
+                          step="500"
+                          value={config.auto_buy_min_market_cap || 9500}
+                          onChange={(e) => setConfig({...config, auto_buy_min_market_cap: parseFloat(e.target.value) || 9500})}
+                        />
+                        <p className="text-xs text-muted-foreground">
+                          Wait until MC reaches this (default: $9,500)
+                        </p>
+                      </div>
+                      <div className="space-y-2">
+                        <Label>Max Market Cap ($)</Label>
+                        <Input 
+                          type="number"
+                          step="5000"
+                          value={config.auto_buy_max_market_cap || 50000}
+                          onChange={(e) => setConfig({...config, auto_buy_max_market_cap: parseFloat(e.target.value) || 50000})}
+                        />
+                        <p className="text-xs text-muted-foreground">
+                          Don't buy if MC exceeds this (too late)
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-4 mt-4">
+                      <div className="space-y-2">
+                        <Label>Min Unique Holders</Label>
+                        <Input 
+                          type="number"
+                          value={config.auto_buy_min_holders || 5}
+                          onChange={(e) => setConfig({...config, auto_buy_min_holders: parseInt(e.target.value) || 5})}
+                        />
+                        <p className="text-xs text-muted-foreground">
+                          Require at least this many buyers
+                        </p>
+                      </div>
+                      <div className="space-y-2">
+                        <Label>Min Age (minutes)</Label>
+                        <Input 
+                          type="number"
+                          value={config.auto_buy_min_age_minutes || 3}
+                          onChange={(e) => setConfig({...config, auto_buy_min_age_minutes: parseInt(e.target.value) || 3})}
+                        />
+                        <p className="text-xs text-muted-foreground">
+                          Wait this long after mint
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center justify-between mt-4 p-3 bg-muted/50 rounded-lg">
+                      <div>
+                        <Label>Require Dev Buy-In</Label>
+                        <p className="text-xs text-muted-foreground">
+                          Only buy if dev wallet has also bought (not a test launch)
+                        </p>
+                      </div>
+                      <Switch 
+                        checked={config.auto_buy_require_dev_buy ?? true}
+                        onCheckedChange={(checked) => setConfig({...config, auto_buy_require_dev_buy: checked})}
+                      />
                     </div>
                   </div>
 

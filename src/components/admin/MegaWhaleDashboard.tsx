@@ -63,6 +63,9 @@ interface TokenAlert {
   amount_sol: number | null;
   funding_chain: unknown;
   detected_at: string;
+  token_created_at: string | null;
+  market_cap_at_detection: number | null;
+  bonding_curve_progress: number | null;
   is_read: boolean;
   metadata: any;
 }
@@ -912,9 +915,26 @@ export function MegaWhaleDashboard() {
                               </p>
                             </div>
                           </div>
-                          <span className="text-xs text-muted-foreground">
-                            {format(new Date(alert.detected_at), 'MMM d, HH:mm')}
-                          </span>
+                          <div className="text-right">
+                            {alert.token_created_at && (
+                              <div className="text-xs text-muted-foreground">
+                                <span className="text-yellow-600">Minted:</span> {format(new Date(alert.token_created_at), 'HH:mm:ss')}
+                              </div>
+                            )}
+                            <div className="text-xs text-muted-foreground">
+                              <span className="text-blue-600">Detected:</span> {format(new Date(alert.detected_at), 'HH:mm:ss')}
+                              {alert.token_created_at && (
+                                <span className="ml-1 text-orange-500">
+                                  (+{Math.round((new Date(alert.detected_at).getTime() - new Date(alert.token_created_at).getTime()) / 1000)}s)
+                                </span>
+                              )}
+                            </div>
+                            {alert.market_cap_at_detection && (
+                              <div className="text-xs font-medium text-green-600">
+                                MC: ${alert.market_cap_at_detection.toLocaleString()}
+                              </div>
+                            )}
+                          </div>
                         </div>
                         
                         {/* Funding Chain Visualization */}
