@@ -174,3 +174,6 @@ verify_jwt = false
 
 [functions.mega-whale-auto-buyer]
 verify_jwt = false
+
+[functions.mega-whale-wallet-transfer]
+verify_jwt = false
