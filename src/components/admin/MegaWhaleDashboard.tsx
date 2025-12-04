@@ -1021,20 +1021,68 @@ export function MegaWhaleDashboard() {
               {alertConfig?.additional_telegram_ids && alertConfig.additional_telegram_ids.length > 0 && (
                 <div className="space-y-2">
                   <Label className="text-sm font-medium">Approved Recipients:</Label>
-                  <div className="flex flex-wrap gap-2">
-                    {alertConfig.additional_telegram_ids.map((id) => (
-                      <Badge key={id} variant="secondary" className="flex items-center gap-1 px-3 py-1">
-                        <Bot className="h-3 w-3" />
-                        {id}
-                        <button
-                          onClick={() => removeTelegramRecipient(id)}
-                          className="ml-1 hover:text-destructive"
-                        >
-                          <Trash2 className="h-3 w-3" />
-                        </button>
-                      </Badge>
-                    ))}
-                  </div>
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Telegram ID</TableHead>
+                        <TableHead className="text-right">Actions</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {alertConfig.additional_telegram_ids.map((id) => (
+                        <TableRow key={id}>
+                          <TableCell className="flex items-center gap-2">
+                            <Bot className="h-4 w-4 text-muted-foreground" />
+                            {id}
+                          </TableCell>
+                          <TableCell className="text-right">
+                            <div className="flex items-center justify-end gap-2">
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={async () => {
+                                  toast.loading('Sending test to Telegram...');
+                                  try {
+                                    await supabase.functions.invoke('mega-whale-notifier', {
+                                      body: {
+                                        alert: {
+                                          id: 'test-tg-' + Date.now(),
+                                          user_id: user?.id,
+                                          alert_type: 'test_notification',
+                                          severity: 'info',
+                                          title: '🧪 Test Notification',
+                                          description: 'This is a test notification to verify Telegram is working!',
+                                          metadata: { test: true, recipient: id }
+                                        },
+                                        telegram_only: true,
+                                        telegram_id: id
+                                      }
+                                    });
+                                    toast.dismiss();
+                                    toast.success(`Test sent to ${id}!`);
+                                  } catch (err: any) {
+                                    toast.dismiss();
+                                    toast.error(err.message || 'Failed to send test');
+                                  }
+                                }}
+                              >
+                                <Send className="h-3 w-3 mr-1" />
+                                Test TG
+                              </Button>
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                onClick={() => removeTelegramRecipient(id)}
+                                className="text-destructive hover:text-destructive"
+                              >
+                                <Trash2 className="h-4 w-4" />
+                              </Button>
+                            </div>
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
                 </div>
               )}
 
