@@ -4488,6 +4488,7 @@ export type Database = {
           id: string
           last_buy_at: string | null
           participating_wallets: Json
+          token_image: string | null
           token_mint: string
           token_name: string | null
           token_symbol: string | null
@@ -4507,6 +4508,7 @@ export type Database = {
           id?: string
           last_buy_at?: string | null
           participating_wallets?: Json
+          token_image?: string | null
           token_mint: string
           token_name?: string | null
           token_symbol?: string | null
@@ -4526,6 +4528,7 @@ export type Database = {
           id?: string
           last_buy_at?: string | null
           participating_wallets?: Json
+          token_image?: string | null
           token_mint?: string
           token_name?: string | null
           token_symbol?: string | null

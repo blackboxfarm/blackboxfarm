@@ -14,6 +14,7 @@ interface ActivityItem {
   wallet_nickname?: string;
   token_mint: string;
   token_symbol?: string;
+  token_image?: string;
   amount_sol?: number;
   timestamp: string;
   whale_count?: number;
@@ -47,11 +48,18 @@ export function FrenzyActivityFeed({
         },
         (payload) => {
           const event = payload.new as any;
+          // Extract wallet info from participating_wallets JSON
+          const wallets = event.participating_wallets as any[] || [];
+          const firstWallet = wallets[0] || {};
+          
           const newActivity: ActivityItem = {
             id: event.id,
             type: 'frenzy_detected',
             token_mint: event.token_mint,
             token_symbol: event.token_symbol,
+            token_image: event.token_image,
+            wallet_address: firstWallet.address,
+            wallet_nickname: firstWallet.nickname,
             timestamp: event.detected_at,
             whale_count: event.whale_count
           };
@@ -64,6 +72,7 @@ export function FrenzyActivityFeed({
               type: 'auto_buy',
               token_mint: event.token_mint,
               token_symbol: event.token_symbol,
+              token_image: event.token_image,
               amount_sol: event.auto_buy_amount_sol,
               timestamp: event.detected_at
             };
@@ -94,11 +103,18 @@ export function FrenzyActivityFeed({
     if (data) {
       const newActivities: ActivityItem[] = [];
       data.forEach(event => {
+        // Extract wallet info from participating_wallets JSON
+        const wallets = event.participating_wallets as any[] || [];
+        const firstWallet = wallets[0] || {};
+        
         newActivities.push({
           id: event.id,
           type: 'frenzy_detected',
           token_mint: event.token_mint,
           token_symbol: event.token_symbol,
+          token_image: event.token_image,
+          wallet_address: firstWallet.address,
+          wallet_nickname: firstWallet.nickname,
           timestamp: event.detected_at,
           whale_count: event.whale_count
         });
@@ -109,6 +125,7 @@ export function FrenzyActivityFeed({
             type: 'auto_buy',
             token_mint: event.token_mint,
             token_symbol: event.token_symbol,
+            token_image: event.token_image,
             amount_sol: event.auto_buy_amount_sol,
             timestamp: event.detected_at
           });
@@ -123,13 +140,10 @@ export function FrenzyActivityFeed({
     if (activity.type === 'auto_buy') {
       return <Zap className="h-4 w-4 text-yellow-500" />;
     }
-    if (activity.type === 'whale_buy') {
-      return <span className="text-lg">🐋</span>;
-    }
-    // frenzy_detected - icon based on whale count
+    // Icon based on whale count
     const count = activity.whale_count || 1;
-    if (count >= 3) return <span className="text-lg">🔥</span>;
-    if (count === 2) return <span className="text-lg">👀</span>;
+    if (count >= minWhalesForFrenzy) return <span className="text-lg">🔥</span>;
+    if (count >= 2) return <span className="text-lg">👀</span>;
     return <span className="text-lg">🐋</span>;
   };
 
@@ -148,19 +162,24 @@ export function FrenzyActivityFeed({
     if (activity.type === 'auto_buy') {
       return { label: 'AUTO-BUY', className: 'text-green-500' };
     }
-    if (activity.type === 'whale_buy') {
-      return { label: 'Whale Buy', className: 'text-blue-500' };
-    }
-    // frenzy_detected - label based on whale count
+    // Label based on whale count
     const count = activity.whale_count || 1;
-    if (count >= 3) return { label: '🔥 FRENZY!', className: 'text-orange-500' };
+    if (count >= minWhalesForFrenzy) return { label: '🔥 FRENZY!', className: 'text-orange-500' };
+    if (count >= 3) return { label: 'Triple Buy', className: 'text-amber-500' };
     if (count === 2) return { label: 'Double Buy', className: 'text-yellow-500' };
     return { label: 'Whale Buy', className: 'text-blue-400' };
   };
 
+  const getWalletDisplay = (activity: ActivityItem) => {
+    if (activity.wallet_nickname) return activity.wallet_nickname;
+    if (activity.wallet_address) return activity.wallet_address.slice(0, 4) + '...' + activity.wallet_address.slice(-4);
+    return 'Unknown';
+  };
+
   const getActivityMessage = (activity: ActivityItem) => {
     const { label, className } = getActivityLabel(activity);
-    const tokenDisplay = activity.token_symbol || activity.token_mint.slice(0, 8);
+    const tokenDisplay = activity.token_symbol ? `$${activity.token_symbol}` : activity.token_mint.slice(0, 6) + '...';
+    const walletDisplay = getWalletDisplay(activity);
     
     if (activity.type === 'auto_buy') {
       return (
@@ -168,8 +187,8 @@ export function FrenzyActivityFeed({
           <span className={`font-bold ${className}`}>{label}</span>
           {': '}
           <span className="font-medium">{activity.amount_sol} SOL</span>
-          {' on '}
-          <span className="font-medium">{tokenDisplay}</span>
+          {' → '}
+          <span className="font-semibold text-primary">{tokenDisplay}</span>
         </>
       );
     }
@@ -177,24 +196,23 @@ export function FrenzyActivityFeed({
     const count = activity.whale_count || 1;
     return (
       <>
+        <span className="text-muted-foreground">{walletDisplay}</span>
+        {' '}
         <span className={`font-bold ${className}`}>{label}</span>
         {count > 1 && (
-          <>
-            {' '}
-            <span className="font-medium">{count} whales</span>
-          </>
+          <span className="text-muted-foreground"> ({count} whales)</span>
         )}
-        {' on '}
-        <span className="font-medium">{tokenDisplay}</span>
+        {' → '}
+        <span className="font-semibold text-primary">{tokenDisplay}</span>
       </>
     );
   };
 
   const getActivityBorderColor = (activity: ActivityItem) => {
     if (activity.type === 'auto_buy') return 'border-l-green-500 bg-green-500/5';
-    if (activity.type === 'whale_buy') return 'border-l-blue-500';
     const count = activity.whale_count || 1;
-    if (count >= 3) return 'border-l-orange-500 bg-orange-500/10';
+    if (count >= minWhalesForFrenzy) return 'border-l-orange-500 bg-orange-500/10';
+    if (count >= 3) return 'border-l-amber-500 bg-amber-500/5';
     if (count === 2) return 'border-l-yellow-500 bg-yellow-500/5';
     return 'border-l-blue-400 bg-blue-500/5';
   };
@@ -246,13 +264,23 @@ export function FrenzyActivityFeed({
               activities.map((activity) => (
                 <div
                   key={activity.id}
-                  className={`flex items-start gap-3 p-2 rounded-lg bg-muted/50 border-l-2 ${getActivityBorderColor(activity)}`}
+                  className={`flex items-start gap-2 p-2 rounded-lg bg-muted/50 border-l-2 ${getActivityBorderColor(activity)}`}
                 >
-                  <div className="mt-0.5">
-                    {getActivityIcon(activity)}
-                  </div>
+                  {/* Token image */}
+                  {activity.token_image ? (
+                    <img 
+                      src={activity.token_image} 
+                      alt={activity.token_symbol || 'Token'} 
+                      className="w-8 h-8 rounded-full object-cover border border-border flex-shrink-0"
+                      onError={(e) => { e.currentTarget.style.display = 'none'; }}
+                    />
+                  ) : (
+                    <div className="w-8 h-8 rounded-full bg-muted flex items-center justify-center flex-shrink-0">
+                      {getActivityIcon(activity)}
+                    </div>
+                  )}
                   <div className="flex-1 min-w-0">
-                    <p className="text-sm">
+                    <p className="text-sm leading-tight">
                       {getActivityMessage(activity)}
                     </p>
                     <p className="text-xs text-muted-foreground">
