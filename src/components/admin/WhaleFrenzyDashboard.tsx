@@ -557,18 +557,48 @@ export function WhaleFrenzyDashboard() {
             <CardContent className="space-y-4">
               <div className="flex gap-2 mb-2">
                 <Button
-                  variant="outline"
+                  variant="default"
                   size="sm"
-                  onClick={() => {
-                    const kolscanData = KOLSCAN_TOP_50
-                      .map(w => `${w.address},${w.nickname},${w.twitter || ''}`)
-                      .join('\n');
-                    setBulkWalletInput(kolscanData);
-                    toast.success('Loaded KOLscan Top 50 wallets with Twitter handles');
+                  disabled={importing}
+                  onClick={async () => {
+                    if (!user?.id) return;
+                    setImporting(true);
+                    try {
+                      // Filter out wallets that already exist
+                      const newWallets = KOLSCAN_TOP_50.filter(
+                        w => !existingAddresses.has(w.address)
+                      );
+                      
+                      if (newWallets.length === 0) {
+                        toast.info('All KOLscan Top 50 wallets are already in your list');
+                        return;
+                      }
+
+                      const walletsToInsert = newWallets.map(w => ({
+                        user_id: user.id,
+                        wallet_address: w.address,
+                        nickname: w.nickname,
+                        twitter_handle: w.twitter
+                      }));
+
+                      const { error } = await supabase
+                        .from('whale_wallets')
+                        .insert(walletsToInsert);
+
+                      if (error) throw error;
+                      
+                      toast.success(`Added ${newWallets.length} KOLscan whale wallets`);
+                      loadData();
+                    } catch (error: any) {
+                      console.error('Error importing KOLscan wallets:', error);
+                      toast.error(error.message || 'Failed to import wallets');
+                    } finally {
+                      setImporting(false);
+                    }
                   }}
                 >
                   <Upload className="h-4 w-4 mr-2" />
-                  Import KOLscan Top 50
+                  {importing ? 'Importing...' : 'Import KOLscan Top 50'}
                 </Button>
               </div>
               <Textarea
