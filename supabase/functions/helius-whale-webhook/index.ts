@@ -62,14 +62,24 @@ Deno.serve(async (req) => {
       })
     }
 
-    const whaleAddresses = new Set(whaleWallets?.map(w => w.wallet_address) || [])
-    const whaleMap = new Map(whaleWallets?.map(w => [w.wallet_address, w]) || [])
+    // Get avatar URLs from wallet_metadata
+    const walletAddresses = whaleWallets?.map(w => w.wallet_address) || []
+    const { data: walletMetadata } = await supabase
+      .from('wallet_metadata')
+      .select('wallet_address, avatar_url, twitter_handle')
+      .in('wallet_address', walletAddresses)
+    
+    const avatarMap = new Map(walletMetadata?.map(m => [m.wallet_address, m.avatar_url]) || [])
+
+    const whaleAddresses = new Set(walletAddresses)
+    const whaleMap = new Map(whaleWallets?.map(w => [w.wallet_address, { ...w, avatar_url: avatarMap.get(w.wallet_address) }]) || [])
 
     // Process each transaction to find whale buys
     const whaleBuys: Array<{
       wallet_address: string;
       nickname: string | null;
       twitter_handle: string | null;
+      avatar_url: string | null;
       token_mint: string;
       token_amount: number;
       sol_amount: number;
@@ -121,6 +131,7 @@ Deno.serve(async (req) => {
               wallet_address: tx.feePayer,
               nickname: whale.nickname,
               twitter_handle: whale.twitter_handle,
+              avatar_url: whale.avatar_url || null,
               token_mint: transfer.mint,
               token_amount: transfer.tokenAmount,
               sol_amount: solSpent,
@@ -219,6 +230,7 @@ Deno.serve(async (req) => {
             address: buy.wallet_address,
             nickname: buy.nickname,
             twitter: buy.twitter_handle,
+            avatar_url: buy.avatar_url,
             sol_amount: buy.sol_amount,
             token_amount: buy.token_amount,
             price_per_token: buy.price_per_token
@@ -227,6 +239,7 @@ Deno.serve(async (req) => {
             wallet: buy.wallet_address,
             nickname: buy.nickname,
             twitter: buy.twitter_handle,
+            avatar_url: buy.avatar_url,
             sol_amount: buy.sol_amount,
             token_amount: buy.token_amount,
             price_per_token: buy.price_per_token,
@@ -317,7 +330,8 @@ Deno.serve(async (req) => {
           const whaleDetails = [...recentWhales].map(addr => ({
             address: addr,
             nickname: whaleMap.get(addr)?.nickname || null,
-            twitter: whaleMap.get(addr)?.twitter_handle || null
+            twitter: whaleMap.get(addr)?.twitter_handle || null,
+            avatar_url: whaleMap.get(addr)?.avatar_url || null
           }))
 
           // Create FRENZY event (whale_count > 1)
