@@ -4428,10 +4428,12 @@ export type Database = {
           created_at: string
           fantasy_buy_amount: number | null
           fantasy_mode: boolean | null
+          helius_webhook_id: string | null
           id: string
           is_active: boolean
           max_slippage_bps: number
           min_whales_for_frenzy: number
+          monitoring_active: boolean | null
           time_window_seconds: number
           updated_at: string
           user_id: string
@@ -4443,10 +4445,12 @@ export type Database = {
           created_at?: string
           fantasy_buy_amount?: number | null
           fantasy_mode?: boolean | null
+          helius_webhook_id?: string | null
           id?: string
           is_active?: boolean
           max_slippage_bps?: number
           min_whales_for_frenzy?: number
+          monitoring_active?: boolean | null
           time_window_seconds?: number
           updated_at?: string
           user_id: string
@@ -4458,10 +4462,12 @@ export type Database = {
           created_at?: string
           fantasy_buy_amount?: number | null
           fantasy_mode?: boolean | null
+          helius_webhook_id?: string | null
           id?: string
           is_active?: boolean
           max_slippage_bps?: number
           min_whales_for_frenzy?: number
+          monitoring_active?: boolean | null
           time_window_seconds?: number
           updated_at?: string
           user_id?: string
