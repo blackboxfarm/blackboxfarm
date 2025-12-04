@@ -46,9 +46,19 @@ interface HeliusTransaction {
   }>;
 }
 
+// KILL SWITCH - Set to true to disable all processing
+const WEBHOOK_DISABLED = true;
+
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
+  }
+
+  // Early exit if disabled
+  if (WEBHOOK_DISABLED) {
+    return new Response(JSON.stringify({ status: 'disabled', message: 'Webhook processing is currently disabled' }), { 
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
+    });
   }
 
   const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
