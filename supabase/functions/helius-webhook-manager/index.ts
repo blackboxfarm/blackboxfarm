@@ -135,10 +135,10 @@ Deno.serve(async (req) => {
         webhookId = result.webhookID
         console.log('Webhook created:', webhookId)
 
-        // Save webhook ID to config
+        // Save webhook ID to config and set monitoring active
         await supabase
           .from('whale_frenzy_config')
-          .update({ helius_webhook_id: webhookId })
+          .update({ helius_webhook_id: webhookId, monitoring_active: true })
           .eq('user_id', user_id)
 
         return new Response(JSON.stringify({ 
@@ -175,10 +175,10 @@ Deno.serve(async (req) => {
         })
       }
 
-      // Clear webhook ID from config
+      // Clear webhook ID from config and set monitoring inactive
       await supabase
         .from('whale_frenzy_config')
-        .update({ helius_webhook_id: null })
+        .update({ helius_webhook_id: null, monitoring_active: false })
         .eq('user_id', user_id)
 
       return new Response(JSON.stringify({ success: true, message: 'Webhook deleted' }), { headers: corsHeaders })
