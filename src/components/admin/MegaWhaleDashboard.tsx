@@ -859,7 +859,16 @@ export function MegaWhaleDashboard() {
                       No alerts yet. Alerts will appear when offspring wallets mint or trade tokens.
                     </p>
                   ) : (
-                    filteredAlerts.map((alert) => (
+                    filteredAlerts.map((alert) => {
+                      // Generate appropriate trading link
+                      const getTradeUrl = (mint: string) => {
+                        if (mint.endsWith('pump')) {
+                          return `https://pump.fun/${mint}`;
+                        }
+                        return `https://dexscreener.com/solana/${mint}`;
+                      };
+                      
+                      return (
                       <div
                         key={alert.id}
                         className={`p-4 rounded-lg border ${!alert.is_read ? 'bg-primary/5 border-primary/20' : 'bg-card'}`}
@@ -879,12 +888,13 @@ export function MegaWhaleDashboard() {
                                   />
                                 )}
                                 <a
-                                  href={`https://trade.padre.gg/${alert.token_mint}`}
+                                  href={getTradeUrl(alert.token_mint)}
                                   target="_blank"
                                   rel="noopener noreferrer"
-                                  className="font-medium hover:text-primary flex items-center gap-1"
+                                  className="font-bold text-lg hover:text-primary flex items-center gap-1"
+                                  title={alert.token_mint}
                                 >
-                                  {alert.token_symbol || alert.token_mint.slice(0, 8)}
+                                  ${alert.token_symbol || alert.token_mint.slice(0, 8)}
                                   <ExternalLink className="h-3 w-3" />
                                 </a>
                                 <Badge variant={
@@ -894,8 +904,8 @@ export function MegaWhaleDashboard() {
                                   {alert.alert_type.replace('_', ' ').toUpperCase()}
                                 </Badge>
                               </div>
-                              <p className="text-sm font-medium mt-1">
-                                {alert.token_name || 'Unknown Token'}
+                              <p className="text-sm text-muted-foreground mt-1">
+                                {alert.token_name || 'Unknown Token'} • <span className="font-mono text-xs">{alert.token_mint.slice(0, 12)}...</span>
                               </p>
                               <p className="text-xs text-muted-foreground">
                                 {alert.amount_sol ? `${alert.amount_sol.toFixed(4)} SOL` : ''}
@@ -923,7 +933,8 @@ export function MegaWhaleDashboard() {
                           </div>
                         )}
                       </div>
-                    ))
+                      );
+                    })
                   )}
                 </div>
               </ScrollArea>

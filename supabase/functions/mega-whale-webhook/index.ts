@@ -9,6 +9,20 @@ const PUMP_PROGRAM_ID = '6EF8rrecthR5Dkzon8Nwu78hRvfCKubJ14M5uBEwF6P';
 const TOKEN_PROGRAM_ID = 'TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA';
 const SYSTEM_PROGRAM_ID = '11111111111111111111111111111111';
 
+// Known tokens to NEVER flag as new mints (stablecoins, wSOL, etc.)
+const KNOWN_TOKENS = new Set([
+  'So11111111111111111111111111111111111111112',  // wSOL
+  'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v', // USDC
+  'Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB', // USDT
+  'mSoLzYCxHdYgdzU16g5QSh3i5K3z3KZK7ytfqcJm7So',  // mSOL
+  'DezXAZ8z7PnrnRJjz3wXBoRgixCa6xjnB7YaB1pPB263', // BONK
+  '7dHbWXmci3dT8UFYWYZweBLXgycu7Y3iL6trKn1Y7ARj', // stSOL
+  'JUPyiwrYJFskUPiHa7hkeR8VUtAeFoSYbKedZNsDvCN',  // JUP
+  'orcaEKTdK7LKz57vaAYr9QeNsVEPfiu6QeMU1kektZE',  // ORCA
+  'RLBxxFkseAZ4RgJH3Sqn8jXxhmGoz9jWxDNJMh8pL7a',  // RLBB
+  'HZ1JovNiVvGrGNiiYvEozEVgZ58xaU3RKwX8eACQBCt3', // PYTH
+]);
+
 interface HeliusTransaction {
   signature: string;
   timestamp: number;
@@ -217,10 +231,26 @@ Deno.serve(async (req) => {
 
         // Detect token buys and sells
         for (const transfer of tx.tokenTransfers || []) {
+          // Skip known tokens (wSOL, USDC, etc.)
+          if (KNOWN_TOKENS.has(transfer.mint)) continue;
+          
           const isBuy = transfer.toUserAccount === feePayer && transfer.tokenAmount > 0;
           const isSell = transfer.fromUserAccount === feePayer && transfer.tokenAmount > 0;
 
           if (isBuy || isSell) {
+            // Check for duplicate alert (same token + same signature)
+            const { data: existingAlert } = await supabase
+              .from('mega_whale_token_alerts')
+              .select('id')
+              .eq('token_mint', transfer.mint)
+              .eq('metadata->>signature', tx.signature)
+              .maybeSingle();
+            
+            if (existingAlert) {
+              console.log(`[MEGA-WHALE-WEBHOOK] Skipping duplicate alert for ${transfer.mint}`);
+              continue;
+            }
+            
             // Get token metadata
             const tokenMeta = await fetchTokenMetadata(supabase, transfer.mint);
             
@@ -291,7 +321,23 @@ Deno.serve(async (req) => {
         if (tx.type === 'CREATE' || tx.type === 'TOKEN_MINT' || mintInstructions.length > 0) {
           // Check if any new tokens were created
           for (const transfer of tx.tokenTransfers || []) {
+            // Skip known tokens (wSOL, USDC, etc.) - these are NOT new mints
+            if (KNOWN_TOKENS.has(transfer.mint)) continue;
+            
             if (transfer.toUserAccount === feePayer && transfer.tokenAmount > 0) {
+              // Check for duplicate mint alert
+              const { data: existingMint } = await supabase
+                .from('mega_whale_token_alerts')
+                .select('id')
+                .eq('token_mint', transfer.mint)
+                .eq('alert_type', 'token_mint')
+                .maybeSingle();
+              
+              if (existingMint) {
+                console.log(`[MEGA-WHALE-WEBHOOK] Skipping duplicate mint alert for ${transfer.mint}`);
+                continue;
+              }
+              
               const tokenMeta = await fetchTokenMetadata(supabase, transfer.mint);
               const fundingChain = await buildFundingChain(supabase, offspring, megaWhale);
 
@@ -516,34 +562,82 @@ async function fetchTokenMetadata(supabase: any, mint: string): Promise<{ symbol
       .eq('mint', mint)
       .single();
 
-    if (cached) return cached;
+    if (cached?.symbol) return cached;
 
-    // Fetch from Helius
+    let metadata: { symbol?: string; name?: string; image?: string } | null = null;
+
+    // Source 1: Try Helius getAsset
     const heliusApiKey = Deno.env.get('HELIUS_API_KEY');
-    if (!heliusApiKey) return null;
+    if (heliusApiKey) {
+      try {
+        const response = await fetch(`https://mainnet.helius-rpc.com/?api-key=${heliusApiKey}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            jsonrpc: '2.0',
+            id: 'metadata',
+            method: 'getAsset',
+            params: { id: mint }
+          })
+        });
 
-    const response = await fetch(`https://mainnet.helius-rpc.com/?api-key=${heliusApiKey}`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        jsonrpc: '2.0',
-        id: 'metadata',
-        method: 'getAsset',
-        params: { id: mint }
-      })
-    });
+        const data = await response.json();
+        const content = data?.result?.content;
+        
+        if (content?.metadata?.symbol) {
+          metadata = {
+            symbol: content.metadata.symbol,
+            name: content.metadata.name,
+            image: content.links?.image || content.files?.[0]?.uri
+          };
+        }
+      } catch (e) {
+        console.log('[MEGA-WHALE-WEBHOOK] Helius metadata fetch failed, trying DexScreener');
+      }
+    }
 
-    const data = await response.json();
-    const content = data?.result?.content;
-    
-    if (content) {
-      const metadata = {
-        symbol: content.metadata?.symbol,
-        name: content.metadata?.name,
-        image: content.links?.image || content.files?.[0]?.uri
-      };
+    // Source 2: Try DexScreener
+    if (!metadata?.symbol) {
+      try {
+        const dexResponse = await fetch(`https://api.dexscreener.com/latest/dex/tokens/${mint}`, {
+          headers: { 'Accept': 'application/json' }
+        });
+        const dexData = await dexResponse.json();
+        const pair = dexData?.pairs?.[0];
+        
+        if (pair?.baseToken) {
+          metadata = {
+            symbol: pair.baseToken.symbol,
+            name: pair.baseToken.name,
+            image: pair.info?.imageUrl || metadata?.image
+          };
+        }
+      } catch (e) {
+        console.log('[MEGA-WHALE-WEBHOOK] DexScreener metadata fetch failed, trying pump.fun');
+      }
+    }
 
-      // Cache it
+    // Source 3: Try pump.fun API for .pump tokens
+    if (!metadata?.symbol && mint.endsWith('pump')) {
+      try {
+        const pumpResponse = await fetch(`https://frontend-api.pump.fun/coins/${mint}`);
+        if (pumpResponse.ok) {
+          const pumpData = await pumpResponse.json();
+          if (pumpData?.symbol) {
+            metadata = {
+              symbol: pumpData.symbol,
+              name: pumpData.name,
+              image: pumpData.image_uri || pumpData.metadata?.image
+            };
+          }
+        }
+      } catch (e) {
+        console.log('[MEGA-WHALE-WEBHOOK] pump.fun metadata fetch failed');
+      }
+    }
+
+    // Cache whatever we found (even partial data)
+    if (metadata) {
       await supabase
         .from('token_metadata_cache')
         .upsert({ mint, ...metadata, updated_at: new Date().toISOString() })
@@ -552,10 +646,11 @@ async function fetchTokenMetadata(supabase: any, mint: string): Promise<{ symbol
       return metadata;
     }
 
-    return null;
+    // Return truncated mint as fallback symbol
+    return { symbol: mint.slice(0, 6) + '...', name: 'Unknown Token', image: null };
   } catch (e) {
     console.error('[MEGA-WHALE-WEBHOOK] Token metadata fetch error:', e);
-    return null;
+    return { symbol: mint.slice(0, 6) + '...', name: 'Unknown Token', image: null };
   }
 }
 
