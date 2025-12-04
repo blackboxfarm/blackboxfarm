@@ -340,6 +340,10 @@ Deno.serve(async (req) => {
               
               const tokenMeta = await fetchTokenMetadata(supabase, transfer.mint);
               const fundingChain = await buildFundingChain(supabase, offspring, megaWhale);
+              
+              // Fetch actual token creation time from pump.fun
+              const tokenCreatedAt = await getTokenCreationTime(transfer.mint);
+              const marketCapData = await getTokenMarketData(transfer.mint);
 
               const { error: alertError } = await supabase
                 .from('mega_whale_token_alerts')
@@ -354,6 +358,9 @@ Deno.serve(async (req) => {
                   token_image: tokenMeta?.image,
                   funding_chain: fundingChain,
                   detected_at: timestamp,
+                  token_created_at: tokenCreatedAt,
+                  market_cap_at_detection: marketCapData?.marketCap,
+                  bonding_curve_progress: marketCapData?.bondingProgress,
                   metadata: {
                     signature: tx.signature,
                     creator_wallet: feePayer,
@@ -389,7 +396,9 @@ Deno.serve(async (req) => {
                     token_symbol: tokenMeta?.symbol,
                     token_name: tokenMeta?.name,
                     creator_wallet: feePayer,
-                    signature: tx.signature
+                    signature: tx.signature,
+                    token_created_at: tokenCreatedAt,
+                    market_cap: marketCapData?.marketCap
                   }
                 });
                 
@@ -651,6 +660,47 @@ async function fetchTokenMetadata(supabase: any, mint: string): Promise<{ symbol
   } catch (e) {
     console.error('[MEGA-WHALE-WEBHOOK] Token metadata fetch error:', e);
     return { symbol: mint.slice(0, 6) + '...', name: 'Unknown Token', image: null };
+  }
+}
+
+// Fetch actual token creation time from pump.fun
+async function getTokenCreationTime(mint: string): Promise<string | null> {
+  try {
+    // For pump.fun tokens, get creation time from API
+    const response = await fetch(`https://frontend-api.pump.fun/coins/${mint}`);
+    if (response.ok) {
+      const data = await response.json();
+      // pump.fun returns created_timestamp as unix ms or ISO string
+      if (data.created_timestamp) {
+        const ts = typeof data.created_timestamp === 'number' 
+          ? new Date(data.created_timestamp).toISOString()
+          : data.created_timestamp;
+        return ts;
+      }
+    }
+    return null;
+  } catch (e) {
+    console.log('[MEGA-WHALE-WEBHOOK] Failed to get token creation time:', e);
+    return null;
+  }
+}
+
+// Fetch token market data for buyability assessment
+async function getTokenMarketData(mint: string): Promise<{ marketCap: number; bondingProgress: number; price: number } | null> {
+  try {
+    const response = await fetch(`https://frontend-api.pump.fun/coins/${mint}`);
+    if (response.ok) {
+      const data = await response.json();
+      return {
+        marketCap: data.usd_market_cap || 0,
+        bondingProgress: data.bonding_curve_progress || 0,
+        price: data.price || 0
+      };
+    }
+    return null;
+  } catch (e) {
+    console.log('[MEGA-WHALE-WEBHOOK] Failed to get token market data:', e);
+    return null;
   }
 }
 

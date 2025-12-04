@@ -2435,8 +2435,14 @@ export type Database = {
         Row: {
           additional_telegram_ids: string[] | null
           auto_buy_amount_sol: number | null
+          auto_buy_max_dump_ratio: number | null
+          auto_buy_max_market_cap: number | null
           auto_buy_max_wait_minutes: number | null
+          auto_buy_min_age_minutes: number | null
+          auto_buy_min_holders: number | null
+          auto_buy_min_market_cap: number | null
           auto_buy_on_mint: boolean | null
+          auto_buy_require_dev_buy: boolean | null
           auto_buy_wait_for_buys: number | null
           coordinated_buy_count: number | null
           coordinated_buy_window_minutes: number | null
@@ -2457,8 +2463,14 @@ export type Database = {
         Insert: {
           additional_telegram_ids?: string[] | null
           auto_buy_amount_sol?: number | null
+          auto_buy_max_dump_ratio?: number | null
+          auto_buy_max_market_cap?: number | null
           auto_buy_max_wait_minutes?: number | null
+          auto_buy_min_age_minutes?: number | null
+          auto_buy_min_holders?: number | null
+          auto_buy_min_market_cap?: number | null
           auto_buy_on_mint?: boolean | null
+          auto_buy_require_dev_buy?: boolean | null
           auto_buy_wait_for_buys?: number | null
           coordinated_buy_count?: number | null
           coordinated_buy_window_minutes?: number | null
@@ -2479,8 +2491,14 @@ export type Database = {
         Update: {
           additional_telegram_ids?: string[] | null
           auto_buy_amount_sol?: number | null
+          auto_buy_max_dump_ratio?: number | null
+          auto_buy_max_market_cap?: number | null
           auto_buy_max_wait_minutes?: number | null
+          auto_buy_min_age_minutes?: number | null
+          auto_buy_min_holders?: number | null
+          auto_buy_min_market_cap?: number | null
           auto_buy_on_mint?: boolean | null
+          auto_buy_require_dev_buy?: boolean | null
           auto_buy_wait_for_buys?: number | null
           coordinated_buy_count?: number | null
           coordinated_buy_window_minutes?: number | null
@@ -2584,70 +2602,88 @@ export type Database = {
       mega_whale_auto_trades: {
         Row: {
           amount_sol: number
+          buyability_score: number | null
           buys_detected: number | null
           buys_required: number | null
           created_at: string | null
+          dev_has_bought: boolean | null
           error_message: string | null
           executed_at: string | null
           execution_price: number | null
           id: string
+          market_cap_at_check: number | null
           mega_whale_id: string | null
           monitoring_expires_at: string | null
           monitoring_started_at: string | null
           pattern_alert_id: string | null
+          rejection_reason: string | null
           status: string
+          token_age_minutes: number | null
           token_mint: string
           token_name: string | null
           token_symbol: string | null
           tokens_received: number | null
           trade_type: string
           transaction_signature: string | null
+          unique_holders: number | null
           updated_at: string | null
           user_id: string
         }
         Insert: {
           amount_sol: number
+          buyability_score?: number | null
           buys_detected?: number | null
           buys_required?: number | null
           created_at?: string | null
+          dev_has_bought?: boolean | null
           error_message?: string | null
           executed_at?: string | null
           execution_price?: number | null
           id?: string
+          market_cap_at_check?: number | null
           mega_whale_id?: string | null
           monitoring_expires_at?: string | null
           monitoring_started_at?: string | null
           pattern_alert_id?: string | null
+          rejection_reason?: string | null
           status?: string
+          token_age_minutes?: number | null
           token_mint: string
           token_name?: string | null
           token_symbol?: string | null
           tokens_received?: number | null
           trade_type?: string
           transaction_signature?: string | null
+          unique_holders?: number | null
           updated_at?: string | null
           user_id: string
         }
         Update: {
           amount_sol?: number
+          buyability_score?: number | null
           buys_detected?: number | null
           buys_required?: number | null
           created_at?: string | null
+          dev_has_bought?: boolean | null
           error_message?: string | null
           executed_at?: string | null
           execution_price?: number | null
           id?: string
+          market_cap_at_check?: number | null
           mega_whale_id?: string | null
           monitoring_expires_at?: string | null
           monitoring_started_at?: string | null
           pattern_alert_id?: string | null
+          rejection_reason?: string | null
           status?: string
+          token_age_minutes?: number | null
           token_mint?: string
           token_name?: string | null
           token_symbol?: string | null
           tokens_received?: number | null
           trade_type?: string
           transaction_signature?: string | null
+          unique_holders?: number | null
           updated_at?: string | null
           user_id?: string
         }
@@ -2887,14 +2923,17 @@ export type Database = {
         Row: {
           alert_type: string
           amount_sol: number | null
+          bonding_curve_progress: number | null
           created_at: string | null
           detected_at: string | null
           funding_chain: Json | null
           id: string
           is_read: boolean | null
+          market_cap_at_detection: number | null
           mega_whale_id: string
           metadata: Json | null
           offspring_id: string | null
+          token_created_at: string | null
           token_image: string | null
           token_mint: string
           token_name: string | null
@@ -2904,14 +2943,17 @@ export type Database = {
         Insert: {
           alert_type: string
           amount_sol?: number | null
+          bonding_curve_progress?: number | null
           created_at?: string | null
           detected_at?: string | null
           funding_chain?: Json | null
           id?: string
           is_read?: boolean | null
+          market_cap_at_detection?: number | null
           mega_whale_id: string
           metadata?: Json | null
           offspring_id?: string | null
+          token_created_at?: string | null
           token_image?: string | null
           token_mint: string
           token_name?: string | null
@@ -2921,14 +2963,17 @@ export type Database = {
         Update: {
           alert_type?: string
           amount_sol?: number | null
+          bonding_curve_progress?: number | null
           created_at?: string | null
           detected_at?: string | null
           funding_chain?: Json | null
           id?: string
           is_read?: boolean | null
+          market_cap_at_detection?: number | null
           mega_whale_id?: string
           metadata?: Json | null
           offspring_id?: string | null
+          token_created_at?: string | null
           token_image?: string | null
           token_mint?: string
           token_name?: string | null
