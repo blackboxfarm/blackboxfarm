@@ -220,11 +220,21 @@ async function performQuickScan(supabase: any, heliusApiKey: string, megaWhale: 
   console.log(`[MEGA-WHALE-MANAGER] Quick scan for ${megaWhale.wallet_address}`);
 
   const results = {
-    offspring_found: 0,
+    total_scanned: 0,
+    new_offspring: 0,
     transactions_scanned: 0
   };
 
   try {
+    // Get existing offspring addresses BEFORE scanning
+    const { data: existingOffspring } = await supabase
+      .from('mega_whale_offspring')
+      .select('wallet_address')
+      .eq('mega_whale_id', megaWhale.id);
+    
+    const existingAddresses = new Set(existingOffspring?.map((o: any) => o.wallet_address) || []);
+    console.log(`[MEGA-WHALE-MANAGER] Existing offspring count: ${existingAddresses.size}`);
+
     // Fetch recent transactions (limited to 50)
     const response = await fetch(
       `https://api.helius.xyz/v0/addresses/${megaWhale.wallet_address}/transactions?api-key=${heliusApiKey}&limit=50`
@@ -245,9 +255,9 @@ async function performQuickScan(supabase: any, heliusApiKey: string, megaWhale: 
         if (transfer.fromUserAccount === megaWhale.wallet_address && 
             transfer.amount > 0.01 * 1e9) { // More than 0.01 SOL
           
-          // Check if already tracked
-          const existingOffspring = offspringToInsert.find(o => o.wallet_address === transfer.toUserAccount);
-          if (!existingOffspring) {
+          // Check if already in this batch
+          const alreadyInBatch = offspringToInsert.find(o => o.wallet_address === transfer.toUserAccount);
+          if (!alreadyInBatch) {
             offspringToInsert.push({
               mega_whale_id: megaWhale.id,
               wallet_address: transfer.toUserAccount,
@@ -260,7 +270,15 @@ async function performQuickScan(supabase: any, heliusApiKey: string, megaWhale: 
       }
     }
 
-    // Batch insert offspring
+    results.total_scanned = offspringToInsert.length;
+    
+    // Calculate truly new offspring (not in existing set)
+    const newOffspring = offspringToInsert.filter(o => !existingAddresses.has(o.wallet_address));
+    results.new_offspring = newOffspring.length;
+
+    console.log(`[MEGA-WHALE-MANAGER] Scanned ${results.total_scanned} wallets, ${results.new_offspring} are new`);
+
+    // Batch insert offspring (upsert handles duplicates)
     if (offspringToInsert.length > 0) {
       const { error } = await supabase
         .from('mega_whale_offspring')
@@ -269,23 +287,27 @@ async function performQuickScan(supabase: any, heliusApiKey: string, megaWhale: 
           ignoreDuplicates: true
         });
 
-      if (!error) {
-        results.offspring_found = offspringToInsert.length;
-      } else {
+      if (error) {
         console.error('[MEGA-WHALE-MANAGER] Error inserting offspring:', error);
       }
     }
 
-    // Update mega whale stats
+    // Get actual total count from database
+    const { count: actualTotal } = await supabase
+      .from('mega_whale_offspring')
+      .select('*', { count: 'exact', head: true })
+      .eq('mega_whale_id', megaWhale.id);
+
+    // Update mega whale stats with REAL total
     await supabase
       .from('mega_whales')
       .update({ 
-        total_offspring_wallets: results.offspring_found,
+        total_offspring_wallets: actualTotal || 0,
         last_activity_at: new Date().toISOString()
       })
       .eq('id', megaWhale.id);
 
-    console.log(`[MEGA-WHALE-MANAGER] Quick scan complete:`, results);
+    console.log(`[MEGA-WHALE-MANAGER] Quick scan complete. Total offspring in DB: ${actualTotal}`);
     return results;
 
   } catch (e) {
