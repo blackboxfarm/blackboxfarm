@@ -2447,6 +2447,11 @@ export type Database = {
           coordinated_buy_count: number | null
           coordinated_buy_window_minutes: number | null
           created_at: string | null
+          distribution_enabled: boolean | null
+          distribution_percent_per_wallet: number | null
+          distribution_wallet_1: string | null
+          distribution_wallet_2: string | null
+          distribution_wallet_3: string | null
           email_address: string | null
           funding_burst_count: number | null
           funding_burst_window_minutes: number | null
@@ -2475,6 +2480,11 @@ export type Database = {
           coordinated_buy_count?: number | null
           coordinated_buy_window_minutes?: number | null
           created_at?: string | null
+          distribution_enabled?: boolean | null
+          distribution_percent_per_wallet?: number | null
+          distribution_wallet_1?: string | null
+          distribution_wallet_2?: string | null
+          distribution_wallet_3?: string | null
           email_address?: string | null
           funding_burst_count?: number | null
           funding_burst_window_minutes?: number | null
@@ -2503,6 +2513,11 @@ export type Database = {
           coordinated_buy_count?: number | null
           coordinated_buy_window_minutes?: number | null
           created_at?: string | null
+          distribution_enabled?: boolean | null
+          distribution_percent_per_wallet?: number | null
+          distribution_wallet_1?: string | null
+          distribution_wallet_2?: string | null
+          distribution_wallet_3?: string | null
           email_address?: string | null
           funding_burst_count?: number | null
           funding_burst_window_minutes?: number | null
@@ -2700,6 +2715,71 @@ export type Database = {
             columns: ["pattern_alert_id"]
             isOneToOne: false
             referencedRelation: "mega_whale_pattern_alerts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      mega_whale_distributions: {
+        Row: {
+          completed_at: string | null
+          created_at: string | null
+          distribution_amount_sol: number
+          error_message: string | null
+          id: string
+          source_signature: string | null
+          status: string | null
+          total_profit_sol: number
+          trade_id: string | null
+          user_id: string
+          wallet_1_address: string | null
+          wallet_1_signature: string | null
+          wallet_2_address: string | null
+          wallet_2_signature: string | null
+          wallet_3_address: string | null
+          wallet_3_signature: string | null
+        }
+        Insert: {
+          completed_at?: string | null
+          created_at?: string | null
+          distribution_amount_sol: number
+          error_message?: string | null
+          id?: string
+          source_signature?: string | null
+          status?: string | null
+          total_profit_sol: number
+          trade_id?: string | null
+          user_id: string
+          wallet_1_address?: string | null
+          wallet_1_signature?: string | null
+          wallet_2_address?: string | null
+          wallet_2_signature?: string | null
+          wallet_3_address?: string | null
+          wallet_3_signature?: string | null
+        }
+        Update: {
+          completed_at?: string | null
+          created_at?: string | null
+          distribution_amount_sol?: number
+          error_message?: string | null
+          id?: string
+          source_signature?: string | null
+          status?: string | null
+          total_profit_sol?: number
+          trade_id?: string | null
+          user_id?: string
+          wallet_1_address?: string | null
+          wallet_1_signature?: string | null
+          wallet_2_address?: string | null
+          wallet_2_signature?: string | null
+          wallet_3_address?: string | null
+          wallet_3_signature?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "mega_whale_distributions_trade_id_fkey"
+            columns: ["trade_id"]
+            isOneToOne: false
+            referencedRelation: "mega_whale_auto_trades"
             referencedColumns: ["id"]
           },
         ]

@@ -55,6 +55,12 @@ interface AutoBuyConfig {
   auto_buy_min_holders: number;
   auto_buy_min_age_minutes: number;
   auto_buy_require_dev_buy: boolean;
+  // Distribution settings
+  distribution_enabled: boolean;
+  distribution_wallet_1: string;
+  distribution_wallet_2: string;
+  distribution_wallet_3: string;
+  distribution_percent_per_wallet: number;
 }
 
 interface MegaWhaleWalletManagerProps {
@@ -115,13 +121,36 @@ export function MegaWhaleWalletManager({ userId }: MegaWhaleWalletManagerProps) 
 
   const loadConfig = useCallback(async () => {
     try {
+      // Load auto-buy config
       const { data, error } = await supabase.functions.invoke('mega-whale-auto-buyer', {
         body: { action: 'get_config', user_id: userId }
       });
 
       if (error) throw error;
+      
+      // Load alert config for distribution and smart buy settings
+      const { data: alertConfig } = await supabase
+        .from('mega_whale_alert_config')
+        .select('*')
+        .eq('user_id', userId)
+        .single();
+      
       if (data?.config) {
-        setConfig(data.config);
+        setConfig({
+          ...data.config,
+          // Merge distribution settings from alert config
+          distribution_enabled: alertConfig?.distribution_enabled ?? false,
+          distribution_wallet_1: alertConfig?.distribution_wallet_1 || '',
+          distribution_wallet_2: alertConfig?.distribution_wallet_2 || '',
+          distribution_wallet_3: alertConfig?.distribution_wallet_3 || '',
+          distribution_percent_per_wallet: alertConfig?.distribution_percent_per_wallet || 10,
+          // Merge smart buy settings
+          auto_buy_min_market_cap: alertConfig?.auto_buy_min_market_cap || 9500,
+          auto_buy_max_market_cap: alertConfig?.auto_buy_max_market_cap || 50000,
+          auto_buy_min_holders: alertConfig?.auto_buy_min_holders || 5,
+          auto_buy_min_age_minutes: alertConfig?.auto_buy_min_age_minutes || 3,
+          auto_buy_require_dev_buy: alertConfig?.auto_buy_require_dev_buy ?? true
+        });
       }
     } catch (error: any) {
       console.error('Failed to load config:', error);
@@ -189,6 +218,7 @@ export function MegaWhaleWalletManager({ userId }: MegaWhaleWalletManagerProps) 
     setSavingConfig(true);
     
     try {
+      // Save auto-buy config
       const { error } = await supabase.functions.invoke('mega-whale-auto-buyer', {
         body: {
           action: 'update_config',
@@ -204,6 +234,26 @@ export function MegaWhaleWalletManager({ userId }: MegaWhaleWalletManagerProps) 
       });
 
       if (error) throw error;
+      
+      // Save distribution settings and smart buy config directly to mega_whale_alert_config
+      const { error: alertConfigError } = await supabase
+        .from('mega_whale_alert_config')
+        .update({
+          distribution_enabled: config.distribution_enabled,
+          distribution_wallet_1: config.distribution_wallet_1 || null,
+          distribution_wallet_2: config.distribution_wallet_2 || null,
+          distribution_wallet_3: config.distribution_wallet_3 || null,
+          distribution_percent_per_wallet: config.distribution_percent_per_wallet || 10,
+          auto_buy_min_market_cap: config.auto_buy_min_market_cap || 9500,
+          auto_buy_max_market_cap: config.auto_buy_max_market_cap || 50000,
+          auto_buy_min_holders: config.auto_buy_min_holders || 5,
+          auto_buy_min_age_minutes: config.auto_buy_min_age_minutes || 3,
+          auto_buy_require_dev_buy: config.auto_buy_require_dev_buy ?? true
+        })
+        .eq('user_id', userId);
+      
+      if (alertConfigError) throw alertConfigError;
+      
       toast.success('Settings saved!');
     } catch (error: any) {
       toast.error(error.message || 'Failed to save settings');
@@ -693,6 +743,77 @@ export function MegaWhaleWalletManager({ userId }: MegaWhaleWalletManagerProps) 
                       max={5000}
                       step={100}
                     />
+                  </div>
+
+                  {/* Profit Distribution Settings */}
+                  <div className="border-t pt-4 mt-4">
+                    <h4 className="font-semibold mb-3 flex items-center gap-2">
+                      <ArrowUpRight className="h-4 w-4 text-green-500" />
+                      Profit Distribution
+                    </h4>
+                    <p className="text-xs text-muted-foreground mb-4">
+                      Automatically split {(config.distribution_percent_per_wallet || 10) * 3}% of profits after each sell to 3 wallets (10% each).
+                    </p>
+                    
+                    <div className="flex items-center justify-between mb-4 p-3 bg-muted/50 rounded-lg">
+                      <div>
+                        <Label>Enable Auto-Distribution</Label>
+                        <p className="text-xs text-muted-foreground">
+                          Send 30% of sell profits to your 3 wallets
+                        </p>
+                      </div>
+                      <Switch 
+                        checked={config.distribution_enabled ?? false}
+                        onCheckedChange={(checked) => setConfig({...config, distribution_enabled: checked})}
+                      />
+                    </div>
+
+                    <div className="space-y-3">
+                      <div className="space-y-2">
+                        <Label className="flex items-center gap-2">
+                          <span className="w-5 h-5 rounded-full bg-green-500 text-white text-xs flex items-center justify-center">1</span>
+                          Distribution Wallet #1 (10%)
+                        </Label>
+                        <Input 
+                          placeholder="Enter Solana wallet address..."
+                          value={config.distribution_wallet_1 || ''}
+                          onChange={(e) => setConfig({...config, distribution_wallet_1: e.target.value})}
+                          className="font-mono text-sm"
+                        />
+                      </div>
+                      
+                      <div className="space-y-2">
+                        <Label className="flex items-center gap-2">
+                          <span className="w-5 h-5 rounded-full bg-blue-500 text-white text-xs flex items-center justify-center">2</span>
+                          Distribution Wallet #2 (10%)
+                        </Label>
+                        <Input 
+                          placeholder="Enter Solana wallet address..."
+                          value={config.distribution_wallet_2 || ''}
+                          onChange={(e) => setConfig({...config, distribution_wallet_2: e.target.value})}
+                          className="font-mono text-sm"
+                        />
+                      </div>
+                      
+                      <div className="space-y-2">
+                        <Label className="flex items-center gap-2">
+                          <span className="w-5 h-5 rounded-full bg-purple-500 text-white text-xs flex items-center justify-center">3</span>
+                          Distribution Wallet #3 (10%)
+                        </Label>
+                        <Input 
+                          placeholder="Enter Solana wallet address..."
+                          value={config.distribution_wallet_3 || ''}
+                          onChange={(e) => setConfig({...config, distribution_wallet_3: e.target.value})}
+                          className="font-mono text-sm"
+                        />
+                      </div>
+                    </div>
+
+                    {config.distribution_enabled && (!config.distribution_wallet_1 || !config.distribution_wallet_2 || !config.distribution_wallet_3) && (
+                      <p className="text-xs text-yellow-600 mt-3 p-2 bg-yellow-500/10 rounded">
+                        ⚠️ Distribution is enabled but not all wallets are configured. Please add all 3 wallet addresses.
+                      </p>
+                    )}
                   </div>
 
                   <Button onClick={saveConfig} disabled={savingConfig} className="w-full">
