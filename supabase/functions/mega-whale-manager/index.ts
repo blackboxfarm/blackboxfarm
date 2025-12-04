@@ -40,17 +40,18 @@ Deno.serve(async (req) => {
 
         if (error) throw error;
 
-        // Start initial historical scan
-        const scanResult = await performHistoricalScan(supabase, heliusApiKey, megaWhale);
+        // Perform a quick initial scan (only first-level) for immediate feedback
+        const quickScanResult = await performQuickScan(supabase, heliusApiKey, megaWhale);
 
-        // Create webhook for this mega whale's network
+        // Create webhook for monitoring
         await updateWebhook(supabase, heliusApiKey, user_id);
 
         return new Response(
           JSON.stringify({ 
             success: true, 
             mega_whale: megaWhale,
-            initial_scan: scanResult
+            initial_scan: quickScanResult,
+            message: 'Mega whale added. Quick scan complete - offspring will be discovered via real-time monitoring.'
           }),
           { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
         );
@@ -58,6 +59,16 @@ Deno.serve(async (req) => {
 
       case 'remove': {
         // Remove mega whale and its offspring
+        await supabase
+          .from('mega_whale_token_alerts')
+          .delete()
+          .eq('mega_whale_id', mega_whale_id);
+
+        await supabase
+          .from('mega_whale_offspring')
+          .delete()
+          .eq('mega_whale_id', mega_whale_id);
+
         const { error } = await supabase
           .from('mega_whales')
           .delete()
@@ -76,7 +87,7 @@ Deno.serve(async (req) => {
       }
 
       case 'scan': {
-        // Perform historical scan for a specific mega whale
+        // Perform quick scan for a specific mega whale
         const { data: megaWhale } = await supabase
           .from('mega_whales')
           .select('*')
@@ -91,7 +102,7 @@ Deno.serve(async (req) => {
           );
         }
 
-        const scanResult = await performHistoricalScan(supabase, heliusApiKey, megaWhale);
+        const scanResult = await performQuickScan(supabase, heliusApiKey, megaWhale);
 
         // Update webhook with new addresses
         await updateWebhook(supabase, heliusApiKey, user_id);
@@ -102,8 +113,32 @@ Deno.serve(async (req) => {
         );
       }
 
+      case 'deep_scan': {
+        // Perform deeper scan - runs in chunks to avoid timeout
+        const { data: megaWhale } = await supabase
+          .from('mega_whales')
+          .select('*')
+          .eq('id', mega_whale_id)
+          .eq('user_id', user_id)
+          .single();
+
+        if (!megaWhale) {
+          return new Response(
+            JSON.stringify({ error: 'Mega whale not found' }),
+            { status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+
+        const scanResult = await performDeepScan(supabase, heliusApiKey, megaWhale);
+        await updateWebhook(supabase, heliusApiKey, user_id);
+
+        return new Response(
+          JSON.stringify({ success: true, scan_result: scanResult }),
+          { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+
       case 'status': {
-        // Get status of mega whale monitoring
         const { data: megaWhales } = await supabase
           .from('mega_whales')
           .select(`
@@ -140,7 +175,6 @@ Deno.serve(async (req) => {
       }
 
       case 'stop_monitoring': {
-        // Delete existing webhook
         const { data: megaWhales } = await supabase
           .from('mega_whales')
           .select('helius_webhook_id')
@@ -181,8 +215,88 @@ Deno.serve(async (req) => {
   }
 });
 
-async function performHistoricalScan(supabase: any, heliusApiKey: string, megaWhale: any): Promise<any> {
-  console.log(`[MEGA-WHALE-MANAGER] Starting historical scan for ${megaWhale.wallet_address}`);
+// Quick scan - only first level, limited transactions
+async function performQuickScan(supabase: any, heliusApiKey: string, megaWhale: any): Promise<any> {
+  console.log(`[MEGA-WHALE-MANAGER] Quick scan for ${megaWhale.wallet_address}`);
+
+  const results = {
+    offspring_found: 0,
+    transactions_scanned: 0
+  };
+
+  try {
+    // Fetch recent transactions (limited to 50)
+    const response = await fetch(
+      `https://api.helius.xyz/v0/addresses/${megaWhale.wallet_address}/transactions?api-key=${heliusApiKey}&limit=50`
+    );
+    const transactions = await response.json();
+
+    if (!Array.isArray(transactions)) {
+      console.log(`[MEGA-WHALE-MANAGER] No transactions found or invalid response`);
+      return results;
+    }
+
+    results.transactions_scanned = transactions.length;
+    const offspringToInsert: any[] = [];
+
+    for (const tx of transactions) {
+      // Look for SOL transfers from this wallet
+      for (const transfer of tx.nativeTransfers || []) {
+        if (transfer.fromUserAccount === megaWhale.wallet_address && 
+            transfer.amount > 0.01 * 1e9) { // More than 0.01 SOL
+          
+          // Check if already tracked
+          const existingOffspring = offspringToInsert.find(o => o.wallet_address === transfer.toUserAccount);
+          if (!existingOffspring) {
+            offspringToInsert.push({
+              mega_whale_id: megaWhale.id,
+              wallet_address: transfer.toUserAccount,
+              depth_level: 1,
+              first_funded_at: tx.timestamp ? new Date(tx.timestamp * 1000).toISOString() : new Date().toISOString(),
+              total_sol_received: transfer.amount / 1e9
+            });
+          }
+        }
+      }
+    }
+
+    // Batch insert offspring
+    if (offspringToInsert.length > 0) {
+      const { error } = await supabase
+        .from('mega_whale_offspring')
+        .upsert(offspringToInsert, { 
+          onConflict: 'mega_whale_id,wallet_address',
+          ignoreDuplicates: true
+        });
+
+      if (!error) {
+        results.offspring_found = offspringToInsert.length;
+      } else {
+        console.error('[MEGA-WHALE-MANAGER] Error inserting offspring:', error);
+      }
+    }
+
+    // Update mega whale stats
+    await supabase
+      .from('mega_whales')
+      .update({ 
+        total_offspring_wallets: results.offspring_found,
+        last_activity_at: new Date().toISOString()
+      })
+      .eq('id', megaWhale.id);
+
+    console.log(`[MEGA-WHALE-MANAGER] Quick scan complete:`, results);
+    return results;
+
+  } catch (e) {
+    console.error(`[MEGA-WHALE-MANAGER] Error in quick scan:`, e);
+    return results;
+  }
+}
+
+// Deep scan - scans offspring wallets up to depth 2 (avoids timeout)
+async function performDeepScan(supabase: any, heliusApiKey: string, megaWhale: any): Promise<any> {
+  console.log(`[MEGA-WHALE-MANAGER] Deep scan for ${megaWhale.wallet_address}`);
 
   const results = {
     offspring_found: 0,
@@ -190,143 +304,112 @@ async function performHistoricalScan(supabase: any, heliusApiKey: string, megaWh
     depth_reached: 0
   };
 
-  // Queue of wallets to scan: [wallet_address, depth, parent_offspring_id]
-  const queue: [string, number, string | null][] = [[megaWhale.wallet_address, 0, null]];
-  const scanned = new Set<string>();
+  // Get existing level-1 offspring
+  const { data: level1Offspring } = await supabase
+    .from('mega_whale_offspring')
+    .select('id, wallet_address')
+    .eq('mega_whale_id', megaWhale.id)
+    .eq('depth_level', 1)
+    .limit(20); // Limit to avoid timeout
 
-  while (queue.length > 0) {
-    const [walletAddress, depth, parentOffspringId] = queue.shift()!;
+  if (!level1Offspring?.length) {
+    console.log('[MEGA-WHALE-MANAGER] No level-1 offspring to scan');
+    return results;
+  }
 
-    if (scanned.has(walletAddress) || depth > MAX_DEPTH) continue;
-    scanned.add(walletAddress);
+  results.depth_reached = 2;
 
-    if (depth > results.depth_reached) {
-      results.depth_reached = depth;
-    }
-
+  // Scan each level-1 offspring for their transfers
+  for (const offspring of level1Offspring) {
     try {
-      // Fetch transaction history
-      const response = await fetch(`https://api.helius.xyz/v0/addresses/${walletAddress}/transactions?api-key=${heliusApiKey}&limit=100`);
+      const response = await fetch(
+        `https://api.helius.xyz/v0/addresses/${offspring.wallet_address}/transactions?api-key=${heliusApiKey}&limit=30`
+      );
       const transactions = await response.json();
 
       if (!Array.isArray(transactions)) continue;
-
       results.transactions_scanned += transactions.length;
 
       for (const tx of transactions) {
-        // Look for SOL transfers from this wallet
+        // Look for SOL transfers from this offspring
         for (const transfer of tx.nativeTransfers || []) {
-          if (transfer.fromUserAccount === walletAddress && 
-              transfer.amount > 0.001 * 1e9 && // More than 0.001 SOL
-              !scanned.has(transfer.toUserAccount)) {
+          if (transfer.fromUserAccount === offspring.wallet_address && 
+              transfer.amount > 0.01 * 1e9) {
             
-            if (depth < MAX_DEPTH) {
-              // This is a potential offspring wallet
-              const offspringData: any = {
+            const { error } = await supabase
+              .from('mega_whale_offspring')
+              .upsert({
                 mega_whale_id: megaWhale.id,
                 wallet_address: transfer.toUserAccount,
-                depth_level: depth + 1,
+                depth_level: 2,
+                parent_offspring_id: offspring.id,
                 first_funded_at: tx.timestamp ? new Date(tx.timestamp * 1000).toISOString() : new Date().toISOString(),
                 total_sol_received: transfer.amount / 1e9
-              };
+              }, { 
+                onConflict: 'mega_whale_id,wallet_address',
+                ignoreDuplicates: true
+              });
 
-              if (parentOffspringId) {
-                offspringData.parent_offspring_id = parentOffspringId;
-              }
-
-              const { data: newOffspring, error } = await supabase
-                .from('mega_whale_offspring')
-                .upsert(offspringData, { onConflict: 'mega_whale_id,wallet_address' })
-                .select()
-                .single();
-
-              if (!error && newOffspring) {
-                results.offspring_found++;
-                
-                // Add to queue for deeper scanning
-                if (depth + 1 < MAX_DEPTH) {
-                  queue.push([transfer.toUserAccount, depth + 1, newOffspring.id]);
-                }
-              }
-            }
+            if (!error) results.offspring_found++;
           }
         }
 
-        // Check for token mints or buys from this wallet
+        // Check for token activity
         for (const transfer of tx.tokenTransfers || []) {
-          const isMint = tx.type === 'CREATE' || tx.type === 'TOKEN_MINT';
-          const isBuy = transfer.toUserAccount === walletAddress && transfer.tokenAmount > 0;
-          const isSell = transfer.fromUserAccount === walletAddress && transfer.tokenAmount > 0;
+          const isBuy = transfer.toUserAccount === offspring.wallet_address;
+          const isSell = transfer.fromUserAccount === offspring.wallet_address;
 
-          if ((isMint || isBuy || isSell) && depth > 0) {
-            // This is an offspring wallet with token activity - create alert
-            const { data: offspring } = await supabase
+          if (isBuy || isSell) {
+            await supabase
+              .from('mega_whale_token_alerts')
+              .upsert({
+                user_id: megaWhale.user_id,
+                mega_whale_id: megaWhale.id,
+                offspring_id: offspring.id,
+                alert_type: isBuy ? 'token_buy' : 'token_sell',
+                token_mint: transfer.mint,
+                detected_at: tx.timestamp ? new Date(tx.timestamp * 1000).toISOString() : new Date().toISOString(),
+                metadata: {
+                  signature: tx.signature,
+                  historical_scan: true
+                }
+              }, { onConflict: 'mega_whale_id,offspring_id,token_mint,alert_type' });
+
+            await supabase
               .from('mega_whale_offspring')
-              .select('id')
-              .eq('mega_whale_id', megaWhale.id)
-              .eq('wallet_address', walletAddress)
-              .single();
-
-            if (offspring) {
-              let alertType = 'token_buy';
-              if (isMint) alertType = 'token_mint';
-              else if (isSell) alertType = 'token_sell';
-
-              // Fetch token metadata
-              const tokenMeta = await fetchTokenMetadataSimple(heliusApiKey, transfer.mint);
-
-              await supabase
-                .from('mega_whale_token_alerts')
-                .insert({
-                  user_id: megaWhale.user_id,
-                  mega_whale_id: megaWhale.id,
-                  offspring_id: offspring.id,
-                  alert_type: alertType,
-                  token_mint: transfer.mint,
-                  token_symbol: tokenMeta?.symbol,
-                  token_name: tokenMeta?.name,
-                  token_image: tokenMeta?.image,
-                  detected_at: tx.timestamp ? new Date(tx.timestamp * 1000).toISOString() : new Date().toISOString(),
-                  metadata: {
-                    signature: tx.signature,
-                    historical_scan: true,
-                    depth_level: depth
-                  }
-                });
-
-              // Update offspring as active trader
-              await supabase
-                .from('mega_whale_offspring')
-                .update({ is_active_trader: true })
-                .eq('id', offspring.id);
-            }
+              .update({ is_active_trader: true })
+              .eq('id', offspring.id);
           }
         }
       }
 
-      // Rate limiting - wait 200ms between requests
-      await new Promise(resolve => setTimeout(resolve, 200));
+      // Rate limiting
+      await new Promise(resolve => setTimeout(resolve, 150));
 
     } catch (e) {
-      console.error(`[MEGA-WHALE-MANAGER] Error scanning ${walletAddress}:`, e);
+      console.error(`[MEGA-WHALE-MANAGER] Error scanning offspring ${offspring.wallet_address}:`, e);
     }
   }
 
   // Update mega whale stats
+  const { count } = await supabase
+    .from('mega_whale_offspring')
+    .select('*', { count: 'exact', head: true })
+    .eq('mega_whale_id', megaWhale.id);
+
   await supabase
     .from('mega_whales')
     .update({ 
-      total_offspring_wallets: results.offspring_found,
+      total_offspring_wallets: count || 0,
       last_activity_at: new Date().toISOString()
     })
     .eq('id', megaWhale.id);
 
-  console.log(`[MEGA-WHALE-MANAGER] Scan complete:`, results);
+  console.log(`[MEGA-WHALE-MANAGER] Deep scan complete:`, results);
   return results;
 }
 
 async function updateWebhook(supabase: any, heliusApiKey: string, userId: string): Promise<void> {
-  // Get all mega whales and their offspring for this user
   const { data: megaWhales } = await supabase
     .from('mega_whales')
     .select('id, wallet_address, helius_webhook_id')
@@ -373,7 +456,6 @@ async function updateWebhook(supabase: any, heliusApiKey: string, userId: string
   const webhookData = await response.json();
 
   if (webhookData.webhookID) {
-    // Update all mega whales with the new webhook ID
     await supabase
       .from('mega_whales')
       .update({ helius_webhook_id: webhookData.webhookID })
@@ -382,31 +464,5 @@ async function updateWebhook(supabase: any, heliusApiKey: string, userId: string
     console.log(`[MEGA-WHALE-MANAGER] Webhook created: ${webhookData.webhookID}`);
   } else {
     console.error('[MEGA-WHALE-MANAGER] Failed to create webhook:', webhookData);
-  }
-}
-
-async function fetchTokenMetadataSimple(heliusApiKey: string, mint: string): Promise<any> {
-  try {
-    const response = await fetch(`https://mainnet.helius-rpc.com/?api-key=${heliusApiKey}`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        jsonrpc: '2.0',
-        id: 'metadata',
-        method: 'getAsset',
-        params: { id: mint }
-      })
-    });
-
-    const data = await response.json();
-    const content = data?.result?.content;
-    
-    return content ? {
-      symbol: content.metadata?.symbol,
-      name: content.metadata?.name,
-      image: content.links?.image || content.files?.[0]?.uri
-    } : null;
-  } catch {
-    return null;
   }
 }
