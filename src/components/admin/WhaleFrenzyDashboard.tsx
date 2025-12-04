@@ -13,9 +13,13 @@ import { useAuth } from '@/hooks/useAuth';
 import { toast } from 'sonner';
 import { 
   Flame, Plus, Trash2, Settings, Activity, History, 
-  RefreshCw, Wallet, AlertTriangle, CheckCircle, XCircle, Upload
+  RefreshCw, Wallet, AlertTriangle, CheckCircle, XCircle, Upload,
+  Monitor, Gamepad2, PlayCircle
 } from 'lucide-react';
 import { format } from 'date-fns';
+import { FrenzyActivityFeed } from './whale-frenzy/FrenzyActivityFeed';
+import { FantasyTradesPanel } from './whale-frenzy/FantasyTradesPanel';
+import { FrenzyHistoryPlayback } from './whale-frenzy/FrenzyHistoryPlayback';
 
 interface FrenzyConfig {
   id?: string;
@@ -304,18 +308,30 @@ export function WhaleFrenzyDashboard() {
       </div>
 
       <Tabs value={activeTab} onValueChange={setActiveTab}>
-        <TabsList>
+        <TabsList className="flex-wrap h-auto gap-1">
           <TabsTrigger value="config">
             <Settings className="h-4 w-4 mr-2" />
-            Configuration
+            Config
           </TabsTrigger>
           <TabsTrigger value="wallets">
             <Wallet className="h-4 w-4 mr-2" />
-            Whale Wallets ({whaleWallets.length})
+            Wallets ({whaleWallets.length})
+          </TabsTrigger>
+          <TabsTrigger value="monitor">
+            <Monitor className="h-4 w-4 mr-2" />
+            Live Monitor
+          </TabsTrigger>
+          <TabsTrigger value="fantasy">
+            <Gamepad2 className="h-4 w-4 mr-2" />
+            Fantasy Mode
+          </TabsTrigger>
+          <TabsTrigger value="playback">
+            <PlayCircle className="h-4 w-4 mr-2" />
+            Playback
           </TabsTrigger>
           <TabsTrigger value="events">
             <History className="h-4 w-4 mr-2" />
-            Frenzy History
+            History
           </TabsTrigger>
         </TabsList>
 
@@ -589,6 +605,23 @@ export function WhaleFrenzyDashboard() {
               )}
             </CardContent>
           </Card>
+        </TabsContent>
+
+        <TabsContent value="monitor" className="space-y-4">
+          {user?.id && (
+            <FrenzyActivityFeed 
+              userId={user.id} 
+              minWhalesForFrenzy={config.min_whales_for_frenzy}
+            />
+          )}
+        </TabsContent>
+
+        <TabsContent value="fantasy" className="space-y-4">
+          {user?.id && <FantasyTradesPanel userId={user.id} />}
+        </TabsContent>
+
+        <TabsContent value="playback" className="space-y-4">
+          {user?.id && <FrenzyHistoryPlayback userId={user.id} />}
         </TabsContent>
 
         <TabsContent value="events" className="space-y-4">

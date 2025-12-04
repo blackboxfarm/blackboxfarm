@@ -2090,6 +2090,71 @@ export type Database = {
           },
         ]
       }
+      fantasy_trades: {
+        Row: {
+          created_at: string
+          current_price_sol: number | null
+          entry_amount_sol: number
+          entry_price_sol: number
+          entry_timestamp: string
+          exit_price_sol: number | null
+          exit_timestamp: string | null
+          frenzy_event_id: string | null
+          id: string
+          status: string
+          token_mint: string
+          token_symbol: string | null
+          unrealized_pnl_percent: number | null
+          unrealized_pnl_sol: number | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          current_price_sol?: number | null
+          entry_amount_sol?: number
+          entry_price_sol: number
+          entry_timestamp?: string
+          exit_price_sol?: number | null
+          exit_timestamp?: string | null
+          frenzy_event_id?: string | null
+          id?: string
+          status?: string
+          token_mint: string
+          token_symbol?: string | null
+          unrealized_pnl_percent?: number | null
+          unrealized_pnl_sol?: number | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          current_price_sol?: number | null
+          entry_amount_sol?: number
+          entry_price_sol?: number
+          entry_timestamp?: string
+          exit_price_sol?: number | null
+          exit_timestamp?: string | null
+          frenzy_event_id?: string | null
+          id?: string
+          status?: string
+          token_mint?: string
+          token_symbol?: string | null
+          unrealized_pnl_percent?: number | null
+          unrealized_pnl_sol?: number | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "fantasy_trades_frenzy_event_id_fkey"
+            columns: ["frenzy_event_id"]
+            isOneToOne: false
+            referencedRelation: "whale_frenzy_events"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       fantasy_wallets: {
         Row: {
           balance_usd: number
@@ -4361,6 +4426,8 @@ export type Database = {
           buy_amount_sol: number
           cooldown_seconds: number
           created_at: string
+          fantasy_buy_amount: number | null
+          fantasy_mode: boolean | null
           id: string
           is_active: boolean
           max_slippage_bps: number
@@ -4374,6 +4441,8 @@ export type Database = {
           buy_amount_sol?: number
           cooldown_seconds?: number
           created_at?: string
+          fantasy_buy_amount?: number | null
+          fantasy_mode?: boolean | null
           id?: string
           is_active?: boolean
           max_slippage_bps?: number
@@ -4387,6 +4456,8 @@ export type Database = {
           buy_amount_sol?: number
           cooldown_seconds?: number
           created_at?: string
+          fantasy_buy_amount?: number | null
+          fantasy_mode?: boolean | null
           id?: string
           is_active?: boolean
           max_slippage_bps?: number
@@ -4403,8 +4474,10 @@ export type Database = {
           auto_buy_error: string | null
           auto_buy_executed: boolean
           auto_buy_signature: string | null
+          buy_timeline: Json | null
           created_at: string
           detected_at: string
+          entry_token_price: number | null
           first_buy_at: string | null
           id: string
           last_buy_at: string | null
@@ -4420,8 +4493,10 @@ export type Database = {
           auto_buy_error?: string | null
           auto_buy_executed?: boolean
           auto_buy_signature?: string | null
+          buy_timeline?: Json | null
           created_at?: string
           detected_at?: string
+          entry_token_price?: number | null
           first_buy_at?: string | null
           id?: string
           last_buy_at?: string | null
@@ -4437,8 +4512,10 @@ export type Database = {
           auto_buy_error?: string | null
           auto_buy_executed?: boolean
           auto_buy_signature?: string | null
+          buy_timeline?: Json | null
           created_at?: string
           detected_at?: string
+          entry_token_price?: number | null
           first_buy_at?: string | null
           id?: string
           last_buy_at?: string | null

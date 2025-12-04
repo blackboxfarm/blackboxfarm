@@ -1,0 +1,251 @@
+import React, { useEffect, useState } from 'react';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Badge } from '@/components/ui/badge';
+import { Progress } from '@/components/ui/progress';
+import { ScrollArea } from '@/components/ui/scroll-area';
+import { supabase } from '@/integrations/supabase/client';
+import { format } from 'date-fns';
+import { Bell, TrendingUp, Zap } from 'lucide-react';
+
+interface ActivityItem {
+  id: string;
+  type: 'whale_buy' | 'frenzy_detected' | 'auto_buy';
+  wallet_address?: string;
+  wallet_nickname?: string;
+  token_mint: string;
+  token_symbol?: string;
+  amount_sol?: number;
+  timestamp: string;
+  whale_count?: number;
+}
+
+interface FrenzyActivityFeedProps {
+  userId: string;
+  minWhalesForFrenzy: number;
+  onFrenzyDetected?: (tokenMint: string) => void;
+}
+
+export function FrenzyActivityFeed({ 
+  userId, 
+  minWhalesForFrenzy,
+  onFrenzyDetected 
+}: FrenzyActivityFeedProps) {
+  const [activities, setActivities] = useState<ActivityItem[]>([]);
+  const [tokenProgress, setTokenProgress] = useState<Map<string, number>>(new Map());
+
+  useEffect(() => {
+    // Subscribe to real-time whale_frenzy_events
+    const channel = supabase
+      .channel('frenzy-activity')
+      .on(
+        'postgres_changes',
+        {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'whale_frenzy_events',
+          filter: `user_id=eq.${userId}`
+        },
+        (payload) => {
+          const event = payload.new as any;
+          const newActivity: ActivityItem = {
+            id: event.id,
+            type: 'frenzy_detected',
+            token_mint: event.token_mint,
+            token_symbol: event.token_symbol,
+            timestamp: event.detected_at,
+            whale_count: event.whale_count
+          };
+          
+          setActivities(prev => [newActivity, ...prev].slice(0, 50));
+          
+          if (event.auto_buy_executed) {
+            const autoBuyActivity: ActivityItem = {
+              id: `${event.id}-autobuy`,
+              type: 'auto_buy',
+              token_mint: event.token_mint,
+              token_symbol: event.token_symbol,
+              amount_sol: event.auto_buy_amount_sol,
+              timestamp: event.detected_at
+            };
+            setActivities(prev => [autoBuyActivity, ...prev].slice(0, 50));
+          }
+          
+          onFrenzyDetected?.(event.token_mint);
+        }
+      )
+      .subscribe();
+
+    // Load recent frenzy events
+    loadRecentEvents();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [userId]);
+
+  const loadRecentEvents = async () => {
+    const { data } = await supabase
+      .from('whale_frenzy_events')
+      .select('*')
+      .eq('user_id', userId)
+      .order('detected_at', { ascending: false })
+      .limit(20);
+
+    if (data) {
+      const newActivities: ActivityItem[] = [];
+      data.forEach(event => {
+        newActivities.push({
+          id: event.id,
+          type: 'frenzy_detected',
+          token_mint: event.token_mint,
+          token_symbol: event.token_symbol,
+          timestamp: event.detected_at,
+          whale_count: event.whale_count
+        });
+        
+        if (event.auto_buy_executed) {
+          newActivities.push({
+            id: `${event.id}-autobuy`,
+            type: 'auto_buy',
+            token_mint: event.token_mint,
+            token_symbol: event.token_symbol,
+            amount_sol: event.auto_buy_amount_sol,
+            timestamp: event.detected_at
+          });
+        }
+      });
+      
+      setActivities(newActivities);
+    }
+  };
+
+  const getActivityIcon = (type: ActivityItem['type']) => {
+    switch (type) {
+      case 'whale_buy':
+        return <span className="text-lg">🐋</span>;
+      case 'frenzy_detected':
+        return <span className="text-lg">🔥</span>;
+      case 'auto_buy':
+        return <Zap className="h-4 w-4 text-yellow-500" />;
+    }
+  };
+
+  const getActivityColor = (type: ActivityItem['type']) => {
+    switch (type) {
+      case 'whale_buy':
+        return 'text-blue-500';
+      case 'frenzy_detected':
+        return 'text-orange-500';
+      case 'auto_buy':
+        return 'text-green-500';
+    }
+  };
+
+  const getActivityMessage = (activity: ActivityItem) => {
+    switch (activity.type) {
+      case 'whale_buy':
+        return (
+          <>
+            <span className="font-medium">{activity.wallet_nickname || activity.wallet_address?.slice(0, 8)}</span>
+            {' bought '}
+            <span className="font-medium">{activity.token_symbol || activity.token_mint.slice(0, 8)}</span>
+          </>
+        );
+      case 'frenzy_detected':
+        return (
+          <>
+            <span className="font-bold text-orange-500">FRENZY!</span>
+            {' '}
+            <span className="font-medium">{activity.whale_count}</span>
+            {' whales on '}
+            <span className="font-medium">{activity.token_symbol || activity.token_mint.slice(0, 8)}</span>
+          </>
+        );
+      case 'auto_buy':
+        return (
+          <>
+            <span className="font-bold text-green-500">AUTO-BUY</span>
+            {': '}
+            <span className="font-medium">{activity.amount_sol} SOL</span>
+            {' on '}
+            <span className="font-medium">{activity.token_symbol || activity.token_mint.slice(0, 8)}</span>
+          </>
+        );
+    }
+  };
+
+  // Calculate urgency based on recent activity
+  const recentFrenzies = activities.filter(
+    a => a.type === 'frenzy_detected' && 
+    new Date(a.timestamp).getTime() > Date.now() - 60000
+  ).length;
+  const urgencyLevel = Math.min(recentFrenzies * 33, 100);
+
+  return (
+    <Card className="bg-card/50 backdrop-blur h-full">
+      <CardHeader className="pb-2">
+        <CardTitle className="text-lg flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <Bell className="h-5 w-5" />
+            Activity Feed
+          </div>
+          {urgencyLevel > 0 && (
+            <Badge variant={urgencyLevel > 66 ? 'destructive' : urgencyLevel > 33 ? 'default' : 'secondary'}>
+              {urgencyLevel > 66 ? '🔥 HOT' : urgencyLevel > 33 ? '⚡ Active' : 'Normal'}
+            </Badge>
+          )}
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-3">
+        {/* Urgency meter */}
+        <div className="space-y-1">
+          <div className="flex justify-between text-xs text-muted-foreground">
+            <span>Activity Level</span>
+            <span>{urgencyLevel}%</span>
+          </div>
+          <Progress 
+            value={urgencyLevel} 
+            className={`h-2 ${urgencyLevel > 66 ? '[&>div]:bg-destructive' : urgencyLevel > 33 ? '[&>div]:bg-orange-500' : ''}`}
+          />
+        </div>
+
+        {/* Activity list */}
+        <ScrollArea className="h-[300px] pr-4">
+          <div className="space-y-2">
+            {activities.length === 0 ? (
+              <div className="text-center text-muted-foreground py-8">
+                <TrendingUp className="h-8 w-8 mx-auto mb-2 opacity-50" />
+                <p className="text-sm">Waiting for whale activity...</p>
+              </div>
+            ) : (
+              activities.map((activity) => (
+                <div
+                  key={activity.id}
+                  className={`flex items-start gap-3 p-2 rounded-lg bg-muted/50 border-l-2 ${
+                    activity.type === 'frenzy_detected' 
+                      ? 'border-l-orange-500 bg-orange-500/5' 
+                      : activity.type === 'auto_buy'
+                      ? 'border-l-green-500 bg-green-500/5'
+                      : 'border-l-blue-500'
+                  }`}
+                >
+                  <div className="mt-0.5">
+                    {getActivityIcon(activity.type)}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm">
+                      {getActivityMessage(activity)}
+                    </p>
+                    <p className="text-xs text-muted-foreground">
+                      {format(new Date(activity.timestamp), 'HH:mm:ss')}
+                    </p>
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+        </ScrollArea>
+      </CardContent>
+    </Card>
+  );
+}
