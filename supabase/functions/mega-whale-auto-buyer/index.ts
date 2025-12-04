@@ -33,7 +33,8 @@ Deno.serve(async (req) => {
         body: { data: secretKey },
       })
 
-      if (encryptError || !encryptResult?.encrypted) {
+      if (encryptError || !encryptResult?.encryptedData) {
+        console.error('Encryption failed:', encryptError, encryptResult)
         throw new Error('Failed to encrypt wallet secret key')
       }
 
@@ -43,7 +44,7 @@ Deno.serve(async (req) => {
         .insert({
           user_id,
           pubkey,
-          secret_key_encrypted: encryptResult.encrypted,
+          secret_key_encrypted: encryptResult.encryptedData,
         })
         .select()
         .single()
