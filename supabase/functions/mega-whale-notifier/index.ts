@@ -181,5 +181,6 @@ ${patternAlert.metadata?.wallets_involved ? `*Wallets:* ${patternAlert.metadata.
 
 function escapeMarkdown(text: string | undefined | null): string {
   if (!text) return '';
-  return String(text).replace(/[_*[\]()~`>#+-=|{}.!]/g, '\\$&');
+  // Only escape characters that break Telegram Markdown: * _ ` [
+  return String(text).replace(/([*_`\[])/g, '\\$1');
 }
