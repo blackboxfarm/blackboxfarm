@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -7,12 +7,13 @@ import { Switch } from '@/components/ui/switch';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { Textarea } from '@/components/ui/textarea';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
 import { toast } from 'sonner';
 import { 
   Flame, Plus, Trash2, Settings, Activity, History, 
-  RefreshCw, Wallet, AlertTriangle, CheckCircle, XCircle 
+  RefreshCw, Wallet, AlertTriangle, CheckCircle, XCircle, Upload
 } from 'lucide-react';
 import { format } from 'date-fns';
 
@@ -51,11 +52,50 @@ interface FrenzyEvent {
   auto_buy_error: string | null;
 }
 
+interface ParsedWallet {
+  address: string;
+  nickname: string | null;
+  valid: boolean;
+  error?: string;
+}
+
+// Base58 character set for Solana addresses
+const BASE58_REGEX = /^[1-9A-HJ-NP-Za-km-z]{32,44}$/;
+
+function parseWalletInput(input: string, existingAddresses: Set<string>): ParsedWallet[] {
+  const lines = input.split('\n').map(line => line.trim()).filter(Boolean);
+  const seen = new Set<string>();
+  
+  return lines.map(line => {
+    const [address, nickname] = line.split(',').map(s => s.trim());
+    
+    if (!address) {
+      return { address: '', nickname: null, valid: false, error: 'Empty line' };
+    }
+    
+    if (!BASE58_REGEX.test(address)) {
+      return { address, nickname: nickname || null, valid: false, error: 'Invalid Solana address format' };
+    }
+    
+    if (existingAddresses.has(address)) {
+      return { address, nickname: nickname || null, valid: false, error: 'Already in your list' };
+    }
+    
+    if (seen.has(address)) {
+      return { address, nickname: nickname || null, valid: false, error: 'Duplicate in paste' };
+    }
+    
+    seen.add(address);
+    return { address, nickname: nickname || null, valid: true };
+  });
+}
+
 export function WhaleFrenzyDashboard() {
   const { user } = useAuth();
   const [activeTab, setActiveTab] = useState('config');
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [importing, setImporting] = useState(false);
   
   const [config, setConfig] = useState<FrenzyConfig>({
     user_id: '',
@@ -70,8 +110,7 @@ export function WhaleFrenzyDashboard() {
   
   const [whaleWallets, setWhaleWallets] = useState<WhaleWallet[]>([]);
   const [frenzyEvents, setFrenzyEvents] = useState<FrenzyEvent[]>([]);
-  const [newWalletAddress, setNewWalletAddress] = useState('');
-  const [newWalletNickname, setNewWalletNickname] = useState('');
+  const [bulkWalletInput, setBulkWalletInput] = useState('');
 
   useEffect(() => {
     if (user?.id) {
@@ -144,27 +183,44 @@ export function WhaleFrenzyDashboard() {
     }
   };
 
-  const addWhaleWallet = async () => {
-    if (!user?.id || !newWalletAddress.trim()) return;
+  const existingAddresses = useMemo(() => 
+    new Set(whaleWallets.map(w => w.wallet_address)), 
+    [whaleWallets]
+  );
+
+  const parsedWallets = useMemo(() => 
+    bulkWalletInput ? parseWalletInput(bulkWalletInput, existingAddresses) : [],
+    [bulkWalletInput, existingAddresses]
+  );
+
+  const validWallets = parsedWallets.filter(w => w.valid);
+  const invalidWallets = parsedWallets.filter(w => !w.valid);
+
+  const importWhaleWallets = async () => {
+    if (!user?.id || validWallets.length === 0) return;
+    setImporting(true);
 
     try {
+      const walletsToInsert = validWallets.map(w => ({
+        user_id: user.id,
+        wallet_address: w.address,
+        nickname: w.nickname
+      }));
+
       const { error } = await supabase
         .from('whale_wallets')
-        .insert({
-          user_id: user.id,
-          wallet_address: newWalletAddress.trim(),
-          nickname: newWalletNickname.trim() || null
-        });
+        .insert(walletsToInsert);
 
       if (error) throw error;
       
-      toast.success('Whale wallet added');
-      setNewWalletAddress('');
-      setNewWalletNickname('');
+      toast.success(`Added ${validWallets.length} whale wallets`);
+      setBulkWalletInput('');
       loadData();
     } catch (error: any) {
-      console.error('Error adding wallet:', error);
-      toast.error(error.message || 'Failed to add wallet');
+      console.error('Error importing wallets:', error);
+      toast.error(error.message || 'Failed to import wallets');
+    } finally {
+      setImporting(false);
     }
   };
 
@@ -416,30 +472,65 @@ export function WhaleFrenzyDashboard() {
         <TabsContent value="wallets" className="space-y-4">
           <Card>
             <CardHeader>
-              <CardTitle>Add Whale Wallet</CardTitle>
+              <CardTitle className="flex items-center gap-2">
+                <Upload className="h-5 w-5" />
+                Mass Import Whale Wallets
+              </CardTitle>
               <CardDescription>
-                Add wallets to monitor for coordinated buying
+                Paste wallet addresses, one per line. Optionally add a nickname with comma: <code className="text-xs bg-muted px-1 rounded">address,nickname</code>
               </CardDescription>
             </CardHeader>
-            <CardContent>
-              <div className="flex gap-2">
-                <Input
-                  placeholder="Wallet address"
-                  value={newWalletAddress}
-                  onChange={(e) => setNewWalletAddress(e.target.value)}
-                  className="flex-1"
-                />
-                <Input
-                  placeholder="Nickname (optional)"
-                  value={newWalletNickname}
-                  onChange={(e) => setNewWalletNickname(e.target.value)}
-                  className="w-40"
-                />
-                <Button onClick={addWhaleWallet} disabled={!newWalletAddress.trim()}>
-                  <Plus className="h-4 w-4 mr-2" />
-                  Add
-                </Button>
-              </div>
+            <CardContent className="space-y-4">
+              <Textarea
+                placeholder={`Paste wallet addresses here, one per line...\n\nExamples:\nAbc123xyz789...\nDef456abc123...,WhaleKing\nGhi789def456...,BigBuyer`}
+                value={bulkWalletInput}
+                onChange={(e) => setBulkWalletInput(e.target.value)}
+                className="min-h-[150px] font-mono text-sm"
+              />
+              
+              {parsedWallets.length > 0 && (
+                <div className="flex items-center gap-4 text-sm">
+                  <div className="flex items-center gap-1.5">
+                    <CheckCircle className="h-4 w-4 text-green-500" />
+                    <span className="text-green-600">{validWallets.length} valid</span>
+                  </div>
+                  {invalidWallets.length > 0 && (
+                    <div className="flex items-center gap-1.5">
+                      <XCircle className="h-4 w-4 text-destructive" />
+                      <span className="text-destructive">{invalidWallets.length} invalid/duplicate</span>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {invalidWallets.length > 0 && (
+                <div className="text-xs text-muted-foreground bg-muted/50 p-2 rounded max-h-20 overflow-auto">
+                  {invalidWallets.slice(0, 5).map((w, i) => (
+                    <div key={i} className="truncate">
+                      <span className="text-destructive">{w.address.slice(0, 20)}...</span>
+                      <span className="ml-2">({w.error})</span>
+                    </div>
+                  ))}
+                  {invalidWallets.length > 5 && (
+                    <div className="text-muted-foreground">...and {invalidWallets.length - 5} more</div>
+                  )}
+                </div>
+              )}
+
+              <Button 
+                onClick={importWhaleWallets} 
+                disabled={validWallets.length === 0 || importing}
+                className="w-full"
+              >
+                {importing ? (
+                  <>Importing...</>
+                ) : (
+                  <>
+                    <Plus className="h-4 w-4 mr-2" />
+                    Import {validWallets.length} Wallet{validWallets.length !== 1 ? 's' : ''}
+                  </>
+                )}
+              </Button>
             </CardContent>
           </Card>
 
