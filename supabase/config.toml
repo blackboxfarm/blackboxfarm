@@ -150,3 +150,9 @@ verify_jwt = false
 
 [functions.helius-webhook-manager]
 verify_jwt = false
+
+[functions.mega-whale-webhook]
+verify_jwt = false
+
+[functions.mega-whale-manager]
+verify_jwt = false
