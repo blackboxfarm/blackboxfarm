@@ -47,7 +47,7 @@ interface HeliusTransaction {
 }
 
 // KILL SWITCH - Set to true to disable all processing
-const WEBHOOK_DISABLED = true;
+const WEBHOOK_DISABLED = false;
 
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {
