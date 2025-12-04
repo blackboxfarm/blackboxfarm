@@ -119,8 +119,10 @@ export function MegaWhaleDashboard() {
   const [megaWhales, setMegaWhales] = useState<MegaWhale[]>([]);
   const [offspring, setOffspring] = useState<Offspring[]>([]);
   const [alerts, setAlerts] = useState<TokenAlert[]>([]);
+  const [mintAlerts, setMintAlerts] = useState<TokenAlert[]>([]);
   const [patternAlerts, setPatternAlerts] = useState<PatternAlert[]>([]);
   const [alertConfig, setAlertConfig] = useState<AlertConfig | null>(null);
+  const [alertTypeFilter, setAlertTypeFilter] = useState<string>('all');
   const [selectedWhale, setSelectedWhale] = useState<string | null>(null);
   const [monitoringActive, setMonitoringActive] = useState(false);
   const [savingConfig, setSavingConfig] = useState(false);
@@ -187,14 +189,26 @@ export function MegaWhaleDashboard() {
 
         setOffspring(offspringData || []);
 
+        // Load ALL alerts (increased limit)
         const { data: alertsData } = await supabase
           .from('mega_whale_token_alerts')
           .select('*')
           .eq('user_id', user.id)
           .order('detected_at', { ascending: false })
-          .limit(100);
+          .limit(500);
 
         setAlerts(alertsData || []);
+
+        // Load MINT alerts specifically (these are most important!)
+        const { data: mintsData } = await supabase
+          .from('mega_whale_token_alerts')
+          .select('*')
+          .eq('user_id', user.id)
+          .eq('alert_type', 'token_mint')
+          .order('detected_at', { ascending: false })
+          .limit(100);
+
+        setMintAlerts(mintsData || []);
       }
     } catch (error) {
       console.error('Error loading data:', error);
@@ -318,11 +332,15 @@ export function MegaWhaleDashboard() {
     ? offspring.filter(o => o.mega_whale_id === selectedWhale)
     : offspring;
 
-  const filteredAlerts = selectedWhale
-    ? alerts.filter(a => a.mega_whale_id === selectedWhale)
-    : alerts;
+  // Filter alerts by type and whale
+  const filteredAlerts = alerts.filter(a => {
+    const whaleMatch = !selectedWhale || a.mega_whale_id === selectedWhale;
+    const typeMatch = alertTypeFilter === 'all' || a.alert_type === alertTypeFilter;
+    return whaleMatch && typeMatch;
+  });
 
   const unreadCount = alerts.filter(a => !a.is_read).length;
+  const mintCount = mintAlerts.length;
 
   const sendTestNotification = async () => {
     if (!user?.id) return;
@@ -464,10 +482,13 @@ export function MegaWhaleDashboard() {
             <p className="text-xs text-muted-foreground">Offspring Wallets</p>
           </CardContent>
         </Card>
-        <Card>
+        <Card 
+          className="cursor-pointer hover:border-primary transition-colors"
+          onClick={() => { setActiveTab('alerts'); setAlertTypeFilter('token_mint'); }}
+        >
           <CardContent className="pt-6">
-            <div className="text-2xl font-bold">{alerts.filter(a => a.alert_type === 'token_mint').length}</div>
-            <p className="text-xs text-muted-foreground">Tokens Minted</p>
+            <div className="text-2xl font-bold text-yellow-500">{mintCount}</div>
+            <p className="text-xs text-muted-foreground">Tokens Minted (click to view)</p>
           </CardContent>
         </Card>
         <Card>
@@ -765,21 +786,50 @@ export function MegaWhaleDashboard() {
                     Token mints, buys, and sells from offspring network
                   </CardDescription>
                 </div>
-                {megaWhales.length > 0 && (
-                  <Select value={selectedWhale || 'all'} onValueChange={(v) => setSelectedWhale(v === 'all' ? null : v)}>
-                    <SelectTrigger className="w-[200px]">
-                      <SelectValue placeholder="Filter by whale..." />
+                <div className="flex items-center gap-2">
+                  {/* Alert type filter */}
+                  <Select value={alertTypeFilter} onValueChange={setAlertTypeFilter}>
+                    <SelectTrigger className="w-[150px]">
+                      <SelectValue placeholder="Filter type..." />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="all">All Whales</SelectItem>
-                      {megaWhales.map(w => (
-                        <SelectItem key={w.id} value={w.id}>
-                          {w.nickname || w.wallet_address.slice(0, 8)}
-                        </SelectItem>
-                      ))}
+                      <SelectItem value="all">All Types</SelectItem>
+                      <SelectItem value="token_mint">
+                        <div className="flex items-center gap-2">
+                          <Coins className="h-4 w-4 text-yellow-500" />
+                          Mints ({mintCount})
+                        </div>
+                      </SelectItem>
+                      <SelectItem value="token_buy">
+                        <div className="flex items-center gap-2">
+                          <TrendingUp className="h-4 w-4 text-green-500" />
+                          Buys
+                        </div>
+                      </SelectItem>
+                      <SelectItem value="token_sell">
+                        <div className="flex items-center gap-2">
+                          <TrendingDown className="h-4 w-4 text-red-500" />
+                          Sells
+                        </div>
+                      </SelectItem>
                     </SelectContent>
                   </Select>
-                )}
+                  {megaWhales.length > 0 && (
+                    <Select value={selectedWhale || 'all'} onValueChange={(v) => setSelectedWhale(v === 'all' ? null : v)}>
+                      <SelectTrigger className="w-[180px]">
+                        <SelectValue placeholder="Filter by whale..." />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">All Whales</SelectItem>
+                        {megaWhales.map(w => (
+                          <SelectItem key={w.id} value={w.id}>
+                            {w.nickname || w.wallet_address.slice(0, 8)}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  )}
+                </div>
               </div>
             </CardHeader>
             <CardContent>
