@@ -21,6 +21,7 @@ import { ArbitrageBotDashboard } from "@/components/admin/ArbitrageBotDashboard"
 import { Playground } from "@/components/admin/Playground";
 import { AirdropManager } from "@/components/admin/AirdropManager";
 import { WhaleFrenzyDashboard } from "@/components/admin/WhaleFrenzyDashboard";
+import { MegaWhaleDashboard } from "@/components/admin/MegaWhaleDashboard";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import TransactionHistoryWindow from "@/components/blackbox/TransactionHistoryWindow";
@@ -115,6 +116,7 @@ export default function SuperAdmin() {
             <TabsTrigger value="banners" className="flex-shrink-0">Banners</TabsTrigger>
             <TabsTrigger value="surveys" className="flex-shrink-0">Surveys</TabsTrigger>
             <TabsTrigger value="whale-frenzy" className="flex-shrink-0 data-[state=active]:bg-gradient-to-r data-[state=active]:from-orange-500/30 data-[state=active]:to-red-500/20">🔥 Whale Frenzy</TabsTrigger>
+            <TabsTrigger value="mega-whale" className="flex-shrink-0 data-[state=active]:bg-gradient-to-r data-[state=active]:from-yellow-500/30 data-[state=active]:to-amber-500/20">👑 MEGA WHALE</TabsTrigger>
           </TabsList>
           
           <TabsContent value="wallets">
@@ -210,6 +212,10 @@ export default function SuperAdmin() {
 
           <TabsContent value="whale-frenzy">
             <WhaleFrenzyDashboard />
+          </TabsContent>
+
+          <TabsContent value="mega-whale">
+            <MegaWhaleDashboard />
           </TabsContent>
         </Tabs>
       </div>

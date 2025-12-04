@@ -2431,6 +2431,201 @@ export type Database = {
         }
         Relationships: []
       }
+      mega_whale_offspring: {
+        Row: {
+          created_at: string | null
+          depth_level: number
+          first_funded_at: string | null
+          id: string
+          is_active_trader: boolean | null
+          is_pump_fun_dev: boolean | null
+          last_activity_at: string | null
+          mega_whale_id: string
+          parent_offspring_id: string | null
+          tokens_bought: Json | null
+          tokens_minted: Json | null
+          tokens_sold: Json | null
+          total_sol_received: number | null
+          updated_at: string | null
+          wallet_address: string
+        }
+        Insert: {
+          created_at?: string | null
+          depth_level?: number
+          first_funded_at?: string | null
+          id?: string
+          is_active_trader?: boolean | null
+          is_pump_fun_dev?: boolean | null
+          last_activity_at?: string | null
+          mega_whale_id: string
+          parent_offspring_id?: string | null
+          tokens_bought?: Json | null
+          tokens_minted?: Json | null
+          tokens_sold?: Json | null
+          total_sol_received?: number | null
+          updated_at?: string | null
+          wallet_address: string
+        }
+        Update: {
+          created_at?: string | null
+          depth_level?: number
+          first_funded_at?: string | null
+          id?: string
+          is_active_trader?: boolean | null
+          is_pump_fun_dev?: boolean | null
+          last_activity_at?: string | null
+          mega_whale_id?: string
+          parent_offspring_id?: string | null
+          tokens_bought?: Json | null
+          tokens_minted?: Json | null
+          tokens_sold?: Json | null
+          total_sol_received?: number | null
+          updated_at?: string | null
+          wallet_address?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "mega_whale_offspring_mega_whale_id_fkey"
+            columns: ["mega_whale_id"]
+            isOneToOne: false
+            referencedRelation: "mega_whales"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "mega_whale_offspring_parent_offspring_id_fkey"
+            columns: ["parent_offspring_id"]
+            isOneToOne: false
+            referencedRelation: "mega_whale_offspring"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      mega_whale_token_alerts: {
+        Row: {
+          alert_type: string
+          amount_sol: number | null
+          created_at: string | null
+          detected_at: string | null
+          funding_chain: Json | null
+          id: string
+          is_read: boolean | null
+          mega_whale_id: string
+          metadata: Json | null
+          offspring_id: string | null
+          token_image: string | null
+          token_mint: string
+          token_name: string | null
+          token_symbol: string | null
+          user_id: string
+        }
+        Insert: {
+          alert_type: string
+          amount_sol?: number | null
+          created_at?: string | null
+          detected_at?: string | null
+          funding_chain?: Json | null
+          id?: string
+          is_read?: boolean | null
+          mega_whale_id: string
+          metadata?: Json | null
+          offspring_id?: string | null
+          token_image?: string | null
+          token_mint: string
+          token_name?: string | null
+          token_symbol?: string | null
+          user_id: string
+        }
+        Update: {
+          alert_type?: string
+          amount_sol?: number | null
+          created_at?: string | null
+          detected_at?: string | null
+          funding_chain?: Json | null
+          id?: string
+          is_read?: boolean | null
+          mega_whale_id?: string
+          metadata?: Json | null
+          offspring_id?: string | null
+          token_image?: string | null
+          token_mint?: string
+          token_name?: string | null
+          token_symbol?: string | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "mega_whale_token_alerts_mega_whale_id_fkey"
+            columns: ["mega_whale_id"]
+            isOneToOne: false
+            referencedRelation: "mega_whales"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "mega_whale_token_alerts_offspring_id_fkey"
+            columns: ["offspring_id"]
+            isOneToOne: false
+            referencedRelation: "mega_whale_offspring"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      mega_whales: {
+        Row: {
+          avatar_url: string | null
+          created_at: string | null
+          first_tracked_at: string | null
+          helius_webhook_id: string | null
+          id: string
+          is_active: boolean | null
+          last_activity_at: string | null
+          nickname: string | null
+          notes: string | null
+          source_cex: string | null
+          total_offspring_wallets: number | null
+          total_tokens_bought: number | null
+          total_tokens_minted: number | null
+          updated_at: string | null
+          user_id: string
+          wallet_address: string
+        }
+        Insert: {
+          avatar_url?: string | null
+          created_at?: string | null
+          first_tracked_at?: string | null
+          helius_webhook_id?: string | null
+          id?: string
+          is_active?: boolean | null
+          last_activity_at?: string | null
+          nickname?: string | null
+          notes?: string | null
+          source_cex?: string | null
+          total_offspring_wallets?: number | null
+          total_tokens_bought?: number | null
+          total_tokens_minted?: number | null
+          updated_at?: string | null
+          user_id: string
+          wallet_address: string
+        }
+        Update: {
+          avatar_url?: string | null
+          created_at?: string | null
+          first_tracked_at?: string | null
+          helius_webhook_id?: string | null
+          id?: string
+          is_active?: boolean | null
+          last_activity_at?: string | null
+          nickname?: string | null
+          notes?: string | null
+          source_cex?: string | null
+          total_offspring_wallets?: number | null
+          total_tokens_bought?: number | null
+          total_tokens_minted?: number | null
+          updated_at?: string | null
+          user_id?: string
+          wallet_address?: string
+        }
+        Relationships: []
+      }
       monitored_wallets: {
         Row: {
           created_at: string
