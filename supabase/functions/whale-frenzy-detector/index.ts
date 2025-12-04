@@ -13,6 +13,8 @@ interface FrenzyConfig {
   buy_amount_sol: number;
   max_slippage_bps: number;
   cooldown_seconds: number;
+  fantasy_mode?: boolean;
+  fantasy_buy_amount?: number;
 }
 
 interface WhaleWallet {
@@ -26,6 +28,22 @@ interface WhaleBuy {
   amount_sol: number;
   timestamp: string;
   signature: string;
+}
+
+async function getTokenPrice(tokenMint: string): Promise<number | null> {
+  try {
+    const priceRes = await fetch(
+      `https://price.jup.ag/v6/price?ids=${tokenMint}&vsToken=So11111111111111111111111111111111111111112`
+    );
+    
+    if (priceRes.ok) {
+      const priceData = await priceRes.json();
+      return priceData.data?.[tokenMint]?.price || null;
+    }
+  } catch (e) {
+    console.error('Error fetching token price:', e);
+  }
+  return null;
 }
 
 Deno.serve(async (req) => {
@@ -87,11 +105,12 @@ Deno.serve(async (req) => {
         
         const { data: userWhales } = await supabase
           .from('whale_wallets')
-          .select('wallet_address')
+          .select('wallet_address, nickname')
           .eq('user_id', config.user_id)
           .eq('is_active', true)
 
         const whaleAddresses = userWhales?.map(w => w.wallet_address) || []
+        const whaleNicknames = new Map(userWhales?.map(w => [w.wallet_address, w.nickname]) || [])
 
         // Query wallet_transactions for recent buys on this token by these whales
         const { data: recentBuys } = await supabase
@@ -127,21 +146,86 @@ Deno.serve(async (req) => {
           console.log(`🔥 FRENZY DETECTED for user ${config.user_id}: ${uniqueWhales.size} whales on ${token_mint}`)
 
           const participatingWallets = Array.from(uniqueWhales)
-          const timestamps = recentBuys?.map(b => new Date(b.timestamp)) || []
-          timestamps.push(new Date(timestamp))
+          
+          // Build buy timeline for visualization
+          const buyTimeline = (recentBuys || []).map(b => ({
+            wallet_address: b.monitored_wallet_id,
+            nickname: whaleNicknames.get(b.monitored_wallet_id) || null,
+            timestamp: b.timestamp,
+            amount_sol: b.amount_sol
+          }))
+          
+          // Add current buy to timeline
+          buyTimeline.push({
+            wallet_address: wallet_address,
+            nickname: whaleNicknames.get(wallet_address) || null,
+            timestamp: timestamp || new Date().toISOString(),
+            amount_sol: amount_sol || null
+          })
+
+          // Sort timeline by timestamp
+          buyTimeline.sort((a, b) => 
+            new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime()
+          )
+
+          // Get token price at frenzy detection
+          const entryTokenPrice = await getTokenPrice(token_mint)
           
           const frenzyEvent: any = {
             user_id: config.user_id,
             token_mint,
             whale_count: uniqueWhales.size,
             participating_wallets: participatingWallets,
-            first_buy_at: timestamps.length ? new Date(Math.min(...timestamps.map(t => t.getTime()))).toISOString() : null,
+            buy_timeline: buyTimeline,
+            entry_token_price: entryTokenPrice,
+            first_buy_at: buyTimeline.length ? buyTimeline[0].timestamp : null,
             last_buy_at: new Date().toISOString(),
             auto_buy_executed: false,
           }
 
-          // Execute auto-buy if enabled
-          if (config.auto_buy_enabled && config.buy_amount_sol > 0) {
+          // Check if fantasy mode is enabled
+          const isFantasyMode = config.fantasy_mode === true
+          const fantasyBuyAmount = config.fantasy_buy_amount || 1
+
+          if (isFantasyMode && entryTokenPrice) {
+            // Create fantasy trade instead of real auto-buy
+            console.log(`Fantasy mode: Creating virtual trade for ${fantasyBuyAmount} SOL on ${token_mint}`)
+            
+            const { data: insertedEvent, error: insertError } = await supabase
+              .from('whale_frenzy_events')
+              .insert(frenzyEvent)
+              .select()
+              .single()
+
+            if (!insertError && insertedEvent) {
+              // Create fantasy trade
+              const { error: fantasyError } = await supabase
+                .from('fantasy_trades')
+                .insert({
+                  user_id: config.user_id,
+                  frenzy_event_id: insertedEvent.id,
+                  token_mint,
+                  entry_price_sol: entryTokenPrice,
+                  entry_amount_sol: fantasyBuyAmount,
+                  current_price_sol: entryTokenPrice,
+                  status: 'open'
+                })
+
+              if (fantasyError) {
+                console.error('Error creating fantasy trade:', fantasyError)
+              } else {
+                console.log(`Fantasy trade created for ${token_mint}`)
+              }
+            }
+
+            results.push({
+              user_id: config.user_id,
+              frenzy_detected: true,
+              whale_count: uniqueWhales.size,
+              fantasy_trade_created: true
+            })
+          } else if (config.auto_buy_enabled && config.buy_amount_sol > 0) {
+            // Execute real auto-buy if enabled and not in fantasy mode
             try {
               // Get user's trading wallet
               const { data: userSecrets } = await supabase
@@ -181,23 +265,39 @@ Deno.serve(async (req) => {
               frenzyEvent.auto_buy_error = buyError.message
               console.error('Auto-buy error:', buyError)
             }
+
+            // Store frenzy event
+            const { error: insertError } = await supabase
+              .from('whale_frenzy_events')
+              .insert(frenzyEvent)
+
+            if (insertError) {
+              console.error('Error storing frenzy event:', insertError)
+            }
+
+            results.push({
+              user_id: config.user_id,
+              frenzy_detected: true,
+              whale_count: uniqueWhales.size,
+              auto_buy_executed: frenzyEvent.auto_buy_executed
+            })
+          } else {
+            // No auto-buy, just store the event
+            const { error: insertError } = await supabase
+              .from('whale_frenzy_events')
+              .insert(frenzyEvent)
+
+            if (insertError) {
+              console.error('Error storing frenzy event:', insertError)
+            }
+
+            results.push({
+              user_id: config.user_id,
+              frenzy_detected: true,
+              whale_count: uniqueWhales.size,
+              auto_buy_executed: false
+            })
           }
-
-          // Store frenzy event
-          const { error: insertError } = await supabase
-            .from('whale_frenzy_events')
-            .insert(frenzyEvent)
-
-          if (insertError) {
-            console.error('Error storing frenzy event:', insertError)
-          }
-
-          results.push({
-            user_id: config.user_id,
-            frenzy_detected: true,
-            whale_count: uniqueWhales.size,
-            auto_buy_executed: frenzyEvent.auto_buy_executed
-          })
         }
       }
 
@@ -233,11 +333,12 @@ Deno.serve(async (req) => {
       // Get user's whale wallets
       const { data: whales } = await supabase
         .from('whale_wallets')
-        .select('wallet_address')
+        .select('wallet_address, nickname')
         .eq('user_id', user_id)
         .eq('is_active', true)
 
       const whaleAddresses = whales?.map(w => w.wallet_address) || []
+      const whaleNicknames = new Map(whales?.map(w => [w.wallet_address, w.nickname]) || [])
 
       if (whaleAddresses.length === 0) {
         return new Response(
@@ -264,24 +365,43 @@ Deno.serve(async (req) => {
       const walletIdToAddress = new Map(monitoredWallets?.map(w => [w.id, w.wallet_address]) || [])
       const relevantBuys = recentBuys?.filter(b => walletIdToAddress.has(b.monitored_wallet_id)) || []
 
-      // Group by token
-      const tokenBuys = new Map<string, Set<string>>()
+      // Group by token with timeline
+      const tokenBuys = new Map<string, {
+        wallets: Set<string>;
+        timeline: Array<{ wallet_address: string; nickname?: string; timestamp: string; amount_sol?: number }>;
+      }>()
+
       for (const buy of relevantBuys) {
         const whaleAddr = walletIdToAddress.get(buy.monitored_wallet_id)
+        if (!whaleAddr) continue
+
         if (!tokenBuys.has(buy.token_mint)) {
-          tokenBuys.set(buy.token_mint, new Set())
+          tokenBuys.set(buy.token_mint, { wallets: new Set(), timeline: [] })
         }
-        tokenBuys.get(buy.token_mint)!.add(whaleAddr!)
+        
+        const tokenData = tokenBuys.get(buy.token_mint)!
+        tokenData.wallets.add(whaleAddr)
+        tokenData.timeline.push({
+          wallet_address: whaleAddr,
+          nickname: whaleNicknames.get(whaleAddr) || undefined,
+          timestamp: buy.timestamp,
+          amount_sol: buy.amount_sol
+        })
       }
 
       // Find frenzies
       const frenzies = []
-      for (const [token, whales] of tokenBuys) {
-        if (whales.size >= config.min_whales_for_frenzy) {
+      for (const [token, data] of tokenBuys) {
+        if (data.wallets.size >= config.min_whales_for_frenzy) {
+          const price = await getTokenPrice(token)
           frenzies.push({
             token_mint: token,
-            whale_count: whales.size,
-            participating_wallets: Array.from(whales)
+            whale_count: data.wallets.size,
+            participating_wallets: Array.from(data.wallets),
+            buy_timeline: data.timeline.sort((a, b) => 
+              new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime()
+            ),
+            entry_token_price: price
           })
         }
       }

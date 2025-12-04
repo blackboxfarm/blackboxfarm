@@ -141,3 +141,6 @@ verify_jwt = false
 
 [functions.whale-frenzy-detector]
 verify_jwt = false
+
+[functions.update-fantasy-prices]
+verify_jwt = false
