@@ -2535,6 +2535,7 @@ export type Database = {
       }
       mega_whale_auto_buy_config: {
         Row: {
+          auto_sell_enabled: boolean | null
           buy_amount_sol: number | null
           buys_today: number | null
           created_at: string | null
@@ -2544,10 +2545,15 @@ export type Database = {
           max_daily_buys: number | null
           min_launcher_score: number | null
           slippage_bps: number | null
+          stop_loss_pct: number | null
+          take_profit_pct: number | null
+          trailing_stop_enabled: boolean | null
+          trailing_stop_pct: number | null
           updated_at: string | null
           user_id: string
         }
         Insert: {
+          auto_sell_enabled?: boolean | null
           buy_amount_sol?: number | null
           buys_today?: number | null
           created_at?: string | null
@@ -2557,10 +2563,15 @@ export type Database = {
           max_daily_buys?: number | null
           min_launcher_score?: number | null
           slippage_bps?: number | null
+          stop_loss_pct?: number | null
+          take_profit_pct?: number | null
+          trailing_stop_enabled?: boolean | null
+          trailing_stop_pct?: number | null
           updated_at?: string | null
           user_id: string
         }
         Update: {
+          auto_sell_enabled?: boolean | null
           buy_amount_sol?: number | null
           buys_today?: number | null
           created_at?: string | null
@@ -2570,6 +2581,10 @@ export type Database = {
           max_daily_buys?: number | null
           min_launcher_score?: number | null
           slippage_bps?: number | null
+          stop_loss_pct?: number | null
+          take_profit_pct?: number | null
+          trailing_stop_enabled?: boolean | null
+          trailing_stop_pct?: number | null
           updated_at?: string | null
           user_id?: string
         }
@@ -2998,6 +3013,72 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      mega_whale_positions: {
+        Row: {
+          amount_tokens: number
+          closed_at: string | null
+          created_at: string | null
+          current_price_sol: number | null
+          entry_price_sol: number
+          high_price_sol: number | null
+          id: string
+          last_price_check: string | null
+          opened_at: string | null
+          pnl_percent: number | null
+          sell_price_sol: number | null
+          sell_reason: string | null
+          sell_signature: string | null
+          status: string | null
+          token_mint: string
+          token_symbol: string | null
+          trade_id: string | null
+          user_id: string
+          wallet_id: string | null
+        }
+        Insert: {
+          amount_tokens: number
+          closed_at?: string | null
+          created_at?: string | null
+          current_price_sol?: number | null
+          entry_price_sol: number
+          high_price_sol?: number | null
+          id?: string
+          last_price_check?: string | null
+          opened_at?: string | null
+          pnl_percent?: number | null
+          sell_price_sol?: number | null
+          sell_reason?: string | null
+          sell_signature?: string | null
+          status?: string | null
+          token_mint: string
+          token_symbol?: string | null
+          trade_id?: string | null
+          user_id: string
+          wallet_id?: string | null
+        }
+        Update: {
+          amount_tokens?: number
+          closed_at?: string | null
+          created_at?: string | null
+          current_price_sol?: number | null
+          entry_price_sol?: number
+          high_price_sol?: number | null
+          id?: string
+          last_price_check?: string | null
+          opened_at?: string | null
+          pnl_percent?: number | null
+          sell_price_sol?: number | null
+          sell_reason?: string | null
+          sell_signature?: string | null
+          status?: string | null
+          token_mint?: string
+          token_symbol?: string | null
+          trade_id?: string | null
+          user_id?: string
+          wallet_id?: string | null
+        }
+        Relationships: []
       }
       mega_whale_token_alerts: {
         Row: {
