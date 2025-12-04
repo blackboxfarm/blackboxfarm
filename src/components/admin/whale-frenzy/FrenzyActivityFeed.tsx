@@ -15,7 +15,9 @@ interface ActivityItem {
   token_mint: string;
   token_symbol?: string;
   token_image?: string;
-  amount_sol?: number;
+  sol_amount?: number;
+  token_amount?: number;
+  price_per_token?: number;
   timestamp: string;
   whale_count?: number;
 }
@@ -26,13 +28,30 @@ interface FrenzyActivityFeedProps {
   onFrenzyDetected?: (tokenMint: string) => void;
 }
 
+// Format price in readable format (handles very small numbers)
+const formatPrice = (price: number | undefined): string => {
+  if (!price || price === 0) return '-';
+  if (price < 0.000001) return price.toExponential(2);
+  if (price < 0.0001) return price.toFixed(8);
+  if (price < 0.01) return price.toFixed(6);
+  if (price < 1) return price.toFixed(4);
+  return price.toFixed(2);
+};
+
+// Format SOL amount
+const formatSol = (amount: number | undefined): string => {
+  if (!amount || amount === 0) return '-';
+  if (amount < 0.01) return amount.toFixed(4);
+  if (amount < 1) return amount.toFixed(3);
+  return amount.toFixed(2);
+};
+
 export function FrenzyActivityFeed({ 
   userId, 
   minWhalesForFrenzy,
   onFrenzyDetected 
 }: FrenzyActivityFeedProps) {
   const [activities, setActivities] = useState<ActivityItem[]>([]);
-  const [tokenProgress, setTokenProgress] = useState<Map<string, number>>(new Map());
 
   useEffect(() => {
     // Subscribe to real-time whale_frenzy_events
@@ -48,7 +67,6 @@ export function FrenzyActivityFeed({
         },
         (payload) => {
           const event = payload.new as any;
-          // Extract wallet info from participating_wallets JSON
           const wallets = event.participating_wallets as any[] || [];
           const firstWallet = wallets[0] || {};
           
@@ -60,6 +78,9 @@ export function FrenzyActivityFeed({
             token_image: event.token_image,
             wallet_address: firstWallet.address,
             wallet_nickname: firstWallet.nickname,
+            sol_amount: firstWallet.sol_amount,
+            token_amount: firstWallet.token_amount,
+            price_per_token: firstWallet.price_per_token,
             timestamp: event.detected_at,
             whale_count: event.whale_count
           };
@@ -73,7 +94,7 @@ export function FrenzyActivityFeed({
               token_mint: event.token_mint,
               token_symbol: event.token_symbol,
               token_image: event.token_image,
-              amount_sol: event.auto_buy_amount_sol,
+              sol_amount: event.auto_buy_amount_sol,
               timestamp: event.detected_at
             };
             setActivities(prev => [autoBuyActivity, ...prev].slice(0, 50));
@@ -84,7 +105,6 @@ export function FrenzyActivityFeed({
       )
       .subscribe();
 
-    // Load recent frenzy events
     loadRecentEvents();
 
     return () => {
@@ -98,12 +118,11 @@ export function FrenzyActivityFeed({
       .select('*')
       .eq('user_id', userId)
       .order('detected_at', { ascending: false })
-      .limit(20);
+      .limit(30);
 
     if (data) {
       const newActivities: ActivityItem[] = [];
       data.forEach(event => {
-        // Extract wallet info from participating_wallets JSON
         const wallets = event.participating_wallets as any[] || [];
         const firstWallet = wallets[0] || {};
         
@@ -115,6 +134,9 @@ export function FrenzyActivityFeed({
           token_image: event.token_image,
           wallet_address: firstWallet.address,
           wallet_nickname: firstWallet.nickname,
+          sol_amount: firstWallet.sol_amount,
+          token_amount: firstWallet.token_amount,
+          price_per_token: firstWallet.price_per_token,
           timestamp: event.detected_at,
           whale_count: event.whale_count
         });
@@ -126,7 +148,7 @@ export function FrenzyActivityFeed({
             token_mint: event.token_mint,
             token_symbol: event.token_symbol,
             token_image: event.token_image,
-            amount_sol: event.auto_buy_amount_sol,
+            sol_amount: event.auto_buy_amount_sol,
             timestamp: event.detected_at
           });
         }
@@ -136,90 +158,41 @@ export function FrenzyActivityFeed({
     }
   };
 
-  const getActivityIcon = (activity: ActivityItem) => {
+  const getActivityBadge = (activity: ActivityItem) => {
     if (activity.type === 'auto_buy') {
-      return <Zap className="h-4 w-4 text-yellow-500" />;
+      return <Badge className="bg-green-500/20 text-green-400 border-green-500/30">AUTO-BUY</Badge>;
     }
-    // Icon based on whale count
     const count = activity.whale_count || 1;
-    if (count >= minWhalesForFrenzy) return <span className="text-lg">🔥</span>;
-    if (count >= 2) return <span className="text-lg">👀</span>;
-    return <span className="text-lg">🐋</span>;
-  };
-
-  const getActivityColor = (type: ActivityItem['type']) => {
-    switch (type) {
-      case 'whale_buy':
-        return 'text-blue-500';
-      case 'frenzy_detected':
-        return 'text-orange-500';
-      case 'auto_buy':
-        return 'text-green-500';
+    if (count >= minWhalesForFrenzy) {
+      return <Badge className="bg-orange-500/20 text-orange-400 border-orange-500/30 animate-pulse">🔥 FRENZY</Badge>;
     }
-  };
-
-  const getActivityLabel = (activity: ActivityItem) => {
-    if (activity.type === 'auto_buy') {
-      return { label: 'AUTO-BUY', className: 'text-green-500' };
+    if (count >= 3) {
+      return <Badge className="bg-amber-500/20 text-amber-400 border-amber-500/30">Triple</Badge>;
     }
-    // Label based on whale count
-    const count = activity.whale_count || 1;
-    if (count >= minWhalesForFrenzy) return { label: '🔥 FRENZY!', className: 'text-orange-500' };
-    if (count >= 3) return { label: 'Triple Buy', className: 'text-amber-500' };
-    if (count === 2) return { label: 'Double Buy', className: 'text-yellow-500' };
-    return { label: 'Whale Buy', className: 'text-blue-400' };
+    if (count === 2) {
+      return <Badge className="bg-yellow-500/20 text-yellow-400 border-yellow-500/30">Double</Badge>;
+    }
+    return <Badge variant="outline" className="text-blue-400 border-blue-400/30">Buy</Badge>;
   };
 
   const getWalletDisplay = (activity: ActivityItem) => {
     if (activity.wallet_nickname) return activity.wallet_nickname;
     if (activity.wallet_address) return activity.wallet_address.slice(0, 4) + '...' + activity.wallet_address.slice(-4);
-    return 'Unknown';
+    return '-';
   };
 
-  const getActivityMessage = (activity: ActivityItem) => {
-    const { label, className } = getActivityLabel(activity);
-    const tokenDisplay = activity.token_symbol ? `$${activity.token_symbol}` : activity.token_mint.slice(0, 6) + '...';
-    const walletDisplay = getWalletDisplay(activity);
-    
-    if (activity.type === 'auto_buy') {
-      return (
-        <>
-          <span className={`font-bold ${className}`}>{label}</span>
-          {': '}
-          <span className="font-medium">{activity.amount_sol} SOL</span>
-          {' → '}
-          <span className="font-semibold text-primary">{tokenDisplay}</span>
-        </>
-      );
-    }
-    
+  const getRowBgColor = (activity: ActivityItem) => {
+    if (activity.type === 'auto_buy') return 'bg-green-500/5 hover:bg-green-500/10';
     const count = activity.whale_count || 1;
-    return (
-      <>
-        <span className="text-muted-foreground">{walletDisplay}</span>
-        {' '}
-        <span className={`font-bold ${className}`}>{label}</span>
-        {count > 1 && (
-          <span className="text-muted-foreground"> ({count} whales)</span>
-        )}
-        {' → '}
-        <span className="font-semibold text-primary">{tokenDisplay}</span>
-      </>
-    );
-  };
-
-  const getActivityBorderColor = (activity: ActivityItem) => {
-    if (activity.type === 'auto_buy') return 'border-l-green-500 bg-green-500/5';
-    const count = activity.whale_count || 1;
-    if (count >= minWhalesForFrenzy) return 'border-l-orange-500 bg-orange-500/10';
-    if (count >= 3) return 'border-l-amber-500 bg-amber-500/5';
-    if (count === 2) return 'border-l-yellow-500 bg-yellow-500/5';
-    return 'border-l-blue-400 bg-blue-500/5';
+    if (count >= minWhalesForFrenzy) return 'bg-orange-500/10 hover:bg-orange-500/15';
+    if (count >= 3) return 'bg-amber-500/5 hover:bg-amber-500/10';
+    if (count === 2) return 'bg-yellow-500/5 hover:bg-yellow-500/10';
+    return 'hover:bg-muted/50';
   };
 
   // Calculate urgency based on recent activity
   const recentFrenzies = activities.filter(
-    a => a.type === 'frenzy_detected' && 
+    a => a.whale_count && a.whale_count >= minWhalesForFrenzy && 
     new Date(a.timestamp).getTime() > Date.now() - 60000
   ).length;
   const urgencyLevel = Math.min(recentFrenzies * 33, 100);
@@ -252,45 +225,111 @@ export function FrenzyActivityFeed({
           />
         </div>
 
-        {/* Activity list */}
-        <ScrollArea className="h-[300px] pr-4">
-          <div className="space-y-2">
-            {activities.length === 0 ? (
-              <div className="text-center text-muted-foreground py-8">
-                <TrendingUp className="h-8 w-8 mx-auto mb-2 opacity-50" />
-                <p className="text-sm">Waiting for whale activity...</p>
+        {/* Activity table */}
+        <ScrollArea className="h-[400px]">
+          {activities.length === 0 ? (
+            <div className="text-center text-muted-foreground py-8">
+              <TrendingUp className="h-8 w-8 mx-auto mb-2 opacity-50" />
+              <p className="text-sm">Waiting for whale activity...</p>
+            </div>
+          ) : (
+            <div className="space-y-1">
+              {/* Header row */}
+              <div className="grid grid-cols-[40px_1fr_100px_90px_100px_70px_60px] gap-2 px-2 py-1 text-xs font-medium text-muted-foreground border-b border-border/50">
+                <div></div>
+                <div>Whale / Token</div>
+                <div className="text-right">SOL</div>
+                <div className="text-right">Price</div>
+                <div>Type</div>
+                <div className="text-right">Time</div>
+                <div></div>
               </div>
-            ) : (
-              activities.map((activity) => (
+              
+              {/* Activity rows */}
+              {activities.map((activity) => (
                 <div
                   key={activity.id}
-                  className={`flex items-start gap-2 p-2 rounded-lg bg-muted/50 border-l-2 ${getActivityBorderColor(activity)}`}
+                  className={`grid grid-cols-[40px_1fr_100px_90px_100px_70px_60px] gap-2 px-2 py-2 rounded-lg items-center transition-colors ${getRowBgColor(activity)}`}
                 >
                   {/* Token image */}
-                  {activity.token_image ? (
-                    <img 
-                      src={activity.token_image} 
-                      alt={activity.token_symbol || 'Token'} 
-                      className="w-8 h-8 rounded-full object-cover border border-border flex-shrink-0"
-                      onError={(e) => { e.currentTarget.style.display = 'none'; }}
-                    />
-                  ) : (
-                    <div className="w-8 h-8 rounded-full bg-muted flex items-center justify-center flex-shrink-0">
-                      {getActivityIcon(activity)}
+                  <div className="flex-shrink-0">
+                    {activity.token_image ? (
+                      <img 
+                        src={activity.token_image} 
+                        alt={activity.token_symbol || 'Token'} 
+                        className="w-8 h-8 rounded-full object-cover border border-border"
+                        onError={(e) => { 
+                          e.currentTarget.onerror = null;
+                          e.currentTarget.src = ''; 
+                          e.currentTarget.className = 'hidden';
+                        }}
+                      />
+                    ) : (
+                      <div className="w-8 h-8 rounded-full bg-muted flex items-center justify-center text-sm">
+                        {activity.type === 'auto_buy' ? (
+                          <Zap className="h-4 w-4 text-yellow-500" />
+                        ) : activity.whale_count && activity.whale_count >= minWhalesForFrenzy ? (
+                          '🔥'
+                        ) : (
+                          '🐋'
+                        )}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Whale & Token */}
+                  <div className="min-w-0">
+                    <div className="text-sm font-medium truncate">
+                      {activity.token_symbol ? (
+                        <span className="text-primary">${activity.token_symbol}</span>
+                      ) : (
+                        <span className="text-muted-foreground font-mono text-xs">
+                          {activity.token_mint.slice(0, 8)}...
+                        </span>
+                      )}
                     </div>
-                  )}
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm leading-tight">
-                      {getActivityMessage(activity)}
-                    </p>
-                    <p className="text-xs text-muted-foreground">
-                      {format(new Date(activity.timestamp), 'HH:mm:ss')}
-                    </p>
+                    <div className="text-xs text-muted-foreground truncate">
+                      {getWalletDisplay(activity)}
+                    </div>
+                  </div>
+
+                  {/* SOL Amount */}
+                  <div className="text-right">
+                    <span className="text-sm font-medium text-foreground">
+                      {formatSol(activity.sol_amount)}
+                    </span>
+                    {activity.sol_amount && activity.sol_amount > 0 && (
+                      <span className="text-xs text-muted-foreground ml-1">SOL</span>
+                    )}
+                  </div>
+
+                  {/* Price */}
+                  <div className="text-right font-mono text-xs text-muted-foreground">
+                    {formatPrice(activity.price_per_token)}
+                  </div>
+
+                  {/* Type badge */}
+                  <div>
+                    {getActivityBadge(activity)}
+                  </div>
+
+                  {/* Time */}
+                  <div className="text-right text-xs text-muted-foreground">
+                    {format(new Date(activity.timestamp), 'HH:mm:ss')}
+                  </div>
+
+                  {/* Whale count indicator */}
+                  <div className="text-right">
+                    {activity.whale_count && activity.whale_count > 1 && (
+                      <span className="text-xs text-muted-foreground">
+                        {activity.whale_count}🐋
+                      </span>
+                    )}
                   </div>
                 </div>
-              ))
-            )}
-          </div>
+              ))}
+            </div>
+          )}
         </ScrollArea>
       </CardContent>
     </Card>

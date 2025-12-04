@@ -71,7 +71,9 @@ Deno.serve(async (req) => {
       nickname: string | null;
       twitter_handle: string | null;
       token_mint: string;
-      amount: number;
+      token_amount: number;
+      sol_amount: number;
+      price_per_token: number;
       timestamp: number;
       signature: string;
       user_id: string;
@@ -83,6 +85,16 @@ Deno.serve(async (req) => {
 
       const whale = whaleMap.get(tx.feePayer)
       if (!whale) continue
+
+      // Calculate SOL spent from native transfers (whale sending SOL = buy)
+      let solSpent = 0
+      if (tx.nativeTransfers) {
+        for (const transfer of tx.nativeTransfers) {
+          if (transfer.fromUserAccount === tx.feePayer) {
+            solSpent += transfer.amount / 1e9 // Convert lamports to SOL
+          }
+        }
+      }
 
       // Look for token purchases (token transfers TO the whale)
       if (tx.tokenTransfers && tx.tokenTransfers.length > 0) {
@@ -98,14 +110,21 @@ Deno.serve(async (req) => {
             ]
             if (skipMints.includes(transfer.mint)) continue
 
-            console.log(`🐋 Whale ${whale.nickname || tx.feePayer.slice(0, 8)} bought token ${transfer.mint.slice(0, 8)}...`)
+            // Calculate price per token
+            const pricePerToken = solSpent > 0 && transfer.tokenAmount > 0 
+              ? solSpent / transfer.tokenAmount 
+              : 0
+
+            console.log(`🐋 Whale ${whale.nickname || tx.feePayer.slice(0, 8)} bought ${transfer.tokenAmount} tokens for ${solSpent.toFixed(4)} SOL`)
             
             whaleBuys.push({
               wallet_address: tx.feePayer,
               nickname: whale.nickname,
               twitter_handle: whale.twitter_handle,
               token_mint: transfer.mint,
-              amount: transfer.tokenAmount,
+              token_amount: transfer.tokenAmount,
+              sol_amount: solSpent,
+              price_per_token: pricePerToken,
               timestamp: tx.timestamp,
               signature: tx.signature,
               user_id: whale.user_id
@@ -199,13 +218,18 @@ Deno.serve(async (req) => {
           participating_wallets: [{
             address: buy.wallet_address,
             nickname: buy.nickname,
-            twitter: buy.twitter_handle
+            twitter: buy.twitter_handle,
+            sol_amount: buy.sol_amount,
+            token_amount: buy.token_amount,
+            price_per_token: buy.price_per_token
           }],
           buy_timeline: [{
             wallet: buy.wallet_address,
             nickname: buy.nickname,
             twitter: buy.twitter_handle,
-            amount: buy.amount,
+            sol_amount: buy.sol_amount,
+            token_amount: buy.token_amount,
+            price_per_token: buy.price_per_token,
             timestamp: new Date(buy.timestamp * 1000).toISOString(),
             signature: buy.signature
           }],
