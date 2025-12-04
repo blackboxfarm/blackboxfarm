@@ -2448,6 +2448,7 @@ export type Database = {
           notify_browser: boolean | null
           notify_email: boolean | null
           notify_telegram: boolean | null
+          pending_telegram_ids: Json | null
           profit_taking_threshold_percent: number | null
           telegram_chat_id: string | null
           updated_at: string | null
@@ -2469,6 +2470,7 @@ export type Database = {
           notify_browser?: boolean | null
           notify_email?: boolean | null
           notify_telegram?: boolean | null
+          pending_telegram_ids?: Json | null
           profit_taking_threshold_percent?: number | null
           telegram_chat_id?: string | null
           updated_at?: string | null
@@ -2490,6 +2492,7 @@ export type Database = {
           notify_browser?: boolean | null
           notify_email?: boolean | null
           notify_telegram?: boolean | null
+          pending_telegram_ids?: Json | null
           profit_taking_threshold_percent?: number | null
           telegram_chat_id?: string | null
           updated_at?: string | null
