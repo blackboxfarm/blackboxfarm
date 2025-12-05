@@ -155,6 +155,14 @@ export function MegaWhaleDashboard() {
     }
   }, [user?.id]);
 
+  // Auto-select whale if only one exists
+  useEffect(() => {
+    if (megaWhales.length === 1 && !selectedWhale) {
+      setSelectedWhale(megaWhales[0].id);
+      console.log(`[MegaWhaleDashboard] Auto-selected only whale: ${megaWhales[0].nickname || megaWhales[0].id}`);
+    }
+  }, [megaWhales, selectedWhale]);
+
   const loadData = async () => {
     setLoading(true);
     console.log('[MegaWhaleDashboard] Loading data with LIMIT 100...');
@@ -168,12 +176,6 @@ export function MegaWhaleDashboard() {
       
       if (whalesError) throw whalesError;
       setMegaWhales(whalesData || []);
-
-      // Auto-select if only one whale exists
-      if (whalesData && whalesData.length === 1 && !selectedWhale) {
-        setSelectedWhale(whalesData[0].id);
-        console.log(`[MegaWhaleDashboard] Auto-selected only whale: ${whalesData[0].nickname || whalesData[0].id}`);
-      }
 
       // Load offspring with LIMIT 100 (prioritize by SOL and depth)
       const { data: offspringData, error: offspringError } = await supabase
