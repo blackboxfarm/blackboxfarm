@@ -253,11 +253,10 @@ serve(async (req) => {
       throw new Error('Wallet keypair mismatch');
     }
 
-    // Setup Solana connection
-    const rpcUrl = heliusApiKey 
-      ? `https://mainnet.helius-rpc.com/?api-key=${heliusApiKey}`
-      : 'https://api.mainnet-beta.solana.com';
+    // Setup Solana connection - USE PUBLIC RPC (Helius is rate limited)
+    const rpcUrl = 'https://api.mainnet-beta.solana.com';
     const connection = new Connection(rpcUrl, 'confirmed');
+    console.log('Using public Solana RPC for airdrop');
 
     const tokenMintPubkey = new PublicKey(token_mint);
     const senderPubkey = senderKeypair.publicKey;
