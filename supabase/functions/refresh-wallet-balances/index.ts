@@ -66,7 +66,7 @@ serve(async (req) => {
       // No body provided, proceed with bulk refresh
     }
 
-    // Single wallet refresh mode - uses HTTP APIs to avoid RPC rate limits
+    // Single wallet refresh mode - uses public RPC to avoid Helius rate limits
     if (body.wallet_id && body.pubkey) {
       logStep("Single wallet refresh", { pubkey: body.pubkey.slice(0, 8) + "..." });
       
@@ -74,65 +74,80 @@ serve(async (req) => {
         let solBalance = 0;
         let tokens: TokenBalance[] = [];
 
-        // Try Solscan API first for BOTH SOL balance and tokens (no RPC needed)
+        // Use public Solana RPC directly for SOL balance (most reliable)
         try {
-          logStep("Fetching from Solscan API");
-          
-          // Get SOL balance from Solscan
-          const balanceResponse = await fetch(
-            `https://api.solscan.io/v2/account?address=${body.pubkey}`,
-            {
-              headers: {
-                'Accept': 'application/json',
-                'User-Agent': 'Mozilla/5.0'
-              }
-            }
-          );
+          logStep("Fetching SOL balance from public RPC");
+          const publicRpc = "https://api.mainnet-beta.solana.com";
+          const balanceResponse = await fetch(publicRpc, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              jsonrpc: '2.0',
+              id: 1,
+              method: 'getBalance',
+              params: [body.pubkey]
+            })
+          });
           
           if (balanceResponse.ok) {
             const balanceData = await balanceResponse.json();
-            if (balanceData.success && balanceData.data?.lamports) {
-              solBalance = balanceData.data.lamports / 1_000_000_000;
-              logStep("SOL balance from Solscan", { solBalance });
+            if (balanceData.result?.value !== undefined) {
+              solBalance = balanceData.result.value / 1_000_000_000;
+              logStep("SOL balance from public RPC", { solBalance });
             }
           }
-
-          // Get tokens from Solscan
-          const tokensResponse = await fetch(
-            `https://api.solscan.io/v2/account/tokens?address=${body.pubkey}&page=1&page_size=50`,
-            {
-              headers: {
-                'Accept': 'application/json',
-                'User-Agent': 'Mozilla/5.0'
-              }
-            }
-          );
-          
-          if (tokensResponse.ok) {
-            const tokensData = await tokensResponse.json();
-            logStep("Solscan tokens response", { success: tokensData.success, dataLength: tokensData.data?.length });
-            
-            if (tokensData.success && tokensData.data) {
-              tokens = tokensData.data
-                .filter((item: any) => item.amount > 0)
-                .map((item: any) => ({
-                  mint: item.tokenAddress,
-                  balance: item.amount / Math.pow(10, item.decimals || 0),
-                  decimals: item.decimals || 0,
-                  symbol: item.tokenSymbol || null,
-                  name: item.tokenName || null
-                }));
-              logStep("Tokens from Solscan", { count: tokens.length });
-            }
-          }
-        } catch (solscanError) {
-          logStep("Solscan API error", { error: String(solscanError) });
+        } catch (rpcError) {
+          logStep("Public RPC balance error", { error: String(rpcError) });
         }
 
-        // Fallback to Helius DAS API if Solscan didn't work
-        if (tokens.length === 0 && heliusKey) {
+        // Get token accounts from public RPC
+        try {
+          logStep("Fetching tokens from public RPC");
+          const publicRpc = "https://api.mainnet-beta.solana.com";
+          const tokenResponse = await fetch(publicRpc, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              jsonrpc: '2.0',
+              id: 1,
+              method: 'getTokenAccountsByOwner',
+              params: [
+                body.pubkey,
+                { programId: 'TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA' },
+                { encoding: 'jsonParsed' }
+              ]
+            })
+          });
+          
+          if (tokenResponse.ok) {
+            const tokenData = await tokenResponse.json();
+            if (tokenData.result?.value) {
+              tokens = tokenData.result.value
+                .map((account: any) => {
+                  const info = account.account?.data?.parsed?.info;
+                  if (!info) return null;
+                  const amount = info.tokenAmount?.uiAmount || 0;
+                  if (amount === 0) return null;
+                  return {
+                    mint: info.mint,
+                    balance: amount,
+                    decimals: info.tokenAmount?.decimals || 0,
+                    symbol: null,
+                    name: null
+                  };
+                })
+                .filter((t: TokenBalance | null) => t !== null);
+              logStep("Tokens from public RPC", { count: tokens.length });
+            }
+          }
+        } catch (tokenError) {
+          logStep("Public RPC token error", { error: String(tokenError) });
+        }
+
+        // Fallback to Helius DAS API for token metadata if available
+        if (tokens.length > 0 && heliusKey) {
           try {
-            logStep("Trying Helius DAS API");
+            logStep("Enriching tokens with Helius metadata");
             const response = await fetch(`https://mainnet.helius-rpc.com/?api-key=${heliusKey}`, {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
@@ -144,35 +159,31 @@ serve(async (req) => {
                   ownerAddress: body.pubkey,
                   page: 1,
                   limit: 100,
-                  displayOptions: { showFungible: true, showNativeBalance: true }
+                  displayOptions: { showFungible: true }
                 }
               })
             });
             const dasResult = await response.json();
             
-            if (dasResult.result) {
-              // Get native SOL balance if not already set
-              if (solBalance === 0 && dasResult.result.nativeBalance?.lamports) {
-                solBalance = dasResult.result.nativeBalance.lamports / 1_000_000_000;
-                logStep("SOL balance from Helius", { solBalance });
-              }
+            if (dasResult.result?.items) {
+              const metadataMap = new Map();
+              dasResult.result.items.forEach((item: any) => {
+                metadataMap.set(item.id, {
+                  symbol: item.token_info?.symbol || item.content?.metadata?.symbol,
+                  name: item.content?.metadata?.name
+                });
+              });
               
-              if (dasResult.result.items) {
-                tokens = dasResult.result.items
-                  .filter((item: any) => item.interface === 'FungibleToken' || item.interface === 'FungibleAsset')
-                  .map((item: any) => ({
-                    mint: item.id,
-                    balance: item.token_info?.balance ? item.token_info.balance / Math.pow(10, item.token_info.decimals || 0) : 0,
-                    decimals: item.token_info?.decimals || 0,
-                    symbol: item.token_info?.symbol || item.content?.metadata?.symbol || null,
-                    name: item.content?.metadata?.name || null
-                  }))
-                  .filter((t: TokenBalance) => t.balance > 0);
-                logStep("Tokens from Helius DAS", { count: tokens.length });
-              }
+              // Enrich tokens with metadata
+              tokens = tokens.map(t => ({
+                ...t,
+                symbol: metadataMap.get(t.mint)?.symbol || t.symbol,
+                name: metadataMap.get(t.mint)?.name || t.name
+              }));
+              logStep("Enriched tokens with Helius metadata");
             }
           } catch (dasError) {
-            logStep("Helius DAS failed", { error: String(dasError) });
+            logStep("Helius metadata enrichment failed", { error: String(dasError) });
           }
         }
 
