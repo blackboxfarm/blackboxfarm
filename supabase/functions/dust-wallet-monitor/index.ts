@@ -30,7 +30,108 @@ serve(async (req) => {
 
     console.log(`[Dust Monitor] Action: ${action}, Whale: ${mega_whale_id || 'all'}`);
 
-    if (action === 'check_reactivations') {
+    // Get RPC URL
+    const heliusApiKey = Deno.env.get('HELIUS_API_KEY');
+    const rpcUrl = heliusApiKey 
+      ? `https://mainnet.helius-rpc.com/?api-key=${heliusApiKey}`
+      : 'https://api.mainnet-beta.solana.com';
+
+    if (action === 'initial_balance_check') {
+      // Fetch ALL wallets and update their current SOL balances
+      let query = supabase
+        .from('mega_whale_offspring')
+        .select('id, wallet_address')
+        .order('created_at', { ascending: false });
+
+      if (mega_whale_id) {
+        query = query.eq('mega_whale_id', mega_whale_id);
+      }
+
+      const { data: wallets, error: fetchError } = await query;
+
+      if (fetchError) {
+        throw new Error(`Failed to fetch wallets: ${fetchError.message}`);
+      }
+
+      console.log(`[Dust Monitor] Running initial balance check for ${wallets?.length || 0} wallets`);
+
+      if (!wallets || wallets.length === 0) {
+        return new Response(JSON.stringify({
+          success: true,
+          checked: 0,
+          message: 'No wallets found'
+        }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+      }
+
+      let checkedCount = 0;
+      let errorCount = 0;
+      const batchSize = 100; // Helius supports up to 100 accounts per call
+
+      // Process in batches
+      for (let i = 0; i < wallets.length; i += batchSize) {
+        const batch = wallets.slice(i, i + batchSize);
+        const addresses = batch.map(w => w.wallet_address);
+
+        try {
+          const response = await fetch(rpcUrl, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              jsonrpc: '2.0',
+              id: 1,
+              method: 'getMultipleAccounts',
+              params: [addresses, { encoding: 'base64' }]
+            })
+          });
+
+          const result = await response.json();
+          const accounts = result?.result?.value || [];
+
+          // Update each wallet's balance
+          for (let j = 0; j < batch.length; j++) {
+            const wallet = batch[j];
+            const account = accounts[j];
+            const lamports = account?.lamports || 0;
+            const solBalance = lamports / 1e9;
+
+            const { error: updateError } = await supabase
+              .from('mega_whale_offspring')
+              .update({
+                current_sol_balance: solBalance,
+                balance_checked_at: new Date().toISOString()
+              })
+              .eq('id', wallet.id);
+
+            if (updateError) {
+              console.error(`[Dust Monitor] Failed to update wallet ${wallet.id}: ${updateError.message}`);
+              errorCount++;
+            } else {
+              checkedCount++;
+            }
+          }
+
+          console.log(`[Dust Monitor] Batch ${Math.floor(i / batchSize) + 1}: Checked ${batch.length} wallets`);
+
+          // Rate limit between batches
+          if (i + batchSize < wallets.length) {
+            await new Promise(resolve => setTimeout(resolve, 100));
+          }
+        } catch (batchError) {
+          console.error(`[Dust Monitor] Batch error:`, batchError);
+          errorCount += batch.length;
+        }
+      }
+
+      console.log(`[Dust Monitor] Initial balance check complete. Checked: ${checkedCount}, Errors: ${errorCount}`);
+
+      return new Response(JSON.stringify({
+        success: true,
+        checked: checkedCount,
+        errors: errorCount,
+        total: wallets.length
+      }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+
+    } else if (action === 'check_reactivations') {
       // Get dust wallets that need rechecking
       let query = supabase
         .from('mega_whale_offspring')
@@ -60,12 +161,6 @@ serve(async (req) => {
           message: 'No dust wallets due for recheck'
         }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
       }
-
-      // Check SOL balances via public RPC (lightweight check)
-      const heliusApiKey = Deno.env.get('HELIUS_API_KEY');
-      const rpcUrl = heliusApiKey 
-        ? `https://mainnet.helius-rpc.com/?api-key=${heliusApiKey}`
-        : 'https://api.mainnet-beta.solana.com';
 
       let reactivatedCount = 0;
       const reactivatedWallets: string[] = [];
@@ -106,7 +201,7 @@ serve(async (req) => {
                 .update({
                   is_dust: false,
                   current_sol_balance: solBalance,
-                  // Keep dust_marked_at for tracking that it WAS dust before
+                  balance_checked_at: new Date().toISOString()
                 })
                 .eq('id', wallet.id);
 
@@ -122,6 +217,7 @@ serve(async (req) => {
                 .from('mega_whale_offspring')
                 .update({
                   current_sol_balance: solBalance,
+                  balance_checked_at: new Date().toISOString(),
                   dust_recheck_at: nextRecheck.toISOString()
                 })
                 .eq('id', wallet.id);
@@ -159,34 +255,63 @@ serve(async (req) => {
         throw new Error(`Failed to mark dust wallets: ${error.message}`);
       }
 
-      const result = data?.[0] || { marked_count: 0, total_dust: 0, total_active: 0 };
-      console.log(`[Dust Monitor] Marked ${result.marked_count} as dust. Total: ${result.total_dust} dust, ${result.total_active} active`);
+      const result = data?.[0] || { marked_count: 0, total_dust: 0, total_active: 0, wallets_without_balance: 0 };
+      console.log(`[Dust Monitor] Marked ${result.marked_count} as dust. Total: ${result.total_dust} dust, ${result.total_active} active, ${result.wallets_without_balance} unchecked`);
 
       return new Response(JSON.stringify({
         success: true,
         marked: result.marked_count,
         total_dust: result.total_dust,
-        total_active: result.total_active
+        total_active: result.total_active,
+        wallets_without_balance: result.wallets_without_balance
       }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
 
     } else if (action === 'get_stats') {
-      // Get dust wallet statistics
-      const { data, error } = await supabase.rpc('get_dust_wallet_stats', {
+      // Get dust wallet statistics including balance check status
+      const { data: stats, error: statsError } = await supabase.rpc('get_dust_wallet_stats', {
         whale_id: mega_whale_id || null
       });
 
-      if (error) {
-        throw new Error(`Failed to get dust stats: ${error.message}`);
+      if (statsError) {
+        throw new Error(`Failed to get dust stats: ${statsError.message}`);
       }
+
+      // Also get count of wallets without balance data
+      let balanceQuery = supabase
+        .from('mega_whale_offspring')
+        .select('balance_checked_at', { count: 'exact', head: true })
+        .is('balance_checked_at', null);
+
+      if (mega_whale_id) {
+        balanceQuery = balanceQuery.eq('mega_whale_id', mega_whale_id);
+      }
+
+      const { count: uncheckedCount } = await balanceQuery;
+
+      // Get last balance check time
+      let lastCheckQuery = supabase
+        .from('mega_whale_offspring')
+        .select('balance_checked_at')
+        .not('balance_checked_at', 'is', null)
+        .order('balance_checked_at', { ascending: false })
+        .limit(1);
+
+      if (mega_whale_id) {
+        lastCheckQuery = lastCheckQuery.eq('mega_whale_id', mega_whale_id);
+      }
+
+      const { data: lastCheck } = await lastCheckQuery;
 
       return new Response(JSON.stringify({
         success: true,
-        stats: data?.[0] || null
+        stats: stats?.[0] || null,
+        wallets_without_balance: uncheckedCount || 0,
+        last_balance_check: lastCheck?.[0]?.balance_checked_at || null
       }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
 
     } else {
       return new Response(JSON.stringify({
-        error: 'Invalid action. Use: check_reactivations, mark_dust, or get_stats'
+        error: 'Invalid action. Use: initial_balance_check, check_reactivations, mark_dust, or get_stats'
       }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
 
