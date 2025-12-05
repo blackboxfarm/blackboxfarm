@@ -1,6 +1,9 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
+// KILL SWITCH - Function disabled to reduce database load
+const FUNCTION_DISABLED = true;
+
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
@@ -378,6 +381,14 @@ async function monitorUntilSold(
 serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
+  }
+
+  // KILL SWITCH - Early exit to reduce database load
+  if (FUNCTION_DISABLED) {
+    console.log('[POSITION-MONITOR] Function disabled via kill switch');
+    return new Response(JSON.stringify({ status: 'disabled', message: 'Function temporarily disabled' }), {
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+    });
   }
 
   try {
