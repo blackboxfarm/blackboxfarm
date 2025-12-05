@@ -11,9 +11,10 @@ import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { 
   Wallet, Plus, RefreshCw, Copy, Send, ArrowDownLeft, 
-  ShoppingCart, DollarSign, Coins, Settings, History,
+  ShoppingCart, DollarSign, Coins, Settings,
   QrCode, ExternalLink, Loader2, ArrowUpRight, Trash2, Zap
 } from 'lucide-react';
+import { MegaWhaleDecisionHistory } from './MegaWhaleDecisionHistory';
 import {
   Dialog,
   DialogContent,
@@ -1120,6 +1121,9 @@ export function MegaWhaleWalletManager({ userId }: MegaWhaleWalletManagerProps) 
               )}
             </CardContent>
           </Card>
+
+          {/* Decision History */}
+          <MegaWhaleDecisionHistory userId={userId} />
         </>
       )}
 
