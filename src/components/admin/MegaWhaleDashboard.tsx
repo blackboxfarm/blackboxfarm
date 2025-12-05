@@ -151,75 +151,20 @@ export function MegaWhaleDashboard() {
   }, [user?.id]);
 
   const loadData = async () => {
-    if (!user?.id) return;
-    setLoading(true);
-
-    try {
-      // Load mega whales
-      const { data: whalesData } = await supabase
-        .from('mega_whales')
-        .select('*')
-        .eq('user_id', user.id)
-        .order('created_at', { ascending: false });
-
-      setMegaWhales(whalesData || []);
-      setMonitoringActive(whalesData?.some(w => w.helius_webhook_id) || false);
-
-      // Load alert config
-      const { data: configData } = await supabase
-        .from('mega_whale_alert_config')
-        .select('*')
-        .eq('user_id', user.id)
-        .single();
-      
-      setAlertConfig(configData as unknown as AlertConfig || null);
-
-      // Load pattern alerts
-      const { data: patternData } = await supabase
-        .from('mega_whale_pattern_alerts')
-        .select('*')
-        .eq('user_id', user.id)
-        .order('created_at', { ascending: false })
-        .limit(50);
-      
-      setPatternAlerts((patternData as PatternAlert[]) || []);
-
-      if (whalesData?.length) {
-        const { data: offspringData } = await supabase
-          .from('mega_whale_offspring')
-          .select('*')
-          .in('mega_whale_id', whalesData.map(w => w.id))
-          .order('depth_level', { ascending: true });
-
-        setOffspring(offspringData || []);
-
-        // Load ALL alerts (increased limit)
-        const { data: alertsData } = await supabase
-          .from('mega_whale_token_alerts')
-          .select('*')
-          .eq('user_id', user.id)
-          .order('detected_at', { ascending: false })
-          .limit(500);
-
-        setAlerts(alertsData || []);
-
-        // Load MINT alerts specifically (these are most important!)
-        const { data: mintsData } = await supabase
-          .from('mega_whale_token_alerts')
-          .select('*')
-          .eq('user_id', user.id)
-          .eq('alert_type', 'token_mint')
-          .order('detected_at', { ascending: false })
-          .limit(100);
-
-        setMintAlerts(mintsData || []);
-      }
-    } catch (error) {
-      console.error('Error loading data:', error);
-      toast.error('Failed to load data');
-    } finally {
-      setLoading(false);
-    }
+    // DISABLED - Database queries disabled to reduce database load
+    // All mega whale functionality temporarily suspended
+    console.log('[MegaWhaleDashboard] loadData() disabled - not fetching from database');
+    setLoading(false);
+    setMegaWhales([]);
+    setOffspring([]);
+    setAlerts([]);
+    setMintAlerts([]);
+    setPatternAlerts([]);
+    setAlertConfig(null);
+    setMonitoringActive(false);
+    toast.info('Mega Whale data loading disabled', {
+      description: 'Database queries suspended to reduce load'
+    });
   };
 
   const addMegaWhale = async () => {
