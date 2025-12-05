@@ -920,34 +920,48 @@ export function MegaWhaleWalletManager({ userId }: MegaWhaleWalletManagerProps) 
                       />
                     </div>
 
-                    <div className="grid grid-cols-2 gap-4">
-                      <div className="space-y-2">
-                        <div className="flex items-center justify-between">
-                          <Label>Take Profit %</Label>
-                          <span className="text-sm font-medium text-green-600">+{config.take_profit_pct || 50}%</span>
-                        </div>
-                        <Slider 
-                          value={[config.take_profit_pct || 50]}
-                          onValueChange={([value]) => setConfig({...config, take_profit_pct: value})}
-                          min={10}
-                          max={500}
-                          step={10}
-                        />
+                    <div className="space-y-2">
+                      <div className="flex items-center justify-between">
+                        <Label>Take Profit %</Label>
+                        <span className="text-sm font-medium text-green-600">+{config.take_profit_pct || 50}%</span>
                       </div>
-                      <div className="space-y-2">
+                      <Slider 
+                        value={[config.take_profit_pct || 50]}
+                        onValueChange={([value]) => setConfig({...config, take_profit_pct: value})}
+                        min={1}
+                        max={500}
+                        step={1}
+                      />
+                    </div>
+
+                    <div className="flex items-center justify-between mt-4 p-3 bg-red-500/10 rounded-lg">
+                      <div>
+                        <Label>Enable Stop Loss</Label>
+                        <p className="text-xs text-muted-foreground">
+                          Auto-sell if price drops below entry
+                        </p>
+                      </div>
+                      <Switch 
+                        checked={(config.stop_loss_pct ?? 0) > 0}
+                        onCheckedChange={(checked) => setConfig({...config, stop_loss_pct: checked ? 20 : 0})}
+                      />
+                    </div>
+
+                    {(config.stop_loss_pct ?? 0) > 0 && (
+                      <div className="space-y-2 mt-3">
                         <div className="flex items-center justify-between">
                           <Label>Stop Loss %</Label>
-                          <span className="text-sm font-medium text-red-600">-{config.stop_loss_pct || 20}%</span>
+                          <span className="text-sm font-medium text-red-600">-{config.stop_loss_pct}%</span>
                         </div>
                         <Slider 
                           value={[config.stop_loss_pct || 20]}
                           onValueChange={([value]) => setConfig({...config, stop_loss_pct: value})}
-                          min={5}
+                          min={1}
                           max={50}
-                          step={5}
+                          step={1}
                         />
                       </div>
-                    </div>
+                    )}
 
                     <div className="flex items-center justify-between mt-4 p-3 bg-muted/50 rounded-lg">
                       <div>
@@ -971,9 +985,9 @@ export function MegaWhaleWalletManager({ userId }: MegaWhaleWalletManagerProps) 
                         <Slider 
                           value={[config.trailing_stop_pct || 10]}
                           onValueChange={([value]) => setConfig({...config, trailing_stop_pct: value})}
-                          min={5}
+                          min={1}
                           max={50}
-                          step={5}
+                          step={1}
                         />
                       </div>
                     )}
@@ -1018,9 +1032,9 @@ export function MegaWhaleWalletManager({ userId }: MegaWhaleWalletManagerProps) 
                           <Slider 
                             value={[config.sell_percent_initial || 100]}
                             onValueChange={([value]) => setConfig({...config, sell_percent_initial: value})}
-                            min={10}
+                            min={1}
                             max={100}
-                            step={10}
+                            step={1}
                           />
                           <p className="text-xs text-muted-foreground">
                             {config.sell_percent_initial === 100 
@@ -1045,9 +1059,9 @@ export function MegaWhaleWalletManager({ userId }: MegaWhaleWalletManagerProps) 
                                   <Slider 
                                     value={[config.remaining_position_take_profit_pct || 100]}
                                     onValueChange={([value]) => setConfig({...config, remaining_position_take_profit_pct: value})}
-                                    min={50}
+                                    min={1}
                                     max={500}
-                                    step={25}
+                                    step={1}
                                   />
                                 </div>
                                 <div className="space-y-2">
@@ -1058,9 +1072,9 @@ export function MegaWhaleWalletManager({ userId }: MegaWhaleWalletManagerProps) 
                                   <Slider 
                                     value={[config.remaining_position_stop_loss_pct || 25]}
                                     onValueChange={([value]) => setConfig({...config, remaining_position_stop_loss_pct: value})}
-                                    min={10}
+                                    min={1}
                                     max={50}
-                                    step={5}
+                                    step={1}
                                   />
                                 </div>
                               </div>
@@ -1073,9 +1087,9 @@ export function MegaWhaleWalletManager({ userId }: MegaWhaleWalletManagerProps) 
                                 <Slider 
                                   value={[config.sell_percent_remaining || 100]}
                                   onValueChange={([value]) => setConfig({...config, sell_percent_remaining: value})}
-                                  min={25}
+                                  min={1}
                                   max={100}
-                                  step={25}
+                                  step={1}
                                 />
                                 <p className="text-xs text-muted-foreground">
                                   % of remaining position to sell on subsequent triggers
