@@ -142,55 +142,108 @@ serve(async (req) => {
       }
     }
 
-    // Helper: Extract SOL transfers from transactions
+    // Helper: Extract SOL transfers from transactions - look at parsed instructions
     async function getSolTransfers(address: string, limit = 50) {
       const signatures = await getTransactionSignatures(address, limit);
       const transfers: any[] = [];
+      const seenRecipients = new Set<string>();
       
       console.log(`[Master Sync] Found ${signatures.length} signatures for ${address.slice(0, 8)}...`);
       
-      // Process signatures in batches with rate limiting
-      for (let i = 0; i < Math.min(signatures.length, 20); i++) {
+      // Process more signatures but with batching
+      for (let i = 0; i < Math.min(signatures.length, 50); i++) {
         const sig = signatures[i];
         
-        await sleep(200); // Rate limit RPC calls
+        await sleep(100); // Rate limit RPC calls
         
         const tx = await getTransactionDetails(sig.signature);
-        if (!tx?.meta || !tx.transaction?.message) continue;
+        if (!tx?.transaction?.message) continue;
         
-        const preBalances = tx.meta.preBalances || [];
-        const postBalances = tx.meta.postBalances || [];
-        const accountKeys = tx.transaction.message.accountKeys || [];
-        
-        // Find accounts that received SOL (postBalance > preBalance)
-        for (let j = 0; j < accountKeys.length; j++) {
-          const pubkey = accountKeys[j]?.pubkey || accountKeys[j];
-          const pre = preBalances[j] || 0;
-          const post = postBalances[j] || 0;
-          const diff = (post - pre) / 1e9;
-          
-          // If this address sent SOL (balance decreased) and another received it
-          if (pubkey === address && diff < -0.001) {
-            // Find recipient (someone whose balance increased)
-            for (let k = 0; k < accountKeys.length; k++) {
-              if (k === j) continue;
-              const recipientKey = accountKeys[k]?.pubkey || accountKeys[k];
-              const recipientDiff = ((postBalances[k] || 0) - (preBalances[k] || 0)) / 1e9;
-              
-              if (recipientDiff > 0.001 && typeof recipientKey === 'string') {
+        // Method 1: Look for parsed System Program transfer instructions
+        const instructions = tx.transaction.message.instructions || [];
+        for (const ix of instructions) {
+          // Check for System Program transfer
+          if (ix.program === 'system' && ix.parsed?.type === 'transfer') {
+            const info = ix.parsed.info;
+            if (info?.source === address && info?.destination && info.destination !== address) {
+              if (!seenRecipients.has(info.destination)) {
+                seenRecipients.add(info.destination);
                 transfers.push({
                   src: address,
-                  dst: recipientKey,
-                  lamport: Math.abs(diff) * 1e9,
-                  blockTime: tx.blockTime,
+                  dst: info.destination,
+                  lamport: info.lamports || 0,
+                  blockTime: tx.blockTime || 0,
                   signature: sig.signature
                 });
               }
             }
           }
         }
+        
+        // Method 2: Check inner instructions for nested transfers
+        const innerInstructions = tx.meta?.innerInstructions || [];
+        for (const inner of innerInstructions) {
+          for (const ix of inner.instructions || []) {
+            if (ix.program === 'system' && ix.parsed?.type === 'transfer') {
+              const info = ix.parsed.info;
+              if (info?.source === address && info?.destination && info.destination !== address) {
+                if (!seenRecipients.has(info.destination)) {
+                  seenRecipients.add(info.destination);
+                  transfers.push({
+                    src: address,
+                    dst: info.destination,
+                    lamport: info.lamports || 0,
+                    blockTime: tx.blockTime || 0,
+                    signature: sig.signature
+                  });
+                }
+              }
+            }
+          }
+        }
+        
+        // Method 3: Fallback - check balance changes if no transfer instructions found
+        if (transfers.length === 0 && tx.meta) {
+          const preBalances = tx.meta.preBalances || [];
+          const postBalances = tx.meta.postBalances || [];
+          const accountKeys = tx.transaction.message.accountKeys || [];
+          
+          // Find source address index
+          let sourceIdx = -1;
+          for (let j = 0; j < accountKeys.length; j++) {
+            const key = accountKeys[j]?.pubkey || accountKeys[j];
+            if (key === address) {
+              sourceIdx = j;
+              break;
+            }
+          }
+          
+          if (sourceIdx >= 0) {
+            const sourceDiff = (postBalances[sourceIdx] - preBalances[sourceIdx]) / 1e9;
+            // If source balance decreased significantly (sent SOL)
+            if (sourceDiff < -0.01) {
+              for (let j = 0; j < accountKeys.length; j++) {
+                if (j === sourceIdx) continue;
+                const key = accountKeys[j]?.pubkey || accountKeys[j];
+                const diff = (postBalances[j] - preBalances[j]) / 1e9;
+                // If this account received significant SOL
+                if (diff > 0.01 && typeof key === 'string' && !seenRecipients.has(key)) {
+                  seenRecipients.add(key);
+                  transfers.push({
+                    src: address,
+                    dst: key,
+                    lamport: diff * 1e9,
+                    blockTime: tx.blockTime || 0,
+                    signature: sig.signature
+                  });
+                }
+              }
+            }
+          }
+        }
       }
       
+      console.log(`[Master Sync] Extracted ${transfers.length} unique transfers from ${address.slice(0, 8)}...`);
       return transfers;
     }
 
