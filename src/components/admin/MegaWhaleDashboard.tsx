@@ -25,6 +25,7 @@ import { MegaWhaleWalletManager } from './MegaWhaleWalletManager';
 import { FantasyTradeStory } from './mega-whale/FantasyTradeStory';
 import { WTFIsHappening } from './mega-whale/WTFIsHappening';
 import { ScanGuardrails } from './mega-whale/ScanGuardrails';
+import { MasterSyncButton } from './mega-whale/MasterSyncButton';
 
 interface MegaWhale {
   id: string;
@@ -1231,7 +1232,25 @@ export function MegaWhaleDashboard() {
 
         {/* Scan Guardrails Tab */}
         <TabsContent value="guardrails">
-          <ScanGuardrails userId={user?.id || ''} megaWhaleId={selectedWhale} />
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            {selectedWhale && (
+              <MasterSyncButton 
+                megaWhaleId={selectedWhale} 
+                whaleName={megaWhales.find(w => w.id === selectedWhale)?.nickname || undefined}
+              />
+            )}
+            {!selectedWhale && (
+              <Card className="border-amber-500/30 bg-amber-500/5">
+                <CardContent className="pt-6 text-center">
+                  <AlertTriangle className="h-8 w-8 mx-auto mb-2 text-amber-500" />
+                  <p className="text-sm text-muted-foreground">
+                    Select a Mega Whale from the list above to enable Master Sync
+                  </p>
+                </CardContent>
+              </Card>
+            )}
+            <ScanGuardrails userId={user?.id || ''} megaWhaleId={selectedWhale || undefined} />
+          </div>
         </TabsContent>
       </Tabs>
     </div>
