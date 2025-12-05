@@ -29,6 +29,9 @@ interface SyncResult {
   bundled_detected: number;
 }
 
+// Helper: sleep for rate limiting
+const sleep = (ms: number) => new Promise(r => setTimeout(r, ms));
+
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
@@ -67,13 +70,10 @@ serve(async (req) => {
     const isIncrementalSync = lastSync && !force_full_sync;
 
     console.log(`[Master Sync] Mode: ${isIncrementalSync ? 'INCREMENTAL' : 'FULL'}, Last sync: ${lastSync?.toISOString() || 'never'}`);
+    console.log(`[Master Sync] Whale address: ${whale.wallet_address}`);
 
-    // Get RPC URL
-    const heliusApiKey = Deno.env.get('HELIUS_API_KEY');
-    if (!heliusApiKey) {
-      throw new Error('HELIUS_API_KEY not configured');
-    }
-    const rpcUrl = `https://mainnet.helius-rpc.com/?api-key=${heliusApiKey}`;
+    // Use public Solana RPC for balances
+    const rpcUrl = 'https://api.mainnet-beta.solana.com';
 
     const result: SyncResult = {
       wallets_discovered: 0,
@@ -91,47 +91,87 @@ serve(async (req) => {
     const processedAddresses = new Set<string>();
     const bundleGroups = new Map<string, string[]>(); // timestamp -> addresses
 
-    // Helper: Fetch transaction history with Helius
-    async function getTransactionHistory(address: string, limit = 100, beforeSignature?: string) {
-      const params: any = { query: { source: address }, options: { limit } };
-      if (beforeSignature) params.options.before = beforeSignature;
-
-      const response = await fetch(`https://api.helius.xyz/v0/addresses/${address}/transactions?api-key=${heliusApiKey}&limit=${limit}`);
-      if (!response.ok) {
-        console.error(`[Master Sync] Failed to get tx history for ${address}: ${response.status}`);
-        return [];
-      }
-      return await response.json();
-    }
-
-    // Helper: Check if wallet has minted tokens
-    async function checkMintHistory(address: string): Promise<boolean> {
+    // Helper: Fetch transaction history using Solscan API (free tier)
+    async function getTransactionHistory(address: string, limit = 50) {
       try {
-        const txs = await getTransactionHistory(address, 50);
-        for (const tx of txs) {
-          // Check for token creation instructions
-          if (tx.type === 'CREATE' || tx.type === 'TOKEN_MINT' || 
-              tx.instructions?.some((i: any) => 
-                i.programId === 'TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA' && 
-                i.parsed?.type === 'initializeMint'
-              )) {
-            return true;
-          }
-          // Check source field for mints
-          if (tx.source === 'PUMP_FUN' || tx.source === 'RAYDIUM') {
-            if (tx.type === 'CREATE' || tx.description?.toLowerCase().includes('create')) {
-              return true;
+        // Use Solscan public API
+        const response = await fetch(
+          `https://public-api.solscan.io/account/transactions?account=${address}&limit=${limit}`,
+          {
+            headers: {
+              'Accept': 'application/json',
+              'User-Agent': 'BlackboxFarm/1.0'
             }
           }
+        );
+        
+        if (!response.ok) {
+          console.error(`[Master Sync] Solscan error for ${address}: ${response.status}`);
+          return [];
         }
-        return false;
+        
+        const data = await response.json();
+        return Array.isArray(data) ? data : [];
       } catch (error) {
-        console.error(`[Master Sync] Mint check error for ${address}:`, error);
+        console.error(`[Master Sync] Failed to get tx history for ${address}:`, error);
+        return [];
+      }
+    }
+
+    // Helper: Get SOL transfers from Solscan
+    async function getSolTransfers(address: string, limit = 50) {
+      try {
+        const response = await fetch(
+          `https://public-api.solscan.io/account/solTransfers?account=${address}&limit=${limit}`,
+          {
+            headers: {
+              'Accept': 'application/json',
+              'User-Agent': 'BlackboxFarm/1.0'
+            }
+          }
+        );
+        
+        if (!response.ok) {
+          console.error(`[Master Sync] Solscan sol transfers error for ${address}: ${response.status}`);
+          return [];
+        }
+        
+        const data = await response.json();
+        return data?.data || [];
+      } catch (error) {
+        console.error(`[Master Sync] Failed to get sol transfers for ${address}:`, error);
+        return [];
+      }
+    }
+
+    // Helper: Check if wallet has minted tokens using Solscan
+    async function checkMintHistory(address: string): Promise<boolean> {
+      try {
+        // Check for token accounts created by this wallet
+        const response = await fetch(
+          `https://public-api.solscan.io/account/tokens?account=${address}`,
+          {
+            headers: {
+              'Accept': 'application/json',
+              'User-Agent': 'BlackboxFarm/1.0'
+            }
+          }
+        );
+        
+        if (!response.ok) return false;
+        
+        const tokens = await response.json();
+        // If wallet has created any SPL tokens, it's likely a minter
+        // We'd need deeper analysis, but for now check if they have tokens with high supply %
+        return Array.isArray(tokens) && tokens.some((t: any) => 
+          t.tokenAmount?.uiAmount > 0 && t.tokenAmount?.decimals >= 6
+        );
+      } catch (error) {
         return false;
       }
     }
 
-    // Helper: Get SOL balance
+    // Helper: Get SOL balance using public RPC
     async function getSolBalance(address: string): Promise<number> {
       try {
         const response = await fetch(rpcUrl, {
@@ -176,14 +216,13 @@ serve(async (req) => {
             const lamports = accounts[j]?.lamports || 0;
             balances.set(batch[j], lamports / 1e9);
           }
-          result.balances_checked += batch.length;
         } catch (error) {
           console.error(`[Master Sync] Batch balance error:`, error);
         }
 
-        // Rate limiting
+        // Rate limiting for public RPC
         if (i + batchSize < addresses.length) {
-          await new Promise(r => setTimeout(r, 50));
+          await sleep(200);
         }
       }
 
@@ -197,56 +236,60 @@ serve(async (req) => {
 
       console.log(`[Master Sync] Scanning depth ${depth}: ${address.slice(0, 8)}...`);
 
-      // For incremental sync, only get recent transactions
-      const txs = await getTransactionHistory(address, isIncrementalSync ? 50 : 100);
+      // Rate limit: 1 second between Solscan API calls
+      await sleep(1000);
 
-      for (const tx of txs) {
-        // Skip old transactions in incremental mode
-        if (isIncrementalSync && lastSync && new Date(tx.timestamp * 1000) < lastSync) {
+      // Get SOL transfers (outgoing funds = offspring wallets)
+      const transfers = await getSolTransfers(address, isIncrementalSync ? 30 : 50);
+
+      console.log(`[Master Sync] Found ${transfers.length} SOL transfers for ${address.slice(0, 8)}...`);
+
+      for (const transfer of transfers) {
+        // Skip incoming transfers - we want outgoing (where this wallet sent SOL)
+        if (transfer.src !== address) continue;
+
+        // Skip if incremental and transfer is before last sync
+        const txTime = transfer.blockTime * 1000;
+        if (isIncrementalSync && lastSync && txTime < lastSync.getTime()) {
           continue;
         }
 
-        const timestamp = tx.timestamp * 1000;
+        const recipient = transfer.dst;
+        if (!recipient || recipient === address) continue;
+
+        const timestamp = txTime;
         const timeKey = Math.floor(timestamp / 500).toString(); // 500ms bundle window
 
-        // Extract recipient wallets from SOL transfers
-        if (tx.nativeTransfers) {
-          for (const transfer of tx.nativeTransfers) {
-            if (transfer.fromUserAccount === address && transfer.amount > 0) {
-              const recipient = transfer.toUserAccount;
-              
-              if (!walletMap.has(recipient)) {
-                walletMap.set(recipient, {
-                  address: recipient,
-                  depth: depth + 1,
-                  parent_address: address,
-                  sol_balance: 0,
-                  has_minted: false,
-                  created_at: new Date(timestamp).toISOString(),
-                  last_activity: new Date(timestamp).toISOString(),
-                  is_bundled: false,
-                  bundle_id: null,
-                });
-                result.wallets_discovered++;
-              }
-
-              // Track potential bundles (multiple wallets funded in same block)
-              if (!bundleGroups.has(timeKey)) {
-                bundleGroups.set(timeKey, []);
-              }
-              bundleGroups.get(timeKey)!.push(recipient);
-            }
-          }
+        if (!walletMap.has(recipient)) {
+          walletMap.set(recipient, {
+            address: recipient,
+            depth: depth + 1,
+            parent_address: address,
+            sol_balance: 0,
+            has_minted: false,
+            created_at: new Date(timestamp).toISOString(),
+            last_activity: new Date(timestamp).toISOString(),
+            is_bundled: false,
+            bundle_id: null,
+          });
+          result.wallets_discovered++;
+          console.log(`[Master Sync] Discovered wallet: ${recipient.slice(0, 8)}... at depth ${depth + 1}`);
         }
+
+        // Track potential bundles (multiple wallets funded in same block)
+        if (!bundleGroups.has(timeKey)) {
+          bundleGroups.set(timeKey, []);
+        }
+        bundleGroups.get(timeKey)!.push(recipient);
       }
 
-      // Recursively scan discovered wallets at this depth
+      // Recursively scan discovered wallets at this depth (up to a reasonable limit per depth)
       const walletsAtNextDepth = Array.from(walletMap.values())
-        .filter(w => w.depth === depth + 1 && w.parent_address === address);
+        .filter(w => w.depth === depth + 1 && w.parent_address === address)
+        .slice(0, 20); // Limit to 20 per parent to avoid exponential growth
 
       for (const wallet of walletsAtNextDepth) {
         await discoverWallets(wallet.address, depth + 1, address);
-        await new Promise(r => setTimeout(r, 100)); // Rate limit
       }
     }
 
@@ -271,36 +314,33 @@ serve(async (req) => {
     }
 
     // STEP 3: Get balances for all wallets
-    const allAddresses = Array.from(walletMap.keys());
-    const balances = await getMultipleBalances(allAddresses);
-    for (const [addr, balance] of balances) {
-      const wallet = walletMap.get(addr);
-      if (wallet) {
-        wallet.sol_balance = balance;
+    if (walletMap.size > 0) {
+      console.log(`[Master Sync] Fetching balances for ${walletMap.size} wallets...`);
+      const allAddresses = Array.from(walletMap.keys());
+      const balances = await getMultipleBalances(allAddresses);
+      for (const [addr, balance] of balances) {
+        const wallet = walletMap.get(addr);
+        if (wallet) {
+          wallet.sol_balance = balance;
+        }
       }
+      result.balances_checked = balances.size;
     }
-    result.balances_checked = balances.size;
 
-    // STEP 4: Check mint history for wallets with sufficient balance
+    // STEP 4: Check mint history for wallets with sufficient balance (sample to avoid rate limits)
     const potentialMinters = Array.from(walletMap.values())
-      .filter(w => w.sol_balance >= 0.01 || !isIncrementalSync);
+      .filter(w => w.sol_balance >= 0.05)
+      .slice(0, 30); // Limit to 30 mint checks to avoid rate limits
 
     console.log(`[Master Sync] Checking mint history for ${potentialMinters.length} wallets...`);
     
-    let mintCheckCount = 0;
     for (const wallet of potentialMinters) {
+      await sleep(1000); // 1 second delay for Solscan
       wallet.has_minted = await checkMintHistory(wallet.address);
       if (wallet.has_minted) {
         result.minters_found++;
+        console.log(`[Master Sync] Minter found: ${wallet.address.slice(0, 8)}...`);
       }
-      mintCheckCount++;
-      
-      // Progress log every 50
-      if (mintCheckCount % 50 === 0) {
-        console.log(`[Master Sync] Mint check progress: ${mintCheckCount}/${potentialMinters.length}`);
-      }
-      
-      await new Promise(r => setTimeout(r, 50)); // Rate limit
     }
 
     // STEP 5: Store/update wallets in database
