@@ -66,40 +66,39 @@ serve(async (req) => {
       // No body provided, proceed with bulk refresh
     }
 
-    // Single wallet refresh mode
+    // Single wallet refresh mode - uses HTTP APIs to avoid RPC rate limits
     if (body.wallet_id && body.pubkey) {
       logStep("Single wallet refresh", { pubkey: body.pubkey.slice(0, 8) + "..." });
       
       try {
-        const publicKey = new PublicKey(body.pubkey);
-        
-        // Get SOL balance - try Helius first, fallback to public RPC
         let solBalance = 0;
-        let balance = 0;
-        
-        try {
-          balance = await connection.getBalance(publicKey);
-          solBalance = balance / 1_000_000_000;
-          logStep("SOL balance fetched", { solBalance });
-        } catch (balanceError: any) {
-          // If Helius is rate limited, try public RPC
-          if (balanceError.message?.includes('429') || balanceError.message?.includes('Too Many Requests')) {
-            logStep("Helius rate limited, trying public RPC");
-            const publicConnection = new Connection("https://api.mainnet-beta.solana.com", { commitment: "confirmed" });
-            balance = await publicConnection.getBalance(publicKey);
-            solBalance = balance / 1_000_000_000;
-            logStep("SOL balance from public RPC", { solBalance });
-          } else {
-            throw balanceError;
-          }
-        }
-
         let tokens: TokenBalance[] = [];
 
-        // Use Solscan API for token portfolio (most reliable)
+        // Try Solscan API first for BOTH SOL balance and tokens (no RPC needed)
         try {
-          logStep("Fetching tokens from Solscan API");
-          const solscanResponse = await fetch(
+          logStep("Fetching from Solscan API");
+          
+          // Get SOL balance from Solscan
+          const balanceResponse = await fetch(
+            `https://api.solscan.io/v2/account?address=${body.pubkey}`,
+            {
+              headers: {
+                'Accept': 'application/json',
+                'User-Agent': 'Mozilla/5.0'
+              }
+            }
+          );
+          
+          if (balanceResponse.ok) {
+            const balanceData = await balanceResponse.json();
+            if (balanceData.success && balanceData.data?.lamports) {
+              solBalance = balanceData.data.lamports / 1_000_000_000;
+              logStep("SOL balance from Solscan", { solBalance });
+            }
+          }
+
+          // Get tokens from Solscan
+          const tokensResponse = await fetch(
             `https://api.solscan.io/v2/account/tokens?address=${body.pubkey}&page=1&page_size=50`,
             {
               headers: {
@@ -109,12 +108,12 @@ serve(async (req) => {
             }
           );
           
-          if (solscanResponse.ok) {
-            const solscanData = await solscanResponse.json();
-            logStep("Solscan API response", { success: solscanData.success, dataLength: solscanData.data?.length });
+          if (tokensResponse.ok) {
+            const tokensData = await tokensResponse.json();
+            logStep("Solscan tokens response", { success: tokensData.success, dataLength: tokensData.data?.length });
             
-            if (solscanData.success && solscanData.data) {
-              tokens = solscanData.data
+            if (tokensData.success && tokensData.data) {
+              tokens = tokensData.data
                 .filter((item: any) => item.amount > 0)
                 .map((item: any) => ({
                   mint: item.tokenAddress,
@@ -125,8 +124,6 @@ serve(async (req) => {
                 }));
               logStep("Tokens from Solscan", { count: tokens.length });
             }
-          } else {
-            logStep("Solscan API failed", { status: solscanResponse.status });
           }
         } catch (solscanError) {
           logStep("Solscan API error", { error: String(solscanError) });
@@ -135,7 +132,7 @@ serve(async (req) => {
         // Fallback to Helius DAS API if Solscan didn't work
         if (tokens.length === 0 && heliusKey) {
           try {
-            logStep("Trying Helius DAS API for tokens");
+            logStep("Trying Helius DAS API");
             const response = await fetch(`https://mainnet.helius-rpc.com/?api-key=${heliusKey}`, {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
@@ -147,53 +144,39 @@ serve(async (req) => {
                   ownerAddress: body.pubkey,
                   page: 1,
                   limit: 100,
-                  displayOptions: { showFungible: true, showNativeBalance: false }
+                  displayOptions: { showFungible: true, showNativeBalance: true }
                 }
               })
             });
             const dasResult = await response.json();
             
-            if (dasResult.result?.items) {
-              tokens = dasResult.result.items
-                .filter((item: any) => item.interface === 'FungibleToken' || item.interface === 'FungibleAsset')
-                .map((item: any) => ({
-                  mint: item.id,
-                  balance: item.token_info?.balance ? item.token_info.balance / Math.pow(10, item.token_info.decimals || 0) : 0,
-                  decimals: item.token_info?.decimals || 0,
-                  symbol: item.token_info?.symbol || item.content?.metadata?.symbol || null,
-                  name: item.content?.metadata?.name || null
-                }))
-                .filter((t: TokenBalance) => t.balance > 0);
-              logStep("Tokens from Helius DAS", { count: tokens.length });
+            if (dasResult.result) {
+              // Get native SOL balance if not already set
+              if (solBalance === 0 && dasResult.result.nativeBalance?.lamports) {
+                solBalance = dasResult.result.nativeBalance.lamports / 1_000_000_000;
+                logStep("SOL balance from Helius", { solBalance });
+              }
+              
+              if (dasResult.result.items) {
+                tokens = dasResult.result.items
+                  .filter((item: any) => item.interface === 'FungibleToken' || item.interface === 'FungibleAsset')
+                  .map((item: any) => ({
+                    mint: item.id,
+                    balance: item.token_info?.balance ? item.token_info.balance / Math.pow(10, item.token_info.decimals || 0) : 0,
+                    decimals: item.token_info?.decimals || 0,
+                    symbol: item.token_info?.symbol || item.content?.metadata?.symbol || null,
+                    name: item.content?.metadata?.name || null
+                  }))
+                  .filter((t: TokenBalance) => t.balance > 0);
+                logStep("Tokens from Helius DAS", { count: tokens.length });
+              }
             }
           } catch (dasError) {
             logStep("Helius DAS failed", { error: String(dasError) });
           }
         }
 
-        // Last fallback: standard RPC
-        if (tokens.length === 0) {
-          logStep("Using standard RPC for token accounts");
-          const tokenAccounts = await connection.getParsedTokenAccountsByOwner(
-            publicKey,
-            { programId: TOKEN_PROGRAM_ID }
-          );
-
-          tokens = tokenAccounts.value
-            .map((account) => {
-              const parsed = account.account.data.parsed;
-              const info = parsed.info;
-              return {
-                mint: info.mint,
-                balance: parseFloat(info.tokenAmount.uiAmountString || "0"),
-                decimals: info.tokenAmount.decimals
-              };
-            })
-            .filter((t) => t.balance > 0);
-          logStep("Tokens from standard RPC", { count: tokens.length });
-        }
-
-        logStep("Token accounts found", { count: tokens.length });
+        logStep("Fetch complete", { solBalance, tokenCount: tokens.length });
 
         // Update airdrop_wallets table
         const { error: updateError } = await supabaseServiceClient
@@ -210,7 +193,6 @@ serve(async (req) => {
         return new Response(JSON.stringify({ 
           success: true,
           sol_balance: solBalance,
-          lamports: balance,
           tokens,
           timestamp: new Date().toISOString()
         }), {
