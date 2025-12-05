@@ -1,10 +1,10 @@
-import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import { logHeliusCall } from '../_shared/helius-logger.ts';
+import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
+import { fetchTokenBalance, getRpcUrl, isProviderEnabled } from '../_shared/rpc-provider.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-}
+};
 
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
@@ -13,101 +13,50 @@ serve(async (req) => {
 
   try {
     const { childWallet, tokenMint } = await req.json();
-    
+
     if (!childWallet || !tokenMint) {
       return new Response(
-        JSON.stringify({ error: 'Missing required parameters: childWallet, tokenMint' }),
+        JSON.stringify({ error: 'Missing required parameters: childWallet and tokenMint' }),
         { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
 
-    // Get Helius API key from environment
-    const heliusApiKey = Deno.env.get('HELIUS_API_KEY');
-    if (!heliusApiKey) {
+    console.log(`[bagless-investigation] Checking balance for wallet: ${childWallet}, token: ${tokenMint}`);
+
+    // Use the provider-agnostic token balance fetcher
+    const result = await fetchTokenBalance(childWallet, tokenMint);
+
+    if (result.error) {
+      console.error(`[bagless-investigation] Error from ${result.provider}:`, result.error);
       return new Response(
-        JSON.stringify({ error: 'Helius API key not configured' }),
+        JSON.stringify({ error: result.error }),
         { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
 
-    console.log(`Checking current Bagless token balance for wallet: ${childWallet}`);
-    console.log(`Token mint: ${tokenMint}`);
+    const balance = result.data?.balance || 0;
+    const hasTokens = balance > 0;
 
-    // Get current token balance using Helius RPC
-    const rpcUrl = `https://rpc.helius.xyz/?api-key=${heliusApiKey}`;
-    
-    const logger = await logHeliusCall({
-      functionName: 'bagless-investigation',
-      endpoint: 'rpc.helius.xyz',
-      method: 'getTokenAccountsByOwner',
-      requestParams: { wallet: childWallet, mint: tokenMint }
-    });
-    
-    const response = await fetch(rpcUrl, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        jsonrpc: '2.0',
-        id: 1,
-        method: 'getTokenAccountsByOwner',
-        params: [
-          childWallet,
-          {
-            mint: tokenMint
-          },
-          {
-            encoding: 'jsonParsed'
-          }
-        ]
-      })
-    });
-
-    await logger.complete(response.status, response.ok);
-
-    if (!response.ok) {
-      throw new Error(`RPC request failed: ${response.status}`);
-    }
-
-    const data = await response.json();
-    
-    if (data.error) {
-      throw new Error(`RPC error: ${data.error.message}`);
-    }
-
-    let currentBalance = 0;
-    
-    if (data.result && data.result.value && data.result.value.length > 0) {
-      // Get the token account balance
-      const tokenAccount = data.result.value[0];
-      const balanceInfo = tokenAccount.account.data.parsed.info;
-      currentBalance = parseFloat(balanceInfo.tokenAmount.uiAmount || 0);
-    }
-
-    console.log(`Current Bagless token balance: ${currentBalance}`);
-
-    const result = {
-      childWallet,
-      tokenMint,
-      currentBalance,
-      balanceRaw: data.result?.value?.[0]?.account?.data?.parsed?.info?.tokenAmount?.amount || '0',
-      summary: `The wallet ${childWallet} currently holds ${currentBalance.toLocaleString()} Bagless tokens.`,
-      hasTokens: currentBalance > 0
-    };
+    console.log(`[bagless-investigation] Provider: ${result.provider}, Balance: ${balance}`);
 
     return new Response(
-      JSON.stringify(result),
+      JSON.stringify({
+        childWallet,
+        tokenMint,
+        currentBalance: balance,
+        balanceRaw: result.data?.decimals ? Math.floor(balance * Math.pow(10, result.data.decimals)).toString() : '0',
+        summary: hasTokens 
+          ? `The wallet ${childWallet} currently holds ${balance.toLocaleString()} tokens.`
+          : 'Wallet has no tokens for this mint',
+        hasTokens,
+        provider: result.provider
+      }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
-
   } catch (error) {
-    console.error('Balance check error:', error);
+    console.error('[bagless-investigation] Unexpected error:', error);
     return new Response(
-      JSON.stringify({ 
-        error: 'Balance check failed', 
-        details: error instanceof Error ? error.message : String(error) 
-      }),
+      JSON.stringify({ error: error.message }),
       { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
   }

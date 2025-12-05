@@ -267,6 +267,42 @@ export type Database = {
         }
         Relationships: []
       }
+      api_provider_config: {
+        Row: {
+          created_at: string | null
+          error_count: number | null
+          id: string
+          is_enabled: boolean | null
+          last_error_at: string | null
+          priority: number | null
+          provider_name: string
+          rate_limit_remaining: number | null
+          updated_at: string | null
+        }
+        Insert: {
+          created_at?: string | null
+          error_count?: number | null
+          id?: string
+          is_enabled?: boolean | null
+          last_error_at?: string | null
+          priority?: number | null
+          provider_name: string
+          rate_limit_remaining?: number | null
+          updated_at?: string | null
+        }
+        Update: {
+          created_at?: string | null
+          error_count?: number | null
+          id?: string
+          is_enabled?: boolean | null
+          last_error_at?: string | null
+          priority?: number | null
+          provider_name?: string
+          rate_limit_remaining?: number | null
+          updated_at?: string | null
+        }
+        Relationships: []
+      }
       arb_balances: {
         Row: {
           base_token_base: number
