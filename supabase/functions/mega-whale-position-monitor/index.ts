@@ -13,6 +13,7 @@ interface Position {
   token_mint: string;
   token_symbol: string;
   amount_tokens: number;
+  original_amount_tokens: number;
   entry_price_sol: number;
   current_price_sol: number;
   high_price_sol: number;
@@ -20,6 +21,9 @@ interface Position {
   pnl_percent: number;
   status: string;
   opened_at: string;
+  partial_sells_count: number;
+  total_sold_tokens: number;
+  average_sell_price_sol: number;
 }
 
 interface UserConfig {
@@ -31,6 +35,11 @@ interface UserConfig {
   trailing_stop_pct: number;
   price_check_interval_seconds: number;
   max_position_age_hours: number;
+  // Partial sell settings
+  sell_percent_initial: number;
+  sell_percent_remaining: number;
+  remaining_position_take_profit_pct: number;
+  remaining_position_stop_loss_pct: number;
 }
 
 // Track active monitors to prevent duplicates
@@ -102,13 +111,15 @@ async function getTokenPrice(tokenMint: string): Promise<number | null> {
   return await getPriceFromDexScreener(tokenMint);
 }
 
-async function executeSell(
+async function executePartialSell(
   supabase: any,
   position: Position,
+  sellPercent: number,
   reason: string
-): Promise<{ success: boolean; signature?: string; error?: string }> {
+): Promise<{ success: boolean; signature?: string; amountSold?: number; error?: string }> {
   try {
-    console.log(`🚨 EXECUTING SELL for position ${position.id}, reason: ${reason}`);
+    const tokensToSell = Math.floor(position.amount_tokens * (sellPercent / 100));
+    console.log(`🚨 EXECUTING ${sellPercent}% SELL (${tokensToSell} tokens) for position ${position.id}, reason: ${reason}`);
     
     const { data: wallet, error: walletError } = await supabase
       .from("mega_whale_auto_buy_wallets")
@@ -121,13 +132,16 @@ async function executeSell(
       return { success: false, error: "Wallet not found" };
     }
     
+    const sellAll = sellPercent >= 100;
+    
     const { data: swapResult, error: swapError } = await supabase.functions.invoke(
       "raydium-swap",
       {
         body: {
           side: "sell",
           tokenMint: position.token_mint,
-          sellAll: true,
+          sellAll: sellAll,
+          amount: sellAll ? undefined : tokensToSell,
           ownerSecret: wallet.secret_key_encrypted,
           slippageBps: 500,
           confirmPolicy: "confirmed",
@@ -146,11 +160,11 @@ async function executeSell(
     }
     
     const signature = swapResult?.signature || swapResult?.signatures?.[0];
-    console.log(`✅ Sell executed successfully, signature: ${signature}`);
+    console.log(`✅ Partial sell (${sellPercent}%) executed successfully, signature: ${signature}`);
     
-    return { success: true, signature };
+    return { success: true, signature, amountSold: tokensToSell };
   } catch (error) {
-    console.error("Execute sell error:", error);
+    console.error("Execute partial sell error:", error);
     return { success: false, error: String(error) };
   }
 }
@@ -159,7 +173,7 @@ async function checkAndUpdatePosition(
   supabase: any,
   position: Position,
   config: UserConfig | undefined
-): Promise<{ sold: boolean; reason?: string; error?: string; currentPrice?: number; pnlPercent?: number }> {
+): Promise<{ sold: boolean; partial?: boolean; reason?: string; error?: string; currentPrice?: number; pnlPercent?: number }> {
   const currentPrice = await getTokenPrice(position.token_mint);
   
   if (!currentPrice) {
@@ -194,18 +208,24 @@ async function checkAndUpdatePosition(
     return { sold: false, currentPrice, pnlPercent };
   }
 
+  // Determine sell conditions based on partial sell count
+  const isFirstSell = (position.partial_sells_count || 0) === 0;
+  const takeProfitTarget = isFirstSell ? config.take_profit_pct : config.remaining_position_take_profit_pct;
+  const stopLossTarget = isFirstSell ? config.stop_loss_pct : config.remaining_position_stop_loss_pct;
+  const sellPercent = isFirstSell ? (config.sell_percent_initial || 100) : (config.sell_percent_remaining || 100);
+
   let shouldSell = false;
   let sellReason = "";
 
-  if (pnlPercent >= config.take_profit_pct) {
+  if (pnlPercent >= takeProfitTarget) {
     shouldSell = true;
-    sellReason = `take_profit_${config.take_profit_pct}%`;
-    console.log(`🎯 TAKE PROFIT: ${position.token_symbol || position.token_mint} at ${pnlPercent.toFixed(2)}%`);
+    sellReason = `take_profit_${takeProfitTarget}%`;
+    console.log(`🎯 TAKE PROFIT: ${position.token_symbol || position.token_mint} at ${pnlPercent.toFixed(2)}% (target: ${takeProfitTarget}%)`);
   }
-  else if (pnlPercent <= -config.stop_loss_pct) {
+  else if (pnlPercent <= -stopLossTarget) {
     shouldSell = true;
-    sellReason = `stop_loss_${config.stop_loss_pct}%`;
-    console.log(`🛑 STOP LOSS: ${position.token_symbol || position.token_mint} at ${pnlPercent.toFixed(2)}%`);
+    sellReason = `stop_loss_${stopLossTarget}%`;
+    console.log(`🛑 STOP LOSS: ${position.token_symbol || position.token_mint} at ${pnlPercent.toFixed(2)}% (target: -${stopLossTarget}%)`);
   }
   else if (config.trailing_stop_enabled && highPrice > 0) {
     const dropFromHigh = ((highPrice - currentPrice) / highPrice) * 100;
@@ -217,22 +237,57 @@ async function checkAndUpdatePosition(
   }
 
   if (shouldSell) {
-    const sellResult = await executeSell(supabase, position, sellReason);
+    const sellResult = await executePartialSell(supabase, position, sellPercent, sellReason);
     
     if (sellResult.success) {
-      await supabase
-        .from("mega_whale_positions")
-        .update({
-          status: sellReason.includes("take_profit") ? "take_profit" : 
-                  sellReason.includes("stop_loss") ? "stopped_out" : "sold",
-          sell_signature: sellResult.signature,
-          sell_price_sol: currentPrice,
-          sell_amount_sol: currentPrice * position.amount_tokens,
-          closed_at: new Date().toISOString(),
-        })
-        .eq("id", position.id);
+      const isFullSell = sellPercent >= 100;
+      const newAmountTokens = isFullSell ? 0 : position.amount_tokens - (sellResult.amountSold || 0);
+      const newTotalSold = (position.total_sold_tokens || 0) + (sellResult.amountSold || 0);
+      
+      // Calculate new average sell price
+      const prevSellValue = (position.average_sell_price_sol || 0) * (position.total_sold_tokens || 0);
+      const thisSellValue = currentPrice * (sellResult.amountSold || 0);
+      const newAvgSellPrice = newTotalSold > 0 ? (prevSellValue + thisSellValue) / newTotalSold : currentPrice;
+      
+      if (isFullSell) {
+        // Full sell - close position
+        await supabase
+          .from("mega_whale_positions")
+          .update({
+            status: sellReason.includes("take_profit") ? "take_profit" : 
+                    sellReason.includes("stop_loss") ? "stopped_out" : "sold",
+            amount_tokens: 0,
+            sell_signature: sellResult.signature,
+            sell_price_sol: currentPrice,
+            sell_amount_sol: currentPrice * position.amount_tokens,
+            closed_at: new Date().toISOString(),
+            partial_sells_count: (position.partial_sells_count || 0) + 1,
+            total_sold_tokens: newTotalSold,
+            average_sell_price_sol: newAvgSellPrice,
+          })
+          .eq("id", position.id);
 
-      return { sold: true, reason: sellReason, currentPrice, pnlPercent };
+        return { sold: true, partial: false, reason: sellReason, currentPrice, pnlPercent };
+      } else {
+        // Partial sell - update position with remaining tokens and reset entry price to current for tracking new gains
+        await supabase
+          .from("mega_whale_positions")
+          .update({
+            amount_tokens: newAmountTokens,
+            partial_sells_count: (position.partial_sells_count || 0) + 1,
+            total_sold_tokens: newTotalSold,
+            average_sell_price_sol: newAvgSellPrice,
+            // Reset high_price to current for trailing stop on remaining position
+            high_price_sol: currentPrice,
+            // Update entry price to current for calculating new P&L on remaining position
+            entry_price_sol: currentPrice,
+            last_partial_sell_at: new Date().toISOString(),
+          })
+          .eq("id", position.id);
+
+        console.log(`💰 PARTIAL SELL COMPLETE: Sold ${sellPercent}%, ${newAmountTokens} tokens remaining`);
+        return { sold: false, partial: true, reason: `partial_${sellPercent}%_${sellReason}`, currentPrice, pnlPercent };
+      }
     } else {
       return { sold: false, error: sellResult.error, currentPrice, pnlPercent };
     }
@@ -265,6 +320,7 @@ async function monitorUntilSold(
   console.log(`🚀 CONTINUOUS MONITORING started for ${position.token_symbol || position.token_mint}`);
   console.log(`   Check interval: ${config.price_check_interval_seconds || 5}s | Max age: ${config.max_position_age_hours || 24}h`);
   console.log(`   Take profit: ${config.take_profit_pct}% | Stop loss: ${config.stop_loss_pct}%`);
+  console.log(`   Initial sell: ${config.sell_percent_initial || 100}% | Remaining targets: TP ${config.remaining_position_take_profit_pct}% / SL ${config.remaining_position_stop_loss_pct}%`);
   
   let checkCount = 0;
   
@@ -295,11 +351,16 @@ async function monitorUntilSold(
       const result = await checkAndUpdatePosition(supabase, freshPosition, config);
       
       const emoji = result.pnlPercent && result.pnlPercent > 0 ? "📈" : "📉";
+      const partialInfo = freshPosition.partial_sells_count > 0 ? ` [Partial sells: ${freshPosition.partial_sells_count}]` : "";
       console.log(`${emoji} Check #${checkCount} | ${position.token_symbol || position.token_mint.slice(0,8)} | ` +
-        `P&L: ${result.pnlPercent?.toFixed(2) || '?'}% | Price: ${result.currentPrice?.toExponential(4) || '?'} SOL`);
+        `P&L: ${result.pnlPercent?.toFixed(2) || '?'}% | Price: ${result.currentPrice?.toExponential(4) || '?'} SOL${partialInfo}`);
+      
+      if (result.partial) {
+        console.log(`💰 PARTIAL SELL executed - ${result.reason}. Continuing to monitor remaining position...`);
+      }
       
       if (result.sold) {
-        console.log(`✅ SOLD! ${position.token_symbol || position.token_mint} - ${result.reason}`);
+        console.log(`✅ FULLY SOLD! ${position.token_symbol || position.token_mint} - ${result.reason}`);
         break;
       }
       
@@ -360,7 +421,7 @@ serve(async (req) => {
     
     const { data: configs } = await supabase
       .from("mega_whale_auto_buy_config")
-      .select("user_id, auto_sell_enabled, take_profit_pct, stop_loss_pct, trailing_stop_enabled, trailing_stop_pct, price_check_interval_seconds, max_position_age_hours")
+      .select("user_id, auto_sell_enabled, take_profit_pct, stop_loss_pct, trailing_stop_enabled, trailing_stop_pct, price_check_interval_seconds, max_position_age_hours, sell_percent_initial, sell_percent_remaining, remaining_position_take_profit_pct, remaining_position_stop_loss_pct")
       .in("user_id", userIds);
 
     const configMap = new Map<string, UserConfig>();
