@@ -16,11 +16,15 @@ import {
   Crown, Plus, Trash2, Search, Activity, Bell, 
   RefreshCw, ExternalLink, GitBranch, Coins, 
   TrendingUp, TrendingDown, Radio, WifiOff, Eye,
-  Zap, Settings, Mail, Send, Bot, DollarSign, Wallet
+  Zap, Settings, Mail, Send, Bot, DollarSign, Wallet,
+  Gamepad2, AlertTriangle, Shield
 } from 'lucide-react';
 import { Switch } from '@/components/ui/switch';
 import { format } from 'date-fns';
 import { MegaWhaleWalletManager } from './MegaWhaleWalletManager';
+import { FantasyTradeStory } from './mega-whale/FantasyTradeStory';
+import { WTFIsHappening } from './mega-whale/WTFIsHappening';
+import { ScanGuardrails } from './mega-whale/ScanGuardrails';
 
 interface MegaWhale {
   id: string;
@@ -151,20 +155,74 @@ export function MegaWhaleDashboard() {
   }, [user?.id]);
 
   const loadData = async () => {
-    // DISABLED - Database queries disabled to reduce database load
-    // All mega whale functionality temporarily suspended
-    console.log('[MegaWhaleDashboard] loadData() disabled - not fetching from database');
-    setLoading(false);
-    setMegaWhales([]);
-    setOffspring([]);
-    setAlerts([]);
-    setMintAlerts([]);
-    setPatternAlerts([]);
-    setAlertConfig(null);
-    setMonitoringActive(false);
-    toast.info('Mega Whale data loading disabled', {
-      description: 'Database queries suspended to reduce load'
-    });
+    setLoading(true);
+    console.log('[MegaWhaleDashboard] Loading data with LIMIT 100...');
+    
+    try {
+      // Load mega whales
+      const { data: whalesData, error: whalesError } = await supabase
+        .from('mega_whales')
+        .select('*')
+        .order('created_at', { ascending: false });
+      
+      if (whalesError) throw whalesError;
+      setMegaWhales(whalesData || []);
+
+      // Load offspring with LIMIT 100 (prioritize by SOL and depth)
+      const { data: offspringData, error: offspringError } = await supabase
+        .from('mega_whale_offspring')
+        .select('*')
+        .order('depth_level', { ascending: true })
+        .order('total_sol_received', { ascending: false })
+        .limit(100);
+      
+      if (offspringError) throw offspringError;
+      setOffspring(offspringData || []);
+
+      // Load token alerts with LIMIT 100
+      const { data: alertsData, error: alertsError } = await supabase
+        .from('mega_whale_token_alerts')
+        .select('*')
+        .order('detected_at', { ascending: false })
+        .limit(100);
+      
+      if (alertsError) throw alertsError;
+      setAlerts(alertsData || []);
+      
+      // Filter mint alerts
+      const mints = (alertsData || []).filter(a => a.alert_type === 'token_mint');
+      setMintAlerts(mints);
+
+      // Load pattern alerts with LIMIT 50
+      const { data: patternData } = await supabase
+        .from('mega_whale_pattern_alerts')
+        .select('*')
+        .eq('user_id', user?.id)
+        .order('created_at', { ascending: false })
+        .limit(50);
+      
+      setPatternAlerts(patternData || []);
+
+      // Load alert config
+      const { data: configData } = await supabase
+        .from('mega_whale_alert_config')
+        .select('*')
+        .eq('user_id', user?.id)
+        .single();
+      
+      setAlertConfig(configData as unknown as AlertConfig | null);
+
+      // Check if any webhooks are active
+      const hasActiveWebhook = (whalesData || []).some(w => w.helius_webhook_id);
+      setMonitoringActive(hasActiveWebhook);
+
+      console.log(`[MegaWhaleDashboard] Loaded: ${whalesData?.length || 0} whales, ${offspringData?.length || 0} offspring (limited), ${alertsData?.length || 0} alerts`);
+    } catch (error: any) {
+      console.error('Failed to load data:', error);
+      toast.error('Failed to load data', { description: error.message });
+    } finally {
+      setLoading(false);
+    }
   };
 
   const addMegaWhale = async () => {
@@ -467,7 +525,7 @@ export function MegaWhaleDashboard() {
       </div>
 
       <Tabs value={activeTab} onValueChange={setActiveTab}>
-        <TabsList>
+        <TabsList className="flex-wrap h-auto gap-1">
           <TabsTrigger value="whales" className="flex items-center gap-2">
             <Crown className="h-4 w-4" /> Mega Whales
           </TabsTrigger>
@@ -482,8 +540,17 @@ export function MegaWhaleDashboard() {
               </Badge>
             )}
           </TabsTrigger>
+          <TabsTrigger value="fantasy" className="flex items-center gap-2">
+            <Gamepad2 className="h-4 w-4" /> Fantasy
+          </TabsTrigger>
+          <TabsTrigger value="wtf" className="flex items-center gap-2">
+            <AlertTriangle className="h-4 w-4" /> WTF
+          </TabsTrigger>
           <TabsTrigger value="wallet" className="flex items-center gap-2">
             <Wallet className="h-4 w-4" /> Wallet
+          </TabsTrigger>
+          <TabsTrigger value="guardrails" className="flex items-center gap-2">
+            <Shield className="h-4 w-4" /> Guardrails
           </TabsTrigger>
           <TabsTrigger value="settings" className="flex items-center gap-2">
             <Settings className="h-4 w-4" /> Settings
@@ -1144,6 +1211,27 @@ export function MegaWhaleDashboard() {
               )}
             </CardContent>
           </Card>
+        </TabsContent>
+
+        {/* Fantasy Trade Story Tab */}
+        <TabsContent value="fantasy">
+          <FantasyTradeStory 
+            megaWhaleId={selectedWhale} 
+            userId={user?.id || ''} 
+          />
+        </TabsContent>
+
+        {/* WTF is Happening Tab */}
+        <TabsContent value="wtf">
+          <WTFIsHappening 
+            megaWhaleId={selectedWhale} 
+            userId={user?.id || ''} 
+          />
+        </TabsContent>
+
+        {/* Scan Guardrails Tab */}
+        <TabsContent value="guardrails">
+          <ScanGuardrails userId={user?.id || ''} />
         </TabsContent>
       </Tabs>
     </div>
