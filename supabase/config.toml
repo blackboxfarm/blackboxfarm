@@ -186,3 +186,6 @@ verify_jwt = false
 
 [functions.mega-whale-master-sync]
 verify_jwt = false
+
+[functions.import-whale-csv]
+verify_jwt = false

@@ -17,7 +17,7 @@ import {
   RefreshCw, ExternalLink, GitBranch, Coins, 
   TrendingUp, TrendingDown, Radio, WifiOff, Eye,
   Zap, Settings, Mail, Send, Bot, DollarSign, Wallet,
-  Gamepad2, AlertTriangle, Shield
+  Gamepad2, AlertTriangle, Shield, Upload
 } from 'lucide-react';
 import { Switch } from '@/components/ui/switch';
 import { format } from 'date-fns';
@@ -148,6 +148,9 @@ export function MegaWhaleDashboard() {
   const [sendingTest, setSendingTest] = useState(false);
   const [newTelegramId, setNewTelegramId] = useState('');
   const [addingTelegramId, setAddingTelegramId] = useState(false);
+  
+  // CSV Import state
+  const [importingCsv, setImportingCsv] = useState(false);
 
   useEffect(() => {
     if (user?.id) {
@@ -265,6 +268,50 @@ export function MegaWhaleDashboard() {
       toast.error(error.message || 'Failed to add mega whale');
     } finally {
       setAdding(false);
+    }
+  };
+
+  const handleCsvImport = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    
+    setImportingCsv(true);
+    
+    try {
+      const csvText = await file.text();
+      
+      // Extract whale address from filename or prompt
+      const filenameMatch = file.name.match(/export_transfer_([A-Za-z0-9]+)_/);
+      const whaleAddress = filenameMatch?.[1] || megaWhales[0]?.wallet_address;
+      
+      if (!whaleAddress) {
+        toast.error('Could not determine whale address from filename');
+        return;
+      }
+      
+      console.log(`[CSV Import] Importing transfers for whale: ${whaleAddress}`);
+      
+      const { data, error } = await supabase.functions.invoke('import-whale-csv', {
+        body: {
+          csvData: csvText,
+          whaleAddress
+        }
+      });
+      
+      if (error) throw error;
+      
+      toast.success(`Imported ${data.totalUniqueWallets} child wallets!`, {
+        description: `${data.insertedCount} added, ${data.skippedCount} skipped`
+      });
+      
+      console.log('[CSV Import] Result:', data);
+      loadData();
+    } catch (error: any) {
+      console.error('[CSV Import] Error:', error);
+      toast.error(error.message || 'Failed to import CSV');
+    } finally {
+      setImportingCsv(false);
+      event.target.value = ''; // Reset input
     }
   };
 
@@ -628,7 +675,37 @@ export function MegaWhaleDashboard() {
           {/* Mega Whales List */}
           <Card>
             <CardHeader>
-              <CardTitle className="text-lg">Your Mega Whales</CardTitle>
+              <div className="flex items-center justify-between">
+                <CardTitle className="text-lg">Your Mega Whales</CardTitle>
+                <div className="flex items-center gap-2">
+                  <input
+                    type="file"
+                    accept=".csv"
+                    onChange={handleCsvImport}
+                    className="hidden"
+                    id="csv-import-input"
+                  />
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => document.getElementById('csv-import-input')?.click()}
+                    disabled={importingCsv}
+                  >
+                    {importingCsv ? (
+                      <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
+                    ) : (
+                      <Upload className="h-4 w-4 mr-2" />
+                    )}
+                    Import CSV
+                  </Button>
+                  {selectedWhale && (
+                    <MasterSyncButton 
+                      megaWhaleId={selectedWhale} 
+                      whaleName={megaWhales.find(w => w.id === selectedWhale)?.nickname || undefined}
+                    />
+                  )}
+                </div>
+              </div>
             </CardHeader>
             <CardContent>
               {megaWhales.length === 0 ? (
