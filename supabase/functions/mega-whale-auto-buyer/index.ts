@@ -48,6 +48,99 @@ async function encryptSecret(plaintext: string): Promise<string> {
   }
 }
 
+async function logDecision(
+  supabase: any,
+  params: {
+    user_id?: string
+    mega_whale_id?: string
+    offspring_wallet?: string
+    token_mint?: string
+    token_symbol?: string
+    decision: string
+    reason?: string
+    details?: any
+    sol_amount?: number
+    tx_signature?: string
+    launcher_score?: number
+  }
+) {
+  try {
+    await supabase.from('mega_whale_decision_log').insert({
+      user_id: params.user_id,
+      mega_whale_id: params.mega_whale_id,
+      offspring_wallet: params.offspring_wallet,
+      token_mint: params.token_mint,
+      token_symbol: params.token_symbol,
+      decision: params.decision,
+      reason: params.reason,
+      details: params.details || {},
+      sol_amount: params.sol_amount,
+      tx_signature: params.tx_signature,
+      launcher_score: params.launcher_score,
+    })
+    console.log(`📝 Decision logged: ${params.decision} - ${params.reason}`)
+  } catch (e) {
+    console.log('Decision log insert failed:', e)
+  }
+}
+
+async function sendTelegramNotification(
+  supabase: any,
+  userId: string,
+  message: string
+) {
+  try {
+    const telegramBotToken = Deno.env.get('TELEGRAM_BOT_TOKEN')
+    if (!telegramBotToken) {
+      console.log('No TELEGRAM_BOT_TOKEN configured')
+      return
+    }
+
+    // Get user's telegram config
+    const { data: config } = await supabase
+      .from('mega_whale_alert_config')
+      .select('telegram_chat_id, additional_telegram_ids, notify_telegram')
+      .eq('user_id', userId)
+      .single()
+
+    if (!config?.notify_telegram) {
+      console.log('Telegram notifications disabled for user')
+      return
+    }
+
+    const chatIds: string[] = []
+    if (config.telegram_chat_id) chatIds.push(config.telegram_chat_id)
+    if (config.additional_telegram_ids?.length) {
+      chatIds.push(...config.additional_telegram_ids)
+    }
+
+    if (chatIds.length === 0) {
+      console.log('No Telegram chat IDs configured')
+      return
+    }
+
+    for (const chatId of chatIds) {
+      const response = await fetch(`https://api.telegram.org/bot${telegramBotToken}/sendMessage`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          chat_id: chatId,
+          text: message,
+          parse_mode: 'Markdown'
+        })
+      })
+      if (response.ok) {
+        console.log(`✅ Telegram sent to ${chatId}`)
+      } else {
+        const err = await response.text()
+        console.error(`❌ Telegram failed for ${chatId}:`, err)
+      }
+    }
+  } catch (e) {
+    console.error('Telegram notification error:', e)
+  }
+}
+
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders })
@@ -60,9 +153,9 @@ Deno.serve(async (req) => {
     const supabase = createClient(supabaseUrl, supabaseKey)
 
     const body = await req.json()
-    const { action, user_id, alert_id, token_mint, launcher_score, config } = body
+    const { action, user_id, alert_id, token_mint, token_symbol, launcher_score, config } = body
 
-    console.log(`Auto-buyer action: ${action}`)
+    console.log(`[AUTO-BUYER] Action: ${action}, Token: ${token_mint}, Score: ${launcher_score}`)
 
     if (action === 'generate_wallet') {
       // Generate a new auto-buy wallet for a user
@@ -180,6 +273,14 @@ Deno.serve(async (req) => {
 
       if (configError || !config) {
         console.log('No auto-buy config for user, skipping')
+        await logDecision(supabase, {
+          user_id,
+          token_mint,
+          token_symbol,
+          decision: 'buy_skipped',
+          reason: 'No auto-buy config found',
+          launcher_score,
+        })
         return new Response(
           JSON.stringify({ success: false, reason: 'No config' }),
           { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
@@ -188,6 +289,26 @@ Deno.serve(async (req) => {
 
       if (!config.is_enabled) {
         console.log('Auto-buy disabled, skipping')
+        await logDecision(supabase, {
+          user_id,
+          token_mint,
+          token_symbol,
+          decision: 'buy_skipped',
+          reason: 'Auto-buy is disabled',
+          launcher_score,
+        })
+        
+        // Still notify about the mint even if auto-buy is off
+        await sendTelegramNotification(
+          supabase,
+          user_id,
+          `🔔 *MINT ALERT* (Auto-buy OFF)\n\n` +
+          `Token: \`${token_symbol || 'Unknown'}\`\n` +
+          `Mint: \`${token_mint}\`\n` +
+          `Score: ${launcher_score || 0}\n\n` +
+          `_Auto-buy is disabled. Enable to auto-purchase._`
+        )
+        
         return new Response(
           JSON.stringify({ success: false, reason: 'Disabled' }),
           { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
@@ -197,6 +318,26 @@ Deno.serve(async (req) => {
       // Check launcher score threshold
       if (launcher_score < config.min_launcher_score) {
         console.log(`Launcher score ${launcher_score} below threshold ${config.min_launcher_score}`)
+        await logDecision(supabase, {
+          user_id,
+          token_mint,
+          token_symbol,
+          decision: 'buy_skipped',
+          reason: `Score ${launcher_score} < threshold ${config.min_launcher_score}`,
+          launcher_score,
+          details: { threshold: config.min_launcher_score },
+        })
+        
+        await sendTelegramNotification(
+          supabase,
+          user_id,
+          `⏭️ *MINT SKIPPED* (Low Score)\n\n` +
+          `Token: \`${token_symbol || 'Unknown'}\`\n` +
+          `Mint: \`${token_mint}\`\n` +
+          `Score: ${launcher_score} (min: ${config.min_launcher_score})\n\n` +
+          `_Score below threshold. Not buying._`
+        )
+        
         return new Response(
           JSON.stringify({ success: false, reason: 'Score too low' }),
           { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
@@ -206,6 +347,27 @@ Deno.serve(async (req) => {
       // Check daily limit
       if (config.buys_today >= config.max_daily_buys) {
         console.log('Daily buy limit reached')
+        await logDecision(supabase, {
+          user_id,
+          token_mint,
+          token_symbol,
+          decision: 'buy_skipped',
+          reason: `Daily limit reached (${config.buys_today}/${config.max_daily_buys})`,
+          launcher_score,
+          details: { buys_today: config.buys_today, max: config.max_daily_buys },
+        })
+        
+        await sendTelegramNotification(
+          supabase,
+          user_id,
+          `🚫 *MINT SKIPPED* (Daily Limit)\n\n` +
+          `Token: \`${token_symbol || 'Unknown'}\`\n` +
+          `Mint: \`${token_mint}\`\n` +
+          `Score: ${launcher_score}\n` +
+          `Buys Today: ${config.buys_today}/${config.max_daily_buys}\n\n` +
+          `_Daily buy limit reached._`
+        )
+        
         return new Response(
           JSON.stringify({ success: false, reason: 'Daily limit reached' }),
           { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
@@ -222,6 +384,25 @@ Deno.serve(async (req) => {
 
       if (walletError || !wallet) {
         console.log('No auto-buy wallet found')
+        await logDecision(supabase, {
+          user_id,
+          token_mint,
+          token_symbol,
+          decision: 'buy_skipped',
+          reason: 'No auto-buy wallet found',
+          launcher_score,
+        })
+        
+        await sendTelegramNotification(
+          supabase,
+          user_id,
+          `❌ *BUY FAILED* (No Wallet)\n\n` +
+          `Token: \`${token_symbol || 'Unknown'}\`\n` +
+          `Mint: \`${token_mint}\`\n` +
+          `Score: ${launcher_score}\n\n` +
+          `_No auto-buy wallet configured._`
+        )
+        
         return new Response(
           JSON.stringify({ success: false, reason: 'No wallet' }),
           { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
@@ -232,6 +413,17 @@ Deno.serve(async (req) => {
       if ((wallet.sol_balance || 0) < config.buy_amount_sol) {
         console.log(`Insufficient balance: ${wallet.sol_balance} < ${config.buy_amount_sol}`)
         
+        await logDecision(supabase, {
+          user_id,
+          token_mint,
+          token_symbol,
+          decision: 'buy_skipped',
+          reason: `Insufficient balance: ${wallet.sol_balance} < ${config.buy_amount_sol} SOL`,
+          sol_amount: config.buy_amount_sol,
+          launcher_score,
+          details: { wallet_balance: wallet.sol_balance, required: config.buy_amount_sol },
+        })
+        
         // Update alert with failure reason
         if (alert_id) {
           await supabase
@@ -240,13 +432,36 @@ Deno.serve(async (req) => {
             .eq('id', alert_id)
         }
 
+        await sendTelegramNotification(
+          supabase,
+          user_id,
+          `💰 *BUY FAILED* (Low Balance)\n\n` +
+          `Token: \`${token_symbol || 'Unknown'}\`\n` +
+          `Mint: \`${token_mint}\`\n` +
+          `Score: ${launcher_score}\n` +
+          `Wallet Balance: ${wallet.sol_balance?.toFixed(4) || 0} SOL\n` +
+          `Required: ${config.buy_amount_sol} SOL\n\n` +
+          `_Please fund your auto-buy wallet._`
+        )
+
         return new Response(
           JSON.stringify({ success: false, reason: 'Insufficient balance' }),
           { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
         )
       }
 
-      console.log(`Executing auto-buy: ${config.buy_amount_sol} SOL for ${token_mint}`)
+      console.log(`🚀 Executing auto-buy: ${config.buy_amount_sol} SOL for ${token_mint}`)
+      
+      // Send "buying" notification
+      await sendTelegramNotification(
+        supabase,
+        user_id,
+        `⏳ *BUYING TOKEN...*\n\n` +
+        `Token: \`${token_symbol || 'Unknown'}\`\n` +
+        `Mint: \`${token_mint}\`\n` +
+        `Amount: ${config.buy_amount_sol} SOL\n` +
+        `Score: ${launcher_score}`
+      )
 
       // Mark as triggered
       if (alert_id) {
@@ -273,6 +488,22 @@ Deno.serve(async (req) => {
         })
 
         if (swapError) throw swapError
+
+        // Log success
+        await logDecision(supabase, {
+          user_id,
+          token_mint,
+          token_symbol,
+          decision: 'buy_executed',
+          reason: 'Auto-buy successful',
+          sol_amount: config.buy_amount_sol,
+          tx_signature: swapResult?.signature,
+          launcher_score,
+          details: { 
+            slippage_bps: config.slippage_bps,
+            wallet_pubkey: wallet.pubkey,
+          },
+        })
 
         // Update alert with success
         if (alert_id) {
@@ -301,7 +532,20 @@ Deno.serve(async (req) => {
           .update({ buys_today: config.buys_today + 1 })
           .eq('user_id', user_id)
 
-        console.log(`Auto-buy completed: ${swapResult?.signature}`)
+        console.log(`✅ Auto-buy completed: ${swapResult?.signature}`)
+
+        // Send success notification
+        await sendTelegramNotification(
+          supabase,
+          user_id,
+          `✅ *BUY SUCCESSFUL!*\n\n` +
+          `Token: \`${token_symbol || 'Unknown'}\`\n` +
+          `Mint: \`${token_mint}\`\n` +
+          `Amount: ${config.buy_amount_sol} SOL\n` +
+          `Score: ${launcher_score}\n` +
+          `TX: \`${swapResult?.signature?.slice(0, 20)}...\`\n\n` +
+          `[View on Solscan](https://solscan.io/tx/${swapResult?.signature})`
+        )
 
         return new Response(
           JSON.stringify({
@@ -315,6 +559,18 @@ Deno.serve(async (req) => {
       } catch (swapError) {
         console.error('Swap error:', swapError)
 
+        // Log failure
+        await logDecision(supabase, {
+          user_id,
+          token_mint,
+          token_symbol,
+          decision: 'buy_failed',
+          reason: `Swap failed: ${swapError.message}`,
+          sol_amount: config.buy_amount_sol,
+          launcher_score,
+          details: { error: swapError.message },
+        })
+
         // Update alert with failure
         if (alert_id) {
           await supabase
@@ -324,6 +580,18 @@ Deno.serve(async (req) => {
             })
             .eq('id', alert_id)
         }
+
+        // Send failure notification
+        await sendTelegramNotification(
+          supabase,
+          user_id,
+          `❌ *BUY FAILED*\n\n` +
+          `Token: \`${token_symbol || 'Unknown'}\`\n` +
+          `Mint: \`${token_mint}\`\n` +
+          `Amount: ${config.buy_amount_sol} SOL\n` +
+          `Score: ${launcher_score}\n` +
+          `Error: ${swapError.message?.slice(0, 100)}`
+        )
 
         return new Response(
           JSON.stringify({ success: false, reason: 'Swap failed', error: swapError.message }),
