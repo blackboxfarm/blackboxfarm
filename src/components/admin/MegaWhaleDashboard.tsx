@@ -119,7 +119,7 @@ const CEX_OPTIONS = [
 export function MegaWhaleDashboard() {
   const { user } = useAuth();
   const [activeTab, setActiveTab] = useState('whales');
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
   const [megaWhales, setMegaWhales] = useState<MegaWhale[]>([]);
   const [offspring, setOffspring] = useState<Offspring[]>([]);
   const [alerts, setAlerts] = useState<TokenAlert[]>([]);
