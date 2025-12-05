@@ -61,6 +61,9 @@ interface AutoBuyConfig {
   distribution_wallet_2: string;
   distribution_wallet_3: string;
   distribution_percent_per_wallet: number;
+  distribution_percent_wallet_1: number;
+  distribution_percent_wallet_2: number;
+  distribution_percent_wallet_3: number;
 }
 
 interface MegaWhaleWalletManagerProps {
@@ -144,6 +147,9 @@ export function MegaWhaleWalletManager({ userId }: MegaWhaleWalletManagerProps) 
           distribution_wallet_2: alertConfig?.distribution_wallet_2 || '',
           distribution_wallet_3: alertConfig?.distribution_wallet_3 || '',
           distribution_percent_per_wallet: alertConfig?.distribution_percent_per_wallet || 10,
+          distribution_percent_wallet_1: alertConfig?.distribution_percent_wallet_1 || 10,
+          distribution_percent_wallet_2: alertConfig?.distribution_percent_wallet_2 || 10,
+          distribution_percent_wallet_3: alertConfig?.distribution_percent_wallet_3 || 10,
           // Merge smart buy settings
           auto_buy_min_market_cap: alertConfig?.auto_buy_min_market_cap || 9500,
           auto_buy_max_market_cap: alertConfig?.auto_buy_max_market_cap || 50000,
@@ -244,6 +250,9 @@ export function MegaWhaleWalletManager({ userId }: MegaWhaleWalletManagerProps) 
           distribution_wallet_2: config.distribution_wallet_2 || null,
           distribution_wallet_3: config.distribution_wallet_3 || null,
           distribution_percent_per_wallet: config.distribution_percent_per_wallet || 10,
+          distribution_percent_wallet_1: config.distribution_percent_wallet_1 || 10,
+          distribution_percent_wallet_2: config.distribution_percent_wallet_2 || 10,
+          distribution_percent_wallet_3: config.distribution_percent_wallet_3 || 10,
           auto_buy_min_market_cap: config.auto_buy_min_market_cap || 9500,
           auto_buy_max_market_cap: config.auto_buy_max_market_cap || 50000,
           auto_buy_min_holders: config.auto_buy_min_holders || 5,
@@ -752,14 +761,14 @@ export function MegaWhaleWalletManager({ userId }: MegaWhaleWalletManagerProps) 
                       Profit Distribution
                     </h4>
                     <p className="text-xs text-muted-foreground mb-4">
-                      Automatically split {(config.distribution_percent_per_wallet || 10) * 3}% of profits after each sell to 3 wallets (10% each).
+                      Automatically split {(config.distribution_percent_wallet_1 || 10) + (config.distribution_percent_wallet_2 || 10) + (config.distribution_percent_wallet_3 || 10)}% of profits after each sell to 3 wallets.
                     </p>
                     
                     <div className="flex items-center justify-between mb-4 p-3 bg-muted/50 rounded-lg">
                       <div>
                         <Label>Enable Auto-Distribution</Label>
                         <p className="text-xs text-muted-foreground">
-                          Send 30% of sell profits to your 3 wallets
+                          Send profits to your configured wallets
                         </p>
                       </div>
                       <Switch 
@@ -768,11 +777,11 @@ export function MegaWhaleWalletManager({ userId }: MegaWhaleWalletManagerProps) 
                       />
                     </div>
 
-                    <div className="space-y-3">
-                      <div className="space-y-2">
+                    <div className="space-y-4">
+                      <div className="space-y-2 p-3 border rounded-lg">
                         <Label className="flex items-center gap-2">
                           <span className="w-5 h-5 rounded-full bg-green-500 text-white text-xs flex items-center justify-center">1</span>
-                          Distribution Wallet #1 (10%)
+                          Distribution Wallet #1
                         </Label>
                         <Input 
                           placeholder="Enter Solana wallet address..."
@@ -780,12 +789,23 @@ export function MegaWhaleWalletManager({ userId }: MegaWhaleWalletManagerProps) 
                           onChange={(e) => setConfig({...config, distribution_wallet_1: e.target.value})}
                           className="font-mono text-sm"
                         />
+                        <div className="flex items-center gap-3 mt-2">
+                          <Slider
+                            value={[config.distribution_percent_wallet_1 || 10]}
+                            onValueChange={(value) => setConfig({...config, distribution_percent_wallet_1: value[0]})}
+                            min={0}
+                            max={50}
+                            step={1}
+                            className="flex-1"
+                          />
+                          <span className="text-sm font-medium w-12 text-right">{config.distribution_percent_wallet_1 || 10}%</span>
+                        </div>
                       </div>
                       
-                      <div className="space-y-2">
+                      <div className="space-y-2 p-3 border rounded-lg">
                         <Label className="flex items-center gap-2">
                           <span className="w-5 h-5 rounded-full bg-blue-500 text-white text-xs flex items-center justify-center">2</span>
-                          Distribution Wallet #2 (10%)
+                          Distribution Wallet #2
                         </Label>
                         <Input 
                           placeholder="Enter Solana wallet address..."
@@ -793,12 +813,23 @@ export function MegaWhaleWalletManager({ userId }: MegaWhaleWalletManagerProps) 
                           onChange={(e) => setConfig({...config, distribution_wallet_2: e.target.value})}
                           className="font-mono text-sm"
                         />
+                        <div className="flex items-center gap-3 mt-2">
+                          <Slider
+                            value={[config.distribution_percent_wallet_2 || 10]}
+                            onValueChange={(value) => setConfig({...config, distribution_percent_wallet_2: value[0]})}
+                            min={0}
+                            max={50}
+                            step={1}
+                            className="flex-1"
+                          />
+                          <span className="text-sm font-medium w-12 text-right">{config.distribution_percent_wallet_2 || 10}%</span>
+                        </div>
                       </div>
                       
-                      <div className="space-y-2">
+                      <div className="space-y-2 p-3 border rounded-lg">
                         <Label className="flex items-center gap-2">
                           <span className="w-5 h-5 rounded-full bg-purple-500 text-white text-xs flex items-center justify-center">3</span>
-                          Distribution Wallet #3 (10%)
+                          Distribution Wallet #3
                         </Label>
                         <Input 
                           placeholder="Enter Solana wallet address..."
@@ -806,6 +837,17 @@ export function MegaWhaleWalletManager({ userId }: MegaWhaleWalletManagerProps) 
                           onChange={(e) => setConfig({...config, distribution_wallet_3: e.target.value})}
                           className="font-mono text-sm"
                         />
+                        <div className="flex items-center gap-3 mt-2">
+                          <Slider
+                            value={[config.distribution_percent_wallet_3 || 10]}
+                            onValueChange={(value) => setConfig({...config, distribution_percent_wallet_3: value[0]})}
+                            min={0}
+                            max={50}
+                            step={1}
+                            className="flex-1"
+                          />
+                          <span className="text-sm font-medium w-12 text-right">{config.distribution_percent_wallet_3 || 10}%</span>
+                        </div>
                       </div>
                     </div>
 
