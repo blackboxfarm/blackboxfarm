@@ -3,6 +3,9 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2?target=deno
 import { Connection, PublicKey } from "https://esm.sh/@solana/web3.js@1.95.3";
 import { TOKEN_PROGRAM_ID } from "https://esm.sh/@solana/spl-token@0.4.6";
 
+// KILL SWITCH - Function disabled to reduce database load
+const FUNCTION_DISABLED = true;
+
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
@@ -30,6 +33,14 @@ const logStep = (step: string, details?: any) => {
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
+  }
+
+  // KILL SWITCH - Early exit to reduce database load
+  if (FUNCTION_DISABLED) {
+    logStep('Function disabled via kill switch');
+    return new Response(JSON.stringify({ status: 'disabled', message: 'Function temporarily disabled' }), {
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+    });
   }
 
   try {
