@@ -168,7 +168,7 @@ export function MegaWhaleDashboard() {
 
   const loadData = async () => {
     setLoading(true);
-    console.log('[MegaWhaleDashboard] Loading data with LIMIT 100...');
+    console.log('[MegaWhaleDashboard] Loading all data...');
     
     try {
       // Load mega whales
@@ -180,16 +180,16 @@ export function MegaWhaleDashboard() {
       if (whalesError) throw whalesError;
       setMegaWhales(whalesData || []);
 
-      // Load offspring with LIMIT 100 (prioritize by SOL and depth)
+      // Load ALL offspring (no limit)
       const { data: offspringData, error: offspringError } = await supabase
         .from('mega_whale_offspring')
         .select('*')
         .order('depth_level', { ascending: true })
-        .order('total_sol_received', { ascending: false })
-        .limit(100);
+        .order('total_sol_received', { ascending: false });
       
       if (offspringError) throw offspringError;
       setOffspring(offspringData || []);
+      console.log(`[MegaWhaleDashboard] Loaded ${(offspringData || []).length} total offspring wallets`);
 
       // Load token alerts with LIMIT 100
       const { data: alertsData, error: alertsError } = await supabase
