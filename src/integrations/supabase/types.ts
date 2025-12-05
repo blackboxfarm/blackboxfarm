@@ -2934,6 +2934,7 @@ export type Database = {
       mega_whale_offspring: {
         Row: {
           balance_checked_at: string | null
+          bundle_id: string | null
           created_at: string | null
           current_sol_balance: number | null
           depth_level: number
@@ -2941,10 +2942,13 @@ export type Database = {
           dust_recheck_at: string | null
           dust_token_value_usd: number | null
           first_funded_at: string | null
+          first_seen_at: string | null
           has_minted: boolean | null
           id: string
           is_active_trader: boolean | null
+          is_bundled: boolean | null
           is_dust: boolean | null
+          is_mintable: boolean | null
           is_monitored: boolean | null
           is_pump_fun_dev: boolean | null
           last_activity_at: string | null
@@ -2953,6 +2957,7 @@ export type Database = {
           mega_whale_id: string
           minted_token: string | null
           parent_offspring_id: string | null
+          parent_wallet_address: string | null
           score_factors: Json | null
           tokens_bought: Json | null
           tokens_minted: Json | null
@@ -2963,6 +2968,7 @@ export type Database = {
         }
         Insert: {
           balance_checked_at?: string | null
+          bundle_id?: string | null
           created_at?: string | null
           current_sol_balance?: number | null
           depth_level?: number
@@ -2970,10 +2976,13 @@ export type Database = {
           dust_recheck_at?: string | null
           dust_token_value_usd?: number | null
           first_funded_at?: string | null
+          first_seen_at?: string | null
           has_minted?: boolean | null
           id?: string
           is_active_trader?: boolean | null
+          is_bundled?: boolean | null
           is_dust?: boolean | null
+          is_mintable?: boolean | null
           is_monitored?: boolean | null
           is_pump_fun_dev?: boolean | null
           last_activity_at?: string | null
@@ -2982,6 +2991,7 @@ export type Database = {
           mega_whale_id: string
           minted_token?: string | null
           parent_offspring_id?: string | null
+          parent_wallet_address?: string | null
           score_factors?: Json | null
           tokens_bought?: Json | null
           tokens_minted?: Json | null
@@ -2992,6 +3002,7 @@ export type Database = {
         }
         Update: {
           balance_checked_at?: string | null
+          bundle_id?: string | null
           created_at?: string | null
           current_sol_balance?: number | null
           depth_level?: number
@@ -2999,10 +3010,13 @@ export type Database = {
           dust_recheck_at?: string | null
           dust_token_value_usd?: number | null
           first_funded_at?: string | null
+          first_seen_at?: string | null
           has_minted?: boolean | null
           id?: string
           is_active_trader?: boolean | null
+          is_bundled?: boolean | null
           is_dust?: boolean | null
+          is_mintable?: boolean | null
           is_monitored?: boolean | null
           is_pump_fun_dev?: boolean | null
           last_activity_at?: string | null
@@ -3011,6 +3025,7 @@ export type Database = {
           mega_whale_id?: string
           minted_token?: string | null
           parent_offspring_id?: string | null
+          parent_wallet_address?: string | null
           score_factors?: Json | null
           tokens_bought?: Json | null
           tokens_minted?: Json | null
@@ -3260,6 +3275,7 @@ export type Database = {
           id: string
           is_active: boolean | null
           last_activity_at: string | null
+          last_sync_at: string | null
           nickname: string | null
           notes: string | null
           source_cex: string | null
@@ -3278,6 +3294,7 @@ export type Database = {
           id?: string
           is_active?: boolean | null
           last_activity_at?: string | null
+          last_sync_at?: string | null
           nickname?: string | null
           notes?: string | null
           source_cex?: string | null
@@ -3296,6 +3313,7 @@ export type Database = {
           id?: string
           is_active?: boolean | null
           last_activity_at?: string | null
+          last_sync_at?: string | null
           nickname?: string | null
           notes?: string | null
           source_cex?: string | null

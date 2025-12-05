@@ -183,3 +183,6 @@ verify_jwt = false
 
 [functions.dust-wallet-monitor]
 verify_jwt = false
+
+[functions.mega-whale-master-sync]
+verify_jwt = false
