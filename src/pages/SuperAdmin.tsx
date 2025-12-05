@@ -22,13 +22,14 @@ import { Playground } from "@/components/admin/Playground";
 import { AirdropManager } from "@/components/admin/AirdropManager";
 import { WhaleFrenzyDashboard } from "@/components/admin/WhaleFrenzyDashboard";
 import { MegaWhaleDashboard } from "@/components/admin/MegaWhaleDashboard";
+import { ApiProviderManager } from "@/components/admin/ApiProviderManager";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import TransactionHistoryWindow from "@/components/blackbox/TransactionHistoryWindow";
 import { WalletBalanceMonitor } from "@/components/WalletBalanceMonitor";
 import { WalletMonitor } from "@/components/WalletMonitor";
 import { useUserRoles } from "@/hooks/useUserRoles";
-import { Shield, AlertTriangle } from "lucide-react";
+import { Shield, AlertTriangle, Zap } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 
 
@@ -117,6 +118,7 @@ export default function SuperAdmin() {
             <TabsTrigger value="surveys" className="flex-shrink-0">Surveys</TabsTrigger>
             <TabsTrigger value="whale-frenzy" className="flex-shrink-0 data-[state=active]:bg-gradient-to-r data-[state=active]:from-orange-500/30 data-[state=active]:to-red-500/20">🔥 Whale Frenzy</TabsTrigger>
             <TabsTrigger value="mega-whale" className="flex-shrink-0 data-[state=active]:bg-gradient-to-r data-[state=active]:from-yellow-500/30 data-[state=active]:to-amber-500/20">👑 MEGA WHALE</TabsTrigger>
+            <TabsTrigger value="api-providers" className="flex-shrink-0 data-[state=active]:bg-gradient-to-r data-[state=active]:from-red-500/30 data-[state=active]:to-orange-500/20">⚡ API Providers</TabsTrigger>
           </TabsList>
           
           <TabsContent value="wallets">
@@ -216,6 +218,10 @@ export default function SuperAdmin() {
 
           <TabsContent value="mega-whale">
             <MegaWhaleDashboard />
+          </TabsContent>
+
+          <TabsContent value="api-providers">
+            <ApiProviderManager />
           </TabsContent>
         </Tabs>
       </div>
