@@ -2933,6 +2933,7 @@ export type Database = {
       }
       mega_whale_offspring: {
         Row: {
+          balance_checked_at: string | null
           created_at: string | null
           current_sol_balance: number | null
           depth_level: number
@@ -2961,6 +2962,7 @@ export type Database = {
           wallet_address: string
         }
         Insert: {
+          balance_checked_at?: string | null
           created_at?: string | null
           current_sol_balance?: number | null
           depth_level?: number
@@ -2989,6 +2991,7 @@ export type Database = {
           wallet_address: string
         }
         Update: {
+          balance_checked_at?: string | null
           created_at?: string | null
           current_sol_balance?: number | null
           depth_level?: number
@@ -5802,6 +5805,7 @@ export type Database = {
           marked_count: number
           total_active: number
           total_dust: number
+          wallets_without_balance: number
         }[]
       }
       mask_sensitive_data: { Args: { input_text: string }; Returns: string }
