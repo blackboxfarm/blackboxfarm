@@ -73,10 +73,26 @@ serve(async (req) => {
       try {
         const publicKey = new PublicKey(body.pubkey);
         
-        // Get SOL balance
-        const balance = await connection.getBalance(publicKey);
-        const solBalance = balance / 1_000_000_000;
-        logStep("SOL balance fetched", { solBalance });
+        // Get SOL balance - try Helius first, fallback to public RPC
+        let solBalance = 0;
+        let balance = 0;
+        
+        try {
+          balance = await connection.getBalance(publicKey);
+          solBalance = balance / 1_000_000_000;
+          logStep("SOL balance fetched", { solBalance });
+        } catch (balanceError: any) {
+          // If Helius is rate limited, try public RPC
+          if (balanceError.message?.includes('429') || balanceError.message?.includes('Too Many Requests')) {
+            logStep("Helius rate limited, trying public RPC");
+            const publicConnection = new Connection("https://api.mainnet-beta.solana.com", { commitment: "confirmed" });
+            balance = await publicConnection.getBalance(publicKey);
+            solBalance = balance / 1_000_000_000;
+            logStep("SOL balance from public RPC", { solBalance });
+          } else {
+            throw balanceError;
+          }
+        }
 
         let tokens: TokenBalance[] = [];
 
