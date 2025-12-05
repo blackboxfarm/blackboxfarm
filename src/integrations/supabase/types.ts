@@ -2934,11 +2934,16 @@ export type Database = {
       mega_whale_offspring: {
         Row: {
           created_at: string | null
+          current_sol_balance: number | null
           depth_level: number
+          dust_marked_at: string | null
+          dust_recheck_at: string | null
+          dust_token_value_usd: number | null
           first_funded_at: string | null
           has_minted: boolean | null
           id: string
           is_active_trader: boolean | null
+          is_dust: boolean | null
           is_monitored: boolean | null
           is_pump_fun_dev: boolean | null
           last_activity_at: string | null
@@ -2957,11 +2962,16 @@ export type Database = {
         }
         Insert: {
           created_at?: string | null
+          current_sol_balance?: number | null
           depth_level?: number
+          dust_marked_at?: string | null
+          dust_recheck_at?: string | null
+          dust_token_value_usd?: number | null
           first_funded_at?: string | null
           has_minted?: boolean | null
           id?: string
           is_active_trader?: boolean | null
+          is_dust?: boolean | null
           is_monitored?: boolean | null
           is_pump_fun_dev?: boolean | null
           last_activity_at?: string | null
@@ -2980,11 +2990,16 @@ export type Database = {
         }
         Update: {
           created_at?: string | null
+          current_sol_balance?: number | null
           depth_level?: number
+          dust_marked_at?: string | null
+          dust_recheck_at?: string | null
+          dust_token_value_usd?: number | null
           first_funded_at?: string | null
           has_minted?: boolean | null
           id?: string
           is_active_trader?: boolean | null
+          is_dust?: boolean | null
           is_monitored?: boolean | null
           is_pump_fun_dev?: boolean | null
           last_activity_at?: string | null
@@ -5606,6 +5621,17 @@ export type Database = {
           user_id: string
         }[]
       }
+      get_dust_wallet_stats: {
+        Args: { whale_id?: string }
+        Returns: {
+          active_wallets: number
+          avg_dust_sol: number
+          dust_percentage: number
+          dust_wallets: number
+          recently_reactivated: number
+          total_wallets: number
+        }[]
+      }
       get_helius_usage_stats: {
         Args: { p_end_date?: string; p_start_date?: string; p_user_id?: string }
         Returns: {
@@ -5765,6 +5791,18 @@ export type Database = {
           p_wallet_type: string
         }
         Returns: undefined
+      }
+      mark_dust_wallets: {
+        Args: {
+          max_token_value_usd?: number
+          min_sol_threshold?: number
+          recheck_interval_hours?: number
+        }
+        Returns: {
+          marked_count: number
+          total_active: number
+          total_dust: number
+        }[]
       }
       mask_sensitive_data: { Args: { input_text: string }; Returns: string }
       process_active_blackbox_commands: { Args: never; Returns: undefined }

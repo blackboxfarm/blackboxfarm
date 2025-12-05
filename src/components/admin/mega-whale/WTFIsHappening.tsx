@@ -4,11 +4,12 @@ import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Progress } from '@/components/ui/progress';
 import { supabase } from '@/integrations/supabase/client';
 import { WalletSnapshotTree } from './WalletSnapshotTree';
 import { 
   Wallet, GitBranch, Coins, ArrowRightLeft, RefreshCw,
-  Activity, TreePine, Eye, AlertTriangle
+  Activity, TreePine, Eye, AlertTriangle, Trash2, Zap
 } from 'lucide-react';
 import { format } from 'date-fns';
 
@@ -25,6 +26,8 @@ interface Offspring {
   tokens_minted: any;
   first_funded_at: string | null;
   created_at: string;
+  is_dust?: boolean;
+  dust_marked_at?: string | null;
 }
 
 interface EventLog {
@@ -34,6 +37,15 @@ interface EventLog {
   description: string;
   wallet: string;
   details?: string;
+}
+
+interface DustStats {
+  total_wallets: number;
+  active_wallets: number;
+  dust_wallets: number;
+  dust_percentage: number;
+  avg_dust_sol: number;
+  recently_reactivated: number;
 }
 
 interface Props {
@@ -49,9 +61,11 @@ export function WTFIsHappening({ megaWhaleId, userId }: Props) {
   const [offspring, setOffspring] = useState<Offspring[]>([]);
   const [totalOffspringCount, setTotalOffspringCount] = useState(0);
   const [events, setEvents] = useState<EventLog[]>([]);
+  const [dustStats, setDustStats] = useState<DustStats | null>(null);
 
   useEffect(() => {
     loadData();
+    loadDustStats();
   }, [megaWhaleId, userId]);
 
   const loadData = async () => {
@@ -69,7 +83,7 @@ export function WTFIsHappening({ megaWhaleId, userId }: Props) {
       const { count } = await countQuery;
       setTotalOffspringCount(count || 0);
 
-      // Load offspring with limit, prioritizing by depth and SOL
+      // Load offspring with limit, prioritizing active (non-dust) wallets
       let offspringQuery = supabase
         .from('mega_whale_offspring')
         .select('*')
@@ -93,10 +107,28 @@ export function WTFIsHappening({ megaWhaleId, userId }: Props) {
     }
   };
 
+  const loadDustStats = async () => {
+    try {
+      const { data, error } = await supabase.rpc('get_dust_wallet_stats', {
+        whale_id: megaWhaleId || null
+      });
+      
+      if (error) throw error;
+      if (data && data.length > 0) {
+        setDustStats(data[0] as DustStats);
+      }
+    } catch (error) {
+      console.error('Failed to load dust stats:', error);
+    }
+  };
+
   const buildEventLog = (offspringData: Offspring[]) => {
     const logs: EventLog[] = [];
 
     offspringData.forEach(o => {
+      // Skip dust wallets in event log
+      if (o.is_dust) return;
+
       // Wallet creation event
       logs.push({
         id: `create-${o.id}`,
@@ -157,14 +189,19 @@ export function WTFIsHappening({ megaWhaleId, userId }: Props) {
     }
   };
 
-  // Calculate stats
-  const mintersCount = offspring.filter(o => o.has_minted || o.is_pump_fun_dev).length;
-  const tradersCount = offspring.filter(o => o.is_active_trader).length;
-  const lowSolCount = offspring.filter(o => o.total_sol_received < 0.5).length;
-  const depthCounts = offspring.reduce((acc, o) => {
+  // Calculate stats (excluding dust)
+  const activeOffspring = offspring.filter(o => !o.is_dust);
+  const mintersCount = activeOffspring.filter(o => o.has_minted || o.is_pump_fun_dev).length;
+  const tradersCount = activeOffspring.filter(o => o.is_active_trader).length;
+  const lowSolCount = activeOffspring.filter(o => o.total_sol_received < 0.5).length;
+  const depthCounts = activeOffspring.reduce((acc, o) => {
     acc[o.depth_level] = (acc[o.depth_level] || 0) + 1;
     return acc;
   }, {} as Record<number, number>);
+
+  const scanEfficiency = dustStats 
+    ? Math.round((dustStats.dust_wallets / Math.max(dustStats.total_wallets, 1)) * 100) 
+    : 0;
 
   return (
     <Card>
@@ -179,12 +216,62 @@ export function WTFIsHappening({ megaWhaleId, userId }: Props) {
               Event log and wallet family snapshot
             </CardDescription>
           </div>
-          <Button variant="outline" size="sm" onClick={loadData} disabled={loading}>
+          <Button variant="outline" size="sm" onClick={() => { loadData(); loadDustStats(); }} disabled={loading}>
             <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
           </Button>
         </div>
       </CardHeader>
       <CardContent className="space-y-4">
+        {/* Dust Statistics Panel - NEW */}
+        {dustStats && (
+          <div className="p-4 rounded-lg border-2 border-dashed border-orange-500/30 bg-orange-500/5 space-y-3">
+            <div className="flex items-center gap-2 font-medium text-sm">
+              <Trash2 className="h-4 w-4 text-orange-500" />
+              Wallet Status Overview
+            </div>
+            
+            <div className="grid grid-cols-4 gap-3">
+              <div className="text-center p-2 bg-background rounded border">
+                <div className="text-xl font-bold text-green-500">{dustStats.active_wallets}</div>
+                <div className="text-xs text-muted-foreground flex items-center justify-center gap-1">
+                  <span className="w-2 h-2 rounded-full bg-green-500"></span> Active
+                </div>
+              </div>
+              <div className="text-center p-2 bg-background rounded border">
+                <div className="text-xl font-bold text-red-500">{dustStats.dust_wallets}</div>
+                <div className="text-xs text-muted-foreground flex items-center justify-center gap-1">
+                  <span className="w-2 h-2 rounded-full bg-red-500"></span> Dust
+                </div>
+              </div>
+              <div className="text-center p-2 bg-background rounded border">
+                <div className="text-xl font-bold">{dustStats.total_wallets}</div>
+                <div className="text-xs text-muted-foreground">Total</div>
+              </div>
+              <div className="text-center p-2 bg-background rounded border">
+                <div className="text-xl font-bold text-blue-500">{dustStats.recently_reactivated}</div>
+                <div className="text-xs text-muted-foreground flex items-center justify-center gap-1">
+                  <Zap className="h-3 w-3" /> Reactivated
+                </div>
+              </div>
+            </div>
+
+            {/* Scan Efficiency Bar */}
+            <div className="space-y-1">
+              <div className="flex items-center justify-between text-xs">
+                <span className="text-muted-foreground">Scan Efficiency</span>
+                <span className="font-mono">{scanEfficiency}% skip rate</span>
+              </div>
+              <Progress value={scanEfficiency} className="h-2" />
+              <div className="flex items-center justify-between text-xs text-muted-foreground">
+                <span>Avg dust SOL: {dustStats.avg_dust_sol?.toFixed(4) || 0}</span>
+                <span className="text-green-600">
+                  Saving ~{Math.round(dustStats.dust_wallets * 2)} API calls/scan
+                </span>
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* Stats Grid */}
         <div className="grid grid-cols-5 gap-3">
           <div className="p-3 rounded-lg border bg-card text-center">
@@ -216,7 +303,7 @@ export function WTFIsHappening({ megaWhaleId, userId }: Props) {
         {/* Note about limits */}
         <div className="flex items-center gap-2 p-2 rounded bg-muted/50 text-sm">
           <Eye className="h-4 w-4 text-muted-foreground" />
-          <span>Displaying <strong>{offspring.length}</strong> of <strong>{totalOffspringCount.toLocaleString()}</strong> total wallets (prioritized by depth & SOL balance)</span>
+          <span>Displaying <strong>{activeOffspring.length}</strong> active of <strong>{totalOffspringCount.toLocaleString()}</strong> total wallets (prioritized by depth & SOL balance)</span>
         </div>
 
         {/* Sub Tabs */}
@@ -270,7 +357,7 @@ export function WTFIsHappening({ megaWhaleId, userId }: Props) {
 
           <TabsContent value="tree" className="mt-4">
             <WalletSnapshotTree 
-              wallets={offspring}
+              wallets={activeOffspring}
               totalCount={totalOffspringCount}
               displayLimit={DISPLAY_LIMIT}
             />

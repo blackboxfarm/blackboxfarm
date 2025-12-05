@@ -6,11 +6,12 @@ import { Switch } from '@/components/ui/switch';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Slider } from '@/components/ui/slider';
+import { Separator } from '@/components/ui/separator';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { 
   Shield, Cpu, Clock, Wallet, Coins, 
-  Users, Save, RefreshCw, AlertTriangle
+  Users, Save, RefreshCw, AlertTriangle, Trash2, Eye
 } from 'lucide-react';
 
 interface ScanConfig {
@@ -23,10 +24,25 @@ interface ScanConfig {
   prioritizeMinters: boolean;
   skipLowBalanceWallets: boolean;
   scanIntervalMinutes: number;
+  // Dust wallet settings
+  dustSolThreshold: number;
+  dustTokenValueThreshold: number;
+  dustRecheckIntervalHours: number;
+  autoMarkDust: boolean;
+}
+
+interface DustStats {
+  total_wallets: number;
+  active_wallets: number;
+  dust_wallets: number;
+  dust_percentage: number;
+  avg_dust_sol: number;
+  recently_reactivated: number;
 }
 
 interface Props {
   userId: string;
+  megaWhaleId?: string | null;
 }
 
 const DEFAULT_CONFIG: ScanConfig = {
@@ -39,24 +55,31 @@ const DEFAULT_CONFIG: ScanConfig = {
   prioritizeMinters: true,
   skipLowBalanceWallets: true,
   scanIntervalMinutes: 5,
+  // Dust defaults
+  dustSolThreshold: 0.01,
+  dustTokenValueThreshold: 0.0001,
+  dustRecheckIntervalHours: 24,
+  autoMarkDust: true,
 };
 
-export function ScanGuardrails({ userId }: Props) {
+export function ScanGuardrails({ userId, megaWhaleId }: Props) {
   const [config, setConfig] = useState<ScanConfig>(DEFAULT_CONFIG);
   const [saving, setSaving] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [dustStats, setDustStats] = useState<DustStats | null>(null);
+  const [markingDust, setMarkingDust] = useState(false);
 
   useEffect(() => {
     loadConfig();
-  }, [userId]);
+    loadDustStats();
+  }, [userId, megaWhaleId]);
 
   const loadConfig = async () => {
     setLoading(true);
     try {
-      // Try to load from local storage for now (can be migrated to DB later)
       const saved = localStorage.getItem(`mega_whale_scan_config_${userId}`);
       if (saved) {
-        setConfig(JSON.parse(saved));
+        setConfig({ ...DEFAULT_CONFIG, ...JSON.parse(saved) });
       }
     } catch (error) {
       console.error('Failed to load scan config:', error);
@@ -65,10 +88,24 @@ export function ScanGuardrails({ userId }: Props) {
     }
   };
 
+  const loadDustStats = async () => {
+    try {
+      const { data, error } = await supabase.rpc('get_dust_wallet_stats', {
+        whale_id: megaWhaleId || null
+      });
+      
+      if (error) throw error;
+      if (data && data.length > 0) {
+        setDustStats(data[0] as DustStats);
+      }
+    } catch (error) {
+      console.error('Failed to load dust stats:', error);
+    }
+  };
+
   const saveConfig = async () => {
     setSaving(true);
     try {
-      // Save to local storage
       localStorage.setItem(`mega_whale_scan_config_${userId}`, JSON.stringify(config));
       toast.success('Scan guardrails saved');
     } catch (error) {
@@ -83,6 +120,34 @@ export function ScanGuardrails({ userId }: Props) {
     toast.info('Reset to default values');
   };
 
+  const markDustWallets = async () => {
+    setMarkingDust(true);
+    try {
+      const { data, error } = await supabase.rpc('mark_dust_wallets', {
+        min_sol_threshold: config.dustSolThreshold,
+        max_token_value_usd: config.dustTokenValueThreshold,
+        recheck_interval_hours: config.dustRecheckIntervalHours
+      });
+      
+      if (error) throw error;
+      
+      const result = data?.[0];
+      if (result) {
+        toast.success(`Marked ${result.marked_count} wallets as dust. Total: ${result.total_dust} dust, ${result.total_active} active`);
+        loadDustStats();
+      }
+    } catch (error) {
+      console.error('Failed to mark dust wallets:', error);
+      toast.error('Failed to mark dust wallets');
+    } finally {
+      setMarkingDust(false);
+    }
+  };
+
+  const scanEfficiency = dustStats 
+    ? Math.round((dustStats.dust_wallets / Math.max(dustStats.total_wallets, 1)) * 100) 
+    : 0;
+
   return (
     <Card>
       <CardHeader>
@@ -95,6 +160,126 @@ export function ScanGuardrails({ userId }: Props) {
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-6">
+        {/* Dust Wallet Management - NEW SECTION */}
+        <div className="space-y-4 p-4 border-2 border-dashed border-orange-500/50 rounded-lg bg-orange-500/5">
+          <h4 className="font-medium flex items-center gap-2 text-orange-600">
+            <Trash2 className="h-4 w-4" /> Dust Wallet Management
+          </h4>
+          
+          {/* Dust Stats Display */}
+          {dustStats && (
+            <div className="grid grid-cols-3 gap-3 p-3 bg-background rounded-lg border">
+              <div className="text-center">
+                <div className="text-lg font-bold text-green-500">{dustStats.active_wallets}</div>
+                <div className="text-xs text-muted-foreground">Active</div>
+              </div>
+              <div className="text-center">
+                <div className="text-lg font-bold text-red-500">{dustStats.dust_wallets}</div>
+                <div className="text-xs text-muted-foreground">Dust</div>
+              </div>
+              <div className="text-center">
+                <div className="text-lg font-bold">{dustStats.total_wallets}</div>
+                <div className="text-xs text-muted-foreground">Total</div>
+              </div>
+            </div>
+          )}
+
+          {/* Efficiency Badge */}
+          {dustStats && dustStats.total_wallets > 0 && (
+            <div className="flex items-center gap-2 p-2 bg-muted/50 rounded text-sm">
+              <Eye className="h-4 w-4 text-muted-foreground" />
+              <span>
+                Scan Efficiency: <Badge variant={scanEfficiency > 40 ? "default" : "secondary"}>
+                  {scanEfficiency}% reduction
+                </Badge>
+              </span>
+              {dustStats.recently_reactivated > 0 && (
+                <Badge variant="outline" className="text-green-600">
+                  {dustStats.recently_reactivated} reactivated today
+                </Badge>
+              )}
+            </div>
+          )}
+
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-2">
+              <Label>Dust SOL Threshold</Label>
+              <Input
+                type="number"
+                step="0.001"
+                value={config.dustSolThreshold}
+                onChange={(e) => setConfig(prev => ({ 
+                  ...prev, 
+                  dustSolThreshold: parseFloat(e.target.value) || 0.01 
+                }))}
+                min={0}
+                max={1}
+              />
+              <p className="text-xs text-muted-foreground">Wallets below this SOL = dust</p>
+            </div>
+            
+            <div className="space-y-2">
+              <Label>Dust Token Value ($)</Label>
+              <Input
+                type="number"
+                step="0.00001"
+                value={config.dustTokenValueThreshold}
+                onChange={(e) => setConfig(prev => ({ 
+                  ...prev, 
+                  dustTokenValueThreshold: parseFloat(e.target.value) || 0.0001 
+                }))}
+                min={0}
+                max={1}
+              />
+              <p className="text-xs text-muted-foreground">Max token value to be dust</p>
+            </div>
+          </div>
+
+          <div className="space-y-2">
+            <div className="flex items-center justify-between">
+              <Label>Dust Recheck Interval</Label>
+              <Badge variant="outline">{config.dustRecheckIntervalHours} hours</Badge>
+            </div>
+            <Slider
+              value={[config.dustRecheckIntervalHours]}
+              onValueChange={([v]) => setConfig(prev => ({ ...prev, dustRecheckIntervalHours: v }))}
+              min={1}
+              max={72}
+              step={1}
+            />
+            <p className="text-xs text-muted-foreground">
+              How often to check if dust wallets have reactivated
+            </p>
+          </div>
+
+          <div className="flex items-center justify-between p-3 border rounded-lg">
+            <div>
+              <Label>Auto-Mark Dust Wallets</Label>
+              <p className="text-xs text-muted-foreground">Automatically flag inactive low-balance wallets</p>
+            </div>
+            <Switch
+              checked={config.autoMarkDust}
+              onCheckedChange={(v) => setConfig(prev => ({ ...prev, autoMarkDust: v }))}
+            />
+          </div>
+
+          <Button 
+            variant="outline" 
+            className="w-full border-orange-500/50 text-orange-600 hover:bg-orange-500/10"
+            onClick={markDustWallets}
+            disabled={markingDust}
+          >
+            {markingDust ? (
+              <RefreshCw className="h-4 w-4 animate-spin mr-2" />
+            ) : (
+              <Trash2 className="h-4 w-4 mr-2" />
+            )}
+            Mark Dust Wallets Now
+          </Button>
+        </div>
+
+        <Separator />
+
         {/* Display Limits */}
         <div className="space-y-4">
           <h4 className="font-medium flex items-center gap-2">
