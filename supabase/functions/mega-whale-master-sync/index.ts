@@ -91,81 +91,138 @@ serve(async (req) => {
     const processedAddresses = new Set<string>();
     const bundleGroups = new Map<string, string[]>(); // timestamp -> addresses
 
-    // Helper: Fetch transaction history using Solscan API (free tier)
-    async function getTransactionHistory(address: string, limit = 50) {
+    // Helper: Get transaction signatures using Solana RPC
+    async function getTransactionSignatures(address: string, limit = 50) {
       try {
-        // Use Solscan public API
-        const response = await fetch(
-          `https://public-api.solscan.io/account/transactions?account=${address}&limit=${limit}`,
-          {
-            headers: {
-              'Accept': 'application/json',
-              'User-Agent': 'BlackboxFarm/1.0'
-            }
-          }
-        );
+        const response = await fetch(rpcUrl, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            jsonrpc: '2.0',
+            id: 1,
+            method: 'getSignaturesForAddress',
+            params: [address, { limit }]
+          })
+        });
         
         if (!response.ok) {
-          console.error(`[Master Sync] Solscan error for ${address}: ${response.status}`);
+          console.error(`[Master Sync] RPC error for ${address}: ${response.status}`);
           return [];
         }
         
         const data = await response.json();
-        return Array.isArray(data) ? data : [];
+        return data?.result || [];
       } catch (error) {
-        console.error(`[Master Sync] Failed to get tx history for ${address}:`, error);
+        console.error(`[Master Sync] Failed to get signatures for ${address}:`, error);
         return [];
       }
     }
 
-    // Helper: Get SOL transfers from Solscan
+    // Helper: Get parsed transaction to find SOL transfers
+    async function getTransactionDetails(signature: string) {
+      try {
+        const response = await fetch(rpcUrl, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            jsonrpc: '2.0',
+            id: 1,
+            method: 'getTransaction',
+            params: [signature, { encoding: 'jsonParsed', maxSupportedTransactionVersion: 0 }]
+          })
+        });
+        
+        if (!response.ok) return null;
+        
+        const data = await response.json();
+        return data?.result;
+      } catch (error) {
+        console.error(`[Master Sync] Failed to get tx ${signature}:`, error);
+        return null;
+      }
+    }
+
+    // Helper: Extract SOL transfers from transactions
     async function getSolTransfers(address: string, limit = 50) {
-      try {
-        const response = await fetch(
-          `https://public-api.solscan.io/account/solTransfers?account=${address}&limit=${limit}`,
-          {
-            headers: {
-              'Accept': 'application/json',
-              'User-Agent': 'BlackboxFarm/1.0'
+      const signatures = await getTransactionSignatures(address, limit);
+      const transfers: any[] = [];
+      
+      console.log(`[Master Sync] Found ${signatures.length} signatures for ${address.slice(0, 8)}...`);
+      
+      // Process signatures in batches with rate limiting
+      for (let i = 0; i < Math.min(signatures.length, 20); i++) {
+        const sig = signatures[i];
+        
+        await sleep(200); // Rate limit RPC calls
+        
+        const tx = await getTransactionDetails(sig.signature);
+        if (!tx?.meta || !tx.transaction?.message) continue;
+        
+        const preBalances = tx.meta.preBalances || [];
+        const postBalances = tx.meta.postBalances || [];
+        const accountKeys = tx.transaction.message.accountKeys || [];
+        
+        // Find accounts that received SOL (postBalance > preBalance)
+        for (let j = 0; j < accountKeys.length; j++) {
+          const pubkey = accountKeys[j]?.pubkey || accountKeys[j];
+          const pre = preBalances[j] || 0;
+          const post = postBalances[j] || 0;
+          const diff = (post - pre) / 1e9;
+          
+          // If this address sent SOL (balance decreased) and another received it
+          if (pubkey === address && diff < -0.001) {
+            // Find recipient (someone whose balance increased)
+            for (let k = 0; k < accountKeys.length; k++) {
+              if (k === j) continue;
+              const recipientKey = accountKeys[k]?.pubkey || accountKeys[k];
+              const recipientDiff = ((postBalances[k] || 0) - (preBalances[k] || 0)) / 1e9;
+              
+              if (recipientDiff > 0.001 && typeof recipientKey === 'string') {
+                transfers.push({
+                  src: address,
+                  dst: recipientKey,
+                  lamport: Math.abs(diff) * 1e9,
+                  blockTime: tx.blockTime,
+                  signature: sig.signature
+                });
+              }
             }
           }
-        );
-        
-        if (!response.ok) {
-          console.error(`[Master Sync] Solscan sol transfers error for ${address}: ${response.status}`);
-          return [];
         }
-        
-        const data = await response.json();
-        return data?.data || [];
-      } catch (error) {
-        console.error(`[Master Sync] Failed to get sol transfers for ${address}:`, error);
-        return [];
       }
+      
+      return transfers;
     }
 
-    // Helper: Check if wallet has minted tokens using Solscan
+    // Helper: Check if wallet has minted tokens by looking for token creation
     async function checkMintHistory(address: string): Promise<boolean> {
       try {
-        // Check for token accounts created by this wallet
-        const response = await fetch(
-          `https://public-api.solscan.io/account/tokens?account=${address}`,
-          {
-            headers: {
-              'Accept': 'application/json',
-              'User-Agent': 'BlackboxFarm/1.0'
-            }
-          }
-        );
+        // Get token accounts owned by this wallet
+        const response = await fetch(rpcUrl, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            jsonrpc: '2.0',
+            id: 1,
+            method: 'getTokenAccountsByOwner',
+            params: [
+              address,
+              { programId: 'TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA' },
+              { encoding: 'jsonParsed' }
+            ]
+          })
+        });
         
         if (!response.ok) return false;
         
-        const tokens = await response.json();
-        // If wallet has created any SPL tokens, it's likely a minter
-        // We'd need deeper analysis, but for now check if they have tokens with high supply %
-        return Array.isArray(tokens) && tokens.some((t: any) => 
-          t.tokenAmount?.uiAmount > 0 && t.tokenAmount?.decimals >= 6
-        );
+        const data = await response.json();
+        const accounts = data?.result?.value || [];
+        
+        // If wallet has any token accounts with significant balance, might be a minter
+        return accounts.some((acc: any) => {
+          const amount = acc.account?.data?.parsed?.info?.tokenAmount?.uiAmount || 0;
+          return amount > 1000; // Has more than 1000 tokens of something
+        });
       } catch (error) {
         return false;
       }
