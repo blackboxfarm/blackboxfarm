@@ -2449,6 +2449,9 @@ export type Database = {
           created_at: string | null
           distribution_enabled: boolean | null
           distribution_percent_per_wallet: number | null
+          distribution_percent_wallet_1: number | null
+          distribution_percent_wallet_2: number | null
+          distribution_percent_wallet_3: number | null
           distribution_wallet_1: string | null
           distribution_wallet_2: string | null
           distribution_wallet_3: string | null
@@ -2482,6 +2485,9 @@ export type Database = {
           created_at?: string | null
           distribution_enabled?: boolean | null
           distribution_percent_per_wallet?: number | null
+          distribution_percent_wallet_1?: number | null
+          distribution_percent_wallet_2?: number | null
+          distribution_percent_wallet_3?: number | null
           distribution_wallet_1?: string | null
           distribution_wallet_2?: string | null
           distribution_wallet_3?: string | null
@@ -2515,6 +2521,9 @@ export type Database = {
           created_at?: string | null
           distribution_enabled?: boolean | null
           distribution_percent_per_wallet?: number | null
+          distribution_percent_wallet_1?: number | null
+          distribution_percent_wallet_2?: number | null
+          distribution_percent_wallet_3?: number | null
           distribution_wallet_1?: string | null
           distribution_wallet_2?: string | null
           distribution_wallet_3?: string | null
