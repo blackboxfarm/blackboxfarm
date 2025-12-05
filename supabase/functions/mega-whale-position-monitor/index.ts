@@ -29,10 +29,12 @@ interface UserConfig {
   stop_loss_pct: number;
   trailing_stop_enabled: boolean;
   trailing_stop_pct: number;
+  price_check_interval_seconds: number;
+  max_position_age_hours: number;
 }
 
-// Track rapid monitoring to avoid duplicate loops
-const activeRapidMonitors = new Set<string>();
+// Track active monitors to prevent duplicates
+const activeMonitors = new Set<string>();
 
 async function getPriceFromDexScreener(tokenMint: string): Promise<number | null> {
   try {
@@ -45,20 +47,17 @@ async function getPriceFromDexScreener(tokenMint: string): Promise<number | null
     const pairs = data?.pairs;
     if (!pairs || pairs.length === 0) return null;
     
-    // Find SOL pair or use first pair
     const solPair = pairs.find((p: any) => 
       p.quoteToken?.symbol?.toUpperCase() === 'SOL' ||
       p.baseToken?.symbol?.toUpperCase() === 'SOL'
     ) || pairs[0];
     
-    // Get price in SOL
     if (solPair.quoteToken?.symbol?.toUpperCase() === 'SOL') {
       return parseFloat(solPair.priceNative);
     } else if (solPair.baseToken?.symbol?.toUpperCase() === 'SOL') {
       return 1 / parseFloat(solPair.priceNative);
     }
     
-    // Fallback: convert USD price to SOL
     const priceUsd = parseFloat(solPair.priceUsd);
     if (priceUsd && priceUsd > 0) {
       const solResponse = await fetch(
@@ -98,11 +97,8 @@ async function getPriceFromJupiter(tokenMint: string): Promise<number | null> {
 }
 
 async function getTokenPrice(tokenMint: string): Promise<number | null> {
-  // Try Jupiter first (more accurate for SOL pairs)
   const jupPrice = await getPriceFromJupiter(tokenMint);
   if (jupPrice) return jupPrice;
-  
-  // Fallback to DexScreener
   return await getPriceFromDexScreener(tokenMint);
 }
 
@@ -114,7 +110,6 @@ async function executeSell(
   try {
     console.log(`🚨 EXECUTING SELL for position ${position.id}, reason: ${reason}`);
     
-    // Get wallet secret for signing
     const { data: wallet, error: walletError } = await supabase
       .from("mega_whale_auto_buy_wallets")
       .select("id, pubkey, secret_key_encrypted")
@@ -126,7 +121,6 @@ async function executeSell(
       return { success: false, error: "Wallet not found" };
     }
     
-    // Call raydium-swap to execute sell
     const { data: swapResult, error: swapError } = await supabase.functions.invoke(
       "raydium-swap",
       {
@@ -135,7 +129,7 @@ async function executeSell(
           tokenMint: position.token_mint,
           sellAll: true,
           ownerSecret: wallet.secret_key_encrypted,
-          slippageBps: 500, // 5% slippage for sells
+          slippageBps: 500,
           confirmPolicy: "confirmed",
         },
       }
@@ -165,25 +159,20 @@ async function checkAndUpdatePosition(
   supabase: any,
   position: Position,
   config: UserConfig | undefined
-): Promise<{ sold: boolean; reason?: string; error?: string }> {
-  // Get current price
+): Promise<{ sold: boolean; reason?: string; error?: string; currentPrice?: number; pnlPercent?: number }> {
   const currentPrice = await getTokenPrice(position.token_mint);
   
   if (!currentPrice) {
-    console.log(`Could not get price for ${position.token_mint}`);
     return { sold: false, error: "Price unavailable" };
   }
 
-  // Calculate P&L
   const pnlPercent = ((currentPrice - position.entry_price_sol) / position.entry_price_sol) * 100;
   const pnlSol = (currentPrice - position.entry_price_sol) * position.amount_tokens;
   
-  // Update high/low watermarks
   const highPrice = Math.max(position.high_price_sol || currentPrice, currentPrice);
   const lowPrice = Math.min(position.low_price_sol || currentPrice, currentPrice);
   
-  // Update position with current price
-  const { error: updateError } = await supabase
+  await supabase
     .from("mega_whale_positions")
     .update({
       current_price_sol: currentPrice,
@@ -194,52 +183,39 @@ async function checkAndUpdatePosition(
       last_checked_at: new Date().toISOString(),
     })
     .eq("id", position.id)
-    .eq("status", "open"); // Only update if still open
+    .eq("status", "open");
 
-  if (updateError) {
-    console.error(`Failed to update position ${position.id}:`, updateError);
-    return { sold: false, error: "Update failed" };
-  }
-
-  // Update local position state for subsequent checks
   position.current_price_sol = currentPrice;
   position.high_price_sol = highPrice;
   position.low_price_sol = lowPrice;
   position.pnl_percent = pnlPercent;
   
   if (!config || !config.auto_sell_enabled) {
-    return { sold: false };
+    return { sold: false, currentPrice, pnlPercent };
   }
 
-  // Check sell conditions
   let shouldSell = false;
   let sellReason = "";
 
-  // Take Profit check
   if (pnlPercent >= config.take_profit_pct) {
     shouldSell = true;
     sellReason = `take_profit_${config.take_profit_pct}%`;
-    console.log(`🎯 TAKE PROFIT for ${position.token_symbol || position.token_mint}: ${pnlPercent.toFixed(2)}% >= ${config.take_profit_pct}%`);
+    console.log(`🎯 TAKE PROFIT: ${position.token_symbol || position.token_mint} at ${pnlPercent.toFixed(2)}%`);
   }
-  
-  // Stop Loss check
   else if (pnlPercent <= -config.stop_loss_pct) {
     shouldSell = true;
     sellReason = `stop_loss_${config.stop_loss_pct}%`;
-    console.log(`🛑 STOP LOSS for ${position.token_symbol || position.token_mint}: ${pnlPercent.toFixed(2)}% <= -${config.stop_loss_pct}%`);
+    console.log(`🛑 STOP LOSS: ${position.token_symbol || position.token_mint} at ${pnlPercent.toFixed(2)}%`);
   }
-  
-  // Trailing Stop check
   else if (config.trailing_stop_enabled && highPrice > 0) {
     const dropFromHigh = ((highPrice - currentPrice) / highPrice) * 100;
     if (dropFromHigh >= config.trailing_stop_pct && pnlPercent > 0) {
       shouldSell = true;
       sellReason = `trailing_stop_${config.trailing_stop_pct}%_from_high`;
-      console.log(`📉 TRAILING STOP for ${position.token_symbol || position.token_mint}: dropped ${dropFromHigh.toFixed(2)}% from high`);
+      console.log(`📉 TRAILING STOP: ${position.token_symbol || position.token_mint} dropped ${dropFromHigh.toFixed(2)}% from high`);
     }
   }
 
-  // Execute sell if conditions met
   if (shouldSell) {
     const sellResult = await executeSell(supabase, position, sellReason);
     
@@ -256,43 +232,52 @@ async function checkAndUpdatePosition(
         })
         .eq("id", position.id);
 
-      return { sold: true, reason: sellReason };
+      return { sold: true, reason: sellReason, currentPrice, pnlPercent };
     } else {
-      return { sold: false, error: sellResult.error };
+      return { sold: false, error: sellResult.error, currentPrice, pnlPercent };
     }
   }
 
-  return { sold: false };
+  return { sold: false, currentPrice, pnlPercent };
 }
 
-// Rapid monitoring for fresh positions - checks every 5 seconds
-async function rapidMonitorPosition(
+// Continuous monitoring until position is sold
+async function monitorUntilSold(
   supabaseUrl: string,
   supabaseServiceKey: string,
   position: Position,
-  config: UserConfig | undefined,
-  durationSeconds: number = 90
+  config: UserConfig
 ): Promise<void> {
   const monitorKey = position.id;
   
-  // Prevent duplicate monitors
-  if (activeRapidMonitors.has(monitorKey)) {
-    console.log(`Rapid monitor already active for ${position.id}`);
+  if (activeMonitors.has(monitorKey)) {
+    console.log(`Monitor already active for ${position.id}`);
     return;
   }
   
-  activeRapidMonitors.add(monitorKey);
+  activeMonitors.add(monitorKey);
   const supabase = createClient(supabaseUrl, supabaseServiceKey);
   
-  console.log(`🚀 Starting RAPID MONITORING for ${position.token_symbol || position.token_mint} (every 5 sec for ${durationSeconds}s)`);
+  const checkIntervalMs = (config.price_check_interval_seconds || 5) * 1000;
+  const maxAgeMs = (config.max_position_age_hours || 24) * 60 * 60 * 1000;
+  const positionOpenedAt = new Date(position.opened_at).getTime();
   
-  const startTime = Date.now();
-  const checkInterval = 5000; // 5 seconds
+  console.log(`🚀 CONTINUOUS MONITORING started for ${position.token_symbol || position.token_mint}`);
+  console.log(`   Check interval: ${config.price_check_interval_seconds || 5}s | Max age: ${config.max_position_age_hours || 24}h`);
+  console.log(`   Take profit: ${config.take_profit_pct}% | Stop loss: ${config.stop_loss_pct}%`);
+  
   let checkCount = 0;
   
   try {
-    while (Date.now() - startTime < durationSeconds * 1000) {
+    while (true) {
       checkCount++;
+      const now = Date.now();
+      
+      // Safety: stop if position is too old
+      if (now - positionOpenedAt > maxAgeMs) {
+        console.log(`⏰ Position ${position.id} exceeded max age (${config.max_position_age_hours}h), stopping monitor`);
+        break;
+      }
       
       // Re-fetch position to check if still open
       const { data: freshPosition, error } = await supabase
@@ -303,29 +288,29 @@ async function rapidMonitorPosition(
         .single();
       
       if (error || !freshPosition) {
-        console.log(`Position ${position.id} no longer open, stopping rapid monitor`);
+        console.log(`Position ${position.id} no longer open, stopping monitor`);
         break;
       }
       
       const result = await checkAndUpdatePosition(supabase, freshPosition, config);
       
-      console.log(`⚡ Rapid check #${checkCount} for ${position.token_symbol || position.token_mint}: ` +
-        `P&L: ${freshPosition.pnl_percent?.toFixed(2) || '?'}% | ` +
-        `Price: ${freshPosition.current_price_sol?.toFixed(10) || '?'} SOL`);
+      const emoji = result.pnlPercent && result.pnlPercent > 0 ? "📈" : "📉";
+      console.log(`${emoji} Check #${checkCount} | ${position.token_symbol || position.token_mint.slice(0,8)} | ` +
+        `P&L: ${result.pnlPercent?.toFixed(2) || '?'}% | Price: ${result.currentPrice?.toExponential(4) || '?'} SOL`);
       
       if (result.sold) {
-        console.log(`✅ Position sold during rapid monitoring: ${result.reason}`);
+        console.log(`✅ SOLD! ${position.token_symbol || position.token_mint} - ${result.reason}`);
         break;
       }
       
-      // Wait 5 seconds before next check
-      await new Promise(resolve => setTimeout(resolve, checkInterval));
+      // Wait for configured interval before next check
+      await new Promise(resolve => setTimeout(resolve, checkIntervalMs));
     }
   } catch (error) {
-    console.error(`Rapid monitor error for ${position.id}:`, error);
+    console.error(`Monitor error for ${position.id}:`, error);
   } finally {
-    activeRapidMonitors.delete(monitorKey);
-    console.log(`🏁 Rapid monitoring ended for ${position.token_symbol || position.token_mint} after ${checkCount} checks`);
+    activeMonitors.delete(monitorKey);
+    console.log(`🏁 Monitor ended for ${position.token_symbol || position.token_mint} after ${checkCount} checks`);
   }
 }
 
@@ -341,9 +326,8 @@ serve(async (req) => {
 
     const body = await req.json().catch(() => ({}));
     const batchSize = body.batch_size || 20;
-    const action = body.action || "monitor_all";
 
-    console.log(`Position monitor starting - action: ${action}, batch: ${batchSize}`);
+    console.log(`Position monitor triggered, batch: ${batchSize}`);
 
     // Get all open positions
     const { data: positions, error: positionsError } = await supabase
@@ -371,104 +355,52 @@ serve(async (req) => {
 
     console.log(`Found ${positions.length} open positions`);
 
-    // Categorize positions by age
-    const now = Date.now();
-    const FRESH_THRESHOLD_MS = 15 * 60 * 1000; // 15 minutes
-    
-    const freshPositions: Position[] = [];
-    const olderPositions: Position[] = [];
-    
-    for (const pos of positions as Position[]) {
-      const openedAt = new Date(pos.opened_at).getTime();
-      if (now - openedAt < FRESH_THRESHOLD_MS) {
-        freshPositions.push(pos);
-      } else {
-        olderPositions.push(pos);
-      }
-    }
-
-    console.log(`Fresh positions (< 15 min): ${freshPositions.length}, Older: ${olderPositions.length}`);
-
-    // Get unique user IDs to fetch their configs
+    // Get configs for all users
     const userIds = [...new Set(positions.map((p: Position) => p.user_id))];
     
-    const { data: configs, error: configsError } = await supabase
+    const { data: configs } = await supabase
       .from("mega_whale_auto_buy_config")
-      .select("user_id, auto_sell_enabled, take_profit_pct, stop_loss_pct, trailing_stop_enabled, trailing_stop_pct")
+      .select("user_id, auto_sell_enabled, take_profit_pct, stop_loss_pct, trailing_stop_enabled, trailing_stop_pct, price_check_interval_seconds, max_position_age_hours")
       .in("user_id", userIds);
-
-    if (configsError) {
-      console.error("Failed to fetch configs:", configsError);
-    }
 
     const configMap = new Map<string, UserConfig>();
     (configs || []).forEach((c: UserConfig) => configMap.set(c.user_id, c));
 
     const results = {
       processed: 0,
-      priceUpdates: 0,
-      sellsTriggered: 0,
-      rapidMonitorsStarted: 0,
-      errors: [] as string[],
+      monitorsStarted: 0,
+      alreadyMonitoring: 0,
     };
 
-    // Start rapid monitoring for fresh positions (runs in background)
-    for (const position of freshPositions) {
-      const config = configMap.get(position.user_id);
-      
-      // Check once immediately
-      const result = await checkAndUpdatePosition(supabase, position, config);
+    // Start continuous monitoring for each position
+    for (const position of positions as Position[]) {
       results.processed++;
-      results.priceUpdates++;
       
-      if (result.sold) {
-        results.sellsTriggered++;
+      const config = configMap.get(position.user_id);
+      if (!config) {
+        console.log(`No config for user ${position.user_id}, skipping`);
         continue;
       }
       
-      // Start background rapid monitoring if not already active
-      if (!activeRapidMonitors.has(position.id)) {
-        // Use waitUntil to run in background without blocking response
-        EdgeRuntime.waitUntil(
-          rapidMonitorPosition(supabaseUrl, supabaseServiceKey, position, config, 90)
-        );
-        results.rapidMonitorsStarted++;
+      if (activeMonitors.has(position.id)) {
+        results.alreadyMonitoring++;
+        continue;
       }
       
-      await new Promise(resolve => setTimeout(resolve, 100));
+      // Start background monitoring that runs until sold
+      EdgeRuntime.waitUntil(
+        monitorUntilSold(supabaseUrl, supabaseServiceKey, position, config)
+      );
+      results.monitorsStarted++;
     }
 
-    // Process older positions with single check
-    for (const position of olderPositions) {
-      try {
-        results.processed++;
-        const config = configMap.get(position.user_id);
-        const result = await checkAndUpdatePosition(supabase, position, config);
-        
-        results.priceUpdates++;
-        if (result.sold) {
-          results.sellsTriggered++;
-        }
-        if (result.error) {
-          results.errors.push(`${position.id}: ${result.error}`);
-        }
-        
-        await new Promise(resolve => setTimeout(resolve, 200));
-      } catch (posError) {
-        console.error(`Error processing position ${position.id}:`, posError);
-        results.errors.push(`Error for ${position.id}: ${String(posError)}`);
-      }
-    }
-
-    console.log(`Position monitor complete:`, results);
+    console.log(`Monitor results:`, results);
 
     return new Response(
       JSON.stringify({
         success: true,
         ...results,
-        message: freshPositions.length > 0 
-          ? `Started ${results.rapidMonitorsStarted} rapid monitors (5-sec checks) for fresh positions`
-          : "Standard monitoring completed"
+        message: `Started ${results.monitorsStarted} continuous monitors (checking every ${configs?.[0]?.price_check_interval_seconds || 5}s until sold)`
       }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );

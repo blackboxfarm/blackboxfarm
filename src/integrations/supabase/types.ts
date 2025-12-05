@@ -2543,7 +2543,9 @@ export type Database = {
           is_enabled: boolean | null
           last_buy_reset: string | null
           max_daily_buys: number | null
+          max_position_age_hours: number | null
           min_launcher_score: number | null
+          price_check_interval_seconds: number | null
           slippage_bps: number | null
           stop_loss_pct: number | null
           take_profit_pct: number | null
@@ -2561,7 +2563,9 @@ export type Database = {
           is_enabled?: boolean | null
           last_buy_reset?: string | null
           max_daily_buys?: number | null
+          max_position_age_hours?: number | null
           min_launcher_score?: number | null
+          price_check_interval_seconds?: number | null
           slippage_bps?: number | null
           stop_loss_pct?: number | null
           take_profit_pct?: number | null
@@ -2579,7 +2583,9 @@ export type Database = {
           is_enabled?: boolean | null
           last_buy_reset?: string | null
           max_daily_buys?: number | null
+          max_position_age_hours?: number | null
           min_launcher_score?: number | null
+          price_check_interval_seconds?: number | null
           slippage_bps?: number | null
           stop_loss_pct?: number | null
           take_profit_pct?: number | null
