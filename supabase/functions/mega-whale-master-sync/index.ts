@@ -91,31 +91,43 @@ serve(async (req) => {
     const processedAddresses = new Set<string>();
     const bundleGroups = new Map<string, string[]>(); // timestamp -> addresses
 
-    // Helper: Get transaction signatures using Solana RPC
-    async function getTransactionSignatures(address: string, limit = 50) {
-      try {
-        const response = await fetch(rpcUrl, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            jsonrpc: '2.0',
-            id: 1,
-            method: 'getSignaturesForAddress',
-            params: [address, { limit }]
-          })
-        });
-        
-        if (!response.ok) {
-          console.error(`[Master Sync] RPC error for ${address}: ${response.status}`);
-          return [];
+    // Helper: Get transaction signatures using Solana RPC with retry
+    async function getTransactionSignatures(address: string, limit = 50, retries = 3) {
+      for (let attempt = 0; attempt < retries; attempt++) {
+        try {
+          // Add delay before each RPC call to avoid rate limits
+          await sleep(2000);
+          
+          const response = await fetch(rpcUrl, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              jsonrpc: '2.0',
+              id: 1,
+              method: 'getSignaturesForAddress',
+              params: [address, { limit }]
+            })
+          });
+          
+          if (response.status === 429) {
+            console.log(`[Master Sync] Rate limited, waiting 5s... (attempt ${attempt + 1})`);
+            await sleep(5000);
+            continue;
+          }
+          
+          if (!response.ok) {
+            console.error(`[Master Sync] RPC error for ${address}: ${response.status}`);
+            return [];
+          }
+          
+          const data = await response.json();
+          return data?.result || [];
+        } catch (error) {
+          console.error(`[Master Sync] Failed to get signatures for ${address}:`, error);
+          if (attempt < retries - 1) await sleep(3000);
         }
-        
-        const data = await response.json();
-        return data?.result || [];
-      } catch (error) {
-        console.error(`[Master Sync] Failed to get signatures for ${address}:`, error);
-        return [];
       }
+      return [];
     }
 
     // Helper: Get parsed transaction to find SOL transfers
@@ -150,11 +162,11 @@ serve(async (req) => {
       
       console.log(`[Master Sync] Found ${signatures.length} signatures for ${address.slice(0, 8)}...`);
       
-      // Process more signatures but with batching
-      for (let i = 0; i < Math.min(signatures.length, 50); i++) {
+      // Process signatures with rate limiting for public RPC
+      for (let i = 0; i < Math.min(signatures.length, 30); i++) {
         const sig = signatures[i];
         
-        await sleep(100); // Rate limit RPC calls
+        await sleep(500); // Rate limit RPC calls - public RPC needs longer delays
         
         const tx = await getTransactionDetails(sig.signature);
         if (!tx?.transaction?.message) continue;
