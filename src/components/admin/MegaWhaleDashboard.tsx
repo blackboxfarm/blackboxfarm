@@ -1231,7 +1231,7 @@ export function MegaWhaleDashboard() {
 
         {/* Scan Guardrails Tab */}
         <TabsContent value="guardrails">
-          <ScanGuardrails userId={user?.id || ''} />
+          <ScanGuardrails userId={user?.id || ''} megaWhaleId={selectedWhale} />
         </TabsContent>
       </Tabs>
     </div>
