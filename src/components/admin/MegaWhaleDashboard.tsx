@@ -169,6 +169,12 @@ export function MegaWhaleDashboard() {
       if (whalesError) throw whalesError;
       setMegaWhales(whalesData || []);
 
+      // Auto-select if only one whale exists
+      if (whalesData && whalesData.length === 1 && !selectedWhale) {
+        setSelectedWhale(whalesData[0].id);
+        console.log(`[MegaWhaleDashboard] Auto-selected only whale: ${whalesData[0].nickname || whalesData[0].id}`);
+      }
+
       // Load offspring with LIMIT 100 (prioritize by SOL and depth)
       const { data: offspringData, error: offspringError } = await supabase
         .from('mega_whale_offspring')
