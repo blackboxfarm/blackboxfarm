@@ -64,6 +64,19 @@ interface AutoBuyConfig {
   distribution_percent_wallet_1: number;
   distribution_percent_wallet_2: number;
   distribution_percent_wallet_3: number;
+  // Auto-sell settings
+  auto_sell_enabled: boolean;
+  take_profit_pct: number;
+  stop_loss_pct: number;
+  trailing_stop_enabled: boolean;
+  trailing_stop_pct: number;
+  price_check_interval_seconds: number;
+  max_position_age_hours: number;
+  // Partial sell settings
+  sell_percent_initial: number;
+  sell_percent_remaining: number;
+  remaining_position_take_profit_pct: number;
+  remaining_position_stop_loss_pct: number;
 }
 
 interface MegaWhaleWalletManagerProps {
@@ -124,7 +137,7 @@ export function MegaWhaleWalletManager({ userId }: MegaWhaleWalletManagerProps) 
 
   const loadConfig = useCallback(async () => {
     try {
-      // Load auto-buy config
+      // Load auto-buy config (includes sell settings)
       const { data, error } = await supabase.functions.invoke('mega-whale-auto-buyer', {
         body: { action: 'get_config', user_id: userId }
       });
@@ -155,7 +168,20 @@ export function MegaWhaleWalletManager({ userId }: MegaWhaleWalletManagerProps) 
           auto_buy_max_market_cap: alertConfig?.auto_buy_max_market_cap || 50000,
           auto_buy_min_holders: alertConfig?.auto_buy_min_holders || 5,
           auto_buy_min_age_minutes: alertConfig?.auto_buy_min_age_minutes || 3,
-          auto_buy_require_dev_buy: alertConfig?.auto_buy_require_dev_buy ?? true
+          auto_buy_require_dev_buy: alertConfig?.auto_buy_require_dev_buy ?? true,
+          // Sell settings from auto_buy_config
+          auto_sell_enabled: data.config.auto_sell_enabled ?? false,
+          take_profit_pct: data.config.take_profit_pct ?? 50,
+          stop_loss_pct: data.config.stop_loss_pct ?? 20,
+          trailing_stop_enabled: data.config.trailing_stop_enabled ?? false,
+          trailing_stop_pct: data.config.trailing_stop_pct ?? 10,
+          price_check_interval_seconds: data.config.price_check_interval_seconds ?? 5,
+          max_position_age_hours: data.config.max_position_age_hours ?? 24,
+          // Partial sell settings
+          sell_percent_initial: data.config.sell_percent_initial ?? 100,
+          sell_percent_remaining: data.config.sell_percent_remaining ?? 100,
+          remaining_position_take_profit_pct: data.config.remaining_position_take_profit_pct ?? 100,
+          remaining_position_stop_loss_pct: data.config.remaining_position_stop_loss_pct ?? 25
         });
       }
     } catch (error: any) {
@@ -224,7 +250,7 @@ export function MegaWhaleWalletManager({ userId }: MegaWhaleWalletManagerProps) 
     setSavingConfig(true);
     
     try {
-      // Save auto-buy config
+      // Save auto-buy config with sell settings
       const { error } = await supabase.functions.invoke('mega-whale-auto-buyer', {
         body: {
           action: 'update_config',
@@ -234,7 +260,20 @@ export function MegaWhaleWalletManager({ userId }: MegaWhaleWalletManagerProps) 
             buy_amount_sol: config.buy_amount_sol,
             max_daily_buys: config.max_daily_buys,
             min_launcher_score: config.min_launcher_score,
-            slippage_bps: config.slippage_bps
+            slippage_bps: config.slippage_bps,
+            // Sell settings
+            auto_sell_enabled: config.auto_sell_enabled,
+            take_profit_pct: config.take_profit_pct,
+            stop_loss_pct: config.stop_loss_pct,
+            trailing_stop_enabled: config.trailing_stop_enabled,
+            trailing_stop_pct: config.trailing_stop_pct,
+            price_check_interval_seconds: config.price_check_interval_seconds,
+            max_position_age_hours: config.max_position_age_hours,
+            // Partial sell settings
+            sell_percent_initial: config.sell_percent_initial,
+            sell_percent_remaining: config.sell_percent_remaining,
+            remaining_position_take_profit_pct: config.remaining_position_take_profit_pct,
+            remaining_position_stop_loss_pct: config.remaining_position_stop_loss_pct
           }
         }
       });
@@ -856,6 +895,197 @@ export function MegaWhaleWalletManager({ userId }: MegaWhaleWalletManagerProps) 
                         ⚠️ Distribution is enabled but not all wallets are configured. Please add all 3 wallet addresses.
                       </p>
                     )}
+                  </div>
+
+                  {/* Auto-Sell Settings */}
+                  <div className="border-t pt-4 mt-4">
+                    <h4 className="font-semibold mb-3 flex items-center gap-2">
+                      <DollarSign className="h-4 w-4 text-red-500" />
+                      Auto-Sell Settings
+                    </h4>
+                    <p className="text-xs text-muted-foreground mb-4">
+                      Automatically sell positions when profit/loss targets are hit.
+                    </p>
+                    
+                    <div className="flex items-center justify-between mb-4 p-3 bg-muted/50 rounded-lg">
+                      <div>
+                        <Label>Enable Auto-Sell</Label>
+                        <p className="text-xs text-muted-foreground">
+                          Monitor positions and sell when conditions are met
+                        </p>
+                      </div>
+                      <Switch 
+                        checked={config.auto_sell_enabled ?? false}
+                        onCheckedChange={(checked) => setConfig({...config, auto_sell_enabled: checked})}
+                      />
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-4">
+                      <div className="space-y-2">
+                        <div className="flex items-center justify-between">
+                          <Label>Take Profit %</Label>
+                          <span className="text-sm font-medium text-green-600">+{config.take_profit_pct || 50}%</span>
+                        </div>
+                        <Slider 
+                          value={[config.take_profit_pct || 50]}
+                          onValueChange={([value]) => setConfig({...config, take_profit_pct: value})}
+                          min={10}
+                          max={500}
+                          step={10}
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <div className="flex items-center justify-between">
+                          <Label>Stop Loss %</Label>
+                          <span className="text-sm font-medium text-red-600">-{config.stop_loss_pct || 20}%</span>
+                        </div>
+                        <Slider 
+                          value={[config.stop_loss_pct || 20]}
+                          onValueChange={([value]) => setConfig({...config, stop_loss_pct: value})}
+                          min={5}
+                          max={50}
+                          step={5}
+                        />
+                      </div>
+                    </div>
+
+                    <div className="flex items-center justify-between mt-4 p-3 bg-muted/50 rounded-lg">
+                      <div>
+                        <Label>Trailing Stop</Label>
+                        <p className="text-xs text-muted-foreground">
+                          Sell when price drops {config.trailing_stop_pct || 10}% from high
+                        </p>
+                      </div>
+                      <Switch 
+                        checked={config.trailing_stop_enabled ?? false}
+                        onCheckedChange={(checked) => setConfig({...config, trailing_stop_enabled: checked})}
+                      />
+                    </div>
+
+                    {config.trailing_stop_enabled && (
+                      <div className="space-y-2 mt-3">
+                        <div className="flex items-center justify-between">
+                          <Label>Trailing Stop %</Label>
+                          <span className="text-sm font-medium">{config.trailing_stop_pct || 10}%</span>
+                        </div>
+                        <Slider 
+                          value={[config.trailing_stop_pct || 10]}
+                          onValueChange={([value]) => setConfig({...config, trailing_stop_pct: value})}
+                          min={5}
+                          max={50}
+                          step={5}
+                        />
+                      </div>
+                    )}
+
+                    <div className="grid grid-cols-2 gap-4 mt-4">
+                      <div className="space-y-2">
+                        <Label>Price Check Interval</Label>
+                        <Input 
+                          type="number"
+                          value={config.price_check_interval_seconds || 5}
+                          onChange={(e) => setConfig({...config, price_check_interval_seconds: parseInt(e.target.value) || 5})}
+                        />
+                        <p className="text-xs text-muted-foreground">Seconds between checks</p>
+                      </div>
+                      <div className="space-y-2">
+                        <Label>Max Position Age</Label>
+                        <Input 
+                          type="number"
+                          value={config.max_position_age_hours || 24}
+                          onChange={(e) => setConfig({...config, max_position_age_hours: parseInt(e.target.value) || 24})}
+                        />
+                        <p className="text-xs text-muted-foreground">Hours to monitor</p>
+                      </div>
+                    </div>
+
+                    {/* Partial Sell Settings */}
+                    <div className="mt-6 p-4 border rounded-lg bg-gradient-to-r from-green-500/5 to-red-500/5">
+                      <h5 className="font-semibold mb-3 flex items-center gap-2">
+                        <Coins className="h-4 w-4" />
+                        Partial Sell Strategy
+                      </h5>
+                      <p className="text-xs text-muted-foreground mb-4">
+                        Sell a portion of your position and let the rest ride with new targets.
+                      </p>
+                      
+                      <div className="space-y-4">
+                        <div className="space-y-2">
+                          <div className="flex items-center justify-between">
+                            <Label>Initial Sell %</Label>
+                            <span className="text-sm font-medium">{config.sell_percent_initial || 100}%</span>
+                          </div>
+                          <Slider 
+                            value={[config.sell_percent_initial || 100]}
+                            onValueChange={([value]) => setConfig({...config, sell_percent_initial: value})}
+                            min={10}
+                            max={100}
+                            step={10}
+                          />
+                          <p className="text-xs text-muted-foreground">
+                            {config.sell_percent_initial === 100 
+                              ? "Selling 100% on first trigger (no remaining position)" 
+                              : `Sell ${config.sell_percent_initial}% on first take profit, keep ${100 - (config.sell_percent_initial || 100)}% riding`}
+                          </p>
+                        </div>
+
+                        {(config.sell_percent_initial || 100) < 100 && (
+                          <>
+                            <div className="border-t pt-4">
+                              <p className="text-xs font-medium mb-3 text-primary">
+                                Settings for remaining {100 - (config.sell_percent_initial || 100)}% position:
+                              </p>
+                              
+                              <div className="grid grid-cols-2 gap-4">
+                                <div className="space-y-2">
+                                  <div className="flex items-center justify-between">
+                                    <Label className="text-xs">New Take Profit</Label>
+                                    <span className="text-xs font-medium text-green-600">+{config.remaining_position_take_profit_pct || 100}%</span>
+                                  </div>
+                                  <Slider 
+                                    value={[config.remaining_position_take_profit_pct || 100]}
+                                    onValueChange={([value]) => setConfig({...config, remaining_position_take_profit_pct: value})}
+                                    min={50}
+                                    max={500}
+                                    step={25}
+                                  />
+                                </div>
+                                <div className="space-y-2">
+                                  <div className="flex items-center justify-between">
+                                    <Label className="text-xs">New Stop Loss</Label>
+                                    <span className="text-xs font-medium text-red-600">-{config.remaining_position_stop_loss_pct || 25}%</span>
+                                  </div>
+                                  <Slider 
+                                    value={[config.remaining_position_stop_loss_pct || 25]}
+                                    onValueChange={([value]) => setConfig({...config, remaining_position_stop_loss_pct: value})}
+                                    min={10}
+                                    max={50}
+                                    step={5}
+                                  />
+                                </div>
+                              </div>
+
+                              <div className="space-y-2 mt-4">
+                                <div className="flex items-center justify-between">
+                                  <Label className="text-xs">Remaining Sell %</Label>
+                                  <span className="text-xs font-medium">{config.sell_percent_remaining || 100}%</span>
+                                </div>
+                                <Slider 
+                                  value={[config.sell_percent_remaining || 100]}
+                                  onValueChange={([value]) => setConfig({...config, sell_percent_remaining: value})}
+                                  min={25}
+                                  max={100}
+                                  step={25}
+                                />
+                                <p className="text-xs text-muted-foreground">
+                                  % of remaining position to sell on subsequent triggers
+                                </p>
+                              </div>
+                            </div>
+                          </>
+                        )}
+                      </div>
+                    </div>
                   </div>
 
                   <Button onClick={saveConfig} disabled={savingConfig} className="w-full">
