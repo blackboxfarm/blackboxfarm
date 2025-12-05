@@ -54,6 +54,13 @@ interface Offspring {
   tokens_minted: unknown;
   tokens_bought: unknown;
   tokens_sold: unknown;
+  has_minted?: boolean;
+  minted_token?: string | null;
+  is_bundled?: boolean;
+  bundle_id?: string | null;
+  current_sol_balance?: number;
+  last_activity_at?: string | null;
+  balance_checked_at?: string | null;
 }
 
 interface TokenAlert {
@@ -151,6 +158,10 @@ export function MegaWhaleDashboard() {
   
   // CSV Import state
   const [importingCsv, setImportingCsv] = useState(false);
+  
+  // Offspring scan state
+  const [scanningOffspring, setScanningOffspring] = useState(false);
+  const [scanResult, setScanResult] = useState<any>(null);
 
   useEffect(() => {
     if (user?.id) {
@@ -341,10 +352,10 @@ export function MegaWhaleDashboard() {
       });
 
       if (error) throw error;
-      const scanResult = data.scan_result || {};
-      const message = scanResult.new_offspring > 0 
-        ? `Found ${scanResult.new_offspring} new offspring (${scanResult.total_scanned} scanned)`
-        : `No new offspring found (${scanResult.total_scanned} wallets scanned)`;
+      const scanRes = data.scan_result || {};
+      const message = scanRes.new_offspring > 0 
+        ? `Found ${scanRes.new_offspring} new offspring (${scanRes.total_scanned} scanned)`
+        : `No new offspring found (${scanRes.total_scanned} wallets scanned)`;
       toast.success('Scan complete', { description: message });
       loadData();
     } catch (error: any) {
@@ -370,6 +381,33 @@ export function MegaWhaleDashboard() {
       loadData();
     } catch (error: any) {
       toast.error(error.message || 'Failed to toggle monitoring');
+    }
+  };
+
+  const scanOffspringWallets = async () => {
+    setScanningOffspring(true);
+    setScanResult(null);
+    
+    try {
+      const { data, error } = await supabase.functions.invoke('scan-offspring-wallets', {
+        body: { 
+          mega_whale_id: selectedWhale, 
+          batch_size: 100 
+        }
+      });
+      
+      if (error) throw error;
+      
+      setScanResult(data);
+      toast.success(`Scanned ${data.totalScanned} wallets`, {
+        description: `${data.mintedCount} minted, ${data.bundledCount} bundled, ${data.activeCount} active`
+      });
+      loadData();
+    } catch (error: any) {
+      console.error('[ScanOffspring] Error:', error);
+      toast.error(error.message || 'Failed to scan wallets');
+    } finally {
+      setScanningOffspring(false);
     }
   };
 
@@ -803,30 +841,81 @@ export function MegaWhaleDashboard() {
         </TabsContent>
 
         <TabsContent value="offspring" className="space-y-4">
+          {/* Scan Results Banner */}
+          {scanResult && (
+            <Card className="border-primary/50 bg-primary/5">
+              <CardContent className="pt-4">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-6">
+                    <div>
+                      <div className="text-2xl font-bold">{scanResult.totalScanned}</div>
+                      <p className="text-xs text-muted-foreground">Scanned</p>
+                    </div>
+                    <div>
+                      <div className="text-2xl font-bold text-yellow-500">{scanResult.mintedCount}</div>
+                      <p className="text-xs text-muted-foreground">Minted Tokens</p>
+                    </div>
+                    <div>
+                      <div className="text-2xl font-bold text-purple-500">{scanResult.bundledCount}</div>
+                      <p className="text-xs text-muted-foreground">Bundled</p>
+                    </div>
+                    <div>
+                      <div className="text-2xl font-bold text-green-500">{scanResult.activeCount}</div>
+                      <p className="text-xs text-muted-foreground">Active</p>
+                    </div>
+                  </div>
+                  <Button variant="ghost" size="sm" onClick={() => setScanResult(null)}>
+                    Dismiss
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+          )}
+          
           <Card>
             <CardHeader>
               <div className="flex items-center justify-between">
                 <div>
                   <CardTitle className="text-lg">Offspring Wallet Network</CardTitle>
                   <CardDescription>
-                    Wallets funded by mega whales (up to 4 levels deep)
+                    Wallets funded by mega whales - {filteredOffspring.length} wallets
                   </CardDescription>
                 </div>
-                {megaWhales.length > 0 && (
-                  <Select value={selectedWhale || 'all'} onValueChange={(v) => setSelectedWhale(v === 'all' ? null : v)}>
-                    <SelectTrigger className="w-[200px]">
-                      <SelectValue placeholder="Filter by whale..." />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="all">All Whales</SelectItem>
-                      {megaWhales.map(w => (
-                        <SelectItem key={w.id} value={w.id}>
-                          {w.nickname || w.wallet_address.slice(0, 8)}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                )}
+                <div className="flex items-center gap-2">
+                  <Button
+                    variant="default"
+                    size="sm"
+                    onClick={scanOffspringWallets}
+                    disabled={scanningOffspring || filteredOffspring.length === 0}
+                  >
+                    {scanningOffspring ? (
+                      <>
+                        <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
+                        Scanning...
+                      </>
+                    ) : (
+                      <>
+                        <Zap className="h-4 w-4 mr-2" />
+                        Scan All
+                      </>
+                    )}
+                  </Button>
+                  {megaWhales.length > 0 && (
+                    <Select value={selectedWhale || 'all'} onValueChange={(v) => setSelectedWhale(v === 'all' ? null : v)}>
+                      <SelectTrigger className="w-[200px]">
+                        <SelectValue placeholder="Filter by whale..." />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">All Whales</SelectItem>
+                        {megaWhales.map(w => (
+                          <SelectItem key={w.id} value={w.id}>
+                            {w.nickname || w.wallet_address.slice(0, 8)}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  )}
+                </div>
               </div>
             </CardHeader>
             <CardContent>
@@ -836,15 +925,15 @@ export function MegaWhaleDashboard() {
                     <TableRow>
                       <TableHead>Depth</TableHead>
                       <TableHead>Wallet</TableHead>
-                      <TableHead>SOL Received</TableHead>
-                      <TableHead>Pump.fun Dev?</TableHead>
-                      <TableHead>Active Trader?</TableHead>
-                      <TableHead>First Funded</TableHead>
+                      <TableHead>SOL Balance</TableHead>
+                      <TableHead>Minted?</TableHead>
+                      <TableHead>Bundled?</TableHead>
+                      <TableHead>Last Activity</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
                     {filteredOffspring.map((o) => (
-                      <TableRow key={o.id}>
+                      <TableRow key={o.id} className={o.has_minted ? 'bg-yellow-500/10' : o.is_bundled ? 'bg-purple-500/10' : ''}>
                         <TableCell>
                           <Badge variant={o.depth_level === 1 ? 'default' : 'secondary'}>
                             Level {o.depth_level}
@@ -862,26 +951,57 @@ export function MegaWhaleDashboard() {
                           </a>
                         </TableCell>
                         <TableCell>
-                          <span className="font-medium">{o.total_sol_received?.toFixed(4)} SOL</span>
+                          <span className="font-medium">
+                            {o.current_sol_balance !== undefined 
+                              ? `${o.current_sol_balance.toFixed(4)} SOL` 
+                              : <span className="text-muted-foreground text-xs">Not scanned</span>
+                            }
+                          </span>
                         </TableCell>
                         <TableCell>
-                          {o.is_pump_fun_dev ? (
-                            <Badge variant="destructive">Yes</Badge>
+                          {o.has_minted ? (
+                            <div className="flex flex-col gap-1">
+                              <Badge variant="destructive" className="w-fit">
+                                <Coins className="h-3 w-3 mr-1" />
+                                Minted
+                              </Badge>
+                              {o.minted_token && (
+                                <a
+                                  href={`https://solscan.io/token/${o.minted_token}`}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="text-xs text-muted-foreground hover:text-primary"
+                                >
+                                  {o.minted_token.slice(0, 6)}...
+                                </a>
+                              )}
+                            </div>
+                          ) : o.balance_checked_at ? (
+                            <span className="text-muted-foreground text-xs">No</span>
                           ) : (
-                            <span className="text-muted-foreground">No</span>
+                            <span className="text-muted-foreground text-xs">-</span>
                           )}
                         </TableCell>
                         <TableCell>
-                          {o.is_active_trader ? (
-                            <Badge variant="default">Yes</Badge>
+                          {o.is_bundled ? (
+                            <Badge variant="secondary" className="bg-purple-500/20 text-purple-400">
+                              <GitBranch className="h-3 w-3 mr-1" />
+                              {o.bundle_id?.slice(0, 12) || 'Bundled'}
+                            </Badge>
+                          ) : o.balance_checked_at ? (
+                            <span className="text-muted-foreground text-xs">No</span>
                           ) : (
-                            <span className="text-muted-foreground">No</span>
+                            <span className="text-muted-foreground text-xs">-</span>
                           )}
                         </TableCell>
                         <TableCell>
-                          {o.first_funded_at ? (
+                          {o.last_activity_at ? (
                             <span className="text-xs">
-                              {format(new Date(o.first_funded_at), 'MMM d, yyyy')}
+                              {format(new Date(o.last_activity_at), 'MMM d, HH:mm')}
+                            </span>
+                          ) : o.first_funded_at ? (
+                            <span className="text-xs text-muted-foreground">
+                              Funded: {format(new Date(o.first_funded_at), 'MMM d')}
                             </span>
                           ) : (
                             <span className="text-xs text-muted-foreground">Unknown</span>
