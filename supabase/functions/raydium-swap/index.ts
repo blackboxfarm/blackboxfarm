@@ -325,9 +325,20 @@ serve(async (req) => {
         outputMint = isPumpToken ? NATIVE_MINT.toBase58() : USDC_MINT;
         if (sellAll) {
           const ata = getAssociatedTokenAddress(new PublicKey(tokenMint), owner.publicKey);
-          const bal = await connection.getTokenAccountBalance(ata).catch(() => null);
+          console.log("Sell debug:", {
+            ownerPubkey: owner.publicKey.toBase58(),
+            tokenMint,
+            ataAddress: ata.toBase58()
+          });
+          const bal = await connection.getTokenAccountBalance(ata).catch((e) => {
+            console.log("getTokenAccountBalance error:", e?.message || e);
+            return null;
+          });
+          console.log("Token balance result:", bal?.value);
           const raw = bal?.value?.amount ? Number(bal.value.amount) : 0;
-          if (!Number.isFinite(raw) || raw <= 0) return bad("No token balance to sell");
+          if (!Number.isFinite(raw) || raw <= 0) {
+            return bad(`No token balance to sell. Owner: ${owner.publicKey.toBase58().slice(0,8)}..., ATA: ${ata.toBase58().slice(0,8)}...`);
+          }
           amount = Math.floor(raw);
         } else {
           if (amount == null) return bad("Provide amount when not sellAll");
