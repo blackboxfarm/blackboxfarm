@@ -10,7 +10,7 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
-import { Plus, Copy, Trash2, ChevronDown, ChevronRight, Lock, Unlock, Play, History, Edit, Archive, RotateCcw, RefreshCw, ExternalLink } from "lucide-react";
+import { Plus, Copy, Trash2, ChevronDown, ChevronRight, Lock, Unlock, Play, History, Edit, Archive, RotateCcw, RefreshCw, ExternalLink, DollarSign, Loader2 } from "lucide-react";
 import { format } from "date-fns";
 import type { Json } from "@/integrations/supabase/types";
 
@@ -66,6 +66,13 @@ interface TokenBalance {
   name?: string | null;
 }
 
+interface SellState {
+  tokenMint: string;
+  walletId: string;
+  loading: boolean;
+  percentage: number;
+}
+
 const MEMO_MAX_CHARS = 280;
 
 export function AirdropManager() {
@@ -103,6 +110,7 @@ export function AirdropManager() {
   const [refreshingWallet, setRefreshingWallet] = useState<string | null>(null);
   const [walletTokens, setWalletTokens] = useState<Record<string, TokenBalance[]>>({});
   const [tokenNames, setTokenNames] = useState<Record<string, string>>({});
+  const [sellState, setSellState] = useState<SellState | null>(null);
 
   const loadWallets = useCallback(async () => {
     const { data, error } = await supabase
@@ -257,6 +265,65 @@ export function AirdropManager() {
       toast.error(error.message || "Failed to refresh balance");
     } finally {
       setRefreshingWallet(null);
+    }
+  };
+
+  const sellToken = async (walletId: string, pubkey: string, tokenMint: string, percentage: number = 100) => {
+    const wallet = wallets.find(w => w.id === walletId);
+    if (!wallet) {
+      toast.error("Wallet not found");
+      return;
+    }
+
+    setSellState({ walletId, tokenMint, loading: true, percentage });
+
+    try {
+      // Get the wallet's encrypted secret from the database
+      const { data: walletData, error: walletError } = await supabase
+        .from("airdrop_wallets")
+        .select("secret_key_encrypted")
+        .eq("id", walletId)
+        .single();
+
+      if (walletError || !walletData?.secret_key_encrypted) {
+        throw new Error("Failed to get wallet secret");
+      }
+
+      // Calculate amount based on percentage
+      const tokens = walletTokens[walletId] || [];
+      const token = tokens.find(t => t.mint === tokenMint);
+      if (!token || token.balance <= 0) {
+        throw new Error("No token balance to sell");
+      }
+
+      const rawAmount = Math.floor((token.balance * Math.pow(10, token.decimals)) * (percentage / 100));
+      
+      // Call raydium-swap with the encrypted secret
+      const { data, error } = await supabase.functions.invoke("raydium-swap", {
+        body: {
+          side: "sell",
+          tokenMint,
+          sellAll: percentage === 100,
+          amount: percentage < 100 ? rawAmount : undefined,
+          slippageBps: 300, // 3% slippage for safety
+        },
+        headers: {
+          "x-owner-secret": walletData.secret_key_encrypted
+        }
+      });
+
+      if (error) throw error;
+      if (data?.error) throw new Error(data.error);
+
+      toast.success(`Sold ${percentage}% of ${token.symbol || tokenMint.slice(0, 8)}! Tx: ${data.signature?.slice(0, 8)}...`);
+      
+      // Refresh balance after sell
+      await refreshWalletBalance(walletId, pubkey);
+    } catch (error: any) {
+      console.error("Sell error:", error);
+      toast.error(error.message || "Failed to sell token");
+    } finally {
+      setSellState(null);
     }
   };
 
@@ -647,7 +714,9 @@ export function AirdropManager() {
                       <div className="mb-6">
                         <h3 className="font-medium mb-3">Token Balances ({walletTokens[wallet.id].length})</h3>
                         <div className="space-y-2 max-h-48 overflow-y-auto">
-                          {walletTokens[wallet.id].map((token) => (
+                          {walletTokens[wallet.id].map((token) => {
+                            const isSelling = sellState?.walletId === wallet.id && sellState?.tokenMint === token.mint && sellState?.loading;
+                            return (
                             <div key={token.mint} className="flex items-center justify-between py-2 px-3 bg-muted/30 rounded-lg">
                               <div className="flex items-center gap-2">
                                 <div className="flex flex-col">
@@ -664,9 +733,34 @@ export function AirdropManager() {
                                   <Copy className="h-3 w-3" />
                                 </Button>
                               </div>
-                              <span className="font-mono font-medium">{token.balance.toLocaleString()}</span>
+                              <div className="flex items-center gap-2">
+                                <span className="font-mono font-medium">{token.balance.toLocaleString()}</span>
+                                <div className="flex gap-1">
+                                  <Button
+                                    variant="outline"
+                                    size="sm"
+                                    className="h-7 px-2 text-xs"
+                                    onClick={() => sellToken(wallet.id, wallet.pubkey, token.mint, 50)}
+                                    disabled={isSelling}
+                                    title="Sell 50%"
+                                  >
+                                    {isSelling && sellState?.percentage === 50 ? <Loader2 className="h-3 w-3 animate-spin" /> : "50%"}
+                                  </Button>
+                                  <Button
+                                    variant="default"
+                                    size="sm"
+                                    className="h-7 px-2 text-xs bg-green-600 hover:bg-green-700"
+                                    onClick={() => sellToken(wallet.id, wallet.pubkey, token.mint, 100)}
+                                    disabled={isSelling}
+                                    title="Sell All"
+                                  >
+                                    {isSelling && sellState?.percentage === 100 ? <Loader2 className="h-3 w-3 animate-spin" /> : <><DollarSign className="h-3 w-3 mr-1" />Sell</>}
+                                  </Button>
+                                </div>
+                              </div>
                             </div>
-                          ))}
+                            );
+                          })}
                         </div>
                       </div>
                     )}
