@@ -372,7 +372,6 @@ serve(async (req) => {
           
           console.log("Found token balance:", balanceResult.balance, "using program:", balanceResult.programId.toBase58());
           amount = Math.floor(balanceResult.balance);
-          amount = Math.floor(raw);
         } else {
           if (amount == null) return bad("Provide amount when not sellAll");
         }
