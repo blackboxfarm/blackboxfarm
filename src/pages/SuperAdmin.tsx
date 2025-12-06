@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { SuperAdminWallets } from "@/components/SuperAdminWallets";
 import { AdminWalletRecovery } from "@/components/AdminWalletRecovery";
+import { MasterWalletsDashboard } from "@/components/admin/MasterWalletsDashboard";
 import { SecurityDashboard } from "@/components/security/SecurityDashboard";
 import { AccountViewer } from "@/components/AccountViewer";
 import { BaglessHoldersReport } from "@/components/BaglessHoldersReport";
@@ -94,6 +95,7 @@ export default function SuperAdmin() {
         </div>
         <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
           <TabsList className="flex flex-wrap w-full h-auto gap-1 p-2">
+            <TabsTrigger value="master-wallets" className="flex-shrink-0 data-[state=active]:bg-gradient-to-r data-[state=active]:from-amber-500/30 data-[state=active]:to-yellow-500/20">👑 Master Wallets</TabsTrigger>
             <TabsTrigger value="wallets" className="flex-shrink-0">Wallet Management</TabsTrigger>
             <TabsTrigger value="recovery" className="flex-shrink-0">Wallet Recovery</TabsTrigger>
             <TabsTrigger value="monitor" className="flex-shrink-0">Wallet Monitor</TabsTrigger>
@@ -121,6 +123,10 @@ export default function SuperAdmin() {
             <TabsTrigger value="api-providers" className="flex-shrink-0 data-[state=active]:bg-gradient-to-r data-[state=active]:from-red-500/30 data-[state=active]:to-orange-500/20">⚡ API Providers</TabsTrigger>
           </TabsList>
           
+          <TabsContent value="master-wallets">
+            <MasterWalletsDashboard />
+          </TabsContent>
+
           <TabsContent value="wallets">
             <div className="space-y-6">
               <WalletBalanceMonitor />
