@@ -701,11 +701,19 @@ serve(async (req) => {
             try {
               const vtx = VersionedTransaction.deserialize(pumpResult.tx);
               vtx.sign([owner]);
-              const sig = await connection.sendTransaction(vtx, { skipPreflight: true, maxRetries: 2 });
+              
+              // Use public RPC for PumpPortal transactions (avoid Helius auth issues)
+              const publicRpc = new Connection("https://api.mainnet-beta.solana.com", { commitment: "confirmed" });
+              const { blockhash, lastValidBlockHeight } = await publicRpc.getLatestBlockhash("confirmed");
+              
+              // Update blockhash before sending
+              (vtx as any).message.recentBlockhash = blockhash;
+              vtx.sign([owner]); // Re-sign with new blockhash
+              
+              const sig = await publicRpc.sendTransaction(vtx, { skipPreflight: true, maxRetries: 3 });
               
               if (confirmPolicy !== "none") {
-                const { blockhash, lastValidBlockHeight } = await connection.getLatestBlockhash("confirmed");
-                await connection.confirmTransaction({ blockhash, lastValidBlockHeight, signature: sig }, confirmPolicy as any);
+                await publicRpc.confirmTransaction({ blockhash, lastValidBlockHeight, signature: sig }, confirmPolicy as any);
               }
               
               console.log("PumpPortal sell successful:", sig);
