@@ -320,9 +320,11 @@ serve(async (req) => {
         }
       } else if (side === "sell") {
         inputMint = tokenMint;
-        outputMint = USDC_MINT;
+        // For pump.fun tokens, sell to SOL since they don't have USDC pairs
+        const isPumpToken = tokenMint.endsWith('pump') || tokenMint.includes('pump');
+        outputMint = isPumpToken ? NATIVE_MINT.toBase58() : USDC_MINT;
         if (sellAll) {
-          const ata = await getAssociatedTokenAddress(new PublicKey(tokenMint), owner.publicKey);
+          const ata = getAssociatedTokenAddress(new PublicKey(tokenMint), owner.publicKey);
           const bal = await connection.getTokenAccountBalance(ata).catch(() => null);
           const raw = bal?.value?.amount ? Number(bal.value.amount) : 0;
           if (!Number.isFinite(raw) || raw <= 0) return bad("No token balance to sell");
