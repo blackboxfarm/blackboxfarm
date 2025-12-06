@@ -162,12 +162,8 @@ serve(async (req) => {
   let owner: Keypair | undefined;
 
   try {
-    // Simple token guard (no Supabase Auth required). Provide x-function-token header to call.
-    const fnToken = Deno.env.get("FUNCTION_TOKEN");
-    if (fnToken) {
-      const headerToken = req.headers.get("x-function-token") || (req.headers.get("authorization")?.replace(/^Bearer\s+/i, "") ?? "");
-      if (headerToken !== fnToken) return bad("Unauthorized", 401);
-    }
+    // Authentication via x-owner-secret header or ownerSecret body param
+    // The x-function-token check is disabled as we validate via the encrypted wallet secret
 
     const body = await req.json();
     const {
