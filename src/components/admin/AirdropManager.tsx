@@ -119,6 +119,7 @@ export function AirdropManager() {
   const [sellState, setSellState] = useState<SellState | null>(null);
   const [tokenPrices, setTokenPrices] = useState<Record<string, TokenPrice>>({});
   const [sellPercentages, setSellPercentages] = useState<Record<string, number>>({});
+  const DEFAULT_SELL_PERCENTAGE = 100;
 
   const loadWallets = useCallback(async () => {
     const { data, error } = await supabase
@@ -251,25 +252,53 @@ export function AirdropManager() {
       const missingMints = mints.filter(m => !tokenPrices[m]);
       if (missingMints.length === 0) return;
 
-      // Use DexScreener API for token prices
-      const response = await fetch(`https://api.dexscreener.com/latest/dex/tokens/${missingMints.join(',')}`);
-      if (!response.ok) return;
-      
-      const data = await response.json();
-      const pairs = data.pairs || [];
-      
       const newPrices: Record<string, TokenPrice> = {};
-      for (const mint of missingMints) {
-        const pair = pairs.find((p: any) => 
-          p.baseToken?.address === mint || p.quoteToken?.address === mint
-        );
-        if (pair) {
-          const isBase = pair.baseToken?.address === mint;
-          newPrices[mint] = {
-            priceUsd: isBase ? parseFloat(pair.priceUsd || '0') : (1 / parseFloat(pair.priceUsd || '1')),
-            symbol: isBase ? pair.baseToken?.symbol : pair.quoteToken?.symbol,
-            name: isBase ? pair.baseToken?.name : pair.quoteToken?.name,
-          };
+
+      // Try DexScreener API for token prices
+      try {
+        const response = await fetch(`https://api.dexscreener.com/latest/dex/tokens/${missingMints.join(',')}`);
+        if (response.ok) {
+          const data = await response.json();
+          const pairs = data.pairs || [];
+          
+          for (const mint of missingMints) {
+            const pair = pairs.find((p: any) => 
+              p.baseToken?.address === mint || p.quoteToken?.address === mint
+            );
+            if (pair) {
+              const isBase = pair.baseToken?.address === mint;
+              newPrices[mint] = {
+                priceUsd: isBase ? parseFloat(pair.priceUsd || '0') : (1 / parseFloat(pair.priceUsd || '1')),
+                symbol: isBase ? pair.baseToken?.symbol : pair.quoteToken?.symbol,
+                name: isBase ? pair.baseToken?.name : pair.quoteToken?.name,
+              };
+            }
+          }
+        }
+      } catch (e) {
+        console.error("DexScreener fetch failed:", e);
+      }
+
+      // For tokens not found in DexScreener, try Helius DAS API via our token-metadata function
+      const stillMissing = missingMints.filter(m => !newPrices[m]);
+      if (stillMissing.length > 0) {
+        try {
+          const { data } = await supabase.functions.invoke("token-metadata", {
+            body: { mints: stillMissing }
+          });
+          if (data?.tokens) {
+            for (const token of data.tokens) {
+              if (token.mint && (token.name || token.symbol)) {
+                newPrices[token.mint] = {
+                  priceUsd: 0,
+                  symbol: token.symbol,
+                  name: token.name,
+                };
+              }
+            }
+          }
+        } catch (e) {
+          console.error("Token metadata fetch failed:", e);
         }
       }
       
@@ -764,7 +793,7 @@ export function AirdropManager() {
                             const isSelling = sellState?.walletId === wallet.id && sellState?.tokenMint === token.mint && sellState?.loading;
                             const priceInfo = tokenPrices[token.mint];
                             const tokenKey = `${wallet.id}-${token.mint}`;
-                            const currentPercentage = sellPercentages[tokenKey] ?? 50;
+                            const currentPercentage = sellPercentages[tokenKey] ?? DEFAULT_SELL_PERCENTAGE;
                             const usdValue = priceInfo?.priceUsd ? (token.balance * priceInfo.priceUsd) : null;
                             const displayName = priceInfo?.name || token.name || priceInfo?.symbol || token.symbol;
                             
