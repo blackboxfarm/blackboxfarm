@@ -330,10 +330,23 @@ serve(async (req) => {
             tokenMint,
             ataAddress: ata.toBase58()
           });
-          const bal = await connection.getTokenAccountBalance(ata).catch((e) => {
-            console.log("getTokenAccountBalance error:", e?.message || e);
+          
+          // Try main connection first, fallback to public RPC if auth fails
+          let bal = await connection.getTokenAccountBalance(ata).catch((e) => {
+            console.log("getTokenAccountBalance error (primary RPC):", e?.message || e);
             return null;
           });
+          
+          // Fallback to public RPC if primary fails
+          if (!bal) {
+            console.log("Trying public RPC fallback for balance...");
+            const publicConnection = new Connection("https://api.mainnet-beta.solana.com", { commitment: "confirmed" });
+            bal = await publicConnection.getTokenAccountBalance(ata).catch((e) => {
+              console.log("getTokenAccountBalance error (public RPC):", e?.message || e);
+              return null;
+            });
+          }
+          
           console.log("Token balance result:", bal?.value);
           const raw = bal?.value?.amount ? Number(bal.value.amount) : 0;
           if (!Number.isFinite(raw) || raw <= 0) {
