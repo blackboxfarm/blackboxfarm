@@ -142,34 +142,42 @@ async function tryPumpPortalSell(params: {
   try {
     const { mint, sellerPublicKey, sellAll, slippageBps } = params;
     
-    // PumpPortal uses "100%" for sell all
-    const amount = sellAll ? "100%" : "100%"; // Always sell all for now
+    const requestBody = {
+      publicKey: sellerPublicKey,
+      action: "sell",
+      mint: mint,
+      denominatedInSol: "false",
+      amount: "100%",
+      slippage: 25, // High slippage for pump tokens
+      priorityFee: 0.0005,
+      pool: "pump"
+    };
     
-    console.log("Trying PumpPortal API for pump.fun token sell...", { mint, sellerPublicKey, amount });
+    console.log("PumpPortal request:", JSON.stringify(requestBody));
     
     const response = await fetch("https://pumpportal.fun/api/trade-local", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        publicKey: sellerPublicKey,
-        action: "sell",
-        mint: mint,
-        denominatedInSol: "false",
-        amount: amount,
-        slippage: Math.max(10, Math.ceil(slippageBps / 100)), // min 10% for pump tokens
-        priorityFee: 0.0005,
-        pool: "pump"
-      })
+      body: JSON.stringify(requestBody)
     });
     
+    const responseText = await response.text();
+    console.log("PumpPortal response status:", response.status, "body:", responseText.slice(0, 500));
+    
     if (response.status === 200) {
-      const data = await response.arrayBuffer();
-      console.log("PumpPortal transaction generated successfully, size:", data.byteLength);
+      // Response is binary transaction data
+      const encoder = new TextEncoder();
+      // Actually we need to re-fetch since we consumed the body
+      const response2 = await fetch("https://pumpportal.fun/api/trade-local", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(requestBody)
+      });
+      const data = await response2.arrayBuffer();
+      console.log("PumpPortal transaction generated, size:", data.byteLength);
       return { tx: new Uint8Array(data) };
     } else {
-      const errorText = await response.text();
-      console.log("PumpPortal error:", response.status, errorText);
-      return { error: `PumpPortal API error: ${response.status} ${errorText}` };
+      return { error: `PumpPortal: ${response.status} - ${responseText.slice(0, 200)}` };
     }
   } catch (e) {
     console.log("PumpPortal exception:", (e as Error).message);
