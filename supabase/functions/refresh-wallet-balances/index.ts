@@ -66,54 +66,59 @@ serve(async (req) => {
       // No body provided, proceed with bulk refresh
     }
 
-    // Single wallet refresh mode - uses public RPC to avoid Helius rate limits
-    if (body.wallet_id && body.pubkey) {
+    // Single wallet refresh mode - works with just pubkey
+    if (body.pubkey) {
       logStep("Single wallet refresh", { pubkey: body.pubkey.slice(0, 8) + "..." });
       
       try {
         let solBalance = 0;
         let tokens: TokenBalance[] = [];
 
-        // Use public Solana RPC directly for SOL balance (most reliable)
-        try {
-          logStep("Fetching SOL balance from public RPC");
-          const publicRpc = "https://api.mainnet-beta.solana.com";
-          const balanceResponse = await fetch(publicRpc, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              jsonrpc: '2.0',
-              id: 1,
-              method: 'getBalance',
-              params: [body.pubkey]
-            })
-          });
-          
-          if (balanceResponse.ok) {
-            const balanceData = await balanceResponse.json();
-            if (balanceData.result?.value !== undefined) {
-              solBalance = balanceData.result.value / 1_000_000_000;
-              logStep("SOL balance from public RPC", { solBalance });
+        // Use Helius RPC if available for better reliability
+        const rpcEndpoints = heliusKey 
+          ? [`https://mainnet.helius-rpc.com/?api-key=${heliusKey}`]
+          : [
+              "https://solana-mainnet.g.alchemy.com/v2/demo",
+              "https://api.mainnet-beta.solana.com",
+            ];
+
+        // Get SOL balance
+        for (const rpc of rpcEndpoints) {
+          try {
+            logStep("Fetching SOL balance", { endpoint: rpc.includes('helius') ? 'helius' : rpc.slice(0, 30) });
+            const balanceResponse = await fetch(rpc, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                jsonrpc: '2.0',
+                id: 1,
+                method: 'getBalance',
+                params: [body.pubkey]
+              })
+            });
+            
+            if (balanceResponse.ok) {
+              const balanceData = await balanceResponse.json();
+              if (balanceData.result?.value !== undefined) {
+                solBalance = balanceData.result.value / 1_000_000_000;
+                logStep("SOL balance fetched", { solBalance });
+                break;
+              }
             }
+          } catch (rpcError) {
+            logStep("RPC balance error", { error: String(rpcError) });
           }
-        } catch (rpcError) {
-          logStep("Public RPC balance error", { error: String(rpcError) });
         }
 
-        // Get token accounts from public RPC (try multiple endpoints)
-        const rpcEndpoints = [
-          "https://api.mainnet-beta.solana.com",
-          "https://solana-mainnet.g.alchemy.com/v2/demo",
-        ];
-        
-        for (const publicRpc of rpcEndpoints) {
-          if (tokens.length > 0) break; // Already got tokens
+        // Get token accounts from RPC
+        for (const rpc of rpcEndpoints) {
+          if (tokens.length > 0) break;
           
           try {
-            logStep("Fetching tokens from RPC", { endpoint: publicRpc });
+            logStep("Fetching tokens", { endpoint: rpc.includes('helius') ? 'helius' : rpc.slice(0, 30) });
             
             // Try SPL Token Program
-            const tokenResponse = await fetch(publicRpc, {
+            const tokenResponse = await fetch(rpc, {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({
@@ -130,8 +135,6 @@ serve(async (req) => {
             
             if (tokenResponse.ok) {
               const tokenData = await tokenResponse.json();
-              logStep("Token response received", { hasResult: !!tokenData.result, valueCount: tokenData.result?.value?.length });
-              
               if (tokenData.result?.value) {
                 const foundTokens = tokenData.result.value
                   .map((account: any) => {
@@ -151,60 +154,58 @@ serve(async (req) => {
                   
                 if (foundTokens.length > 0) {
                   tokens = foundTokens;
-                  logStep("Tokens found", { count: tokens.length, endpoint: publicRpc });
+                  logStep("Tokens found (SPL)", { count: tokens.length });
                 }
               }
             }
             
-            // Also try Token-2022 program if no tokens found
-            if (tokens.length === 0) {
-              const token2022Response = await fetch(publicRpc, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                  jsonrpc: '2.0',
-                  id: 2,
-                  method: 'getTokenAccountsByOwner',
-                  params: [
-                    body.pubkey,
-                    { programId: 'TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb' },
-                    { encoding: 'jsonParsed' }
-                  ]
-                })
-              });
-              
-              if (token2022Response.ok) {
-                const token2022Data = await token2022Response.json();
-                if (token2022Data.result?.value) {
-                  const found2022Tokens = token2022Data.result.value
-                    .map((account: any) => {
-                      const info = account.account?.data?.parsed?.info;
-                      if (!info) return null;
-                      const amount = info.tokenAmount?.uiAmount || 0;
-                      if (amount === 0) return null;
-                      return {
-                        mint: info.mint,
-                        balance: amount,
-                        decimals: info.tokenAmount?.decimals || 0,
-                        symbol: null,
-                        name: null
-                      };
-                    })
-                    .filter((t: TokenBalance | null) => t !== null);
-                    
-                  tokens = [...tokens, ...found2022Tokens];
-                  logStep("Token-2022 tokens found", { count: found2022Tokens.length });
+            // Also try Token-2022 program
+            const token2022Response = await fetch(rpc, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                jsonrpc: '2.0',
+                id: 2,
+                method: 'getTokenAccountsByOwner',
+                params: [
+                  body.pubkey,
+                  { programId: 'TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb' },
+                  { encoding: 'jsonParsed' }
+                ]
+              })
+            });
+            
+            if (token2022Response.ok) {
+              const token2022Data = await token2022Response.json();
+              if (token2022Data.result?.value) {
+                const found2022Tokens = token2022Data.result.value
+                  .map((account: any) => {
+                    const info = account.account?.data?.parsed?.info;
+                    if (!info) return null;
+                    const amount = info.tokenAmount?.uiAmount || 0;
+                    if (amount === 0) return null;
+                    return {
+                      mint: info.mint,
+                      balance: amount,
+                      decimals: info.tokenAmount?.decimals || 0,
+                      symbol: null,
+                      name: null
+                    };
+                  })
+                  .filter((t: TokenBalance | null) => t !== null);
+                  
+                tokens = [...tokens, ...found2022Tokens];
+                if (found2022Tokens.length > 0) {
+                  logStep("Tokens found (Token-2022)", { count: found2022Tokens.length });
                 }
               }
             }
           } catch (tokenError) {
-            logStep("RPC token error", { endpoint: publicRpc, error: String(tokenError) });
+            logStep("RPC token error", { error: String(tokenError) });
           }
         }
-        
-        logStep("Final token count", { count: tokens.length });
 
-        // Fallback to Helius DAS API for token metadata if available
+        // Enrich tokens with Helius DAS API metadata if available
         if (tokens.length > 0 && heliusKey) {
           try {
             logStep("Enriching tokens with Helius metadata");
@@ -234,13 +235,12 @@ serve(async (req) => {
                 });
               });
               
-              // Enrich tokens with metadata
               tokens = tokens.map(t => ({
                 ...t,
                 symbol: metadataMap.get(t.mint)?.symbol || t.symbol,
                 name: metadataMap.get(t.mint)?.name || t.name
               }));
-              logStep("Enriched tokens with Helius metadata");
+              logStep("Enriched tokens with metadata", { enriched: metadataMap.size });
             }
           } catch (dasError) {
             logStep("Helius metadata enrichment failed", { error: String(dasError) });
@@ -249,20 +249,23 @@ serve(async (req) => {
 
         logStep("Fetch complete", { solBalance, tokenCount: tokens.length });
 
-        // Update airdrop_wallets table
-        const { error: updateError } = await supabaseServiceClient
-          .from("airdrop_wallets")
-          .update({ sol_balance: solBalance })
-          .eq("id", body.wallet_id);
+        // Optionally update database if wallet_id is provided
+        if (body.wallet_id && body.table) {
+          const { error: updateError } = await supabaseServiceClient
+            .from(body.table)
+            .update({ sol_balance: solBalance })
+            .eq("id", body.wallet_id);
 
-        if (updateError) {
-          throw new Error(`Database update failed: ${updateError.message}`);
+          if (updateError) {
+            logStep("Database update failed", { error: updateError.message });
+          } else {
+            logStep("Database updated", { table: body.table });
+          }
         }
-
-        logStep("Single wallet balance updated", { pubkey: body.pubkey.slice(0, 8) + "...", solBalance, tokenCount: tokens.length });
 
         return new Response(JSON.stringify({ 
           success: true,
+          pubkey: body.pubkey,
           sol_balance: solBalance,
           tokens,
           timestamp: new Date().toISOString()
@@ -273,7 +276,14 @@ serve(async (req) => {
       } catch (error) {
         const errorMsg = error instanceof Error ? error.message : String(error);
         logStep("Single wallet refresh failed", { error: errorMsg });
-        throw new Error(errorMsg);
+        return new Response(JSON.stringify({ 
+          success: false,
+          error: errorMsg,
+          timestamp: new Date().toISOString()
+        }), {
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+          status: 500,
+        });
       }
     }
 

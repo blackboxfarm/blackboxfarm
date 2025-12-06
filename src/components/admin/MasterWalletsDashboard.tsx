@@ -14,8 +14,6 @@ import { supabase } from '@/integrations/supabase/client';
 import { toast } from '@/hooks/use-toast';
 import { useSolPrice } from '@/hooks/useSolPrice';
 import { WalletTokenManager } from '@/components/blackbox/WalletTokenManager';
-import { Connection, PublicKey } from '@solana/web3.js';
-
 interface TokenBalance {
   mint: string;
   symbol: string;
@@ -44,9 +42,6 @@ interface MasterWallet {
   linkedCampaigns?: string[];
 }
 
-const TOKEN_PROGRAM_ID = new PublicKey('TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA');
-const TOKEN_2022_PROGRAM_ID = new PublicKey('TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb');
-
 const WALLET_SOURCE_CONFIG = {
   wallet_pool: { emoji: '🏊', label: 'Pool Wallet', color: 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200' },
   blackbox: { emoji: '📦', label: 'BlackBox', color: 'bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200' },
@@ -73,105 +68,73 @@ export function MasterWalletsDashboard() {
   const [activeTab, setActiveTab] = useState('all');
   const { price: solPrice } = useSolPrice();
 
-  const getRpcUrl = useCallback(() => {
-    // Try to use Helius if available for better rate limits
-    const heliusKey = (window as any).__HELIUS_API_KEY__;
-    if (heliusKey) {
-      return `https://mainnet.helius-rpc.com/?api-key=${heliusKey}`;
-    }
-    // Fallback to public RPC endpoints with rotation
-    const publicRpcs = [
-      'https://api.mainnet-beta.solana.com',
-      'https://solana-mainnet.g.alchemy.com/v2/demo',
-      'https://rpc.ankr.com/solana',
-    ];
-    return publicRpcs[Math.floor(Math.random() * publicRpcs.length)];
-  }, []);
-
-  const loadTokensViaRPC = useCallback(async (ownerAddress: string): Promise<{ solBalance: number; tokens: TokenBalance[] }> => {
-    const tokens: TokenBalance[] = [];
-    let solBalance = 0;
-    
-    try {
-      const connection = new Connection(getRpcUrl(), 'confirmed');
-      const owner = new PublicKey(ownerAddress);
-
-      // Add timeout to prevent hanging
-      const timeoutPromise = new Promise((_, reject) => 
-        setTimeout(() => reject(new Error('RPC timeout')), 15000)
-      );
-
-      const fetchPromise = Promise.all([
-        connection.getBalance(owner),
-        connection.getParsedTokenAccountsByOwner(owner, { programId: TOKEN_PROGRAM_ID }),
-        connection.getParsedTokenAccountsByOwner(owner, { programId: TOKEN_2022_PROGRAM_ID }),
-      ]);
-
-      const [lamports, classicParsed, v22Parsed] = await Promise.race([fetchPromise, timeoutPromise]) as any;
-
-      solBalance = lamports / 1e9;
-      
-      // Add SOL as first token
-      tokens.push({
-        mint: 'So11111111111111111111111111111111111111112',
-        symbol: 'SOL',
-        name: 'Solana',
-        balance: lamports,
-        uiAmount: solBalance,
-        decimals: 9,
-        logoUri: 'https://raw.githubusercontent.com/solana-labs/token-list/main/assets/mainnet/So11111111111111111111111111111111111111112/logo.png',
-        usdValue: solBalance * (solPrice || 0)
-      });
-
-      const combined = [...classicParsed.value, ...v22Parsed.value];
-      for (const acct of combined) {
-        const info: any = (acct as any).account.data.parsed?.info;
-        if (!info?.tokenAmount) continue;
-        const tokenAmount = info.tokenAmount;
-        const uiAmount = parseFloat(tokenAmount.uiAmountString || tokenAmount.uiAmount || '0');
-        if (uiAmount > 0) {
-          const mint = info.mint as string;
-          tokens.push({
-            mint,
-            symbol: mint.slice(0, 4).toUpperCase(),
-            name: 'Token',
-            balance: parseInt(tokenAmount.amount || '0'),
-            uiAmount,
-            decimals: tokenAmount.decimals ?? 0,
-          });
-        }
-      }
-    } catch (e) {
-      console.warn('[MasterWallets] RPC load failed for', ownerAddress, e);
-    }
-    
-    return { solBalance, tokens };
-  }, [solPrice, getRpcUrl]);
-
+  // Load wallet balance via edge function (uses Helius API key server-side)
   const loadWalletBalance = useCallback(async (pubkey: string) => {
     setWallets(prev => prev.map(w => 
       w.pubkey === pubkey ? { ...w, isLoading: true } : w
     ));
 
     try {
-      const { solBalance, tokens } = await loadTokensViaRPC(pubkey);
+      console.log(`[MasterWallets] Fetching balance via edge function for ${pubkey.slice(0, 8)}...`);
+      
+      const { data, error } = await supabase.functions.invoke('refresh-wallet-balances', {
+        body: { pubkey }
+      });
+
+      if (error) throw error;
+      if (!data?.success) throw new Error(data?.error || 'Unknown error');
+
+      const tokens: TokenBalance[] = [];
+      
+      // Add SOL as first token
+      tokens.push({
+        mint: 'So11111111111111111111111111111111111111112',
+        symbol: 'SOL',
+        name: 'Solana',
+        balance: Math.round(data.sol_balance * 1e9),
+        uiAmount: data.sol_balance,
+        decimals: 9,
+        logoUri: 'https://raw.githubusercontent.com/solana-labs/token-list/main/assets/mainnet/So11111111111111111111111111111111111111112/logo.png',
+        usdValue: data.sol_balance * (solPrice || 0)
+      });
+
+      // Add other tokens from response
+      if (data.tokens && Array.isArray(data.tokens)) {
+        data.tokens.forEach((t: any) => {
+          tokens.push({
+            mint: t.mint,
+            symbol: t.symbol || t.mint.slice(0, 4).toUpperCase(),
+            name: t.name || 'Token',
+            balance: t.balance,
+            uiAmount: t.balance,
+            decimals: t.decimals || 0,
+          });
+        });
+      }
+
+      console.log(`[MasterWallets] Got ${tokens.length} tokens for ${pubkey.slice(0, 8)}...`);
       
       setWallets(prev => prev.map(w => 
         w.pubkey === pubkey ? { 
           ...w, 
-          solBalance, 
+          solBalance: data.sol_balance, 
           tokens, 
           isLoading: false,
           lastUpdated: new Date()
         } : w
       ));
-    } catch (error) {
+    } catch (error: any) {
       console.error(`[MasterWallets] Failed to load balance for ${pubkey}:`, error);
+      toast({
+        title: "Balance fetch failed",
+        description: `${pubkey.slice(0, 8)}...: ${error.message}`,
+        variant: "destructive"
+      });
       setWallets(prev => prev.map(w => 
         w.pubkey === pubkey ? { ...w, isLoading: false } : w
       ));
     }
-  }, [loadTokensViaRPC]);
+  }, [solPrice]);
 
   const loadAllWallets = useCallback(async () => {
     setIsLoading(true);
