@@ -143,40 +143,81 @@ async function tryJupiterSwap(params: {
 }): Promise<{ txs: string[] } | { error: string }> {
   try {
     const { inputMint, outputMint, amount, slippageBps, userPublicKey, computeUnitPriceMicroLamports, asLegacy } = params;
-    const qUrl = `https://quote-api.jup.ag/v6/quote?inputMint=${inputMint}&outputMint=${outputMint}&amount=${amount}&slippageBps=${slippageBps}&swapMode=ExactIn`;
-    const qRes = await fetch(qUrl);
-    if (!qRes.ok) {
-      const t = await qRes.text();
-      return { error: `Jupiter quote failed: ${qRes.status} ${t}` };
-    }
-    const qJson = await qRes.json();
-    // v6 sometimes returns { data: [route] }, sometimes a single object
-    const quoteResponse = Array.isArray(qJson?.data) ? qJson.data[0] : qJson;
-    if (!quoteResponse || (!quoteResponse.inAmount && !quoteResponse.routePlan)) {
-      return { error: `Jupiter quote returned no routes` };
-    }
+    
+    // Try multiple Jupiter endpoints (some work better in edge environments)
+    const jupiterHosts = [
+      "https://api.jup.ag",           // Main API
+      "https://quote-api.jup.ag",     // Quote API
+      "https://lite-api.jup.ag",      // Lite API
+    ];
+    
+    let lastError = "";
+    
+    for (const host of jupiterHosts) {
+      try {
+        console.log(`Trying Jupiter host: ${host}`);
+        const qUrl = `${host}/v6/quote?inputMint=${inputMint}&outputMint=${outputMint}&amount=${amount}&slippageBps=${slippageBps}&swapMode=ExactIn`;
+        
+        const qRes = await fetch(qUrl, {
+          headers: { "Accept": "application/json" },
+        });
+        
+        if (!qRes.ok) {
+          const t = await qRes.text();
+          lastError = `Jupiter quote failed (${host}): ${qRes.status} ${t}`;
+          console.log(lastError);
+          continue;
+        }
+        
+        const qJson = await qRes.json();
+        const quoteResponse = Array.isArray(qJson?.data) ? qJson.data[0] : qJson;
+        if (!quoteResponse || (!quoteResponse.inAmount && !quoteResponse.routePlan)) {
+          lastError = `Jupiter quote returned no routes from ${host}`;
+          console.log(lastError);
+          continue;
+        }
+        
+        console.log("Jupiter quote success, building swap transaction...");
 
-    const sRes = await fetch("https://quote-api.jup.ag/v6/swap", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        quoteResponse,
-        userPublicKey,
-        wrapAndUnwrapSol: true,
-        computeUnitPriceMicroLamports,
-        asLegacyTransaction: asLegacy,
-        useTokenLedger: false,
-        dynamicComputeUnitLimit: true,
-      }),
-    });
-    if (!sRes.ok) {
-      const t = await sRes.text();
-      return { error: `Jupiter swap build failed: ${sRes.status} ${t}` };
+        const sRes = await fetch(`${host}/v6/swap`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            quoteResponse,
+            userPublicKey,
+            wrapAndUnwrapSol: true,
+            computeUnitPriceMicroLamports,
+            asLegacyTransaction: asLegacy,
+            useTokenLedger: false,
+            dynamicComputeUnitLimit: true,
+          }),
+        });
+        
+        if (!sRes.ok) {
+          const t = await sRes.text();
+          lastError = `Jupiter swap build failed (${host}): ${sRes.status} ${t}`;
+          console.log(lastError);
+          continue;
+        }
+        
+        const sJson = await sRes.json();
+        const tx = sJson?.swapTransaction || sJson?.data?.swapTransaction;
+        if (typeof tx !== "string") {
+          lastError = `Jupiter swap build returned no transaction from ${host}`;
+          console.log(lastError);
+          continue;
+        }
+        
+        console.log("Jupiter swap transaction built successfully");
+        return { txs: [tx] };
+      } catch (hostError) {
+        lastError = `Jupiter error (${host}): ${(hostError as Error).message}`;
+        console.log(lastError);
+        continue;
+      }
     }
-    const sJson = await sRes.json();
-    const tx = sJson?.swapTransaction || sJson?.data?.swapTransaction;
-    if (typeof tx !== "string") return { error: `Jupiter swap build returned no transaction` };
-    return { txs: [tx] };
+    
+    return { error: `All Jupiter endpoints failed. Last error: ${lastError}` };
   } catch (e) {
     return { error: `Jupiter error: ${(e as Error).message}` };
   }
