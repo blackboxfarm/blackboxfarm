@@ -140,7 +140,7 @@ async function tryPumpPortalSell(params: {
   slippageBps: number;
 }): Promise<{ tx: Uint8Array } | { error: string }> {
   try {
-    const { mint, sellerPublicKey, sellAll, slippageBps } = params;
+    const { mint, sellerPublicKey, slippageBps } = params;
     
     const requestBody = {
       publicKey: sellerPublicKey,
@@ -148,9 +148,9 @@ async function tryPumpPortalSell(params: {
       mint: mint,
       denominatedInSol: "false",
       amount: "100%",
-      slippage: 25, // High slippage for pump tokens
+      slippage: 25,
       priorityFee: 0.0005,
-      pool: "pump"
+      pool: "auto" // Use "auto" to automatically detect the right exchange
     };
     
     console.log("PumpPortal request:", JSON.stringify(requestBody));
@@ -161,23 +161,14 @@ async function tryPumpPortalSell(params: {
       body: JSON.stringify(requestBody)
     });
     
-    const responseText = await response.text();
-    console.log("PumpPortal response status:", response.status, "body:", responseText.slice(0, 500));
-    
     if (response.status === 200) {
-      // Response is binary transaction data
-      const encoder = new TextEncoder();
-      // Actually we need to re-fetch since we consumed the body
-      const response2 = await fetch("https://pumpportal.fun/api/trade-local", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(requestBody)
-      });
-      const data = await response2.arrayBuffer();
+      const data = await response.arrayBuffer();
       console.log("PumpPortal transaction generated, size:", data.byteLength);
       return { tx: new Uint8Array(data) };
     } else {
-      return { error: `PumpPortal: ${response.status} - ${responseText.slice(0, 200)}` };
+      const errorText = await response.text();
+      console.log("PumpPortal error:", response.status, errorText);
+      return { error: `PumpPortal: ${response.status} - ${errorText}` };
     }
   } catch (e) {
     console.log("PumpPortal exception:", (e as Error).message);
