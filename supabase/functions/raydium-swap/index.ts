@@ -4,13 +4,44 @@ import { Connection, PublicKey, VersionedTransaction, Transaction, Keypair, Syst
 import { SecureStorage } from '../_shared/encryption.ts';
 // Lightweight ATA helper (avoid @solana/spl-token dependency)
 const TOKEN_PROGRAM_ID = new PublicKey("TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA");
+const TOKEN_2022_PROGRAM_ID = new PublicKey("TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb");
 const ASSOCIATED_TOKEN_PROGRAM_ID = new PublicKey("ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL");
-function getAssociatedTokenAddress(mint: PublicKey, owner: PublicKey): PublicKey {
+
+function getAssociatedTokenAddress(mint: PublicKey, owner: PublicKey, programId: PublicKey = TOKEN_PROGRAM_ID): PublicKey {
   const [addr] = PublicKey.findProgramAddressSync(
-    [owner.toBuffer(), TOKEN_PROGRAM_ID.toBuffer(), mint.toBuffer()],
+    [owner.toBuffer(), programId.toBuffer(), mint.toBuffer()],
     ASSOCIATED_TOKEN_PROGRAM_ID
   );
   return addr;
+}
+
+// Helper to get token accounts by owner (tries both token programs)
+async function getTokenBalance(connection: Connection, mint: PublicKey, owner: PublicKey): Promise<{ balance: number; programId: PublicKey } | null> {
+  // Try Token-2022 first (pump.fun tokens use this)
+  const ata2022 = getAssociatedTokenAddress(mint, owner, TOKEN_2022_PROGRAM_ID);
+  try {
+    const bal = await connection.getTokenAccountBalance(ata2022);
+    if (bal?.value?.amount) {
+      console.log("Found balance with Token-2022:", bal.value.amount);
+      return { balance: Number(bal.value.amount), programId: TOKEN_2022_PROGRAM_ID };
+    }
+  } catch (e) {
+    console.log("Token-2022 ATA not found:", (e as Error)?.message?.slice(0, 100));
+  }
+  
+  // Try standard SPL Token
+  const ataSpl = getAssociatedTokenAddress(mint, owner, TOKEN_PROGRAM_ID);
+  try {
+    const bal = await connection.getTokenAccountBalance(ataSpl);
+    if (bal?.value?.amount) {
+      console.log("Found balance with SPL Token:", bal.value.amount);
+      return { balance: Number(bal.value.amount), programId: TOKEN_PROGRAM_ID };
+    }
+  } catch (e) {
+    console.log("SPL Token ATA not found:", (e as Error)?.message?.slice(0, 100));
+  }
+  
+  return null;
 }
 const NATIVE_MINT = new PublicKey("So11111111111111111111111111111111111111112");
 const USDC_MINT = "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v"; // USDC (mainnet)
@@ -324,34 +355,23 @@ serve(async (req) => {
         const isPumpToken = tokenMint.endsWith('pump') || tokenMint.includes('pump');
         outputMint = isPumpToken ? NATIVE_MINT.toBase58() : USDC_MINT;
         if (sellAll) {
-          const ata = getAssociatedTokenAddress(new PublicKey(tokenMint), owner.publicKey);
           console.log("Sell debug:", {
             ownerPubkey: owner.publicKey.toBase58(),
-            tokenMint,
-            ataAddress: ata.toBase58()
+            tokenMint
           });
           
-          // Try main connection first, fallback to public RPC if auth fails
-          let bal = await connection.getTokenAccountBalance(ata).catch((e) => {
-            console.log("getTokenAccountBalance error (primary RPC):", e?.message || e);
-            return null;
-          });
+          // Use public RPC for balance check (Helius key may be invalid)
+          const publicConnection = new Connection("https://api.mainnet-beta.solana.com", { commitment: "confirmed" });
           
-          // Fallback to public RPC if primary fails
-          if (!bal) {
-            console.log("Trying public RPC fallback for balance...");
-            const publicConnection = new Connection("https://api.mainnet-beta.solana.com", { commitment: "confirmed" });
-            bal = await publicConnection.getTokenAccountBalance(ata).catch((e) => {
-              console.log("getTokenAccountBalance error (public RPC):", e?.message || e);
-              return null;
-            });
+          // Try both Token-2022 and SPL Token programs
+          const balanceResult = await getTokenBalance(publicConnection, new PublicKey(tokenMint), owner.publicKey);
+          
+          if (!balanceResult || balanceResult.balance <= 0) {
+            return bad(`No token balance to sell. Owner: ${owner.publicKey.toBase58().slice(0,8)}..., tried both Token-2022 and SPL Token programs`);
           }
           
-          console.log("Token balance result:", bal?.value);
-          const raw = bal?.value?.amount ? Number(bal.value.amount) : 0;
-          if (!Number.isFinite(raw) || raw <= 0) {
-            return bad(`No token balance to sell. Owner: ${owner.publicKey.toBase58().slice(0,8)}..., ATA: ${ata.toBase58().slice(0,8)}...`);
-          }
+          console.log("Found token balance:", balanceResult.balance, "using program:", balanceResult.programId.toBase58());
+          amount = Math.floor(balanceResult.balance);
           amount = Math.floor(raw);
         } else {
           if (amount == null) return bad("Provide amount when not sellAll");
