@@ -195,10 +195,22 @@ serve(async (req) => {
     // Decrypt if it's from header (encrypted from database)
     let secretToUse = bodyOwnerSecret || envOwnerSecret;
     if (headerSecret) {
+      // First, try using the header secret directly as base58 (for airdrop wallets)
       try {
-        secretToUse = await SecureStorage.decryptWalletSecret(headerSecret);
-      } catch (error) {
-        return bad(`Failed to decrypt wallet secret: ${error instanceof Error ? error.message : String(error)}`, 400);
+        const decoded = bs58.decode(headerSecret.trim());
+        if (decoded.length === 64 || decoded.length === 32) {
+          // It's a valid base58-encoded secret key, use it directly
+          secretToUse = headerSecret;
+        } else {
+          throw new Error("Invalid key length");
+        }
+      } catch {
+        // Not a base58 key, try to decrypt it
+        try {
+          secretToUse = await SecureStorage.decryptWalletSecret(headerSecret);
+        } catch (error) {
+          return bad(`Failed to decrypt wallet secret: ${error instanceof Error ? error.message : String(error)}`, 400);
+        }
       }
     }
     
