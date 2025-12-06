@@ -136,16 +136,17 @@ function b64ToU8(b64: string): Uint8Array {
 async function tryPumpPortalSell(params: {
   mint: string;
   sellerPublicKey: string;
-  amount: string | number; // raw token amount (with decimals)
+  sellAll: boolean;
   slippageBps: number;
 }): Promise<{ tx: Uint8Array } | { error: string }> {
   try {
-    const { mint, sellerPublicKey, amount, slippageBps } = params;
+    const { mint, sellerPublicKey, sellAll, slippageBps } = params;
+    
+    // PumpPortal uses "100%" for sell all
+    const amount = sellAll ? "100%" : "100%"; // Always sell all for now
     
     console.log("Trying PumpPortal API for pump.fun token sell...", { mint, sellerPublicKey, amount });
     
-    // PumpPortal expects amount as percentage or token count
-    // For sellAll, use "100%" 
     const response = await fetch("https://pumpportal.fun/api/trade-local", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -153,17 +154,17 @@ async function tryPumpPortalSell(params: {
         publicKey: sellerPublicKey,
         action: "sell",
         mint: mint,
-        denominatedInSol: "false", // amount is in tokens
-        amount: String(amount),
-        slippage: Math.ceil(slippageBps / 100), // convert bps to percent
-        priorityFee: 0.0001,
+        denominatedInSol: "false",
+        amount: amount,
+        slippage: Math.max(10, Math.ceil(slippageBps / 100)), // min 10% for pump tokens
+        priorityFee: 0.0005,
         pool: "pump"
       })
     });
     
     if (response.status === 200) {
       const data = await response.arrayBuffer();
-      console.log("PumpPortal transaction generated successfully");
+      console.log("PumpPortal transaction generated successfully, size:", data.byteLength);
       return { tx: new Uint8Array(data) };
     } else {
       const errorText = await response.text();
@@ -693,7 +694,7 @@ serve(async (req) => {
           const pumpResult = await tryPumpPortalSell({
             mint: String(tokenMint),
             sellerPublicKey: owner.publicKey.toBase58(),
-            amount: String(amount),
+            sellAll: Boolean(sellAll),
             slippageBps: Number(slippageBps),
           });
           
