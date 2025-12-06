@@ -73,6 +73,12 @@ interface SellState {
   percentage: number;
 }
 
+interface TokenPrice {
+  priceUsd: number;
+  symbol?: string;
+  name?: string;
+}
+
 const MEMO_MAX_CHARS = 280;
 
 export function AirdropManager() {
@@ -111,6 +117,8 @@ export function AirdropManager() {
   const [walletTokens, setWalletTokens] = useState<Record<string, TokenBalance[]>>({});
   const [tokenNames, setTokenNames] = useState<Record<string, string>>({});
   const [sellState, setSellState] = useState<SellState | null>(null);
+  const [tokenPrices, setTokenPrices] = useState<Record<string, TokenPrice>>({});
+  const [sellPercentages, setSellPercentages] = useState<Record<string, number>>({});
 
   const loadWallets = useCallback(async () => {
     const { data, error } = await supabase
@@ -238,6 +246,39 @@ export function AirdropManager() {
     }
   };
 
+  const fetchTokenPrices = async (mints: string[]) => {
+    try {
+      const missingMints = mints.filter(m => !tokenPrices[m]);
+      if (missingMints.length === 0) return;
+
+      // Use DexScreener API for token prices
+      const response = await fetch(`https://api.dexscreener.com/latest/dex/tokens/${missingMints.join(',')}`);
+      if (!response.ok) return;
+      
+      const data = await response.json();
+      const pairs = data.pairs || [];
+      
+      const newPrices: Record<string, TokenPrice> = {};
+      for (const mint of missingMints) {
+        const pair = pairs.find((p: any) => 
+          p.baseToken?.address === mint || p.quoteToken?.address === mint
+        );
+        if (pair) {
+          const isBase = pair.baseToken?.address === mint;
+          newPrices[mint] = {
+            priceUsd: isBase ? parseFloat(pair.priceUsd || '0') : (1 / parseFloat(pair.priceUsd || '1')),
+            symbol: isBase ? pair.baseToken?.symbol : pair.quoteToken?.symbol,
+            name: isBase ? pair.baseToken?.name : pair.quoteToken?.name,
+          };
+        }
+      }
+      
+      setTokenPrices(prev => ({ ...prev, ...newPrices }));
+    } catch (e) {
+      console.error("Failed to fetch token prices:", e);
+    }
+  };
+
   const refreshWalletBalance = async (walletId: string, pubkey: string) => {
     setRefreshingWallet(walletId);
     try {
@@ -258,6 +299,11 @@ export function AirdropManager() {
 
       // Store token balances
       setWalletTokens((prev) => ({ ...prev, [walletId]: tokens }));
+
+      // Fetch prices for all tokens
+      if (tokens.length > 0) {
+        fetchTokenPrices(tokens.map((t: TokenBalance) => t.mint));
+      }
 
       const tokenCount = tokens.length;
       toast.success(`Balance updated: ${solBalance.toFixed(4)} SOL${tokenCount > 0 ? ` + ${tokenCount} tokens` : ""}`);
@@ -713,48 +759,74 @@ export function AirdropManager() {
                     {walletTokens[wallet.id] && walletTokens[wallet.id].length > 0 && (
                       <div className="mb-6">
                         <h3 className="font-medium mb-3">Token Balances ({walletTokens[wallet.id].length})</h3>
-                        <div className="space-y-2 max-h-48 overflow-y-auto">
+                        <div className="space-y-3 max-h-64 overflow-y-auto">
                           {walletTokens[wallet.id].map((token) => {
                             const isSelling = sellState?.walletId === wallet.id && sellState?.tokenMint === token.mint && sellState?.loading;
+                            const priceInfo = tokenPrices[token.mint];
+                            const tokenKey = `${wallet.id}-${token.mint}`;
+                            const currentPercentage = sellPercentages[tokenKey] ?? 50;
+                            const usdValue = priceInfo?.priceUsd ? (token.balance * priceInfo.priceUsd) : null;
+                            const displayName = priceInfo?.name || token.name || priceInfo?.symbol || token.symbol;
+                            
                             return (
-                            <div key={token.mint} className="flex items-center justify-between py-2 px-3 bg-muted/30 rounded-lg">
-                              <div className="flex items-center gap-2">
-                                <div className="flex flex-col">
-                                  {token.symbol && <span className="font-medium text-sm">{token.symbol}</span>}
-                                  <span className="font-mono text-xs text-muted-foreground">{token.mint.slice(0, 8)}...{token.mint.slice(-6)}</span>
+                            <div key={token.mint} className="flex items-center justify-between py-3 px-4 bg-muted/30 rounded-lg">
+                              <div className="flex items-center gap-3 min-w-0 flex-1">
+                                <div className="flex flex-col min-w-0">
+                                  <div className="flex items-center gap-2">
+                                    {displayName ? (
+                                      <span className="font-medium text-sm truncate">{displayName}</span>
+                                    ) : (
+                                      <span className="text-sm text-muted-foreground italic">Unknown Token</span>
+                                    )}
+                                    {(priceInfo?.symbol || token.symbol) && displayName !== (priceInfo?.symbol || token.symbol) && (
+                                      <Badge variant="outline" className="text-xs">{priceInfo?.symbol || token.symbol}</Badge>
+                                    )}
+                                  </div>
+                                  <div className="flex items-center gap-1">
+                                    <span className="font-mono text-xs text-muted-foreground">{token.mint.slice(0, 8)}...{token.mint.slice(-6)}</span>
+                                    <Button
+                                      variant="ghost"
+                                      size="icon"
+                                      className="h-5 w-5"
+                                      onClick={() => copyToClipboard(token.mint)}
+                                      title="Copy token address"
+                                    >
+                                      <Copy className="h-2.5 w-2.5" />
+                                    </Button>
+                                  </div>
                                 </div>
-                                <Button
-                                  variant="ghost"
-                                  size="icon"
-                                  className="h-6 w-6"
-                                  onClick={() => copyToClipboard(token.mint)}
-                                  title="Copy token address"
-                                >
-                                  <Copy className="h-3 w-3" />
-                                </Button>
                               </div>
-                              <div className="flex items-center gap-2">
-                                <span className="font-mono font-medium">{token.balance.toLocaleString()}</span>
-                                <div className="flex gap-1">
-                                  <Button
-                                    variant="outline"
-                                    size="sm"
-                                    className="h-7 px-2 text-xs"
-                                    onClick={() => sellToken(wallet.id, wallet.pubkey, token.mint, 50)}
-                                    disabled={isSelling}
-                                    title="Sell 50%"
-                                  >
-                                    {isSelling && sellState?.percentage === 50 ? <Loader2 className="h-3 w-3 animate-spin" /> : "50%"}
-                                  </Button>
+                              <div className="flex items-center gap-4">
+                                <div className="text-right">
+                                  <div className="font-mono font-medium">{token.balance.toLocaleString()}</div>
+                                  {usdValue !== null && (
+                                    <div className="text-xs text-green-500 font-medium">
+                                      ${usdValue >= 0.01 ? usdValue.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : usdValue.toFixed(6)}
+                                    </div>
+                                  )}
+                                </div>
+                                <div className="flex items-center gap-2">
+                                  <Input
+                                    type="number"
+                                    min={1}
+                                    max={100}
+                                    value={currentPercentage}
+                                    onChange={(e) => {
+                                      const val = Math.min(100, Math.max(1, parseInt(e.target.value) || 50));
+                                      setSellPercentages(prev => ({ ...prev, [tokenKey]: val }));
+                                    }}
+                                    className="w-14 h-7 text-xs text-center px-1"
+                                  />
+                                  <span className="text-xs text-muted-foreground">%</span>
                                   <Button
                                     variant="default"
                                     size="sm"
-                                    className="h-7 px-2 text-xs bg-green-600 hover:bg-green-700"
-                                    onClick={() => sellToken(wallet.id, wallet.pubkey, token.mint, 100)}
+                                    className="h-7 px-3 text-xs bg-green-600 hover:bg-green-700"
+                                    onClick={() => sellToken(wallet.id, wallet.pubkey, token.mint, currentPercentage)}
                                     disabled={isSelling}
-                                    title="Sell All"
+                                    title={`Sell ${currentPercentage}%`}
                                   >
-                                    {isSelling && sellState?.percentage === 100 ? <Loader2 className="h-3 w-3 animate-spin" /> : <><DollarSign className="h-3 w-3 mr-1" />Sell</>}
+                                    {isSelling ? <Loader2 className="h-3 w-3 animate-spin" /> : <><DollarSign className="h-3 w-3 mr-1" />Sell</>}
                                   </Button>
                                 </div>
                               </div>
