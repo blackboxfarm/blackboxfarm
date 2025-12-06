@@ -132,6 +132,50 @@ function b64ToU8(b64: string): Uint8Array {
   return bytes;
 }
 
+// Try PumpPortal API for pump.fun bonding curve tokens
+async function tryPumpPortalSell(params: {
+  mint: string;
+  sellerPublicKey: string;
+  amount: string | number; // raw token amount (with decimals)
+  slippageBps: number;
+}): Promise<{ tx: Uint8Array } | { error: string }> {
+  try {
+    const { mint, sellerPublicKey, amount, slippageBps } = params;
+    
+    console.log("Trying PumpPortal API for pump.fun token sell...", { mint, sellerPublicKey, amount });
+    
+    // PumpPortal expects amount as percentage or token count
+    // For sellAll, use "100%" 
+    const response = await fetch("https://pumpportal.fun/api/trade-local", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        publicKey: sellerPublicKey,
+        action: "sell",
+        mint: mint,
+        denominatedInSol: "false", // amount is in tokens
+        amount: String(amount),
+        slippage: Math.ceil(slippageBps / 100), // convert bps to percent
+        priorityFee: 0.0001,
+        pool: "pump"
+      })
+    });
+    
+    if (response.status === 200) {
+      const data = await response.arrayBuffer();
+      console.log("PumpPortal transaction generated successfully");
+      return { tx: new Uint8Array(data) };
+    } else {
+      const errorText = await response.text();
+      console.log("PumpPortal error:", response.status, errorText);
+      return { error: `PumpPortal API error: ${response.status} ${errorText}` };
+    }
+  } catch (e) {
+    console.log("PumpPortal exception:", (e as Error).message);
+    return { error: `PumpPortal error: ${(e as Error).message}` };
+  }
+}
+
 async function tryJupiterSwap(params: {
   inputMint: string;
   outputMint: string;
@@ -641,6 +685,40 @@ serve(async (req) => {
         }
         return ok({ signatures: sigs });
       } else {
+        // Jupiter also failed - try PumpPortal for pump.fun tokens as last resort
+        const isPumpToken = tokenMint && (String(tokenMint).endsWith('pump') || String(tokenMint).includes('pump'));
+        if (isPumpToken && side === "sell" && amount) {
+          console.log("Raydium and Jupiter failed, trying PumpPortal for pump.fun bonding curve token...");
+          
+          const pumpResult = await tryPumpPortalSell({
+            mint: String(tokenMint),
+            sellerPublicKey: owner.publicKey.toBase58(),
+            amount: String(amount),
+            slippageBps: Number(slippageBps),
+          });
+          
+          if ("tx" in pumpResult) {
+            try {
+              const vtx = VersionedTransaction.deserialize(pumpResult.tx);
+              vtx.sign([owner]);
+              const sig = await connection.sendTransaction(vtx, { skipPreflight: true, maxRetries: 2 });
+              
+              if (confirmPolicy !== "none") {
+                const { blockhash, lastValidBlockHeight } = await connection.getLatestBlockhash("confirmed");
+                await connection.confirmTransaction({ blockhash, lastValidBlockHeight, signature: sig }, confirmPolicy as any);
+              }
+              
+              console.log("PumpPortal sell successful:", sig);
+              return ok({ signatures: [sig], source: "pumpportal" });
+            } catch (sendError) {
+              console.error("PumpPortal transaction send failed:", (sendError as Error).message);
+              return bad(`All swap methods failed. Raydium: ${jupReason}; Jupiter: ${j.error}; PumpPortal: ${(sendError as Error).message}`, 502);
+            }
+          } else {
+            return bad(`All swap methods failed. Raydium: ${jupReason}; Jupiter: ${j.error}; PumpPortal: ${pumpResult.error}`, 502);
+          }
+        }
+        
         return bad(`${jupReason ?? "Raydium compute failed"}; Jupiter fallback: ${j.error}`, 502);
       }
     }
