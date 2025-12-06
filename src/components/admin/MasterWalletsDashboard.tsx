@@ -14,7 +14,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { toast } from '@/hooks/use-toast';
 import { useSolPrice } from '@/hooks/useSolPrice';
 import { WalletTokenManager } from '@/components/blackbox/WalletTokenManager';
-import { Connection, PublicKey, clusterApiUrl } from '@solana/web3.js';
+import { Connection, PublicKey } from '@solana/web3.js';
 
 interface TokenBalance {
   mint: string;
@@ -73,22 +73,45 @@ export function MasterWalletsDashboard() {
   const [activeTab, setActiveTab] = useState('all');
   const { price: solPrice } = useSolPrice();
 
+  const getRpcUrl = useCallback(() => {
+    // Try to use Helius if available for better rate limits
+    const heliusKey = (window as any).__HELIUS_API_KEY__;
+    if (heliusKey) {
+      return `https://mainnet.helius-rpc.com/?api-key=${heliusKey}`;
+    }
+    // Fallback to public RPC endpoints with rotation
+    const publicRpcs = [
+      'https://api.mainnet-beta.solana.com',
+      'https://solana-mainnet.g.alchemy.com/v2/demo',
+      'https://rpc.ankr.com/solana',
+    ];
+    return publicRpcs[Math.floor(Math.random() * publicRpcs.length)];
+  }, []);
+
   const loadTokensViaRPC = useCallback(async (ownerAddress: string): Promise<{ solBalance: number; tokens: TokenBalance[] }> => {
     const tokens: TokenBalance[] = [];
     let solBalance = 0;
     
     try {
-      const connection = new Connection(clusterApiUrl('mainnet-beta'), 'confirmed');
+      const connection = new Connection(getRpcUrl(), 'confirmed');
       const owner = new PublicKey(ownerAddress);
 
-      const [lamports, classicParsed, v22Parsed] = await Promise.all([
+      // Add timeout to prevent hanging
+      const timeoutPromise = new Promise((_, reject) => 
+        setTimeout(() => reject(new Error('RPC timeout')), 15000)
+      );
+
+      const fetchPromise = Promise.all([
         connection.getBalance(owner),
         connection.getParsedTokenAccountsByOwner(owner, { programId: TOKEN_PROGRAM_ID }),
         connection.getParsedTokenAccountsByOwner(owner, { programId: TOKEN_2022_PROGRAM_ID }),
       ]);
 
+      const [lamports, classicParsed, v22Parsed] = await Promise.race([fetchPromise, timeoutPromise]) as any;
+
       solBalance = lamports / 1e9;
       
+      // Add SOL as first token
       tokens.push({
         mint: 'So11111111111111111111111111111111111111112',
         symbol: 'SOL',
@@ -119,11 +142,36 @@ export function MasterWalletsDashboard() {
         }
       }
     } catch (e) {
-      console.warn('RPC token load failed for', ownerAddress, e);
+      console.warn('[MasterWallets] RPC load failed for', ownerAddress, e);
     }
     
     return { solBalance, tokens };
-  }, [solPrice]);
+  }, [solPrice, getRpcUrl]);
+
+  const loadWalletBalance = useCallback(async (pubkey: string) => {
+    setWallets(prev => prev.map(w => 
+      w.pubkey === pubkey ? { ...w, isLoading: true } : w
+    ));
+
+    try {
+      const { solBalance, tokens } = await loadTokensViaRPC(pubkey);
+      
+      setWallets(prev => prev.map(w => 
+        w.pubkey === pubkey ? { 
+          ...w, 
+          solBalance, 
+          tokens, 
+          isLoading: false,
+          lastUpdated: new Date()
+        } : w
+      ));
+    } catch (error) {
+      console.error(`[MasterWallets] Failed to load balance for ${pubkey}:`, error);
+      setWallets(prev => prev.map(w => 
+        w.pubkey === pubkey ? { ...w, isLoading: false } : w
+      ));
+    }
+  }, [loadTokensViaRPC]);
 
   const loadAllWallets = useCallback(async () => {
     setIsLoading(true);
@@ -231,49 +279,33 @@ export function MasterWalletsDashboard() {
       });
 
       setWallets(allWallets);
+      setIsLoading(false);
       
-      // Auto-load balances for active wallets (first 10 to avoid rate limits)
-      const activeWallets = allWallets.filter(w => w.isActive).slice(0, 10);
-      for (const wallet of activeWallets) {
-        loadWalletBalance(wallet.pubkey);
+      // Auto-load balances for ALL active wallets in batches
+      const activeWallets = allWallets.filter(w => w.isActive && w.pubkey.length === 44);
+      console.log(`[MasterWallets] Loading balances for ${activeWallets.length} active wallets`);
+      
+      // Load in parallel batches of 5
+      const batchSize = 5;
+      for (let i = 0; i < activeWallets.length; i += batchSize) {
+        const batch = activeWallets.slice(i, i + batchSize);
+        await Promise.all(batch.map(w => loadWalletBalance(w.pubkey)));
+        // Small delay between batches to avoid rate limits
+        if (i + batchSize < activeWallets.length) {
+          await new Promise(r => setTimeout(r, 500));
+        }
       }
 
     } catch (error: any) {
-      console.error('Failed to load wallets:', error);
+      console.error('[MasterWallets] Failed to load wallets:', error);
       toast({
         title: "Error loading wallets",
         description: error.message,
         variant: "destructive"
       });
-    } finally {
       setIsLoading(false);
     }
-  }, []);
-
-  const loadWalletBalance = useCallback(async (pubkey: string) => {
-    setWallets(prev => prev.map(w => 
-      w.pubkey === pubkey ? { ...w, isLoading: true } : w
-    ));
-
-    try {
-      const { solBalance, tokens } = await loadTokensViaRPC(pubkey);
-      
-      setWallets(prev => prev.map(w => 
-        w.pubkey === pubkey ? { 
-          ...w, 
-          solBalance, 
-          tokens, 
-          isLoading: false,
-          lastUpdated: new Date()
-        } : w
-      ));
-    } catch (error) {
-      console.error(`Failed to load balance for ${pubkey}:`, error);
-      setWallets(prev => prev.map(w => 
-        w.pubkey === pubkey ? { ...w, isLoading: false } : w
-      ));
-    }
-  }, [loadTokensViaRPC]);
+  }, [loadWalletBalance]);
 
   useEffect(() => {
     loadAllWallets();
@@ -472,6 +504,17 @@ export function MasterWalletsDashboard() {
                         </div>
                       </div>
                     </div>
+                    
+                    {/* Token summary row - show tokens inline */}
+                    {wallet.tokens.length > 1 && !wallet.isLoading && (
+                      <div className="flex flex-wrap gap-1 mt-2">
+                        {wallet.tokens.slice(1).map(t => (
+                          <Badge key={t.mint} variant="outline" className="text-xs font-mono bg-accent/50">
+                            {t.uiAmount.toLocaleString(undefined, { maximumFractionDigits: 4 })} {t.symbol}
+                          </Badge>
+                        ))}
+                      </div>
+                    )}
                     
                     {/* Wallet address row */}
                     <div className="flex items-center gap-2 mt-2">
