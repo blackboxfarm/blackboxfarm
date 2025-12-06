@@ -100,49 +100,109 @@ serve(async (req) => {
           logStep("Public RPC balance error", { error: String(rpcError) });
         }
 
-        // Get token accounts from public RPC
-        try {
-          logStep("Fetching tokens from public RPC");
-          const publicRpc = "https://api.mainnet-beta.solana.com";
-          const tokenResponse = await fetch(publicRpc, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              jsonrpc: '2.0',
-              id: 1,
-              method: 'getTokenAccountsByOwner',
-              params: [
-                body.pubkey,
-                { programId: 'TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA' },
-                { encoding: 'jsonParsed' }
-              ]
-            })
-          });
+        // Get token accounts from public RPC (try multiple endpoints)
+        const rpcEndpoints = [
+          "https://api.mainnet-beta.solana.com",
+          "https://solana-mainnet.g.alchemy.com/v2/demo",
+        ];
+        
+        for (const publicRpc of rpcEndpoints) {
+          if (tokens.length > 0) break; // Already got tokens
           
-          if (tokenResponse.ok) {
-            const tokenData = await tokenResponse.json();
-            if (tokenData.result?.value) {
-              tokens = tokenData.result.value
-                .map((account: any) => {
-                  const info = account.account?.data?.parsed?.info;
-                  if (!info) return null;
-                  const amount = info.tokenAmount?.uiAmount || 0;
-                  if (amount === 0) return null;
-                  return {
-                    mint: info.mint,
-                    balance: amount,
-                    decimals: info.tokenAmount?.decimals || 0,
-                    symbol: null,
-                    name: null
-                  };
-                })
-                .filter((t: TokenBalance | null) => t !== null);
-              logStep("Tokens from public RPC", { count: tokens.length });
+          try {
+            logStep("Fetching tokens from RPC", { endpoint: publicRpc });
+            
+            // Try SPL Token Program
+            const tokenResponse = await fetch(publicRpc, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                jsonrpc: '2.0',
+                id: 1,
+                method: 'getTokenAccountsByOwner',
+                params: [
+                  body.pubkey,
+                  { programId: 'TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA' },
+                  { encoding: 'jsonParsed' }
+                ]
+              })
+            });
+            
+            if (tokenResponse.ok) {
+              const tokenData = await tokenResponse.json();
+              logStep("Token response received", { hasResult: !!tokenData.result, valueCount: tokenData.result?.value?.length });
+              
+              if (tokenData.result?.value) {
+                const foundTokens = tokenData.result.value
+                  .map((account: any) => {
+                    const info = account.account?.data?.parsed?.info;
+                    if (!info) return null;
+                    const amount = info.tokenAmount?.uiAmount || 0;
+                    if (amount === 0) return null;
+                    return {
+                      mint: info.mint,
+                      balance: amount,
+                      decimals: info.tokenAmount?.decimals || 0,
+                      symbol: null,
+                      name: null
+                    };
+                  })
+                  .filter((t: TokenBalance | null) => t !== null);
+                  
+                if (foundTokens.length > 0) {
+                  tokens = foundTokens;
+                  logStep("Tokens found", { count: tokens.length, endpoint: publicRpc });
+                }
+              }
             }
+            
+            // Also try Token-2022 program if no tokens found
+            if (tokens.length === 0) {
+              const token2022Response = await fetch(publicRpc, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  jsonrpc: '2.0',
+                  id: 2,
+                  method: 'getTokenAccountsByOwner',
+                  params: [
+                    body.pubkey,
+                    { programId: 'TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb' },
+                    { encoding: 'jsonParsed' }
+                  ]
+                })
+              });
+              
+              if (token2022Response.ok) {
+                const token2022Data = await token2022Response.json();
+                if (token2022Data.result?.value) {
+                  const found2022Tokens = token2022Data.result.value
+                    .map((account: any) => {
+                      const info = account.account?.data?.parsed?.info;
+                      if (!info) return null;
+                      const amount = info.tokenAmount?.uiAmount || 0;
+                      if (amount === 0) return null;
+                      return {
+                        mint: info.mint,
+                        balance: amount,
+                        decimals: info.tokenAmount?.decimals || 0,
+                        symbol: null,
+                        name: null
+                      };
+                    })
+                    .filter((t: TokenBalance | null) => t !== null);
+                    
+                  tokens = [...tokens, ...found2022Tokens];
+                  logStep("Token-2022 tokens found", { count: found2022Tokens.length });
+                }
+              }
+            }
+          } catch (tokenError) {
+            logStep("RPC token error", { endpoint: publicRpc, error: String(tokenError) });
           }
-        } catch (tokenError) {
-          logStep("Public RPC token error", { error: String(tokenError) });
         }
+        
+        logStep("Final token count", { count: tokens.length });
 
         // Fallback to Helius DAS API for token metadata if available
         if (tokens.length > 0 && heliusKey) {
