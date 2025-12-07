@@ -27,21 +27,23 @@ interface WalletTokenManagerProps {
   walletPubkey: string;
   isOrphaned?: boolean;
   onTokensSold?: () => void;
+  initialTokens?: TokenBalance[];
 }
 
 export function WalletTokenManager({ 
   walletId, 
   walletPubkey, 
   isOrphaned = false,
-  onTokensSold 
+  onTokensSold,
+  initialTokens = []
 }: WalletTokenManagerProps) {
-  const [tokens, setTokens] = useState<TokenBalance[]>([]);
+  const [tokens, setTokens] = useState<TokenBalance[]>(initialTokens);
   const [isLoading, setIsLoading] = useState(false);
   const [sellLoading, setSellLoading] = useState<Set<string>>(new Set());
   const [convertLoading, setConvertLoading] = useState(false);
   const [sellAmounts, setSellAmounts] = useState<Record<string, string>>({});
   const [sellTypes, setSellTypes] = useState<Record<string, 'all' | 'percentage' | 'amount' | 'tokens'>>({});
-const { price: solPrice } = useSolPrice();
+  const { price: solPrice } = useSolPrice();
 
   const TOKEN_PROGRAM_ID = new PublicKey('TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA');
   const TOKEN_2022_PROGRAM_ID = new PublicKey('TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb');
@@ -117,32 +119,58 @@ const { price: solPrice } = useSolPrice();
   };
 
   const loadTokenBalances = async () => {
-    if (!walletId) return;
+    if (!walletPubkey) return;
     
     setIsLoading(true);
     try {
-      console.log('WalletTokenManager: Loading ALL tokens via direct RPC for wallet', walletPubkey);
+      console.log('WalletTokenManager: Loading tokens via edge function for wallet', walletPubkey);
       
-      // Use direct RPC method to get ALL tokens (SOL + SPL tokens)
-      const tokenList = await loadTokensViaRPC(walletPubkey);
-      setTokens(tokenList);
+      // Use edge function (same as MasterWalletsDashboard) for reliable Helius-backed loading
+      const { data, error } = await supabase.functions.invoke('refresh-wallet-balances', {
+        body: { pubkey: walletPubkey }
+      });
+
+      if (error) throw error;
+      if (!data?.success) throw new Error(data?.error || 'Unknown error');
+
+      const tokenList: TokenBalance[] = [];
       
-      console.log('WalletTokenManager: Loaded tokens:', tokenList);
-      
-      // Show success message without errors
-      if (tokenList.length > 0) {
-        console.log(`Successfully loaded ${tokenList.length} tokens for wallet ${walletPubkey}`);
+      // Add SOL as first token
+      tokenList.push({
+        mint: 'So11111111111111111111111111111111111111112',
+        symbol: 'SOL',
+        name: 'Solana',
+        balance: Math.round(data.sol_balance * 1e9),
+        uiAmount: data.sol_balance,
+        decimals: 9,
+        logoUri: 'https://raw.githubusercontent.com/solana-labs/token-list/main/assets/mainnet/So11111111111111111111111111111111111111112/logo.png',
+        usdValue: data.sol_balance * (solPrice || 0)
+      });
+
+      // Add other tokens from response
+      if (data.tokens && Array.isArray(data.tokens)) {
+        data.tokens.forEach((t: any) => {
+          tokenList.push({
+            mint: t.mint,
+            symbol: t.symbol || t.mint.slice(0, 4).toUpperCase(),
+            name: t.name || 'Token',
+            balance: t.balance,
+            uiAmount: t.balance,
+            decimals: t.decimals || 0,
+            logoUri: t.logoUri,
+            usdValue: t.usdValue
+          });
+        });
       }
+      
+      setTokens(tokenList);
+      console.log('WalletTokenManager: Loaded tokens:', tokenList);
       
     } catch (error: any) {
       console.error('WalletTokenManager: Failed to load token balances:', error);
-      
-      // Set empty tokens array on error
-      setTokens([]);
-      
       toast({
         title: 'Error loading tokens',
-        description: 'Failed to load wallet contents from blockchain',
+        description: error.message || 'Failed to load wallet contents',
         variant: 'destructive'
       });
     } finally {
@@ -285,9 +313,14 @@ const { price: solPrice } = useSolPrice();
     }
   };
 
+  // Initialize from props if provided, otherwise load via edge function
   useEffect(() => {
-    loadTokenBalances();
-  }, [walletId]);
+    if (initialTokens && initialTokens.length > 0) {
+      setTokens(initialTokens);
+    } else {
+      loadTokenBalances();
+    }
+  }, [walletPubkey]);
 
   const formatUsdValue = (amount: number, isSOL = false) => {
     if (isSOL) {
