@@ -527,6 +527,7 @@ export function MasterWalletsDashboard() {
                           <WalletTokenManager
                             walletId={wallet.id}
                             walletPubkey={wallet.pubkey}
+                            initialTokens={wallet.tokens}
                             onTokensSold={() => loadWalletBalance(wallet.pubkey)}
                           />
                         </div>
