@@ -2260,6 +2260,42 @@ export type Database = {
         }
         Relationships: []
       }
+      fuct_gift_claims: {
+        Row: {
+          claim_date: string
+          claimed_at: string
+          created_at: string
+          device_fingerprint: string
+          id: string
+          ip_address: string
+          recipient_wallet: string
+          status: string
+          tx_signature: string | null
+        }
+        Insert: {
+          claim_date?: string
+          claimed_at?: string
+          created_at?: string
+          device_fingerprint: string
+          id?: string
+          ip_address: string
+          recipient_wallet: string
+          status?: string
+          tx_signature?: string | null
+        }
+        Update: {
+          claim_date?: string
+          claimed_at?: string
+          created_at?: string
+          device_fingerprint?: string
+          id?: string
+          ip_address?: string
+          recipient_wallet?: string
+          status?: string
+          tx_signature?: string | null
+        }
+        Relationships: []
+      }
       helius_api_usage: {
         Row: {
           created_at: string

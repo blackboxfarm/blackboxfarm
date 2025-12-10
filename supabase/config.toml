@@ -192,3 +192,6 @@ verify_jwt = false
 
 [functions.scan-offspring-wallets]
 verify_jwt = false
+
+[functions.fuct-airdrop-gift]
+verify_jwt = false

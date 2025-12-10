@@ -21,6 +21,7 @@ import { TokenSets } from "@/components/admin/TokenSets";
 import { ArbitrageBotDashboard } from "@/components/admin/ArbitrageBotDashboard";
 import { Playground } from "@/components/admin/Playground";
 import { AirdropManager } from "@/components/admin/AirdropManager";
+import { FuctAirdropGift } from "@/components/admin/FuctAirdropGift";
 import { WhaleFrenzyDashboard } from "@/components/admin/WhaleFrenzyDashboard";
 import { MegaWhaleDashboard } from "@/components/admin/MegaWhaleDashboard";
 import { ApiProviderManager } from "@/components/admin/ApiProviderManager";
@@ -116,6 +117,7 @@ export default function SuperAdmin() {
             <TabsTrigger value="arbitrage" className="flex-shrink-0 data-[state=active]:bg-gradient-to-r data-[state=active]:from-orange-500/30 data-[state=active]:to-orange-500/20">Arbitrage Bot</TabsTrigger>
             <TabsTrigger value="playground" className="flex-shrink-0 data-[state=active]:bg-gradient-to-r data-[state=active]:from-cyan-500/30 data-[state=active]:to-cyan-500/20">Playground</TabsTrigger>
             <TabsTrigger value="airdrops" className="flex-shrink-0 data-[state=active]:bg-gradient-to-r data-[state=active]:from-pink-500/30 data-[state=active]:to-pink-500/20">Airdrops</TabsTrigger>
+            <TabsTrigger value="fuct-airdrops" className="flex-shrink-0 data-[state=active]:bg-gradient-to-r data-[state=active]:from-fuchsia-500/30 data-[state=active]:to-purple-500/20">🎁 $FUCT Airdrops</TabsTrigger>
             <TabsTrigger value="banners" className="flex-shrink-0">Banners</TabsTrigger>
             <TabsTrigger value="surveys" className="flex-shrink-0">Surveys</TabsTrigger>
             <TabsTrigger value="whale-frenzy" className="flex-shrink-0 data-[state=active]:bg-gradient-to-r data-[state=active]:from-orange-500/30 data-[state=active]:to-red-500/20">🔥 Whale Frenzy</TabsTrigger>
@@ -208,6 +210,10 @@ export default function SuperAdmin() {
 
           <TabsContent value="airdrops">
             <AirdropManager />
+          </TabsContent>
+
+          <TabsContent value="fuct-airdrops">
+            <FuctAirdropGift />
           </TabsContent>
 
           <TabsContent value="banners">
