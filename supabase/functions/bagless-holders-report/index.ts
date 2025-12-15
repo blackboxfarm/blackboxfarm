@@ -57,9 +57,9 @@ serve(async (req) => {
       );
     }
 
-    // Get Helius API key from environment (optional)
-    const heliusApiKey = Deno.env.get('HELIUS_API_KEY');
-    console.log(`[HELIUS] API key ${heliusApiKey ? 'FOUND' : 'NOT FOUND'}`);
+    // Get Helius API key from environment (optional) - prefer HELIUS_HOLDERS_KEY for /holders page
+    const heliusApiKey = Deno.env.get('HELIUS_HOLDERS_KEY') || Deno.env.get('HELIUS_API_KEY');
+    console.log(`[HELIUS] API key ${heliusApiKey ? 'FOUND' : 'NOT FOUND'} (source: ${Deno.env.get('HELIUS_HOLDERS_KEY') ? 'HOLDERS_KEY' : 'FALLBACK'})`);
 
     console.log(`⏱️ [PERF] Fetching all token holders for: ${tokenMint}`);
 

@@ -109,7 +109,11 @@ Deno.serve(async (req) => {
 
     // Perform SNS lookups for non-cached wallets
     if (walletsToLookup.length > 0) {
-      const heliusRpc = Deno.env.get('HELIUS_RPC_URL') || 'https://api.mainnet-beta.solana.com'
+      // Prefer HELIUS_HOLDERS_KEY for /holders page functions
+      const heliusHoldersKey = Deno.env.get('HELIUS_HOLDERS_KEY');
+      const heliusRpc = heliusHoldersKey 
+        ? `https://mainnet.helius-rpc.com/?api-key=${heliusHoldersKey}`
+        : (Deno.env.get('HELIUS_RPC_URL') || 'https://api.mainnet-beta.solana.com')
       const connection = new Connection(heliusRpc)
 
       const lookupPromises = walletsToLookup.map(async (wallet) => {
