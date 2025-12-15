@@ -23,8 +23,8 @@ serve(async (req) => {
 
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
     const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
-    // Prefer HELIUS_HOLDERS_KEY for /holders page functions
-    const heliusApiKey = Deno.env.get('HELIUS_HOLDERS_KEY') || Deno.env.get('HELIUS_API_KEY');
+    // Uses dedicated HELIUS_HOLDERS_KEY for /holders page functions
+    const heliusApiKey = Deno.env.get('HELIUS_HOLDERS_KEY');
     const supabase = createClient(supabaseUrl, supabaseKey);
 
     // Check if we have a recent profile

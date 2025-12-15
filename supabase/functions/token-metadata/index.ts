@@ -192,8 +192,8 @@ serve(async (req) => {
       throw new Error('Invalid mint address format');
     }
 
-    // Prefer HELIUS_HOLDERS_KEY for /holders page functions
-    const heliusApiKey = Deno.env.get('HELIUS_HOLDERS_KEY') || Deno.env.get('HELIUS_API_KEY');
+    // Uses dedicated HELIUS_HOLDERS_KEY for /holders page functions
+    const heliusApiKey = Deno.env.get('HELIUS_HOLDERS_KEY');
     const rpcUrl = heliusApiKey 
       ? `https://mainnet.helius-rpc.com/?api-key=${heliusApiKey}`
       : 'https://api.mainnet-beta.solana.com';
