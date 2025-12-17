@@ -25,6 +25,7 @@ import { FuctAirdropGift } from "@/components/admin/FuctAirdropGift";
 import { WhaleFrenzyDashboard } from "@/components/admin/WhaleFrenzyDashboard";
 import { MegaWhaleDashboard } from "@/components/admin/MegaWhaleDashboard";
 import { ApiProviderManager } from "@/components/admin/ApiProviderManager";
+import AdvertiserManagement from "@/components/admin/AdvertiserManagement";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import TransactionHistoryWindow from "@/components/blackbox/TransactionHistoryWindow";
@@ -119,6 +120,7 @@ export default function SuperAdmin() {
             <TabsTrigger value="airdrops" className="flex-shrink-0 data-[state=active]:bg-gradient-to-r data-[state=active]:from-pink-500/30 data-[state=active]:to-pink-500/20">Airdrops</TabsTrigger>
             <TabsTrigger value="fuct-airdrops" className="flex-shrink-0 data-[state=active]:bg-gradient-to-r data-[state=active]:from-fuchsia-500/30 data-[state=active]:to-purple-500/20">🎁 $FUCT Airdrops</TabsTrigger>
             <TabsTrigger value="banners" className="flex-shrink-0">Banners</TabsTrigger>
+            <TabsTrigger value="advertisers" className="flex-shrink-0 data-[state=active]:bg-gradient-to-r data-[state=active]:from-green-500/30 data-[state=active]:to-emerald-500/20">📢 Advertisers</TabsTrigger>
             <TabsTrigger value="surveys" className="flex-shrink-0">Surveys</TabsTrigger>
             <TabsTrigger value="whale-frenzy" className="flex-shrink-0 data-[state=active]:bg-gradient-to-r data-[state=active]:from-orange-500/30 data-[state=active]:to-red-500/20">🔥 Whale Frenzy</TabsTrigger>
             <TabsTrigger value="mega-whale" className="flex-shrink-0 data-[state=active]:bg-gradient-to-r data-[state=active]:from-yellow-500/30 data-[state=active]:to-amber-500/20">👑 MEGA WHALE</TabsTrigger>
@@ -218,6 +220,10 @@ export default function SuperAdmin() {
 
           <TabsContent value="banners">
             <BannerManagement />
+          </TabsContent>
+
+          <TabsContent value="advertisers">
+            <AdvertiserManagement />
           </TabsContent>
 
           <TabsContent value="surveys">
