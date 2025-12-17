@@ -201,3 +201,6 @@ verify_jwt = true
 
 [functions.check-banner-payment]
 verify_jwt = false
+
+[functions.get-advertiser-users]
+verify_jwt = true
