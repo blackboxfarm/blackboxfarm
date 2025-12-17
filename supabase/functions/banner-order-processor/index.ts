@@ -1,7 +1,7 @@
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.39.3';
 import { Keypair } from 'https://esm.sh/@solana/web3.js@1.87.6';
-import { encode as bs58Encode } from 'https://esm.sh/bs58@5.0.0';
+import bs58 from 'https://esm.sh/bs58@5.0.0';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -78,7 +78,7 @@ serve(async (req) => {
       // Generate new Solana wallet for this advertiser
       const keypair = Keypair.generate();
       const pubkey = keypair.publicKey.toBase58();
-      const secretKey = bs58Encode(keypair.secretKey);
+      const secretKey = bs58.encode(keypair.secretKey);
 
       // Encrypt the secret key
       const encryptionKey = Deno.env.get('ENCRYPTION_KEY');
