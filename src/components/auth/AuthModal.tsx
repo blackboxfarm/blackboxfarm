@@ -120,7 +120,7 @@ export const AuthModal = ({ isOpen, onClose, defaultTab = 'signin' }: AuthModalP
     } else {
       toast({
         title: "Account Created!",
-        description: "Please check your email and click the verification link to sign in."
+        description: "You're signed in and can continue. You can verify your email later."
       });
       onClose();
     }
