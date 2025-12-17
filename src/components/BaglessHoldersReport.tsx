@@ -836,19 +836,21 @@ export function BaglessHoldersReport({ initialToken }: BaglessHoldersReportProps
 
       {report && (
         <>
-          {/* Token Health Dashboard - Quick Glance Summary */}
-          {(() => {
-            const lpAnalysis = calculateLPAnalysis();
-            const top10Stats = calculateTop10Stats();
-            
-            return (
-              <TokenHealthDashboard 
-                lpPercentage={lpAnalysis.lpPercentage}
-                top10Concentration={top10Stats.top10Percentage}
-                lpDetectionConfidence={lpAnalysis.confidence}
-              />
-            );
-          })()}
+          {/* Token Health Dashboard - Hidden */}
+          <div className="hidden">
+            {(() => {
+              const lpAnalysis = calculateLPAnalysis();
+              const top10Stats = calculateTop10Stats();
+              
+              return (
+                <TokenHealthDashboard 
+                  lpPercentage={lpAnalysis.lpPercentage}
+                  top10Concentration={top10Stats.top10Percentage}
+                  lpDetectionConfidence={lpAnalysis.confidence}
+                />
+              );
+            })()}
+          </div>
 
           {/* Real-Time Whale Movements - Hidden */}
           {tokenMint && (
