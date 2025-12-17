@@ -73,9 +73,12 @@ export const AuthModal = ({ isOpen, onClose, defaultTab = 'signin' }: AuthModalP
         onClose();
       }
     } catch (error: any) {
+      const isInvalidCredentials = error.message?.includes('Invalid login credentials');
       toast({
         title: "Sign In Failed",
-        description: error.message,
+        description: isInvalidCredentials 
+          ? "Invalid credentials. If you just signed up, please verify your email first by clicking the link we sent you."
+          : error.message,
         variant: "destructive"
       });
     }
@@ -117,7 +120,7 @@ export const AuthModal = ({ isOpen, onClose, defaultTab = 'signin' }: AuthModalP
     } else {
       toast({
         title: "Account Created!",
-        description: "You can verify your email later. You're now signed in."
+        description: "Please check your email and click the verification link to sign in."
       });
       onClose();
     }
