@@ -10,7 +10,8 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/u
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
-import { Loader2, Download, RefreshCw, Flag, AlertTriangle, Shield, TrendingUp, Diamond, Brain, Droplets, CheckCircle, Users, Wallet, DollarSign, BarChart3, Info, Search, Percent, ExternalLink, ChevronDown, ChevronUp, Eye, EyeOff, XCircle } from 'lucide-react';
+import { Loader2, Download, RefreshCw, Flag, AlertTriangle, Shield, TrendingUp, Diamond, Brain, Droplets, CheckCircle, Users, Wallet, DollarSign, BarChart3, Info, Search, Percent, ExternalLink, ChevronDown, ChevronUp, Eye, EyeOff, XCircle, Share2, MessageCircle, Send } from 'lucide-react';
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { Progress } from '@/components/ui/progress';
 import { useTokenMetadata } from '@/hooks/useTokenMetadata';
 import { AdBanner } from '@/components/AdBanner';
@@ -1082,14 +1083,57 @@ export function BaglessHoldersReport({ initialToken }: BaglessHoldersReportProps
                 );
               })()}
 
-              {/* Functional Wallets Header */}
+              {/* Share Button */}
+              <div className="mb-4 flex justify-center">
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button variant="outline" className="gap-2">
+                      <Share2 className="h-4 w-4" />
+                      Share Analysis
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="center">
+                    <DropdownMenuItem onClick={() => {
+                      const ticker = tokenData?.metadata?.symbol || 'this token';
+                      const text = `Check out the Whales vs the Dust for $${ticker} 🐋💨`;
+                      const url = window.location.href;
+                      window.open(`https://twitter.com/intent/tweet?text=${encodeURIComponent(text)}&url=${encodeURIComponent(url)}`, '_blank');
+                    }}>
+                      <span className="w-5 h-5 bg-foreground rounded-full flex items-center justify-center mr-2">
+                        <span className="text-background text-xs font-bold">𝕏</span>
+                      </span>
+                      Share on X
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => {
+                      const ticker = tokenData?.metadata?.symbol || 'this token';
+                      const text = `🐋 **Whales vs Dust** 🐋\n\nCheck out the holder analysis for $${ticker}!\n\n🔗 ${window.location.href}`;
+                      navigator.clipboard.writeText(text);
+                      toast({ title: "Copied!", description: "Discord message copied to clipboard" });
+                    }}>
+                      <MessageCircle className="h-4 w-4 mr-2" />
+                      Copy for Discord
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => {
+                      const ticker = tokenData?.metadata?.symbol || 'this token';
+                      const text = `🐋 Check out the Whales vs the Dust for $${ticker}`;
+                      const url = window.location.href;
+                      window.open(`https://t.me/share/url?url=${encodeURIComponent(url)}&text=${encodeURIComponent(text)}`, '_blank');
+                    }}>
+                      <Send className="h-4 w-4 mr-2" />
+                      Share on Telegram
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              </div>
+
+              {/* Functional Holders Header */}
               <div className="mb-4 p-4 bg-primary/10 rounded-lg border-2 border-primary/30">
                 <div className="text-center">
                   <div className="text-3xl md:text-4xl font-bold text-primary">
                     {filteredHolders.length.toLocaleString()}
                   </div>
                   <div className="text-sm md:text-base font-semibold text-foreground">
-                    Functional Wallets above $1
+                    Functional Holders above $1
                   </div>
                 </div>
               </div>
@@ -1098,7 +1142,7 @@ export function BaglessHoldersReport({ initialToken }: BaglessHoldersReportProps
               <div className="grid grid-cols-2 gap-3 md:gap-4 mb-3 md:mb-4">
                 <div className="text-center">
                   <div className="text-2xl md:text-3xl font-bold">{report.totalHolders}</div>
-                  <div className="text-xs md:text-sm text-muted-foreground">Total Holders</div>
+                  <div className="text-xs md:text-sm text-muted-foreground">Total Wallets</div>
                 </div>
                 <div className="text-center">
                   <div className="text-xl md:text-3xl font-bold break-all">{Math.round(report.totalBalance).toLocaleString()}</div>
