@@ -172,6 +172,17 @@ export default function BuyBanner() {
         .getPublicUrl(fileName);
 
       // Create order via edge function - use authenticated user's email
+      // Explicitly pass the access token to avoid missing-auth edge cases.
+      const { data: { session } } = await supabase.auth.getSession();
+      const accessToken = session?.access_token;
+
+      if (!accessToken) {
+        toast.error('Session expired. Please sign in again.');
+        setAuthDefaultTab('signin');
+        setShowAuthModal(true);
+        return;
+      }
+
       const { data, error } = await supabase.functions.invoke('banner-order-processor', {
         body: {
           imageUrl: publicUrl,
@@ -183,9 +194,22 @@ export default function BuyBanner() {
           priceUsd: PRICING[duration].price,
           startTime: getScheduledStartTime().toISOString(),
         },
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+        },
       });
 
-      if (error) throw error;
+      if (error) {
+        const ctx = (error as any)?.context as Response | undefined;
+        let details = error.message || 'Edge Function error';
+
+        if (ctx) {
+          const text = await ctx.text().catch(() => '');
+          details = `(${ctx.status}) ${text || details}`;
+        }
+
+        throw new Error(details);
+      }
 
       toast.success('Order created! Redirecting to checkout...');
       navigate(`/banner-checkout/${data.orderId}`);
