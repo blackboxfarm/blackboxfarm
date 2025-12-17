@@ -1840,7 +1840,7 @@ export function BaglessHoldersReport({ initialToken }: BaglessHoldersReportProps
           )}
 
           <Card>
-            <CardHeader className="pb-4">
+            <CardHeader className="hidden pb-4">
               <CardTitle className="text-base md:text-lg">
                 Holders List ({filteredHolders.length} wallets) - excluding Small and Dust Wallets for a better SnapShot!
               </CardTitle>
@@ -2152,12 +2152,12 @@ export function BaglessHoldersReport({ initialToken }: BaglessHoldersReportProps
             </CardContent>
           </Card>
           
-          {/* Ad Banner #4 - After Holders List Table */}
+          {/* Ad Banner #3 - After Holders List Table */}
           <div className="block md:hidden">
-            <AdBanner size="mobile" position={4} />
+            <AdBanner size="mobile" position={3} />
           </div>
           <div className="hidden md:block">
-            <AdBanner size="leaderboard" position={4} />
+            <AdBanner size="leaderboard" position={3} />
           </div>
         </>
       )}
