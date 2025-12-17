@@ -8,7 +8,6 @@ import { useAuth } from '@/hooks/useAuth';
 import { useToast } from '@/hooks/use-toast';
 import { Loader2, Mail, Lock } from 'lucide-react';
 import { PasswordResetModal } from './PasswordResetModal';
-import { EmailVerificationModal } from './EmailVerificationModal';
 import { GoogleAuthButton } from './GoogleAuthButton';
 import { OTPVerification } from './OTPVerification';
 import { supabase } from '@/integrations/supabase/client';
@@ -26,8 +25,6 @@ export const AuthModal = ({ isOpen, onClose, defaultTab = 'signin' }: AuthModalP
   const [loading, setLoading] = useState(false);
   const [activeTab, setActiveTab] = useState(defaultTab);
   const [showPasswordReset, setShowPasswordReset] = useState(false);
-  const [showEmailVerification, setShowEmailVerification] = useState(false);
-  const [verificationEmail, setVerificationEmail] = useState('');
   const [showOTPVerification, setShowOTPVerification] = useState(false);
   const [otpEmail, setOtpEmail] = useState('');
   
@@ -118,12 +115,11 @@ export const AuthModal = ({ isOpen, onClose, defaultTab = 'signin' }: AuthModalP
         });
       }
     } else {
-      setVerificationEmail(email);
-      setShowEmailVerification(true);
       toast({
         title: "Account Created!",
-        description: "Please check your email to verify your account."
+        description: "You can verify your email later. You're now signed in."
       });
+      onClose();
     }
     setLoading(false);
   };
@@ -346,12 +342,6 @@ export const AuthModal = ({ isOpen, onClose, defaultTab = 'signin' }: AuthModalP
         <PasswordResetModal 
           isOpen={showPasswordReset}
           onClose={() => setShowPasswordReset(false)}
-        />
-
-        <EmailVerificationModal 
-          isOpen={showEmailVerification}
-          onClose={() => setShowEmailVerification(false)}
-          email={verificationEmail}
         />
       </DialogContent>
     </Dialog>
