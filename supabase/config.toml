@@ -195,3 +195,9 @@ verify_jwt = false
 
 [functions.fuct-airdrop-gift]
 verify_jwt = false
+
+[functions.banner-order-processor]
+verify_jwt = true
+
+[functions.check-banner-payment]
+verify_jwt = false

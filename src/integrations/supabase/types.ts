@@ -73,6 +73,45 @@ export type Database = {
           },
         ]
       }
+      advertiser_accounts: {
+        Row: {
+          created_at: string | null
+          email: string
+          id: string
+          is_active: boolean | null
+          payment_wallet_pubkey: string
+          payment_wallet_secret_encrypted: string
+          total_spent_sol: number | null
+          twitter_handle: string | null
+          updated_at: string | null
+          user_id: string | null
+        }
+        Insert: {
+          created_at?: string | null
+          email: string
+          id?: string
+          is_active?: boolean | null
+          payment_wallet_pubkey: string
+          payment_wallet_secret_encrypted: string
+          total_spent_sol?: number | null
+          twitter_handle?: string | null
+          updated_at?: string | null
+          user_id?: string | null
+        }
+        Update: {
+          created_at?: string | null
+          email?: string
+          id?: string
+          is_active?: boolean | null
+          payment_wallet_pubkey?: string
+          payment_wallet_secret_encrypted?: string
+          total_spent_sol?: number | null
+          twitter_handle?: string | null
+          updated_at?: string | null
+          user_id?: string | null
+        }
+        Relationships: []
+      }
       advertiser_inquiries: {
         Row: {
           additional_info: string | null
@@ -907,6 +946,84 @@ export type Database = {
           {
             foreignKeyName: "banner_impressions_banner_id_fkey"
             columns: ["banner_id"]
+            isOneToOne: false
+            referencedRelation: "banner_ads"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      banner_orders: {
+        Row: {
+          activation_key: string | null
+          advertiser_id: string | null
+          banner_ad_id: string | null
+          created_at: string | null
+          duration_hours: number
+          end_time: string | null
+          id: string
+          image_url: string
+          is_active: boolean | null
+          link_url: string
+          payment_confirmed_at: string | null
+          payment_status: string | null
+          price_sol: number | null
+          price_usd: number
+          sol_price_at_order: number | null
+          start_time: string
+          title: string
+          updated_at: string | null
+        }
+        Insert: {
+          activation_key?: string | null
+          advertiser_id?: string | null
+          banner_ad_id?: string | null
+          created_at?: string | null
+          duration_hours: number
+          end_time?: string | null
+          id?: string
+          image_url: string
+          is_active?: boolean | null
+          link_url: string
+          payment_confirmed_at?: string | null
+          payment_status?: string | null
+          price_sol?: number | null
+          price_usd: number
+          sol_price_at_order?: number | null
+          start_time: string
+          title?: string
+          updated_at?: string | null
+        }
+        Update: {
+          activation_key?: string | null
+          advertiser_id?: string | null
+          banner_ad_id?: string | null
+          created_at?: string | null
+          duration_hours?: number
+          end_time?: string | null
+          id?: string
+          image_url?: string
+          is_active?: boolean | null
+          link_url?: string
+          payment_confirmed_at?: string | null
+          payment_status?: string | null
+          price_sol?: number | null
+          price_usd?: number
+          sol_price_at_order?: number | null
+          start_time?: string
+          title?: string
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "banner_orders_advertiser_id_fkey"
+            columns: ["advertiser_id"]
+            isOneToOne: false
+            referencedRelation: "advertiser_accounts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "banner_orders_banner_ad_id_fkey"
+            columns: ["banner_ad_id"]
             isOneToOne: false
             referencedRelation: "banner_ads"
             referencedColumns: ["id"]

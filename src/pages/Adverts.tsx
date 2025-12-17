@@ -108,15 +108,25 @@ export default function Adverts() {
                   <strong>Prime banner placement</strong> appears on every holder analysis page.
                   Users spend 30-60 seconds reviewing reports - perfect for brand awareness and clicks.
                 </p>
-                <Button 
-                  onClick={() => navigate("/contact-us")}
-                  variant="default"
-                  size="lg"
-                  className="w-full"
-                >
-                  <DollarSign className="w-4 h-4 mr-2" />
-                  Get Banner Space →
-                </Button>
+                <div className="grid grid-cols-2 gap-3">
+                  <Button 
+                    onClick={() => navigate("/buy-banner")}
+                    variant="default"
+                    size="lg"
+                    className="w-full"
+                  >
+                    <DollarSign className="w-4 h-4 mr-2" />
+                    Get Banner Space
+                  </Button>
+                  <Button 
+                    onClick={() => navigate("/contact-us")}
+                    variant="outline"
+                    size="lg"
+                    className="w-full"
+                  >
+                    Contact Us
+                  </Button>
+                </div>
               </div>
             </CardContent>
           </Card>
@@ -159,16 +169,26 @@ export default function Adverts() {
 
         {/* CTA */}
         <div className="text-center space-y-4 pb-8">
-          <Button 
-            onClick={() => navigate("/contact-us")}
-            size="lg"
-            className="text-lg px-8 py-6"
-          >
-            <DollarSign className="w-5 h-5 mr-2" />
-            Contact Us About Advertising
-          </Button>
+          <div className="flex flex-col sm:flex-row gap-4 justify-center">
+            <Button 
+              onClick={() => navigate("/buy-banner")}
+              size="lg"
+              className="text-lg px-8 py-6"
+            >
+              <DollarSign className="w-5 h-5 mr-2" />
+              Get Banner Space - Self Serve
+            </Button>
+            <Button 
+              onClick={() => navigate("/contact-us")}
+              variant="outline"
+              size="lg"
+              className="text-lg px-8 py-6"
+            >
+              Contact Us About Custom Packages
+            </Button>
+          </div>
           <p className="text-sm text-muted-foreground">
-            Quick response • Custom packages available • Professional support
+            24hr: $40 • 48hr: $70 • 72hr: $100 • 1 Week: $175 (paid in SOL)
           </p>
         </div>
       </div>
