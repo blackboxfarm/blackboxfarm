@@ -200,14 +200,16 @@ export default function BuyBanner() {
       });
 
       if (error) {
-        const ctx = (error as any)?.context as Response | undefined;
         let details = error.message || 'Edge Function error';
-
-        if (ctx) {
-          const text = await ctx.text().catch(() => '');
-          details = `(${ctx.status}) ${text || details}`;
+        try {
+          const ctx = (error as any)?.context;
+          if (ctx && typeof ctx.text === 'function') {
+            const text = await ctx.text().catch(() => '');
+            details = `(${ctx.status || 'unknown'}) ${text || details}`;
+          }
+        } catch (e) {
+          console.error('Error parsing error context:', e);
         }
-
         throw new Error(details);
       }
 
