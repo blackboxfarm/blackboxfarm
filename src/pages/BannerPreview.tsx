@@ -1,11 +1,12 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
-import { ArrowLeft, ExternalLink, Clock, Calendar, Eye, Check, AlertCircle } from 'lucide-react';
+import { useAuth } from '@/hooks/useAuth';
+import { ArrowLeft, ExternalLink, Clock, Calendar, Eye, Check, AlertCircle, Upload, RefreshCw, ImageIcon } from 'lucide-react';
 import { format } from 'date-fns';
 
 interface BannerOrder {
@@ -25,8 +26,11 @@ interface BannerOrder {
 export default function BannerPreview() {
   const { orderId } = useParams<{ orderId: string }>();
   const navigate = useNavigate();
+  const { user } = useAuth();
   const [order, setOrder] = useState<BannerOrder | null>(null);
   const [loading, setLoading] = useState(true);
+  const [swapping, setSwapping] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     if (orderId) {
@@ -49,6 +53,62 @@ export default function BannerPreview() {
       toast.error('Failed to load banner preview');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleBannerSwap = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !user || !order) return;
+
+    // Validate file type
+    if (!file.type.startsWith('image/')) {
+      toast.error('Please select an image file');
+      return;
+    }
+
+    // Validate file size (max 5MB)
+    if (file.size > 5 * 1024 * 1024) {
+      toast.error('Image must be less than 5MB');
+      return;
+    }
+
+    setSwapping(true);
+    try {
+      // Upload new image
+      const fileExt = file.name.split('.').pop();
+      const fileName = `${user.id}/${Date.now()}.${fileExt}`;
+
+      const { error: uploadError } = await supabase.storage
+        .from('banner-images')
+        .upload(fileName, file);
+
+      if (uploadError) throw uploadError;
+
+      // Get public URL
+      const { data: { publicUrl } } = supabase.storage
+        .from('banner-images')
+        .getPublicUrl(fileName);
+
+      // Update order with new image URL
+      const { error: updateError } = await supabase
+        .from('banner_orders')
+        .update({ image_url: publicUrl })
+        .eq('id', order.id);
+
+      if (updateError) throw updateError;
+
+      // Update local state
+      setOrder({ ...order, image_url: publicUrl });
+      toast.success('Banner image updated successfully!');
+    } catch (error: any) {
+      console.error('Error swapping banner:', error);
+      toast.error(error.message || 'Failed to update banner image');
+    } finally {
+      setSwapping(false);
+      // Reset file input
+      if (fileInputRef.current) {
+        fileInputRef.current.value = '';
+      }
     }
   };
 
@@ -158,9 +218,37 @@ export default function BannerPreview() {
                         </div>
                       </div>
                     </a>
-                    <p className="text-xs text-muted-foreground mt-1 text-center">
-                      Your banner in Position 1 (Premium Placement)
-                    </p>
+                    <div className="flex items-center justify-center gap-2 mt-2">
+                      <p className="text-xs text-muted-foreground">
+                        Your banner in Position 1 (Premium Placement)
+                      </p>
+                      <input
+                        type="file"
+                        ref={fileInputRef}
+                        onChange={handleBannerSwap}
+                        accept="image/*"
+                        className="hidden"
+                      />
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => fileInputRef.current?.click()}
+                        disabled={swapping}
+                        className="text-xs h-6 px-2"
+                      >
+                        {swapping ? (
+                          <>
+                            <RefreshCw className="h-3 w-3 mr-1 animate-spin" />
+                            Uploading...
+                          </>
+                        ) : (
+                          <>
+                            <ImageIcon className="h-3 w-3 mr-1" />
+                            Change Banner
+                          </>
+                        )}
+                      </Button>
+                    </div>
                   </div>
 
                   {/* Simulated Report Content */}
