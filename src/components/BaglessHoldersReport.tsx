@@ -850,12 +850,12 @@ export function BaglessHoldersReport({ initialToken }: BaglessHoldersReportProps
             );
           })()}
 
-          {/* Real-Time Whale Movements - Now public, only shows when significant activity exists */}
+          {/* Real-Time Whale Movements - Hidden */}
           {tokenMint && (
-            <>
+            <div className="hidden">
               <WhaleWarningSystem tokenMint={tokenMint} />
               <HolderMovementFeed tokenMint={tokenMint} hideWhenEmpty={true} tokenAge={tokenAge} />
-            </>
+            </div>
           )}
 
           <Card>
