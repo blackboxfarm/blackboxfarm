@@ -250,6 +250,7 @@ export default function ContactUs() {
                           <SelectItem value="general">General Question</SelectItem>
                           <SelectItem value="technical">Technical Support</SelectItem>
                           <SelectItem value="billing">Billing & Pricing</SelectItem>
+                          <SelectItem value="advertising">Advertising</SelectItem>
                           <SelectItem value="partnership">Partnership</SelectItem>
                           <SelectItem value="feedback">Feature Request/Feedback</SelectItem>
                           <SelectItem value="security">Security Concern</SelectItem>
@@ -296,6 +297,19 @@ export default function ContactUs() {
                     )}
                   </Button>
                 </form>
+
+                {/* Self-Serve Advertising Link */}
+                <div className="mt-6 p-4 bg-primary/5 border border-primary/20 rounded-lg">
+                  <h4 className="font-medium mb-2">Want to advertise?</h4>
+                  <p className="text-sm text-muted-foreground mb-3">
+                    Self-serve banner ads starting at $40/day. Get your ad live in minutes!
+                  </p>
+                  <Link to="/buy-banner">
+                    <Button variant="outline" size="sm" className="w-full">
+                      Get Banner Space →
+                    </Button>
+                  </Link>
+                </div>
               </CardContent>
             </Card>
           </div>
