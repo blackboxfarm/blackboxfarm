@@ -60,15 +60,18 @@ export default function BannerPreview() {
     const file = e.target.files?.[0];
     if (!file || !user || !order) return;
 
-    // Validate file type
-    if (!file.type.startsWith('image/')) {
-      toast.error('Please select an image file');
+    // Validate file type (images and videos)
+    const allowedTypes = ['image/', 'video/mp4', 'video/webm', 'video/quicktime'];
+    const isAllowed = allowedTypes.some(type => file.type.startsWith(type));
+    if (!isAllowed) {
+      toast.error('Please select an image or video file (MP4, WebM, MOV)');
       return;
     }
 
-    // Validate file size (max 5MB)
-    if (file.size > 5 * 1024 * 1024) {
-      toast.error('Image must be less than 5MB');
+    // Validate file size (max 20MB for videos, 5MB for images)
+    const maxSize = file.type.startsWith('video/') ? 20 * 1024 * 1024 : 5 * 1024 * 1024;
+    if (file.size > maxSize) {
+      toast.error(file.type.startsWith('video/') ? 'Video must be less than 20MB' : 'Image must be less than 5MB');
       return;
     }
 
@@ -206,11 +209,22 @@ export default function BannerPreview() {
                       className="block group"
                     >
                       <div className="relative overflow-hidden rounded-lg shadow-lg hover:shadow-xl transition-shadow">
-                        <img
-                          src={order.image_url}
-                          alt={order.title}
-                          className="w-full"
-                        />
+                        {order.image_url.match(/\.(mp4|webm|mov)$/i) ? (
+                          <video
+                            src={order.image_url}
+                            autoPlay
+                            loop
+                            muted
+                            playsInline
+                            className="w-full"
+                          />
+                        ) : (
+                          <img
+                            src={order.image_url}
+                            alt={order.title}
+                            className="w-full"
+                          />
+                        )}
                         <div className="absolute inset-0 bg-black/0 group-hover:bg-black/10 transition-colors flex items-center justify-center">
                           <span className="opacity-0 group-hover:opacity-100 transition-opacity bg-black/50 text-white px-3 py-1 rounded-full text-sm flex items-center gap-1">
                             Visit <ExternalLink className="h-3 w-3" />
@@ -226,7 +240,7 @@ export default function BannerPreview() {
                         type="file"
                         ref={fileInputRef}
                         onChange={handleBannerSwap}
-                        accept="image/*"
+                        accept="image/*,video/mp4,video/webm,video/quicktime"
                         className="hidden"
                       />
                       <Button
