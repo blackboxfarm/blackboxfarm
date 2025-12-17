@@ -1839,8 +1839,9 @@ export function BaglessHoldersReport({ initialToken }: BaglessHoldersReportProps
             </div>
           )}
 
-          <Card>
-            <CardHeader className="hidden pb-4">
+          {/* Holders List Card - Hidden */}
+          <Card className="hidden">
+            <CardHeader className="pb-4">
               <CardTitle className="text-base md:text-lg">
                 Holders List ({filteredHolders.length} wallets) - excluding Small and Dust Wallets for a better SnapShot!
               </CardTitle>
