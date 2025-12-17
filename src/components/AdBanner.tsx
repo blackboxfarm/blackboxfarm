@@ -159,15 +159,15 @@ export function AdBanner({ size, position }: AdBannerProps) {
     );
   }
 
-  // Leaderboard (728x90 equivalent)
+  // Leaderboard (preserves original image aspect ratio)
   return (
       <Card className="mb-4 overflow-hidden cursor-pointer transition-all duration-300 hover:scale-105 hover:shadow-2xl hover:shadow-primary/20" onClick={handleClick}>
       {displayData.image_url ? (
-        <div className="relative h-24 bg-cover bg-center" style={{ backgroundImage: `url(${displayData.image_url})` }}>
+        <div className="relative w-full" style={{ aspectRatio: 'auto' }}>
           <img 
             src={displayData.image_url} 
             alt={displayData.title}
-            className="w-full h-full object-cover"
+            className="w-full h-auto object-contain"
           />
         </div>
       ) : (
