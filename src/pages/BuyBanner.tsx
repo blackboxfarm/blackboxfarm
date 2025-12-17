@@ -5,6 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/com
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
+import { Checkbox } from '@/components/ui/checkbox';
 import { Calendar } from '@/components/ui/calendar';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -45,6 +46,7 @@ export default function BuyBanner() {
   const [dragActive, setDragActive] = useState(false);
   const [showAuthModal, setShowAuthModal] = useState(false);
   const [authDefaultTab, setAuthDefaultTab] = useState<'signin' | 'signup'>('signin');
+  const [startImmediately, setStartImmediately] = useState(false);
 
   const handleDrag = useCallback((e: React.DragEvent) => {
     e.preventDefault();
@@ -114,6 +116,7 @@ export default function BuyBanner() {
   };
 
   const getScheduledStartTime = (): Date => {
+    if (startImmediately) return new Date();
     if (!startDate) return addHours(startOfHour(new Date()), 1);
     const date = new Date(startDate);
     date.setHours(parseInt(startHour), 0, 0, 0);
@@ -424,13 +427,25 @@ export default function BuyBanner() {
                 </CardTitle>
               </CardHeader>
               <CardContent className="space-y-4">
-                <div className="flex gap-4">
+                <div className="flex items-center space-x-2 pb-2">
+                  <Checkbox
+                    id="startImmediately"
+                    checked={startImmediately}
+                    onCheckedChange={(checked) => setStartImmediately(checked === true)}
+                  />
+                  <Label htmlFor="startImmediately" className="cursor-pointer font-medium">
+                    Start Immediately
+                  </Label>
+                </div>
+                
+                <div className={cn("flex gap-4", startImmediately && "opacity-50 pointer-events-none")}>
                   <div className="flex-1">
                     <Label>Date</Label>
                     <Popover>
                       <PopoverTrigger asChild>
                         <Button
                           variant="outline"
+                          disabled={startImmediately}
                           className={cn(
                             "w-full justify-start text-left font-normal",
                             !startDate && "text-muted-foreground"
@@ -453,7 +468,7 @@ export default function BuyBanner() {
                   </div>
                   <div className="w-32">
                     <Label>Hour (UTC)</Label>
-                    <Select value={startHour} onValueChange={setStartHour}>
+                    <Select value={startHour} onValueChange={setStartHour} disabled={startImmediately}>
                       <SelectTrigger>
                         <SelectValue />
                       </SelectTrigger>
