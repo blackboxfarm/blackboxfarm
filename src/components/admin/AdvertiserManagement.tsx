@@ -12,7 +12,7 @@ import { toast } from 'sonner';
 import { 
   Users, Search, RefreshCw, Eye, Wallet, Mail, Twitter, 
   Calendar, DollarSign, Image, ExternalLink, Copy, CheckCircle,
-  XCircle, Clock, Ban, MoreHorizontal
+  XCircle, Clock, Ban, MoreHorizontal, UserX, AlertCircle
 } from 'lucide-react';
 import { format } from 'date-fns';
 import {
@@ -34,6 +34,16 @@ interface Advertiser {
   user_id: string | null;
 }
 
+interface IncompleteUser {
+  id: string;
+  email: string;
+  created_at: string;
+  last_sign_in_at: string | null;
+  email_confirmed_at: string | null;
+  phone: string | null;
+  provider: string;
+}
+
 interface BannerOrder {
   id: string;
   title: string;
@@ -48,29 +58,47 @@ interface BannerOrder {
   activation_key: string | null;
   created_at: string | null;
   is_active: boolean | null;
+  advertiser_id?: string | null;
 }
 
 export default function AdvertiserManagement() {
   const [advertisers, setAdvertisers] = useState<Advertiser[]>([]);
+  const [incompleteUsers, setIncompleteUsers] = useState<IncompleteUser[]>([]);
+  const [allBannerOrders, setAllBannerOrders] = useState<BannerOrder[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedAdvertiser, setSelectedAdvertiser] = useState<Advertiser | null>(null);
   const [advertiserOrders, setAdvertiserOrders] = useState<BannerOrder[]>([]);
   const [ordersLoading, setOrdersLoading] = useState(false);
   const [detailsOpen, setDetailsOpen] = useState(false);
+  const [activeMainTab, setActiveMainTab] = useState('complete');
+  const [totalAuthUsers, setTotalAuthUsers] = useState(0);
 
-  const fetchAdvertisers = async () => {
+  const fetchAllData = async () => {
     setLoading(true);
     try {
-      const { data, error } = await supabase
+      const { data: session } = await supabase.auth.getSession();
+      const { data, error } = await supabase.functions.invoke('get-advertiser-users', {
+        headers: session?.session?.access_token 
+          ? { Authorization: `Bearer ${session.session.access_token}` }
+          : undefined
+      });
+
+      if (error) throw error;
+      
+      setAdvertisers(data.advertisers || []);
+      setIncompleteUsers(data.incompleteUsers || []);
+      setAllBannerOrders(data.bannerOrders || []);
+      setTotalAuthUsers(data.totalAuthUsers || 0);
+    } catch (error: any) {
+      console.error('Failed to load data:', error);
+      toast.error('Failed to load advertiser data: ' + error.message);
+      // Fallback to direct query for advertisers only
+      const { data } = await supabase
         .from('advertiser_accounts')
         .select('*')
         .order('created_at', { ascending: false });
-
-      if (error) throw error;
       setAdvertisers(data || []);
-    } catch (error: any) {
-      toast.error('Failed to load advertisers: ' + error.message);
     } finally {
       setLoading(false);
     }
@@ -95,7 +123,7 @@ export default function AdvertiserManagement() {
   };
 
   useEffect(() => {
-    fetchAdvertisers();
+    fetchAllData();
   }, []);
 
   const handleViewDetails = async (advertiser: Advertiser) => {
@@ -113,7 +141,7 @@ export default function AdvertiserManagement() {
 
       if (error) throw error;
       toast.success(`Advertiser ${advertiser.is_active ? 'disabled' : 'enabled'}`);
-      fetchAdvertisers();
+      fetchAllData();
     } catch (error: any) {
       toast.error('Failed to update status: ' + error.message);
     }
@@ -128,6 +156,11 @@ export default function AdvertiserManagement() {
     a.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
     a.twitter_handle?.toLowerCase().includes(searchTerm.toLowerCase()) ||
     a.payment_wallet_pubkey.toLowerCase().includes(searchTerm.toLowerCase())
+  );
+
+  const filteredIncompleteUsers = incompleteUsers.filter(u => 
+    u.email?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    u.id.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
   const getPaymentStatusBadge = (status: string | null) => {
@@ -157,7 +190,7 @@ export default function AdvertiserManagement() {
                 Manage advertiser accounts, orders, and payments
               </CardDescription>
             </div>
-            <Button onClick={fetchAdvertisers} variant="outline" size="sm">
+            <Button onClick={fetchAllData} variant="outline" size="sm">
               <RefreshCw className={`h-4 w-4 mr-2 ${loading ? 'animate-spin' : ''}`} />
               Refresh
             </Button>
@@ -179,16 +212,18 @@ export default function AdvertiserManagement() {
           </div>
 
           {/* Stats */}
-          <div className="grid grid-cols-4 gap-4 mb-6">
+          <div className="grid grid-cols-5 gap-4 mb-6">
             <Card className="p-4">
-              <div className="text-2xl font-bold">{advertisers.length}</div>
-              <div className="text-sm text-muted-foreground">Total Advertisers</div>
+              <div className="text-2xl font-bold">{totalAuthUsers}</div>
+              <div className="text-sm text-muted-foreground">Total Auth Users</div>
             </Card>
             <Card className="p-4">
-              <div className="text-2xl font-bold text-green-400">
-                {advertisers.filter(a => a.is_active !== false).length}
-              </div>
-              <div className="text-sm text-muted-foreground">Active</div>
+              <div className="text-2xl font-bold text-green-400">{advertisers.length}</div>
+              <div className="text-sm text-muted-foreground">Complete Advertisers</div>
+            </Card>
+            <Card className="p-4">
+              <div className="text-2xl font-bold text-yellow-400">{incompleteUsers.length}</div>
+              <div className="text-sm text-muted-foreground">Incomplete</div>
             </Card>
             <Card className="p-4">
               <div className="text-2xl font-bold text-primary">
@@ -197,14 +232,25 @@ export default function AdvertiserManagement() {
               <div className="text-sm text-muted-foreground">Total Revenue</div>
             </Card>
             <Card className="p-4">
-              <div className="text-2xl font-bold">
-                {advertisers.filter(a => a.twitter_handle).length}
-              </div>
-              <div className="text-sm text-muted-foreground">With Twitter</div>
+              <div className="text-2xl font-bold">{allBannerOrders.length}</div>
+              <div className="text-sm text-muted-foreground">Total Orders</div>
             </Card>
           </div>
 
-          {/* Table */}
+          {/* Tabs for Complete vs Incomplete */}
+          <Tabs value={activeMainTab} onValueChange={setActiveMainTab} className="w-full">
+            <TabsList className="mb-4">
+              <TabsTrigger value="complete" className="gap-2">
+                <CheckCircle className="h-4 w-4" />
+                Complete Advertisers ({advertisers.length})
+              </TabsTrigger>
+              <TabsTrigger value="incomplete" className="gap-2">
+                <AlertCircle className="h-4 w-4" />
+                Incomplete Registrations ({incompleteUsers.length})
+              </TabsTrigger>
+            </TabsList>
+
+            <TabsContent value="complete">
           <div className="border rounded-lg">
             <Table>
               <TableHeader>
@@ -319,6 +365,123 @@ export default function AdvertiserManagement() {
               </TableBody>
             </Table>
           </div>
+            </TabsContent>
+
+            <TabsContent value="incomplete">
+              <div className="border rounded-lg">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Email</TableHead>
+                      <TableHead>Provider</TableHead>
+                      <TableHead>User ID</TableHead>
+                      <TableHead>Email Verified</TableHead>
+                      <TableHead>Created</TableHead>
+                      <TableHead>Last Sign In</TableHead>
+                      <TableHead className="text-right">Actions</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {loading ? (
+                      <TableRow>
+                        <TableCell colSpan={7} className="text-center py-8">
+                          <RefreshCw className="h-6 w-6 animate-spin mx-auto text-muted-foreground" />
+                        </TableCell>
+                      </TableRow>
+                    ) : filteredIncompleteUsers.length === 0 ? (
+                      <TableRow>
+                        <TableCell colSpan={7} className="text-center py-8 text-muted-foreground">
+                          No incomplete registrations found
+                        </TableCell>
+                      </TableRow>
+                    ) : (
+                      filteredIncompleteUsers.map((user) => (
+                        <TableRow key={user.id}>
+                          <TableCell>
+                            <div className="flex items-center gap-2">
+                              <Mail className="h-4 w-4 text-muted-foreground" />
+                              <span className="font-mono text-sm">{user.email || 'No email'}</span>
+                            </div>
+                          </TableCell>
+                          <TableCell>
+                            <Badge variant="outline">{user.provider}</Badge>
+                          </TableCell>
+                          <TableCell>
+                            <div className="flex items-center gap-2">
+                              <span className="font-mono text-xs">
+                                {user.id.slice(0, 8)}...
+                              </span>
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="h-6 w-6"
+                                onClick={() => copyToClipboard(user.id, 'User ID')}
+                              >
+                                <Copy className="h-3 w-3" />
+                              </Button>
+                            </div>
+                          </TableCell>
+                          <TableCell>
+                            {user.email_confirmed_at ? (
+                              <Badge className="bg-green-500/20 text-green-400 border-green-500/30">
+                                <CheckCircle className="w-3 h-3 mr-1" />Verified
+                              </Badge>
+                            ) : (
+                              <Badge className="bg-yellow-500/20 text-yellow-400 border-yellow-500/30">
+                                <Clock className="w-3 h-3 mr-1" />Pending
+                              </Badge>
+                            )}
+                          </TableCell>
+                          <TableCell className="text-muted-foreground text-sm">
+                            {user.created_at ? format(new Date(user.created_at), 'MMM d, yyyy HH:mm') : '—'}
+                          </TableCell>
+                          <TableCell className="text-muted-foreground text-sm">
+                            {user.last_sign_in_at ? format(new Date(user.last_sign_in_at), 'MMM d, yyyy HH:mm') : 'Never'}
+                          </TableCell>
+                          <TableCell className="text-right">
+                            <DropdownMenu>
+                              <DropdownMenuTrigger asChild>
+                                <Button variant="ghost" size="icon">
+                                  <MoreHorizontal className="h-4 w-4" />
+                                </Button>
+                              </DropdownMenuTrigger>
+                              <DropdownMenuContent align="end">
+                                <DropdownMenuItem onClick={() => copyToClipboard(user.id, 'User ID')}>
+                                  <Copy className="h-4 w-4 mr-2" />
+                                  Copy User ID
+                                </DropdownMenuItem>
+                                {user.email && (
+                                  <DropdownMenuItem onClick={() => copyToClipboard(user.email, 'Email')}>
+                                    <Mail className="h-4 w-4 mr-2" />
+                                    Copy Email
+                                  </DropdownMenuItem>
+                                )}
+                              </DropdownMenuContent>
+                            </DropdownMenu>
+                          </TableCell>
+                        </TableRow>
+                      ))
+                    )}
+                  </TableBody>
+                </Table>
+              </div>
+              
+              {/* Info box about incomplete users */}
+              <div className="mt-4 p-4 bg-yellow-500/10 border border-yellow-500/30 rounded-lg">
+                <div className="flex items-start gap-3">
+                  <AlertCircle className="h-5 w-5 text-yellow-400 mt-0.5" />
+                  <div>
+                    <div className="font-medium text-yellow-400">Incomplete Registrations</div>
+                    <div className="text-sm text-muted-foreground mt-1">
+                      These users created an auth account but haven't completed their advertiser profile. 
+                      This usually means their banner order submission failed (e.g., payment processing error) 
+                      before an advertiser account could be created.
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </TabsContent>
+          </Tabs>
         </CardContent>
       </Card>
 
