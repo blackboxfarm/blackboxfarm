@@ -18,7 +18,7 @@ serve(async (req) => {
     const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
-    // Get user from auth header
+    // Get user from auth header - use service role to verify token
     const authHeader = req.headers.get('Authorization');
     if (!authHeader) {
       return new Response(
@@ -27,17 +27,19 @@ serve(async (req) => {
       );
     }
 
-    const userSupabase = createClient(supabaseUrl, Deno.env.get('SUPABASE_ANON_KEY')!, {
-      global: { headers: { Authorization: authHeader } },
-    });
-    const { data: { user }, error: userError } = await userSupabase.auth.getUser();
+    // Extract token and verify with service role client
+    const token = authHeader.replace('Bearer ', '');
+    const { data: { user }, error: userError } = await supabase.auth.getUser(token);
 
     if (userError || !user) {
+      console.error('User validation error:', userError?.message);
       return new Response(
-        JSON.stringify({ error: 'Invalid user' }),
+        JSON.stringify({ error: 'Invalid user', details: userError?.message }),
         { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
+    
+    console.log('Validated user:', user.id, user.email);
 
     const { imageUrl, linkUrl, title, email, twitter, durationHours, priceUsd, startTime } = await req.json();
 
