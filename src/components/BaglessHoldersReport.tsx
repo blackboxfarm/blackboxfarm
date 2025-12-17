@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { Link } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -1083,13 +1084,17 @@ export function BaglessHoldersReport({ initialToken }: BaglessHoldersReportProps
                 );
               })()}
 
-              {/* Share Button */}
-              <div className="mb-4 flex justify-center">
+              {/* Action Buttons Row */}
+              <div className="mb-4 grid grid-cols-3 gap-2">
+                <Button variant="outline" asChild className="text-xs md:text-sm">
+                  <Link to="/holders-marketing">Why You Need This Before Every Buy</Link>
+                </Button>
+                
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
-                    <Button variant="outline" className="gap-2">
+                    <Button variant="outline" className="gap-2 text-xs md:text-sm">
                       <Share2 className="h-4 w-4" />
-                      Share Analysis
+                      Share
                     </Button>
                   </DropdownMenuTrigger>
                   <DropdownMenuContent align="center">
@@ -1124,6 +1129,10 @@ export function BaglessHoldersReport({ initialToken }: BaglessHoldersReportProps
                     </DropdownMenuItem>
                   </DropdownMenuContent>
                 </DropdownMenu>
+
+                <Button variant="outline" asChild className="text-xs md:text-sm">
+                  <Link to="/adverts">Get Seen! 👀 Eyes here!</Link>
+                </Button>
               </div>
 
               {/* Functional Holders Header */}
