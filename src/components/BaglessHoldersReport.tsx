@@ -898,12 +898,12 @@ export function BaglessHoldersReport({ initialToken }: BaglessHoldersReportProps
                 </div>
               )}
               
-              {/* LP Detection Summary - Enhanced Display */}
+              {/* LP Detection Summary - Hidden */}
               {(() => {
                 const lpAnalysis = calculateLPAnalysis();
                 
                 return (
-                  <div className={`mb-3 md:mb-4 p-2 md:p-3 rounded-lg border ${
+                  <div className={`hidden mb-3 md:mb-4 p-2 md:p-3 rounded-lg border ${
                     lpAnalysis.suspiciousZeroLP 
                       ? 'bg-yellow-500/10 border-yellow-500/30' 
                       : lpAnalysis.lpCount > 0 
