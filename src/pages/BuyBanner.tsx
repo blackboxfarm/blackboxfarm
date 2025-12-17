@@ -11,7 +11,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
-import { Upload, ImageIcon, CalendarIcon, DollarSign, Clock, ArrowRight, AlertCircle, Check } from 'lucide-react';
+import { AuthModal } from '@/components/auth/AuthModal';
+import { Upload, ImageIcon, CalendarIcon, DollarSign, Clock, ArrowRight, AlertCircle, Check, User, LogIn } from 'lucide-react';
 import { format, addHours, startOfHour } from 'date-fns';
 import { cn } from '@/lib/utils';
 
@@ -36,13 +37,14 @@ export default function BuyBanner() {
   const [imageDimensions, setImageDimensions] = useState<{ width: number; height: number } | null>(null);
   const [linkUrl, setLinkUrl] = useState('');
   const [title, setTitle] = useState('');
-  const [email, setEmail] = useState('');
   const [twitter, setTwitter] = useState('');
   const [duration, setDuration] = useState<keyof typeof PRICING>(24);
   const [startDate, setStartDate] = useState<Date | undefined>(undefined);
   const [startHour, setStartHour] = useState<string>('12');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [dragActive, setDragActive] = useState(false);
+  const [showAuthModal, setShowAuthModal] = useState(false);
+  const [authDefaultTab, setAuthDefaultTab] = useState<'signin' | 'signup'>('signin');
 
   const handleDrag = useCallback((e: React.DragEvent) => {
     e.preventDefault();
@@ -127,10 +129,6 @@ export default function BuyBanner() {
       toast.error('Please enter a destination URL');
       return;
     }
-    if (!email) {
-      toast.error('Please enter your email');
-      return;
-    }
     if (!title) {
       toast.error('Please enter a title for your banner');
       return;
@@ -144,15 +142,17 @@ export default function BuyBanner() {
       return;
     }
 
+    // If not logged in, prompt to sign in via modal
+    if (!user) {
+      toast.error('Please sign in to continue');
+      setAuthDefaultTab('signin');
+      setShowAuthModal(true);
+      return;
+    }
+
     setIsSubmitting(true);
 
     try {
-      // If not logged in, create account or prompt login
-      if (!user) {
-        toast.error('Please sign in to continue');
-        navigate('/auth', { state: { returnTo: '/buy-banner' } });
-        return;
-      }
 
       // Upload image to storage
       const fileExt = imageFile.name.split('.').pop();
@@ -168,13 +168,13 @@ export default function BuyBanner() {
         .from('banner-images')
         .getPublicUrl(fileName);
 
-      // Create order via edge function
+      // Create order via edge function - use authenticated user's email
       const { data, error } = await supabase.functions.invoke('banner-order-processor', {
         body: {
           imageUrl: publicUrl,
           linkUrl,
           title,
-          email,
+          email: user.email,
           twitter: twitter || null,
           durationHours: duration,
           priceUsd: PRICING[duration].price,
@@ -324,16 +324,6 @@ export default function BuyBanner() {
                   />
                 </div>
                 <div>
-                  <Label htmlFor="email">Contact Email</Label>
-                  <Input
-                    id="email"
-                    type="email"
-                    placeholder="you@example.com"
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
-                  />
-                </div>
-                <div>
                   <Label htmlFor="twitter">Twitter/X Handle (optional)</Label>
                   <Input
                     id="twitter"
@@ -341,6 +331,49 @@ export default function BuyBanner() {
                     value={twitter}
                     onChange={(e) => setTwitter(e.target.value)}
                   />
+                </div>
+
+                {/* Authentication Section */}
+                <div className="pt-2 border-t border-border">
+                  {user ? (
+                    <div className="flex items-center gap-2 p-3 bg-green-500/10 border border-green-500/20 rounded-lg">
+                      <User className="h-4 w-4 text-green-500" />
+                      <div className="flex-1">
+                        <p className="text-sm font-medium text-green-500">Logged in</p>
+                        <p className="text-xs text-muted-foreground">{user.email}</p>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="space-y-3">
+                      <p className="text-sm text-muted-foreground">Sign in to continue with your order</p>
+                      <div className="flex gap-2">
+                        <Button
+                          type="button"
+                          variant="outline"
+                          className="flex-1"
+                          onClick={() => {
+                            setAuthDefaultTab('signin');
+                            setShowAuthModal(true);
+                          }}
+                        >
+                          <LogIn className="h-4 w-4 mr-2" />
+                          Sign In
+                        </Button>
+                        <Button
+                          type="button"
+                          variant="default"
+                          className="flex-1"
+                          onClick={() => {
+                            setAuthDefaultTab('signup');
+                            setShowAuthModal(true);
+                          }}
+                        >
+                          <User className="h-4 w-4 mr-2" />
+                          Create Account
+                        </Button>
+                      </div>
+                    </div>
+                  )}
                 </div>
               </CardContent>
             </Card>
@@ -479,6 +512,13 @@ export default function BuyBanner() {
           </div>
         </div>
       </div>
+
+      {/* Auth Modal - non-blocking overlay */}
+      <AuthModal
+        isOpen={showAuthModal}
+        onClose={() => setShowAuthModal(false)}
+        defaultTab={authDefaultTab}
+      />
     </div>
   );
 }
