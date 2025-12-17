@@ -1106,9 +1106,9 @@ export function BaglessHoldersReport({ initialToken }: BaglessHoldersReportProps
                 </div>
               </div>
 
-              {/* LP Detection with Solscan Badge */}
+              {/* LP Detection with Solscan Badge - Hidden */}
               {report.liquidityPools && report.liquidityPools.length > 0 && (
-                <div className="mb-4 md:mb-6 space-y-3">
+                <div className="hidden mb-4 md:mb-6 space-y-3">
                   <h4 className="text-sm font-semibold flex items-center gap-2">
                     <Droplets className="w-4 h-4" />
                     Liquidity Pools Detected
