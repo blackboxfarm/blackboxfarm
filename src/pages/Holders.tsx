@@ -29,7 +29,7 @@ export default function Holders() {
     <div className="min-h-screen bg-background">
       {/* Farm Banner Header */}
       <FarmBanner />
-      <div className="mx-auto py-6 space-y-4 px-2 md:px-4 max-w-[1800px]">
+      <div className="mx-auto py-6 space-y-4 px-2 md:px-4 max-w-6xl">
         {/* Header */}
         <div className="flex flex-col md:flex-row md:justify-between md:items-start space-y-4 md:space-y-0">
           <div className="text-center md:text-left flex-1 space-y-4">
