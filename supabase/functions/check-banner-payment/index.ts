@@ -43,8 +43,46 @@ serve(async (req) => {
       );
     }
 
-    // Already paid
+    // Already paid - but check if banner_ads entry exists
     if (order.payment_status === 'paid') {
+      // If banner_ad_id is missing, create it now (retroactive fix)
+      if (!order.banner_ad_id) {
+        console.log('Fixing missing banner_ads entry for paid order:', orderId);
+        
+        const startDate = new Date(order.start_time);
+        const endDate = order.end_time ? new Date(order.end_time) : new Date(startDate.getTime() + order.duration_hours * 60 * 60 * 1000);
+        
+        const { data: bannerAd, error: bannerError } = await supabase
+          .from('banner_ads')
+          .insert({
+            title: order.title || 'Banner Ad',
+            image_url: order.image_url,
+            link_url: order.link_url,
+            position: 1,
+            is_active: true,
+            start_date: order.start_time,
+            end_date: endDate.toISOString(),
+            weight: 10,
+            notes: `Auto-created from order ${orderId}`,
+          })
+          .select('id')
+          .single();
+
+        if (!bannerError && bannerAd) {
+          await supabase
+            .from('banner_orders')
+            .update({ banner_ad_id: bannerAd.id })
+            .eq('id', orderId);
+          
+          console.log('Created missing banner_ads entry:', bannerAd.id);
+          
+          return new Response(
+            JSON.stringify({ status: 'paid', message: 'Payment confirmed and banner activated', bannerId: bannerAd.id }),
+            { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+      }
+      
       return new Response(
         JSON.stringify({ status: 'paid', message: 'Payment already confirmed' }),
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
@@ -78,11 +116,42 @@ serve(async (req) => {
 
     if (balanceSol >= requiredAmount) {
       // Payment confirmed!
+      
+      // First, create a banner_ads entry so it shows on the live page
+      const startDate = new Date(order.start_time);
+      const endDate = new Date(startDate.getTime() + order.duration_hours * 60 * 60 * 1000);
+      const isCurrentlyActive = new Date() >= startDate && new Date() <= endDate;
+      
+      const { data: bannerAd, error: bannerError } = await supabase
+        .from('banner_ads')
+        .insert({
+          title: order.title || 'Banner Ad',
+          image_url: order.image_url,
+          link_url: order.link_url,
+          position: 1, // Default to position 1 (premium)
+          is_active: true, // Will be filtered by date range
+          start_date: order.start_time,
+          end_date: endDate.toISOString(),
+          weight: 10, // Higher weight for paid ads
+          notes: `Auto-created from order ${orderId}`,
+        })
+        .select('id')
+        .single();
+
+      if (bannerError) {
+        console.error('Error creating banner_ads entry:', bannerError);
+        // Continue anyway - we still want to mark payment as confirmed
+      }
+
+      // Update the order with payment status and link to banner_ads
       const { error: updateError } = await supabase
         .from('banner_orders')
         .update({
           payment_status: 'paid',
           payment_confirmed_at: new Date().toISOString(),
+          banner_ad_id: bannerAd?.id || null,
+          end_time: endDate.toISOString(),
+          is_active: isCurrentlyActive,
         })
         .eq('id', orderId);
 
@@ -90,6 +159,8 @@ serve(async (req) => {
         console.error('Error updating order status:', updateError);
         throw updateError;
       }
+      
+      console.log(`Created banner_ads entry ${bannerAd?.id} for order ${orderId}`);
 
       // Update advertiser total spent
       await supabase
