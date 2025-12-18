@@ -34,6 +34,7 @@ import HeliusUsage from "./pages/HeliusUsage";
 import BuyBanner from "./pages/BuyBanner";
 import BannerCheckout from "./pages/BannerCheckout";
 import BannerPreview from "./pages/BannerPreview";
+import TokenAnalysisDownload from "./pages/TokenAnalysisDownload";
 
 const queryClient = new QueryClient();
 
@@ -77,6 +78,7 @@ const App = () => (
               <Route path="/copy-trading" element={<CopyTrading />} />
               <Route path="/breadcrumbs" element={<BreadCrumbs />} />
               <Route path="/helius-usage" element={<HeliusUsage />} />
+              <Route path="/token-analysis" element={<TokenAnalysisDownload />} />
               {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
               <Route path="*" element={<NotFound />} />
             </Routes>
