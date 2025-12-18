@@ -210,3 +210,9 @@ verify_jwt = false
 
 [functions.bagless-investigation]
 verify_jwt = false
+
+[functions.solscan-creator-lookup]
+verify_jwt = false
+
+[functions.developer-wallet-tracer]
+verify_jwt = false
