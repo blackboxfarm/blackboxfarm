@@ -189,9 +189,9 @@ export function AdBanner({ size, position }: AdBannerProps) {
     );
   }
 
-  // Leaderboard (original size, centered)
+  // Leaderboard (scaled for laptop, centered)
   return (
-      <Card className="mb-4 overflow-hidden cursor-pointer transition-all duration-300 hover:scale-105 hover:shadow-2xl hover:shadow-primary/20 w-fit mx-auto" onClick={handleClick}>
+      <Card className="mb-4 overflow-hidden cursor-pointer transition-all duration-300 hover:scale-105 hover:shadow-2xl hover:shadow-primary/20 w-full max-w-4xl mx-auto" onClick={handleClick}>
       {mediaUrl ? (
         isVideo ? (
           <video
@@ -201,13 +201,13 @@ export function AdBanner({ size, position }: AdBannerProps) {
             muted
             playsInline
             preload="metadata"
-            className="max-w-full h-auto"
+            className="w-full h-auto object-contain"
           />
         ) : (
           <img
             src={mediaUrl}
             alt={displayData.title}
-            className="max-w-full h-auto"
+            className="w-full h-auto object-contain"
             loading="lazy"
           />
         )
