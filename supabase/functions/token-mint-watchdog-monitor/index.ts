@@ -596,6 +596,286 @@ Deno.serve(async (req) => {
       )
     }
 
+    // HELIUS FULL TRANSACTION HISTORY - ALL tx types including transfers
+    if (action === 'helius_full_history' && tokenMint) {
+      const heliusApiKey = Deno.env.get('HELIUS_API_KEY')
+      if (!heliusApiKey) {
+        return new Response(
+          JSON.stringify({ error: 'HELIUS_API_KEY not configured' }),
+          { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        )
+      }
+
+      console.log(`Fetching FULL Helius transaction history for token: ${tokenMint}`)
+      
+      const allTransactions: any[] = []
+      let beforeSignature: string | undefined = undefined
+      let pageCount = 0
+      const maxPages = 50 // Up to 5000 transactions
+      
+      while (pageCount < maxPages) {
+        const requestBody: any = {
+          query: {
+            tokenMint: tokenMint
+          },
+          options: {
+            limit: 100
+          }
+        }
+        
+        if (beforeSignature) {
+          requestBody.options.before = beforeSignature
+        }
+        
+        console.log(`Helius page ${pageCount + 1}, before: ${beforeSignature || 'start'}`)
+        
+        const response = await fetch(
+          `https://api.helius.xyz/v0/addresses/${tokenMint}/transactions?api-key=${heliusApiKey}&limit=100${beforeSignature ? `&before=${beforeSignature}` : ''}`,
+          { method: 'GET' }
+        )
+        
+        if (!response.ok) {
+          const errorText = await response.text()
+          console.error(`Helius error page ${pageCount + 1}:`, response.status, errorText)
+          break
+        }
+        
+        const transactions = await response.json()
+        
+        if (!transactions || transactions.length === 0) {
+          console.log(`No more transactions at page ${pageCount + 1}`)
+          break
+        }
+        
+        allTransactions.push(...transactions)
+        console.log(`Page ${pageCount + 1}: Got ${transactions.length} txs, total: ${allTransactions.length}`)
+        
+        // Get last signature for pagination
+        beforeSignature = transactions[transactions.length - 1]?.signature
+        
+        if (transactions.length < 100) break
+        
+        pageCount++
+        await new Promise(r => setTimeout(r, 100)) // Rate limit
+      }
+      
+      console.log(`Total Helius transactions fetched: ${allTransactions.length}`)
+      
+      // Process transactions to extract meaningful data
+      interface ProcessedTx {
+        signature: string
+        timestamp: number
+        timestampFormatted: string
+        type: string
+        description: string
+        fee: number
+        feePayer: string
+        source: string
+        tokenTransfers: any[]
+        nativeTransfers: any[]
+        accountData: any[]
+        instructions: string[]
+      }
+      
+      const processedTxs: ProcessedTx[] = allTransactions.map((tx: any) => {
+        const tokenTransfers = tx.tokenTransfers || []
+        const nativeTransfers = tx.nativeTransfers || []
+        
+        return {
+          signature: tx.signature,
+          timestamp: tx.timestamp,
+          timestampFormatted: new Date(tx.timestamp * 1000).toISOString(),
+          type: tx.type || 'UNKNOWN',
+          description: tx.description || '',
+          fee: tx.fee || 0,
+          feePayer: tx.feePayer || '',
+          source: tx.source || '',
+          tokenTransfers: tokenTransfers.map((t: any) => ({
+            fromUserAccount: t.fromUserAccount,
+            toUserAccount: t.toUserAccount,
+            tokenAmount: t.tokenAmount,
+            mint: t.mint,
+            tokenStandard: t.tokenStandard
+          })),
+          nativeTransfers: nativeTransfers.map((t: any) => ({
+            fromUserAccount: t.fromUserAccount,
+            toUserAccount: t.toUserAccount,
+            amount: t.amount
+          })),
+          accountData: tx.accountData || [],
+          instructions: tx.instructions?.map((i: any) => i.programId) || []
+        }
+      })
+      
+      // Sort by timestamp ascending (oldest first)
+      processedTxs.sort((a, b) => a.timestamp - b.timestamp)
+      
+      // Aggregate wallet activity from ALL transactions
+      interface WalletActivity {
+        wallet: string
+        txCount: number
+        tokensReceived: number
+        tokensSent: number
+        netTokens: number
+        solReceived: number
+        solSent: number
+        netSol: number
+        firstTxTime: number
+        lastTxTime: number
+        txTypes: Record<string, number>
+        interactedWith: Set<string>
+      }
+      
+      const walletActivity = new Map<string, WalletActivity>()
+      
+      processedTxs.forEach(tx => {
+        // Process token transfers
+        tx.tokenTransfers.forEach((t: any) => {
+          if (t.mint !== tokenMint) return
+          
+          const amount = t.tokenAmount || 0
+          
+          // Sender
+          if (t.fromUserAccount) {
+            const w = walletActivity.get(t.fromUserAccount) || {
+              wallet: t.fromUserAccount,
+              txCount: 0,
+              tokensReceived: 0,
+              tokensSent: 0,
+              netTokens: 0,
+              solReceived: 0,
+              solSent: 0,
+              netSol: 0,
+              firstTxTime: tx.timestamp,
+              lastTxTime: tx.timestamp,
+              txTypes: {},
+              interactedWith: new Set<string>()
+            }
+            w.txCount++
+            w.tokensSent += amount
+            w.netTokens = w.tokensReceived - w.tokensSent
+            w.lastTxTime = Math.max(w.lastTxTime, tx.timestamp)
+            w.txTypes[tx.type] = (w.txTypes[tx.type] || 0) + 1
+            if (t.toUserAccount) w.interactedWith.add(t.toUserAccount)
+            walletActivity.set(t.fromUserAccount, w)
+          }
+          
+          // Receiver
+          if (t.toUserAccount) {
+            const w = walletActivity.get(t.toUserAccount) || {
+              wallet: t.toUserAccount,
+              txCount: 0,
+              tokensReceived: 0,
+              tokensSent: 0,
+              netTokens: 0,
+              solReceived: 0,
+              solSent: 0,
+              netSol: 0,
+              firstTxTime: tx.timestamp,
+              lastTxTime: tx.timestamp,
+              txTypes: {},
+              interactedWith: new Set<string>()
+            }
+            w.txCount++
+            w.tokensReceived += amount
+            w.netTokens = w.tokensReceived - w.tokensSent
+            w.lastTxTime = Math.max(w.lastTxTime, tx.timestamp)
+            w.txTypes[tx.type] = (w.txTypes[tx.type] || 0) + 1
+            if (t.fromUserAccount) w.interactedWith.add(t.fromUserAccount)
+            walletActivity.set(t.toUserAccount, w)
+          }
+        })
+        
+        // Process SOL transfers
+        tx.nativeTransfers.forEach((t: any) => {
+          const amount = (t.amount || 0) / 1e9 // Convert lamports to SOL
+          
+          if (t.fromUserAccount) {
+            const w = walletActivity.get(t.fromUserAccount) || {
+              wallet: t.fromUserAccount,
+              txCount: 0,
+              tokensReceived: 0,
+              tokensSent: 0,
+              netTokens: 0,
+              solReceived: 0,
+              solSent: 0,
+              netSol: 0,
+              firstTxTime: tx.timestamp,
+              lastTxTime: tx.timestamp,
+              txTypes: {},
+              interactedWith: new Set<string>()
+            }
+            w.solSent += amount
+            w.netSol = w.solReceived - w.solSent
+            walletActivity.set(t.fromUserAccount, w)
+          }
+          
+          if (t.toUserAccount) {
+            const w = walletActivity.get(t.toUserAccount) || {
+              wallet: t.toUserAccount,
+              txCount: 0,
+              tokensReceived: 0,
+              tokensSent: 0,
+              netTokens: 0,
+              solReceived: 0,
+              solSent: 0,
+              netSol: 0,
+              firstTxTime: tx.timestamp,
+              lastTxTime: tx.timestamp,
+              txTypes: {},
+              interactedWith: new Set<string>()
+            }
+            w.solReceived += amount
+            w.netSol = w.solReceived - w.solSent
+            walletActivity.set(t.toUserAccount, w)
+          }
+        })
+      })
+      
+      // Convert to array and serialize
+      const walletStats = Array.from(walletActivity.values()).map(w => ({
+        ...w,
+        netTokens: parseFloat(w.netTokens.toFixed(4)),
+        netSol: parseFloat(w.netSol.toFixed(6)),
+        solReceived: parseFloat(w.solReceived.toFixed(6)),
+        solSent: parseFloat(w.solSent.toFixed(6)),
+        interactedWith: Array.from(w.interactedWith)
+      }))
+      
+      // Transaction type breakdown
+      const txTypeBreakdown: Record<string, number> = {}
+      processedTxs.forEach(tx => {
+        txTypeBreakdown[tx.type] = (txTypeBreakdown[tx.type] || 0) + 1
+      })
+      
+      // Source breakdown (DEX, program, etc)
+      const sourceBreakdown: Record<string, number> = {}
+      processedTxs.forEach(tx => {
+        sourceBreakdown[tx.source || 'UNKNOWN'] = (sourceBreakdown[tx.source || 'UNKNOWN'] || 0) + 1
+      })
+      
+      return new Response(
+        JSON.stringify({
+          success: true,
+          tokenMint,
+          dataSource: 'helius',
+          summary: {
+            totalTransactions: processedTxs.length,
+            uniqueWallets: walletStats.length,
+            transactionTypes: txTypeBreakdown,
+            sources: sourceBreakdown,
+            timeRange: {
+              first: processedTxs[0]?.timestampFormatted,
+              last: processedTxs[processedTxs.length - 1]?.timestampFormatted
+            }
+          },
+          walletActivity: walletStats.sort((a, b) => b.txCount - a.txCount),
+          allTransactions: processedTxs
+        }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      )
+    }
+
     // Scan for new pump.fun tokens
     if (action === 'scan') {
       console.log('Scanning for new pump.fun tokens...')
