@@ -1,13 +1,15 @@
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Download, Loader2, FileText, FileSpreadsheet } from "lucide-react";
+import { Download, Loader2, FileText, FileSpreadsheet, Database } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 
 const TokenAnalysisDownload = () => {
   const [loading, setLoading] = useState(false);
+  const [heliusLoading, setHeliusLoading] = useState(false);
   const [analysisData, setAnalysisData] = useState<any>(null);
+  const [heliusData, setHeliusData] = useState<any>(null);
 
   const tokenMint = "DyqgbSyWcwRw17Y3SvAtmP4o73n1nes5PzwAEjvVpump";
 
@@ -28,28 +30,70 @@ const TokenAnalysisDownload = () => {
     }
   };
 
+  const fetchHeliusHistory = async () => {
+    setHeliusLoading(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("token-mint-watchdog-monitor", {
+        body: { action: "helius_full_history", tokenMint }
+      });
+
+      if (error) throw error;
+      setHeliusData(data);
+      toast.success(`Fetched ${data.summary?.totalTransactions} total transactions from Helius`);
+    } catch (err: any) {
+      toast.error("Failed to fetch Helius data: " + err.message);
+    } finally {
+      setHeliusLoading(false);
+    }
+  };
+
   const downloadCSV = () => {
     if (!analysisData?.allWalletStats) return;
 
-    // Create CSV for all wallet stats
     const walletHeaders = ["wallet", "buyCount", "sellCount", "buySol", "sellSol", "pnlSol", "pnlUsd", "netTokens", "isEmpty", "tradeSequence"];
     const walletRows = analysisData.allWalletStats.map((w: any) => 
       walletHeaders.map(h => w[h] ?? "").join(",")
     );
     const walletCSV = [walletHeaders.join(","), ...walletRows].join("\n");
 
-    // Create CSV for all trades
     const tradeHeaders = ["index", "type", "wallet", "amount", "volumeSol", "volumeUsd", "priceUsd", "time"];
     const tradeRows = analysisData.first100Trades?.map((t: any) =>
       tradeHeaders.map(h => t[h] ?? "").join(",")
     ) || [];
     const tradesCSV = [tradeHeaders.join(","), ...tradeRows].join("\n");
 
-    // Download wallet stats
     downloadFile(`token_wallet_stats_${tokenMint.slice(0, 8)}.csv`, walletCSV, "text/csv");
-    
-    // Download trades
     downloadFile(`token_trades_${tokenMint.slice(0, 8)}.csv`, tradesCSV, "text/csv");
+  };
+
+  const downloadHeliusCSV = () => {
+    if (!heliusData) return;
+
+    // All transactions CSV
+    const txHeaders = ["signature", "timestamp", "type", "source", "description", "fee", "feePayer"];
+    const txRows = heliusData.allTransactions?.map((t: any) =>
+      txHeaders.map(h => String(t[h] ?? "").replace(/,/g, ";")).join(",")
+    ) || [];
+    const txCSV = [txHeaders.join(","), ...txRows].join("\n");
+
+    // Wallet activity CSV
+    const walletHeaders = ["wallet", "txCount", "tokensReceived", "tokensSent", "netTokens", "solReceived", "solSent", "netSol"];
+    const walletRows = heliusData.walletActivity?.map((w: any) =>
+      walletHeaders.map(h => w[h] ?? "").join(",")
+    ) || [];
+    const walletCSV = [walletHeaders.join(","), ...walletRows].join("\n");
+
+    downloadFile(`helius_all_transactions_${tokenMint.slice(0, 8)}.csv`, txCSV, "text/csv");
+    downloadFile(`helius_wallet_activity_${tokenMint.slice(0, 8)}.csv`, walletCSV, "text/csv");
+  };
+
+  const downloadHeliusJSON = () => {
+    if (!heliusData) return;
+    downloadFile(
+      `helius_full_history_${tokenMint.slice(0, 8)}.json`,
+      JSON.stringify(heliusData, null, 2),
+      "application/json"
+    );
   };
 
   const downloadAnalysisText = () => {
@@ -123,7 +167,7 @@ FIRST 100 TRADES
 ----------------
 `;
     analysisData.first100Trades?.forEach((t: any) => {
-      text += `#${t.index} ${t.type.toUpperCase()} | ${t.wallet?.slice(0, 8)}... | ${t.amount?.toFixed(2)} tokens | ${t.volumeSol?.toFixed(4)} SOL | ${t.time}\n`;
+      text += `#${t.index} ${t.type?.toUpperCase()} | ${t.wallet?.slice(0, 8)}... | ${t.amount?.toFixed(2)} tokens | ${t.volumeSol?.toFixed(4)} SOL | ${t.time}\n`;
     });
 
     text += `
@@ -162,27 +206,28 @@ ALL WALLET STATISTICS
   return (
     <div className="min-h-screen bg-background p-8">
       <div className="max-w-4xl mx-auto space-y-6">
+        {/* Swap Trades Analysis */}
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <FileSpreadsheet className="h-6 w-6" />
-              Token Analysis Download
+              Swap Trades Analysis (Solana Tracker)
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="p-4 bg-muted rounded-lg">
               <p className="font-mono text-sm break-all">{tokenMint}</p>
-              <p className="text-sm text-muted-foreground mt-1">pepemas token</p>
+              <p className="text-sm text-muted-foreground mt-1">pepemas token - Buy/Sell swaps only</p>
             </div>
 
             <Button onClick={fetchAnalysis} disabled={loading} className="w-full">
               {loading ? (
                 <>
                   <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                  Fetching all trades...
+                  Fetching swap trades...
                 </>
               ) : (
-                "Fetch Full Analysis"
+                "Fetch Swap Trades Analysis"
               )}
             </Button>
 
@@ -203,7 +248,7 @@ ALL WALLET STATISTICS
                   </div>
                   <div className="p-3 bg-muted rounded">
                     <div className="font-semibold">Extracted SOL</div>
-                    <div className="text-2xl text-red-500">{analysisData.summary?.earlySellerExtractedSol}</div>
+                    <div className="text-2xl text-destructive">{analysisData.summary?.earlySellerExtractedSol}</div>
                   </div>
                 </div>
 
@@ -219,6 +264,81 @@ ALL WALLET STATISTICS
                   <Button onClick={downloadFullJSON} variant="outline" className="w-full justify-start">
                     <Download className="h-4 w-4 mr-2" />
                     Download Full Raw Data (JSON)
+                  </Button>
+                </div>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* Helius Full History */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Database className="h-6 w-6" />
+              Full Transaction History (Helius)
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="p-4 bg-muted rounded-lg">
+              <p className="text-sm text-muted-foreground">
+                Includes ALL transactions: transfers, mints, burns, account creations, swaps, etc.
+              </p>
+            </div>
+
+            <Button onClick={fetchHeliusHistory} disabled={heliusLoading} className="w-full" variant="secondary">
+              {heliusLoading ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  Fetching all transactions from Helius...
+                </>
+              ) : (
+                "Fetch ALL Transactions (Helius)"
+              )}
+            </Button>
+
+            {heliusData && (
+              <div className="space-y-4 pt-4 border-t">
+                <div className="grid grid-cols-2 gap-4 text-sm">
+                  <div className="p-3 bg-muted rounded">
+                    <div className="font-semibold">Total Transactions</div>
+                    <div className="text-2xl">{heliusData.summary?.totalTransactions}</div>
+                  </div>
+                  <div className="p-3 bg-muted rounded">
+                    <div className="font-semibold">Unique Wallets</div>
+                    <div className="text-2xl">{heliusData.summary?.uniqueWallets}</div>
+                  </div>
+                </div>
+
+                {heliusData.summary?.transactionTypes && (
+                  <div className="p-3 bg-muted rounded">
+                    <div className="font-semibold mb-2">Transaction Types</div>
+                    <div className="grid grid-cols-2 gap-2 text-sm">
+                      {Object.entries(heliusData.summary.transactionTypes).map(([type, count]) => (
+                        <div key={type} className="flex justify-between">
+                          <span className="text-muted-foreground">{type}:</span>
+                          <span className="font-mono">{String(count)}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                <div className="p-3 bg-muted rounded text-sm">
+                  <div className="font-semibold mb-1">Time Range</div>
+                  <div className="text-muted-foreground">
+                    {heliusData.summary?.timeRange?.first} → {heliusData.summary?.timeRange?.last}
+                  </div>
+                </div>
+
+                <div className="grid gap-2">
+                  <Button onClick={downloadHeliusCSV} variant="outline" className="w-full justify-start">
+                    <FileSpreadsheet className="h-4 w-4 mr-2" />
+                    Download All Transactions & Wallet Activity CSV
+                  </Button>
+                  <Button onClick={downloadHeliusJSON} variant="outline" className="w-full justify-start">
+                    <Download className="h-4 w-4 mr-2" />
+                    Download Full Helius Data (JSON)
                   </Button>
                 </div>
               </div>
