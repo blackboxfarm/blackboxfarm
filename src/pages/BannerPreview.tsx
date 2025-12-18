@@ -11,6 +11,7 @@ import { format } from 'date-fns';
 
 interface BannerOrder {
   id: string;
+  banner_ad_id?: string | null;
   image_url: string;
   link_url: string;
   title: string;
@@ -99,6 +100,16 @@ export default function BannerPreview() {
         .eq('id', order.id);
 
       if (updateError) throw updateError;
+
+      // If this order is already linked to a live banner record, update it too
+      if (order.banner_ad_id) {
+        const { error: bannerUpdateError } = await supabase
+          .from('banner_ads')
+          .update({ image_url: publicUrl })
+          .eq('id', order.banner_ad_id);
+
+        if (bannerUpdateError) throw bannerUpdateError;
+      }
 
       // Update local state
       setOrder({ ...order, image_url: publicUrl });

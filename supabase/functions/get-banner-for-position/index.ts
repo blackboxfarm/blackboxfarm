@@ -27,7 +27,7 @@ serve(async (req) => {
 
     // Get active banners for this position
     const now = new Date().toISOString();
-    const { data: banners } = await supabase
+    const { data: banners, error: bannersError } = await supabase
       .from('banner_ads')
       .select('*')
       .eq('position', position)
@@ -36,6 +36,10 @@ serve(async (req) => {
       .or(`end_date.is.null,end_date.gte.${now}`)
       .order('weight', { ascending: false });
 
+    if (bannersError) {
+      throw bannersError;
+    }
+
     if (!banners || banners.length === 0) {
       return new Response(
         JSON.stringify({ banner: null }),
@@ -43,18 +47,30 @@ serve(async (req) => {
       );
     }
 
+    // If any scheduled/paid banners are active (have a start/end window), prefer those
+    // so the "default" always-on banner doesn't steal impressions.
+    const scheduledBanners = banners.filter((b: any) => Boolean(b.start_date) || Boolean(b.end_date));
+    const eligibleBanners = scheduledBanners.length > 0 ? scheduledBanners : banners;
+
     // Weighted random selection
-    const totalWeight = banners.reduce((sum, b) => sum + (b.weight || 1), 0);
+    const totalWeight = eligibleBanners.reduce((sum: number, b: any) => sum + (b.weight || 1), 0);
     let random = Math.random() * totalWeight;
-    
-    let selectedBanner = banners[0];
-    for (const banner of banners) {
+
+    let selectedBanner = eligibleBanners[0];
+    for (const banner of eligibleBanners) {
       random -= (banner.weight || 1);
       if (random <= 0) {
         selectedBanner = banner;
         break;
       }
     }
+
+    console.log('Selected banner', {
+      position,
+      eligibleCount: eligibleBanners.length,
+      selectedId: selectedBanner?.id,
+      selectedTitle: selectedBanner?.title,
+    });
 
     // Log impression
     const authHeader = req.headers.get('Authorization');
