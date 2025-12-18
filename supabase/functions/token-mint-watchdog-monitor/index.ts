@@ -355,6 +355,247 @@ Deno.serve(async (req) => {
       )
     }
 
+    // FULL TOKEN ANALYSIS - Fetches ALL trades and calculates wallet P&L
+    if (action === 'full_analysis' && tokenMint) {
+      console.log(`Starting full analysis for token: ${tokenMint}`)
+      
+      // Fetch ALL trades - try to get as many as possible
+      const allTrades: any[] = []
+      let offset = 0
+      const batchSize = 1000
+      let pageCount = 0
+      const maxPages = 10
+      
+      while (pageCount < maxPages) {
+        const url = `https://data.solanatracker.io/trades/${tokenMint}?limit=${batchSize}&offset=${offset}`
+        console.log(`Fetching page ${pageCount + 1}: offset=${offset}`)
+        
+        const response = await fetch(url, {
+          headers: { 'x-api-key': solanaTrackerApiKey }
+        })
+        
+        if (!response.ok) {
+          console.error(`API error on page ${pageCount + 1}:`, response.status)
+          break
+        }
+        
+        const data = await response.json()
+        const trades = Array.isArray(data) ? data : (data?.trades || data?.items || [])
+        
+        if (trades.length === 0) break
+        
+        allTrades.push(...trades)
+        console.log(`Page ${pageCount + 1}: Got ${trades.length} trades, total: ${allTrades.length}`)
+        
+        if (trades.length < batchSize) break
+        
+        offset += batchSize
+        pageCount++
+        
+        // Rate limit protection
+        await new Promise(r => setTimeout(r, 250))
+      }
+      
+      console.log(`Total trades fetched: ${allTrades.length}`)
+      
+      // Sort by time ascending (oldest first)
+      allTrades.sort((a, b) => (a.time || 0) - (b.time || 0))
+      
+      // Aggregate by wallet
+      interface WalletStats {
+        wallet: string
+        buyCount: number
+        sellCount: number
+        totalBuyVolumeSol: number
+        totalSellVolumeSol: number
+        totalBuyVolumeUsd: number
+        totalSellVolumeUsd: number
+        tokensBought: number
+        tokensSold: number
+        netTokens: number
+        realizedPnlSol: number
+        realizedPnlUsd: number
+        firstTradeTime: number
+        lastTradeTime: number
+        firstTradeType: string
+        isEarlyTrader: boolean
+        tradeSequence: number
+      }
+      
+      const walletMap = new Map<string, WalletStats>()
+      
+      allTrades.forEach((trade, idx) => {
+        const wallet = trade.wallet
+        if (!wallet) return
+        
+        const existing = walletMap.get(wallet) || {
+          wallet,
+          buyCount: 0,
+          sellCount: 0,
+          totalBuyVolumeSol: 0,
+          totalSellVolumeSol: 0,
+          totalBuyVolumeUsd: 0,
+          totalSellVolumeUsd: 0,
+          tokensBought: 0,
+          tokensSold: 0,
+          netTokens: 0,
+          realizedPnlSol: 0,
+          realizedPnlUsd: 0,
+          firstTradeTime: trade.time || 0,
+          lastTradeTime: trade.time || 0,
+          firstTradeType: trade.type || 'unknown',
+          isEarlyTrader: idx < 50,
+          tradeSequence: idx + 1
+        }
+        
+        const volumeSol = trade.volumeSol || (trade.volumeUsd ? trade.volumeUsd / 220 : 0)
+        const volumeUsd = trade.volumeUsd || 0
+        const amount = trade.amount || 0
+        
+        if (trade.type === 'buy') {
+          existing.buyCount++
+          existing.totalBuyVolumeSol += volumeSol
+          existing.totalBuyVolumeUsd += volumeUsd
+          existing.tokensBought += amount
+        } else if (trade.type === 'sell') {
+          existing.sellCount++
+          existing.totalSellVolumeSol += volumeSol
+          existing.totalSellVolumeUsd += volumeUsd
+          existing.tokensSold += amount
+        }
+        
+        existing.netTokens = existing.tokensBought - existing.tokensSold
+        existing.realizedPnlSol = existing.totalSellVolumeSol - existing.totalBuyVolumeSol
+        existing.realizedPnlUsd = existing.totalSellVolumeUsd - existing.totalBuyVolumeUsd
+        existing.lastTradeTime = Math.max(existing.lastTradeTime, trade.time || 0)
+        
+        // Keep track of earliest trade position
+        if (!walletMap.has(wallet)) {
+          existing.tradeSequence = idx + 1
+        }
+        
+        walletMap.set(wallet, existing)
+      })
+      
+      const walletStats = Array.from(walletMap.values())
+      
+      // Identify early sellers (bundled wallet pattern)
+      const earlySellers = walletStats.filter(w => 
+        w.tradeSequence <= 50 && 
+        w.firstTradeType === 'sell' && 
+        w.sellCount > 0
+      )
+      
+      // Wallets that are now empty
+      const emptyWallets = walletStats.filter(w => w.netTokens <= 0 && w.tokensSold > 0)
+      const profitableWallets = walletStats.filter(w => w.realizedPnlSol > 0)
+      const biggestWinners = [...walletStats].sort((a, b) => b.realizedPnlSol - a.realizedPnlSol).slice(0, 30)
+      const biggestLosers = [...walletStats].sort((a, b) => a.realizedPnlSol - b.realizedPnlSol).slice(0, 30)
+      
+      // Totals
+      const totalBuyVolumeSol = walletStats.reduce((sum, w) => sum + w.totalBuyVolumeSol, 0)
+      const totalSellVolumeSol = walletStats.reduce((sum, w) => sum + w.totalSellVolumeSol, 0)
+      const earlySellerExtractedSol = earlySellers.reduce((sum, w) => sum + Math.max(0, w.realizedPnlSol), 0)
+      
+      // First 100 transactions
+      const first100 = allTrades.slice(0, 100).map((t, idx) => ({
+        index: idx + 1,
+        type: t.type,
+        wallet: t.wallet,
+        amount: t.amount,
+        volumeSol: t.volumeSol,
+        volumeUsd: t.volumeUsd,
+        priceUsd: t.priceUsd,
+        time: new Date(t.time).toISOString()
+      }))
+      
+      const analysis = {
+        success: true,
+        tokenMint,
+        summary: {
+          totalTrades: allTrades.length,
+          uniqueWallets: walletStats.length,
+          totalBuyVolumeSol: parseFloat(totalBuyVolumeSol.toFixed(4)),
+          totalSellVolumeSol: parseFloat(totalSellVolumeSol.toFixed(4)),
+          netFlowSol: parseFloat((totalBuyVolumeSol - totalSellVolumeSol).toFixed(4)),
+          emptyWalletsCount: emptyWallets.length,
+          profitableWalletsCount: profitableWallets.length,
+          earlySellersCount: earlySellers.length,
+          earlySellerExtractedSol: parseFloat(earlySellerExtractedSol.toFixed(4))
+        },
+        bundledWalletsAnalysis: {
+          description: 'Wallets that sold in the first 50 transactions (likely bundled/dev wallets)',
+          count: earlySellers.length,
+          totalExtractedSol: parseFloat(earlySellerExtractedSol.toFixed(4)),
+          wallets: earlySellers.map(w => ({
+            wallet: w.wallet,
+            tradeSequence: w.tradeSequence,
+            sellCount: w.sellCount,
+            buyCount: w.buyCount,
+            totalSellSol: parseFloat(w.totalSellVolumeSol.toFixed(4)),
+            totalBuySol: parseFloat(w.totalBuyVolumeSol.toFixed(4)),
+            profitSol: parseFloat(w.realizedPnlSol.toFixed(4)),
+            profitUsd: parseFloat(w.realizedPnlUsd.toFixed(2)),
+            netTokens: parseFloat(w.netTokens.toFixed(2)),
+            isEmpty: w.netTokens <= 0,
+            firstTrade: new Date(w.firstTradeTime).toISOString(),
+            lastTrade: new Date(w.lastTradeTime).toISOString()
+          }))
+        },
+        biggestWinners: biggestWinners.map(w => ({
+          wallet: w.wallet,
+          profitSol: parseFloat(w.realizedPnlSol.toFixed(4)),
+          profitUsd: parseFloat(w.realizedPnlUsd.toFixed(2)),
+          buyCount: w.buyCount,
+          sellCount: w.sellCount,
+          buySol: parseFloat(w.totalBuyVolumeSol.toFixed(4)),
+          sellSol: parseFloat(w.totalSellVolumeSol.toFixed(4)),
+          netTokens: parseFloat(w.netTokens.toFixed(2)),
+          isEmpty: w.netTokens <= 0,
+          isEarlyTrader: w.tradeSequence <= 50
+        })),
+        biggestLosers: biggestLosers.filter(w => w.realizedPnlSol < 0).map(w => ({
+          wallet: w.wallet,
+          lossSol: parseFloat(w.realizedPnlSol.toFixed(4)),
+          lossUsd: parseFloat(w.realizedPnlUsd.toFixed(2)),
+          buyCount: w.buyCount,
+          sellCount: w.sellCount,
+          netTokens: parseFloat(w.netTokens.toFixed(2))
+        })),
+        emptyWalletsSummary: {
+          count: emptyWallets.length,
+          totalProfitSol: parseFloat(emptyWallets.reduce((s, w) => s + w.realizedPnlSol, 0).toFixed(4)),
+          wallets: emptyWallets.slice(0, 50).map(w => ({
+            wallet: w.wallet,
+            profitSol: parseFloat(w.realizedPnlSol.toFixed(4)),
+            profitUsd: parseFloat(w.realizedPnlUsd.toFixed(2)),
+            tokensSold: parseFloat(w.tokensSold.toFixed(2)),
+            wasEarlyTrader: w.tradeSequence <= 50
+          }))
+        },
+        first100Trades: first100,
+        allWalletStats: walletStats.map(w => ({
+          wallet: w.wallet,
+          buyCount: w.buyCount,
+          sellCount: w.sellCount,
+          buySol: parseFloat(w.totalBuyVolumeSol.toFixed(4)),
+          sellSol: parseFloat(w.totalSellVolumeSol.toFixed(4)),
+          pnlSol: parseFloat(w.realizedPnlSol.toFixed(4)),
+          pnlUsd: parseFloat(w.realizedPnlUsd.toFixed(2)),
+          netTokens: parseFloat(w.netTokens.toFixed(2)),
+          isEmpty: w.netTokens <= 0 && w.tokensSold > 0,
+          tradeSequence: w.tradeSequence
+        }))
+      }
+      
+      console.log(`Analysis complete: ${walletStats.length} wallets, ${earlySellers.length} early sellers, ${emptyWallets.length} empty`)
+      
+      return new Response(
+        JSON.stringify(analysis),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      )
+    }
+
     // Scan for new pump.fun tokens
     if (action === 'scan') {
       console.log('Scanning for new pump.fun tokens...')
