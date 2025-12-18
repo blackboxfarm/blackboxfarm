@@ -1,15 +1,19 @@
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Download, Loader2, FileText, FileSpreadsheet, Database } from "lucide-react";
+import { Download, Loader2, FileText, FileSpreadsheet, Database, Search, AlertTriangle } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
+import { Input } from "@/components/ui/input";
 
 const TokenAnalysisDownload = () => {
   const [loading, setLoading] = useState(false);
   const [heliusLoading, setHeliusLoading] = useState(false);
+  const [walletTraceLoading, setWalletTraceLoading] = useState(false);
   const [analysisData, setAnalysisData] = useState<any>(null);
   const [heliusData, setHeliusData] = useState<any>(null);
+  const [walletTraceData, setWalletTraceData] = useState<any>(null);
+  const [walletToTrace, setWalletToTrace] = useState("6rDqAoNhfVhhLynpidBWkSqEzPRkpgzFsMFhmnaCahX8");
 
   const tokenMint = "DyqgbSyWcwRw17Y3SvAtmP4o73n1nes5PzwAEjvVpump";
 
@@ -45,6 +49,65 @@ const TokenAnalysisDownload = () => {
     } finally {
       setHeliusLoading(false);
     }
+  };
+
+  const traceWallet = async () => {
+    if (!walletToTrace.trim()) {
+      toast.error("Enter a wallet address to trace");
+      return;
+    }
+    
+    setWalletTraceLoading(true);
+    try {
+      // Get known wallets from helius data if available
+      const knownWallets = heliusData?.walletActivity?.map((w: any) => w.wallet) || [];
+      
+      const { data, error } = await supabase.functions.invoke("token-mint-watchdog-monitor", {
+        body: { 
+          action: "trace_wallet", 
+          walletAddress: walletToTrace.trim(),
+          knownWallets 
+        }
+      });
+
+      if (error) throw error;
+      setWalletTraceData(data);
+      toast.success(`Traced ${data.summary?.totalTransactions} transactions, found ${data.summary?.overlappingWalletsCount} overlapping wallets`);
+    } catch (err: any) {
+      toast.error("Failed to trace wallet: " + err.message);
+    } finally {
+      setWalletTraceLoading(false);
+    }
+  };
+
+  const downloadWalletTraceCSV = () => {
+    if (!walletTraceData) return;
+
+    // All flows CSV
+    const flowHeaders = ["wallet", "solReceived", "solSent", "netSolFlow", "tokensReceived", "tokensSent", "txCount", "isKnownWallet", "firstInteraction", "lastInteraction"];
+    const flowRows = walletTraceData.allWalletFlows?.map((f: any) =>
+      flowHeaders.map(h => String(f[h] ?? "").replace(/,/g, ";")).join(",")
+    ) || [];
+    const flowCSV = [flowHeaders.join(","), ...flowRows].join("\n");
+
+    // Transactions CSV
+    const txHeaders = ["signature", "timestamp", "type", "source", "description", "fee"];
+    const txRows = walletTraceData.allTransactions?.map((t: any) =>
+      txHeaders.map(h => String(t[h] ?? "").replace(/,/g, ";")).join(",")
+    ) || [];
+    const txCSV = [txHeaders.join(","), ...txRows].join("\n");
+
+    downloadFile(`wallet_trace_flows_${walletToTrace.slice(0, 8)}.csv`, flowCSV, "text/csv");
+    downloadFile(`wallet_trace_txs_${walletToTrace.slice(0, 8)}.csv`, txCSV, "text/csv");
+  };
+
+  const downloadWalletTraceJSON = () => {
+    if (!walletTraceData) return;
+    downloadFile(
+      `wallet_trace_full_${walletToTrace.slice(0, 8)}.json`,
+      JSON.stringify(walletTraceData, null, 2),
+      "application/json"
+    );
   };
 
   const downloadCSV = () => {
@@ -339,6 +402,112 @@ ALL WALLET STATISTICS
                   <Button onClick={downloadHeliusJSON} variant="outline" className="w-full justify-start">
                     <Download className="h-4 w-4 mr-2" />
                     Download Full Helius Data (JSON)
+                  </Button>
+                </div>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* Wallet Tracer */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Search className="h-6 w-6" />
+              Wallet Tracer (Dev/Funding Wallet)
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="p-4 bg-muted rounded-lg">
+              <p className="text-sm text-muted-foreground mb-2">
+                Trace all transactions from a wallet. If you've loaded Helius data first, it will flag any overlapping wallets.
+              </p>
+              <Input 
+                placeholder="Enter wallet address to trace..." 
+                value={walletToTrace}
+                onChange={(e) => setWalletToTrace(e.target.value)}
+                className="font-mono"
+              />
+            </div>
+
+            <Button onClick={traceWallet} disabled={walletTraceLoading} className="w-full" variant="secondary">
+              {walletTraceLoading ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  Tracing wallet transactions...
+                </>
+              ) : (
+                <>
+                  <Search className="h-4 w-4 mr-2" />
+                  Trace Wallet Transactions
+                </>
+              )}
+            </Button>
+
+            {walletTraceData && (
+              <div className="space-y-4 pt-4 border-t">
+                <div className="grid grid-cols-2 gap-4 text-sm">
+                  <div className="p-3 bg-muted rounded">
+                    <div className="font-semibold">Total Transactions</div>
+                    <div className="text-2xl">{walletTraceData.summary?.totalTransactions}</div>
+                  </div>
+                  <div className="p-3 bg-muted rounded">
+                    <div className="font-semibold">Wallets Interacted</div>
+                    <div className="text-2xl">{walletTraceData.summary?.uniqueWalletsInteracted}</div>
+                  </div>
+                  <div className="p-3 bg-muted rounded">
+                    <div className="font-semibold">Total SOL Sent Out</div>
+                    <div className="text-2xl text-destructive">{walletTraceData.summary?.totalSolSentOut}</div>
+                  </div>
+                  <div className="p-3 bg-muted rounded">
+                    <div className="font-semibold">Total SOL Received</div>
+                    <div className="text-2xl text-green-500">{walletTraceData.summary?.totalSolReceivedIn}</div>
+                  </div>
+                </div>
+
+                {walletTraceData.summary?.overlappingWalletsCount > 0 && (
+                  <div className="p-3 bg-destructive/10 border border-destructive rounded">
+                    <div className="flex items-center gap-2 font-semibold text-destructive mb-2">
+                      <AlertTriangle className="h-4 w-4" />
+                      {walletTraceData.summary.overlappingWalletsCount} Overlapping Wallets Found!
+                    </div>
+                    <div className="text-sm space-y-1 max-h-40 overflow-y-auto">
+                      {walletTraceData.overlappingWallets?.slice(0, 20).map((w: any, i: number) => (
+                        <div key={i} className="font-mono text-xs">
+                          {w.wallet} - Received: {w.solReceived} SOL
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                <div className="p-3 bg-muted rounded">
+                  <div className="font-semibold mb-2">Top Recipients (SOL sent to)</div>
+                  <div className="text-sm space-y-1 max-h-48 overflow-y-auto">
+                    {walletTraceData.topRecipients?.slice(0, 15).map((w: any, i: number) => (
+                      <div key={i} className="flex justify-between font-mono text-xs">
+                        <span>{w.wallet.slice(0, 8)}...{w.wallet.slice(-6)}</span>
+                        <span className="text-destructive">{w.solReceived} SOL</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="p-3 bg-muted rounded text-sm">
+                  <div className="font-semibold mb-1">Time Range</div>
+                  <div className="text-muted-foreground">
+                    {walletTraceData.summary?.timeRange?.first} → {walletTraceData.summary?.timeRange?.last}
+                  </div>
+                </div>
+
+                <div className="grid gap-2">
+                  <Button onClick={downloadWalletTraceCSV} variant="outline" className="w-full justify-start">
+                    <FileSpreadsheet className="h-4 w-4 mr-2" />
+                    Download Wallet Flows & Transactions CSV
+                  </Button>
+                  <Button onClick={downloadWalletTraceJSON} variant="outline" className="w-full justify-start">
+                    <Download className="h-4 w-4 mr-2" />
+                    Download Full Trace Data (JSON)
                   </Button>
                 </div>
               </div>
