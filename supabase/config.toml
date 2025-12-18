@@ -204,3 +204,6 @@ verify_jwt = false
 
 [functions.get-advertiser-users]
 verify_jwt = true
+
+[functions.wallet-investigator]
+verify_jwt = false
