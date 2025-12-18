@@ -1,7 +1,7 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Download, Loader2, FileText, FileSpreadsheet, Database, Search, AlertTriangle } from "lucide-react";
+import { Download, Loader2, FileText, FileSpreadsheet, Database, Search, AlertTriangle, Wallet } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { Input } from "@/components/ui/input";
@@ -14,8 +14,33 @@ const TokenAnalysisDownload = () => {
   const [heliusData, setHeliusData] = useState<any>(null);
   const [walletTraceData, setWalletTraceData] = useState<any>(null);
   const [walletToTrace, setWalletToTrace] = useState("6rDqAoNhfVhhLynpidBWkSqEzPRkpgzFsMFhmnaCahX8");
+  const [showDustWallets, setShowDustWallets] = useState(false);
 
   const tokenMint = "DyqgbSyWcwRw17Y3SvAtmP4o73n1nes5PzwAEjvVpump";
+  
+  // ~$5 worth of SOL (assuming ~$200/SOL)
+  const DUST_THRESHOLD_SOL = 0.025;
+  
+  // Filter wallets with net SOL flow < $5 (dust wallets - likely empty now)
+  const dustWallets = useMemo(() => {
+    if (!heliusData?.walletActivity) return [];
+    return heliusData.walletActivity.filter((w: any) => {
+      const netSol = Math.abs(w.netSol || 0);
+      const totalSol = Math.abs(w.solReceived || 0) + Math.abs(w.solSent || 0);
+      // Wallet had activity with this token but net SOL is dust
+      return netSol < DUST_THRESHOLD_SOL && totalSol > 0;
+    }).sort((a: any, b: any) => Math.abs(a.netSol || 0) - Math.abs(b.netSol || 0));
+  }, [heliusData]);
+  
+  const downloadDustWalletsCSV = () => {
+    if (!dustWallets.length) return;
+    const headers = ["wallet", "txCount", "tokensReceived", "tokensSent", "netTokens", "solReceived", "solSent", "netSol"];
+    const rows = dustWallets.map((w: any) =>
+      headers.map(h => String(w[h] ?? "").replace(/,/g, ";")).join(",")
+    );
+    const csv = [headers.join(","), ...rows].join("\n");
+    downloadFile(`dust_wallets_under_5usd_${tokenMint.slice(0, 8)}.csv`, csv, "text/csv");
+  };
 
   const fetchAnalysis = async () => {
     setLoading(true);
@@ -403,6 +428,68 @@ ALL WALLET STATISTICS
                     <Download className="h-4 w-4 mr-2" />
                     Download Full Helius Data (JSON)
                   </Button>
+                </div>
+                
+                {/* Dust Wallets Section */}
+                <div className="pt-4 border-t">
+                  <div className="flex items-center justify-between mb-3">
+                    <div className="flex items-center gap-2">
+                      <Wallet className="h-5 w-5 text-orange-500" />
+                      <span className="font-semibold">Dust Wallets (&lt;$5 net flow)</span>
+                      <span className="text-sm text-muted-foreground">
+                        ({dustWallets.length} wallets)
+                      </span>
+                    </div>
+                    <div className="flex gap-2">
+                      <Button 
+                        onClick={() => setShowDustWallets(!showDustWallets)} 
+                        variant="outline" 
+                        size="sm"
+                      >
+                        {showDustWallets ? "Hide" : "Show"} List
+                      </Button>
+                      <Button 
+                        onClick={downloadDustWalletsCSV} 
+                        variant="outline" 
+                        size="sm"
+                        disabled={!dustWallets.length}
+                      >
+                        <Download className="h-3 w-3 mr-1" />
+                        CSV
+                      </Button>
+                    </div>
+                  </div>
+                  
+                  {showDustWallets && dustWallets.length > 0 && (
+                    <div className="max-h-64 overflow-y-auto bg-background border rounded p-2 space-y-1">
+                      {dustWallets.map((w: any, i: number) => (
+                        <div 
+                          key={w.wallet} 
+                          className="flex items-center justify-between text-xs font-mono p-2 bg-muted rounded hover:bg-muted/80"
+                        >
+                          <a 
+                            href={`https://solscan.io/account/${w.wallet}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-primary hover:underline truncate max-w-[300px]"
+                          >
+                            {w.wallet}
+                          </a>
+                          <div className="flex gap-3 text-muted-foreground">
+                            <span>Tx: {w.txCount}</span>
+                            <span>Net: {(w.netSol || 0).toFixed(4)} SOL</span>
+                            <span>Tokens: {w.netTokens?.toLocaleString() || 0}</span>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  
+                  {dustWallets.length === 0 && (
+                    <p className="text-sm text-muted-foreground">
+                      No dust wallets found (all wallets have &gt;$5 net flow)
+                    </p>
+                  )}
                 </div>
               </div>
             )}
