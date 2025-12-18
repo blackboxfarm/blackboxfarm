@@ -18,8 +18,7 @@ import { format, addHours, startOfHour } from 'date-fns';
 import { cn } from '@/lib/utils';
 
 const PRICING = {
-  1: { hours: 1, price: 1, label: '🧪 Test (1 Hour)', perDay: '$1 test' },
-  24: { hours: 24, price: 40, label: '24 Hours', perDay: '$40/day' },
+  24: { hours: 24, price: 1, label: '🧪 Test (24 Hours)', perDay: '$1/day' },
   48: { hours: 48, price: 70, label: '48 Hours', perDay: '$35/day' },
   72: { hours: 72, price: 100, label: '72 Hours', perDay: '$33/day' },
   168: { hours: 168, price: 175, label: '1 Week', perDay: '$25/day' },
