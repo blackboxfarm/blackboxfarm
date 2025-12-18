@@ -305,6 +305,56 @@ Deno.serve(async (req) => {
       )
     }
 
+    // Get token trades/transactions
+    if (action === 'get_trades' && tokenMint) {
+      const limit = body.limit || 100
+      console.log(`Fetching first ${limit} trades for token: ${tokenMint}`)
+
+      const tradesResponse = await fetch(
+        `https://data.solanatracker.io/trades/${tokenMint}?limit=${limit}`,
+        { headers: { 'x-api-key': solanaTrackerApiKey } }
+      )
+
+      if (!tradesResponse.ok) {
+        const errorText = await tradesResponse.text()
+        console.error('Trades API error:', tradesResponse.status, errorText)
+        return new Response(
+          JSON.stringify({ error: `Failed to fetch trades: ${tradesResponse.status}`, details: errorText }),
+          { status: tradesResponse.status, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        )
+      }
+
+      const tradesData = await tradesResponse.json()
+      console.log(`Trades response type:`, typeof tradesData, Array.isArray(tradesData) ? 'array' : 'object')
+      
+      // Handle different response formats
+      const trades = Array.isArray(tradesData) ? tradesData : (tradesData?.trades || tradesData?.items || [])
+      console.log(`Retrieved ${trades.length} trades`)
+
+      // Sort by time ascending to get earliest first
+      const sortedTrades = trades.sort((a: any, b: any) => (a.time || 0) - (b.time || 0))
+
+      return new Response(
+        JSON.stringify({
+          success: true,
+          tokenMint,
+          totalTrades: sortedTrades.length,
+          trades: sortedTrades.map((t: any, idx: number) => ({
+            index: idx + 1,
+            type: t.type,
+            signature: t.signature,
+            wallet: t.wallet,
+            amount: t.amount,
+            priceUsd: t.priceUsd,
+            volumeUsd: t.volumeUsd,
+            time: t.time,
+            timeFormatted: new Date(t.time * 1000).toISOString()
+          }))
+        }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      )
+    }
+
     // Scan for new pump.fun tokens
     if (action === 'scan') {
       console.log('Scanning for new pump.fun tokens...')
