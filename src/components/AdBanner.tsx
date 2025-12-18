@@ -92,16 +92,33 @@ export function AdBanner({ size, position }: AdBannerProps) {
     image_url: banner.image_url
   };
 
+  const mediaUrl: string | undefined = displayData.image_url;
+  const isVideo = typeof mediaUrl === 'string' && /\.(mp4|webm|mov)$/i.test(mediaUrl);
+
+
   if (size === 'mobile') {
     return (
       <Card className="mb-4 overflow-hidden cursor-pointer transition-all duration-300 hover:scale-105 hover:shadow-2xl hover:shadow-primary/20" onClick={handleClick}>
-        {displayData.image_url ? (
+        {mediaUrl ? (
           <div className="relative w-full" style={{ aspectRatio: 'auto' }}>
-            <img 
-              src={displayData.image_url} 
-              alt={displayData.title}
-              className="w-full h-auto object-contain"
-            />
+            {isVideo ? (
+              <video
+                src={mediaUrl}
+                autoPlay
+                loop
+                muted
+                playsInline
+                preload="metadata"
+                className="w-full h-auto object-contain"
+              />
+            ) : (
+              <img
+                src={mediaUrl}
+                alt={displayData.title}
+                className="w-full h-auto object-contain"
+                loading="lazy"
+              />
+            )}
           </div>
         ) : (
           <div className={`bg-gradient-to-r ${displayData.gradient} p-3 text-white`}>
@@ -127,13 +144,26 @@ export function AdBanner({ size, position }: AdBannerProps) {
   if (size === 'rectangle') {
     return (
       <Card className="mb-4 overflow-hidden cursor-pointer w-[300px] mx-auto shadow-lg transition-all duration-300 hover:scale-105 hover:shadow-2xl hover:shadow-primary/20" onClick={handleClick}>
-        {displayData.image_url ? (
+        {mediaUrl ? (
           <div className="relative w-[300px] h-[250px]">
-            <img 
-              src={displayData.image_url} 
-              alt={displayData.title}
-              className="w-full h-full object-cover"
-            />
+            {isVideo ? (
+              <video
+                src={mediaUrl}
+                autoPlay
+                loop
+                muted
+                playsInline
+                preload="metadata"
+                className="w-full h-full object-cover"
+              />
+            ) : (
+              <img
+                src={mediaUrl}
+                alt={displayData.title}
+                className="w-full h-full object-cover"
+                loading="lazy"
+              />
+            )}
           </div>
         ) : (
           <div className={`bg-gradient-to-br ${displayData.gradient} p-6 text-white h-64 flex flex-col justify-between`}>
@@ -162,12 +192,25 @@ export function AdBanner({ size, position }: AdBannerProps) {
   // Leaderboard (original size, centered)
   return (
       <Card className="mb-4 overflow-hidden cursor-pointer transition-all duration-300 hover:scale-105 hover:shadow-2xl hover:shadow-primary/20 w-fit mx-auto" onClick={handleClick}>
-      {displayData.image_url ? (
-        <img 
-          src={displayData.image_url} 
-          alt={displayData.title}
-          className="max-w-full h-auto"
-        />
+      {mediaUrl ? (
+        isVideo ? (
+          <video
+            src={mediaUrl}
+            autoPlay
+            loop
+            muted
+            playsInline
+            preload="metadata"
+            className="max-w-full h-auto"
+          />
+        ) : (
+          <img
+            src={mediaUrl}
+            alt={displayData.title}
+            className="max-w-full h-auto"
+            loading="lazy"
+          />
+        )
       ) : (
         <div className={`bg-gradient-to-r ${displayData.gradient} p-4 text-white`}>
           <div className="flex items-center justify-between max-w-4xl mx-auto">
