@@ -4385,15 +4385,22 @@ export type Database = {
           alert_level: string
           alert_sent: boolean | null
           alert_sent_at: string | null
+          analyzed_at: string | null
           block_slot: number | null
+          bundle_analysis: Json | null
+          bundle_score: number | null
           created_at: string | null
           creator_wallet: string
           deep_analysis_at: string | null
           deep_analysis_completed: boolean | null
           detected_at: string | null
           developer_id: string | null
+          discovery_triggered: boolean | null
+          first_buyers: Json | null
           id: string
+          is_bundled: boolean | null
           match_confidence: string | null
+          metadata: Json | null
           quick_analysis: Json | null
           reasoning: string | null
           recommendation: string | null
@@ -4403,15 +4410,22 @@ export type Database = {
           alert_level?: string
           alert_sent?: boolean | null
           alert_sent_at?: string | null
+          analyzed_at?: string | null
           block_slot?: number | null
+          bundle_analysis?: Json | null
+          bundle_score?: number | null
           created_at?: string | null
           creator_wallet: string
           deep_analysis_at?: string | null
           deep_analysis_completed?: boolean | null
           detected_at?: string | null
           developer_id?: string | null
+          discovery_triggered?: boolean | null
+          first_buyers?: Json | null
           id?: string
+          is_bundled?: boolean | null
           match_confidence?: string | null
+          metadata?: Json | null
           quick_analysis?: Json | null
           reasoning?: string | null
           recommendation?: string | null
@@ -4421,15 +4435,22 @@ export type Database = {
           alert_level?: string
           alert_sent?: boolean | null
           alert_sent_at?: string | null
+          analyzed_at?: string | null
           block_slot?: number | null
+          bundle_analysis?: Json | null
+          bundle_score?: number | null
           created_at?: string | null
           creator_wallet?: string
           deep_analysis_at?: string | null
           deep_analysis_completed?: boolean | null
           detected_at?: string | null
           developer_id?: string | null
+          discovery_triggered?: boolean | null
+          first_buyers?: Json | null
           id?: string
+          is_bundled?: boolean | null
           match_confidence?: string | null
+          metadata?: Json | null
           quick_analysis?: Json | null
           reasoning?: string | null
           recommendation?: string | null
