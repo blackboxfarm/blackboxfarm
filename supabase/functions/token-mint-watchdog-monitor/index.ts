@@ -596,6 +596,228 @@ Deno.serve(async (req) => {
       )
     }
 
+    // TRACE WALLET - Get all transactions from a specific wallet
+    if (action === 'trace_wallet') {
+      const walletAddress = body.walletAddress
+      const knownWallets = body.knownWallets || [] // Wallets we've seen before to flag overlaps
+      
+      if (!walletAddress) {
+        return new Response(
+          JSON.stringify({ error: 'walletAddress is required' }),
+          { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        )
+      }
+
+      const heliusApiKey = Deno.env.get('HELIUS_API_KEY')
+      if (!heliusApiKey) {
+        return new Response(
+          JSON.stringify({ error: 'HELIUS_API_KEY not configured' }),
+          { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        )
+      }
+
+      console.log(`Tracing wallet: ${walletAddress}`)
+      console.log(`Known wallets to check for overlap: ${knownWallets.length}`)
+      
+      const allTransactions: any[] = []
+      let beforeSignature: string | undefined = undefined
+      let pageCount = 0
+      const maxPages = 50
+      
+      while (pageCount < maxPages) {
+        const url = `https://api.helius.xyz/v0/addresses/${walletAddress}/transactions?api-key=${heliusApiKey}&limit=100${beforeSignature ? `&before=${beforeSignature}` : ''}`
+        
+        console.log(`Wallet trace page ${pageCount + 1}`)
+        
+        const response = await fetch(url, { method: 'GET' })
+        
+        if (!response.ok) {
+          const errorText = await response.text()
+          console.error(`Helius error:`, response.status, errorText)
+          break
+        }
+        
+        const transactions = await response.json()
+        
+        if (!transactions || transactions.length === 0) break
+        
+        allTransactions.push(...transactions)
+        beforeSignature = transactions[transactions.length - 1]?.signature
+        
+        if (transactions.length < 100) break
+        pageCount++
+        await new Promise(r => setTimeout(r, 100))
+      }
+      
+      console.log(`Total wallet transactions fetched: ${allTransactions.length}`)
+      
+      // Process transactions to extract outgoing/incoming flows
+      interface WalletFlow {
+        wallet: string
+        solReceived: number
+        solSent: number
+        tokensReceived: number
+        tokensSent: number
+        txCount: number
+        firstInteraction: number
+        lastInteraction: number
+        isKnownWallet: boolean
+      }
+      
+      const walletFlows = new Map<string, WalletFlow>()
+      const knownSet = new Set(knownWallets.map((w: string) => w.toLowerCase()))
+      
+      const processedTxs = allTransactions.map((tx: any) => {
+        const tokenTransfers = tx.tokenTransfers || []
+        const nativeTransfers = tx.nativeTransfers || []
+        
+        // Track interactions
+        nativeTransfers.forEach((t: any) => {
+          const amount = (t.amount || 0) / 1e9
+          
+          // SOL sent TO another wallet (outgoing from our traced wallet)
+          if (t.fromUserAccount?.toLowerCase() === walletAddress.toLowerCase() && t.toUserAccount) {
+            const target = t.toUserAccount
+            const flow = walletFlows.get(target) || {
+              wallet: target,
+              solReceived: 0,
+              solSent: 0,
+              tokensReceived: 0,
+              tokensSent: 0,
+              txCount: 0,
+              firstInteraction: tx.timestamp,
+              lastInteraction: tx.timestamp,
+              isKnownWallet: knownSet.has(target.toLowerCase())
+            }
+            flow.solReceived += amount // They received from us
+            flow.txCount++
+            flow.lastInteraction = Math.max(flow.lastInteraction, tx.timestamp)
+            flow.firstInteraction = Math.min(flow.firstInteraction, tx.timestamp)
+            walletFlows.set(target, flow)
+          }
+          
+          // SOL received FROM another wallet (incoming to our traced wallet)
+          if (t.toUserAccount?.toLowerCase() === walletAddress.toLowerCase() && t.fromUserAccount) {
+            const source = t.fromUserAccount
+            const flow = walletFlows.get(source) || {
+              wallet: source,
+              solReceived: 0,
+              solSent: 0,
+              tokensReceived: 0,
+              tokensSent: 0,
+              txCount: 0,
+              firstInteraction: tx.timestamp,
+              lastInteraction: tx.timestamp,
+              isKnownWallet: knownSet.has(source.toLowerCase())
+            }
+            flow.solSent += amount // They sent to us
+            flow.txCount++
+            flow.lastInteraction = Math.max(flow.lastInteraction, tx.timestamp)
+            flow.firstInteraction = Math.min(flow.firstInteraction, tx.timestamp)
+            walletFlows.set(source, flow)
+          }
+        })
+        
+        // Track token transfers
+        tokenTransfers.forEach((t: any) => {
+          const amount = t.tokenAmount || 0
+          
+          if (t.fromUserAccount?.toLowerCase() === walletAddress.toLowerCase() && t.toUserAccount) {
+            const target = t.toUserAccount
+            const flow = walletFlows.get(target) || {
+              wallet: target,
+              solReceived: 0,
+              solSent: 0,
+              tokensReceived: 0,
+              tokensSent: 0,
+              txCount: 0,
+              firstInteraction: tx.timestamp,
+              lastInteraction: tx.timestamp,
+              isKnownWallet: knownSet.has(target.toLowerCase())
+            }
+            flow.tokensReceived += amount
+            flow.txCount++
+            walletFlows.set(target, flow)
+          }
+          
+          if (t.toUserAccount?.toLowerCase() === walletAddress.toLowerCase() && t.fromUserAccount) {
+            const source = t.fromUserAccount
+            const flow = walletFlows.get(source) || {
+              wallet: source,
+              solReceived: 0,
+              solSent: 0,
+              tokensReceived: 0,
+              tokensSent: 0,
+              txCount: 0,
+              firstInteraction: tx.timestamp,
+              lastInteraction: tx.timestamp,
+              isKnownWallet: knownSet.has(source.toLowerCase())
+            }
+            flow.tokensSent += amount
+            flow.txCount++
+            walletFlows.set(source, flow)
+          }
+        })
+        
+        return {
+          signature: tx.signature,
+          timestamp: tx.timestamp,
+          timestampFormatted: new Date(tx.timestamp * 1000).toISOString(),
+          type: tx.type || 'UNKNOWN',
+          description: tx.description || '',
+          fee: tx.fee || 0,
+          feePayer: tx.feePayer || '',
+          source: tx.source || '',
+          tokenTransfers: tokenTransfers.length,
+          nativeTransfers: nativeTransfers.length
+        }
+      })
+      
+      processedTxs.sort((a, b) => a.timestamp - b.timestamp)
+      
+      const flows = Array.from(walletFlows.values())
+        .map(f => ({
+          ...f,
+          solReceived: parseFloat(f.solReceived.toFixed(6)),
+          solSent: parseFloat(f.solSent.toFixed(6)),
+          netSolFlow: parseFloat((f.solReceived - f.solSent).toFixed(6)),
+          firstInteractionFormatted: new Date(f.firstInteraction * 1000).toISOString(),
+          lastInteractionFormatted: new Date(f.lastInteraction * 1000).toISOString()
+        }))
+        .sort((a, b) => b.solReceived - a.solReceived)
+      
+      const overlappingWallets = flows.filter(f => f.isKnownWallet)
+      
+      // Calculate summary stats
+      const totalSolOut = flows.reduce((sum, f) => sum + f.solReceived, 0)
+      const totalSolIn = flows.reduce((sum, f) => sum + f.solSent, 0)
+      
+      return new Response(
+        JSON.stringify({
+          success: true,
+          tracedWallet: walletAddress,
+          summary: {
+            totalTransactions: processedTxs.length,
+            uniqueWalletsInteracted: flows.length,
+            totalSolSentOut: parseFloat(totalSolOut.toFixed(4)),
+            totalSolReceivedIn: parseFloat(totalSolIn.toFixed(4)),
+            netSolFlow: parseFloat((totalSolIn - totalSolOut).toFixed(4)),
+            overlappingWalletsCount: overlappingWallets.length,
+            timeRange: {
+              first: processedTxs[0]?.timestampFormatted,
+              last: processedTxs[processedTxs.length - 1]?.timestampFormatted
+            }
+          },
+          overlappingWallets: overlappingWallets,
+          topRecipients: flows.filter(f => f.solReceived > 0).slice(0, 50),
+          topSenders: flows.filter(f => f.solSent > 0).sort((a, b) => b.solSent - a.solSent).slice(0, 50),
+          allWalletFlows: flows,
+          allTransactions: processedTxs
+        }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      )
+    }
+
     // HELIUS FULL TRANSACTION HISTORY - ALL tx types including transfers
     if (action === 'helius_full_history' && tokenMint) {
       const heliusApiKey = Deno.env.get('HELIUS_API_KEY')
