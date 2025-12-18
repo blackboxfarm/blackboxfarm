@@ -207,3 +207,6 @@ verify_jwt = true
 
 [functions.wallet-investigator]
 verify_jwt = false
+
+[functions.bagless-investigation]
+verify_jwt = false
