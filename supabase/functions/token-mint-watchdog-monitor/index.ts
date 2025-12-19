@@ -305,6 +305,75 @@ Deno.serve(async (req) => {
       )
     }
 
+    // GET BONDING CURVE STATE - Check current bonding curve % for pump.fun token
+    if (action === 'get_bonding_curve' && tokenMint) {
+      console.log(`Fetching bonding curve state for: ${tokenMint}`)
+      
+      try {
+        // Fetch token data from Solana Tracker API
+        const tokenResponse = await fetch(
+          `https://data.solanatracker.io/tokens/${tokenMint}`,
+          { headers: { 'x-api-key': solanaTrackerApiKey } }
+        )
+
+        if (!tokenResponse.ok) {
+          const errorText = await tokenResponse.text()
+          console.error('Token API error:', tokenResponse.status, errorText)
+          return new Response(
+            JSON.stringify({ error: `Failed to fetch token: ${tokenResponse.status}` }),
+            { status: tokenResponse.status, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          )
+        }
+
+        const tokenData = await tokenResponse.json()
+        const pool = tokenData.pools?.[0]
+        
+        // Pump.fun bonding curve constants
+        const TOTAL_SOL_FOR_GRADUATION = 85 // ~85 SOL to graduate
+        
+        // Determine if graduated (moved to Raydium)
+        const graduated = pool?.market === 'raydium' || !pool?.curvePercentage
+        
+        // Calculate SOL deposited based on curve percentage
+        const curvePercent = pool?.curvePercentage || 0
+        const solDeposited = (curvePercent / 100) * TOTAL_SOL_FOR_GRADUATION
+        const solRemaining = TOTAL_SOL_FOR_GRADUATION - solDeposited
+        
+        return new Response(
+          JSON.stringify({
+            success: true,
+            tokenMint,
+            name: tokenData.token?.name,
+            symbol: tokenData.token?.symbol,
+            curvePercent,
+            solDeposited: Math.round(solDeposited * 100) / 100,
+            solRemaining: Math.round(solRemaining * 100) / 100,
+            graduated,
+            market: pool?.market,
+            marketCapUsd: pool?.marketCap?.usd,
+            liquidityUsd: pool?.liquidity?.usd,
+            priceUsd: pool?.price?.usd,
+            holders: tokenData.holders,
+            txns: pool?.txns,
+            // Additional bonding curve math
+            bondingCurveInfo: {
+              totalSolRequired: TOTAL_SOL_FOR_GRADUATION,
+              percentComplete: curvePercent,
+              estimatedTokensAvailable: 800_000_000 * (1 - curvePercent / 100),
+              avgPricePerToken: solDeposited / (800_000_000 * (curvePercent / 100)) || 0
+            }
+          }),
+          { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        )
+      } catch (error) {
+        console.error('Error fetching bonding curve:', error)
+        return new Response(
+          JSON.stringify({ error: 'Failed to fetch bonding curve data', details: String(error) }),
+          { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        )
+      }
+    }
+
     // Get token trades/transactions
     if (action === 'get_trades' && tokenMint) {
       const limit = body.limit || 100

@@ -1,7 +1,8 @@
 import { useState, useMemo } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Download, Loader2, FileText, FileSpreadsheet, Database, Search, AlertTriangle, Wallet, GitBranch, ArrowRight, ExternalLink, Eye, Target, Shield, TrendingUp, Zap } from "lucide-react";
+import { Download, Loader2, FileText, FileSpreadsheet, Database, Search, AlertTriangle, Wallet, GitBranch, ArrowRight, ExternalLink, Eye, Target, Shield, TrendingUp, Zap, Calculator, PieChart } from "lucide-react";
+import { Slider } from "@/components/ui/slider";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { Input } from "@/components/ui/input";
@@ -23,8 +24,11 @@ const TokenAnalysisDownload = () => {
   const [moneyFlowData, setMoneyFlowData] = useState<any>(null);
   const [moneyFlowLoading, setMoneyFlowLoading] = useState(false);
   const [walletToTrace, setWalletToTrace] = useState("6rDqAoNhfVhhLynpidBWkSqEzPRkpgzFsMFhmnaCahX8");
-  const [tokenToTrace, setTokenToTrace] = useState("DLMuaLHkeeMDdTTsL5ee4ejbQxewc4q2b6qvtT45pump");
+  const [tokenToTrace, setTokenToTrace] = useState("62aMztCXSDLqpGHX54HiLC3eYwpw9BYfjw465tQSpump");
   const [showDustWallets, setShowDustWallets] = useState(false);
+  const [bondingCurveData, setBondingCurveData] = useState<any>(null);
+  const [bondingLoading, setBondingLoading] = useState(false);
+  const [calcCurvePercent, setCalcCurvePercent] = useState(54);
 
   const tokenMint = "DyqgbSyWcwRw17Y3SvAtmP4o73n1nes5PzwAEjvVpump";
   
@@ -196,6 +200,62 @@ const TokenAnalysisDownload = () => {
     } finally {
       setFullGenealogyLoading(false);
     }
+  };
+
+  // Fetch bonding curve state for a pump.fun token
+  const fetchBondingCurve = async () => {
+    if (!tokenToTrace.trim()) {
+      toast.error("Enter a token mint address");
+      return;
+    }
+    
+    setBondingLoading(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("token-mint-watchdog-monitor", {
+        body: { 
+          action: "get_bonding_curve", 
+          tokenMint: tokenToTrace.trim()
+        }
+      });
+
+      if (error) throw error;
+      setBondingCurveData(data);
+      
+      if (data.curvePercent) {
+        toast.success(`Bonding curve at ${data.curvePercent.toFixed(1)}% - ${data.solDeposited?.toFixed(2)} SOL deposited`);
+      } else {
+        toast.info("Bonding curve data fetched");
+      }
+    } catch (err: any) {
+      toast.error("Failed to fetch bonding curve: " + err.message);
+    } finally {
+      setBondingLoading(false);
+    }
+  };
+
+  // Calculate SOL required for a given curve percentage (pump.fun bonding curve math)
+  const calculateSolForCurve = (targetPercent: number): { solRequired: number; tokensReceived: number } => {
+    // Pump.fun bonding curve constants (approximate)
+    const TOTAL_SOL_FOR_100 = 85; // ~85 SOL to graduate
+    const TOTAL_TOKENS = 800_000_000; // 800M tokens in curve
+    
+    // The bonding curve is: price = k * supply^2
+    // For simplicity, we use a linear approximation which is close enough
+    // More accurate: SOL(%) = TOTAL_SOL * (% / 100)^1.5 (slightly exponential)
+    
+    // Linear approximation
+    const solLinear = (targetPercent / 100) * TOTAL_SOL_FOR_100;
+    
+    // Slightly exponential (more accurate for pump.fun)
+    const solExponential = TOTAL_SOL_FOR_100 * Math.pow(targetPercent / 100, 1.3);
+    
+    // Average of both for better estimate
+    const solRequired = (solLinear + solExponential) / 2;
+    
+    // Tokens received at this percentage
+    const tokensReceived = TOTAL_TOKENS * (targetPercent / 100);
+    
+    return { solRequired, tokensReceived };
   };
 
   // FOLLOW THE MONEY - Trace where funds GO (forward, not backward)
@@ -451,9 +511,169 @@ ALL WALLET STATISTICS
     toast.success(`Downloaded ${filename}`);
   };
 
+  // Bonding curve calculation memo
+  const curveCalc = useMemo(() => calculateSolForCurve(calcCurvePercent), [calcCurvePercent]);
+
   return (
     <div className="min-h-screen bg-background p-8">
       <div className="max-w-4xl mx-auto space-y-6">
+        
+        {/* Pump.fun Bonding Curve Calculator */}
+        <Card className="border-orange-500/50 bg-gradient-to-br from-orange-500/5 to-yellow-500/5">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Calculator className="h-6 w-6 text-orange-400" />
+              Pump.fun Bonding Curve Calculator
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-6">
+            {/* Live Token Check */}
+            <div className="p-4 bg-muted rounded-lg space-y-3">
+              <div className="flex items-center justify-between">
+                <p className="text-sm text-muted-foreground">
+                  Check actual bonding curve state for a token:
+                </p>
+                <Button 
+                  onClick={fetchBondingCurve} 
+                  disabled={bondingLoading}
+                  size="sm"
+                  className="bg-orange-500 hover:bg-orange-600"
+                >
+                  {bondingLoading ? (
+                    <>
+                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                      Fetching...
+                    </>
+                  ) : (
+                    <>
+                      <PieChart className="h-4 w-4 mr-2" />
+                      Fetch Curve State
+                    </>
+                  )}
+                </Button>
+              </div>
+              <Input 
+                placeholder="Enter pump.fun token address..." 
+                value={tokenToTrace}
+                onChange={(e) => setTokenToTrace(e.target.value)}
+                className="font-mono"
+              />
+              
+              {/* Live Token Results */}
+              {bondingCurveData && (
+                <div className="p-4 bg-background rounded-lg border border-orange-500/30 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <span className="font-semibold">{bondingCurveData.name || bondingCurveData.symbol || 'Unknown Token'}</span>
+                    {bondingCurveData.graduated ? (
+                      <Badge className="bg-green-500">Graduated to Raydium</Badge>
+                    ) : (
+                      <Badge variant="secondary">On Bonding Curve</Badge>
+                    )}
+                  </div>
+                  
+                  {!bondingCurveData.graduated && bondingCurveData.curvePercent !== undefined && (
+                    <>
+                      <div className="space-y-1">
+                        <div className="flex justify-between text-sm">
+                          <span>Curve Progress</span>
+                          <span className="font-bold text-orange-400">{bondingCurveData.curvePercent?.toFixed(1)}%</span>
+                        </div>
+                        <div className="w-full bg-muted rounded-full h-4 overflow-hidden">
+                          <div 
+                            className="bg-gradient-to-r from-orange-400 to-yellow-400 h-full rounded-full transition-all"
+                            style={{ width: `${Math.min(bondingCurveData.curvePercent || 0, 100)}%` }}
+                          />
+                        </div>
+                      </div>
+                      
+                      <div className="grid grid-cols-3 gap-3">
+                        <div className="p-2 bg-muted rounded text-center">
+                          <div className="text-lg font-bold text-orange-400">{bondingCurveData.solDeposited?.toFixed(2) || '?'}</div>
+                          <div className="text-xs text-muted-foreground">SOL Deposited</div>
+                        </div>
+                        <div className="p-2 bg-muted rounded text-center">
+                          <div className="text-lg font-bold text-yellow-400">{(85 - (bondingCurveData.solDeposited || 0)).toFixed(2)}</div>
+                          <div className="text-xs text-muted-foreground">SOL to Graduate</div>
+                        </div>
+                        <div className="p-2 bg-muted rounded text-center">
+                          <div className="text-lg font-bold text-green-400">${bondingCurveData.marketCapUsd?.toLocaleString() || '?'}</div>
+                          <div className="text-xs text-muted-foreground">Market Cap</div>
+                        </div>
+                      </div>
+                    </>
+                  )}
+                  
+                  {bondingCurveData.graduated && (
+                    <div className="text-center text-green-400">
+                      Token has graduated! Trading on Raydium now.
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+
+            {/* SOL Calculator */}
+            <div className="p-4 bg-muted rounded-lg space-y-4">
+              <p className="text-sm text-muted-foreground">
+                Calculate how much SOL is needed to reach a specific curve percentage:
+              </p>
+              
+              <div className="space-y-2">
+                <div className="flex justify-between items-center">
+                  <span className="text-sm">Target Curve %</span>
+                  <span className="text-2xl font-bold text-orange-400">{calcCurvePercent}%</span>
+                </div>
+                <Slider 
+                  value={[calcCurvePercent]}
+                  onValueChange={(v) => setCalcCurvePercent(v[0])}
+                  min={1}
+                  max={100}
+                  step={1}
+                  className="w-full"
+                />
+                <div className="flex justify-between text-xs text-muted-foreground">
+                  <span>1%</span>
+                  <span>50%</span>
+                  <span>100% (Graduate)</span>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4 mt-4">
+                <div className="p-4 bg-background border border-orange-500/30 rounded-lg text-center">
+                  <div className="text-3xl font-bold text-orange-400">{curveCalc.solRequired.toFixed(2)}</div>
+                  <div className="text-sm text-muted-foreground">SOL Required</div>
+                  <div className="text-xs text-muted-foreground mt-1">
+                    ~${((curveCalc.solRequired) * 200).toFixed(0)} @ $200/SOL
+                  </div>
+                </div>
+                <div className="p-4 bg-background border border-yellow-500/30 rounded-lg text-center">
+                  <div className="text-3xl font-bold text-yellow-400">{(curveCalc.tokensReceived / 1_000_000).toFixed(1)}M</div>
+                  <div className="text-sm text-muted-foreground">Tokens Purchased</div>
+                  <div className="text-xs text-muted-foreground mt-1">
+                    of 800M total supply
+                  </div>
+                </div>
+              </div>
+
+              {/* Quick Reference Table */}
+              <div className="mt-4">
+                <p className="text-xs text-muted-foreground mb-2">Quick Reference:</p>
+                <div className="grid grid-cols-4 gap-2 text-xs">
+                  {[25, 50, 75, 100].map(pct => {
+                    const calc = calculateSolForCurve(pct);
+                    return (
+                      <div key={pct} className="p-2 bg-background rounded text-center">
+                        <div className="font-bold">{pct}%</div>
+                        <div className="text-orange-400">{calc.solRequired.toFixed(1)} SOL</div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
         {/* Token Genealogy Tracer - NEW */}
         <Card className="border-primary/50">
           <CardHeader>
