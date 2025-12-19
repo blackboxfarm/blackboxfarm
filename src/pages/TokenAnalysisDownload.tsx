@@ -1,7 +1,7 @@
 import { useState, useMemo } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Download, Loader2, FileText, FileSpreadsheet, Database, Search, AlertTriangle, Wallet, GitBranch, ArrowRight, ExternalLink, Eye, Target, Shield } from "lucide-react";
+import { Download, Loader2, FileText, FileSpreadsheet, Database, Search, AlertTriangle, Wallet, GitBranch, ArrowRight, ExternalLink, Eye, Target, Shield, TrendingUp, Zap } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { Input } from "@/components/ui/input";
@@ -20,6 +20,8 @@ const TokenAnalysisDownload = () => {
   const [walletTraceData, setWalletTraceData] = useState<any>(null);
   const [genealogyData, setGenealogyData] = useState<any>(null);
   const [fullGenealogyData, setFullGenealogyData] = useState<any>(null);
+  const [moneyFlowData, setMoneyFlowData] = useState<any>(null);
+  const [moneyFlowLoading, setMoneyFlowLoading] = useState(false);
   const [walletToTrace, setWalletToTrace] = useState("6rDqAoNhfVhhLynpidBWkSqEzPRkpgzFsMFhmnaCahX8");
   const [tokenToTrace, setTokenToTrace] = useState("DLMuaLHkeeMDdTTsL5ee4ejbQxewc4q2b6qvtT45pump");
   const [showDustWallets, setShowDustWallets] = useState(false);
@@ -194,6 +196,46 @@ const TokenAnalysisDownload = () => {
     } finally {
       setFullGenealogyLoading(false);
     }
+  };
+
+  // FOLLOW THE MONEY - Trace where funds GO (forward, not backward)
+  const traceMoneyFlow = async () => {
+    if (!tokenToTrace.trim()) {
+      toast.error("Enter a token mint address");
+      return;
+    }
+    
+    setMoneyFlowLoading(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("token-mint-watchdog-monitor", {
+        body: { 
+          action: "trace_money_flow", 
+          tokenMint: tokenToTrace.trim(),
+          maxDepth: 5,
+          minSolThreshold: 1.0
+        }
+      });
+
+      if (error) throw error;
+      setMoneyFlowData(data);
+      
+      const splitters = data.summary?.splitterWalletsFound || 0;
+      const cex = data.summary?.cexDepositsFound || 0;
+      toast.success(`Found ${splitters} splitter wallets, ${cex} CEX deposits, ${data.summary?.totalSolMoved} SOL moved`);
+    } catch (err: any) {
+      toast.error("Failed to trace money flow: " + err.message);
+    } finally {
+      setMoneyFlowLoading(false);
+    }
+  };
+
+  const downloadMoneyFlowJSON = () => {
+    if (!moneyFlowData) return;
+    downloadFile(
+      `money_flow_${tokenToTrace.slice(0, 8)}.json`,
+      JSON.stringify(moneyFlowData, null, 2),
+      "application/json"
+    );
   };
 
   const downloadFullGenealogyJSON = () => {
@@ -433,7 +475,7 @@ ALL WALLET STATISTICS
               />
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
               <Button onClick={traceTokenGenealogy} disabled={genealogyLoading} variant="outline">
                 {genealogyLoading ? (
                   <>
@@ -457,11 +499,172 @@ ALL WALLET STATISTICS
                 ) : (
                   <>
                     <Target className="h-4 w-4 mr-2" />
-                    Deep Trace to KYC Wallet
+                    Deep Trace to KYC
+                  </>
+                )}
+              </Button>
+
+              <Button onClick={traceMoneyFlow} disabled={moneyFlowLoading} className="bg-gradient-to-r from-orange-500 to-red-500 hover:from-orange-500/90 hover:to-red-500/90">
+                {moneyFlowLoading ? (
+                  <>
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                    Following money...
+                  </>
+                ) : (
+                  <>
+                    <TrendingUp className="h-4 w-4 mr-2" />
+                    Follow the Money →
                   </>
                 )}
               </Button>
             </div>
+
+            {/* Money Flow Results - FOLLOW THE MONEY */}
+            {moneyFlowData && (
+              <div className="space-y-4 pt-4 border-t border-orange-500/30">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <TrendingUp className="h-5 w-5 text-orange-500" />
+                    <span className="font-bold text-orange-400">Money Flow Analysis (Forward Trace)</span>
+                  </div>
+                  <Button size="sm" variant="outline" onClick={downloadMoneyFlowJSON}>
+                    <Download className="h-4 w-4 mr-1" />
+                    JSON
+                  </Button>
+                </div>
+
+                {/* Summary Stats */}
+                <div className="grid grid-cols-4 gap-3">
+                  <div className="p-3 bg-orange-500/10 border border-orange-500/30 rounded text-center">
+                    <div className="text-2xl font-bold text-orange-400">{moneyFlowData.summary?.totalWalletsTraced || 0}</div>
+                    <div className="text-xs text-muted-foreground">Wallets Traced</div>
+                  </div>
+                  <div className="p-3 bg-red-500/10 border border-red-500/30 rounded text-center">
+                    <div className="text-2xl font-bold text-red-400">{moneyFlowData.summary?.splitterWalletsFound || 0}</div>
+                    <div className="text-xs text-muted-foreground">Splitter Wallets</div>
+                  </div>
+                  <div className="p-3 bg-green-500/10 border border-green-500/30 rounded text-center">
+                    <div className="text-2xl font-bold text-green-400">{moneyFlowData.summary?.cexDepositsFound || 0}</div>
+                    <div className="text-xs text-muted-foreground">CEX Deposits</div>
+                  </div>
+                  <div className="p-3 bg-purple-500/10 border border-purple-500/30 rounded text-center">
+                    <div className="text-2xl font-bold text-purple-400">{moneyFlowData.summary?.totalSolMoved || 0}</div>
+                    <div className="text-xs text-muted-foreground">SOL Moved</div>
+                  </div>
+                </div>
+
+                {/* Splitter Wallets */}
+                {moneyFlowData.splitters?.length > 0 && (
+                  <div className="p-4 bg-red-500/10 border border-red-500/30 rounded-lg">
+                    <div className="font-semibold text-red-400 mb-2 flex items-center gap-2">
+                      <Zap className="h-4 w-4" />
+                      Splitter Wallets Detected
+                    </div>
+                    <div className="space-y-2">
+                      {moneyFlowData.splitters.map((s: any, i: number) => (
+                        <div key={i} className="p-3 bg-background/50 rounded border border-red-500/20">
+                          <div className="flex items-center justify-between mb-2">
+                            <a 
+                              href={`https://solscan.io/account/${s.wallet}`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="font-mono text-xs text-primary hover:underline"
+                            >
+                              {s.wallet}
+                            </a>
+                            <Badge variant="destructive" className="text-xs">
+                              Depth {s.depth} • Split to {s.splitToWallets} wallets
+                            </Badge>
+                          </div>
+                          <div className="text-xs text-muted-foreground mb-2">
+                            Received: <span className="text-orange-400 font-semibold">{s.received} SOL</span>
+                          </div>
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-1">
+                            {s.recipients?.slice(0, 6).map((r: any, j: number) => (
+                              <div key={j} className="flex items-center gap-2 text-xs">
+                                <ArrowRight className="h-3 w-3 text-orange-400" />
+                                <span className="text-orange-400">{r.amount} SOL</span>
+                                <span>→</span>
+                                <a 
+                                  href={`https://solscan.io/account/${r.wallet}`}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="font-mono text-primary hover:underline truncate"
+                                >
+                                  {r.wallet.slice(0, 8)}...{r.wallet.slice(-4)}
+                                </a>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* CEX Deposits */}
+                {moneyFlowData.cexDeposits?.length > 0 && (
+                  <div className="p-4 bg-green-500/10 border border-green-500/30 rounded-lg">
+                    <div className="font-semibold text-green-400 mb-2 flex items-center gap-2">
+                      <Shield className="h-4 w-4" />
+                      CEX Deposit Wallets Found
+                    </div>
+                    <div className="space-y-2">
+                      {moneyFlowData.cexDeposits.map((c: any, i: number) => (
+                        <div key={i} className="flex items-center justify-between p-2 bg-background/50 rounded">
+                          <div>
+                            <Badge variant="secondary" className="mr-2">{c.cex}</Badge>
+                            <a 
+                              href={`https://solscan.io/account/${c.wallet}`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="font-mono text-xs text-primary hover:underline"
+                            >
+                              {c.wallet.slice(0, 12)}...{c.wallet.slice(-4)}
+                            </a>
+                          </div>
+                          <span className="text-green-400 font-semibold">{c.amountReceived} SOL</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Full Money Flow Tree */}
+                <div className="p-4 bg-muted/50 rounded-lg max-h-[400px] overflow-y-auto">
+                  <div className="font-semibold mb-3">Complete Money Flow (Forward)</div>
+                  <div className="space-y-1">
+                    {moneyFlowData.moneyFlow?.map((node: any, i: number) => (
+                      <div 
+                        key={i} 
+                        className={`flex items-center gap-2 p-2 rounded text-xs ${
+                          node.isSplitter ? 'bg-red-500/10 border border-red-500/20' :
+                          node.isCex ? 'bg-green-500/10 border border-green-500/20' :
+                          'bg-background/50'
+                        }`}
+                        style={{ marginLeft: `${node.depth * 20}px` }}
+                      >
+                        <span className="text-muted-foreground">D{node.depth}</span>
+                        {node.isSplitter && <Badge variant="destructive" className="text-[10px] px-1">SPLIT</Badge>}
+                        {node.isCex && <Badge variant="secondary" className="text-[10px] px-1">{node.isCex}</Badge>}
+                        <a 
+                          href={`https://solscan.io/account/${node.wallet}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="font-mono text-primary hover:underline"
+                        >
+                          {node.wallet.slice(0, 8)}...{node.wallet.slice(-4)}
+                        </a>
+                        <span className="text-orange-400">↓{node.amountReceived} SOL</span>
+                        {node.totalSent > 0 && (
+                          <span className="text-muted-foreground">sent {node.totalSent} SOL to {node.sentToCount}</span>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            )}
 
             {/* Full Genealogy Results */}
             {fullGenealogyData && (
