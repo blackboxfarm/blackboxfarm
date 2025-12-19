@@ -1604,6 +1604,354 @@ Deno.serve(async (req) => {
       )
     }
 
+    // TRACE FULL GENEALOGY - Recursively trace back to KYC/CEX wallet
+    if (action === 'trace_full_genealogy' && tokenMint) {
+      const heliusApiKey = Deno.env.get('HELIUS_API_KEY')
+      if (!heliusApiKey) {
+        return new Response(
+          JSON.stringify({ error: 'HELIUS_API_KEY not configured' }),
+          { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        )
+      }
+
+      const maxDepth = body.maxDepth || 10
+      const minSolThreshold = body.minSolThreshold || 0.5 // Only trace significant funding
+
+      // Known CEX/KYC hot wallets
+      const KNOWN_CEX_WALLETS: Record<string, string[]> = {
+        'Binance': [
+          '5tzFkiKscXHK5ZXCGbXZxdw7gTjjD1mBwuoFbhUvuAi9',
+          '9WzDXwBbmkg8ZTbNMqUxvQRAyrZzDsGYdLVL9zYtAWWM',
+          'BmFdpraQhkiDQE6SnfG5omcA1VwzqfXrwtNYBwWTymy6'
+        ],
+        'Coinbase': [
+          'H8sMJSCQxfKiFTCfDR3DUMLPwcRbM61LGFJ8N4dK3WjS',
+          'GJRs4FwHtemZ5ZE9x3FNvJ8TMwitKTh21yxdRPqn7npE'
+        ],
+        'KuCoin': [
+          'BmFdpraQhkiDQE6SnfG5omcA1VwzqfXrwtNYBwWTymy6',
+          'AobVSwdW9BbpMdJvTqeCN4hPAmh4rHm7vwLnQ5ATSyrS'
+        ],
+        'KuCoin 2': [
+          'inDKhd9vD82hSozuNmGVKVwYYZm1dV2Efbu6ZoA' // Partial match
+        ],
+        'OKX': [
+          '5VCwKtCXgCJ6kit5FybXjvriW3xELsFDhYrPSqtJNmcD'
+        ],
+        'Bybit': [
+          'AC5RDfQFmDS1deWZos921JfqscXdByf8BKHs5ACWjtW2'
+        ],
+        'Kraken': [
+          '9WzDXwBbmkg8ZTbNMqUxvQRAyrZzDsGYdLVL9zYtAWWM'
+        ],
+        'FTX (Legacy)': [
+          'Ex9CqcVFjmxSH7nw18k3SHN95NGhjkphpkfBQWCS9tvb'
+        ]
+      }
+
+      // Helper to check if wallet is a known CEX
+      const getCexName = (wallet: string): string | null => {
+        for (const [cex, wallets] of Object.entries(KNOWN_CEX_WALLETS)) {
+          if (wallets.some(w => wallet.includes(w) || w.includes(wallet))) {
+            return cex
+          }
+        }
+        return null
+      }
+
+      console.log(`🔬 Full genealogy trace for token: ${tokenMint} (max depth: ${maxDepth})`)
+
+      interface WalletNode {
+        wallet: string
+        depth: number
+        solReceived: number
+        solSent: number
+        fundedBy: string | null
+        fundedAmount: number
+        fundingTx: string | null
+        fundingTime: string | null
+        cexSource: string | null
+        isLeaf: boolean
+        children: string[]
+      }
+
+      const walletTree = new Map<string, WalletNode>()
+      const visited = new Set<string>()
+      const queue: Array<{ wallet: string, depth: number, fundedBy: string | null, fundedAmount: number, fundingTx: string | null, fundingTime: string | null }> = []
+      
+      // Step 1: Get the mint wallet from the token
+      console.log(`Finding mint wallet for token...`)
+      const tokenTxUrl = `https://api.helius.xyz/v0/addresses/${tokenMint}/transactions?api-key=${heliusApiKey}&limit=50`
+      const tokenTxResponse = await fetch(tokenTxUrl)
+      
+      if (!tokenTxResponse.ok) {
+        return new Response(
+          JSON.stringify({ error: `Failed to fetch token transactions: ${tokenTxResponse.status}` }),
+          { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        )
+      }
+      
+      const tokenTxs = await tokenTxResponse.json()
+      tokenTxs.sort((a: any, b: any) => (a.timestamp || 0) - (b.timestamp || 0))
+      
+      let mintWallet: string | null = null
+      let mintTxSignature: string | null = null
+      let mintTimestamp: string | null = null
+      
+      for (const tx of tokenTxs.slice(0, 10)) {
+        if (tx.feePayer && !mintWallet) {
+          mintWallet = tx.feePayer
+          mintTxSignature = tx.signature
+          mintTimestamp = tx.timestamp ? new Date(tx.timestamp * 1000).toISOString() : null
+          break
+        }
+      }
+      
+      if (!mintWallet) {
+        return new Response(
+          JSON.stringify({ error: 'Could not find mint wallet for this token' }),
+          { status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        )
+      }
+      
+      console.log(`✅ Mint wallet: ${mintWallet}`)
+      
+      // Initialize the mint wallet as root
+      walletTree.set(mintWallet, {
+        wallet: mintWallet,
+        depth: 0,
+        solReceived: 0,
+        solSent: 0,
+        fundedBy: null,
+        fundedAmount: 0,
+        fundingTx: null,
+        fundingTime: null,
+        cexSource: getCexName(mintWallet),
+        isLeaf: false,
+        children: []
+      })
+      queue.push({ wallet: mintWallet, depth: 0, fundedBy: null, fundedAmount: 0, fundingTx: null, fundingTime: null })
+      
+      // BFS trace backwards through the wallet chain
+      let rootCexWallet: string | null = null
+      let rootCexName: string | null = null
+      
+      while (queue.length > 0) {
+        const { wallet, depth, fundedBy, fundedAmount, fundingTx, fundingTime } = queue.shift()!
+        
+        if (visited.has(wallet) || depth > maxDepth) continue
+        visited.add(wallet)
+        
+        console.log(`📍 Tracing wallet at depth ${depth}: ${wallet.slice(0, 8)}...`)
+        
+        // Check if this is a CEX wallet
+        const cexName = getCexName(wallet)
+        if (cexName) {
+          console.log(`🏦 Found CEX wallet: ${cexName} at depth ${depth}`)
+          rootCexWallet = wallet
+          rootCexName = cexName
+          
+          const node = walletTree.get(wallet) || {
+            wallet,
+            depth,
+            solReceived: fundedAmount,
+            solSent: 0,
+            fundedBy,
+            fundedAmount,
+            fundingTx,
+            fundingTime,
+            cexSource: cexName,
+            isLeaf: true,
+            children: []
+          }
+          node.cexSource = cexName
+          node.isLeaf = true
+          walletTree.set(wallet, node)
+          
+          // Don't continue tracing past CEX
+          continue
+        }
+        
+        // Fetch wallet transactions to find funding sources
+        const walletTxUrl = `https://api.helius.xyz/v0/addresses/${wallet}/transactions?api-key=${heliusApiKey}&limit=100`
+        
+        try {
+          const walletTxResponse = await fetch(walletTxUrl)
+          if (!walletTxResponse.ok) {
+            console.error(`Failed to fetch transactions for ${wallet}: ${walletTxResponse.status}`)
+            continue
+          }
+          
+          const walletTxs = await walletTxResponse.json()
+          walletTxs.sort((a: any, b: any) => (a.timestamp || 0) - (b.timestamp || 0))
+          
+          // Find all wallets that funded this wallet
+          const funders = new Map<string, { totalSol: number, firstTx: string, firstTime: number }>()
+          let totalReceived = 0
+          let totalSent = 0
+          
+          for (const tx of walletTxs) {
+            const nativeTransfers = tx.nativeTransfers || []
+            
+            for (const transfer of nativeTransfers) {
+              const amount = (transfer.amount || 0) / 1e9
+              
+              // Incoming transfer
+              if (transfer.toUserAccount?.toLowerCase() === wallet.toLowerCase() && 
+                  transfer.fromUserAccount &&
+                  transfer.fromUserAccount.toLowerCase() !== wallet.toLowerCase()) {
+                
+                totalReceived += amount
+                
+                if (amount >= minSolThreshold) {
+                  const sender = transfer.fromUserAccount
+                  const existing = funders.get(sender) || { totalSol: 0, firstTx: tx.signature, firstTime: tx.timestamp }
+                  existing.totalSol += amount
+                  if (tx.timestamp < existing.firstTime) {
+                    existing.firstTx = tx.signature
+                    existing.firstTime = tx.timestamp
+                  }
+                  funders.set(sender, existing)
+                }
+              }
+              
+              // Outgoing transfer
+              if (transfer.fromUserAccount?.toLowerCase() === wallet.toLowerCase()) {
+                totalSent += amount
+              }
+            }
+          }
+          
+          // Update wallet node
+          const existingNode = walletTree.get(wallet) || {
+            wallet,
+            depth,
+            solReceived: 0,
+            solSent: 0,
+            fundedBy,
+            fundedAmount,
+            fundingTx,
+            fundingTime,
+            cexSource: null,
+            isLeaf: funders.size === 0,
+            children: []
+          }
+          existingNode.solReceived = totalReceived
+          existingNode.solSent = totalSent
+          existingNode.isLeaf = funders.size === 0
+          walletTree.set(wallet, existingNode)
+          
+          // Add funders to queue for tracing
+          const funderList = Array.from(funders.entries())
+            .sort((a, b) => b[1].totalSol - a[1].totalSol)
+            .slice(0, 3) // Top 3 funders only to avoid explosion
+          
+          for (const [funderWallet, funderData] of funderList) {
+            if (!visited.has(funderWallet)) {
+              queue.push({
+                wallet: funderWallet,
+                depth: depth + 1,
+                fundedBy: wallet,
+                fundedAmount: funderData.totalSol,
+                fundingTx: funderData.firstTx,
+                fundingTime: new Date(funderData.firstTime * 1000).toISOString()
+              })
+              
+              // Record child relationship
+              existingNode.children.push(funderWallet)
+              
+              // Pre-create node for funder
+              if (!walletTree.has(funderWallet)) {
+                walletTree.set(funderWallet, {
+                  wallet: funderWallet,
+                  depth: depth + 1,
+                  solReceived: 0,
+                  solSent: funderData.totalSol,
+                  fundedBy: wallet,
+                  fundedAmount: funderData.totalSol,
+                  fundingTx: funderData.firstTx,
+                  fundingTime: new Date(funderData.firstTime * 1000).toISOString(),
+                  cexSource: getCexName(funderWallet),
+                  isLeaf: false,
+                  children: []
+                })
+              }
+            }
+          }
+          
+          // Rate limit protection
+          await new Promise(r => setTimeout(r, 150))
+          
+        } catch (error) {
+          console.error(`Error tracing wallet ${wallet}:`, error)
+        }
+      }
+      
+      // Build the hierarchical chain from mint wallet to root
+      const chain: Array<{ level: string, wallet: string, depth: number, solFlow: number, cexSource: string | null, fundingTx: string | null }> = []
+      const nodes = Array.from(walletTree.values()).sort((a, b) => a.depth - b.depth)
+      
+      for (const node of nodes) {
+        let levelName = 'wallet'
+        if (node.depth === 0) levelName = 'mint'
+        else if (node.cexSource) levelName = `KYC (${node.cexSource})`
+        else if (node.depth === 1) levelName = 'parent'
+        else if (node.depth === 2) levelName = 'grandparent'
+        else levelName = `ancestor-${node.depth}`
+        
+        chain.push({
+          level: levelName,
+          wallet: node.wallet,
+          depth: node.depth,
+          solFlow: node.fundedAmount || node.solReceived,
+          cexSource: node.cexSource,
+          fundingTx: node.fundingTx
+        })
+      }
+      
+      // Find the root (deepest) wallet
+      const rootWallet = nodes.length > 0 ? nodes[nodes.length - 1] : null
+      
+      return new Response(
+        JSON.stringify({
+          success: true,
+          tokenMint,
+          summary: {
+            mintWallet,
+            mintTransaction: mintTxSignature,
+            mintTimestamp,
+            totalWalletsTraced: walletTree.size,
+            maxDepthReached: Math.max(...nodes.map(n => n.depth)),
+            rootCexWallet,
+            rootCexName,
+            foundKycWallet: !!rootCexName
+          },
+          chain: chain.reverse(), // Root to mint
+          walletTree: nodes.map(n => ({
+            wallet: n.wallet,
+            depth: n.depth,
+            solReceived: parseFloat(n.solReceived.toFixed(4)),
+            solSent: parseFloat(n.solSent.toFixed(4)),
+            fundedBy: n.fundedBy,
+            fundedAmount: parseFloat(n.fundedAmount.toFixed(4)),
+            fundingTx: n.fundingTx,
+            fundingTime: n.fundingTime,
+            cexSource: n.cexSource,
+            isLeaf: n.isLeaf,
+            childCount: n.children.length
+          })),
+          recommendedWatchlist: nodes
+            .filter(n => n.depth === 1 || n.depth === 2) // Parent and grandparent level
+            .map(n => ({
+              wallet: n.wallet,
+              reason: n.depth === 1 ? 'Direct parent of mint wallet' : 'Grandparent level - likely master wallet',
+              solFlow: parseFloat(n.fundedAmount.toFixed(4))
+            }))
+        }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      )
+    }
+
     // Scan for new pump.fun tokens
     if (action === 'scan') {
       console.log('Scanning for new pump.fun tokens...')

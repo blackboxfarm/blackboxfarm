@@ -1,10 +1,11 @@
 import { useState, useMemo } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Download, Loader2, FileText, FileSpreadsheet, Database, Search, AlertTriangle, Wallet, GitBranch, ArrowRight, ExternalLink } from "lucide-react";
+import { Download, Loader2, FileText, FileSpreadsheet, Database, Search, AlertTriangle, Wallet, GitBranch, ArrowRight, ExternalLink, Eye, Target, Shield } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { Input } from "@/components/ui/input";
+import { Badge } from "@/components/ui/badge";
 
 const TokenAnalysisDownload = () => {
   const [loading, setLoading] = useState(false);
@@ -12,11 +13,13 @@ const TokenAnalysisDownload = () => {
   const [walletTraceLoading, setWalletTraceLoading] = useState(false);
   const [genealogyLoading, setGenealogyLoading] = useState(false);
   const [offspringLoading, setOffspringLoading] = useState(false);
+  const [fullGenealogyLoading, setFullGenealogyLoading] = useState(false);
   const [analysisData, setAnalysisData] = useState<any>(null);
   const [offspringData, setOffspringData] = useState<any>(null);
   const [heliusData, setHeliusData] = useState<any>(null);
   const [walletTraceData, setWalletTraceData] = useState<any>(null);
   const [genealogyData, setGenealogyData] = useState<any>(null);
+  const [fullGenealogyData, setFullGenealogyData] = useState<any>(null);
   const [walletToTrace, setWalletToTrace] = useState("6rDqAoNhfVhhLynpidBWkSqEzPRkpgzFsMFhmnaCahX8");
   const [tokenToTrace, setTokenToTrace] = useState("DLMuaLHkeeMDdTTsL5ee4ejbQxewc4q2b6qvtT45pump");
   const [showDustWallets, setShowDustWallets] = useState(false);
@@ -159,6 +162,47 @@ const TokenAnalysisDownload = () => {
     } finally {
       setOffspringLoading(false);
     }
+  };
+
+  const traceFullGenealogy = async () => {
+    if (!tokenToTrace.trim()) {
+      toast.error("Enter a token mint address");
+      return;
+    }
+    
+    setFullGenealogyLoading(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("token-mint-watchdog-monitor", {
+        body: { 
+          action: "trace_full_genealogy", 
+          tokenMint: tokenToTrace.trim(),
+          maxDepth: 10,
+          minSolThreshold: 0.5
+        }
+      });
+
+      if (error) throw error;
+      setFullGenealogyData(data);
+      
+      if (data.summary?.foundKycWallet) {
+        toast.success(`Found KYC wallet: ${data.summary.rootCexName}!`);
+      } else {
+        toast.success(`Traced ${data.summary?.totalWalletsTraced} wallets (depth: ${data.summary?.maxDepthReached})`);
+      }
+    } catch (err: any) {
+      toast.error("Failed to trace full genealogy: " + err.message);
+    } finally {
+      setFullGenealogyLoading(false);
+    }
+  };
+
+  const downloadFullGenealogyJSON = () => {
+    if (!fullGenealogyData) return;
+    downloadFile(
+      `full_genealogy_${tokenToTrace.slice(0, 8)}.json`,
+      JSON.stringify(fullGenealogyData, null, 2),
+      "application/json"
+    );
   };
 
   const downloadGenealogyJSON = () => {
@@ -389,19 +433,215 @@ ALL WALLET STATISTICS
               />
             </div>
 
-            <Button onClick={traceTokenGenealogy} disabled={genealogyLoading} className="w-full">
-              {genealogyLoading ? (
-                <>
-                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                  Tracing token genealogy...
-                </>
-              ) : (
-                <>
-                  <GitBranch className="h-4 w-4 mr-2" />
-                  Trace Token → Mint Wallet → Parent Wallet
-                </>
-              )}
-            </Button>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+              <Button onClick={traceTokenGenealogy} disabled={genealogyLoading} variant="outline">
+                {genealogyLoading ? (
+                  <>
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                    Tracing...
+                  </>
+                ) : (
+                  <>
+                    <GitBranch className="h-4 w-4 mr-2" />
+                    Quick Trace (3 levels)
+                  </>
+                )}
+              </Button>
+
+              <Button onClick={traceFullGenealogy} disabled={fullGenealogyLoading} className="bg-gradient-to-r from-primary to-purple-500 hover:from-primary/90 hover:to-purple-500/90">
+                {fullGenealogyLoading ? (
+                  <>
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                    Deep tracing to KYC...
+                  </>
+                ) : (
+                  <>
+                    <Target className="h-4 w-4 mr-2" />
+                    Deep Trace to KYC Wallet
+                  </>
+                )}
+              </Button>
+            </div>
+
+            {/* Full Genealogy Results */}
+            {fullGenealogyData && (
+              <div className="space-y-4 pt-4 border-t border-primary/30">
+                {/* KYC Status Banner */}
+                {fullGenealogyData.summary?.foundKycWallet ? (
+                  <div className="p-4 bg-green-500/20 border border-green-500/50 rounded-lg">
+                    <div className="flex items-center gap-3">
+                      <Shield className="h-8 w-8 text-green-500" />
+                      <div>
+                        <div className="font-bold text-lg text-green-400">KYC Wallet Found!</div>
+                        <div className="text-sm">
+                          Source: <Badge variant="secondary" className="ml-1">{fullGenealogyData.summary.rootCexName}</Badge>
+                        </div>
+                        <a 
+                          href={`https://solscan.io/account/${fullGenealogyData.summary.rootCexWallet}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="font-mono text-xs text-primary hover:underline"
+                        >
+                          {fullGenealogyData.summary.rootCexWallet}
+                        </a>
+                      </div>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="p-4 bg-yellow-500/20 border border-yellow-500/50 rounded-lg">
+                    <div className="flex items-center gap-3">
+                      <AlertTriangle className="h-6 w-6 text-yellow-500" />
+                      <div>
+                        <div className="font-semibold">No known CEX/KYC wallet found</div>
+                        <div className="text-xs text-muted-foreground">
+                          Traced {fullGenealogyData.summary?.totalWalletsTraced} wallets to depth {fullGenealogyData.summary?.maxDepthReached}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Summary Stats */}
+                <div className="grid grid-cols-3 gap-3">
+                  <div className="p-3 bg-muted rounded text-center">
+                    <div className="text-2xl font-bold">{fullGenealogyData.summary?.totalWalletsTraced || 0}</div>
+                    <div className="text-xs text-muted-foreground">Wallets Traced</div>
+                  </div>
+                  <div className="p-3 bg-muted rounded text-center">
+                    <div className="text-2xl font-bold">{fullGenealogyData.summary?.maxDepthReached || 0}</div>
+                    <div className="text-xs text-muted-foreground">Max Depth</div>
+                  </div>
+                  <div className="p-3 bg-green-500/10 border border-green-500/30 rounded text-center">
+                    <div className="text-xs text-muted-foreground mb-1">Mint Wallet</div>
+                    <a 
+                      href={`https://solscan.io/account/${fullGenealogyData.summary?.mintWallet}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="font-mono text-xs text-primary hover:underline"
+                    >
+                      {fullGenealogyData.summary?.mintWallet?.slice(0, 6)}...{fullGenealogyData.summary?.mintWallet?.slice(-4)}
+                    </a>
+                  </div>
+                </div>
+
+                {/* Full Chain Visualization */}
+                <div className="p-4 bg-gradient-to-r from-purple-500/10 via-muted to-green-500/10 rounded-lg">
+                  <div className="font-semibold mb-3 flex items-center gap-2">
+                    <Eye className="h-4 w-4" />
+                    Complete Wallet Chain (KYC → Mint)
+                  </div>
+                  <div className="flex flex-wrap items-center gap-2 text-sm">
+                    {fullGenealogyData.chain?.map((item: any, idx: number) => (
+                      <div key={idx} className="flex items-center gap-2">
+                        {idx > 0 && <ArrowRight className="h-4 w-4 text-muted-foreground" />}
+                        <div className={`p-2 rounded ${
+                          item.cexSource ? 'bg-purple-500/30 border-2 border-purple-500' :
+                          item.level === 'mint' ? 'bg-green-500/20 border border-green-500/50' :
+                          item.level === 'parent' ? 'bg-orange-500/20 border border-orange-500/50' :
+                          'bg-muted border border-border'
+                        }`}>
+                          <div className="text-xs text-muted-foreground uppercase flex items-center gap-1">
+                            {item.cexSource && <Shield className="h-3 w-3 text-purple-400" />}
+                            {item.level}
+                          </div>
+                          <a 
+                            href={`https://solscan.io/account/${item.wallet}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="font-mono text-xs hover:underline flex items-center gap-1"
+                          >
+                            {item.wallet?.slice(0, 6)}...{item.wallet?.slice(-4)}
+                            <ExternalLink className="h-3 w-3" />
+                          </a>
+                          {item.solFlow > 0 && (
+                            <div className="text-xs text-green-400">{item.solFlow.toFixed(2)} SOL</div>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Recommended Watchlist */}
+                {fullGenealogyData.recommendedWatchlist?.length > 0 && (
+                  <div className="p-4 bg-yellow-500/10 border border-yellow-500/30 rounded-lg">
+                    <div className="font-semibold mb-3 flex items-center gap-2">
+                      <Target className="h-4 w-4 text-yellow-500" />
+                      Recommended Watchlist
+                    </div>
+                    <p className="text-xs text-muted-foreground mb-3">
+                      Monitor these wallets for new token mints. They are likely to be used for future token launches.
+                    </p>
+                    <div className="space-y-2">
+                      {fullGenealogyData.recommendedWatchlist.map((w: any, i: number) => (
+                        <div key={i} className="flex items-center justify-between p-2 bg-background rounded">
+                          <div className="flex items-center gap-2">
+                            <Badge variant="outline" className="text-xs">{i + 1}</Badge>
+                            <a 
+                              href={`https://solscan.io/account/${w.wallet}`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="font-mono text-xs text-primary hover:underline"
+                            >
+                              {w.wallet}
+                            </a>
+                          </div>
+                          <div className="text-xs text-muted-foreground">
+                            <span className="text-green-400">{w.solFlow} SOL</span>
+                            <span className="ml-2">• {w.reason}</span>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Full Wallet Tree */}
+                {fullGenealogyData.walletTree?.length > 0 && (
+                  <div className="p-3 bg-muted rounded">
+                    <div className="font-semibold mb-2">Full Wallet Tree ({fullGenealogyData.walletTree.length} wallets)</div>
+                    <div className="max-h-64 overflow-y-auto space-y-1">
+                      {fullGenealogyData.walletTree.map((node: any, i: number) => (
+                        <div 
+                          key={i} 
+                          className={`flex items-center justify-between text-xs font-mono p-2 rounded ${
+                            node.cexSource ? 'bg-purple-500/20 border border-purple-500/50' :
+                            node.depth === 0 ? 'bg-green-500/10 border border-green-500/30' :
+                            node.depth === 1 ? 'bg-orange-500/10 border border-orange-500/30' :
+                            'bg-background'
+                          }`}
+                          style={{ marginLeft: `${node.depth * 12}px` }}
+                        >
+                          <div className="flex items-center gap-2">
+                            <span className="text-muted-foreground">D{node.depth}</span>
+                            <a 
+                              href={`https://solscan.io/account/${node.wallet}`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="text-primary hover:underline truncate max-w-[200px]"
+                            >
+                              {node.wallet}
+                            </a>
+                            {node.cexSource && (
+                              <Badge variant="secondary" className="text-[10px]">{node.cexSource}</Badge>
+                            )}
+                          </div>
+                          <div className="flex items-center gap-2 text-muted-foreground">
+                            <span className="text-green-400">↓{node.solReceived} SOL</span>
+                            <span className="text-red-400">↑{node.solSent} SOL</span>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                <Button onClick={downloadFullGenealogyJSON} variant="outline" className="w-full justify-start">
+                  <Download className="h-4 w-4 mr-2" />
+                  Download Full Genealogy Data (JSON)
+                </Button>
+              </div>
+            )}
 
             {genealogyData && (
               <div className="space-y-4 pt-4 border-t">
