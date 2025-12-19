@@ -1,7 +1,7 @@
 import { useState, useMemo } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Download, Loader2, FileText, FileSpreadsheet, Database, Search, AlertTriangle, Wallet } from "lucide-react";
+import { Download, Loader2, FileText, FileSpreadsheet, Database, Search, AlertTriangle, Wallet, GitBranch, ArrowRight, ExternalLink } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { Input } from "@/components/ui/input";
@@ -10,10 +10,13 @@ const TokenAnalysisDownload = () => {
   const [loading, setLoading] = useState(false);
   const [heliusLoading, setHeliusLoading] = useState(false);
   const [walletTraceLoading, setWalletTraceLoading] = useState(false);
+  const [genealogyLoading, setGenealogyLoading] = useState(false);
   const [analysisData, setAnalysisData] = useState<any>(null);
   const [heliusData, setHeliusData] = useState<any>(null);
   const [walletTraceData, setWalletTraceData] = useState<any>(null);
+  const [genealogyData, setGenealogyData] = useState<any>(null);
   const [walletToTrace, setWalletToTrace] = useState("6rDqAoNhfVhhLynpidBWkSqEzPRkpgzFsMFhmnaCahX8");
+  const [tokenToTrace, setTokenToTrace] = useState("DLMuaLHkeeMDdTTsL5ee4ejbQxewc4q2b6qvtT45pump");
   const [showDustWallets, setShowDustWallets] = useState(false);
 
   const tokenMint = "DyqgbSyWcwRw17Y3SvAtmP4o73n1nes5PzwAEjvVpump";
@@ -103,6 +106,40 @@ const TokenAnalysisDownload = () => {
     } finally {
       setWalletTraceLoading(false);
     }
+  };
+
+  const traceTokenGenealogy = async () => {
+    if (!tokenToTrace.trim()) {
+      toast.error("Enter a token mint address");
+      return;
+    }
+    
+    setGenealogyLoading(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("token-mint-watchdog-monitor", {
+        body: { 
+          action: "trace_token_genealogy", 
+          tokenMint: tokenToTrace.trim()
+        }
+      });
+
+      if (error) throw error;
+      setGenealogyData(data);
+      toast.success(`Found mint wallet: ${data.genealogy?.mintWallet?.slice(0, 8)}...`);
+    } catch (err: any) {
+      toast.error("Failed to trace genealogy: " + err.message);
+    } finally {
+      setGenealogyLoading(false);
+    }
+  };
+
+  const downloadGenealogyJSON = () => {
+    if (!genealogyData) return;
+    downloadFile(
+      `token_genealogy_${tokenToTrace.slice(0, 8)}.json`,
+      JSON.stringify(genealogyData, null, 2),
+      "application/json"
+    );
   };
 
   const downloadWalletTraceCSV = () => {
@@ -294,6 +331,191 @@ ALL WALLET STATISTICS
   return (
     <div className="min-h-screen bg-background p-8">
       <div className="max-w-4xl mx-auto space-y-6">
+        {/* Token Genealogy Tracer - NEW */}
+        <Card className="border-primary/50">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <GitBranch className="h-6 w-6 text-primary" />
+              Token Genealogy Tracer
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="p-4 bg-muted rounded-lg">
+              <p className="text-sm text-muted-foreground mb-2">
+                Enter a token mint address to find the creator wallet and trace back to the original funding source.
+              </p>
+              <Input 
+                placeholder="Enter token mint address..." 
+                value={tokenToTrace}
+                onChange={(e) => setTokenToTrace(e.target.value)}
+                className="font-mono"
+              />
+            </div>
+
+            <Button onClick={traceTokenGenealogy} disabled={genealogyLoading} className="w-full">
+              {genealogyLoading ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  Tracing token genealogy...
+                </>
+              ) : (
+                <>
+                  <GitBranch className="h-4 w-4 mr-2" />
+                  Trace Token → Mint Wallet → Parent Wallet
+                </>
+              )}
+            </Button>
+
+            {genealogyData && (
+              <div className="space-y-4 pt-4 border-t">
+                {/* Wallet Chain Visualization */}
+                <div className="p-4 bg-gradient-to-r from-muted to-background rounded-lg">
+                  <div className="font-semibold mb-3">Wallet Chain</div>
+                  <div className="flex flex-wrap items-center gap-2 text-sm">
+                    {genealogyData.chain?.map((item: any, idx: number) => (
+                      <div key={idx} className="flex items-center gap-2">
+                        {idx > 0 && <ArrowRight className="h-4 w-4 text-muted-foreground" />}
+                        <div className={`p-2 rounded ${
+                          item.level === 'grandparent' ? 'bg-purple-500/20 border border-purple-500/50' :
+                          item.level === 'parent' ? 'bg-orange-500/20 border border-orange-500/50' :
+                          item.level === 'mint' ? 'bg-green-500/20 border border-green-500/50' :
+                          'bg-blue-500/20 border border-blue-500/50'
+                        }`}>
+                          <div className="text-xs text-muted-foreground uppercase">{item.level}</div>
+                          <a 
+                            href={`https://solscan.io/account/${item.wallet || item.address}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="font-mono text-xs hover:underline flex items-center gap-1"
+                          >
+                            {(item.wallet || item.address)?.slice(0, 6)}...{(item.wallet || item.address)?.slice(-4)}
+                            <ExternalLink className="h-3 w-3" />
+                          </a>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Key Details */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
+                  <div className="p-3 bg-green-500/10 border border-green-500/30 rounded">
+                    <div className="font-semibold flex items-center gap-2">
+                      <Wallet className="h-4 w-4" />
+                      Mint Wallet (Creator)
+                    </div>
+                    <a 
+                      href={`https://solscan.io/account/${genealogyData.genealogy?.mintWallet}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="font-mono text-xs text-primary hover:underline break-all"
+                    >
+                      {genealogyData.genealogy?.mintWallet}
+                    </a>
+                    {genealogyData.genealogy?.mintTimestamp && (
+                      <div className="text-xs text-muted-foreground mt-1">
+                        Minted: {genealogyData.genealogy.mintTimestamp}
+                      </div>
+                    )}
+                  </div>
+
+                  {genealogyData.genealogy?.parentWallet && (
+                    <div className="p-3 bg-orange-500/10 border border-orange-500/30 rounded">
+                      <div className="font-semibold flex items-center gap-2">
+                        <GitBranch className="h-4 w-4" />
+                        Parent Wallet (Funder)
+                      </div>
+                      <a 
+                        href={`https://solscan.io/account/${genealogyData.genealogy?.parentWallet}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="font-mono text-xs text-primary hover:underline break-all"
+                      >
+                        {genealogyData.genealogy?.parentWallet}
+                      </a>
+                      {genealogyData.genealogy?.parentWalletDetails && (
+                        <div className="text-xs text-muted-foreground mt-1">
+                          Sent: {genealogyData.genealogy.parentWalletDetails.totalSolSent?.toFixed(4)} SOL
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {genealogyData.genealogy?.grandparentWallet && (
+                    <div className="p-3 bg-purple-500/10 border border-purple-500/30 rounded">
+                      <div className="font-semibold">Grandparent Wallet</div>
+                      <a 
+                        href={`https://solscan.io/account/${genealogyData.genealogy?.grandparentWallet}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="font-mono text-xs text-primary hover:underline break-all"
+                      >
+                        {genealogyData.genealogy?.grandparentWallet}
+                      </a>
+                    </div>
+                  )}
+
+                  {genealogyData.genealogy?.largestFunder && (
+                    <div className="p-3 bg-muted rounded">
+                      <div className="font-semibold">Largest Funder</div>
+                      <a 
+                        href={`https://solscan.io/account/${genealogyData.genealogy?.largestFunder.wallet}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="font-mono text-xs text-primary hover:underline"
+                      >
+                        {genealogyData.genealogy?.largestFunder.wallet?.slice(0, 8)}...
+                      </a>
+                      <span className="text-xs ml-2">
+                        ({genealogyData.genealogy?.largestFunder.totalSolSent} SOL, {genealogyData.genealogy?.largestFunder.txCount} txs)
+                      </span>
+                    </div>
+                  )}
+                </div>
+
+                {/* Funding Sources List */}
+                {genealogyData.fundingSources?.length > 0 && (
+                  <div className="p-3 bg-muted rounded">
+                    <div className="font-semibold mb-2">All Funding Sources ({genealogyData.fundingSources.length})</div>
+                    <div className="max-h-48 overflow-y-auto space-y-1">
+                      {genealogyData.fundingSources.map((f: any, i: number) => (
+                        <div 
+                          key={i} 
+                          className={`flex items-center justify-between text-xs font-mono p-2 rounded ${
+                            f.isParent ? 'bg-orange-500/10 border border-orange-500/30' :
+                            f.isLargestFunder ? 'bg-green-500/10 border border-green-500/30' :
+                            'bg-background'
+                          }`}
+                        >
+                          <a 
+                            href={`https://solscan.io/account/${f.wallet}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-primary hover:underline truncate max-w-[250px]"
+                          >
+                            {f.wallet}
+                          </a>
+                          <div className="flex items-center gap-2 text-muted-foreground">
+                            <span className="text-green-500">{f.totalSolSent} SOL</span>
+                            <span>({f.txCount} tx)</span>
+                            {f.isParent && <span className="text-orange-500 text-[10px]">PARENT</span>}
+                            {f.isLargestFunder && <span className="text-green-500 text-[10px]">LARGEST</span>}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                <Button onClick={downloadGenealogyJSON} variant="outline" className="w-full justify-start">
+                  <Download className="h-4 w-4 mr-2" />
+                  Download Full Genealogy Data (JSON)
+                </Button>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
         {/* Swap Trades Analysis */}
         <Card>
           <CardHeader>
