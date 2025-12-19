@@ -1778,11 +1778,13 @@ Deno.serve(async (req) => {
         try {
           const walletTxResponse = await fetch(walletTxUrl)
           if (!walletTxResponse.ok) {
-            console.error(`Failed to fetch transactions for ${wallet}: ${walletTxResponse.status}`)
+            console.error(`❌ Failed to fetch transactions for ${wallet}: ${walletTxResponse.status}`)
             continue
           }
           
           const walletTxs = await walletTxResponse.json()
+          console.log(`📦 Got ${walletTxs.length} transactions for wallet ${wallet.slice(0, 8)}...`)
+          
           walletTxs.sort((a: any, b: any) => (a.timestamp || 0) - (b.timestamp || 0))
           
           // Find all wallets that funded this wallet
@@ -1803,13 +1805,14 @@ Deno.serve(async (req) => {
                 
                 totalReceived += amount
                 
-                if (amount >= minSolThreshold) {
+                // Use much lower threshold (0.01 SOL) to catch all significant funding
+                if (amount >= 0.01) {
                   const sender = transfer.fromUserAccount
-                  const existing = funders.get(sender) || { totalSol: 0, firstTx: tx.signature, firstTime: tx.timestamp }
+                  const existing = funders.get(sender) || { totalSol: 0, firstTx: tx.signature, firstTime: tx.timestamp || 0 }
                   existing.totalSol += amount
-                  if (tx.timestamp < existing.firstTime) {
+                  if (!existing.firstTime || (tx.timestamp && tx.timestamp < existing.firstTime)) {
                     existing.firstTx = tx.signature
-                    existing.firstTime = tx.timestamp
+                    existing.firstTime = tx.timestamp || 0
                   }
                   funders.set(sender, existing)
                 }
@@ -1820,6 +1823,17 @@ Deno.serve(async (req) => {
                 totalSent += amount
               }
             }
+          }
+          
+          console.log(`💰 Wallet ${wallet.slice(0, 8)}... received ${totalReceived.toFixed(2)} SOL from ${funders.size} unique funders`)
+          
+          // Log the top funders for debugging
+          const topFunders = Array.from(funders.entries())
+            .sort((a, b) => b[1].totalSol - a[1].totalSol)
+            .slice(0, 5)
+          
+          for (const [funderWallet, data] of topFunders) {
+            console.log(`  ↳ ${funderWallet.slice(0, 8)}... sent ${data.totalSol.toFixed(4)} SOL`)
           }
           
           // Update wallet node
@@ -1841,10 +1855,13 @@ Deno.serve(async (req) => {
           existingNode.isLeaf = funders.size === 0
           walletTree.set(wallet, existingNode)
           
-          // Add funders to queue for tracing
+          // Add funders to queue for tracing - trace those with > minSolThreshold
           const funderList = Array.from(funders.entries())
+            .filter(([_, data]) => data.totalSol >= minSolThreshold) // Only trace significant funders
             .sort((a, b) => b[1].totalSol - a[1].totalSol)
-            .slice(0, 3) // Top 3 funders only to avoid explosion
+            .slice(0, 5) // Top 5 funders to trace deeper
+          
+          console.log(`🔗 Adding ${funderList.length} funders to trace queue (threshold: ${minSolThreshold} SOL)`)
           
           for (const [funderWallet, funderData] of funderList) {
             if (!visited.has(funderWallet)) {
@@ -1854,7 +1871,7 @@ Deno.serve(async (req) => {
                 fundedBy: wallet,
                 fundedAmount: funderData.totalSol,
                 fundingTx: funderData.firstTx,
-                fundingTime: new Date(funderData.firstTime * 1000).toISOString()
+                fundingTime: funderData.firstTime ? new Date(funderData.firstTime * 1000).toISOString() : null
               })
               
               // Record child relationship
@@ -1870,7 +1887,7 @@ Deno.serve(async (req) => {
                   fundedBy: wallet,
                   fundedAmount: funderData.totalSol,
                   fundingTx: funderData.firstTx,
-                  fundingTime: new Date(funderData.firstTime * 1000).toISOString(),
+                  fundingTime: funderData.firstTime ? new Date(funderData.firstTime * 1000).toISOString() : null,
                   cexSource: getCexName(funderWallet),
                   isLeaf: false,
                   children: []
@@ -1880,10 +1897,10 @@ Deno.serve(async (req) => {
           }
           
           // Rate limit protection
-          await new Promise(r => setTimeout(r, 150))
+          await new Promise(r => setTimeout(r, 200))
           
         } catch (error) {
-          console.error(`Error tracing wallet ${wallet}:`, error)
+          console.error(`❌ Error tracing wallet ${wallet}:`, error)
         }
       }
       
