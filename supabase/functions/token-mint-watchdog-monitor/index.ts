@@ -1098,6 +1098,211 @@ Deno.serve(async (req) => {
       )
     }
 
+    // TRACE OFFSPRING WALLETS - Track where funds went OUT from mint wallet
+    if (action === 'trace_offspring_wallets') {
+      const mintWallet = body.mintWallet
+      if (!mintWallet) {
+        return new Response(
+          JSON.stringify({ error: 'mintWallet is required' }),
+          { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        )
+      }
+
+      const heliusApiKey = Deno.env.get('HELIUS_API_KEY')
+      if (!heliusApiKey) {
+        return new Response(
+          JSON.stringify({ error: 'HELIUS_API_KEY not configured' }),
+          { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        )
+      }
+
+      console.log(`🌿 Tracing offspring wallets from mint wallet: ${mintWallet}`)
+      
+      // Fetch mint wallet transaction history
+      const walletTxUrl = `https://api.helius.xyz/v0/addresses/${mintWallet}/transactions?api-key=${heliusApiKey}&limit=100`
+      const walletTxResponse = await fetch(walletTxUrl)
+      
+      if (!walletTxResponse.ok) {
+        const error = await walletTxResponse.text()
+        console.error('Wallet tx fetch error:', error)
+        return new Response(
+          JSON.stringify({ error: `Failed to fetch wallet transactions: ${walletTxResponse.status}` }),
+          { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        )
+      }
+      
+      const walletTxs = await walletTxResponse.json()
+      console.log(`Got ${walletTxs.length} transactions for mint wallet`)
+      
+      // Sort by timestamp ascending
+      walletTxs.sort((a: any, b: any) => (a.timestamp || 0) - (b.timestamp || 0))
+      
+      // Find all wallets that RECEIVED SOL from the mint wallet (offspring)
+      interface OffspringWallet {
+        wallet: string
+        totalSolReceived: number
+        txCount: number
+        firstTx: string
+        firstTxTime: number
+        firstTxTimeFormatted: string
+        transactions: Array<{
+          signature: string
+          amount: number
+          timestamp: number
+          timestampFormatted: string
+        }>
+      }
+      
+      const offspringWallets = new Map<string, OffspringWallet>()
+      let totalSolSent = 0
+      
+      for (const tx of walletTxs) {
+        const nativeTransfers = tx.nativeTransfers || []
+        
+        for (const transfer of nativeTransfers) {
+          // Find SOL transfers FROM our mint wallet TO other wallets
+          if (transfer.fromUserAccount?.toLowerCase() === mintWallet.toLowerCase() && 
+              transfer.toUserAccount &&
+              transfer.toUserAccount.toLowerCase() !== mintWallet.toLowerCase()) {
+            
+            const recipient = transfer.toUserAccount
+            const amount = (transfer.amount || 0) / 1e9
+            
+            if (amount > 0.0001) { // Ignore dust
+              totalSolSent += amount
+              
+              const existing = offspringWallets.get(recipient) || {
+                wallet: recipient,
+                totalSolReceived: 0,
+                txCount: 0,
+                firstTx: tx.signature,
+                firstTxTime: tx.timestamp,
+                firstTxTimeFormatted: new Date(tx.timestamp * 1000).toISOString(),
+                transactions: []
+              }
+              
+              existing.totalSolReceived += amount
+              existing.txCount++
+              existing.transactions.push({
+                signature: tx.signature,
+                amount,
+                timestamp: tx.timestamp,
+                timestampFormatted: new Date(tx.timestamp * 1000).toISOString()
+              })
+              
+              if (tx.timestamp < existing.firstTxTime) {
+                existing.firstTx = tx.signature
+                existing.firstTxTime = tx.timestamp
+                existing.firstTxTimeFormatted = new Date(tx.timestamp * 1000).toISOString()
+              }
+              
+              offspringWallets.set(recipient, existing)
+            }
+          }
+        }
+      }
+      
+      const offspringList = Array.from(offspringWallets.values())
+        .sort((a, b) => b.totalSolReceived - a.totalSolReceived)
+      
+      console.log(`Found ${offspringList.length} offspring wallets receiving ${totalSolSent.toFixed(4)} SOL total`)
+      
+      // Trace level 2: For top offspring wallets, find where THEY sent funds
+      const level2Offspring: Array<{
+        parentWallet: string
+        parentReceivedSol: number
+        children: Array<{
+          wallet: string
+          solReceived: number
+          txCount: number
+        }>
+      }> = []
+      
+      // Trace top 5 largest recipients
+      const topOffspring = offspringList.slice(0, 5)
+      
+      for (const offspring of topOffspring) {
+        console.log(`Tracing level 2 from offspring: ${offspring.wallet.slice(0, 8)}...`)
+        
+        const level2TxUrl = `https://api.helius.xyz/v0/addresses/${offspring.wallet}/transactions?api-key=${heliusApiKey}&limit=50`
+        const level2Response = await fetch(level2TxUrl)
+        
+        if (!level2Response.ok) continue
+        
+        const level2Txs = await level2Response.json()
+        const children = new Map<string, { wallet: string, solReceived: number, txCount: number }>()
+        
+        for (const tx of level2Txs) {
+          const nativeTransfers = tx.nativeTransfers || []
+          
+          for (const transfer of nativeTransfers) {
+            if (transfer.fromUserAccount?.toLowerCase() === offspring.wallet.toLowerCase() &&
+                transfer.toUserAccount &&
+                transfer.toUserAccount.toLowerCase() !== offspring.wallet.toLowerCase() &&
+                transfer.toUserAccount.toLowerCase() !== mintWallet.toLowerCase()) {
+              
+              const recipient = transfer.toUserAccount
+              const amount = (transfer.amount || 0) / 1e9
+              
+              if (amount > 0.01) { // Only significant transfers
+                const existing = children.get(recipient) || {
+                  wallet: recipient,
+                  solReceived: 0,
+                  txCount: 0
+                }
+                
+                existing.solReceived += amount
+                existing.txCount++
+                children.set(recipient, existing)
+              }
+            }
+          }
+        }
+        
+        if (children.size > 0) {
+          level2Offspring.push({
+            parentWallet: offspring.wallet,
+            parentReceivedSol: offspring.totalSolReceived,
+            children: Array.from(children.values())
+              .sort((a, b) => b.solReceived - a.solReceived)
+              .slice(0, 10)
+          })
+        }
+        
+        // Rate limit protection
+        await new Promise(r => setTimeout(r, 100))
+      }
+      
+      return new Response(
+        JSON.stringify({
+          success: true,
+          mintWallet,
+          summary: {
+            totalOffspringWallets: offspringList.length,
+            totalSolDistributed: parseFloat(totalSolSent.toFixed(4)),
+            largestRecipient: offspringList[0] ? {
+              wallet: offspringList[0].wallet,
+              amount: parseFloat(offspringList[0].totalSolReceived.toFixed(4))
+            } : null
+          },
+          offspring: offspringList.map(o => ({
+            wallet: o.wallet,
+            totalSolReceived: parseFloat(o.totalSolReceived.toFixed(4)),
+            txCount: o.txCount,
+            firstTransaction: o.firstTx,
+            firstTransactionTime: o.firstTxTimeFormatted,
+            transactions: o.transactions.slice(0, 5).map(t => ({
+              signature: t.signature,
+              amount: parseFloat(t.amount.toFixed(4)),
+              timestamp: t.timestampFormatted
+            }))
+          })),
+          level2Distribution: level2Offspring
+        }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      )
+    }
+
     // TRACE TOKEN GENEALOGY - Find creator wallet and trace to funding source
     if (action === 'trace_token_genealogy' && tokenMint) {
       const heliusApiKey = Deno.env.get('HELIUS_API_KEY')

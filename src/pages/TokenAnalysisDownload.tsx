@@ -11,7 +11,9 @@ const TokenAnalysisDownload = () => {
   const [heliusLoading, setHeliusLoading] = useState(false);
   const [walletTraceLoading, setWalletTraceLoading] = useState(false);
   const [genealogyLoading, setGenealogyLoading] = useState(false);
+  const [offspringLoading, setOffspringLoading] = useState(false);
   const [analysisData, setAnalysisData] = useState<any>(null);
+  const [offspringData, setOffspringData] = useState<any>(null);
   const [heliusData, setHeliusData] = useState<any>(null);
   const [walletTraceData, setWalletTraceData] = useState<any>(null);
   const [genealogyData, setGenealogyData] = useState<any>(null);
@@ -129,7 +131,33 @@ const TokenAnalysisDownload = () => {
     } catch (err: any) {
       toast.error("Failed to trace genealogy: " + err.message);
     } finally {
-      setGenealogyLoading(false);
+    setGenealogyLoading(false);
+    }
+  };
+
+  const traceOffspringWallets = async () => {
+    const mintWallet = genealogyData?.genealogy?.mintWallet;
+    if (!mintWallet) {
+      toast.error("Run genealogy trace first to find the mint wallet");
+      return;
+    }
+    
+    setOffspringLoading(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("token-mint-watchdog-monitor", {
+        body: { 
+          action: "trace_offspring_wallets", 
+          mintWallet
+        }
+      });
+
+      if (error) throw error;
+      setOffspringData(data);
+      toast.success(`Found ${data.summary?.totalOffspringWallets} offspring wallets (${data.summary?.totalSolDistributed} SOL distributed)`);
+    } catch (err: any) {
+      toast.error("Failed to trace offspring: " + err.message);
+    } finally {
+      setOffspringLoading(false);
     }
   };
 
@@ -138,6 +166,15 @@ const TokenAnalysisDownload = () => {
     downloadFile(
       `token_genealogy_${tokenToTrace.slice(0, 8)}.json`,
       JSON.stringify(genealogyData, null, 2),
+      "application/json"
+    );
+  };
+
+  const downloadOffspringJSON = () => {
+    if (!offspringData) return;
+    downloadFile(
+      `offspring_wallets_${genealogyData?.genealogy?.mintWallet?.slice(0, 8)}.json`,
+      JSON.stringify(offspringData, null, 2),
       "application/json"
     );
   };
@@ -511,6 +548,137 @@ ALL WALLET STATISTICS
                   <Download className="h-4 w-4 mr-2" />
                   Download Full Genealogy Data (JSON)
                 </Button>
+
+                {/* Offspring Tracing Section */}
+                <div className="pt-4 border-t space-y-4">
+                  <div className="font-semibold flex items-center gap-2">
+                    <GitBranch className="h-4 w-4 rotate-180" />
+                    Trace Offspring Wallets (Where did funds GO?)
+                  </div>
+                  
+                  <Button 
+                    onClick={traceOffspringWallets} 
+                    disabled={offspringLoading || !genealogyData?.genealogy?.mintWallet}
+                    variant="secondary"
+                    className="w-full"
+                  >
+                    {offspringLoading ? (
+                      <>
+                        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                        Tracing offspring wallets...
+                      </>
+                    ) : (
+                      <>
+                        <ArrowRight className="h-4 w-4 mr-2" />
+                        Trace Where Mint Wallet Sent Funds
+                      </>
+                    )}
+                  </Button>
+
+                  {offspringData && (
+                    <div className="space-y-4">
+                      {/* Summary */}
+                      <div className="grid grid-cols-2 gap-3">
+                        <div className="p-3 bg-red-500/10 border border-red-500/30 rounded text-center">
+                          <div className="text-2xl font-bold text-red-400">
+                            {offspringData.summary?.totalSolDistributed} SOL
+                          </div>
+                          <div className="text-xs text-muted-foreground">Total Distributed Out</div>
+                        </div>
+                        <div className="p-3 bg-muted rounded text-center">
+                          <div className="text-2xl font-bold">
+                            {offspringData.summary?.totalOffspringWallets}
+                          </div>
+                          <div className="text-xs text-muted-foreground">Offspring Wallets</div>
+                        </div>
+                      </div>
+
+                      {/* Offspring Wallets List */}
+                      {offspringData.offspring?.length > 0 && (
+                        <div className="p-3 bg-muted rounded">
+                          <div className="font-semibold mb-2 flex items-center gap-2">
+                            Direct Recipients from Mint Wallet
+                            <span className="text-xs text-muted-foreground">
+                              (sorted by amount)
+                            </span>
+                          </div>
+                          <div className="max-h-64 overflow-y-auto space-y-1">
+                            {offspringData.offspring.slice(0, 20).map((o: any, i: number) => (
+                              <div 
+                                key={i} 
+                                className={`flex items-center justify-between text-xs font-mono p-2 rounded ${
+                                  i === 0 ? 'bg-red-500/10 border border-red-500/30' :
+                                  o.totalSolReceived > 10 ? 'bg-orange-500/10 border border-orange-500/30' :
+                                  'bg-background'
+                                }`}
+                              >
+                                <a 
+                                  href={`https://solscan.io/account/${o.wallet}`}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="text-primary hover:underline truncate max-w-[200px]"
+                                >
+                                  {o.wallet}
+                                </a>
+                                <div className="flex items-center gap-2 text-muted-foreground">
+                                  <span className="text-red-400 font-semibold">{o.totalSolReceived} SOL</span>
+                                  <span>({o.txCount} tx)</span>
+                                  {i === 0 && <span className="text-red-500 text-[10px]">LARGEST</span>}
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Level 2 Distribution */}
+                      {offspringData.level2Distribution?.length > 0 && (
+                        <div className="p-3 bg-muted rounded">
+                          <div className="font-semibold mb-2">Level 2: Where Offspring Sent Funds</div>
+                          <div className="space-y-3">
+                            {offspringData.level2Distribution.map((level2: any, i: number) => (
+                              <div key={i} className="p-2 bg-background rounded border">
+                                <div className="flex items-center gap-2 mb-2">
+                                  <a 
+                                    href={`https://solscan.io/account/${level2.parentWallet}`}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="font-mono text-xs text-primary hover:underline"
+                                  >
+                                    {level2.parentWallet.slice(0, 8)}...{level2.parentWallet.slice(-4)}
+                                  </a>
+                                  <span className="text-xs text-muted-foreground">
+                                    (received {level2.parentReceivedSol} SOL) → sent to:
+                                  </span>
+                                </div>
+                                <div className="pl-4 space-y-1">
+                                  {level2.children.slice(0, 5).map((child: any, j: number) => (
+                                    <div key={j} className="flex items-center justify-between text-xs">
+                                      <a 
+                                        href={`https://solscan.io/account/${child.wallet}`}
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        className="font-mono text-primary hover:underline"
+                                      >
+                                        {child.wallet.slice(0, 8)}...{child.wallet.slice(-4)}
+                                      </a>
+                                      <span className="text-orange-400">{child.solReceived.toFixed(2)} SOL</span>
+                                    </div>
+                                  ))}
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+
+                      <Button onClick={downloadOffspringJSON} variant="outline" className="w-full justify-start">
+                        <Download className="h-4 w-4 mr-2" />
+                        Download Offspring Data (JSON)
+                      </Button>
+                    </div>
+                  )}
+                </div>
               </div>
             )}
           </CardContent>
