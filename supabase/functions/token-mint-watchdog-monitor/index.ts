@@ -1617,7 +1617,7 @@ Deno.serve(async (req) => {
       const maxDepth = body.maxDepth || 10
       const minSolThreshold = body.minSolThreshold || 0.5 // Only trace significant funding
 
-      // Known CEX/KYC hot wallets
+      // Known CEX/KYC hot wallets - FULL addresses for exact matching
       const KNOWN_CEX_WALLETS: Record<string, string[]> = {
         'Binance': [
           '5tzFkiKscXHK5ZXCGbXZxdw7gTjjD1mBwuoFbhUvuAi9',
@@ -1633,7 +1633,7 @@ Deno.serve(async (req) => {
           'AobVSwdW9BbpMdJvTqeCN4hPAmh4rHm7vwLnQ5ATSyrS'
         ],
         'KuCoin 2': [
-          'inDKhd9vD82hSozuNmGVKVwYYZm1dV2Efbu6ZoA' // Partial match
+          'xxxxinDKhd9vD82hSozuNmGVKVwYYZm1dV2Efbu6ZoA' // User-provided KYC wallet
         ],
         'OKX': [
           '5VCwKtCXgCJ6kit5FybXjvriW3xELsFDhYrPSqtJNmcD'
@@ -1648,15 +1648,37 @@ Deno.serve(async (req) => {
           'Ex9CqcVFjmxSH7nw18k3SHN95NGhjkphpkfBQWCS9tvb'
         ]
       }
+      
+      // Known "Treasury" wallets that are funded by CEX and then fund mint wallets
+      const KNOWN_TREASURY_WALLETS: Record<string, { address: string, fundedBy: string }> = {
+        'HydraXoSz7oE3774DoWQQaofKb31Kbn2cbcqG4ShKy85': {
+          address: 'HydraXoSz7oE3774DoWQQaofKb31Kbn2cbcqG4ShKy85',
+          fundedBy: 'xxxxinDKhd9vD82hSozuNmGVKVwYYZm1dV2Efbu6ZoA' // KuCoin 2
+        }
+      }
+      
+      // Helper to check if wallet is a known treasury
+      const getTreasuryInfo = (wallet: string): { isTreasury: boolean, fundedBy: string | null } => {
+        const info = KNOWN_TREASURY_WALLETS[wallet]
+        if (info) {
+          return { isTreasury: true, fundedBy: info.fundedBy }
+        }
+        return { isTreasury: false, fundedBy: null }
+      }
 
-      // Helper to check if wallet is a known CEX
+      // Helper to check if wallet is a known CEX - use exact matching
       const getCexName = (wallet: string): string | null => {
         for (const [cex, wallets] of Object.entries(KNOWN_CEX_WALLETS)) {
-          if (wallets.some(w => wallet.includes(w) || w.includes(wallet))) {
+          if (wallets.includes(wallet)) {
             return cex
           }
         }
         return null
+      }
+      
+      // Check if this is a known treasury wallet (one step below CEX)
+      const isTreasuryWallet = (wallet: string): boolean => {
+        return wallet in KNOWN_TREASURY_WALLETS
       }
 
       console.log(`🔬 Full genealogy trace for token: ${tokenMint} (max depth: ${maxDepth})`)
@@ -1742,12 +1764,55 @@ Deno.serve(async (req) => {
         if (visited.has(wallet) || depth > maxDepth) continue
         visited.add(wallet)
         
-        console.log(`📍 Tracing wallet at depth ${depth}: ${wallet.slice(0, 8)}...`)
+        console.log(`📍 Tracing wallet at depth ${depth}: ${wallet}`)
+        
+        // Check if this is a known treasury wallet (one level below CEX)
+        const treasuryInfo = getTreasuryInfo(wallet)
+        if (treasuryInfo.isTreasury) {
+          console.log(`💎 Found TREASURY wallet at depth ${depth}: ${wallet}`)
+          console.log(`   ↳ Known to be funded by: ${treasuryInfo.fundedBy}`)
+          
+          // Mark this wallet
+          const node = walletTree.get(wallet) || {
+            wallet,
+            depth,
+            solReceived: fundedAmount,
+            solSent: 0,
+            fundedBy,
+            fundedAmount,
+            fundingTx,
+            fundingTime,
+            cexSource: null,
+            isLeaf: false,
+            children: [],
+            isTreasury: true
+          }
+          walletTree.set(wallet, node)
+          
+          // Add the known CEX funder to the queue
+          if (treasuryInfo.fundedBy && !visited.has(treasuryInfo.fundedBy)) {
+            queue.push({
+              wallet: treasuryInfo.fundedBy,
+              depth: depth + 1,
+              fundedBy: wallet,
+              fundedAmount: 0, // Will be filled in when traced
+              fundingTx: null,
+              fundingTime: null
+            })
+            
+            // Record child relationship
+            node.children = node.children || []
+            if (!node.children.includes(treasuryInfo.fundedBy)) {
+              node.children.push(treasuryInfo.fundedBy)
+            }
+            walletTree.set(wallet, node)
+          }
+        }
         
         // Check if this is a CEX wallet
         const cexName = getCexName(wallet)
         if (cexName) {
-          console.log(`🏦 Found CEX wallet: ${cexName} at depth ${depth}`)
+          console.log(`🏦 Found CEX/KYC wallet: ${cexName} at depth ${depth}: ${wallet}`)
           rootCexWallet = wallet
           rootCexName = cexName
           
