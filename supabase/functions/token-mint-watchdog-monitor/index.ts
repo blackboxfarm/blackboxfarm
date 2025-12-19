@@ -2034,6 +2034,271 @@ Deno.serve(async (req) => {
       )
     }
 
+    // TRACE MONEY FLOW - Follow money FORWARD (where it goes, not where it came from)
+    // This traces outbound transfers from the creator to find splitter wallets and profit extraction
+    if (action === 'trace_money_flow' && tokenMint) {
+      const heliusApiKey = Deno.env.get('HELIUS_API_KEY')
+      if (!heliusApiKey) {
+        return new Response(
+          JSON.stringify({ error: 'HELIUS_API_KEY not configured' }),
+          { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        )
+      }
+
+      const maxDepth = body.maxDepth || 5
+      const minSolThreshold = body.minSolThreshold || 1.0 // Only follow significant transfers
+
+      console.log(`💸 FORWARD TRACE: Following money flow from token ${tokenMint}`)
+
+      // Known CEX deposit wallets (where funds ultimately go for cash-out)
+      const KNOWN_CEX_DEPOSITS: Record<string, string[]> = {
+        'Binance': ['5tzFkiKscXHK5ZXCGbXZxdw7gTjjD1mBwuoFbhUvuAi9'],
+        'Coinbase': ['H8sMJSCQxfKiFTCfDR3DUMLPwcRbM61LGFJ8N4dK3WjS'],
+        'KuCoin': ['BmFdpraQhkiDQE6SnfG5omcA1VwzqfXrwtNYBwWTymy6'],
+        'MEXC': ['ASTyfSima4LLAdDgoFGkgqoKowG1LZFDr9fAQrg7iaJZ'],
+        'OKX': ['5VCwKtCXgCJ6kit5FybXjvriW3xELsFDhYrPSqtJNmcD'],
+        'Bybit': ['AC5RDfQFmDS1deWZos921JfqscXdByf8BKHs5ACWjtW2'],
+        'Gate.io': ['u6PJ8DtQuPFnfmwHbGFULQ4u4EgjDiyYKjVEsynXq2w']
+      }
+
+      const getCexName = (wallet: string): string | null => {
+        for (const [cex, wallets] of Object.entries(KNOWN_CEX_DEPOSITS)) {
+          if (wallets.includes(wallet)) return cex
+        }
+        return null
+      }
+
+      interface MoneyNode {
+        wallet: string
+        depth: number
+        receivedFrom: string | null
+        amountReceived: number
+        totalSent: number
+        sentTo: Array<{ wallet: string, amount: number, tx: string, time: string | null }>
+        isSplitter: boolean
+        isCex: string | null
+        isLeaf: boolean
+      }
+
+      // Step 1: Find the creator/mint wallet
+      console.log(`Finding creator wallet for token...`)
+      const tokenTxUrl = `https://api.helius.xyz/v0/addresses/${tokenMint}/transactions?api-key=${heliusApiKey}&limit=50`
+      const tokenTxResponse = await fetch(tokenTxUrl)
+      
+      if (!tokenTxResponse.ok) {
+        return new Response(
+          JSON.stringify({ error: `Failed to fetch token transactions: ${tokenTxResponse.status}` }),
+          { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        )
+      }
+      
+      const tokenTxs = await tokenTxResponse.json()
+      tokenTxs.sort((a: any, b: any) => (a.timestamp || 0) - (b.timestamp || 0))
+      
+      let creatorWallet: string | null = null
+      for (const tx of tokenTxs.slice(0, 10)) {
+        if (tx.feePayer && !creatorWallet) {
+          creatorWallet = tx.feePayer
+          break
+        }
+      }
+      
+      if (!creatorWallet) {
+        return new Response(
+          JSON.stringify({ error: 'Could not find creator wallet' }),
+          { status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        )
+      }
+
+      console.log(`✅ Creator wallet: ${creatorWallet}`)
+
+      const moneyTree = new Map<string, MoneyNode>()
+      const visited = new Set<string>()
+      const queue: Array<{ wallet: string, depth: number, receivedFrom: string | null, amountReceived: number }> = []
+
+      queue.push({ wallet: creatorWallet, depth: 0, receivedFrom: null, amountReceived: 0 })
+
+      // BFS - follow money FORWARD
+      while (queue.length > 0) {
+        const { wallet, depth, receivedFrom, amountReceived } = queue.shift()!
+        
+        if (visited.has(wallet) || depth > maxDepth) continue
+        visited.add(wallet)
+
+        console.log(`💰 Depth ${depth}: Analyzing wallet ${wallet}`)
+
+        // Check if this is a CEX deposit
+        const cexName = getCexName(wallet)
+        if (cexName) {
+          console.log(`🏦 Found CEX deposit: ${cexName} at depth ${depth}`)
+          moneyTree.set(wallet, {
+            wallet,
+            depth,
+            receivedFrom,
+            amountReceived,
+            totalSent: 0,
+            sentTo: [],
+            isSplitter: false,
+            isCex: cexName,
+            isLeaf: true
+          })
+          continue // Don't trace further into CEX
+        }
+
+        // Fetch transactions
+        const walletTxUrl = `https://api.helius.xyz/v0/addresses/${wallet}/transactions?api-key=${heliusApiKey}&limit=200`
+        
+        try {
+          const walletTxResponse = await fetch(walletTxUrl)
+          if (!walletTxResponse.ok) {
+            console.error(`❌ Failed to fetch: ${walletTxResponse.status}`)
+            continue
+          }
+
+          const walletTxs = await walletTxResponse.json()
+          console.log(`📦 Got ${walletTxs.length} transactions for ${wallet.slice(0, 8)}...`)
+
+          // Find OUTGOING transfers (where this wallet SENDS money)
+          const outbound = new Map<string, { totalSol: number, txs: Array<{ sig: string, amount: number, time: number | null }> }>()
+          let totalSent = 0
+
+          for (const tx of walletTxs) {
+            const nativeTransfers = tx.nativeTransfers || []
+            
+            for (const transfer of nativeTransfers) {
+              // OUTGOING transfer - from this wallet to someone else
+              if (transfer.fromUserAccount?.toLowerCase() === wallet.toLowerCase() &&
+                  transfer.toUserAccount &&
+                  transfer.toUserAccount.toLowerCase() !== wallet.toLowerCase()) {
+                
+                const amount = (transfer.amount || 0) / 1e9
+                
+                if (amount >= 0.01) { // Any transfer over 0.01 SOL
+                  const recipient = transfer.toUserAccount
+                  totalSent += amount
+                  
+                  const existing = outbound.get(recipient) || { totalSol: 0, txs: [] }
+                  existing.totalSol += amount
+                  existing.txs.push({
+                    sig: tx.signature,
+                    amount,
+                    time: tx.timestamp
+                  })
+                  outbound.set(recipient, existing)
+                }
+              }
+            }
+          }
+
+          // Determine if this is a "splitter" wallet (receives large, sends to multiple in smaller amounts)
+          const outboundCount = outbound.size
+          const isSplitter = amountReceived > 10 && outboundCount >= 3 // Received large and split to 3+ wallets
+
+          if (isSplitter) {
+            console.log(`🔀 SPLITTER DETECTED: ${wallet.slice(0, 8)}... splits funds to ${outboundCount} wallets`)
+          }
+
+          // Build sent-to list
+          const sentToList: Array<{ wallet: string, amount: number, tx: string, time: string | null }> = []
+          
+          const sortedOutbound = Array.from(outbound.entries())
+            .filter(([_, data]) => data.totalSol >= minSolThreshold)
+            .sort((a, b) => b[1].totalSol - a[1].totalSol)
+
+          for (const [recipient, data] of sortedOutbound) {
+            const firstTx = data.txs.sort((a, b) => (a.time || 0) - (b.time || 0))[0]
+            sentToList.push({
+              wallet: recipient,
+              amount: parseFloat(data.totalSol.toFixed(4)),
+              tx: firstTx.sig,
+              time: firstTx.time ? new Date(firstTx.time * 1000).toISOString() : null
+            })
+
+            console.log(`  → Sent ${data.totalSol.toFixed(2)} SOL to ${recipient.slice(0, 8)}...`)
+
+            // Add to queue to trace further
+            if (!visited.has(recipient) && data.totalSol >= minSolThreshold) {
+              queue.push({
+                wallet: recipient,
+                depth: depth + 1,
+                receivedFrom: wallet,
+                amountReceived: data.totalSol
+              })
+            }
+          }
+
+          moneyTree.set(wallet, {
+            wallet,
+            depth,
+            receivedFrom,
+            amountReceived,
+            totalSent,
+            sentTo: sentToList,
+            isSplitter,
+            isCex: null,
+            isLeaf: sentToList.length === 0
+          })
+
+          // Rate limit
+          await new Promise(r => setTimeout(r, 150))
+
+        } catch (error) {
+          console.error(`❌ Error tracing ${wallet}:`, error)
+        }
+      }
+
+      // Build flow summary
+      const nodes = Array.from(moneyTree.values()).sort((a, b) => a.depth - b.depth)
+      const splitterWallets = nodes.filter(n => n.isSplitter)
+      const cexDeposits = nodes.filter(n => n.isCex)
+      const totalExtracted = nodes.reduce((sum, n) => sum + n.totalSent, 0)
+
+      console.log(`✅ Trace complete: ${nodes.length} wallets, ${splitterWallets.length} splitters, ${cexDeposits.length} CEX deposits`)
+
+      return new Response(
+        JSON.stringify({
+          success: true,
+          tokenMint,
+          direction: 'forward',
+          summary: {
+            creatorWallet,
+            totalWalletsTraced: nodes.length,
+            maxDepthReached: Math.max(...nodes.map(n => n.depth)),
+            splitterWalletsFound: splitterWallets.length,
+            cexDepositsFound: cexDeposits.length,
+            totalSolMoved: parseFloat(totalExtracted.toFixed(2))
+          },
+          splitters: splitterWallets.map(s => ({
+            wallet: s.wallet,
+            depth: s.depth,
+            received: parseFloat(s.amountReceived.toFixed(4)),
+            splitToWallets: s.sentTo.length,
+            recipients: s.sentTo
+          })),
+          cexDeposits: cexDeposits.map(c => ({
+            wallet: c.wallet,
+            cex: c.isCex,
+            depth: c.depth,
+            amountReceived: parseFloat(c.amountReceived.toFixed(4)),
+            fromWallet: c.receivedFrom
+          })),
+          moneyFlow: nodes.map(n => ({
+            wallet: n.wallet,
+            depth: n.depth,
+            receivedFrom: n.receivedFrom,
+            amountReceived: parseFloat(n.amountReceived.toFixed(4)),
+            totalSent: parseFloat(n.totalSent.toFixed(4)),
+            sentToCount: n.sentTo.length,
+            isSplitter: n.isSplitter,
+            isCex: n.isCex,
+            isLeaf: n.isLeaf,
+            topRecipients: n.sentTo.slice(0, 5)
+          }))
+        }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      )
+    }
+
     // Scan for new pump.fun tokens
     if (action === 'scan') {
       console.log('Scanning for new pump.fun tokens...')
