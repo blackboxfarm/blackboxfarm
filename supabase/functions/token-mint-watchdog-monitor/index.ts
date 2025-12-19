@@ -1098,6 +1098,307 @@ Deno.serve(async (req) => {
       )
     }
 
+    // TRACE TOKEN GENEALOGY - Find creator wallet and trace to funding source
+    if (action === 'trace_token_genealogy' && tokenMint) {
+      const heliusApiKey = Deno.env.get('HELIUS_API_KEY')
+      if (!heliusApiKey) {
+        return new Response(
+          JSON.stringify({ error: 'HELIUS_API_KEY not configured' }),
+          { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        )
+      }
+
+      console.log(`🧬 Tracing genealogy for token: ${tokenMint}`)
+      
+      // Step 1: Get the earliest transactions for this token to find the minter
+      const tokenTxUrl = `https://api.helius.xyz/v0/addresses/${tokenMint}/transactions?api-key=${heliusApiKey}&limit=100`
+      console.log(`Fetching token transactions to find creator...`)
+      
+      const tokenTxResponse = await fetch(tokenTxUrl)
+      if (!tokenTxResponse.ok) {
+        const error = await tokenTxResponse.text()
+        console.error('Token tx fetch error:', error)
+        return new Response(
+          JSON.stringify({ error: `Failed to fetch token transactions: ${tokenTxResponse.status}` }),
+          { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        )
+      }
+      
+      const tokenTxs = await tokenTxResponse.json()
+      console.log(`Got ${tokenTxs.length} token transactions`)
+      
+      // Sort by timestamp ascending to get oldest first
+      tokenTxs.sort((a: any, b: any) => (a.timestamp || 0) - (b.timestamp || 0))
+      
+      // Find the creation/mint transaction
+      let mintWallet: string | null = null
+      let mintTxSignature: string | null = null
+      let mintTimestamp: number | null = null
+      
+      // Look for the first transaction - usually the mint/creation tx
+      for (const tx of tokenTxs.slice(0, 10)) {
+        // The fee payer of the first transaction is usually the creator
+        if (tx.feePayer && !mintWallet) {
+          mintWallet = tx.feePayer
+          mintTxSignature = tx.signature
+          mintTimestamp = tx.timestamp
+          console.log(`Found potential mint wallet from feePayer: ${mintWallet}`)
+        }
+        
+        // Also check for token transfers - the first "from" address in the earliest tx
+        if (tx.tokenTransfers && tx.tokenTransfers.length > 0) {
+          for (const transfer of tx.tokenTransfers) {
+            if (transfer.mint === tokenMint && transfer.fromUserAccount && !mintWallet) {
+              mintWallet = transfer.fromUserAccount
+              mintTxSignature = tx.signature
+              mintTimestamp = tx.timestamp
+              console.log(`Found mint wallet from token transfer: ${mintWallet}`)
+              break
+            }
+          }
+        }
+        
+        // Check for SWAP type which indicates the first buyer
+        if (tx.type === 'SWAP' && tx.feePayer && !mintWallet) {
+          // For pump.fun tokens, the first swap is usually from the dev
+          // Actually we want the token creator, not the first swapper
+          continue
+        }
+        
+        // Look for TRANSFER or CREATE type
+        if ((tx.type === 'TRANSFER' || tx.type === 'CREATE' || tx.type === 'TOKEN_MINT') && tx.feePayer) {
+          mintWallet = tx.feePayer
+          mintTxSignature = tx.signature
+          mintTimestamp = tx.timestamp
+          console.log(`Found mint wallet from ${tx.type}: ${mintWallet}`)
+          break
+        }
+      }
+      
+      // Fallback: use the feePayer of the absolute first transaction
+      if (!mintWallet && tokenTxs.length > 0) {
+        mintWallet = tokenTxs[0].feePayer
+        mintTxSignature = tokenTxs[0].signature
+        mintTimestamp = tokenTxs[0].timestamp
+        console.log(`Using first tx feePayer as mint wallet: ${mintWallet}`)
+      }
+      
+      if (!mintWallet) {
+        return new Response(
+          JSON.stringify({ 
+            error: 'Could not find mint wallet for this token',
+            tokenMint,
+            transactionCount: tokenTxs.length
+          }),
+          { status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        )
+      }
+      
+      console.log(`✅ Identified mint wallet: ${mintWallet}`)
+      
+      // Step 2: Trace the mint wallet's transaction history to find funding sources
+      console.log(`Tracing mint wallet history to find funding sources...`)
+      
+      const walletTxUrl = `https://api.helius.xyz/v0/addresses/${mintWallet}/transactions?api-key=${heliusApiKey}&limit=100`
+      const walletTxResponse = await fetch(walletTxUrl)
+      
+      if (!walletTxResponse.ok) {
+        console.error('Wallet tx fetch error:', walletTxResponse.status)
+        return new Response(
+          JSON.stringify({
+            success: true,
+            tokenMint,
+            mintWallet,
+            mintTransaction: mintTxSignature,
+            mintTimestamp: mintTimestamp ? new Date(mintTimestamp * 1000).toISOString() : null,
+            parentWallet: null,
+            fundingSources: [],
+            error: 'Could not fetch mint wallet history'
+          }),
+          { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        )
+      }
+      
+      const walletTxs = await walletTxResponse.json()
+      console.log(`Got ${walletTxs.length} transactions for mint wallet`)
+      
+      // Sort by timestamp ascending
+      walletTxs.sort((a: any, b: any) => (a.timestamp || 0) - (b.timestamp || 0))
+      
+      // Find all wallets that sent SOL to the mint wallet
+      interface FundingSource {
+        wallet: string
+        totalSolSent: number
+        txCount: number
+        firstTx: string
+        firstTxTime: number
+        firstTxTimeFormatted: string
+        transactions: Array<{
+          signature: string
+          amount: number
+          timestamp: number
+          timestampFormatted: string
+        }>
+      }
+      
+      const fundingSources = new Map<string, FundingSource>()
+      
+      for (const tx of walletTxs) {
+        const nativeTransfers = tx.nativeTransfers || []
+        
+        for (const transfer of nativeTransfers) {
+          // Find SOL transfers TO our mint wallet
+          if (transfer.toUserAccount?.toLowerCase() === mintWallet.toLowerCase() && 
+              transfer.fromUserAccount &&
+              transfer.fromUserAccount.toLowerCase() !== mintWallet.toLowerCase()) {
+            
+            const sender = transfer.fromUserAccount
+            const amount = (transfer.amount || 0) / 1e9
+            
+            if (amount > 0.0001) { // Ignore dust
+              const existing = fundingSources.get(sender) || {
+                wallet: sender,
+                totalSolSent: 0,
+                txCount: 0,
+                firstTx: tx.signature,
+                firstTxTime: tx.timestamp,
+                firstTxTimeFormatted: new Date(tx.timestamp * 1000).toISOString(),
+                transactions: []
+              }
+              
+              existing.totalSolSent += amount
+              existing.txCount++
+              existing.transactions.push({
+                signature: tx.signature,
+                amount,
+                timestamp: tx.timestamp,
+                timestampFormatted: new Date(tx.timestamp * 1000).toISOString()
+              })
+              
+              if (tx.timestamp < existing.firstTxTime) {
+                existing.firstTx = tx.signature
+                existing.firstTxTime = tx.timestamp
+                existing.firstTxTimeFormatted = new Date(tx.timestamp * 1000).toISOString()
+              }
+              
+              fundingSources.set(sender, existing)
+            }
+          }
+        }
+      }
+      
+      const fundingList = Array.from(fundingSources.values())
+        .sort((a, b) => a.firstTxTime - b.firstTxTime)
+      
+      // The earliest significant funder is likely the parent wallet
+      const parentWallet = fundingList.length > 0 ? fundingList[0].wallet : null
+      const largestFunder = fundingList.length > 0 
+        ? fundingList.reduce((max, f) => f.totalSolSent > max.totalSolSent ? f : max)
+        : null
+      
+      console.log(`Found ${fundingList.length} funding sources`)
+      console.log(`Parent wallet (earliest funder): ${parentWallet}`)
+      console.log(`Largest funder: ${largestFunder?.wallet} (${largestFunder?.totalSolSent.toFixed(4)} SOL)`)
+      
+      // Step 3: If we have a parent wallet, trace it back one more level
+      let grandparentWallet: string | null = null
+      let grandparentFundingSources: any[] = []
+      
+      if (parentWallet) {
+        console.log(`Tracing parent wallet to find grandparent...`)
+        
+        const parentTxUrl = `https://api.helius.xyz/v0/addresses/${parentWallet}/transactions?api-key=${heliusApiKey}&limit=100`
+        const parentTxResponse = await fetch(parentTxUrl)
+        
+        if (parentTxResponse.ok) {
+          const parentTxs = await parentTxResponse.json()
+          parentTxs.sort((a: any, b: any) => (a.timestamp || 0) - (b.timestamp || 0))
+          
+          const gpFunders = new Map<string, { wallet: string, totalSol: number, firstTx: string, firstTime: number }>()
+          
+          for (const tx of parentTxs) {
+            const nativeTransfers = tx.nativeTransfers || []
+            
+            for (const transfer of nativeTransfers) {
+              if (transfer.toUserAccount?.toLowerCase() === parentWallet.toLowerCase() &&
+                  transfer.fromUserAccount &&
+                  transfer.fromUserAccount.toLowerCase() !== parentWallet.toLowerCase()) {
+                
+                const sender = transfer.fromUserAccount
+                const amount = (transfer.amount || 0) / 1e9
+                
+                if (amount > 0.01) { // Only significant transfers
+                  const existing = gpFunders.get(sender) || {
+                    wallet: sender,
+                    totalSol: 0,
+                    firstTx: tx.signature,
+                    firstTime: tx.timestamp
+                  }
+                  
+                  existing.totalSol += amount
+                  if (tx.timestamp < existing.firstTime) {
+                    existing.firstTx = tx.signature
+                    existing.firstTime = tx.timestamp
+                  }
+                  
+                  gpFunders.set(sender, existing)
+                }
+              }
+            }
+          }
+          
+          grandparentFundingSources = Array.from(gpFunders.values())
+            .sort((a, b) => a.firstTime - b.firstTime)
+            .map(f => ({
+              wallet: f.wallet,
+              totalSolSent: parseFloat(f.totalSol.toFixed(4)),
+              firstTransaction: f.firstTx,
+              firstTransactionTime: new Date(f.firstTime * 1000).toISOString()
+            }))
+          
+          grandparentWallet = grandparentFundingSources.length > 0 ? grandparentFundingSources[0].wallet : null
+          console.log(`Found ${grandparentFundingSources.length} grandparent funding sources`)
+        }
+      }
+      
+      return new Response(
+        JSON.stringify({
+          success: true,
+          tokenMint,
+          genealogy: {
+            mintWallet,
+            mintTransaction: mintTxSignature,
+            mintTimestamp: mintTimestamp ? new Date(mintTimestamp * 1000).toISOString() : null,
+            parentWallet,
+            parentWalletDetails: parentWallet ? fundingList.find(f => f.wallet === parentWallet) : null,
+            largestFunder: largestFunder ? {
+              wallet: largestFunder.wallet,
+              totalSolSent: parseFloat(largestFunder.totalSolSent.toFixed(4)),
+              txCount: largestFunder.txCount
+            } : null,
+            grandparentWallet,
+            grandparentFundingSources: grandparentFundingSources.slice(0, 10)
+          },
+          fundingSources: fundingList.map(f => ({
+            wallet: f.wallet,
+            totalSolSent: parseFloat(f.totalSolSent.toFixed(4)),
+            txCount: f.txCount,
+            firstTransaction: f.firstTx,
+            firstTransactionTime: f.firstTxTimeFormatted,
+            isParent: f.wallet === parentWallet,
+            isLargestFunder: largestFunder && f.wallet === largestFunder.wallet
+          })),
+          chain: [
+            grandparentWallet ? { level: 'grandparent', wallet: grandparentWallet } : null,
+            parentWallet ? { level: 'parent', wallet: parentWallet } : null,
+            { level: 'mint', wallet: mintWallet },
+            { level: 'token', address: tokenMint }
+          ].filter(Boolean)
+        }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      )
+    }
+
     // Scan for new pump.fun tokens
     if (action === 'scan') {
       console.log('Scanning for new pump.fun tokens...')
