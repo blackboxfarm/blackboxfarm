@@ -78,7 +78,9 @@ const App = () => (
               <Route path="/copy-trading" element={<CopyTrading />} />
               <Route path="/breadcrumbs" element={<BreadCrumbs />} />
               <Route path="/helius-usage" element={<HeliusUsage />} />
+              {/* Token analysis (allow trailing slash / subpaths) */}
               <Route path="/token-analysis" element={<TokenAnalysisDownload />} />
+              <Route path="/token-analysis/*" element={<TokenAnalysisDownload />} />
               {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
               <Route path="*" element={<NotFound />} />
             </Routes>
