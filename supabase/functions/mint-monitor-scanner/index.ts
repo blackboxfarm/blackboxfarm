@@ -222,7 +222,7 @@ serve(async (req) => {
       // Scan all cron-enabled wallets
       const { data: wallets, error: fetchError } = await supabase
         .from('mint_monitor_wallets')
-        .select('*, user:user_id(email)')
+        .select('*')
         .eq('is_cron_enabled', true);
       
       if (fetchError) {
@@ -281,17 +281,13 @@ serve(async (req) => {
           
           // Collect for notification if new mints found
           if (newMints.length > 0) {
-            // Get user email for notification
-            const { data: userData } = await supabase
-              .from('profiles')
-              .select('email')
-              .eq('id', wallet.user_id)
-              .single();
+            // Get user email for notification from auth.users
+            const { data: userData } = await supabase.auth.admin.getUserById(wallet.user_id);
             
             newMintsForNotification.push({
               walletAddress: wallet.wallet_address,
               mints: newMints,
-              userEmail: userData?.email
+              userEmail: userData?.user?.email
             });
           }
           
