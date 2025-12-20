@@ -3530,6 +3530,7 @@ export type Database = {
           is_cron_enabled: boolean
           label: string | null
           last_scanned_at: string | null
+          notification_emails: string[] | null
           source_token: string | null
           updated_at: string
           user_id: string
@@ -3541,6 +3542,7 @@ export type Database = {
           is_cron_enabled?: boolean
           label?: string | null
           last_scanned_at?: string | null
+          notification_emails?: string[] | null
           source_token?: string | null
           updated_at?: string
           user_id: string
@@ -3552,6 +3554,7 @@ export type Database = {
           is_cron_enabled?: boolean
           label?: string | null
           last_scanned_at?: string | null
+          notification_emails?: string[] | null
           source_token?: string | null
           updated_at?: string
           user_id?: string

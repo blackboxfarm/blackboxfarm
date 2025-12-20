@@ -281,14 +281,24 @@ serve(async (req) => {
           
           // Collect for notification if new mints found
           if (newMints.length > 0) {
-            // Get user email for notification from auth.users
-            const { data: userData } = await supabase.auth.admin.getUserById(wallet.user_id);
+            // Use notification_emails from wallet config, fallback to user's auth email
+            let emails: string[] = wallet.notification_emails || [];
             
-            newMintsForNotification.push({
-              walletAddress: wallet.wallet_address,
-              mints: newMints,
-              userEmail: userData?.user?.email
-            });
+            if (emails.length === 0) {
+              // Fallback to auth user email
+              const { data: userData } = await supabase.auth.admin.getUserById(wallet.user_id);
+              if (userData?.user?.email) {
+                emails = [userData.user.email];
+              }
+            }
+            
+            for (const email of emails) {
+              newMintsForNotification.push({
+                walletAddress: wallet.wallet_address,
+                mints: newMints,
+                userEmail: email
+              });
+            }
           }
           
           results.push({
@@ -388,6 +398,54 @@ serve(async (req) => {
       }
       
       return new Response(JSON.stringify({ success: true, wallets }), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+      });
+    }
+    
+    // Test notification action
+    if (action === 'test_notification') {
+      const emails = ['admin@blackbox.farm', 'wilsondavid@live.ca'];
+      const testMint = {
+        symbol: 'TESTCOIN',
+        name: 'Test Token for Watchdog',
+        mint: '7xKXtg2CW87d97TXJSDpbD5jBkheTqA83TZRuJosgAsU'
+      };
+      
+      const results: { email: string; success: boolean; error?: string }[] = [];
+      
+      for (const email of emails) {
+        try {
+          const resp = await fetch(`${supabaseUrl}/functions/v1/send-notification`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${supabaseServiceKey}`
+            },
+            body: JSON.stringify({
+              type: 'email',
+              to: email,
+              subject: '🚨 TEST: New Token Mint Detected - 1 token',
+              message: `This is a TEST notification from your Mint Monitor Watchdog!\n\nA monitored spawner wallet has created a new token:\n\n• $${testMint.symbol} (${testMint.name})\n\nMint Address: ${testMint.mint}\n\nThis is a simulated detection to verify your email notifications are working correctly.\n\nCheck your watchdog dashboard for real detections.`,
+              notificationType: 'wallet',
+              level: 'warning',
+              data: { mints: [testMint], isTest: true }
+            })
+          });
+          
+          const result = await resp.json();
+          console.log(`Test notification to ${email}:`, result);
+          results.push({ email, success: resp.ok, error: result.error });
+        } catch (e) {
+          console.error(`Failed to send test to ${email}:`, e);
+          results.push({ email, success: false, error: e.message });
+        }
+      }
+      
+      return new Response(JSON.stringify({ 
+        success: true, 
+        message: 'Test notifications sent',
+        results 
+      }), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' }
       });
     }
