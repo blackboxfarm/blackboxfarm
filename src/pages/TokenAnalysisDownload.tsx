@@ -7,8 +7,11 @@ import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
+import { WalletScanButtons } from "@/components/mint-monitor/WalletScanButtons";
+import { useAuth } from "@/hooks/useAuth";
 
 const TokenAnalysisDownload = () => {
+  const { user } = useAuth();
   const [loading, setLoading] = useState(false);
   const [heliusLoading, setHeliusLoading] = useState(false);
   const [walletTraceLoading, setWalletTraceLoading] = useState(false);
@@ -995,24 +998,31 @@ ALL WALLET STATISTICS
                     <p className="text-xs text-muted-foreground mb-3">
                       Monitor these wallets for new token mints. They are likely to be used for future token launches.
                     </p>
-                    <div className="space-y-2">
+                    <div className="space-y-4">
                       {fullGenealogyData.recommendedWatchlist.map((w: any, i: number) => (
-                        <div key={i} className="flex items-center justify-between p-2 bg-background rounded">
-                          <div className="flex items-center gap-2">
-                            <Badge variant="outline" className="text-xs">{i + 1}</Badge>
-                            <a 
-                              href={`https://solscan.io/account/${w.wallet}`}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="font-mono text-xs text-primary hover:underline"
-                            >
-                              {w.wallet}
-                            </a>
+                        <div key={i} className="p-3 bg-background rounded border border-border">
+                          <div className="flex items-center justify-between mb-2">
+                            <div className="flex items-center gap-2">
+                              <Badge variant="outline" className="text-xs">{i + 1}</Badge>
+                              <a 
+                                href={`https://solscan.io/account/${w.wallet}`}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="font-mono text-xs text-primary hover:underline"
+                              >
+                                {w.wallet}
+                              </a>
+                            </div>
+                            <div className="text-xs text-muted-foreground">
+                              <span className="text-green-400">{w.solFlow} SOL</span>
+                              <span className="ml-2">• {w.reason}</span>
+                            </div>
                           </div>
-                          <div className="text-xs text-muted-foreground">
-                            <span className="text-green-400">{w.solFlow} SOL</span>
-                            <span className="ml-2">• {w.reason}</span>
-                          </div>
+                          <WalletScanButtons 
+                            walletAddress={w.wallet} 
+                            sourceToken={tokenToTrace}
+                            userId={user?.id}
+                          />
                         </div>
                       ))}
                     </div>
