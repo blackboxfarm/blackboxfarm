@@ -913,10 +913,83 @@ ALL WALLET STATISTICS
                               </div>
 
                               {candidate.tokensCreated > 0 && (
-                                <div className="mt-2">
-                                  <span className="text-xs text-orange-400 font-semibold">
-                                    Created {candidate.tokensCreated} token(s)
-                                  </span>
+                                <div className="mt-3 space-y-2">
+                                  <div className="text-xs text-orange-400 font-semibold">
+                                    Created {candidate.tokensCreated} token(s):
+                                  </div>
+                                  {candidate.recentTokens?.length > 0 && (
+                                    <div className="space-y-2 max-h-[200px] overflow-y-auto">
+                                      {candidate.recentTokens.map((token: any, idx: number) => (
+                                        <div key={token.mint} className="p-2 bg-background/70 rounded border border-border text-xs">
+                                          <div className="flex items-center justify-between gap-2 mb-1">
+                                            <span className="font-bold text-primary">
+                                              ${token.symbol || 'Unknown'}
+                                            </span>
+                                            <span className="text-muted-foreground">
+                                              {token.timestamp ? new Date(token.timestamp).toLocaleDateString() : 'Unknown date'}
+                                            </span>
+                                          </div>
+                                          <div className="text-muted-foreground truncate mb-1">
+                                            {token.name || 'Unknown Token'}
+                                          </div>
+                                          <div className="flex flex-wrap items-center gap-2 mb-2">
+                                            {token.athUsd && (
+                                              <Badge variant="secondary" className="text-[10px]">
+                                                ATH: ${token.athUsd >= 1 ? token.athUsd.toFixed(2) : token.athUsd.toFixed(6)}
+                                              </Badge>
+                                            )}
+                                            {token.currentPriceUsd && (
+                                              <Badge variant="outline" className="text-[10px]">
+                                                Now: ${token.currentPriceUsd >= 1 ? token.currentPriceUsd.toFixed(2) : token.currentPriceUsd.toFixed(8)}
+                                              </Badge>
+                                            )}
+                                            {token.marketCap && (
+                                              <Badge variant="outline" className="text-[10px]">
+                                                MC: ${token.marketCap >= 1000000 ? (token.marketCap/1000000).toFixed(1) + 'M' : (token.marketCap/1000).toFixed(0) + 'K'}
+                                              </Badge>
+                                            )}
+                                            {token.launchpad && (
+                                              <Badge className="bg-purple-500/20 text-purple-300 text-[10px]">
+                                                {token.launchpad}
+                                              </Badge>
+                                            )}
+                                          </div>
+                                          <div className="flex items-center gap-2">
+                                            <a 
+                                              href={token.dexscreenerUrl} 
+                                              target="_blank" 
+                                              rel="noopener noreferrer"
+                                              className="text-[10px] text-blue-400 hover:underline"
+                                            >
+                                              DexScreener
+                                            </a>
+                                            <span className="text-muted-foreground">•</span>
+                                            <a 
+                                              href={token.solscanUrl} 
+                                              target="_blank" 
+                                              rel="noopener noreferrer"
+                                              className="text-[10px] text-green-400 hover:underline"
+                                            >
+                                              Solscan
+                                            </a>
+                                            {token.pumpfunUrl && (
+                                              <>
+                                                <span className="text-muted-foreground">•</span>
+                                                <a 
+                                                  href={token.pumpfunUrl} 
+                                                  target="_blank" 
+                                                  rel="noopener noreferrer"
+                                                  className="text-[10px] text-orange-400 hover:underline"
+                                                >
+                                                  Pump.fun
+                                                </a>
+                                              </>
+                                            )}
+                                          </div>
+                                        </div>
+                                      ))}
+                                    </div>
+                                  )}
                                 </div>
                               )}
                             </div>
@@ -944,11 +1017,23 @@ ALL WALLET STATISTICS
                                 variant="secondary"
                                 onClick={() => addToCronMonitor(candidate.wallet)}
                                 className="text-xs"
+                                title="Add this wallet to the automated monitoring cron job"
                               >
                                 <Eye className="h-3 w-3 mr-1" />
                                 Add to Cron
                               </Button>
                             </div>
+                          </div>
+                          
+                          {/* Cron Explanation */}
+                          <div className="mt-3 p-2 bg-muted/50 rounded text-[10px] text-muted-foreground border-t border-border">
+                            <div className="font-semibold text-foreground mb-1">📊 What "Add to Cron" does:</div>
+                            <ul className="space-y-1 ml-2">
+                              <li>• Scans this wallet every <span className="text-primary">5-15 minutes</span> for new token mints</li>
+                              <li>• Uses <span className="text-yellow-400">~2-4 Helius API credits</span> per scan (fetches last 100 txs)</li>
+                              <li>• Daily load: <span className="text-orange-400">~200-600 credits/wallet</span> (depends on cron frequency)</li>
+                              <li>• Alerts you when a new token is created by this wallet</li>
+                            </ul>
                           </div>
                         </div>
                       ))}
