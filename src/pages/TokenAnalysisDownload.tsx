@@ -38,6 +38,7 @@ const TokenAnalysisDownload = () => {
   const [bondingLoading, setBondingLoading] = useState(false);
   const [calcCurvePercent, setCalcCurvePercent] = useState(54);
   const [checkingWallet, setCheckingWallet] = useState<string | null>(null);
+  const [addingAllSpawners, setAddingAllSpawners] = useState(false);
 
   const tokenMint = "DyqgbSyWcwRw17Y3SvAtmP4o73n1nes5PzwAEjvVpump";
   
@@ -385,6 +386,52 @@ const TokenAnalysisDownload = () => {
       window.dispatchEvent(new Event("mint-monitor-wallets-changed"));
     } catch (err: any) {
       toast.error("Failed to add to watchdog: " + (err?.message || "Unknown error"));
+    }
+  };
+
+  // Add ALL spawner candidates to watchdog at once
+  const addAllSpawnersToWatchdog = async () => {
+    if (!user?.id) {
+      toast.error("Please log in to add wallets to the watchdog");
+      return;
+    }
+    
+    const candidates = spawnerData?.spawnerCandidates || [];
+    if (candidates.length === 0) {
+      toast.error("No spawner candidates to add");
+      return;
+    }
+
+    setAddingAllSpawners(true);
+    let successCount = 0;
+    let errorCount = 0;
+
+    for (const candidate of candidates) {
+      try {
+        const { error } = await supabase.functions.invoke("mint-monitor-scanner", {
+          body: {
+            action: "add_to_cron",
+            walletAddress: candidate.wallet,
+            userId: user.id,
+            sourceToken: tokenToTrace.trim() || undefined
+          }
+        });
+        if (!error) successCount++;
+        else errorCount++;
+      } catch {
+        errorCount++;
+      }
+    }
+
+    setAddingAllSpawners(false);
+    window.dispatchEvent(new Event("mint-monitor-wallets-changed"));
+    
+    if (successCount > 0) {
+      toast.success(`Added ${successCount} spawner${successCount > 1 ? 's' : ''} to Watchdog`, {
+        description: errorCount > 0 ? `${errorCount} failed to add` : undefined
+      });
+    } else {
+      toast.error("Failed to add any spawners to watchdog");
     }
   };
 
@@ -1102,8 +1149,24 @@ ALL WALLET STATISTICS
                   {/* Spawner Candidates List */}
                   {spawnerData.spawnerCandidates?.length > 0 && (
                     <div className="space-y-3">
-                      <div className="text-sm font-semibold text-yellow-400">
-                        🎯 Most Likely Spawner Wallets (monitor these for new mints):
+                      <div className="flex items-center justify-between">
+                        <div className="text-sm font-semibold text-yellow-400">
+                          🎯 Most Likely Spawner Wallets (monitor these for new mints):
+                        </div>
+                        <Button
+                          size="sm"
+                          variant="default"
+                          onClick={addAllSpawnersToWatchdog}
+                          disabled={addingAllSpawners || !user?.id}
+                          className="bg-yellow-500 hover:bg-yellow-600 text-black"
+                        >
+                          {addingAllSpawners ? (
+                            <Loader2 className="h-4 w-4 animate-spin mr-1" />
+                          ) : (
+                            <Eye className="h-4 w-4 mr-1" />
+                          )}
+                          Add All ({spawnerData.spawnerCandidates.length}) to Watchdog
+                        </Button>
                       </div>
                       {spawnerData.spawnerCandidates.map((candidate: any, i: number) => (
                         <div 
