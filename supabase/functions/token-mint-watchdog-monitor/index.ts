@@ -2462,6 +2462,177 @@ Deno.serve(async (req) => {
       )
     }
 
+    // CHECK WALLET MINTS - Scan wallets for any token mints they've created
+    if (action === 'check_wallet_mints') {
+      const wallets = body.wallets || []
+      
+      if (!Array.isArray(wallets) || wallets.length === 0) {
+        return new Response(
+          JSON.stringify({ error: 'wallets array is required' }),
+          { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        )
+      }
+
+      const heliusApiKey = Deno.env.get('HELIUS_API_KEY')
+      if (!heliusApiKey) {
+        return new Response(
+          JSON.stringify({ error: 'HELIUS_API_KEY not configured' }),
+          { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        )
+      }
+
+      console.log(`Checking ${wallets.length} wallets for token mints...`)
+      
+      const mintedTokens: any[] = []
+      
+      for (const walletAddress of wallets.slice(0, 10)) { // Limit to 10 wallets
+        console.log(`Scanning wallet for mints: ${walletAddress}`)
+        
+        try {
+          // Fetch wallet transactions from Helius
+          const response = await fetch(
+            `https://api.helius.xyz/v0/addresses/${walletAddress}/transactions?api-key=${heliusApiKey}&limit=100`,
+            { method: 'GET' }
+          )
+          
+          if (!response.ok) {
+            console.error(`Helius error for ${walletAddress}:`, response.status)
+            continue
+          }
+          
+          const transactions = await response.json()
+          
+          // Look for token creation transactions
+          for (const tx of transactions) {
+            const instructions = tx.instructions || []
+            const events = tx.events || {}
+            
+            // Check for token program instructions that indicate minting
+            const isTokenCreation = instructions.some((inst: any) => {
+              // Check for InitializeMint instruction
+              if (inst.programId === 'TokenkgQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA') {
+                if (inst.parsed?.type === 'initializeMint' || inst.parsed?.type === 'initializeMint2') {
+                  return true
+                }
+              }
+              // Check for Token-2022 program
+              if (inst.programId === 'TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb') {
+                if (inst.parsed?.type === 'initializeMint' || inst.parsed?.type === 'initializeMint2') {
+                  return true
+                }
+              }
+              return false
+            })
+            
+            // Also check for pump.fun create instruction
+            const isPumpCreate = instructions.some((inst: any) => 
+              inst.programId === '6EF8rrecthR5Dkzon8Nwu78hRvfCKubJ14M5uBEwF6P' && 
+              (inst.parsed?.type === 'create' || tx.type === 'CREATE')
+            )
+            
+            if (isTokenCreation || isPumpCreate || tx.type === 'CREATE') {
+              // Extract token mint from the transaction
+              let tokenMint = null
+              
+              // Check token transfers for the new mint
+              const tokenTransfers = tx.tokenTransfers || []
+              if (tokenTransfers.length > 0) {
+                tokenMint = tokenTransfers[0]?.mint
+              }
+              
+              // Check events for nft/token info
+              if (events.nft) {
+                tokenMint = tokenMint || events.nft.mint
+              }
+              
+              // Check instructions for mint account
+              for (const inst of instructions) {
+                if (inst.parsed?.info?.mint) {
+                  tokenMint = inst.parsed.info.mint
+                  break
+                }
+                if (inst.accounts && inst.accounts.length > 0) {
+                  // First account is often the mint
+                  const possibleMint = inst.accounts[0]
+                  if (possibleMint && possibleMint.length > 30) {
+                    tokenMint = tokenMint || possibleMint
+                  }
+                }
+              }
+              
+              if (tokenMint) {
+                // Fetch token metadata
+                let tokenName = 'Unknown'
+                let tokenSymbol = 'Unknown'
+                let market = 'unknown'
+                let marketCap = 0
+                let curvePercentage = 0
+                
+                try {
+                  const tokenResponse = await fetch(
+                    `https://data.solanatracker.io/tokens/${tokenMint}`,
+                    { headers: { 'x-api-key': solanaTrackerApiKey } }
+                  )
+                  
+                  if (tokenResponse.ok) {
+                    const tokenData = await tokenResponse.json()
+                    tokenName = tokenData.token?.name || 'Unknown'
+                    tokenSymbol = tokenData.token?.symbol || 'Unknown'
+                    market = tokenData.pools?.[0]?.market || 'unknown'
+                    marketCap = tokenData.pools?.[0]?.marketCap?.usd || 0
+                    curvePercentage = tokenData.pools?.[0]?.curvePercentage || 0
+                  }
+                } catch (e) {
+                  console.log(`Could not fetch metadata for ${tokenMint}`)
+                }
+                
+                mintedTokens.push({
+                  tokenMint,
+                  tokenName,
+                  tokenSymbol,
+                  creatorWallet: walletAddress,
+                  txSignature: tx.signature,
+                  timestamp: tx.timestamp,
+                  timestampFormatted: new Date(tx.timestamp * 1000).toISOString(),
+                  type: isPumpCreate ? 'pump.fun' : 'standard',
+                  market,
+                  marketCap,
+                  curvePercentage,
+                  solscanUrl: `https://solscan.io/tx/${tx.signature}`
+                })
+                
+                console.log(`Found minted token: ${tokenSymbol} (${tokenMint}) by ${walletAddress}`)
+              }
+            }
+          }
+          
+          // Rate limit protection
+          await new Promise(r => setTimeout(r, 200))
+          
+        } catch (error) {
+          console.error(`Error scanning wallet ${walletAddress}:`, error)
+        }
+      }
+      
+      // Deduplicate tokens by mint address
+      const uniqueTokens = Array.from(
+        new Map(mintedTokens.map(t => [t.tokenMint, t])).values()
+      )
+      
+      console.log(`Found ${uniqueTokens.length} unique minted tokens across ${wallets.length} wallets`)
+      
+      return new Response(
+        JSON.stringify({
+          success: true,
+          action: 'check_wallet_mints',
+          walletsScanned: Math.min(wallets.length, 10),
+          totalMintedTokens: uniqueTokens.length,
+          mintedTokens: uniqueTokens.sort((a, b) => b.timestamp - a.timestamp)
+        }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      )
+    }
+
     return new Response(
       JSON.stringify({ error: 'Invalid action. Use "analyze" with tokenMint or "scan"' }),
       { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
