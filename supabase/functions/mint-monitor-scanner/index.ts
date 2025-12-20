@@ -222,7 +222,7 @@ serve(async (req) => {
       // Scan all cron-enabled wallets
       const { data: wallets, error: fetchError } = await supabase
         .from('mint_monitor_wallets')
-        .select('*')
+        .select('*, user:user_id(email)')
         .eq('is_cron_enabled', true);
       
       if (fetchError) {
@@ -235,25 +235,41 @@ serve(async (req) => {
       console.log(`Running cron scan for ${wallets?.length || 0} wallets`);
       
       const results = [];
+      const newMintsForNotification: { walletAddress: string; mints: TokenMint[]; userEmail?: string }[] = [];
+      
       for (const wallet of (wallets || [])) {
         try {
           const mints = await scanWalletForMints(wallet.wallet_address, heliusApiKey, 1); // Last hour
           
+          const newMints: TokenMint[] = [];
+          
           // Store new detections
           for (const mint of mints) {
-            const { error: insertError } = await supabase
+            const { data: existing } = await supabase
               .from('mint_monitor_detections')
-              .upsert({
-                wallet_id: wallet.id,
-                token_mint: mint.mint,
-                token_name: mint.name,
-                token_symbol: mint.symbol,
-                token_image: mint.image,
-                detected_at: new Date(mint.timestamp * 1000).toISOString()
-              }, { onConflict: 'wallet_id,token_mint', ignoreDuplicates: true });
+              .select('id')
+              .eq('wallet_id', wallet.id)
+              .eq('token_mint', mint.mint)
+              .single();
             
-            if (insertError) {
-              console.error(`Error storing detection: ${insertError.message}`);
+            if (!existing) {
+              // This is a NEW mint!
+              const { error: insertError } = await supabase
+                .from('mint_monitor_detections')
+                .insert({
+                  wallet_id: wallet.id,
+                  token_mint: mint.mint,
+                  token_name: mint.name,
+                  token_symbol: mint.symbol,
+                  token_image: mint.image,
+                  detected_at: new Date(mint.timestamp * 1000).toISOString()
+                });
+              
+              if (!insertError) {
+                newMints.push(mint);
+              } else {
+                console.error(`Error storing detection: ${insertError.message}`);
+              }
             }
           }
           
@@ -263,10 +279,26 @@ serve(async (req) => {
             .update({ last_scanned_at: new Date().toISOString() })
             .eq('id', wallet.id);
           
+          // Collect for notification if new mints found
+          if (newMints.length > 0) {
+            // Get user email for notification
+            const { data: userData } = await supabase
+              .from('profiles')
+              .select('email')
+              .eq('id', wallet.user_id)
+              .single();
+            
+            newMintsForNotification.push({
+              walletAddress: wallet.wallet_address,
+              mints: newMints,
+              userEmail: userData?.email
+            });
+          }
+          
           results.push({
             wallet: wallet.wallet_address,
-            newMints: mints.length,
-            mints
+            newMints: newMints.length,
+            mints: newMints
           });
         } catch (e) {
           console.error(`Error scanning wallet ${wallet.wallet_address}:`, e);
@@ -277,9 +309,60 @@ serve(async (req) => {
         }
       }
       
+      // Send notifications for new mints
+      if (newMintsForNotification.length > 0) {
+        console.log(`Sending notifications for ${newMintsForNotification.length} wallets with new mints`);
+        
+        // Group by user email
+        const byEmail: Record<string, { wallets: string[]; mints: TokenMint[] }> = {};
+        for (const item of newMintsForNotification) {
+          if (item.userEmail) {
+            if (!byEmail[item.userEmail]) {
+              byEmail[item.userEmail] = { wallets: [], mints: [] };
+            }
+            byEmail[item.userEmail].wallets.push(item.walletAddress);
+            byEmail[item.userEmail].mints.push(...item.mints);
+          }
+        }
+        
+        // Send one email per user
+        for (const [email, data] of Object.entries(byEmail)) {
+          try {
+            const mintsList = data.mints.map(m => 
+              `• ${m.symbol || 'Unknown'} (${m.name || m.mint.slice(0, 16) + '...'})`
+            ).join('\n');
+            
+            await fetch(`${supabaseUrl}/functions/v1/send-notification`, {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${supabaseServiceKey}`
+              },
+              body: JSON.stringify({
+                type: 'email',
+                to: email,
+                subject: `🚨 New Token Mint Detected - ${data.mints.length} token(s)`,
+                message: `Your monitored spawner wallet(s) have created new tokens!\n\nWallets: ${data.wallets.length}\nNew Tokens:\n${mintsList}\n\nCheck your watchdog dashboard for details.`,
+                notificationType: 'wallet',
+                level: 'warning',
+                data: { mints: data.mints.map(m => ({ symbol: m.symbol, mint: m.mint })) }
+              })
+            });
+            console.log(`Notification sent to ${email}`);
+          } catch (notifErr) {
+            console.error(`Failed to send notification to ${email}:`, notifErr);
+          }
+        }
+      }
+      
       return new Response(JSON.stringify({ 
         success: true, 
         scannedWallets: wallets?.length || 0,
+        newMintsDetected: newMintsForNotification.reduce((acc, w) => acc + w.mints.length, 0),
+        notificationsSent: Object.keys(newMintsForNotification.reduce((acc, w) => {
+          if (w.userEmail) acc[w.userEmail] = true;
+          return acc;
+        }, {} as Record<string, boolean>)).length,
         results
       }), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' }
