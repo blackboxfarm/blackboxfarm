@@ -1,47 +1,47 @@
-import React, { useState, useEffect } from "react";
-import { SuperAdminWallets } from "@/components/SuperAdminWallets";
-import { AdminWalletRecovery } from "@/components/AdminWalletRecovery";
-import { MasterWalletsDashboard } from "@/components/admin/MasterWalletsDashboard";
-import { SecurityDashboard } from "@/components/security/SecurityDashboard";
-import { AccountViewer } from "@/components/AccountViewer";
-import { BaglessHoldersReport } from "@/components/BaglessHoldersReport";
-import { LiquidityLockChecker } from "@/components/LiquidityLockChecker";
-import { AllWalletsTokenView } from "@/components/AllWalletsTokenView";
-import { DeveloperProfiles } from "@/components/admin/DeveloperProfiles";
-import { AnalysisJobs } from "@/components/admin/AnalysisJobs";
-import { TokenWatchdog } from "@/components/admin/TokenWatchdog";
-import { SystemTesting } from "@/components/admin/SystemTesting";
-import { DeveloperAlerts } from "@/components/admin/DeveloperAlerts";
-import { BannerManagement } from "@/components/admin/BannerManagement";
-import { SurveyManagement } from "@/components/admin/SurveyManagement";
-import { TokenGenealogyDashboard } from "@/components/admin/TokenGenealogyDashboard";
-import { DexCompilesView } from "@/components/admin/DexCompilesView";
-import { HtmlScrapes } from "@/components/admin/HtmlScrapes";
-import { TokenSets } from "@/components/admin/TokenSets";
-import { ArbitrageBotDashboard } from "@/components/admin/ArbitrageBotDashboard";
-import { Playground } from "@/components/admin/Playground";
-import { AirdropManager } from "@/components/admin/AirdropManager";
-import { FuctAirdropGift } from "@/components/admin/FuctAirdropGift";
-import { WhaleFrenzyDashboard } from "@/components/admin/WhaleFrenzyDashboard";
-import { MegaWhaleDashboard } from "@/components/admin/MegaWhaleDashboard";
-import { ApiProviderManager } from "@/components/admin/ApiProviderManager";
-import AdvertiserManagement from "@/components/admin/AdvertiserManagement";
+import React, { useState, useEffect, Suspense, lazy } from "react";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import TransactionHistoryWindow from "@/components/blackbox/TransactionHistoryWindow";
-import { WalletBalanceMonitor } from "@/components/WalletBalanceMonitor";
-import { WalletMonitor } from "@/components/WalletMonitor";
 import { useUserRoles } from "@/hooks/useUserRoles";
-import { Shield, AlertTriangle, Zap } from "lucide-react";
+import { AlertTriangle } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { LazyLoader } from "@/components/ui/lazy-loader";
 
+// Lazy load ALL admin components - they won't load until their tab is clicked
+const MasterWalletsDashboard = lazy(() => import("@/components/admin/MasterWalletsDashboard").then(m => ({ default: m.MasterWalletsDashboard })));
+const SuperAdminWallets = lazy(() => import("@/components/SuperAdminWallets").then(m => ({ default: m.SuperAdminWallets })));
+const WalletBalanceMonitor = lazy(() => import("@/components/WalletBalanceMonitor").then(m => ({ default: m.WalletBalanceMonitor })));
+const AdminWalletRecovery = lazy(() => import("@/components/AdminWalletRecovery").then(m => ({ default: m.AdminWalletRecovery })));
+const WalletMonitor = lazy(() => import("@/components/WalletMonitor").then(m => ({ default: m.WalletMonitor })));
+const SecurityDashboard = lazy(() => import("@/components/security/SecurityDashboard").then(m => ({ default: m.SecurityDashboard })));
+const AccountViewer = lazy(() => import("@/components/AccountViewer").then(m => ({ default: m.AccountViewer })));
+const BaglessHoldersReport = lazy(() => import("@/components/BaglessHoldersReport").then(m => ({ default: m.BaglessHoldersReport })));
+const LiquidityLockChecker = lazy(() => import("@/components/LiquidityLockChecker").then(m => ({ default: m.LiquidityLockChecker })));
+const AllWalletsTokenView = lazy(() => import("@/components/AllWalletsTokenView").then(m => ({ default: m.AllWalletsTokenView })));
+const DeveloperProfiles = lazy(() => import("@/components/admin/DeveloperProfiles").then(m => ({ default: m.DeveloperProfiles })));
+const AnalysisJobs = lazy(() => import("@/components/admin/AnalysisJobs").then(m => ({ default: m.AnalysisJobs })));
+const TokenWatchdog = lazy(() => import("@/components/admin/TokenWatchdog").then(m => ({ default: m.TokenWatchdog })));
+const SystemTesting = lazy(() => import("@/components/admin/SystemTesting").then(m => ({ default: m.SystemTesting })));
+const DeveloperAlerts = lazy(() => import("@/components/admin/DeveloperAlerts").then(m => ({ default: m.DeveloperAlerts })));
+const BannerManagement = lazy(() => import("@/components/admin/BannerManagement").then(m => ({ default: m.BannerManagement })));
+const SurveyManagement = lazy(() => import("@/components/admin/SurveyManagement").then(m => ({ default: m.SurveyManagement })));
+const TokenGenealogyDashboard = lazy(() => import("@/components/admin/TokenGenealogyDashboard").then(m => ({ default: m.TokenGenealogyDashboard })));
+const DexCompilesView = lazy(() => import("@/components/admin/DexCompilesView").then(m => ({ default: m.DexCompilesView })));
+const HtmlScrapes = lazy(() => import("@/components/admin/HtmlScrapes").then(m => ({ default: m.HtmlScrapes })));
+const TokenSets = lazy(() => import("@/components/admin/TokenSets").then(m => ({ default: m.TokenSets })));
+const ArbitrageBotDashboard = lazy(() => import("@/components/admin/ArbitrageBotDashboard").then(m => ({ default: m.ArbitrageBotDashboard })));
+const Playground = lazy(() => import("@/components/admin/Playground").then(m => ({ default: m.Playground })));
+const AirdropManager = lazy(() => import("@/components/admin/AirdropManager").then(m => ({ default: m.AirdropManager })));
+const FuctAirdropGift = lazy(() => import("@/components/admin/FuctAirdropGift").then(m => ({ default: m.FuctAirdropGift })));
+const WhaleFrenzyDashboard = lazy(() => import("@/components/admin/WhaleFrenzyDashboard").then(m => ({ default: m.WhaleFrenzyDashboard })));
+const MegaWhaleDashboard = lazy(() => import("@/components/admin/MegaWhaleDashboard").then(m => ({ default: m.MegaWhaleDashboard })));
+const ApiProviderManager = lazy(() => import("@/components/admin/ApiProviderManager").then(m => ({ default: m.ApiProviderManager })));
+const AdvertiserManagement = lazy(() => import("@/components/admin/AdvertiserManagement"));
 
 export default function SuperAdmin() {
   const [activeTab, setActiveTab] = useState("wallets");
   const { isSuperAdmin, isLoading } = useUserRoles();
 
   useEffect(() => {
-    // Check for tab parameter in URL
     const urlParams = new URLSearchParams(window.location.search);
     const tabParam = urlParams.get('tab');
     if (tabParam) {
@@ -49,7 +49,6 @@ export default function SuperAdmin() {
     }
   }, []);
 
-  // Show loading state while checking roles
   if (isLoading) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
@@ -61,7 +60,6 @@ export default function SuperAdmin() {
     );
   }
 
-  // Show access denied if not super admin
   if (!isSuperAdmin) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
@@ -128,118 +126,174 @@ export default function SuperAdmin() {
           </TabsList>
           
           <TabsContent value="master-wallets">
-            <MasterWalletsDashboard />
+            <Suspense fallback={<LazyLoader />}>
+              <MasterWalletsDashboard />
+            </Suspense>
           </TabsContent>
 
           <TabsContent value="wallets">
-            <div className="space-y-6">
-              <WalletBalanceMonitor />
-              <SuperAdminWallets />
-            </div>
+            <Suspense fallback={<LazyLoader />}>
+              <div className="space-y-6">
+                <WalletBalanceMonitor />
+                <SuperAdminWallets />
+              </div>
+            </Suspense>
           </TabsContent>
           
           <TabsContent value="recovery">
-            <AdminWalletRecovery />
+            <Suspense fallback={<LazyLoader />}>
+              <AdminWalletRecovery />
+            </Suspense>
           </TabsContent>
           
           <TabsContent value="monitor">
-            <WalletMonitor />
+            <Suspense fallback={<LazyLoader />}>
+              <WalletMonitor />
+            </Suspense>
           </TabsContent>
           
           <TabsContent value="security">
-            <SecurityDashboard />
+            <Suspense fallback={<LazyLoader />}>
+              <SecurityDashboard />
+            </Suspense>
           </TabsContent>
           
           <TabsContent value="accounts">
-            <AccountViewer />
+            <Suspense fallback={<LazyLoader />}>
+              <AccountViewer />
+            </Suspense>
           </TabsContent>
           
           <TabsContent value="holders">
-            <BaglessHoldersReport />
+            <Suspense fallback={<LazyLoader />}>
+              <BaglessHoldersReport />
+            </Suspense>
           </TabsContent>
           
           <TabsContent value="liquidity">
-            <LiquidityLockChecker />
+            <Suspense fallback={<LazyLoader />}>
+              <LiquidityLockChecker />
+            </Suspense>
           </TabsContent>
           
           <TabsContent value="tokens">
-            <AllWalletsTokenView />
+            <Suspense fallback={<LazyLoader />}>
+              <AllWalletsTokenView />
+            </Suspense>
           </TabsContent>
 
           <TabsContent value="developers">
-            <DeveloperProfiles />
+            <Suspense fallback={<LazyLoader />}>
+              <DeveloperProfiles />
+            </Suspense>
           </TabsContent>
 
           <TabsContent value="analysis">
-            <AnalysisJobs />
+            <Suspense fallback={<LazyLoader />}>
+              <AnalysisJobs />
+            </Suspense>
           </TabsContent>
 
           <TabsContent value="watchdog">
-            <TokenWatchdog />
+            <Suspense fallback={<LazyLoader />}>
+              <TokenWatchdog />
+            </Suspense>
           </TabsContent>
 
           <TabsContent value="alerts">
-            <DeveloperAlerts />
+            <Suspense fallback={<LazyLoader />}>
+              <DeveloperAlerts />
+            </Suspense>
           </TabsContent>
 
           <TabsContent value="testing">
-            <SystemTesting />
+            <Suspense fallback={<LazyLoader />}>
+              <SystemTesting />
+            </Suspense>
           </TabsContent>
 
           <TabsContent value="genealogy">
-            <TokenGenealogyDashboard />
+            <Suspense fallback={<LazyLoader />}>
+              <TokenGenealogyDashboard />
+            </Suspense>
           </TabsContent>
 
           <TabsContent value="dex-compiles">
-            <DexCompilesView />
+            <Suspense fallback={<LazyLoader />}>
+              <DexCompilesView />
+            </Suspense>
           </TabsContent>
 
           <TabsContent value="html-scrapes">
-            <HtmlScrapes />
+            <Suspense fallback={<LazyLoader />}>
+              <HtmlScrapes />
+            </Suspense>
           </TabsContent>
 
           <TabsContent value="token-sets">
-            <TokenSets />
+            <Suspense fallback={<LazyLoader />}>
+              <TokenSets />
+            </Suspense>
           </TabsContent>
 
           <TabsContent value="arbitrage">
-            <ArbitrageBotDashboard />
+            <Suspense fallback={<LazyLoader />}>
+              <ArbitrageBotDashboard />
+            </Suspense>
           </TabsContent>
 
           <TabsContent value="playground">
-            <Playground />
+            <Suspense fallback={<LazyLoader />}>
+              <Playground />
+            </Suspense>
           </TabsContent>
 
           <TabsContent value="airdrops">
-            <AirdropManager />
+            <Suspense fallback={<LazyLoader />}>
+              <AirdropManager />
+            </Suspense>
           </TabsContent>
 
           <TabsContent value="fuct-airdrops">
-            <FuctAirdropGift />
+            <Suspense fallback={<LazyLoader />}>
+              <FuctAirdropGift />
+            </Suspense>
           </TabsContent>
 
           <TabsContent value="banners">
-            <BannerManagement />
+            <Suspense fallback={<LazyLoader />}>
+              <BannerManagement />
+            </Suspense>
           </TabsContent>
 
           <TabsContent value="advertisers">
-            <AdvertiserManagement />
+            <Suspense fallback={<LazyLoader />}>
+              <AdvertiserManagement />
+            </Suspense>
           </TabsContent>
 
           <TabsContent value="surveys">
-            <SurveyManagement />
+            <Suspense fallback={<LazyLoader />}>
+              <SurveyManagement />
+            </Suspense>
           </TabsContent>
 
           <TabsContent value="whale-frenzy">
-            <WhaleFrenzyDashboard />
+            <Suspense fallback={<LazyLoader />}>
+              <WhaleFrenzyDashboard />
+            </Suspense>
           </TabsContent>
 
           <TabsContent value="mega-whale">
-            <MegaWhaleDashboard />
+            <Suspense fallback={<LazyLoader />}>
+              <MegaWhaleDashboard />
+            </Suspense>
           </TabsContent>
 
           <TabsContent value="api-providers">
-            <ApiProviderManager />
+            <Suspense fallback={<LazyLoader />}>
+              <ApiProviderManager />
+            </Suspense>
           </TabsContent>
         </Tabs>
       </div>
