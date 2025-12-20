@@ -3190,6 +3190,29 @@ Deno.serve(async (req) => {
         )
       }
 
+      // Get user_id from auth header or body
+      const authHeader = req.headers.get('Authorization')
+      let userId: string | null = body.userId || null
+      
+      if (!userId && authHeader) {
+        try {
+          const token = authHeader.replace('Bearer ', '')
+          const { data: { user } } = await supabase.auth.getUser(token)
+          userId = user?.id || null
+        } catch (e) {
+          console.log('Could not extract user from auth header')
+        }
+      }
+
+      if (!userId) {
+        return new Response(
+          JSON.stringify({ error: 'User ID required. Please log in.' }),
+          { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        )
+      }
+
+      console.log(`🌳 ANCESTRY TRACE: User ${userId} tracing token ${tokenMint}`)
+
       const maxDepth = 5
       console.log(`🌳 ANCESTRY TRACE: Token ${tokenMint} → tracing ${maxDepth} levels back`)
 
@@ -3373,16 +3396,19 @@ Deno.serve(async (req) => {
           const { error: upsertError } = await supabase
             .from('mint_monitor_wallets')
             .upsert({
+              user_id: userId,
               wallet_address: spawner.wallet,
               label: `Spawner (${spawner.tokensCreated} tokens) from ${tokenSymbol}`,
               source_token: tokenMint,
               is_cron_enabled: true,
               updated_at: new Date().toISOString()
-            }, { onConflict: 'wallet_address' })
+            }, { onConflict: 'wallet_address,user_id' })
 
           if (!upsertError) {
             addedToWatchdog.push(spawner.wallet)
-            console.log(`✅ Added ${spawner.wallet.slice(0, 8)}... to watchdog`)
+            console.log(`✅ Added ${spawner.wallet.slice(0, 8)}... to watchdog for user ${userId}`)
+          } else {
+            console.error(`Failed upsert for ${spawner.wallet}:`, upsertError)
           }
         } catch (e) {
           console.log(`Failed to add ${spawner.wallet} to watchdog:`, e)

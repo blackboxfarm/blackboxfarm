@@ -375,13 +375,19 @@ const TokenAnalysisDownload = () => {
       return;
     }
     
+    if (!user?.id) {
+      toast.error("Please log in to use this feature");
+      return;
+    }
+    
     setAncestryLoading(true);
     setAncestryData(null);
     try {
       const { data, error } = await supabase.functions.invoke("token-mint-watchdog-monitor", {
         body: { 
           action: "trace_ancestry_add_watchdog", 
-          tokenMint: tokenToTrace.trim()
+          tokenMint: tokenToTrace.trim(),
+          userId: user.id
         }
       });
 
