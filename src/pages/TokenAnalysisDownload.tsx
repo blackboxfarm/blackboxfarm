@@ -8,6 +8,7 @@ import { toast } from "sonner";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { WalletScanButtons } from "@/components/mint-monitor/WalletScanButtons";
+import { WatchdogWalletsList } from "@/components/mint-monitor/WatchdogWalletsList";
 import { useAuth } from "@/hooks/useAuth";
 
 const TokenAnalysisDownload = () => {
@@ -1040,6 +1041,9 @@ ALL WALLET STATISTICS
                 </div>
               </div>
             )}
+
+            {/* WATCHDOG WALLETS LIST - View monitored spawner wallets and their detections */}
+            <WatchdogWalletsList />
 
             {/* SPAWNER WALLETS RESULTS - THE MAIN FEATURE */}
             {spawnerData && (
