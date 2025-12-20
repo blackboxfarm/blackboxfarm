@@ -20,6 +20,8 @@ const TokenAnalysisDownload = () => {
   const [fullGenealogyLoading, setFullGenealogyLoading] = useState(false);
   const [spawnerLoading, setSpawnerLoading] = useState(false);
   const [spawnerData, setSpawnerData] = useState<any>(null);
+  const [ancestryLoading, setAncestryLoading] = useState(false);
+  const [ancestryData, setAncestryData] = useState<any>(null);
   const [analysisData, setAnalysisData] = useState<any>(null);
   const [offspringData, setOffspringData] = useState<any>(null);
   const [heliusData, setHeliusData] = useState<any>(null);
@@ -363,6 +365,42 @@ const TokenAnalysisDownload = () => {
     toast.success("Wallet copied to clipboard!", {
       description: "Add this wallet to your mint monitor watchlist"
     });
+  };
+
+  // TRACE ANCESTRY FROM TOKEN & AUTO-ADD SPAWNERS TO WATCHDOG
+  const traceAncestryAddWatchdog = async () => {
+    if (!tokenToTrace.trim()) {
+      toast.error("Enter a token mint address");
+      return;
+    }
+    
+    setAncestryLoading(true);
+    setAncestryData(null);
+    try {
+      const { data, error } = await supabase.functions.invoke("token-mint-watchdog-monitor", {
+        body: { 
+          action: "trace_ancestry_add_watchdog", 
+          tokenMint: tokenToTrace.trim()
+        }
+      });
+
+      if (error) throw error;
+      setAncestryData(data);
+      
+      const added = data.addedToWatchdog?.length || 0;
+      const spawners = data.spawners?.length || 0;
+      if (added > 0) {
+        toast.success(`Found ${spawners} spawners, added ${added} to watchdog!`);
+      } else if (spawners > 0) {
+        toast.info(`Found ${spawners} spawners but could not add to watchdog`);
+      } else {
+        toast.info(`Traced ${data.summary?.totalWalletsTraced || 0} wallets, no spawners with mint history found`);
+      }
+    } catch (err: any) {
+      toast.error("Failed to trace ancestry: " + err.message);
+    } finally {
+      setAncestryLoading(false);
+    }
   };
 
   const downloadMoneyFlowJSON = () => {
@@ -832,7 +870,176 @@ ALL WALLET STATISTICS
                   </>
                 )}
               </Button>
+
+              {/* NEW: Trace Ancestry & Add to Watchdog */}
+              <Button 
+                onClick={traceAncestryAddWatchdog} 
+                disabled={ancestryLoading} 
+                className="bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-600/90 hover:to-emerald-600/90 text-white font-bold"
+              >
+                {ancestryLoading ? (
+                  <>
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                    Tracing 5 Levels...
+                  </>
+                ) : (
+                  <>
+                    <GitBranch className="h-4 w-4 mr-2" />
+                    🌳 Trace Ancestry → Add to Watchdog
+                  </>
+                )}
+              </Button>
             </div>
+
+            {/* ANCESTRY TRACE RESULTS */}
+            {ancestryData && (
+              <div className="space-y-4 pt-4 border-t-2 border-green-500/50">
+                <div className="p-4 bg-gradient-to-r from-green-500/20 to-emerald-500/20 border border-green-500/50 rounded-lg">
+                  <div className="flex items-center gap-3 mb-3">
+                    <GitBranch className="h-8 w-8 text-green-500" />
+                    <div>
+                      <div className="font-bold text-lg text-green-400">
+                        Ancestry Trace: {ancestryData.tokenSymbol || 'Unknown'}
+                      </div>
+                      <div className="text-sm text-muted-foreground">{ancestryData.message}</div>
+                    </div>
+                  </div>
+
+                  {/* Summary Stats */}
+                  <div className="grid grid-cols-4 gap-3 mb-4">
+                    <div className="p-3 bg-green-500/10 border border-green-500/30 rounded text-center">
+                      <div className="text-2xl font-bold text-green-400">{ancestryData.summary?.totalWalletsTraced || 0}</div>
+                      <div className="text-xs text-muted-foreground">Wallets Traced</div>
+                    </div>
+                    <div className="p-3 bg-orange-500/10 border border-orange-500/30 rounded text-center">
+                      <div className="text-2xl font-bold text-orange-400">{ancestryData.summary?.spawnersFound || 0}</div>
+                      <div className="text-xs text-muted-foreground">Spawners Found</div>
+                    </div>
+                    <div className="p-3 bg-purple-500/10 border border-purple-500/30 rounded text-center">
+                      <div className="text-2xl font-bold text-purple-400">{ancestryData.summary?.totalTokensInAncestry || 0}</div>
+                      <div className="text-xs text-muted-foreground">Tokens Created</div>
+                    </div>
+                    <div className="p-3 bg-blue-500/10 border border-blue-500/30 rounded text-center">
+                      <div className="text-2xl font-bold text-blue-400">{ancestryData.summary?.addedToWatchdog || 0}</div>
+                      <div className="text-xs text-muted-foreground">Added to Watchdog</div>
+                    </div>
+                  </div>
+
+                  {/* Creator Wallet */}
+                  <div className="p-3 bg-background/50 rounded border border-green-500/20 mb-4">
+                    <div className="text-xs text-muted-foreground mb-1">Token Creator</div>
+                    <a 
+                      href={`https://solscan.io/account/${ancestryData.creatorWallet}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="font-mono text-sm text-primary hover:underline"
+                    >
+                      {ancestryData.creatorWallet}
+                    </a>
+                  </div>
+
+                  {/* Spawners Found */}
+                  {ancestryData.spawners?.length > 0 && (
+                    <div className="space-y-2">
+                      <div className="font-semibold text-green-400 flex items-center gap-2">
+                        <Zap className="h-4 w-4" />
+                        Spawner Wallets (with mint history)
+                      </div>
+                      {ancestryData.spawners.map((spawner: any, i: number) => (
+                        <div key={i} className="p-3 bg-background/50 rounded border border-green-500/20">
+                          <div className="flex items-center justify-between mb-2">
+                            <div className="flex items-center gap-2">
+                              <Badge variant={spawner.addedToWatchdog ? "default" : "secondary"} className="text-xs">
+                                {spawner.addedToWatchdog ? '✅ In Watchdog' : '⚠️ Not Added'}
+                              </Badge>
+                              <Badge variant="outline" className="text-xs">Depth {spawner.depth}</Badge>
+                              <Badge className="bg-orange-500/20 text-orange-300 text-xs">
+                                {spawner.tokensCreated} tokens
+                              </Badge>
+                            </div>
+                            <span className="text-xs text-muted-foreground">
+                              ← {spawner.fundedAmount} SOL
+                            </span>
+                          </div>
+                          <a 
+                            href={spawner.solscanUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="font-mono text-xs text-primary hover:underline block mb-2"
+                          >
+                            {spawner.wallet}
+                          </a>
+                          
+                          {/* Tokens Created by this Spawner */}
+                          {spawner.tokensList?.length > 0 && (
+                            <div className="mt-2 pt-2 border-t border-green-500/20">
+                              <div className="text-xs text-muted-foreground mb-1">Tokens Created:</div>
+                              <div className="flex flex-wrap gap-1">
+                                {spawner.tokensList.slice(0, 10).map((token: any, j: number) => (
+                                  <a
+                                    key={j}
+                                    href={`https://dexscreener.com/solana/${token.mint}`}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="inline-flex items-center gap-1 px-2 py-0.5 bg-green-500/10 rounded text-[10px] text-green-300 hover:bg-green-500/20"
+                                  >
+                                    ${token.symbol}
+                                    <ExternalLink className="h-2 w-2" />
+                                  </a>
+                                ))}
+                                {spawner.tokensList.length > 10 && (
+                                  <span className="text-[10px] text-muted-foreground">
+                                    +{spawner.tokensList.length - 10} more
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  {/* Full Ancestry (collapsible) */}
+                  {ancestryData.ancestry?.length > 0 && (
+                    <div className="mt-4 pt-4 border-t border-green-500/30">
+                      <details>
+                        <summary className="text-sm font-semibold cursor-pointer text-muted-foreground hover:text-foreground">
+                          🌳 View Full Ancestry Chain ({ancestryData.ancestry.length} wallets)
+                        </summary>
+                        <div className="mt-2 space-y-1 max-h-[300px] overflow-y-auto">
+                          {ancestryData.ancestry.map((node: any, i: number) => (
+                            <div 
+                              key={node.wallet}
+                              className="flex items-center gap-2 p-2 bg-background/50 rounded text-xs"
+                              style={{ marginLeft: `${node.depth * 16}px` }}
+                            >
+                              <span className="text-muted-foreground">D{node.depth}</span>
+                              {node.tokensCreated > 0 && (
+                                <Badge className="bg-orange-500/20 text-orange-300 text-[10px]">
+                                  {node.tokensCreated} tokens
+                                </Badge>
+                              )}
+                              <a 
+                                href={`https://solscan.io/account/${node.wallet}`}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="font-mono text-primary hover:underline"
+                              >
+                                {node.wallet.slice(0, 8)}...{node.wallet.slice(-4)}
+                              </a>
+                              {node.fundedAmount > 0 && (
+                                <span className="text-muted-foreground">← {node.fundedAmount} SOL</span>
+                              )}
+                            </div>
+                          ))}
+                        </div>
+                      </details>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
 
             {/* SPAWNER WALLETS RESULTS - THE MAIN FEATURE */}
             {spawnerData && (

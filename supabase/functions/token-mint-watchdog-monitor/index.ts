@@ -3179,6 +3179,247 @@ Deno.serve(async (req) => {
       )
     }
 
+    // TRACE ANCESTRY FROM TOKEN & AUTO-ADD TO WATCHDOG
+    // Starting from a token: find creator → trace 5 levels back → check each for mints → add spawners to watchdog
+    if (action === 'trace_ancestry_add_watchdog' && tokenMint) {
+      const heliusApiKey = Deno.env.get('HELIUS_API_KEY')
+      if (!heliusApiKey) {
+        return new Response(
+          JSON.stringify({ error: 'HELIUS_API_KEY not configured' }),
+          { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        )
+      }
+
+      const maxDepth = 5
+      console.log(`🌳 ANCESTRY TRACE: Token ${tokenMint} → tracing ${maxDepth} levels back`)
+
+      // Step 1: Get creator wallet from Solana Tracker
+      let creatorWallet: string | null = null
+      let tokenSymbol = 'Unknown'
+      let tokenName = 'Unknown'
+      
+      try {
+        const stResponse = await fetch(
+          `https://data.solanatracker.io/tokens/${tokenMint}`,
+          { headers: { 'x-api-key': solanaTrackerApiKey } }
+        )
+        
+        if (stResponse.ok) {
+          const stData = await stResponse.json()
+          creatorWallet = stData.token?.creation?.creator || stData.pools?.[0]?.deployer || null
+          tokenSymbol = stData.token?.symbol || 'Unknown'
+          tokenName = stData.token?.name || 'Unknown'
+          console.log(`✅ Creator wallet: ${creatorWallet}`)
+        }
+      } catch (e) {
+        console.log('Solana Tracker failed, using Helius fallback')
+      }
+
+      // Fallback to Helius
+      if (!creatorWallet) {
+        const tokenTxUrl = `https://api.helius.xyz/v0/addresses/${tokenMint}/transactions?api-key=${heliusApiKey}&limit=20`
+        const tokenTxResponse = await fetch(tokenTxUrl)
+        if (tokenTxResponse.ok) {
+          const txs = await tokenTxResponse.json()
+          txs.sort((a: any, b: any) => (a.timestamp || 0) - (b.timestamp || 0))
+          creatorWallet = txs[0]?.feePayer || null
+        }
+      }
+
+      if (!creatorWallet) {
+        return new Response(
+          JSON.stringify({ error: 'Could not find creator wallet for this token' }),
+          { status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        )
+      }
+
+      // Step 2: Trace ancestry (5 levels back)
+      const TOKEN_PROGRAM_IDS = new Set([
+        'TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA',
+        'TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb'
+      ])
+      const WSOL_MINT = 'So11111111111111111111111111111111111111112'
+
+      interface AncestryNode {
+        wallet: string
+        depth: number
+        fundedBy: string | null
+        fundedAmount: number
+        tokensCreated: number
+        tokensList: Array<{ mint: string, symbol: string, name: string, timestamp: string }>
+      }
+
+      const ancestry: AncestryNode[] = []
+      const visited = new Set<string>()
+      let currentWallet = creatorWallet
+      let currentDepth = 0
+
+      while (currentWallet && currentDepth <= maxDepth && !visited.has(currentWallet)) {
+        visited.add(currentWallet)
+        console.log(`🔍 Depth ${currentDepth}: ${currentWallet.slice(0, 8)}...`)
+
+        try {
+          const walletTxUrl = `https://api.helius.xyz/v0/addresses/${currentWallet}/transactions?api-key=${heliusApiKey}&limit=100`
+          const walletTxResponse = await fetch(walletTxUrl)
+          if (!walletTxResponse.ok) break
+
+          const walletTxs = await walletTxResponse.json()
+          walletTxs.sort((a: any, b: any) => (a.timestamp || 0) - (b.timestamp || 0))
+
+          // Find funder (largest incoming SOL)
+          let funder: string | null = null
+          let fundedAmount = 0
+          const fundingSources = new Map<string, number>()
+
+          for (const tx of walletTxs) {
+            for (const transfer of (tx.nativeTransfers || [])) {
+              if (transfer.toUserAccount?.toLowerCase() === currentWallet.toLowerCase() &&
+                  transfer.fromUserAccount?.toLowerCase() !== currentWallet.toLowerCase() &&
+                  transfer.fromUserAccount) {
+                const amount = (transfer.amount || 0) / 1e9
+                if (amount >= 0.01) {
+                  fundingSources.set(transfer.fromUserAccount, (fundingSources.get(transfer.fromUserAccount) || 0) + amount)
+                }
+              }
+            }
+          }
+
+          for (const [wallet, amount] of fundingSources.entries()) {
+            if (amount > fundedAmount) {
+              funder = wallet
+              fundedAmount = amount
+            }
+          }
+
+          // Check for token mints (spawner detection)
+          const mintedTokens = new Map<string, { symbol: string, name: string, timestamp: string }>()
+
+          for (const tx of walletTxs) {
+            if (mintedTokens.size >= 20) break
+            if (tx.feePayer?.toLowerCase() !== currentWallet.toLowerCase()) continue
+
+            for (const inst of (tx.instructions || [])) {
+              if (!TOKEN_PROGRAM_IDS.has(inst.programId)) continue
+              const t = inst.parsed?.type
+              if (t !== 'initializeMint' && t !== 'initializeMint2') continue
+
+              const candidateMint =
+                inst.parsed?.info?.mint ||
+                inst.parsed?.info?.account ||
+                inst.parsed?.info?.newAccount ||
+                (Array.isArray(inst.accounts) ? inst.accounts[0] : null)
+
+              if (typeof candidateMint === 'string' && candidateMint.length >= 32 && candidateMint !== WSOL_MINT && !mintedTokens.has(candidateMint)) {
+                // Try to get token info
+                let sym = 'Unknown'
+                let nm = 'Unknown'
+                try {
+                  const metaRes = await fetch(`https://data.solanatracker.io/tokens/${candidateMint}`, { headers: { 'x-api-key': solanaTrackerApiKey } })
+                  if (metaRes.ok) {
+                    const meta = await metaRes.json()
+                    sym = meta.token?.symbol || 'Unknown'
+                    nm = meta.token?.name || 'Unknown'
+                  }
+                } catch {}
+                
+                mintedTokens.set(candidateMint, {
+                  symbol: sym,
+                  name: nm,
+                  timestamp: new Date((tx.timestamp || 0) * 1000).toISOString()
+                })
+              }
+            }
+          }
+
+          const tokensList = Array.from(mintedTokens.entries()).map(([mint, info]) => ({
+            mint,
+            symbol: info.symbol,
+            name: info.name,
+            timestamp: info.timestamp
+          }))
+
+          ancestry.push({
+            wallet: currentWallet,
+            depth: currentDepth,
+            fundedBy: funder,
+            fundedAmount: parseFloat(fundedAmount.toFixed(4)),
+            tokensCreated: mintedTokens.size,
+            tokensList
+          })
+
+          console.log(`   → Created ${mintedTokens.size} tokens, funded by ${funder?.slice(0, 8) || 'unknown'}...`)
+
+          // Move up
+          if (funder && !visited.has(funder)) {
+            currentWallet = funder
+            currentDepth++
+            await new Promise(r => setTimeout(r, 200))
+          } else {
+            break
+          }
+
+        } catch (error) {
+          console.error(`Error at depth ${currentDepth}:`, error)
+          break
+        }
+      }
+
+      // Step 3: Find spawners (wallets with mint history) and add to watchdog
+      const spawners = ancestry.filter(n => n.tokensCreated > 0)
+      const addedToWatchdog: string[] = []
+
+      for (const spawner of spawners) {
+        try {
+          const { error: upsertError } = await supabase
+            .from('mint_monitor_wallets')
+            .upsert({
+              wallet_address: spawner.wallet,
+              label: `Spawner (${spawner.tokensCreated} tokens) from ${tokenSymbol}`,
+              source_token: tokenMint,
+              is_cron_enabled: true,
+              updated_at: new Date().toISOString()
+            }, { onConflict: 'wallet_address' })
+
+          if (!upsertError) {
+            addedToWatchdog.push(spawner.wallet)
+            console.log(`✅ Added ${spawner.wallet.slice(0, 8)}... to watchdog`)
+          }
+        } catch (e) {
+          console.log(`Failed to add ${spawner.wallet} to watchdog:`, e)
+        }
+      }
+
+      return new Response(
+        JSON.stringify({
+          success: true,
+          tokenMint,
+          tokenSymbol,
+          tokenName,
+          creatorWallet,
+          message: `Traced ${ancestry.length} wallets, found ${spawners.length} spawners with mint history. Added ${addedToWatchdog.length} to watchdog.`,
+          ancestry,
+          spawners: spawners.map(s => ({
+            wallet: s.wallet,
+            depth: s.depth,
+            tokensCreated: s.tokensCreated,
+            tokensList: s.tokensList,
+            fundedBy: s.fundedBy,
+            fundedAmount: s.fundedAmount,
+            solscanUrl: `https://solscan.io/account/${s.wallet}`,
+            addedToWatchdog: addedToWatchdog.includes(s.wallet)
+          })),
+          addedToWatchdog,
+          summary: {
+            totalWalletsTraced: ancestry.length,
+            spawnersFound: spawners.length,
+            totalTokensInAncestry: ancestry.reduce((sum, n) => sum + n.tokensCreated, 0),
+            addedToWatchdog: addedToWatchdog.length
+          }
+        }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      )
+    }
+
     return new Response(
       JSON.stringify({ error: 'Invalid action. Use "analyze" with tokenMint or "scan"' }),
       { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
