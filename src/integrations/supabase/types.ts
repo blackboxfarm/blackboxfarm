@@ -3479,6 +3479,86 @@ export type Database = {
         }
         Relationships: []
       }
+      mint_monitor_detections: {
+        Row: {
+          created_at: string
+          detected_at: string
+          id: string
+          notified_at: string | null
+          token_image: string | null
+          token_mint: string
+          token_name: string | null
+          token_symbol: string | null
+          wallet_id: string
+        }
+        Insert: {
+          created_at?: string
+          detected_at?: string
+          id?: string
+          notified_at?: string | null
+          token_image?: string | null
+          token_mint: string
+          token_name?: string | null
+          token_symbol?: string | null
+          wallet_id: string
+        }
+        Update: {
+          created_at?: string
+          detected_at?: string
+          id?: string
+          notified_at?: string | null
+          token_image?: string | null
+          token_mint?: string
+          token_name?: string | null
+          token_symbol?: string | null
+          wallet_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "mint_monitor_detections_wallet_id_fkey"
+            columns: ["wallet_id"]
+            isOneToOne: false
+            referencedRelation: "mint_monitor_wallets"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      mint_monitor_wallets: {
+        Row: {
+          created_at: string
+          id: string
+          is_cron_enabled: boolean
+          label: string | null
+          last_scanned_at: string | null
+          source_token: string | null
+          updated_at: string
+          user_id: string
+          wallet_address: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          is_cron_enabled?: boolean
+          label?: string | null
+          last_scanned_at?: string | null
+          source_token?: string | null
+          updated_at?: string
+          user_id: string
+          wallet_address: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          is_cron_enabled?: boolean
+          label?: string | null
+          last_scanned_at?: string | null
+          source_token?: string | null
+          updated_at?: string
+          user_id?: string
+          wallet_address?: string
+        }
+        Relationships: []
+      }
       monitored_wallets: {
         Row: {
           created_at: string
