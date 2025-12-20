@@ -6,6 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
 import { Loader2, RefreshCw, Eye, Trash2, ExternalLink, AlertTriangle, Clock, Zap } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
+import { CronStatusPanel } from "./CronStatusPanel";
 
 interface MintMonitorWallet {
   id: string;
@@ -171,25 +172,29 @@ export const WatchdogWalletsList = () => {
   const activeWallets = wallets.filter(w => w.is_cron_enabled).length;
 
   return (
-    <Card>
-      <CardHeader className="flex flex-row items-center justify-between">
-        <CardTitle className="flex items-center gap-2">
-          <Eye className="h-5 w-5 text-blue-500" />
-          Watchdog Wallets
-        </CardTitle>
-        <div className="flex items-center gap-2">
-          <Badge variant="outline">{wallets.length} wallets</Badge>
-          <Badge variant="secondary" className="bg-green-500/20 text-green-300">
-            {activeWallets} active
-          </Badge>
-          <Badge variant="secondary" className="bg-purple-500/20 text-purple-300">
-            {totalDetections} detections
-          </Badge>
-          <Button variant="outline" size="sm" onClick={fetchWallets}>
-            <RefreshCw className="h-3 w-3" />
-          </Button>
-        </div>
-      </CardHeader>
+    <div className="space-y-4">
+      {/* Cron Status Panel */}
+      <CronStatusPanel />
+      
+      <Card>
+        <CardHeader className="flex flex-row items-center justify-between">
+          <CardTitle className="flex items-center gap-2">
+            <Eye className="h-5 w-5 text-blue-500" />
+            Watchdog Wallets
+          </CardTitle>
+          <div className="flex items-center gap-2">
+            <Badge variant="outline">{wallets.length} wallets</Badge>
+            <Badge variant="secondary" className="bg-green-500/20 text-green-300">
+              {activeWallets} active
+            </Badge>
+            <Badge variant="secondary" className="bg-purple-500/20 text-purple-300">
+              {totalDetections} detections
+            </Badge>
+            <Button variant="outline" size="sm" onClick={fetchWallets}>
+              <RefreshCw className="h-3 w-3" />
+            </Button>
+          </div>
+        </CardHeader>
       <CardContent className="space-y-3">
         {wallets.map((wallet) => {
           const walletDetections = detections[wallet.id] || [];
@@ -314,6 +319,7 @@ export const WatchdogWalletsList = () => {
           );
         })}
       </CardContent>
-    </Card>
+      </Card>
+    </div>
   );
 };
