@@ -1770,42 +1770,100 @@ Deno.serve(async (req) => {
       const visited = new Set<string>()
       const queue: Array<{ wallet: string, depth: number, fundedBy: string | null, fundedAmount: number, fundingTx: string | null, fundingTime: string | null }> = []
       
-      // Step 1: Get the mint wallet from the token
-      console.log(`Finding mint wallet for token...`)
-      const tokenTxUrl = `https://api.helius.xyz/v0/addresses/${tokenMint}/transactions?api-key=${heliusApiKey}&limit=50`
-      const tokenTxResponse = await fetch(tokenTxUrl)
-      
-      if (!tokenTxResponse.ok) {
-        return new Response(
-          JSON.stringify({ error: `Failed to fetch token transactions: ${tokenTxResponse.status}` }),
-          { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-        )
-      }
-      
-      const tokenTxs = await tokenTxResponse.json()
-      tokenTxs.sort((a: any, b: any) => (a.timestamp || 0) - (b.timestamp || 0))
+      // Step 1: Get the ACTUAL creator wallet using Solana Tracker API first (most reliable for pump.fun)
+      console.log(`Finding creator wallet for token using Solana Tracker API...`)
       
       let mintWallet: string | null = null
       let mintTxSignature: string | null = null
       let mintTimestamp: string | null = null
+      let creatorSource = 'unknown'
       
-      for (const tx of tokenTxs.slice(0, 10)) {
-        if (tx.feePayer && !mintWallet) {
-          mintWallet = tx.feePayer
-          mintTxSignature = tx.signature
-          mintTimestamp = tx.timestamp ? new Date(tx.timestamp * 1000).toISOString() : null
-          break
+      // Try Solana Tracker API first - it has the correct creator info
+      try {
+        const stResponse = await fetch(
+          `https://data.solanatracker.io/tokens/${tokenMint}`,
+          { headers: { 'x-api-key': solanaTrackerApiKey } }
+        )
+        
+        if (stResponse.ok) {
+          const stData = await stResponse.json()
+          if (stData.token?.creation?.creator) {
+            mintWallet = stData.token.creation.creator
+            mintTxSignature = stData.token.creation.created_tx || null
+            mintTimestamp = stData.token.creation.created_time 
+              ? new Date(stData.token.creation.created_time * 1000).toISOString() 
+              : null
+            creatorSource = 'solana-tracker'
+            console.log(`✅ Found creator from Solana Tracker: ${mintWallet}`)
+          } else if (stData.pools?.[0]?.deployer) {
+            mintWallet = stData.pools[0].deployer
+            creatorSource = 'solana-tracker-deployer'
+            console.log(`✅ Found deployer from Solana Tracker: ${mintWallet}`)
+          }
+        } else {
+          console.log(`Solana Tracker API returned ${stResponse.status}, falling back to Helius`)
+        }
+      } catch (stError) {
+        console.log(`Solana Tracker API error, falling back to Helius:`, stError)
+      }
+      
+      // Fallback to Helius if Solana Tracker didn't work
+      if (!mintWallet) {
+        console.log(`Falling back to Helius to find creator...`)
+        const tokenTxUrl = `https://api.helius.xyz/v0/addresses/${tokenMint}/transactions?api-key=${heliusApiKey}&limit=50`
+        const tokenTxResponse = await fetch(tokenTxUrl)
+        
+        if (tokenTxResponse.ok) {
+          const tokenTxs = await tokenTxResponse.json()
+          tokenTxs.sort((a: any, b: any) => (a.timestamp || 0) - (b.timestamp || 0))
+          
+          // Look for the actual signer, not just feePayer (feePayer can be a program)
+          for (const tx of tokenTxs.slice(0, 10)) {
+            // Check accountData for signers (non-program accounts that signed)
+            if (tx.accountData) {
+              for (const acc of tx.accountData) {
+                // Skip known program addresses and PDAs
+                if (acc.account && 
+                    !acc.account.endsWith('pump') && // Skip pump.fun token addresses
+                    !acc.account.startsWith('6EF8') && // Skip pump.fun program
+                    acc.nativeBalanceChange !== 0) {
+                  // This might be a user wallet
+                  const potentialCreator = acc.account
+                  // Verify it's not the token mint itself
+                  if (potentialCreator !== tokenMint && potentialCreator.length === 44) {
+                    mintWallet = potentialCreator
+                    mintTxSignature = tx.signature
+                    mintTimestamp = tx.timestamp ? new Date(tx.timestamp * 1000).toISOString() : null
+                    creatorSource = 'helius-accountData'
+                    console.log(`Found potential creator from accountData: ${mintWallet}`)
+                    break
+                  }
+                }
+              }
+              if (mintWallet) break
+            }
+            
+            // Fallback to feePayer (less reliable for pump.fun)
+            if (!mintWallet && tx.feePayer && tx.feePayer.length === 44) {
+              mintWallet = tx.feePayer
+              mintTxSignature = tx.signature
+              mintTimestamp = tx.timestamp ? new Date(tx.timestamp * 1000).toISOString() : null
+              creatorSource = 'helius-feePayer'
+              console.log(`Using feePayer as creator (fallback): ${mintWallet}`)
+              break
+            }
+          }
         }
       }
       
       if (!mintWallet) {
         return new Response(
-          JSON.stringify({ error: 'Could not find mint wallet for this token' }),
+          JSON.stringify({ error: 'Could not find creator wallet for this token' }),
           { status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
         )
       }
       
-      console.log(`✅ Mint wallet: ${mintWallet}`)
+      console.log(`✅ Creator wallet: ${mintWallet} (source: ${creatorSource})`)
       
       // Initialize the mint wallet as root
       walletTree.set(mintWallet, {
@@ -2149,26 +2207,59 @@ Deno.serve(async (req) => {
         isLeaf: boolean
       }
 
-      // Step 1: Find the creator/mint wallet
+      // Step 1: Find the ACTUAL creator wallet using Solana Tracker API first
       console.log(`Finding creator wallet for token...`)
-      const tokenTxUrl = `https://api.helius.xyz/v0/addresses/${tokenMint}/transactions?api-key=${heliusApiKey}&limit=50`
-      const tokenTxResponse = await fetch(tokenTxUrl)
-      
-      if (!tokenTxResponse.ok) {
-        return new Response(
-          JSON.stringify({ error: `Failed to fetch token transactions: ${tokenTxResponse.status}` }),
-          { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-        )
-      }
-      
-      const tokenTxs = await tokenTxResponse.json()
-      tokenTxs.sort((a: any, b: any) => (a.timestamp || 0) - (b.timestamp || 0))
       
       let creatorWallet: string | null = null
-      for (const tx of tokenTxs.slice(0, 10)) {
-        if (tx.feePayer && !creatorWallet) {
-          creatorWallet = tx.feePayer
-          break
+      let creatorSource = 'unknown'
+      
+      // Try Solana Tracker API first - it has the correct creator info
+      try {
+        const stResponse = await fetch(
+          `https://data.solanatracker.io/tokens/${tokenMint}`,
+          { headers: { 'x-api-key': solanaTrackerApiKey } }
+        )
+        
+        if (stResponse.ok) {
+          const stData = await stResponse.json()
+          if (stData.token?.creation?.creator) {
+            creatorWallet = stData.token.creation.creator
+            creatorSource = 'solana-tracker'
+            console.log(`✅ Found creator from Solana Tracker: ${creatorWallet}`)
+          } else if (stData.pools?.[0]?.deployer) {
+            creatorWallet = stData.pools[0].deployer
+            creatorSource = 'solana-tracker-deployer'
+            console.log(`✅ Found deployer from Solana Tracker: ${creatorWallet}`)
+          }
+        } else {
+          console.log(`Solana Tracker API returned ${stResponse.status}, falling back to Helius`)
+        }
+      } catch (stError) {
+        console.log(`Solana Tracker API error, falling back to Helius:`, stError)
+      }
+      
+      // Fallback to Helius if Solana Tracker didn't work
+      if (!creatorWallet) {
+        console.log(`Falling back to Helius to find creator...`)
+        const tokenTxUrl = `https://api.helius.xyz/v0/addresses/${tokenMint}/transactions?api-key=${heliusApiKey}&limit=50`
+        const tokenTxResponse = await fetch(tokenTxUrl)
+        
+        if (tokenTxResponse.ok) {
+          const tokenTxs = await tokenTxResponse.json()
+          tokenTxs.sort((a: any, b: any) => (a.timestamp || 0) - (b.timestamp || 0))
+          
+          for (const tx of tokenTxs.slice(0, 10)) {
+            if (tx.feePayer && !creatorWallet) {
+              creatorWallet = tx.feePayer
+              creatorSource = 'helius-feePayer'
+              break
+            }
+          }
+        } else {
+          return new Response(
+            JSON.stringify({ error: `Failed to fetch token transactions: ${tokenTxResponse.status}` }),
+            { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          )
         }
       }
       
@@ -2179,7 +2270,7 @@ Deno.serve(async (req) => {
         )
       }
 
-      console.log(`✅ Creator wallet: ${creatorWallet}`)
+      console.log(`✅ Creator wallet: ${creatorWallet} (source: ${creatorSource})`)
 
       const moneyTree = new Map<string, MoneyNode>()
       const visited = new Set<string>()
