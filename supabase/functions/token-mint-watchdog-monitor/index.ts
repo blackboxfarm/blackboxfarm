@@ -1986,7 +1986,9 @@ Deno.serve(async (req) => {
           
           for (const tx of walletTxs) {
             const nativeTransfers = tx.nativeTransfers || []
+            const accountData = tx.accountData || []
             
+            // Method 1: Parse nativeTransfers (direct SOL transfers)
             for (const transfer of nativeTransfers) {
               const amount = (transfer.amount || 0) / 1e9
               
@@ -2013,6 +2015,63 @@ Deno.serve(async (req) => {
               // Outgoing transfer
               if (transfer.fromUserAccount?.toLowerCase() === wallet.toLowerCase()) {
                 totalSent += amount
+              }
+            }
+            
+            // Method 2: Parse accountData for balance changes (backup for when nativeTransfers is empty)
+            // This catches program invocations and more complex funding patterns
+            if (nativeTransfers.length === 0 && accountData.length > 0) {
+              // Check if this wallet gained balance
+              const walletAccountData = accountData.find((a: any) => a.account?.toLowerCase() === wallet.toLowerCase())
+              if (walletAccountData && walletAccountData.nativeBalanceChange > 0) {
+                const amount = walletAccountData.nativeBalanceChange / 1e9
+                totalReceived += amount
+                
+                // Find who sent SOL (account with negative balance change)
+                for (const acc of accountData) {
+                  if (acc.account && 
+                      acc.account.toLowerCase() !== wallet.toLowerCase() && 
+                      acc.nativeBalanceChange < 0 &&
+                      acc.account.length === 44) {
+                    const sender = acc.account
+                    const sendAmount = Math.abs(acc.nativeBalanceChange) / 1e9
+                    
+                    if (sendAmount >= 0.01) {
+                      const existing = funders.get(sender) || { totalSol: 0, firstTx: tx.signature, firstTime: tx.timestamp || 0 }
+                      existing.totalSol += sendAmount
+                      if (!existing.firstTime || (tx.timestamp && tx.timestamp < existing.firstTime)) {
+                        existing.firstTx = tx.signature
+                        existing.firstTime = tx.timestamp || 0
+                      }
+                      funders.set(sender, existing)
+                      console.log(`  📥 Found funding via accountData: ${sender.slice(0, 8)}... sent ${sendAmount.toFixed(4)} SOL`)
+                    }
+                  }
+                }
+              }
+              
+              // Check for outgoing from this wallet
+              if (walletAccountData && walletAccountData.nativeBalanceChange < 0) {
+                totalSent += Math.abs(walletAccountData.nativeBalanceChange) / 1e9
+              }
+            }
+            
+            // Method 3: Also check feePayer as potential funder if wallet gained significant balance
+            if (funders.size === 0 && tx.feePayer && tx.feePayer !== wallet) {
+              const walletAccountData = accountData.find((a: any) => a.account?.toLowerCase() === wallet.toLowerCase())
+              if (walletAccountData && walletAccountData.nativeBalanceChange > 0) {
+                const amount = walletAccountData.nativeBalanceChange / 1e9
+                if (amount >= 0.01) {
+                  const sender = tx.feePayer
+                  const existing = funders.get(sender) || { totalSol: 0, firstTx: tx.signature, firstTime: tx.timestamp || 0 }
+                  existing.totalSol += amount
+                  if (!existing.firstTime || (tx.timestamp && tx.timestamp < existing.firstTime)) {
+                    existing.firstTx = tx.signature
+                    existing.firstTime = tx.timestamp || 0
+                  }
+                  funders.set(sender, existing)
+                  console.log(`  📥 Found funding via feePayer: ${sender.slice(0, 8)}... sent ${amount.toFixed(4)} SOL`)
+                }
               }
             }
           }
