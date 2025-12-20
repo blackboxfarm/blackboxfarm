@@ -36,13 +36,21 @@ export const WatchdogWalletsList = () => {
   const [expandedWallet, setExpandedWallet] = useState<string | null>(null);
 
   const fetchWallets = async () => {
+    if (!user?.id) {
+      setWallets([]);
+      setDetections({});
+      setLoading(false);
+      return;
+    }
+
     try {
       setLoading(true);
-      
+
       // Fetch wallets for current user
       const { data: walletsData, error: walletsError } = await supabase
         .from('mint_monitor_wallets')
         .select('*')
+        .eq('user_id', user.id)
         .order('created_at', { ascending: false });
 
       if (walletsError) throw walletsError;
@@ -66,6 +74,8 @@ export const WatchdogWalletsList = () => {
           grouped[d.wallet_id].push(d);
         });
         setDetections(grouped);
+      } else {
+        setDetections({});
       }
     } catch (err: any) {
       toast.error("Failed to load watchdog wallets: " + err.message);
@@ -75,8 +85,15 @@ export const WatchdogWalletsList = () => {
   };
 
   useEffect(() => {
+    if (!user?.id) return;
     fetchWallets();
-  }, []);
+  }, [user?.id]);
+
+  useEffect(() => {
+    const handler = () => fetchWallets();
+    window.addEventListener('mint-monitor-wallets-changed', handler);
+    return () => window.removeEventListener('mint-monitor-wallets-changed', handler);
+  }, [user?.id]);
 
   const manualScan = async (walletAddress: string, walletId: string) => {
     setScanningWallet(walletId);
@@ -150,21 +167,24 @@ export const WatchdogWalletsList = () => {
 
   if (wallets.length === 0) {
     return (
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Eye className="h-5 w-5" />
-            Watchdog Wallets
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="text-center py-8 text-muted-foreground">
-            <AlertTriangle className="h-8 w-8 mx-auto mb-3 opacity-50" />
-            <p>No wallets in watchdog yet.</p>
-            <p className="text-sm">Use "Trace Ancestry → Add to Watchdog" to add spawner wallets.</p>
-          </div>
-        </CardContent>
-      </Card>
+      <div className="space-y-4">
+        <CronStatusPanel />
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Eye className="h-5 w-5" />
+              Watchdog Wallets
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="text-center py-8 text-muted-foreground">
+              <AlertTriangle className="h-8 w-8 mx-auto mb-3 opacity-50" />
+              <p>No wallets in watchdog yet.</p>
+              <p className="text-sm">Click "Add to Watchdog" on a spawner candidate to start monitoring.</p>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
     );
   }
 

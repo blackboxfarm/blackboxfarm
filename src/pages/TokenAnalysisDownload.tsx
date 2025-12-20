@@ -359,13 +359,33 @@ const TokenAnalysisDownload = () => {
     }
   };
 
-  // Add wallet to watchdog cron (placeholder - would need DB integration)
+  // Add wallet to watchdog (mint monitor) with cron enabled
   const addToCronMonitor = async (walletAddress: string) => {
-    // For now, just copy to clipboard and show instructions
-    navigator.clipboard.writeText(walletAddress);
-    toast.success("Wallet copied to clipboard!", {
-      description: "Add this wallet to your mint monitor watchlist"
-    });
+    if (!user?.id) {
+      toast.error("Please log in to add wallets to the watchdog");
+      return;
+    }
+
+    try {
+      const { error } = await supabase.functions.invoke("mint-monitor-scanner", {
+        body: {
+          action: "add_to_cron",
+          walletAddress,
+          userId: user.id,
+          sourceToken: tokenToTrace.trim() || undefined
+        }
+      });
+
+      if (error) throw error;
+
+      toast.success("Added to Watchdog", {
+        description: `${walletAddress.slice(0, 8)}...${walletAddress.slice(-4)} will be scanned automatically.`
+      });
+
+      window.dispatchEvent(new Event("mint-monitor-wallets-changed"));
+    } catch (err: any) {
+      toast.error("Failed to add to watchdog: " + (err?.message || "Unknown error"));
+    }
   };
 
   // TRACE ANCESTRY FROM TOKEN & AUTO-ADD SPAWNERS TO WATCHDOG
@@ -1234,10 +1254,10 @@ ALL WALLET STATISTICS
                                 variant="secondary"
                                 onClick={() => addToCronMonitor(candidate.wallet)}
                                 className="text-xs"
-                                title="Add this wallet to the automated monitoring cron job"
+                                title="Add this wallet to the Watchdog (automated mint monitor)"
                               >
                                 <Eye className="h-3 w-3 mr-1" />
-                                Add to Cron
+                                Add to Watchdog
                               </Button>
                             </div>
                           </div>
