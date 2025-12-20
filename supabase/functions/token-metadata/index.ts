@@ -1,5 +1,5 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import { PublicKey } from 'https://esm.sh/@solana/web3.js@1.98.4';
+import { PublicKey } from 'https://esm.sh/@solana/web3.js@1.95.3?target=deno';
 
 const METAPLEX_PROGRAM_ID = new PublicKey('metaqbxxUerdq28cj1RbAWkYQm3ybzjb6a8bt518x1s');
 
