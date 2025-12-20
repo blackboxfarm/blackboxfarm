@@ -1,6 +1,6 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2?target=deno";
-import { Connection, Keypair } from "https://esm.sh/@solana/web3.js@1.95.3?target=deno";
+import { Connection, Keypair } from "npm:@solana/web3.js@1.95.3";
 import bs58 from "https://esm.sh/bs58@6.0.0";
 
 const corsHeaders = {
@@ -50,7 +50,7 @@ async function refundToFunder(connection: Connection, owner: Keypair): Promise<s
     const dest = await getLatestInboundFunder(connection, owner.publicKey);
     if (!dest) return null;
     
-    const { SystemProgram, Transaction } = await import("https://esm.sh/@solana/web3.js@1.95.3?target=deno");
+    const { SystemProgram, Transaction } = await import("npm:@solana/web3.js@1.95.3");
     const ix = SystemProgram.transfer({ fromPubkey: owner.publicKey, toPubkey: dest, lamports: spendable });
     const { blockhash, lastValidBlockHeight } = await connection.getLatestBlockhash("confirmed");
     const tx = new Transaction({ recentBlockhash: blockhash, feePayer: owner.publicKey }).add(ix);
