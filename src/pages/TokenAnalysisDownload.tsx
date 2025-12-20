@@ -1025,16 +1025,6 @@ ALL WALLET STATISTICS
                             </div>
                           </div>
                           
-                          {/* Cron Explanation */}
-                          <div className="mt-3 p-2 bg-muted/50 rounded text-[10px] text-muted-foreground border-t border-border">
-                            <div className="font-semibold text-foreground mb-1">📊 What "Add to Cron" does:</div>
-                            <ul className="space-y-1 ml-2">
-                              <li>• Scans this wallet every <span className="text-primary">5-15 minutes</span> for new token mints</li>
-                              <li>• Uses <span className="text-yellow-400">~2-4 Helius API credits</span> per scan (fetches last 100 txs)</li>
-                              <li>• Daily load: <span className="text-orange-400">~200-600 credits/wallet</span> (depends on cron frequency)</li>
-                              <li>• Alerts you when a new token is created by this wallet</li>
-                            </ul>
-                          </div>
                         </div>
                       ))}
                     </div>

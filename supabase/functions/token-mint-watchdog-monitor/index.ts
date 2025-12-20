@@ -2940,8 +2940,10 @@ Deno.serve(async (req) => {
           const recentTokens: TokenInfo[] = []
           
           // Look for initializeMint or pump.fun create instructions
+          // Also extract token mints directly from tx type and events
           for (const tx of walletTxs) {
             const instructions = tx.instructions || []
+            const events = tx.events || {}
             
             const isPumpCreate = instructions.some((inst: any) => 
               inst.programId === '6EF8rrecthR5Dkzon8Nwu78hRvfCKubJ14M5uBEwF6P' ||
@@ -2949,85 +2951,122 @@ Deno.serve(async (req) => {
             )
             
             const isTokenMint = instructions.some((inst: any) =>
-              inst.programId === 'TokenkgQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA' &&
+              inst.programId === 'TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA' &&
               (inst.parsed?.type === 'initializeMint' || inst.parsed?.type === 'initializeMint2')
             )
             
-            if (isPumpCreate || isTokenMint) {
-              tokensCreated++
+            // Check if description mentions "created" or "minted"
+            const desc = (tx.description || '').toLowerCase()
+            const isCreationTx = desc.includes('created') || desc.includes('minted') || desc.includes('initialized')
+            
+            if (isPumpCreate || isTokenMint || isCreationTx) {
+              // Try multiple methods to extract the token mint
+              let tokenMintAddr: string | null = null
               
-              // Try to extract the token mint from the transaction
+              // Method 1: tokenTransfers
               const tokenTransfers = tx.tokenTransfers || []
               for (const t of tokenTransfers) {
-                if (t.mint && t.mint.length === 44) {
-                  const tokenMintAddr = t.mint
-                  const timestampStr = new Date(tx.timestamp * 1000).toISOString()
-                  
-                  // Fetch token metadata from Solana Tracker
-                  let tokenName = 'Unknown'
-                  let tokenSymbol = 'Unknown'
-                  let athUsd: number | null = null
-                  let currentPriceUsd: number | null = null
-                  let marketCap: number | null = null
-                  let launchpad: string | null = isPumpCreate ? 'pump.fun' : null
-                  
-                  try {
-                    const tokenMetaRes = await fetch(
-                      `https://data.solanatracker.io/tokens/${tokenMintAddr}`,
-                      { headers: { 'x-api-key': solanaTrackerApiKey } }
-                    )
-                    if (tokenMetaRes.ok) {
-                      const meta = await tokenMetaRes.json()
-                      tokenName = meta.token?.name || 'Unknown'
-                      tokenSymbol = meta.token?.symbol || 'Unknown'
-                      currentPriceUsd = meta.pools?.[0]?.price?.usd || null
-                      marketCap = meta.pools?.[0]?.marketCap?.usd || null
-                      
-                      // Detect launchpad from pool market
-                      const market = meta.pools?.[0]?.market || ''
-                      if (market === 'pumpfun' || tokenMintAddr.endsWith('pump')) {
-                        launchpad = 'pump.fun'
-                      } else if (market === 'raydium') {
-                        launchpad = 'raydium'
-                      } else if (market === 'bonkfun' || market.includes('bonk')) {
-                        launchpad = 'bonk.fun'
+                if (t.mint && t.mint.length >= 32 && t.mint.length <= 50) {
+                  tokenMintAddr = t.mint
+                  break
+                }
+              }
+              
+              // Method 2: events.token
+              if (!tokenMintAddr && events.token?.mint) {
+                tokenMintAddr = events.token.mint
+              }
+              
+              // Method 3: Look in accountData for new token accounts
+              if (!tokenMintAddr) {
+                const accountData = tx.accountData || []
+                for (const acc of accountData) {
+                  if (acc.tokenBalanceChanges && acc.tokenBalanceChanges.length > 0) {
+                    const change = acc.tokenBalanceChanges[0]
+                    if (change.mint) {
+                      tokenMintAddr = change.mint
+                      break
+                    }
+                  }
+                }
+              }
+              
+              // Method 4: Extract from description (e.g. "created $TICKER (mint)")
+              if (!tokenMintAddr) {
+                const mintMatch = desc.match(/([A-Za-z0-9]{32,50}pump)/i) || desc.match(/([A-Za-z0-9]{32,50})/i)
+                if (mintMatch) {
+                  tokenMintAddr = mintMatch[1]
+                }
+              }
+
+              if (tokenMintAddr && tokenMintAddr.length >= 32) {
+                tokensCreated++
+                const timestampStr = new Date(tx.timestamp * 1000).toISOString()
+                
+                // Fetch token metadata from Solana Tracker
+                let tokenName = 'Unknown'
+                let tokenSymbol = 'Unknown'
+                let athUsd: number | null = null
+                let currentPriceUsd: number | null = null
+                let marketCap: number | null = null
+                let launchpad: string | null = isPumpCreate ? 'pump.fun' : null
+                
+                try {
+                  const tokenMetaRes = await fetch(
+                    `https://data.solanatracker.io/tokens/${tokenMintAddr}`,
+                    { headers: { 'x-api-key': solanaTrackerApiKey } }
+                  )
+                  if (tokenMetaRes.ok) {
+                    const meta = await tokenMetaRes.json()
+                    tokenName = meta.token?.name || 'Unknown'
+                    tokenSymbol = meta.token?.symbol || 'Unknown'
+                    currentPriceUsd = meta.pools?.[0]?.price?.usd || null
+                    marketCap = meta.pools?.[0]?.marketCap?.usd || null
+                    
+                    // Detect launchpad from pool market
+                    const market = meta.pools?.[0]?.market || ''
+                    if (market === 'pumpfun' || tokenMintAddr.endsWith('pump')) {
+                      launchpad = 'pump.fun'
+                    } else if (market === 'raydium') {
+                      launchpad = 'raydium'
+                    } else if (market === 'bonkfun' || market.includes('bonk')) {
+                      launchpad = 'bonk.fun'
+                    }
+                  }
+                } catch (e) {
+                  console.log(`Could not fetch metadata for ${tokenMintAddr}`)
+                }
+                
+                // Try to get ATH from DexScreener
+                try {
+                  const dexRes = await fetch(`https://api.dexscreener.com/latest/dex/tokens/${tokenMintAddr}`)
+                  if (dexRes.ok) {
+                    const dexData = await dexRes.json()
+                    const pair = dexData.pairs?.[0]
+                    if (pair) {
+                      if (!currentPriceUsd && pair.priceUsd) {
+                        currentPriceUsd = parseFloat(pair.priceUsd)
+                      }
+                      if (!marketCap && pair.marketCap) {
+                        marketCap = pair.marketCap
+                      }
+                      // Estimate ATH from 24h high if available
+                      if (pair.priceChange?.h24) {
+                        const changePercent = pair.priceChange.h24
+                        if (changePercent < 0 && currentPriceUsd) {
+                          athUsd = currentPriceUsd / (1 + changePercent/100)
+                        } else {
+                          athUsd = currentPriceUsd
+                        }
                       }
                     }
-                  } catch (e) {
-                    console.log(`Could not fetch metadata for ${tokenMintAddr}`)
                   }
-                  
-                  // Try to get ATH from DexScreener
-                  try {
-                    const dexRes = await fetch(`https://api.dexscreener.com/latest/dex/tokens/${tokenMintAddr}`)
-                    if (dexRes.ok) {
-                      const dexData = await dexRes.json()
-                      const pair = dexData.pairs?.[0]
-                      if (pair) {
-                        // DexScreener provides priceChange data, ATH can be estimated
-                        // For now use current price, ATH tracking would need historical data
-                        if (!currentPriceUsd && pair.priceUsd) {
-                          currentPriceUsd = parseFloat(pair.priceUsd)
-                        }
-                        if (!marketCap && pair.marketCap) {
-                          marketCap = pair.marketCap
-                        }
-                        // Estimate ATH from 24h high if available
-                        if (pair.priceChange?.h24) {
-                          const changePercent = pair.priceChange.h24
-                          // If price dropped, ATH was higher
-                          if (changePercent < 0 && currentPriceUsd) {
-                            athUsd = currentPriceUsd / (1 + changePercent/100)
-                          } else {
-                            athUsd = currentPriceUsd // Current might be ATH
-                          }
-                        }
-                      }
-                    }
-                  } catch (e) {
-                    console.log(`Could not fetch DexScreener for ${tokenMintAddr}`)
-                  }
-                  
+                } catch (e) {
+                  console.log(`Could not fetch DexScreener for ${tokenMintAddr}`)
+                }
+                
+                // Avoid duplicates
+                if (!recentTokens.some(t => t.mint === tokenMintAddr)) {
                   recentTokens.push({
                     mint: tokenMintAddr,
                     name: tokenName,
@@ -3041,11 +3080,10 @@ Deno.serve(async (req) => {
                     solscanUrl: `https://solscan.io/token/${tokenMintAddr}`,
                     pumpfunUrl: launchpad === 'pump.fun' ? `https://pump.fun/${tokenMintAddr}` : null
                   })
-                  
-                  // Small delay to avoid rate limits
-                  await new Promise(r => setTimeout(r, 100))
-                  break
                 }
+                
+                // Small delay to avoid rate limits
+                await new Promise(r => setTimeout(r, 100))
               }
             }
           }
