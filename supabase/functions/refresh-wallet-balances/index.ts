@@ -1,6 +1,6 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2?target=deno";
-import { Connection, PublicKey } from "https://esm.sh/@solana/web3.js@1.95.3";
+import { Connection, PublicKey } from "https://esm.sh/@solana/web3.js@1.95.3?target=deno";
 import { TOKEN_PROGRAM_ID } from "https://esm.sh/@solana/spl-token@0.4.6";
 
 // KILL SWITCH - Set to true to disable function

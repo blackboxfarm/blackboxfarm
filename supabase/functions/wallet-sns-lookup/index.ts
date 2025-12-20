@@ -1,5 +1,5 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
-import { Connection, PublicKey } from 'https://esm.sh/@solana/web3.js@1.95.8'
+import { Connection, PublicKey } from 'https://esm.sh/@solana/web3.js@1.95.8?target=deno'
 import { getTwitterRegistry, NameRegistryState } from 'https://esm.sh/@bonfida/spl-name-service@0.1.51'
 
 const corsHeaders = {

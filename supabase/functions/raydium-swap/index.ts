@@ -1,6 +1,6 @@
 import "https://deno.land/x/xhr@0.1.0/mod.ts";
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import { Connection, PublicKey, VersionedTransaction, Transaction, Keypair, SystemProgram, TransactionInstruction } from "https://esm.sh/@solana/web3.js@1.95.3";
+import { Connection, PublicKey, VersionedTransaction, Transaction, Keypair, SystemProgram, TransactionInstruction } from "https://esm.sh/@solana/web3.js@1.95.3?target=deno";
 import { SecureStorage } from '../_shared/encryption.ts';
 // Lightweight ATA helper (avoid @solana/spl-token dependency)
 const TOKEN_PROGRAM_ID = new PublicKey("TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA");
