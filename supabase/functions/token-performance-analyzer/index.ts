@@ -1,5 +1,5 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
-import { Connection, PublicKey } from 'https://esm.sh/@solana/web3.js@1.98.4'
+import { Connection, PublicKey } from 'https://esm.sh/@solana/web3.js@1.95.3?target=deno'
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',

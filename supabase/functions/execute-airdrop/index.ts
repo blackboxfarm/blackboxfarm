@@ -7,7 +7,7 @@ import {
   Transaction,
   TransactionInstruction,
   ComputeBudgetProgram
-} from "https://esm.sh/@solana/web3.js@1.98.0";
+} from "https://esm.sh/@solana/web3.js@1.95.3?target=deno";
 import { 
   createTransferInstruction,
   getAssociatedTokenAddress,
