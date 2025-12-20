@@ -1,35 +1,35 @@
-import { useState } from "react";
+import React, { useState, Suspense, lazy } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { BlackBoxAuth } from "@/components/blackbox/BlackBoxAuth";
-import { CampaignDashboard } from "@/components/blackbox/CampaignDashboard";
-import { FeeCalculator } from "@/components/blackbox/FeeCalculator";
 import { AuthButton } from "@/components/auth/AuthButton";
 import { RequireAuth } from "@/components/RequireAuth";
-import VolumeSimulator from "@/components/VolumeSimulator";
 import { FarmBanner } from "@/components/FarmBanner";
-import { SubscriptionManager } from "@/components/blackbox/SubscriptionManager";
-import { WalletGenerator } from "@/components/WalletGenerator";
-import { SecurityDashboard } from "@/components/security/SecurityDashboard";
-import { NotificationCenter } from "@/components/NotificationCenter";
-import { AnalyticsDashboard } from "@/components/AnalyticsDashboard";
-import { ReferralDashboard } from "@/components/blackbox/ReferralDashboard";
-import { EnhancedWalletView } from "@/components/blackbox/EnhancedWalletView";
-import CommunityWalletDashboard from "@/components/blackbox/CommunityWalletDashboard";
-import { CommunityWalletPublic } from "@/components/blackbox/CommunityWalletPublic";
-import { OverviewTab } from "@/components/blackbox/OverviewTab";
 import { useAuth } from "@/hooks/useAuth";
 import { useUserRoles } from "@/hooks/useUserRoles";
-
 import { Button } from "@/components/ui/button";
 import { useNavigate } from "react-router-dom";
 import { Shield } from "lucide-react";
 import { SolPriceDisplay } from "@/components/SolPriceDisplay";
-import { WalletMonitor } from "@/components/WalletMonitor";
-import { CopyTradingConfig } from "@/components/copy-trading/CopyTradingConfig";
-import { CopyTradingDashboard } from "@/components/copy-trading/CopyTradingDashboard";
-import { BreadCrumbsInterface } from "@/components/breadcrumbs/BreadCrumbsInterface";
-import { BaglessHoldersReport } from "@/components/BaglessHoldersReport";
+import { NotificationCenter } from "@/components/NotificationCenter";
+import { LazyLoader } from "@/components/ui/lazy-loader";
+
+// Lazy load all tab components
+const OverviewTab = lazy(() => import("@/components/blackbox/OverviewTab").then(m => ({ default: m.OverviewTab })));
+const CampaignDashboard = lazy(() => import("@/components/blackbox/CampaignDashboard").then(m => ({ default: m.CampaignDashboard })));
+const WalletGenerator = lazy(() => import("@/components/WalletGenerator").then(m => ({ default: m.WalletGenerator })));
+const WalletMonitor = lazy(() => import("@/components/WalletMonitor").then(m => ({ default: m.WalletMonitor })));
+const BreadCrumbsInterface = lazy(() => import("@/components/breadcrumbs/BreadCrumbsInterface").then(m => ({ default: m.BreadCrumbsInterface })));
+const CopyTradingConfig = lazy(() => import("@/components/copy-trading/CopyTradingConfig").then(m => ({ default: m.CopyTradingConfig })));
+const CopyTradingDashboard = lazy(() => import("@/components/copy-trading/CopyTradingDashboard").then(m => ({ default: m.CopyTradingDashboard })));
+const CommunityWalletDashboard = lazy(() => import("@/components/blackbox/CommunityWalletDashboard"));
+const CommunityWalletPublic = lazy(() => import("@/components/blackbox/CommunityWalletPublic").then(m => ({ default: m.CommunityWalletPublic })));
+const VolumeSimulator = lazy(() => import("@/components/VolumeSimulator"));
+const FeeCalculator = lazy(() => import("@/components/blackbox/FeeCalculator").then(m => ({ default: m.FeeCalculator })));
+const AnalyticsDashboard = lazy(() => import("@/components/AnalyticsDashboard").then(m => ({ default: m.AnalyticsDashboard })));
+const BaglessHoldersReport = lazy(() => import("@/components/BaglessHoldersReport").then(m => ({ default: m.BaglessHoldersReport })));
+const ReferralDashboard = lazy(() => import("@/components/blackbox/ReferralDashboard").then(m => ({ default: m.ReferralDashboard })));
+const EnhancedWalletView = lazy(() => import("@/components/blackbox/EnhancedWalletView").then(m => ({ default: m.EnhancedWalletView })));
+const SecurityDashboard = lazy(() => import("@/components/security/SecurityDashboard").then(m => ({ default: m.SecurityDashboard })));
 
 export default function BlackBox() {
   const [activeTab, setActiveTab] = useState("overview");
@@ -85,7 +85,7 @@ export default function BlackBox() {
 
         {/* Main Navigation */}
         <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-          <TabsList className="w-full">{/* Remove grid constraints to allow flex-wrap */}
+          <TabsList className="w-full">
             <TabsTrigger value="overview">Overview</TabsTrigger>
             {isAdminView && <TabsTrigger value="dashboard">Dashboard</TabsTrigger>}
             {isAdminView && <TabsTrigger value="watcher">Watcher</TabsTrigger>}
@@ -102,82 +102,108 @@ export default function BlackBox() {
           </TabsList>
 
           <TabsContent value="overview" className="space-y-6">
-            <OverviewTab />
+            <Suspense fallback={<LazyLoader />}>
+              <OverviewTab />
+            </Suspense>
           </TabsContent>
 
           <TabsContent value="dashboard" className="space-y-6">
             <RequireAuth>
-              <CampaignDashboard />
-              <WalletGenerator />
+              <Suspense fallback={<LazyLoader />}>
+                <CampaignDashboard />
+                <WalletGenerator />
+              </Suspense>
             </RequireAuth>
           </TabsContent>
 
           <TabsContent value="watcher" className="space-y-6">
-            <WalletMonitor />
+            <Suspense fallback={<LazyLoader />}>
+              <WalletMonitor />
+            </Suspense>
           </TabsContent>
 
           <TabsContent value="breadcrumbs" className="space-y-6">
-            <BreadCrumbsInterface />
+            <Suspense fallback={<LazyLoader />}>
+              <BreadCrumbsInterface />
+            </Suspense>
           </TabsContent>
 
           <TabsContent value="copy-trading" className="space-y-6">
-            <Tabs defaultValue="config" className="w-full">
-              <TabsList className="grid w-full grid-cols-2">
-                <TabsTrigger value="config">Configuration</TabsTrigger>
-                <TabsTrigger value="dashboard">Dashboard</TabsTrigger>
-              </TabsList>
-              
-              <TabsContent value="config" className="mt-6">
-                <CopyTradingConfig />
-              </TabsContent>
-              
-              <TabsContent value="dashboard" className="mt-6">
-                <CopyTradingDashboard />
-              </TabsContent>
-            </Tabs>
+            <Suspense fallback={<LazyLoader />}>
+              <Tabs defaultValue="config" className="w-full">
+                <TabsList className="grid w-full grid-cols-2">
+                  <TabsTrigger value="config">Configuration</TabsTrigger>
+                  <TabsTrigger value="dashboard">Dashboard</TabsTrigger>
+                </TabsList>
+                
+                <TabsContent value="config" className="mt-6">
+                  <CopyTradingConfig />
+                </TabsContent>
+                
+                <TabsContent value="dashboard" className="mt-6">
+                  <CopyTradingDashboard />
+                </TabsContent>
+              </Tabs>
+            </Suspense>
           </TabsContent>
 
           <TabsContent value="community" className="space-y-6">
-            <RequireAuth fallback={<CommunityWalletPublic />}>
-              <CommunityWalletDashboard />
-            </RequireAuth>
+            <Suspense fallback={<LazyLoader />}>
+              <RequireAuth fallback={<CommunityWalletPublic />}>
+                <CommunityWalletDashboard />
+              </RequireAuth>
+            </Suspense>
           </TabsContent>
 
           <TabsContent value="simulator" className="space-y-6">
-            <Card>
-              <CardHeader>
-                <CardTitle>Volume Bot Simulator</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <VolumeSimulator />
-              </CardContent>
-            </Card>
+            <Suspense fallback={<LazyLoader />}>
+              <Card>
+                <CardHeader>
+                  <CardTitle>Volume Bot Simulator</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <VolumeSimulator />
+                </CardContent>
+              </Card>
+            </Suspense>
           </TabsContent>
 
           <TabsContent value="fees" className="space-y-6">
-            <FeeCalculator />
+            <Suspense fallback={<LazyLoader />}>
+              <FeeCalculator />
+            </Suspense>
           </TabsContent>
 
           <TabsContent value="analytics" className="space-y-6">
-            <AnalyticsDashboard />
+            <Suspense fallback={<LazyLoader />}>
+              <AnalyticsDashboard />
+            </Suspense>
           </TabsContent>
 
           <TabsContent value="holders" className="space-y-6">
-            <div className="w-full md:w-1/2 md:mx-auto px-[5px] md:px-6">
-              <BaglessHoldersReport />
-            </div>
+            <Suspense fallback={<LazyLoader />}>
+              <div className="w-full md:w-1/2 md:mx-auto px-[5px] md:px-6">
+                <BaglessHoldersReport />
+              </div>
+            </Suspense>
           </TabsContent>
 
           <TabsContent value="referrals" className="space-y-6">
-            <ReferralDashboard />
+            <Suspense fallback={<LazyLoader />}>
+              <ReferralDashboard />
+            </Suspense>
           </TabsContent>
 
           <TabsContent value="wallets" className="space-y-6">
-            <EnhancedWalletView />
+            <Suspense fallback={<LazyLoader />}>
+              <EnhancedWalletView />
+            </Suspense>
           </TabsContent>
 
           <TabsContent value="security" className="space-y-6">
-            <SecurityDashboard />
+            <Suspense fallback={<LazyLoader />}>
+              <SecurityDashboard />
+            </Suspense>
           </TabsContent>
         </Tabs>
 

@@ -46,7 +46,7 @@ export default defineConfig(({ mode }) => ({
         ]
       },
       workbox: {
-        maximumFileSizeToCacheInBytes: 10 * 1024 * 1024, // 10 MiB
+        maximumFileSizeToCacheInBytes: 10 * 1024 * 1024,
         globPatterns: ['**/*.{js,css,html,ico,png,svg,woff,woff2}'],
         runtimeCaching: [
           {
@@ -56,7 +56,7 @@ export default defineConfig(({ mode }) => ({
               cacheName: 'helius-api-cache',
               expiration: {
                 maxEntries: 50,
-                maxAgeSeconds: 300 // 5 minutes
+                maxAgeSeconds: 300
               }
             }
           }
@@ -69,4 +69,39 @@ export default defineConfig(({ mode }) => ({
       "@": path.resolve(__dirname, "./src"),
     },
   },
+  build: {
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          // Core React/Router - loaded first
+          'vendor-react': ['react', 'react-dom', 'react-router-dom'],
+          // UI components library
+          'vendor-ui': ['@radix-ui/react-tabs', '@radix-ui/react-dialog', '@radix-ui/react-dropdown-menu', '@radix-ui/react-tooltip'],
+          // Query/State management
+          'vendor-query': ['@tanstack/react-query'],
+          // Charts
+          'vendor-charts': ['recharts'],
+          // Admin components - only loaded when accessing /super-admin
+          'admin': [
+            './src/pages/SuperAdmin.tsx',
+          ],
+          // Security components
+          'security': [
+            './src/components/security/SecurityDashboard.tsx',
+          ],
+          // Trading components
+          'trading': [
+            './src/components/trading/RealTimeTrading.tsx',
+            './src/components/copy-trading/CopyTradingConfig.tsx',
+            './src/components/copy-trading/CopyTradingDashboard.tsx',
+          ],
+          // Blackbox components
+          'blackbox': [
+            './src/components/blackbox/CampaignDashboard.tsx',
+            './src/components/blackbox/EnhancedWalletView.tsx',
+          ],
+        }
+      }
+    }
+  }
 }));
