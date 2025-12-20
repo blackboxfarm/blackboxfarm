@@ -18,6 +18,8 @@ const TokenAnalysisDownload = () => {
   const [genealogyLoading, setGenealogyLoading] = useState(false);
   const [offspringLoading, setOffspringLoading] = useState(false);
   const [fullGenealogyLoading, setFullGenealogyLoading] = useState(false);
+  const [spawnerLoading, setSpawnerLoading] = useState(false);
+  const [spawnerData, setSpawnerData] = useState<any>(null);
   const [analysisData, setAnalysisData] = useState<any>(null);
   const [offspringData, setOffspringData] = useState<any>(null);
   const [heliusData, setHeliusData] = useState<any>(null);
@@ -32,6 +34,7 @@ const TokenAnalysisDownload = () => {
   const [bondingCurveData, setBondingCurveData] = useState<any>(null);
   const [bondingLoading, setBondingLoading] = useState(false);
   const [calcCurvePercent, setCalcCurvePercent] = useState(54);
+  const [checkingWallet, setCheckingWallet] = useState<string | null>(null);
 
   const tokenMint = "DyqgbSyWcwRw17Y3SvAtmP4o73n1nes5PzwAEjvVpump";
   
@@ -290,6 +293,76 @@ const TokenAnalysisDownload = () => {
     } finally {
       setMoneyFlowLoading(false);
     }
+  };
+
+  // IDENTIFY SPAWNER WALLETS - Main feature
+  const identifySpawnerWallets = async () => {
+    if (!tokenToTrace.trim()) {
+      toast.error("Enter a token mint address");
+      return;
+    }
+    
+    setSpawnerLoading(true);
+    setSpawnerData(null);
+    try {
+      const { data, error } = await supabase.functions.invoke("token-mint-watchdog-monitor", {
+        body: { 
+          action: "identify_spawner_wallets", 
+          tokenMint: tokenToTrace.trim()
+        }
+      });
+
+      if (error) throw error;
+      setSpawnerData(data);
+      
+      const candidates = data.spawnerCandidates?.length || 0;
+      if (candidates > 0) {
+        toast.success(`Found ${candidates} spawner wallet candidates!`);
+      } else {
+        toast.info(`Traced ${data.summary?.totalWalletsTraced || 0} wallets, no strong spawner candidates found`);
+      }
+    } catch (err: any) {
+      toast.error("Failed to identify spawners: " + err.message);
+    } finally {
+      setSpawnerLoading(false);
+    }
+  };
+
+  // Check a specific wallet for new mints (manual check)
+  const checkWalletForMints = async (walletAddress: string) => {
+    setCheckingWallet(walletAddress);
+    try {
+      const { data, error } = await supabase.functions.invoke("token-mint-watchdog-monitor", {
+        body: { 
+          action: "check_wallet_mints", 
+          wallets: [walletAddress]
+        }
+      });
+
+      if (error) throw error;
+      
+      const tokens = data.mintedTokens || [];
+      if (tokens.length > 0) {
+        toast.success(`Found ${tokens.length} tokens created by this wallet!`, {
+          description: tokens.slice(0, 3).map((t: any) => `${t.tokenSymbol}`).join(', ')
+        });
+      } else {
+        toast.info("No token mints found for this wallet");
+      }
+    } catch (err: any) {
+      toast.error("Failed to check wallet: " + err.message);
+    } finally {
+      setCheckingWallet(null);
+    }
+  };
+
+  // Add wallet to watchdog cron (placeholder - would need DB integration)
+  const addToCronMonitor = async (walletAddress: string) => {
+    // For now, just copy to clipboard and show instructions
+    navigator.clipboard.writeText(walletAddress);
+    toast.success("Wallet copied to clipboard!", {
+      description: "Add this wallet to your mint monitor watchlist"
+    });
   };
 
   const downloadMoneyFlowJSON = () => {
@@ -698,7 +771,7 @@ ALL WALLET STATISTICS
               />
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
               <Button onClick={traceTokenGenealogy} disabled={genealogyLoading} variant="outline">
                 {genealogyLoading ? (
                   <>
@@ -713,7 +786,7 @@ ALL WALLET STATISTICS
                 )}
               </Button>
 
-              <Button onClick={traceFullGenealogy} disabled={fullGenealogyLoading} className="bg-gradient-to-r from-primary to-purple-500 hover:from-primary/90 hover:to-purple-500/90">
+              <Button onClick={traceFullGenealogy} disabled={fullGenealogyLoading} variant="outline">
                 {fullGenealogyLoading ? (
                   <>
                     <Loader2 className="h-4 w-4 mr-2 animate-spin" />
@@ -727,7 +800,7 @@ ALL WALLET STATISTICS
                 )}
               </Button>
 
-              <Button onClick={traceMoneyFlow} disabled={moneyFlowLoading} className="bg-gradient-to-r from-orange-500 to-red-500 hover:from-orange-500/90 hover:to-red-500/90">
+              <Button onClick={traceMoneyFlow} disabled={moneyFlowLoading} variant="outline">
                 {moneyFlowLoading ? (
                   <>
                     <Loader2 className="h-4 w-4 mr-2 animate-spin" />
@@ -740,7 +813,191 @@ ALL WALLET STATISTICS
                   </>
                 )}
               </Button>
+
+              {/* MAIN FEATURE: Find Spawner Wallets */}
+              <Button 
+                onClick={identifySpawnerWallets} 
+                disabled={spawnerLoading} 
+                className="bg-gradient-to-r from-yellow-500 to-orange-500 hover:from-yellow-500/90 hover:to-orange-500/90 text-black font-bold"
+              >
+                {spawnerLoading ? (
+                  <>
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                    Finding Spawners...
+                  </>
+                ) : (
+                  <>
+                    <Zap className="h-4 w-4 mr-2" />
+                    🎯 Find Spawner Wallets
+                  </>
+                )}
+              </Button>
             </div>
+
+            {/* SPAWNER WALLETS RESULTS - THE MAIN FEATURE */}
+            {spawnerData && (
+              <div className="space-y-4 pt-4 border-t-2 border-yellow-500/50">
+                <div className="p-4 bg-gradient-to-r from-yellow-500/20 to-orange-500/20 border border-yellow-500/50 rounded-lg">
+                  <div className="flex items-center gap-3 mb-3">
+                    <Zap className="h-8 w-8 text-yellow-500" />
+                    <div>
+                      <div className="font-bold text-lg text-yellow-400">Spawner Wallet Detection</div>
+                      <div className="text-sm text-muted-foreground">{spawnerData.message}</div>
+                    </div>
+                  </div>
+
+                  {/* Summary */}
+                  <div className="grid grid-cols-3 gap-3 mb-4">
+                    <div className="p-3 bg-background/50 rounded text-center">
+                      <div className="text-2xl font-bold text-primary">{spawnerData.summary?.totalWalletsTraced || 0}</div>
+                      <div className="text-xs text-muted-foreground">Wallets Traced</div>
+                    </div>
+                    <div className="p-3 bg-background/50 rounded text-center">
+                      <div className="text-2xl font-bold text-yellow-400">{spawnerData.spawnerCandidates?.length || 0}</div>
+                      <div className="text-xs text-muted-foreground">Spawner Candidates</div>
+                    </div>
+                    <div className="p-3 bg-background/50 rounded text-center">
+                      <div className="text-2xl font-bold text-orange-400">{spawnerData.summary?.totalTokensFound || 0}</div>
+                      <div className="text-xs text-muted-foreground">Tokens Found</div>
+                    </div>
+                  </div>
+
+                  {/* Spawner Candidates List */}
+                  {spawnerData.spawnerCandidates?.length > 0 && (
+                    <div className="space-y-3">
+                      <div className="text-sm font-semibold text-yellow-400">
+                        🎯 Most Likely Spawner Wallets (monitor these for new mints):
+                      </div>
+                      {spawnerData.spawnerCandidates.map((candidate: any, i: number) => (
+                        <div 
+                          key={candidate.wallet} 
+                          className={`p-4 rounded-lg border ${
+                            candidate.isLikelySpawner 
+                              ? 'bg-yellow-500/10 border-yellow-500/50' 
+                              : 'bg-muted/50 border-muted-foreground/30'
+                          }`}
+                        >
+                          <div className="flex items-start justify-between gap-4">
+                            <div className="flex-1">
+                              <div className="flex items-center gap-2 mb-2">
+                                <Badge variant={candidate.isLikelySpawner ? "default" : "secondary"} className="text-xs">
+                                  #{candidate.rank}
+                                </Badge>
+                                {candidate.isLikelySpawner && (
+                                  <Badge className="bg-yellow-500 text-black text-xs">HIGH PRIORITY</Badge>
+                                )}
+                                <Badge variant="outline" className="text-xs">
+                                  Score: {candidate.spawnerScore}
+                                </Badge>
+                                <Badge variant="outline" className="text-xs">
+                                  Depth {candidate.depth}
+                                </Badge>
+                              </div>
+                              
+                              <a 
+                                href={`https://solscan.io/account/${candidate.wallet}`}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="font-mono text-sm text-primary hover:underline flex items-center gap-1"
+                              >
+                                {candidate.wallet}
+                                <ExternalLink className="h-3 w-3" />
+                              </a>
+                              
+                              <div className="mt-2 text-xs text-muted-foreground space-y-1">
+                                {candidate.spawnerReason?.map((reason: string, j: number) => (
+                                  <div key={j} className="flex items-center gap-1">
+                                    <span className="text-yellow-500">•</span> {reason}
+                                  </div>
+                                ))}
+                              </div>
+
+                              {candidate.tokensCreated > 0 && (
+                                <div className="mt-2">
+                                  <span className="text-xs text-orange-400 font-semibold">
+                                    Created {candidate.tokensCreated} token(s)
+                                  </span>
+                                </div>
+                              )}
+                            </div>
+
+                            {/* Action Buttons */}
+                            <div className="flex flex-col gap-2">
+                              <Button 
+                                size="sm" 
+                                variant="outline"
+                                onClick={() => checkWalletForMints(candidate.wallet)}
+                                disabled={checkingWallet === candidate.wallet}
+                                className="text-xs"
+                              >
+                                {checkingWallet === candidate.wallet ? (
+                                  <Loader2 className="h-3 w-3 animate-spin" />
+                                ) : (
+                                  <>
+                                    <Search className="h-3 w-3 mr-1" />
+                                    Check Now
+                                  </>
+                                )}
+                              </Button>
+                              <Button 
+                                size="sm" 
+                                variant="secondary"
+                                onClick={() => addToCronMonitor(candidate.wallet)}
+                                className="text-xs"
+                              >
+                                <Eye className="h-3 w-3 mr-1" />
+                                Add to Cron
+                              </Button>
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  {/* Full Chain (collapsible) */}
+                  {spawnerData.fullChain?.length > 0 && (
+                    <div className="mt-4 pt-4 border-t border-yellow-500/30">
+                      <details>
+                        <summary className="text-sm font-semibold cursor-pointer text-muted-foreground hover:text-foreground">
+                          📜 View Full Wallet Chain ({spawnerData.fullChain.length} wallets)
+                        </summary>
+                        <div className="mt-2 space-y-1 max-h-[300px] overflow-y-auto">
+                          {spawnerData.fullChain.map((node: any, i: number) => (
+                            <div 
+                              key={node.wallet}
+                              className="flex items-center gap-2 p-2 bg-background/50 rounded text-xs"
+                              style={{ marginLeft: `${node.depth * 16}px` }}
+                            >
+                              <span className="text-muted-foreground">D{node.depth}</span>
+                              {node.spawnerScore > 0 && (
+                                <Badge variant="secondary" className="text-[10px]">
+                                  Score: {node.spawnerScore}
+                                </Badge>
+                              )}
+                              <a 
+                                href={`https://solscan.io/account/${node.wallet}`}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="font-mono text-primary hover:underline"
+                              >
+                                {node.wallet.slice(0, 8)}...{node.wallet.slice(-4)}
+                              </a>
+                              {node.tokensCreated > 0 && (
+                                <span className="text-orange-400">({node.tokensCreated} tokens)</span>
+                              )}
+                              {node.fundedAmount > 0 && (
+                                <span className="text-muted-foreground">← {node.fundedAmount} SOL</span>
+                              )}
+                            </div>
+                          ))}
+                        </div>
+                      </details>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
 
             {/* Money Flow Results - FOLLOW THE MONEY */}
             {moneyFlowData && (

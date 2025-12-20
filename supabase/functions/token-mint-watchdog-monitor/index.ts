@@ -2783,6 +2783,304 @@ Deno.serve(async (req) => {
       )
     }
 
+    // IDENTIFY SPAWNER WALLETS - Main feature: trace token → find wallets likely spawning new mint wallets
+    if (action === 'identify_spawner_wallets' && tokenMint) {
+      const heliusApiKey = Deno.env.get('HELIUS_API_KEY')
+      if (!heliusApiKey) {
+        return new Response(
+          JSON.stringify({ error: 'HELIUS_API_KEY not configured' }),
+          { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        )
+      }
+
+      console.log(`🎯 SPAWNER DETECTION: Analyzing token ${tokenMint}`)
+
+      // Step 1: Get the creator wallet using Solana Tracker API
+      let mintWallet: string | null = null
+      
+      try {
+        const stResponse = await fetch(
+          `https://data.solanatracker.io/tokens/${tokenMint}`,
+          { headers: { 'x-api-key': solanaTrackerApiKey } }
+        )
+        
+        if (stResponse.ok) {
+          const stData = await stResponse.json()
+          mintWallet = stData.token?.creation?.creator || stData.pools?.[0]?.deployer || null
+          console.log(`✅ Found mint wallet: ${mintWallet}`)
+        }
+      } catch (e) {
+        console.log('Solana Tracker failed, using Helius fallback')
+      }
+
+      // Fallback to Helius
+      if (!mintWallet) {
+        const tokenTxUrl = `https://api.helius.xyz/v0/addresses/${tokenMint}/transactions?api-key=${heliusApiKey}&limit=20`
+        const tokenTxResponse = await fetch(tokenTxUrl)
+        if (tokenTxResponse.ok) {
+          const txs = await tokenTxResponse.json()
+          txs.sort((a: any, b: any) => (a.timestamp || 0) - (b.timestamp || 0))
+          mintWallet = txs[0]?.feePayer || null
+        }
+      }
+
+      if (!mintWallet) {
+        return new Response(
+          JSON.stringify({ error: 'Could not find mint wallet for this token' }),
+          { status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        )
+      }
+
+      // Step 2: Trace backwards to find funding chain
+      interface FundingNode {
+        wallet: string
+        depth: number
+        fundedBy: string | null
+        fundedAmount: number
+        tokensCreated: number
+        recentTokens: Array<{ mint: string, name: string, symbol: string, timestamp: string }>
+        spawnerScore: number
+        spawnerReason: string[]
+      }
+
+      const fundingChain: FundingNode[] = []
+      const visited = new Set<string>()
+      let currentWallet = mintWallet
+      let currentDepth = 0
+      const maxDepth = 10
+
+      console.log(`📍 Starting backward trace from mint wallet: ${mintWallet}`)
+
+      while (currentWallet && currentDepth <= maxDepth && !visited.has(currentWallet)) {
+        visited.add(currentWallet)
+        
+        console.log(`🔍 Depth ${currentDepth}: Analyzing ${currentWallet.slice(0, 8)}...`)
+        
+        // Fetch wallet transactions
+        const walletTxUrl = `https://api.helius.xyz/v0/addresses/${currentWallet}/transactions?api-key=${heliusApiKey}&limit=100`
+        
+        try {
+          const walletTxResponse = await fetch(walletTxUrl)
+          if (!walletTxResponse.ok) {
+            console.error(`Failed to fetch: ${walletTxResponse.status}`)
+            break
+          }
+          
+          const walletTxs = await walletTxResponse.json()
+          walletTxs.sort((a: any, b: any) => (a.timestamp || 0) - (b.timestamp || 0))
+          
+          console.log(`📦 Got ${walletTxs.length} transactions`)
+
+          // Find who funded this wallet (largest incoming SOL)
+          let funder: string | null = null
+          let fundedAmount = 0
+          const fundingSources = new Map<string, number>()
+          
+          for (const tx of walletTxs) {
+            const nativeTransfers = tx.nativeTransfers || []
+            const accountData = tx.accountData || []
+            
+            // Method 1: nativeTransfers
+            for (const transfer of nativeTransfers) {
+              if (transfer.toUserAccount?.toLowerCase() === currentWallet.toLowerCase() &&
+                  transfer.fromUserAccount &&
+                  transfer.fromUserAccount.toLowerCase() !== currentWallet.toLowerCase()) {
+                const amount = (transfer.amount || 0) / 1e9
+                if (amount >= 0.01) {
+                  const sender = transfer.fromUserAccount
+                  fundingSources.set(sender, (fundingSources.get(sender) || 0) + amount)
+                }
+              }
+            }
+            
+            // Method 2: accountData balance changes (if nativeTransfers empty)
+            if (nativeTransfers.length === 0 && accountData.length > 0) {
+              const walletAccountData = accountData.find((a: any) => a.account?.toLowerCase() === currentWallet.toLowerCase())
+              if (walletAccountData && walletAccountData.nativeBalanceChange > 0) {
+                for (const acc of accountData) {
+                  if (acc.account && 
+                      acc.account.toLowerCase() !== currentWallet.toLowerCase() && 
+                      acc.nativeBalanceChange < 0 &&
+                      acc.account.length === 44) {
+                    const amount = Math.abs(acc.nativeBalanceChange) / 1e9
+                    if (amount >= 0.01) {
+                      fundingSources.set(acc.account, (fundingSources.get(acc.account) || 0) + amount)
+                    }
+                  }
+                }
+              }
+            }
+          }
+          
+          // Find largest funder
+          for (const [wallet, amount] of fundingSources.entries()) {
+            if (amount > fundedAmount) {
+              funder = wallet
+              fundedAmount = amount
+            }
+          }
+          
+          console.log(`💰 Largest funder: ${funder?.slice(0, 8)}... with ${fundedAmount.toFixed(2)} SOL`)
+
+          // Check for token creation activity (spawner detection)
+          let tokensCreated = 0
+          const recentTokens: Array<{ mint: string, name: string, symbol: string, timestamp: string }> = []
+          
+          // Look for initializeMint or pump.fun create instructions
+          for (const tx of walletTxs) {
+            const instructions = tx.instructions || []
+            
+            const isPumpCreate = instructions.some((inst: any) => 
+              inst.programId === '6EF8rrecthR5Dkzon8Nwu78hRvfCKubJ14M5uBEwF6P' ||
+              inst.programId?.includes('pump')
+            )
+            
+            const isTokenMint = instructions.some((inst: any) =>
+              inst.programId === 'TokenkgQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA' &&
+              (inst.parsed?.type === 'initializeMint' || inst.parsed?.type === 'initializeMint2')
+            )
+            
+            if (isPumpCreate || isTokenMint) {
+              tokensCreated++
+              
+              // Try to extract the token mint from the transaction
+              const tokenTransfers = tx.tokenTransfers || []
+              for (const t of tokenTransfers) {
+                if (t.mint && t.mint.length === 44) {
+                  recentTokens.push({
+                    mint: t.mint,
+                    name: 'Unknown',
+                    symbol: 'Unknown',
+                    timestamp: new Date(tx.timestamp * 1000).toISOString()
+                  })
+                  break
+                }
+              }
+            }
+          }
+          
+          console.log(`🎯 Wallet ${currentWallet.slice(0, 8)}... has created ${tokensCreated} tokens`)
+
+          // Calculate spawner score
+          const spawnerReasons: string[] = []
+          let spawnerScore = 0
+          
+          // Score factors:
+          // 1. Number of tokens created (most important)
+          if (tokensCreated >= 10) {
+            spawnerScore += 50
+            spawnerReasons.push(`Created ${tokensCreated}+ tokens (HIGH VOLUME)`)
+          } else if (tokensCreated >= 5) {
+            spawnerScore += 35
+            spawnerReasons.push(`Created ${tokensCreated} tokens`)
+          } else if (tokensCreated >= 2) {
+            spawnerScore += 20
+            spawnerReasons.push(`Created ${tokensCreated} tokens`)
+          } else if (tokensCreated === 1) {
+            spawnerScore += 5
+            spawnerReasons.push(`Created 1 token`)
+          }
+          
+          // 2. Funding multiple wallets downstream
+          const recipientCount = fundingSources.size
+          if (recipientCount >= 5) {
+            spawnerScore += 25
+            spawnerReasons.push(`Funds ${recipientCount} child wallets`)
+          } else if (recipientCount >= 2) {
+            spawnerScore += 10
+            spawnerReasons.push(`Funds ${recipientCount} wallets`)
+          }
+          
+          // 3. Position in chain (depth 1-3 are most likely spawners)
+          if (currentDepth >= 1 && currentDepth <= 3) {
+            spawnerScore += 15
+            spawnerReasons.push(`At optimal spawner depth (${currentDepth})`)
+          }
+          
+          // 4. Total SOL received (indicates operational wallet)
+          const totalReceived = Array.from(fundingSources.values()).reduce((a, b) => a + b, 0)
+          if (totalReceived >= 10) {
+            spawnerScore += 10
+            spawnerReasons.push(`Received ${totalReceived.toFixed(1)} SOL total`)
+          }
+
+          fundingChain.push({
+            wallet: currentWallet,
+            depth: currentDepth,
+            fundedBy: funder,
+            fundedAmount: parseFloat(fundedAmount.toFixed(4)),
+            tokensCreated,
+            recentTokens: recentTokens.slice(0, 5),
+            spawnerScore,
+            spawnerReason: spawnerReasons
+          })
+
+          // Move up the chain
+          if (funder && !visited.has(funder)) {
+            currentWallet = funder
+            currentDepth++
+            await new Promise(r => setTimeout(r, 200)) // Rate limit
+          } else {
+            break
+          }
+          
+        } catch (error) {
+          console.error(`Error at depth ${currentDepth}:`, error)
+          break
+        }
+      }
+
+      // Sort by spawner score and pick top candidates
+      const spawnerCandidates = fundingChain
+        .filter(n => n.spawnerScore > 0 || n.tokensCreated > 0)
+        .sort((a, b) => b.spawnerScore - a.spawnerScore)
+        .slice(0, 4)
+        .map((n, i) => ({
+          rank: i + 1,
+          wallet: n.wallet,
+          spawnerScore: n.spawnerScore,
+          tokensCreated: n.tokensCreated,
+          recentTokens: n.recentTokens,
+          spawnerReason: n.spawnerReason,
+          depth: n.depth,
+          fundedBy: n.fundedBy,
+          fundedAmount: n.fundedAmount,
+          isLikelySpawner: n.spawnerScore >= 30 || n.tokensCreated >= 3,
+          action: n.spawnerScore >= 30 ? 'HIGH PRIORITY - Monitor immediately' : 
+                  n.tokensCreated >= 1 ? 'MEDIUM - Has minting history' : 
+                  'LOW - Funding pattern only'
+        }))
+
+      console.log(`🎯 Found ${spawnerCandidates.length} spawner candidates`)
+
+      return new Response(
+        JSON.stringify({
+          success: true,
+          tokenMint,
+          mintWallet,
+          message: spawnerCandidates.length > 0 
+            ? `Thanks for the mint address! Traced through ${fundingChain.length} wallets. Here are the most likely spawner wallets:`
+            : `Traced ${fundingChain.length} wallets but no strong spawner candidates found.`,
+          spawnerCandidates,
+          fullChain: fundingChain.map(n => ({
+            wallet: n.wallet,
+            depth: n.depth,
+            fundedBy: n.fundedBy,
+            fundedAmount: n.fundedAmount,
+            tokensCreated: n.tokensCreated,
+            spawnerScore: n.spawnerScore,
+            spawnerReason: n.spawnerReason
+          })),
+          summary: {
+            totalWalletsTraced: fundingChain.length,
+            topSpawnerScore: spawnerCandidates[0]?.spawnerScore || 0,
+            totalTokensFound: fundingChain.reduce((sum, n) => sum + n.tokensCreated, 0)
+          }
+        }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      )
+    }
+
     return new Response(
       JSON.stringify({ error: 'Invalid action. Use "analyze" with tokenMint or "scan"' }),
       { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
