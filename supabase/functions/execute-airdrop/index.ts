@@ -7,14 +7,14 @@ import {
   Transaction,
   TransactionInstruction,
   ComputeBudgetProgram
-} from "https://esm.sh/@solana/web3.js@1.95.3?target=deno";
+} from "npm:@solana/web3.js@1.95.3";
 import { 
   createTransferInstruction,
   getAssociatedTokenAddress,
   createAssociatedTokenAccountInstruction,
   TOKEN_PROGRAM_ID,
   ASSOCIATED_TOKEN_PROGRAM_ID
-} from "https://esm.sh/@solana/spl-token@0.4.9";
+} from "npm:@solana/spl-token@0.4.9";
 
 // Token-2022 program ID
 const TOKEN_2022_PROGRAM_ID = new PublicKey('TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb');

@@ -1,6 +1,6 @@
 import "https://deno.land/x/xhr@0.1.0/mod.ts";
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import { Connection, Keypair, PublicKey } from "https://esm.sh/@solana/web3.js@1.95.3?target=deno";
+import { Connection, Keypair, PublicKey } from "npm:@solana/web3.js@1.95.3";
 import { SecureStorage } from '../_shared/encryption.ts';
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2?target=deno";
 import bs58 from "https://esm.sh/bs58@5.0.0";
