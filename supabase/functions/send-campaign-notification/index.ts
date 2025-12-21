@@ -188,7 +188,7 @@ const handler = async (req: Request): Promise<Response> => {
     const emailPromises = emailList.map(async (email) => {
       try {
         const { data, error } = await resend.emails.send({
-          from: 'Bump Bot <notifications@resend.dev>',
+          from: 'BlackBox Farm <noreply@blackbox.farm>',
           to: [email || ''],
           subject: emailContent.subject,
           html: `
