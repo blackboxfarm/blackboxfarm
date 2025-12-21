@@ -14,8 +14,8 @@ export const CronStatusPanel = () => {
 
   const cronSQL = `-- Enable required extensions (run once in SQL editor)
 SELECT cron.schedule(
-  'mint-monitor-hourly',
-  '0 * * * *', -- Every hour at minute 0
+  'mint-monitor-5min',
+  '*/5 * * * *', -- Every 5 minutes
   $$
   SELECT net.http_post(
     url := 'https://${projectRef}.supabase.co/functions/v1/mint-monitor-scanner',
@@ -49,7 +49,7 @@ SELECT cron.schedule(
         <div className="grid grid-cols-2 gap-4 text-sm">
           <div className="p-3 rounded-lg bg-background/50">
             <div className="text-muted-foreground text-xs mb-1">Scan Frequency</div>
-            <div className="font-medium">Every 1 hour</div>
+            <div className="font-medium">Every 5 minutes</div>
             <div className="text-xs text-muted-foreground">(when cron enabled)</div>
           </div>
           <div className="p-3 rounded-lg bg-background/50">
@@ -68,10 +68,11 @@ SELECT cron.schedule(
             <div className="text-sm">
               <p className="font-medium text-blue-300 mb-1">How it works:</p>
               <ol className="text-xs text-muted-foreground space-y-1 list-decimal list-inside">
-                <li>Cron runs every hour checking all "active" wallets</li>
+                <li>Cron runs every 5 minutes checking all "active" wallets</li>
                 <li>For each wallet, scans last hour of transactions for new mints</li>
                 <li>New mints are saved to <code className="text-primary">mint_monitor_detections</code></li>
                 <li>Email notification sent when new tokens detected</li>
+                <li>Every scan is logged for review</li>
               </ol>
             </div>
           </div>
@@ -123,7 +124,7 @@ SELECT cron.schedule(
             <div className="p-3 rounded-lg bg-green-500/10 border border-green-500/20">
               <div className="flex items-center gap-2 text-sm text-green-300">
                 <CheckCircle2 className="h-4 w-4" />
-                <span>After setup, cron will automatically scan wallets hourly!</span>
+                <span>After setup, cron will automatically scan wallets every 5 minutes!</span>
               </div>
             </div>
           </CollapsibleContent>
