@@ -3523,6 +3523,53 @@ export type Database = {
           },
         ]
       }
+      mint_monitor_scan_logs: {
+        Row: {
+          created_at: string
+          error_message: string | null
+          id: string
+          mints_found: number
+          new_mints_detected: number
+          scan_duration_ms: number | null
+          scanned_at: string
+          status: string
+          wallet_address: string
+          wallet_id: string | null
+        }
+        Insert: {
+          created_at?: string
+          error_message?: string | null
+          id?: string
+          mints_found?: number
+          new_mints_detected?: number
+          scan_duration_ms?: number | null
+          scanned_at?: string
+          status?: string
+          wallet_address: string
+          wallet_id?: string | null
+        }
+        Update: {
+          created_at?: string
+          error_message?: string | null
+          id?: string
+          mints_found?: number
+          new_mints_detected?: number
+          scan_duration_ms?: number | null
+          scanned_at?: string
+          status?: string
+          wallet_address?: string
+          wallet_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "mint_monitor_scan_logs_wallet_id_fkey"
+            columns: ["wallet_id"]
+            isOneToOne: false
+            referencedRelation: "mint_monitor_wallets"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       mint_monitor_wallets: {
         Row: {
           created_at: string

@@ -3,8 +3,9 @@ import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Input } from "@/components/ui/input";
 import { toast } from "sonner";
-import { Loader2, RefreshCw, Eye, Trash2, ExternalLink, AlertTriangle, Clock, Zap } from "lucide-react";
+import { Loader2, RefreshCw, Eye, Trash2, ExternalLink, AlertTriangle, Clock, Zap, Plus, History, CheckCircle2, XCircle } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { CronStatusPanel } from "./CronStatusPanel";
 
@@ -27,18 +28,38 @@ interface MintDetection {
   detected_at: string;
 }
 
+interface ScanLog {
+  id: string;
+  wallet_id: string;
+  wallet_address: string;
+  scanned_at: string;
+  mints_found: number;
+  new_mints_detected: number;
+  status: string;
+  error_message: string | null;
+  scan_duration_ms: number | null;
+}
+
 export const WatchdogWalletsList = () => {
   const { user } = useAuth();
   const [wallets, setWallets] = useState<MintMonitorWallet[]>([]);
   const [detections, setDetections] = useState<Record<string, MintDetection[]>>({});
+  const [scanLogs, setScanLogs] = useState<Record<string, ScanLog[]>>({});
   const [loading, setLoading] = useState(true);
   const [scanningWallet, setScanningWallet] = useState<string | null>(null);
   const [expandedWallet, setExpandedWallet] = useState<string | null>(null);
+  const [expandedLogs, setExpandedLogs] = useState<string | null>(null);
+  const [deletingLogs, setDeletingLogs] = useState<string | null>(null);
+  
+  // Raw wallet input
+  const [rawWalletInput, setRawWalletInput] = useState("");
+  const [addingRawWallet, setAddingRawWallet] = useState(false);
 
   const fetchWallets = async () => {
     if (!user?.id) {
       setWallets([]);
       setDetections({});
+      setScanLogs({});
       setLoading(false);
       return;
     }
@@ -56,26 +77,45 @@ export const WatchdogWalletsList = () => {
       if (walletsError) throw walletsError;
       setWallets(walletsData || []);
 
-      // Fetch detections for all wallets
+      // Fetch detections and scan logs for all wallets
       if (walletsData && walletsData.length > 0) {
         const walletIds = walletsData.map(w => w.id);
-        const { data: detectionsData, error: detectionsError } = await supabase
-          .from('mint_monitor_detections')
-          .select('*')
-          .in('wallet_id', walletIds)
-          .order('detected_at', { ascending: false });
+        
+        const [detectionsResult, logsResult] = await Promise.all([
+          supabase
+            .from('mint_monitor_detections')
+            .select('*')
+            .in('wallet_id', walletIds)
+            .order('detected_at', { ascending: false }),
+          supabase
+            .from('mint_monitor_scan_logs')
+            .select('*')
+            .in('wallet_id', walletIds)
+            .order('scanned_at', { ascending: false })
+            .limit(500)
+        ]);
 
-        if (detectionsError) throw detectionsError;
+        if (detectionsResult.error) throw detectionsResult.error;
+        if (logsResult.error) throw logsResult.error;
 
         // Group detections by wallet_id
-        const grouped: Record<string, MintDetection[]> = {};
-        (detectionsData || []).forEach(d => {
-          if (!grouped[d.wallet_id]) grouped[d.wallet_id] = [];
-          grouped[d.wallet_id].push(d);
+        const groupedDetections: Record<string, MintDetection[]> = {};
+        (detectionsResult.data || []).forEach(d => {
+          if (!groupedDetections[d.wallet_id]) groupedDetections[d.wallet_id] = [];
+          groupedDetections[d.wallet_id].push(d);
         });
-        setDetections(grouped);
+        setDetections(groupedDetections);
+
+        // Group logs by wallet_id
+        const groupedLogs: Record<string, ScanLog[]> = {};
+        (logsResult.data || []).forEach(l => {
+          if (!groupedLogs[l.wallet_id]) groupedLogs[l.wallet_id] = [];
+          groupedLogs[l.wallet_id].push(l as ScanLog);
+        });
+        setScanLogs(groupedLogs);
       } else {
         setDetections({});
+        setScanLogs({});
       }
     } catch (err: any) {
       toast.error("Failed to load watchdog wallets: " + err.message);
@@ -136,8 +176,11 @@ export const WatchdogWalletsList = () => {
 
   const removeWallet = async (walletId: string) => {
     try {
-      // First delete associated detections
-      await supabase.from('mint_monitor_detections').delete().eq('wallet_id', walletId);
+      // First delete associated detections and logs
+      await Promise.all([
+        supabase.from('mint_monitor_detections').delete().eq('wallet_id', walletId),
+        supabase.from('mint_monitor_scan_logs').delete().eq('wallet_id', walletId)
+      ]);
       
       // Then delete the wallet
       const { error } = await supabase.from('mint_monitor_wallets').delete().eq('id', walletId);
@@ -150,9 +193,69 @@ export const WatchdogWalletsList = () => {
     }
   };
 
+  const clearLogsForWallet = async (walletId: string) => {
+    setDeletingLogs(walletId);
+    try {
+      const { error } = await supabase
+        .from('mint_monitor_scan_logs')
+        .delete()
+        .eq('wallet_id', walletId);
+      
+      if (error) throw error;
+      
+      toast.success("Scan logs cleared");
+      fetchWallets();
+    } catch (err: any) {
+      toast.error("Failed to clear logs: " + err.message);
+    } finally {
+      setDeletingLogs(null);
+    }
+  };
+
+  const addRawWallet = async () => {
+    if (!rawWalletInput.trim() || !user?.id) return;
+    
+    const walletAddress = rawWalletInput.trim();
+    
+    // Basic validation (Solana addresses are 32-44 characters)
+    if (walletAddress.length < 32 || walletAddress.length > 44) {
+      toast.error("Invalid Solana wallet address");
+      return;
+    }
+    
+    setAddingRawWallet(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('mint-monitor-scanner', {
+        body: { 
+          action: 'add_to_cron', 
+          walletAddress,
+          userId: user.id,
+          sourceToken: null // Raw wallet has no source token
+        }
+      });
+      
+      if (error) throw error;
+      
+      toast.success("Wallet added to watchdog monitoring");
+      setRawWalletInput("");
+      fetchWallets();
+      window.dispatchEvent(new CustomEvent('mint-monitor-wallets-changed'));
+    } catch (err: any) {
+      toast.error("Failed to add wallet: " + err.message);
+    } finally {
+      setAddingRawWallet(false);
+    }
+  };
+
   const formatDate = (dateStr: string | null) => {
     if (!dateStr) return 'Never';
     return new Date(dateStr).toLocaleString();
+  };
+
+  const formatDuration = (ms: number | null) => {
+    if (!ms) return '-';
+    if (ms < 1000) return `${ms}ms`;
+    return `${(ms / 1000).toFixed(1)}s`;
   };
 
   if (loading) {
@@ -169,6 +272,37 @@ export const WatchdogWalletsList = () => {
     return (
       <div className="space-y-4">
         <CronStatusPanel />
+        
+        {/* Raw Wallet Input */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 text-base">
+              <Plus className="h-4 w-4" />
+              Add Raw Wallet to Monitor
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="flex gap-2">
+              <Input
+                placeholder="Paste Solana wallet address..."
+                value={rawWalletInput}
+                onChange={(e) => setRawWalletInput(e.target.value)}
+                className="font-mono text-sm"
+              />
+              <Button 
+                onClick={addRawWallet} 
+                disabled={!rawWalletInput.trim() || addingRawWallet}
+              >
+                {addingRawWallet ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
+                Add
+              </Button>
+            </div>
+            <p className="text-xs text-muted-foreground mt-2">
+              Add any Solana wallet to monitor for new token mints
+            </p>
+          </CardContent>
+        </Card>
+        
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
@@ -180,7 +314,7 @@ export const WatchdogWalletsList = () => {
             <div className="text-center py-8 text-muted-foreground">
               <AlertTriangle className="h-8 w-8 mx-auto mb-3 opacity-50" />
               <p>No wallets in watchdog yet.</p>
-              <p className="text-sm">Click "Add to Watchdog" on a spawner candidate to start monitoring.</p>
+              <p className="text-sm">Add a wallet above or click "Add to Watchdog" on a spawner candidate.</p>
             </div>
           </CardContent>
         </Card>
@@ -190,11 +324,41 @@ export const WatchdogWalletsList = () => {
 
   const totalDetections = Object.values(detections).flat().length;
   const activeWallets = wallets.filter(w => w.is_cron_enabled).length;
+  const totalLogs = Object.values(scanLogs).flat().length;
 
   return (
     <div className="space-y-4">
       {/* Cron Status Panel */}
       <CronStatusPanel />
+      
+      {/* Raw Wallet Input */}
+      <Card className="border-primary/30 bg-primary/5">
+        <CardHeader className="pb-2">
+          <CardTitle className="flex items-center gap-2 text-base">
+            <Plus className="h-4 w-4 text-primary" />
+            Add Raw Wallet to Monitor
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="flex gap-2">
+            <Input
+              placeholder="Paste Solana wallet address..."
+              value={rawWalletInput}
+              onChange={(e) => setRawWalletInput(e.target.value)}
+              onKeyDown={(e) => e.key === 'Enter' && addRawWallet()}
+              className="font-mono text-sm"
+            />
+            <Button 
+              onClick={addRawWallet} 
+              disabled={!rawWalletInput.trim() || addingRawWallet}
+              className="shrink-0"
+            >
+              {addingRawWallet ? <Loader2 className="h-4 w-4 animate-spin mr-1" /> : <Plus className="h-4 w-4 mr-1" />}
+              Add to Watchdog
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
       
       <Card>
         <CardHeader className="flex flex-row items-center justify-between">
@@ -210,6 +374,9 @@ export const WatchdogWalletsList = () => {
             <Badge variant="secondary" className="bg-purple-500/20 text-purple-300">
               {totalDetections} detections
             </Badge>
+            <Badge variant="secondary" className="bg-blue-500/20 text-blue-300">
+              {totalLogs} logs
+            </Badge>
             <Button variant="outline" size="sm" onClick={fetchWallets}>
               <RefreshCw className="h-3 w-3" />
             </Button>
@@ -218,7 +385,9 @@ export const WatchdogWalletsList = () => {
       <CardContent className="space-y-3">
         {wallets.map((wallet) => {
           const walletDetections = detections[wallet.id] || [];
+          const walletLogs = scanLogs[wallet.id] || [];
           const isExpanded = expandedWallet === wallet.id;
+          const isLogsExpanded = expandedLogs === wallet.id;
 
           return (
             <div 
@@ -238,6 +407,11 @@ export const WatchdogWalletsList = () => {
                   {walletDetections.length > 0 && (
                     <Badge className="bg-purple-500/20 text-purple-300 text-[10px]">
                       {walletDetections.length} mints detected
+                    </Badge>
+                  )}
+                  {walletLogs.length > 0 && (
+                    <Badge className="bg-blue-500/20 text-blue-300 text-[10px]">
+                      {walletLogs.length} scans
                     </Badge>
                   )}
                   {wallet.label && (
@@ -335,6 +509,83 @@ export const WatchdogWalletsList = () => {
                   )}
                 </div>
               )}
+
+              {/* Scan Logs - Collapsible */}
+              <div className="mt-2 pt-2 border-t border-border/50">
+                <div className="flex items-center justify-between">
+                  <button 
+                    onClick={() => setExpandedLogs(isLogsExpanded ? null : wallet.id)}
+                    className="text-xs text-muted-foreground hover:text-foreground flex items-center gap-1"
+                  >
+                    <History className="h-3 w-3" />
+                    {isLogsExpanded ? '▼' : '▶'} Scan History ({walletLogs.length} logs)
+                  </button>
+                  {walletLogs.length > 0 && (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-6 text-[10px] text-destructive hover:text-destructive"
+                      onClick={() => clearLogsForWallet(wallet.id)}
+                      disabled={deletingLogs === wallet.id}
+                    >
+                      {deletingLogs === wallet.id ? (
+                        <Loader2 className="h-2 w-2 animate-spin mr-1" />
+                      ) : (
+                        <Trash2 className="h-2 w-2 mr-1" />
+                      )}
+                      Clear Logs
+                    </Button>
+                  )}
+                </div>
+                
+                {isLogsExpanded && (
+                  <div className="mt-2 space-y-1 max-h-[300px] overflow-y-auto">
+                    {walletLogs.length === 0 ? (
+                      <p className="text-xs text-muted-foreground text-center py-2">No scan logs yet</p>
+                    ) : (
+                      walletLogs.map((log) => (
+                        <div 
+                          key={log.id}
+                          className={`flex items-center justify-between p-2 rounded text-xs ${
+                            log.status === 'success' 
+                              ? 'bg-green-500/5 border border-green-500/20' 
+                              : 'bg-red-500/5 border border-red-500/20'
+                          }`}
+                        >
+                          <div className="flex items-center gap-2">
+                            {log.status === 'success' ? (
+                              <CheckCircle2 className="h-3 w-3 text-green-500" />
+                            ) : (
+                              <XCircle className="h-3 w-3 text-red-500" />
+                            )}
+                            <span className="text-muted-foreground">
+                              {formatDate(log.scanned_at)}
+                            </span>
+                          </div>
+                          <div className="flex items-center gap-3 text-[10px]">
+                            <span className="text-muted-foreground">
+                              Found: {log.mints_found}
+                            </span>
+                            {log.new_mints_detected > 0 && (
+                              <Badge className="bg-purple-500/20 text-purple-300 text-[9px] h-4">
+                                +{log.new_mints_detected} new
+                              </Badge>
+                            )}
+                            <span className="text-muted-foreground">
+                              {formatDuration(log.scan_duration_ms)}
+                            </span>
+                            {log.error_message && (
+                              <span className="text-red-400 truncate max-w-[100px]" title={log.error_message}>
+                                {log.error_message}
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                )}
+              </div>
             </div>
           );
         })}

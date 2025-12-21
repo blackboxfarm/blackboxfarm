@@ -238,8 +238,15 @@ serve(async (req) => {
       const newMintsForNotification: { walletAddress: string; mints: TokenMint[]; userEmail?: string }[] = [];
       
       for (const wallet of (wallets || [])) {
+        const scanStartTime = Date.now();
+        let scanStatus = 'success';
+        let errorMessage: string | null = null;
+        let mintsFound = 0;
+        let newMintsCount = 0;
+        
         try {
           const mints = await scanWalletForMints(wallet.wallet_address, heliusApiKey, 1); // Last hour
+          mintsFound = mints.length;
           
           const newMints: TokenMint[] = [];
           
@@ -267,6 +274,7 @@ serve(async (req) => {
               
               if (!insertError) {
                 newMints.push(mint);
+                newMintsCount++;
               } else {
                 console.error(`Error storing detection: ${insertError.message}`);
               }
@@ -308,11 +316,26 @@ serve(async (req) => {
           });
         } catch (e) {
           console.error(`Error scanning wallet ${wallet.wallet_address}:`, e);
+          scanStatus = 'error';
+          errorMessage = e.message;
           results.push({
             wallet: wallet.wallet_address,
             error: e.message
           });
         }
+        
+        // Log this scan attempt
+        const scanDurationMs = Date.now() - scanStartTime;
+        await supabase.from('mint_monitor_scan_logs').insert({
+          wallet_id: wallet.id,
+          wallet_address: wallet.wallet_address,
+          scanned_at: new Date().toISOString(),
+          mints_found: mintsFound,
+          new_mints_detected: newMintsCount,
+          status: scanStatus,
+          error_message: errorMessage,
+          scan_duration_ms: scanDurationMs
+        });
       }
       
       // Send notifications for new mints
