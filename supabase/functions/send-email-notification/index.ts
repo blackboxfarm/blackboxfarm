@@ -48,7 +48,7 @@ const handler = async (req: Request): Promise<Response> => {
     };
 
     const emailResponse = await resend.emails.send({
-      from: "BlackBox Trading <notifications@resend.dev>",
+      from: "BlackBox Trading <noreply@blackbox.farm>",
       to: [to],
       subject: subject,
       html: `
