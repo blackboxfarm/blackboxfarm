@@ -39,7 +39,7 @@ const handler = async (req: Request): Promise<Response> => {
     if (type === 'email') {
       // Send email notification
       const emailResponse = await resend.emails.send({
-        from: "BlackBox Farm <notifications@resend.dev>",
+        from: "BlackBox Farm <noreply@blackbox.farm>",
         to: [to],
         subject: subject,
         html: `
