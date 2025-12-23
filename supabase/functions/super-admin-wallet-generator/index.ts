@@ -60,7 +60,7 @@ serve(async (req) => {
       });
 
       // Load wallets (return only non-sensitive fields)
-      const { data, error } = await supabaseClient
+      const { data: wallets, error } = await supabaseClient
         .from('super_admin_wallets')
         .select('id,label,pubkey,wallet_type,is_active,created_at,updated_at')
         .order('created_at', { ascending: false });
@@ -79,7 +79,17 @@ serve(async (req) => {
         throw error;
       }
 
-      return new Response(JSON.stringify({ data }), {
+      const safeWallets = (wallets || []).map((w: any) => ({
+        id: w.id,
+        label: w.label,
+        pubkey: w.pubkey,
+        wallet_type: w.wallet_type,
+        is_active: w.is_active,
+        created_at: w.created_at,
+        updated_at: w.updated_at,
+      }));
+
+      return new Response(JSON.stringify({ data: safeWallets }), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }

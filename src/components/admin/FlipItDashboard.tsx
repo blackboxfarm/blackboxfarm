@@ -398,9 +398,21 @@ export function FlipItDashboard() {
                         variant="ghost" 
                         className="h-6 w-6"
                         onClick={() => copyToClipboard(wallets.find(w => w.id === selectedWallet)?.pubkey || '', 'Address')}
+                        title="Copy wallet address"
                       >
                         <Copy className="h-3 w-3" />
                       </Button>
+                      <a
+                        className="inline-flex"
+                        href={`https://solscan.io/account/${wallets.find(w => w.id === selectedWallet)?.pubkey}`}
+                        target="_blank"
+                        rel="noreferrer"
+                        title="View on Solscan"
+                      >
+                        <Button size="icon" variant="ghost" className="h-6 w-6">
+                          <ArrowUpRight className="h-3 w-3" />
+                        </Button>
+                      </a>
                     </div>
                     
                     <div className="flex items-center gap-3">
@@ -415,6 +427,7 @@ export function FlipItDashboard() {
                           className="h-6 w-6"
                           onClick={refreshWalletBalance}
                           disabled={isRefreshingBalance}
+                          title="Refresh balance"
                         >
                           <RefreshCw className={`h-3 w-3 ${isRefreshingBalance ? 'animate-spin' : ''}`} />
                         </Button>
