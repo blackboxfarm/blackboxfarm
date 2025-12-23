@@ -9,7 +9,7 @@ import { Progress } from '@/components/ui/progress';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
-import { Flame, RefreshCw, TrendingUp, DollarSign, Wallet, Clock, CheckCircle2, XCircle, Loader2 } from 'lucide-react';
+import { Flame, RefreshCw, TrendingUp, DollarSign, Wallet, Clock, CheckCircle2, XCircle, Loader2, Plus, Copy, ArrowUpRight, Key } from 'lucide-react';
 
 interface FlipPosition {
   id: string;
@@ -37,6 +37,7 @@ interface SuperAdminWallet {
   id: string;
   label: string;
   pubkey: string;
+  wallet_type?: string;
 }
 
 export function FlipItDashboard() {
@@ -50,17 +51,28 @@ export function FlipItDashboard() {
   const [isFlipping, setIsFlipping] = useState(false);
   const [isMonitoring, setIsMonitoring] = useState(false);
   const [currentPrices, setCurrentPrices] = useState<Record<string, number>>({});
+  const [isGeneratingWallet, setIsGeneratingWallet] = useState(false);
+  const [isWithdrawing, setIsWithdrawing] = useState(false);
+  const [walletBalance, setWalletBalance] = useState<number | null>(null);
+  const [isRefreshingBalance, setIsRefreshingBalance] = useState(false);
 
   useEffect(() => {
     loadWallets();
     loadPositions();
   }, []);
 
+  useEffect(() => {
+    if (selectedWallet) {
+      refreshWalletBalance();
+    }
+  }, [selectedWallet]);
+
   const loadWallets = async () => {
     const { data, error } = await supabase
       .from('super_admin_wallets')
-      .select('id, label, pubkey')
+      .select('id, label, pubkey, wallet_type')
       .eq('is_active', true)
+      .eq('wallet_type', 'flipit')
       .order('created_at', { ascending: false });
 
     if (error) {
@@ -72,6 +84,80 @@ export function FlipItDashboard() {
     if (data && data.length > 0 && !selectedWallet) {
       setSelectedWallet(data[0].id);
     }
+  };
+
+  const refreshWalletBalance = async () => {
+    if (!selectedWallet) return;
+    
+    const wallet = wallets.find(w => w.id === selectedWallet);
+    if (!wallet) return;
+
+    setIsRefreshingBalance(true);
+    try {
+      const response = await fetch(`https://api.helius.xyz/v0/addresses/${wallet.pubkey}/balances?api-key=cc91cc33-a6d8-4a97-b09e-f05c2c671f2c`);
+      if (response.ok) {
+        const data = await response.json();
+        const solBalance = (data.nativeBalance || 0) / 1e9;
+        setWalletBalance(solBalance);
+      }
+    } catch (err) {
+      console.error('Failed to fetch balance:', err);
+    } finally {
+      setIsRefreshingBalance(false);
+    }
+  };
+
+  const handleGenerateWallet = async () => {
+    setIsGeneratingWallet(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('flipit-wallet-generator');
+
+      if (error) throw error;
+
+      if (data?.error) {
+        toast.error(data.error);
+      } else {
+        toast.success(`Wallet generated: ${data.wallet.pubkey.slice(0, 8)}...`);
+        loadWallets();
+        setSelectedWallet(data.wallet.id);
+      }
+    } catch (err: any) {
+      toast.error(err.message || 'Failed to generate wallet');
+    } finally {
+      setIsGeneratingWallet(false);
+    }
+  };
+
+  const handleWithdraw = async () => {
+    if (!selectedWallet) {
+      toast.error('Select a wallet first');
+      return;
+    }
+
+    setIsWithdrawing(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('flipit-wallet-withdrawal', {
+        body: { walletId: selectedWallet }
+      });
+
+      if (error) throw error;
+
+      if (data?.error) {
+        toast.error(data.error);
+      } else {
+        toast.success(`Withdrawn ${data.amountSol.toFixed(4)} SOL! TX: ${data.signature.slice(0, 8)}...`);
+        refreshWalletBalance();
+      }
+    } catch (err: any) {
+      toast.error(err.message || 'Failed to withdraw');
+    } finally {
+      setIsWithdrawing(false);
+    }
+  };
+
+  const copyToClipboard = (text: string, label: string) => {
+    navigator.clipboard.writeText(text);
+    toast.success(`${label} copied!`);
   };
 
   const loadPositions = async () => {
@@ -227,26 +313,113 @@ export function FlipItDashboard() {
           </CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-            {/* Wallet Selector */}
-            <div className="space-y-2">
-              <Label className="flex items-center gap-1">
-                <Wallet className="h-4 w-4" />
-                Source Wallet
-              </Label>
-              <Select value={selectedWallet} onValueChange={setSelectedWallet}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Select wallet" />
-                </SelectTrigger>
-                <SelectContent>
-                  {wallets.map(w => (
-                    <SelectItem key={w.id} value={w.id}>
-                      {w.label} ({w.pubkey.slice(0, 4)}...{w.pubkey.slice(-4)})
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
+          {/* Source Wallet Section */}
+          <div className="mb-6 p-4 rounded-lg border border-border bg-card/50">
+            <Label className="flex items-center gap-1 mb-3 text-lg">
+              <Key className="h-5 w-5" />
+              Source Wallet
+            </Label>
+            
+            {wallets.length === 0 ? (
+              <div className="text-center py-6">
+                <p className="text-muted-foreground mb-4">No FlipIt wallet configured yet</p>
+                <Button 
+                  onClick={handleGenerateWallet} 
+                  disabled={isGeneratingWallet}
+                  className="bg-gradient-to-r from-orange-500 to-red-500 hover:from-orange-600 hover:to-red-600"
+                >
+                  {isGeneratingWallet ? (
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  ) : (
+                    <Plus className="h-4 w-4 mr-2" />
+                  )}
+                  Generate Source Wallet
+                </Button>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                <div className="flex items-center gap-2">
+                  <Select value={selectedWallet} onValueChange={setSelectedWallet}>
+                    <SelectTrigger className="flex-1">
+                      <SelectValue placeholder="Select wallet" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {wallets.map(w => (
+                        <SelectItem key={w.id} value={w.id}>
+                          {w.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <Button 
+                    size="icon" 
+                    variant="outline" 
+                    onClick={handleGenerateWallet}
+                    disabled={isGeneratingWallet}
+                    title="Generate new wallet"
+                  >
+                    {isGeneratingWallet ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      <Plus className="h-4 w-4" />
+                    )}
+                  </Button>
+                </div>
+                
+                {selectedWallet && wallets.find(w => w.id === selectedWallet) && (
+                  <div className="flex items-center justify-between flex-wrap gap-2 p-3 rounded-md bg-muted/50">
+                    <div className="flex items-center gap-2">
+                      <code className="text-sm font-mono">
+                        {wallets.find(w => w.id === selectedWallet)?.pubkey}
+                      </code>
+                      <Button 
+                        size="icon" 
+                        variant="ghost" 
+                        className="h-6 w-6"
+                        onClick={() => copyToClipboard(wallets.find(w => w.id === selectedWallet)?.pubkey || '', 'Address')}
+                      >
+                        <Copy className="h-3 w-3" />
+                      </Button>
+                    </div>
+                    
+                    <div className="flex items-center gap-3">
+                      <div className="flex items-center gap-2">
+                        <span className="text-sm text-muted-foreground">Balance:</span>
+                        <span className="font-bold">
+                          {walletBalance !== null ? `${walletBalance.toFixed(4)} SOL` : '...'}
+                        </span>
+                        <Button 
+                          size="icon" 
+                          variant="ghost" 
+                          className="h-6 w-6"
+                          onClick={refreshWalletBalance}
+                          disabled={isRefreshingBalance}
+                        >
+                          <RefreshCw className={`h-3 w-3 ${isRefreshingBalance ? 'animate-spin' : ''}`} />
+                        </Button>
+                      </div>
+                      
+                      <Button 
+                        size="sm" 
+                        variant="destructive"
+                        onClick={handleWithdraw}
+                        disabled={isWithdrawing || !walletBalance || walletBalance < 0.001}
+                      >
+                        {isWithdrawing ? (
+                          <Loader2 className="h-4 w-4 mr-1 animate-spin" />
+                        ) : (
+                          <ArrowUpRight className="h-4 w-4 mr-1" />
+                        )}
+                        Withdraw All
+                      </Button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
 
             {/* Token Input */}
             <div className="space-y-2">
