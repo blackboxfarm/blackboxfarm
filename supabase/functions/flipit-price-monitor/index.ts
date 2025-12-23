@@ -74,9 +74,12 @@ serve(async (req) => {
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
     const body = await req.json().catch(() => ({}));
-    const { action } = body;
+    const { action, slippageBps, priorityFeeMode } = body;
 
-    console.log("FlipIt price monitor:", { action });
+    // Default slippage 5% (500 bps), configurable
+    const effectiveSlippage = slippageBps || 500;
+
+    console.log("FlipIt price monitor:", { action, slippageBps: effectiveSlippage, priorityFeeMode });
 
     // Get all holding positions
     const { data: positions, error: posErr } = await supabase
@@ -143,7 +146,8 @@ serve(async (req) => {
               side: "sell",
               tokenMint: position.token_mint,
               sellAll: true,
-              slippageBps: 500,
+              slippageBps: effectiveSlippage,
+              priorityFeeMode: priorityFeeMode || "medium",
             },
             headers: {
               "x-owner-secret": walletSecret

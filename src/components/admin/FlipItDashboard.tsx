@@ -9,7 +9,7 @@ import { Progress } from '@/components/ui/progress';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
-import { Flame, RefreshCw, TrendingUp, DollarSign, Wallet, Clock, CheckCircle2, XCircle, Loader2, Plus, Copy, ArrowUpRight, Key } from 'lucide-react';
+import { Flame, RefreshCw, TrendingUp, DollarSign, Wallet, Clock, CheckCircle2, XCircle, Loader2, Plus, Copy, ArrowUpRight, Key, Settings, Zap, Activity } from 'lucide-react';
 
 interface FlipPosition {
   id: string;
@@ -55,6 +55,12 @@ export function FlipItDashboard() {
   const [isWithdrawing, setIsWithdrawing] = useState(false);
   const [walletBalance, setWalletBalance] = useState<number | null>(null);
   const [isRefreshingBalance, setIsRefreshingBalance] = useState(false);
+  
+  // Settings
+  const [slippageBps, setSlippageBps] = useState(500); // 5% default
+  const [priorityFeeMode, setPriorityFeeMode] = useState<'low' | 'medium' | 'high' | 'turbo'>('medium');
+  const [autoMonitorEnabled, setAutoMonitorEnabled] = useState(true);
+  const [lastAutoCheck, setLastAutoCheck] = useState<string | null>(null);
 
   useEffect(() => {
     loadWallets();
@@ -196,7 +202,9 @@ export function FlipItDashboard() {
           tokenMint: tokenAddress.trim(),
           walletId: selectedWallet,
           buyAmountUsd: buyAmount,
-          targetMultiplier: targetMultiplier
+          targetMultiplier: targetMultiplier,
+          slippageBps: slippageBps,
+          priorityFeeMode: priorityFeeMode
         }
       });
 
@@ -226,13 +234,20 @@ export function FlipItDashboard() {
     setIsMonitoring(true);
     try {
       const { data, error } = await supabase.functions.invoke('flipit-price-monitor', {
-        body: { action: 'check' }
+        body: { 
+          action: 'check',
+          slippageBps: slippageBps,
+          priorityFeeMode: priorityFeeMode
+        }
       });
 
       if (error) throw error;
 
       if (data?.prices) {
         setCurrentPrices(data.prices);
+      }
+      if (data?.checkedAt) {
+        setLastAutoCheck(data.checkedAt);
       }
       if (data?.executed?.length > 0) {
         toast.success(`Sold ${data.executed.length} position(s) at target!`);
@@ -252,7 +267,9 @@ export function FlipItDashboard() {
       const { data, error } = await supabase.functions.invoke('flipit-execute', {
         body: {
           action: 'sell',
-          positionId: positionId
+          positionId: positionId,
+          slippageBps: slippageBps,
+          priorityFeeMode: priorityFeeMode
         }
       });
 
@@ -417,6 +434,73 @@ export function FlipItDashboard() {
                 )}
               </div>
             )}
+          </div>
+
+          {/* Settings Panel */}
+          <div className="mb-6 p-4 rounded-lg border border-border bg-card/50">
+            <Label className="flex items-center gap-1 mb-3 text-lg">
+              <Settings className="h-5 w-5" />
+              Trading Settings
+            </Label>
+            
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              {/* Slippage */}
+              <div className="space-y-2">
+                <Label className="flex items-center gap-1 text-sm">
+                  <Activity className="h-4 w-4" />
+                  Slippage Tolerance
+                </Label>
+                <Select value={slippageBps.toString()} onValueChange={v => setSlippageBps(Number(v))}>
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="100">1% (Conservative)</SelectItem>
+                    <SelectItem value="300">3% (Standard)</SelectItem>
+                    <SelectItem value="500">5% (Default)</SelectItem>
+                    <SelectItem value="1000">10% (Aggressive)</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              {/* Priority Fee */}
+              <div className="space-y-2">
+                <Label className="flex items-center gap-1 text-sm">
+                  <Zap className="h-4 w-4" />
+                  Priority Fee (Gas)
+                </Label>
+                <Select value={priorityFeeMode} onValueChange={(v: 'low' | 'medium' | 'high' | 'turbo') => setPriorityFeeMode(v)}>
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="low">Low (~0.0001 SOL)</SelectItem>
+                    <SelectItem value="medium">Medium (~0.0005 SOL)</SelectItem>
+                    <SelectItem value="high">High (~0.001 SOL)</SelectItem>
+                    <SelectItem value="turbo">Turbo (~0.005 SOL)</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              {/* Auto-Monitor Status */}
+              <div className="space-y-2">
+                <Label className="flex items-center gap-1 text-sm">
+                  <RefreshCw className="h-4 w-4" />
+                  Auto-Monitor
+                </Label>
+                <div className="flex items-center gap-2 p-2 rounded-md bg-muted/50 h-10">
+                  <div className={`w-2 h-2 rounded-full ${autoMonitorEnabled ? 'bg-green-500 animate-pulse' : 'bg-red-500'}`} />
+                  <span className="text-sm">
+                    {autoMonitorEnabled ? 'ON - Every 1 min' : 'OFF'}
+                  </span>
+                  {lastAutoCheck && (
+                    <span className="text-xs text-muted-foreground ml-auto">
+                      Last: {new Date(lastAutoCheck).toLocaleTimeString()}
+                    </span>
+                  )}
+                </div>
+              </div>
+            </div>
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">

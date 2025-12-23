@@ -76,9 +76,12 @@ serve(async (req) => {
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
     const body = await req.json();
-    const { action, tokenMint, walletId, buyAmountUsd, targetMultiplier, positionId } = body;
+    const { action, tokenMint, walletId, buyAmountUsd, targetMultiplier, positionId, slippageBps, priorityFeeMode } = body;
 
-    console.log("FlipIt execute:", { action, tokenMint, walletId, buyAmountUsd, targetMultiplier, positionId });
+    // Default slippage 5% (500 bps), configurable
+    const effectiveSlippage = slippageBps || 500;
+    
+    console.log("FlipIt execute:", { action, tokenMint, walletId, buyAmountUsd, targetMultiplier, positionId, slippageBps: effectiveSlippage, priorityFeeMode });
 
     if (action === "buy") {
       if (!tokenMint || !walletId) {
@@ -150,7 +153,8 @@ serve(async (req) => {
             tokenMint: tokenMint,
             usdcAmount: buyAmountUsd || 10,
             buyWithSol: true,
-            slippageBps: 500, // 5% slippage for small caps
+            slippageBps: effectiveSlippage,
+            priorityFeeMode: priorityFeeMode || "medium",
           },
           headers: {
             "x-owner-secret": wallet.secret_key_encrypted
@@ -237,7 +241,8 @@ serve(async (req) => {
             side: "sell",
             tokenMint: position.token_mint,
             sellAll: true,
-            slippageBps: 500,
+            slippageBps: effectiveSlippage,
+            priorityFeeMode: priorityFeeMode || "medium",
           },
           headers: {
             "x-owner-secret": walletSecret
