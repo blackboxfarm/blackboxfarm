@@ -23,22 +23,33 @@ interface TokenMint {
   marketCapUsd?: number;
   liquidityUsd?: number;
   volume24h?: number;
+  // Graduation & launchpad
+  isGraduated?: boolean;
+  launchpad?: string;
+  creatorWallet?: string;
 }
 
-async function fetchPumpFunData(mint: string): Promise<Partial<TokenMint>> {
+async function fetchPumpFunData(mint: string): Promise<Partial<TokenMint> & { pumpFunGraduated?: boolean }> {
   try {
     // Try pump.fun API for bonding curve and trading data
     const response = await fetch(`https://frontend-api.pump.fun/coins/${mint}`);
-    if (!response.ok) return {};
+    if (!response.ok) {
+      // If pump.fun returns 404, token might have graduated or doesn't exist on pump
+      return { pumpFunGraduated: response.status === 404 ? undefined : undefined };
+    }
     
     const data = await response.json();
+    
+    // Check if pump.fun indicates this token is complete/graduated
+    // pump.fun sets complete: true and has raydium_pool when graduated
+    const isPumpFunGraduated = data.complete === true || data.raydium_pool !== null;
     
     // Calculate bonding curve percentage
     // pump.fun graduates at ~$69K market cap / 85 SOL in curve
     const virtualSolReserves = data.virtual_sol_reserves ? Number(data.virtual_sol_reserves) / 1e9 : 0;
     const realSolReserves = data.real_sol_reserves ? Number(data.real_sol_reserves) / 1e9 : 0;
     const totalSolInCurve = virtualSolReserves + realSolReserves;
-    const bondingCurvePercent = Math.min(100, (totalSolInCurve / 85) * 100);
+    const bondingCurvePercent = isPumpFunGraduated ? 100 : Math.min(100, (totalSolInCurve / 85) * 100);
     
     return {
       name: data.name,
@@ -47,6 +58,7 @@ async function fetchPumpFunData(mint: string): Promise<Partial<TokenMint>> {
       image: data.image_uri,
       bondingCurvePercent,
       marketCapUsd: data.usd_market_cap,
+      pumpFunGraduated: isPumpFunGraduated,
     };
   } catch (e) {
     console.error(`Error fetching pump.fun data for ${mint}:`, e);
@@ -54,7 +66,7 @@ async function fetchPumpFunData(mint: string): Promise<Partial<TokenMint>> {
   }
 }
 
-async function fetchDexScreenerData(mint: string): Promise<Partial<TokenMint>> {
+async function fetchDexScreenerData(mint: string): Promise<Partial<TokenMint> & { isGraduated?: boolean; launchpad?: string }> {
   try {
     const response = await fetch(`https://api.dexscreener.com/latest/dex/tokens/${mint}`);
     if (!response.ok) return {};
@@ -64,6 +76,25 @@ async function fetchDexScreenerData(mint: string): Promise<Partial<TokenMint>> {
     
     if (!pair) return {};
     
+    // Detect if graduated to Raydium (has Raydium pair with liquidity)
+    const raydiumPair = data.pairs?.find((p: any) => 
+      p.dexId === 'raydium' && p.liquidity?.usd > 0
+    );
+    const isGraduated = !!raydiumPair;
+    
+    // Detect launchpad from pair URLs or dexId
+    let launchpad: string | undefined;
+    const pairUrl = pair.url || '';
+    const websiteUrl = pair.info?.websites?.[0]?.url || '';
+    
+    if (pairUrl.includes('bags.fm') || websiteUrl.includes('bags.fm')) {
+      launchpad = 'bags.fm';
+    } else if (pairUrl.includes('bonk.fun') || websiteUrl.includes('bonk.fun')) {
+      launchpad = 'bonk.fun';
+    } else if (pairUrl.includes('pump.fun') || websiteUrl.includes('pump.fun') || pair.labels?.includes('pump.fun')) {
+      launchpad = 'pump.fun';
+    }
+    
     return {
       currentPriceUsd: parseFloat(pair.priceUsd) || undefined,
       currentPriceSol: parseFloat(pair.priceNative) || undefined,
@@ -72,6 +103,8 @@ async function fetchDexScreenerData(mint: string): Promise<Partial<TokenMint>> {
       marketCapUsd: pair.fdv,
       buyCount: pair.txns?.h24?.buys,
       sellCount: pair.txns?.h24?.sells,
+      isGraduated,
+      launchpad,
     };
   } catch (e) {
     console.error(`Error fetching DexScreener data for ${mint}:`, e);
@@ -98,7 +131,7 @@ async function fetchHolderCount(mint: string, heliusApiKey: string): Promise<num
   }
 }
 
-async function fetchEnhancedTokenData(mint: string, heliusApiKey: string): Promise<Partial<TokenMint>> {
+async function fetchEnhancedTokenData(mint: string, heliusApiKey: string, creatorWallet?: string): Promise<Partial<TokenMint>> {
   console.log(`Fetching enhanced data for ${mint}...`);
   
   // Fetch from multiple sources in parallel
@@ -106,6 +139,16 @@ async function fetchEnhancedTokenData(mint: string, heliusApiKey: string): Promi
     fetchPumpFunData(mint),
     fetchDexScreenerData(mint),
   ]);
+  
+  // Determine if graduated:
+  // 1. DexScreener shows Raydium pair with liquidity
+  // 2. pump.fun API indicates complete/graduated
+  // 3. Bonding curve at 100%
+  const isGraduated = dexData.isGraduated || 
+                      pumpData.pumpFunGraduated === true || 
+                      (pumpData.bondingCurvePercent !== undefined && pumpData.bondingCurvePercent >= 100);
+  
+  console.log(`Graduation check for ${mint}: dexGrad=${dexData.isGraduated}, pumpGrad=${pumpData.pumpFunGraduated}, bondingCurve=${pumpData.bondingCurvePercent}`);
   
   // Merge data, preferring more complete sources
   return {
@@ -116,8 +159,11 @@ async function fetchEnhancedTokenData(mint: string, heliusApiKey: string): Promi
     symbol: dexData.symbol || pumpData.symbol,
     description: pumpData.description,
     image: pumpData.image,
-    // Keep bonding curve from pump.fun
-    bondingCurvePercent: pumpData.bondingCurvePercent,
+    // Keep bonding curve from pump.fun (set to 100 if graduated)
+    bondingCurvePercent: isGraduated ? 100 : pumpData.bondingCurvePercent,
+    isGraduated,
+    launchpad: dexData.launchpad,
+    creatorWallet,
   };
 }
 
@@ -231,7 +277,7 @@ serve(async (req) => {
     
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
     
-    const { action, walletAddress, userId, sourceToken, maxAgeHours } = await req.json();
+    const { action, walletAddress, userId, sourceToken, maxAgeHours, testMint } = await req.json();
     
     console.log(`Mint monitor action: ${action}`);
     
@@ -555,27 +601,46 @@ serve(async (req) => {
       });
     }
     
-    // Test notification action
+    // Test notification action - supports custom mint via testMint param
     if (action === 'test_notification') {
       const emails = ['admin@blackbox.farm', 'wilsondavid@live.ca'];
-      const testMint = {
-        mint: '7xKXtg2CW87d97TXJSDpbD5jBkheTqA83TZRuJosgAsU',
-        symbol: 'TESTCOIN',
-        name: 'Test Token for Watchdog Demo',
-        description: 'This is a sample token created to demonstrate the enhanced email notifications. The Mint Monitor Watchdog detected this token from a monitored spawner wallet.',
-        image: 'https://pump.fun/logo.png',
-        holderCount: 1247,
-        buyCount: 892,
-        sellCount: 156,
-        currentPriceUsd: 0.00004523,
-        currentPriceSol: 0.000000234,
-        bondingCurvePercent: 67.5,
-        marketCapUsd: 45230,
-        liquidityUsd: 12500,
-        volume24h: 8750,
-      };
+      
+      let testMintData;
+      
+      // If custom mint provided, fetch real data
+      if (testMint?.mint) {
+        console.log(`Fetching real data for custom test mint: ${testMint.mint}`);
+        const enhanced = await fetchEnhancedTokenData(testMint.mint, heliusApiKey, testMint.creatorWallet);
+        testMintData = {
+          mint: testMint.mint,
+          ...enhanced,
+          creatorWallet: testMint.creatorWallet,
+        };
+        console.log(`Enhanced data for ${testMint.mint}:`, testMintData);
+      } else {
+        // Default test data
+        testMintData = {
+          mint: '7xKXtg2CW87d97TXJSDpbD5jBkheTqA83TZRuJosgAsU',
+          symbol: 'TESTCOIN',
+          name: 'Test Token for Watchdog Demo',
+          description: 'This is a sample token created to demonstrate the email notifications.',
+          image: 'https://pump.fun/logo.png',
+          holderCount: 1247,
+          buyCount: 892,
+          sellCount: 156,
+          currentPriceUsd: 0.00004523,
+          currentPriceSol: 0.000000234,
+          bondingCurvePercent: 67.5,
+          marketCapUsd: 45230,
+          liquidityUsd: 12500,
+          volume24h: 8750,
+          isGraduated: false,
+          launchpad: 'pump.fun',
+        };
+      }
       
       const results: { email: string; success: boolean; error?: string }[] = [];
+      const tokenSymbol = testMintData.symbol || 'Token';
       
       for (const email of emails) {
         try {
@@ -588,11 +653,11 @@ serve(async (req) => {
             body: JSON.stringify({
               type: 'email',
               to: email,
-              subject: '🚨 TEST: New Token Mint Detected - 1 token',
-              message: `This is a TEST notification from your Mint Monitor Watchdog!\n\nA monitored spawner wallet has created a new token.`,
+              subject: `🚨 New Token Mint Detected - $${tokenSymbol}`,
+              message: `A monitored spawner wallet has created a new token!\n\n${testMintData.creatorWallet ? `Creator: ${testMintData.creatorWallet}` : ''}`,
               notificationType: 'wallet',
               level: 'warning',
-              data: { mints: [testMint], isTest: true }
+              data: { mints: [testMintData] }
             })
           });
           
@@ -608,6 +673,7 @@ serve(async (req) => {
       return new Response(JSON.stringify({ 
         success: true, 
         message: 'Test notifications sent',
+        tokenData: testMintData,
         results 
       }), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' }
