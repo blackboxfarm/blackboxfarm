@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -7,9 +7,10 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { Switch } from '@/components/ui/switch';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
-import { Flame, RefreshCw, TrendingUp, DollarSign, Wallet, Clock, CheckCircle2, XCircle, Loader2, Plus, Copy, ArrowUpRight, Key, Settings, Zap, Activity } from 'lucide-react';
+import { Flame, RefreshCw, TrendingUp, DollarSign, Wallet, Clock, CheckCircle2, XCircle, Loader2, Plus, Copy, ArrowUpRight, Key, Settings, Zap, Activity, Radio } from 'lucide-react';
 import { useSolPrice } from '@/hooks/useSolPrice';
 import { FlipItFeeCalculator } from './flipit/FlipItFeeCalculator';
 
@@ -67,11 +68,99 @@ export function FlipItDashboard() {
   const [priorityFeeMode, setPriorityFeeMode] = useState<'low' | 'medium' | 'high' | 'turbo' | 'ultra'>('medium');
   const [autoMonitorEnabled, setAutoMonitorEnabled] = useState(true);
   const [lastAutoCheck, setLastAutoCheck] = useState<string | null>(null);
+  
+  // Auto-refresh state
+  const [autoRefreshEnabled, setAutoRefreshEnabled] = useState(true);
+  const [countdown, setCountdown] = useState(60);
+  const countdownRef = useRef(60);
 
   useEffect(() => {
     loadWallets();
     loadPositions();
   }, []);
+
+  // Real-time subscription to flip_positions changes
+  useEffect(() => {
+    const channel = supabase
+      .channel('flip-positions-realtime')
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'flip_positions' },
+        (payload) => {
+          console.log('Position changed:', payload);
+          loadPositions(); // Reload when CRON updates positions
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, []);
+
+  // Auto-refresh polling with countdown
+  useEffect(() => {
+    if (!autoRefreshEnabled) {
+      setCountdown(60);
+      return;
+    }
+
+    const activeHoldings = positions.filter(p => p.status === 'holding');
+    if (activeHoldings.length === 0) {
+      setCountdown(60);
+      return;
+    }
+
+    // Countdown timer
+    const countdownInterval = setInterval(() => {
+      countdownRef.current -= 1;
+      setCountdown(countdownRef.current);
+      
+      if (countdownRef.current <= 0) {
+        countdownRef.current = 60;
+        setCountdown(60);
+        // Trigger price refresh
+        handleAutoRefresh();
+      }
+    }, 1000);
+
+    return () => {
+      clearInterval(countdownInterval);
+    };
+  }, [autoRefreshEnabled, positions]);
+
+  const handleAutoRefresh = useCallback(async () => {
+    const holdingPositions = positions.filter(p => p.status === 'holding');
+    if (holdingPositions.length === 0 || isMonitoring) return;
+
+    setIsMonitoring(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('flipit-price-monitor', {
+        body: { 
+          action: 'check',
+          slippageBps: slippageBps,
+          priorityFeeMode: priorityFeeMode
+        }
+      });
+
+      if (error) throw error;
+
+      if (data?.prices) {
+        setCurrentPrices(data.prices);
+      }
+      if (data?.checkedAt) {
+        setLastAutoCheck(data.checkedAt);
+      }
+      if (data?.executed?.length > 0) {
+        toast.success(`Auto-sold ${data.executed.length} position(s) at target!`);
+        loadPositions();
+      }
+    } catch (err) {
+      console.error('Auto-refresh failed:', err);
+    } finally {
+      setIsMonitoring(false);
+    }
+  }, [positions, slippageBps, priorityFeeMode, isMonitoring]);
 
   useEffect(() => {
     if (selectedWallet) {
@@ -534,17 +623,29 @@ export function FlipItDashboard() {
                 </Select>
               </div>
 
-              {/* Auto-Monitor Status */}
+              {/* Auto-Refresh Control */}
               <div className="space-y-2">
                 <Label className="flex items-center gap-1 text-sm">
-                  <RefreshCw className="h-4 w-4" />
-                  Auto-Monitor
+                  <Radio className="h-4 w-4" />
+                  Auto-Refresh Prices
                 </Label>
                 <div className="flex items-center gap-2 p-2 rounded-md bg-muted/50 h-10">
-                  <div className={`w-2 h-2 rounded-full ${autoMonitorEnabled ? 'bg-green-500 animate-pulse' : 'bg-red-500'}`} />
-                  <span className="text-sm">
-                    {autoMonitorEnabled ? 'ON - Every 1 min' : 'OFF'}
-                  </span>
+                  <Switch 
+                    checked={autoRefreshEnabled} 
+                    onCheckedChange={setAutoRefreshEnabled}
+                  />
+                  {autoRefreshEnabled && positions.filter(p => p.status === 'holding').length > 0 ? (
+                    <div className="flex items-center gap-2">
+                      <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />
+                      <span className="text-sm font-medium text-green-500">
+                        Refreshing in {countdown}s
+                      </span>
+                    </div>
+                  ) : (
+                    <span className="text-sm text-muted-foreground">
+                      {autoRefreshEnabled ? 'Waiting for positions...' : 'Paused'}
+                    </span>
+                  )}
                   {lastAutoCheck && (
                     <span className="text-xs text-muted-foreground ml-auto">
                       Last: {new Date(lastAutoCheck).toLocaleTimeString()}
