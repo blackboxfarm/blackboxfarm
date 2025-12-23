@@ -32,7 +32,7 @@ const TokenAnalysisDownload = () => {
   const [moneyFlowData, setMoneyFlowData] = useState<any>(null);
   const [moneyFlowLoading, setMoneyFlowLoading] = useState(false);
   const [walletToTrace, setWalletToTrace] = useState("6rDqAoNhfVhhLynpidBWkSqEzPRkpgzFsMFhmnaCahX8");
-  const [tokenToTrace, setTokenToTrace] = useState("62aMztCXSDLqpGHX54HiLC3eYwpw9BYfjw465tQSpump");
+  const [tokenToTrace, setTokenToTrace] = useState("");
   const [showDustWallets, setShowDustWallets] = useState(false);
   const [bondingCurveData, setBondingCurveData] = useState<any>(null);
   const [bondingLoading, setBondingLoading] = useState(false);
