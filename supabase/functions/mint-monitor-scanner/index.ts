@@ -10,8 +10,115 @@ interface TokenMint {
   mint: string;
   name?: string;
   symbol?: string;
+  description?: string;
   image?: string;
   timestamp: number;
+  // Enhanced trading data
+  holderCount?: number;
+  buyCount?: number;
+  sellCount?: number;
+  currentPriceUsd?: number;
+  currentPriceSol?: number;
+  bondingCurvePercent?: number;
+  marketCapUsd?: number;
+  liquidityUsd?: number;
+  volume24h?: number;
+}
+
+async function fetchPumpFunData(mint: string): Promise<Partial<TokenMint>> {
+  try {
+    // Try pump.fun API for bonding curve and trading data
+    const response = await fetch(`https://frontend-api.pump.fun/coins/${mint}`);
+    if (!response.ok) return {};
+    
+    const data = await response.json();
+    
+    // Calculate bonding curve percentage
+    // pump.fun graduates at ~$69K market cap / 85 SOL in curve
+    const virtualSolReserves = data.virtual_sol_reserves ? Number(data.virtual_sol_reserves) / 1e9 : 0;
+    const realSolReserves = data.real_sol_reserves ? Number(data.real_sol_reserves) / 1e9 : 0;
+    const totalSolInCurve = virtualSolReserves + realSolReserves;
+    const bondingCurvePercent = Math.min(100, (totalSolInCurve / 85) * 100);
+    
+    return {
+      name: data.name,
+      symbol: data.symbol,
+      description: data.description,
+      image: data.image_uri,
+      bondingCurvePercent,
+      marketCapUsd: data.usd_market_cap,
+    };
+  } catch (e) {
+    console.error(`Error fetching pump.fun data for ${mint}:`, e);
+    return {};
+  }
+}
+
+async function fetchDexScreenerData(mint: string): Promise<Partial<TokenMint>> {
+  try {
+    const response = await fetch(`https://api.dexscreener.com/latest/dex/tokens/${mint}`);
+    if (!response.ok) return {};
+    
+    const data = await response.json();
+    const pair = data.pairs?.[0];
+    
+    if (!pair) return {};
+    
+    return {
+      currentPriceUsd: parseFloat(pair.priceUsd) || undefined,
+      currentPriceSol: parseFloat(pair.priceNative) || undefined,
+      liquidityUsd: pair.liquidity?.usd,
+      volume24h: pair.volume?.h24,
+      marketCapUsd: pair.fdv,
+      buyCount: pair.txns?.h24?.buys,
+      sellCount: pair.txns?.h24?.sells,
+    };
+  } catch (e) {
+    console.error(`Error fetching DexScreener data for ${mint}:`, e);
+    return {};
+  }
+}
+
+async function fetchHolderCount(mint: string, heliusApiKey: string): Promise<number | undefined> {
+  try {
+    const response = await fetch(`https://api.helius.xyz/v0/token-metadata?api-key=${heliusApiKey}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ mintAccounts: [mint], includeOffChain: true })
+    });
+    
+    if (!response.ok) return undefined;
+    
+    const data = await response.json();
+    // Note: Helius doesn't directly provide holder count, would need to use getTokenLargestAccounts
+    // For now, return undefined - we get this from DexScreener if available
+    return undefined;
+  } catch (e) {
+    return undefined;
+  }
+}
+
+async function fetchEnhancedTokenData(mint: string, heliusApiKey: string): Promise<Partial<TokenMint>> {
+  console.log(`Fetching enhanced data for ${mint}...`);
+  
+  // Fetch from multiple sources in parallel
+  const [pumpData, dexData] = await Promise.all([
+    fetchPumpFunData(mint),
+    fetchDexScreenerData(mint),
+  ]);
+  
+  // Merge data, preferring more complete sources
+  return {
+    ...pumpData,
+    ...dexData,
+    // Keep pump.fun metadata if DexScreener didn't have it
+    name: dexData.name || pumpData.name,
+    symbol: dexData.symbol || pumpData.symbol,
+    description: pumpData.description,
+    image: pumpData.image,
+    // Keep bonding curve from pump.fun
+    bondingCurvePercent: pumpData.bondingCurvePercent,
+  };
 }
 
 async function scanWalletForMints(
@@ -34,21 +141,15 @@ async function scanWalletForMints(
   const cutoffTime = Date.now() / 1000 - (maxAgeHours * 3600);
   
   for (const tx of transactions) {
-    // Skip old transactions
     if (tx.timestamp && tx.timestamp < cutoffTime) continue;
     
-    // Look for token creation instructions
     const instructions = tx.instructions || [];
     for (const ix of instructions) {
-      // Check for initializeMint instruction (Token Program)
       if (ix.programId === 'TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA' ||
-          ix.programId === '6EF8rrecthR5Dkzon8Nwu78hRvfCKubJ14M5uBEwF6P') { // pump.fun
+          ix.programId === '6EF8rrecthR5Dkzon8Nwu78hRvfCKubJ14M5uBEwF6P') {
         
-        // Extract mint address from accounts
         if (ix.accounts && ix.accounts.length > 0) {
           const mintAccount = ix.accounts[0];
-          
-          // Fetch metadata for this mint
           const metadata = await fetchTokenMetadata(mintAccount, heliusApiKey);
           
           mints.push({
@@ -62,11 +163,9 @@ async function scanWalletForMints(
       }
     }
     
-    // Also check tokenTransfers for mints where this wallet received tokens first
     if (tx.tokenTransfers) {
       for (const transfer of tx.tokenTransfers) {
         if (transfer.toUserAccount === walletAddress && transfer.mint) {
-          // This could be initial token distribution
           const metadata = await fetchTokenMetadata(transfer.mint, heliusApiKey);
           if (metadata) {
             mints.push({
@@ -82,7 +181,6 @@ async function scanWalletForMints(
     }
   }
   
-  // Deduplicate by mint address
   const uniqueMints = Array.from(
     new Map(mints.map(m => [m.mint, m])).values()
   );
@@ -354,11 +452,26 @@ serve(async (req) => {
           }
         }
         
-        // Send one email per user
+        // Send one email per user with enhanced token data
         for (const [email, data] of Object.entries(byEmail)) {
           try {
-            const mintsList = data.mints.map(m => 
-              `• ${m.symbol || 'Unknown'} (${m.name || m.mint.slice(0, 16) + '...'})`
+            // Fetch enhanced data for each token in parallel
+            const enhancedMints = await Promise.all(
+              data.mints.map(async (mint) => {
+                const enhanced = await fetchEnhancedTokenData(mint.mint, heliusApiKey);
+                return {
+                  ...mint,
+                  ...enhanced,
+                  // Ensure we keep original data if enhanced is empty
+                  name: enhanced.name || mint.name,
+                  symbol: enhanced.symbol || mint.symbol,
+                  image: enhanced.image || mint.image,
+                };
+              })
+            );
+            
+            const mintsList = enhancedMints.map(m => 
+              `• $${m.symbol || 'Unknown'} - ${m.name || 'No name'}`
             ).join('\n');
             
             await fetch(`${supabaseUrl}/functions/v1/send-notification`, {
@@ -370,14 +483,31 @@ serve(async (req) => {
               body: JSON.stringify({
                 type: 'email',
                 to: email,
-                subject: `🚨 New Token Mint Detected - ${data.mints.length} token(s)`,
-                message: `Your monitored spawner wallet(s) have created new tokens!\n\nWallets: ${data.wallets.length}\nNew Tokens:\n${mintsList}\n\nCheck your watchdog dashboard for details.`,
+                subject: `🚨 New Token Mint Detected - ${enhancedMints.length} token(s)`,
+                message: `A monitored spawner wallet has created ${enhancedMints.length} new token(s)!\n\nMonitored Wallets: ${data.wallets.length}\n\nNew Tokens:\n${mintsList}`,
                 notificationType: 'wallet',
                 level: 'warning',
-                data: { mints: data.mints.map(m => ({ symbol: m.symbol, mint: m.mint })) }
+                data: { 
+                  mints: enhancedMints.map(m => ({
+                    mint: m.mint,
+                    symbol: m.symbol,
+                    name: m.name,
+                    description: m.description,
+                    image: m.image,
+                    holderCount: m.holderCount,
+                    buyCount: m.buyCount,
+                    sellCount: m.sellCount,
+                    currentPriceUsd: m.currentPriceUsd,
+                    currentPriceSol: m.currentPriceSol,
+                    bondingCurvePercent: m.bondingCurvePercent,
+                    marketCapUsd: m.marketCapUsd,
+                    liquidityUsd: m.liquidityUsd,
+                    volume24h: m.volume24h,
+                  }))
+                }
               })
             });
-            console.log(`Notification sent to ${email}`);
+            console.log(`Enhanced notification sent to ${email} with ${enhancedMints.length} tokens`);
           } catch (notifErr) {
             console.error(`Failed to send notification to ${email}:`, notifErr);
           }
@@ -429,9 +559,20 @@ serve(async (req) => {
     if (action === 'test_notification') {
       const emails = ['admin@blackbox.farm', 'wilsondavid@live.ca'];
       const testMint = {
+        mint: '7xKXtg2CW87d97TXJSDpbD5jBkheTqA83TZRuJosgAsU',
         symbol: 'TESTCOIN',
-        name: 'Test Token for Watchdog',
-        mint: '7xKXtg2CW87d97TXJSDpbD5jBkheTqA83TZRuJosgAsU'
+        name: 'Test Token for Watchdog Demo',
+        description: 'This is a sample token created to demonstrate the enhanced email notifications. The Mint Monitor Watchdog detected this token from a monitored spawner wallet.',
+        image: 'https://pump.fun/logo.png',
+        holderCount: 1247,
+        buyCount: 892,
+        sellCount: 156,
+        currentPriceUsd: 0.00004523,
+        currentPriceSol: 0.000000234,
+        bondingCurvePercent: 67.5,
+        marketCapUsd: 45230,
+        liquidityUsd: 12500,
+        volume24h: 8750,
       };
       
       const results: { email: string; success: boolean; error?: string }[] = [];
@@ -448,7 +589,7 @@ serve(async (req) => {
               type: 'email',
               to: email,
               subject: '🚨 TEST: New Token Mint Detected - 1 token',
-              message: `This is a TEST notification from your Mint Monitor Watchdog!\n\nA monitored spawner wallet has created a new token:\n\n• $${testMint.symbol} (${testMint.name})\n\nMint Address: ${testMint.mint}\n\nThis is a simulated detection to verify your email notifications are working correctly.\n\nCheck your watchdog dashboard for real detections.`,
+              message: `This is a TEST notification from your Mint Monitor Watchdog!\n\nA monitored spawner wallet has created a new token.`,
               notificationType: 'wallet',
               level: 'warning',
               data: { mints: [testMint], isTest: true }
