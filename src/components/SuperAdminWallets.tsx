@@ -6,7 +6,7 @@ import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
-import { Copy, Plus, Shield, Wallet, AlertTriangle, Key, DollarSign, ChevronDown, ChevronUp } from "lucide-react";
+import { Copy, Plus, Shield, Wallet, AlertTriangle, Key, DollarSign, ChevronDown, ChevronUp, Flame } from "lucide-react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Keypair } from "@solana/web3.js";
 import bs58 from "bs58";
@@ -18,7 +18,7 @@ interface SuperAdminWallet {
   id: string;
   label: string;
   pubkey: string;
-  wallet_type: 'treasury' | 'campaign_funding' | 'refund_processing' | 'emergency';
+  wallet_type: 'treasury' | 'campaign_funding' | 'refund_processing' | 'emergency' | 'flipit';
   is_active: boolean;
   created_at: string;
 }
@@ -61,8 +61,17 @@ export function SuperAdminWallets() {
       description: "Emergency access for critical operations",
       icon: <AlertTriangle className="h-4 w-4" />,
       color: "bg-red-100 text-red-800"
+    },
+    {
+      value: "flipit",
+      label: "FlipIt Wallet",
+      description: "Dedicated wallet for FlipIt quick flips",
+      icon: <Flame className="h-4 w-4" />,
+      color: "bg-orange-100 text-orange-800"
     }
   ];
+
+  const creatableWalletTypes = walletTypes.filter((t) => t.value !== "flipit");
 
   useEffect(() => {
     loadSuperAdminWallets();
@@ -260,7 +269,7 @@ export function SuperAdminWallets() {
                   <div className="space-y-2">
                     <Label>Wallet Type</Label>
                     <div className="grid gap-2">
-                      {walletTypes.map((type) => (
+                      {creatableWalletTypes.map((type) => (
                         <div
                           key={type.value}
                           className={`p-3 border rounded-lg cursor-pointer transition-colors ${
@@ -408,6 +417,7 @@ export function SuperAdminWallets() {
                     {type.value === "campaign_funding" && "Use for: Initial campaign funding, client payments"}
                     {type.value === "refund_processing" && "Use for: Processing refunds, campaign cancellations"}
                     {type.value === "emergency" && "Use for: Emergency operations, recovery scenarios"}
+                    {type.value === "flipit" && "Use for: FlipIt trading wallet (fund, trade, withdraw)"}
                   </div>
                 </div>
               </div>
