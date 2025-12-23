@@ -179,12 +179,186 @@ async function fetchEnhancedTokenData(mint: string, heliusApiKey: string, creato
   };
 }
 
+// Known tokens to exclude (not actual new mints)
+const EXCLUDED_TOKENS = new Set([
+  'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v', // USDC
+  'So11111111111111111111111111111111111111112',   // Wrapped SOL
+  'Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB', // USDT
+  'mSoLzYCxHdYgdzU16g5QSh3i5K3z3KZK7ytfqcJm7So',  // mSOL
+  'DezXAZ8z7PnrnRJjz3wXBoRgixCa6xjnB7YaB1pPB263', // Bonk
+]);
+
+// Pump.fun program IDs
+const PUMP_FUN_PROGRAM = '6EF8rrecthR5Dkzon8Nwu78hRvfCKubJ14M5uBEwF6P';
+const TOKEN_PROGRAM = 'TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA';
+const TOKEN_2022_PROGRAM = 'TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb';
+
 async function scanWalletForMints(
   walletAddress: string, 
   heliusApiKey: string,
   maxAgeHours: number = 24
 ): Promise<TokenMint[]> {
-  console.log(`Scanning wallet ${walletAddress} for mints...`);
+  console.log(`Scanning wallet ${walletAddress} for TRUE token creations only...`);
+  
+  // Use Helius parsed transaction history for better type detection
+  const url = `https://api.helius.xyz/v0/addresses/${walletAddress}/transactions?api-key=${heliusApiKey}&limit=100&type=TOKEN_MINT`;
+  
+  const response = await fetch(url);
+  if (!response.ok) {
+    console.error(`Helius API error: ${response.status}`);
+    // Fallback to regular transactions if type filter fails
+    return await scanWalletForMintsLegacy(walletAddress, heliusApiKey, maxAgeHours);
+  }
+  
+  const transactions = await response.json();
+  console.log(`Got ${transactions.length} TOKEN_MINT type transactions`);
+  
+  const mints: TokenMint[] = [];
+  const cutoffTime = Date.now() / 1000 - (maxAgeHours * 3600);
+  const seenMints = new Set<string>();
+  
+  for (const tx of transactions) {
+    if (tx.timestamp && tx.timestamp < cutoffTime) continue;
+    
+    // Check if this wallet was the fee payer (creator)
+    const isCreator = tx.feePayer === walletAddress;
+    if (!isCreator) {
+      console.log(`Skipping tx ${tx.signature?.slice(0, 8)} - wallet is not fee payer`);
+      continue;
+    }
+    
+    // Look for token mint in the transaction
+    let detectedMint: string | null = null;
+    
+    // Check token transfers for minted token
+    if (tx.tokenTransfers?.length > 0) {
+      for (const transfer of tx.tokenTransfers) {
+        const mint = transfer.mint;
+        if (mint && !EXCLUDED_TOKENS.has(mint) && !seenMints.has(mint)) {
+          // Validate this is actually a new token creation
+          const isValidMint = await validateTokenCreation(mint, walletAddress, heliusApiKey);
+          if (isValidMint) {
+            detectedMint = mint;
+            break;
+          }
+        }
+      }
+    }
+    
+    // Also check instructions for pump.fun create
+    if (!detectedMint && tx.instructions) {
+      for (const ix of tx.instructions) {
+        if (ix.programId === PUMP_FUN_PROGRAM) {
+          // Look for create instruction accounts
+          const accounts = ix.accounts || [];
+          for (const account of accounts) {
+            if (account && account.length === 44 && !EXCLUDED_TOKENS.has(account) && !seenMints.has(account)) {
+              const isValidMint = await validateTokenCreation(account, walletAddress, heliusApiKey);
+              if (isValidMint) {
+                detectedMint = account;
+                break;
+              }
+            }
+          }
+        }
+      }
+    }
+    
+    if (detectedMint && !seenMints.has(detectedMint)) {
+      seenMints.add(detectedMint);
+      const metadata = await fetchTokenMetadata(detectedMint, heliusApiKey);
+      
+      // Final validation: must have proper token metadata
+      if (metadata?.name || metadata?.symbol) {
+        console.log(`✓ Valid mint detected: ${detectedMint} (${metadata.symbol || 'Unknown'})`);
+        mints.push({
+          mint: detectedMint,
+          name: metadata?.name,
+          symbol: metadata?.symbol,
+          image: metadata?.image,
+          timestamp: tx.timestamp || Date.now() / 1000,
+          creatorWallet: walletAddress
+        });
+      } else {
+        console.log(`✗ Rejected ${detectedMint.slice(0, 8)} - no valid token metadata`);
+      }
+    }
+  }
+  
+  console.log(`Found ${mints.length} TRUE token creations for wallet ${walletAddress}`);
+  return mints;
+}
+
+// Validate that this is a real token created by the wallet
+async function validateTokenCreation(
+  mint: string,
+  expectedCreator: string,
+  heliusApiKey: string
+): Promise<boolean> {
+  try {
+    // Skip obviously invalid addresses
+    if (mint.length !== 44 && mint.length !== 43) return false;
+    if (EXCLUDED_TOKENS.has(mint)) return false;
+    
+    // Fetch token metadata to check mint authority
+    const url = `https://api.helius.xyz/v0/token-metadata?api-key=${heliusApiKey}`;
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ mintAccounts: [mint] })
+    });
+    
+    if (!response.ok) return false;
+    
+    const data = await response.json();
+    if (!data || data.length === 0) return false;
+    
+    const token = data[0];
+    
+    // Check if mint authority or update authority matches expected creator
+    const mintAuthority = token.onChainAccountInfo?.accountInfo?.data?.parsed?.info?.mintAuthority;
+    const updateAuthority = token.onChainMetadata?.metadata?.updateAuthority;
+    
+    // For pump.fun tokens, the mint authority is often the pump program, but update authority should be creator
+    // Or check if the token was created recently (has low supply history)
+    const hasValidAuthority = mintAuthority === expectedCreator || updateAuthority === expectedCreator;
+    
+    // Also accept if the token has valid metadata (name/symbol) - indicates real token
+    const hasValidMetadata = !!(
+      token.onChainMetadata?.metadata?.data?.name ||
+      token.legacyMetadata?.name
+    );
+    
+    // Accept if either authority matches OR has valid metadata and looks like new token
+    if (hasValidAuthority) {
+      console.log(`  ✓ ${mint.slice(0, 8)} - authority matches creator`);
+      return true;
+    }
+    
+    if (hasValidMetadata) {
+      // Check decimals - most meme tokens have 6-9 decimals
+      const decimals = token.onChainAccountInfo?.accountInfo?.data?.parsed?.info?.decimals;
+      if (decimals !== undefined && decimals >= 0 && decimals <= 18) {
+        console.log(`  ✓ ${mint.slice(0, 8)} - has valid token metadata`);
+        return true;
+      }
+    }
+    
+    console.log(`  ✗ ${mint.slice(0, 8)} - failed validation (no authority match, no valid metadata)`);
+    return false;
+  } catch (e) {
+    console.error(`Error validating token ${mint}:`, e);
+    return false;
+  }
+}
+
+// Fallback scanner for when type filter doesn't work
+async function scanWalletForMintsLegacy(
+  walletAddress: string, 
+  heliusApiKey: string,
+  maxAgeHours: number = 24
+): Promise<TokenMint[]> {
+  console.log(`Using legacy scan for wallet ${walletAddress}...`);
   
   const url = `https://api.helius.xyz/v0/addresses/${walletAddress}/transactions?api-key=${heliusApiKey}&limit=100`;
   
@@ -197,54 +371,54 @@ async function scanWalletForMints(
   const transactions = await response.json();
   const mints: TokenMint[] = [];
   const cutoffTime = Date.now() / 1000 - (maxAgeHours * 3600);
+  const seenMints = new Set<string>();
   
   for (const tx of transactions) {
     if (tx.timestamp && tx.timestamp < cutoffTime) continue;
     
+    // CRITICAL: Only process transactions where this wallet is the fee payer (creator)
+    if (tx.feePayer !== walletAddress) continue;
+    
+    // Look for pump.fun create instructions
     const instructions = tx.instructions || [];
     for (const ix of instructions) {
-      if (ix.programId === 'TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA' ||
-          ix.programId === '6EF8rrecthR5Dkzon8Nwu78hRvfCKubJ14M5uBEwF6P') {
+      // Check for pump.fun program
+      if (ix.programId === PUMP_FUN_PROGRAM) {
+        // This is a pump.fun interaction - check if it's a create
+        const accounts = ix.accounts || [];
         
-        if (ix.accounts && ix.accounts.length > 0) {
-          const mintAccount = ix.accounts[0];
-          const metadata = await fetchTokenMetadata(mintAccount, heliusApiKey);
-          
-          mints.push({
-            mint: mintAccount,
-            name: metadata?.name,
-            symbol: metadata?.symbol,
-            image: metadata?.image,
-            timestamp: tx.timestamp || Date.now() / 1000
-          });
-        }
-      }
-    }
-    
-    if (tx.tokenTransfers) {
-      for (const transfer of tx.tokenTransfers) {
-        if (transfer.toUserAccount === walletAddress && transfer.mint) {
-          const metadata = await fetchTokenMetadata(transfer.mint, heliusApiKey);
-          if (metadata) {
-            mints.push({
-              mint: transfer.mint,
-              name: metadata.name,
-              symbol: metadata.symbol,
-              image: metadata.image,
-              timestamp: tx.timestamp || Date.now() / 1000
-            });
+        for (const account of accounts) {
+          if (account && 
+              account.length >= 43 && 
+              account.length <= 44 &&
+              !EXCLUDED_TOKENS.has(account) && 
+              !seenMints.has(account) &&
+              account !== walletAddress) {
+            
+            const isValid = await validateTokenCreation(account, walletAddress, heliusApiKey);
+            if (isValid) {
+              seenMints.add(account);
+              const metadata = await fetchTokenMetadata(account, heliusApiKey);
+              
+              if (metadata?.name || metadata?.symbol) {
+                mints.push({
+                  mint: account,
+                  name: metadata?.name,
+                  symbol: metadata?.symbol,
+                  image: metadata?.image,
+                  timestamp: tx.timestamp || Date.now() / 1000,
+                  creatorWallet: walletAddress
+                });
+              }
+            }
           }
         }
       }
     }
   }
   
-  const uniqueMints = Array.from(
-    new Map(mints.map(m => [m.mint, m])).values()
-  );
-  
-  console.log(`Found ${uniqueMints.length} mints for wallet ${walletAddress}`);
-  return uniqueMints;
+  console.log(`Legacy scan found ${mints.length} mints for wallet ${walletAddress}`);
+  return mints;
 }
 
 async function fetchTokenMetadata(
