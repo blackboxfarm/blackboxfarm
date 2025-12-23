@@ -11,7 +11,6 @@ import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { Flame, RefreshCw, TrendingUp, DollarSign, Wallet, Clock, CheckCircle2, XCircle, Loader2, Plus, Copy, ArrowUpRight, Key, Settings, Zap, Activity } from 'lucide-react';
 import { useSolPrice } from '@/hooks/useSolPrice';
-import { Connection, PublicKey, LAMPORTS_PER_SOL } from '@solana/web3.js';
 
 interface FlipPosition {
   id: string;
@@ -109,12 +108,15 @@ export function FlipItDashboard() {
 
     setIsRefreshingBalance(true);
     try {
-      // Use Solana mainnet RPC directly - more reliable than Helius for simple balance checks
-      const connection = new Connection('https://api.mainnet-beta.solana.com', 'confirmed');
-      const pubkey = new PublicKey(wallet.pubkey);
-      const balance = await connection.getBalance(pubkey);
-      const solBalance = balance / LAMPORTS_PER_SOL;
-      setWalletBalance(solBalance);
+      // Use edge function to fetch balance via Helius (avoids browser CORS/rate limits)
+      const { data, error } = await supabase.functions.invoke('get-wallet-balance', {
+        body: { walletAddress: wallet.pubkey }
+      });
+      
+      if (error) throw error;
+      if (data.error) throw new Error(data.error);
+      
+      setWalletBalance(data.balance);
     } catch (err) {
       console.error('Failed to fetch balance:', err);
       toast.error('Failed to fetch wallet balance');
