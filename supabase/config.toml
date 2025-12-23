@@ -228,3 +228,9 @@ verify_jwt = false
 
 [functions.flipit-price-monitor]
 verify_jwt = false
+
+[functions.flipit-wallet-generator]
+verify_jwt = true
+
+[functions.flipit-wallet-withdrawal]
+verify_jwt = true
