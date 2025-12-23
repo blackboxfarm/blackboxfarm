@@ -74,21 +74,25 @@ export function FlipItDashboard() {
   }, [selectedWallet]);
 
   const loadWallets = async () => {
-    const { data, error } = await supabase
-      .from('super_admin_wallets')
-      .select('id, label, pubkey, wallet_type')
-      .eq('is_active', true)
-      .eq('wallet_type', 'flipit')
-      .order('created_at', { ascending: false });
+    const { data: sessionData } = await supabase.auth.getSession();
+    const accessToken = sessionData.session?.access_token;
+
+    const { data: response, error } = await supabase.functions.invoke('super-admin-wallet-generator', {
+      method: 'GET',
+      headers: accessToken ? { Authorization: `Bearer ${accessToken}` } : undefined,
+    });
 
     if (error) {
       toast.error('Failed to load wallets');
       return;
     }
 
-    setWallets(data || []);
-    if (data && data.length > 0 && !selectedWallet) {
-      setSelectedWallet(data[0].id);
+    const allWallets = (response as any)?.data as SuperAdminWallet[] | undefined;
+    const flipitWallets = (allWallets || []).filter((w: any) => w.wallet_type === 'flipit' && w.is_active);
+
+    setWallets(flipitWallets);
+    if (flipitWallets.length > 0 && !selectedWallet) {
+      setSelectedWallet(flipitWallets[0].id);
     }
   };
 
