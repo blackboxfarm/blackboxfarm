@@ -24,6 +24,10 @@ interface TokenMintData {
   marketCapUsd?: number;
   liquidityUsd?: number;
   volume24h?: number;
+  // Graduation status
+  isGraduated?: boolean;
+  launchpad?: 'pump.fun' | 'bags.fm' | 'bonk.fun' | 'raydium';
+  creatorWallet?: string;
 }
 
 interface NotificationRequest {
@@ -57,18 +61,35 @@ function formatPrice(price: number | undefined): string {
 
 function generateTokenCardHtml(token: TokenMintData): string {
   const solscanUrl = `https://solscan.io/token/${token.mint}`;
-  const pumpFunUrl = `https://pump.fun/${token.mint}`;
   const dexScreenerUrl = `https://dexscreener.com/solana/${token.mint}`;
   
-  const bondingCurveColor = (token.bondingCurvePercent ?? 0) >= 80 ? '#22c55e' : 
+  // Detect if token is graduated (has Raydium liquidity or bondingCurve >= 100)
+  const isGraduated = token.isGraduated || (token.bondingCurvePercent !== undefined && token.bondingCurvePercent >= 100);
+  
+  // Determine launchpad
+  const launchpad = token.launchpad || 'pump.fun';
+  const launchpadUrl = launchpad === 'bags.fm' ? `https://bags.fm/token/${token.mint}` :
+                       launchpad === 'bonk.fun' ? `https://bonk.fun/token/${token.mint}` :
+                       `https://pump.fun/${token.mint}`;
+  const launchpadLabel = launchpad === 'bags.fm' ? '💼 bags.fm' :
+                         launchpad === 'bonk.fun' ? '🐕 bonk.fun' :
+                         '🎯 pump.fun';
+  
+  const bondingCurveColor = isGraduated ? '#22c55e' :
+                            (token.bondingCurvePercent ?? 0) >= 80 ? '#22c55e' : 
                             (token.bondingCurvePercent ?? 0) >= 50 ? '#f59e0b' : '#ef4444';
+  
+  // Status badge
+  const statusBadge = isGraduated ? 
+    `<span style="background: linear-gradient(135deg, #22c55e, #16a34a); color: white; padding: 4px 10px; border-radius: 12px; font-size: 11px; font-weight: 600;">✅ GRADUATED TO RAYDIUM</span>` :
+    `<span style="background: ${bondingCurveColor}20; color: ${bondingCurveColor}; padding: 4px 10px; border-radius: 12px; font-size: 11px; font-weight: 600;">📈 ${(token.bondingCurvePercent ?? 0).toFixed(1)}% Bonding Curve</span>`;
   
   return `
     <div style="background: #1a1a2e; border-radius: 12px; padding: 20px; margin-bottom: 16px; border: 1px solid #2a2a4e;">
       <!-- Token Header -->
-      <div style="display: flex; align-items: center; margin-bottom: 16px;">
+      <div style="display: flex; align-items: center; margin-bottom: 12px;">
         ${token.image ? `<img src="${token.image}" alt="${token.symbol}" style="width: 48px; height: 48px; border-radius: 50%; margin-right: 12px; object-fit: cover;" onerror="this.style.display='none'" />` : ''}
-        <div>
+        <div style="flex: 1;">
           <h3 style="margin: 0; color: #f59e0b; font-size: 20px; font-weight: bold;">
             ${token.symbol ? `$${token.symbol}` : 'Unknown Token'}
           </h3>
@@ -76,6 +97,7 @@ function generateTokenCardHtml(token: TokenMintData): string {
             ${token.name || 'No name'}
           </p>
         </div>
+        ${statusBadge}
       </div>
       
       ${token.description ? `
@@ -86,13 +108,6 @@ function generateTokenCardHtml(token: TokenMintData): string {
       
       <!-- Trading Stats Grid -->
       <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; margin-bottom: 16px;">
-        ${token.bondingCurvePercent !== undefined ? `
-          <div style="background: #0d0d1a; padding: 12px; border-radius: 8px; text-align: center;">
-            <div style="color: ${bondingCurveColor}; font-size: 18px; font-weight: bold;">${token.bondingCurvePercent.toFixed(1)}%</div>
-            <div style="color: #666; font-size: 11px;">Bonding Curve</div>
-          </div>
-        ` : ''}
-        
         ${token.currentPriceUsd !== undefined ? `
           <div style="background: #0d0d1a; padding: 12px; border-radius: 8px; text-align: center;">
             <div style="color: #22c55e; font-size: 18px; font-weight: bold;">${formatPrice(token.currentPriceUsd)}</div>
@@ -100,17 +115,24 @@ function generateTokenCardHtml(token: TokenMintData): string {
           </div>
         ` : ''}
         
-        ${token.holderCount !== undefined ? `
-          <div style="background: #0d0d1a; padding: 12px; border-radius: 8px; text-align: center;">
-            <div style="color: #3b82f6; font-size: 18px; font-weight: bold;">${formatNumber(token.holderCount)}</div>
-            <div style="color: #666; font-size: 11px;">Holders</div>
-          </div>
-        ` : ''}
-        
         ${token.marketCapUsd !== undefined ? `
           <div style="background: #0d0d1a; padding: 12px; border-radius: 8px; text-align: center;">
             <div style="color: #a855f7; font-size: 18px; font-weight: bold;">${formatNumber(token.marketCapUsd)}</div>
             <div style="color: #666; font-size: 11px;">Market Cap</div>
+          </div>
+        ` : ''}
+        
+        ${token.liquidityUsd !== undefined ? `
+          <div style="background: #0d0d1a; padding: 12px; border-radius: 8px; text-align: center;">
+            <div style="color: #3b82f6; font-size: 18px; font-weight: bold;">${formatNumber(token.liquidityUsd)}</div>
+            <div style="color: #666; font-size: 11px;">Liquidity</div>
+          </div>
+        ` : ''}
+        
+        ${token.holderCount !== undefined ? `
+          <div style="background: #0d0d1a; padding: 12px; border-radius: 8px; text-align: center;">
+            <div style="color: #f59e0b; font-size: 18px; font-weight: bold;">${formatNumber(token.holderCount)}</div>
+            <div style="color: #666; font-size: 11px;">Holders</div>
           </div>
         ` : ''}
       </div>
@@ -143,9 +165,14 @@ function generateTokenCardHtml(token: TokenMintData): string {
       
       <!-- Action Links -->
       <div style="display: flex; gap: 8px; flex-wrap: wrap;">
-        <a href="${pumpFunUrl}" target="_blank" style="display: inline-block; background: #22c55e; color: white; padding: 10px 16px; border-radius: 6px; text-decoration: none; font-size: 13px; font-weight: 600;">
-          🎯 pump.fun
+        <a href="${launchpadUrl}" target="_blank" style="display: inline-block; background: #22c55e; color: white; padding: 10px 16px; border-radius: 6px; text-decoration: none; font-size: 13px; font-weight: 600;">
+          ${launchpadLabel}
         </a>
+        ${isGraduated ? `
+          <a href="https://raydium.io/swap/?inputMint=sol&outputMint=${token.mint}" target="_blank" style="display: inline-block; background: #6366f1; color: white; padding: 10px 16px; border-radius: 6px; text-decoration: none; font-size: 13px; font-weight: 600;">
+            🌊 Raydium
+          </a>
+        ` : ''}
         <a href="${solscanUrl}" target="_blank" style="display: inline-block; background: #3b82f6; color: white; padding: 10px 16px; border-radius: 6px; text-decoration: none; font-size: 13px; font-weight: 600;">
           🔍 Solscan
         </a>
@@ -179,12 +206,6 @@ function generateEmailHtml(subject: string, message: string, data?: Notification
         
         <!-- Main Content -->
         <div style="background: #16162a; padding: 24px; border-radius: 0 0 12px 12px;">
-          ${data?.isTest ? `
-            <div style="background: #f59e0b20; border: 1px solid #f59e0b; border-radius: 8px; padding: 12px; margin-bottom: 16px; text-align: center;">
-              <span style="color: #f59e0b; font-weight: bold;">⚠️ This is a TEST notification</span>
-            </div>
-          ` : ''}
-          
           <p style="color: #b0b0c0; font-size: 15px; line-height: 1.6; margin: 0 0 20px 0;">
             ${message.replace(/\n/g, '<br>')}
           </p>
