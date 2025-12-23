@@ -46,7 +46,8 @@ export function FlipItDashboard() {
   const [wallets, setWallets] = useState<SuperAdminWallet[]>([]);
   const [selectedWallet, setSelectedWallet] = useState<string>('');
   const [tokenAddress, setTokenAddress] = useState('');
-  const [buyAmount, setBuyAmount] = useState(10);
+  const [buyAmount, setBuyAmount] = useState('0.1');
+  const [buyAmountMode, setBuyAmountMode] = useState<'usd' | 'sol'>('sol');
   const [targetMultiplier, setTargetMultiplier] = useState(2);
   const [isLoading, setIsLoading] = useState(false);
   const [isFlipping, setIsFlipping] = useState(false);
@@ -206,6 +207,17 @@ export function FlipItDashboard() {
       return;
     }
 
+    const parsedAmount = parseFloat(buyAmount);
+    if (isNaN(parsedAmount) || parsedAmount <= 0) {
+      toast.error('Enter a valid buy amount');
+      return;
+    }
+
+    // Convert to USD if in SOL mode
+    const buyAmountUsd = buyAmountMode === 'sol' && solPrice 
+      ? parsedAmount * solPrice 
+      : parsedAmount;
+
     setIsFlipping(true);
     try {
       const { data, error } = await supabase.functions.invoke('flipit-execute', {
@@ -213,7 +225,7 @@ export function FlipItDashboard() {
           action: 'buy',
           tokenMint: tokenAddress.trim(),
           walletId: selectedWallet,
-          buyAmountUsd: buyAmount,
+          buyAmountUsd: buyAmountUsd,
           targetMultiplier: targetMultiplier,
           slippageBps: slippageBps,
           priorityFeeMode: priorityFeeMode
@@ -557,21 +569,37 @@ export function FlipItDashboard() {
             {/* Amount */}
             <div className="space-y-2">
               <Label className="flex items-center gap-1">
-                <DollarSign className="h-4 w-4" />
-                Buy Amount (USD)
+                {buyAmountMode === 'usd' ? <DollarSign className="h-4 w-4" /> : <Wallet className="h-4 w-4" />}
+                Buy Amount
               </Label>
-              <Select value={buyAmount.toString()} onValueChange={v => setBuyAmount(Number(v))}>
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="5">$5</SelectItem>
-                  <SelectItem value="10">$10</SelectItem>
-                  <SelectItem value="25">$25</SelectItem>
-                  <SelectItem value="50">$50</SelectItem>
-                  <SelectItem value="100">$100</SelectItem>
-                </SelectContent>
-              </Select>
+              <div className="flex gap-2">
+                <Input
+                  type="number"
+                  step="0.001"
+                  min="0"
+                  value={buyAmount}
+                  onChange={(e) => setBuyAmount(e.target.value)}
+                  placeholder={buyAmountMode === 'usd' ? '0.00' : '0.001'}
+                  className="flex-1"
+                />
+                <Select value={buyAmountMode} onValueChange={(v: 'usd' | 'sol') => setBuyAmountMode(v)}>
+                  <SelectTrigger className="w-20">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="sol">SOL</SelectItem>
+                    <SelectItem value="usd">USD</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              {solPrice && buyAmount && (
+                <p className="text-xs text-muted-foreground">
+                  {buyAmountMode === 'usd' 
+                    ? `≈ ${(parseFloat(buyAmount) / solPrice).toFixed(4)} SOL`
+                    : `≈ $${(parseFloat(buyAmount) * solPrice).toFixed(2)} USD`
+                  }
+                </p>
+              )}
             </div>
 
             {/* Target Multiplier */}
