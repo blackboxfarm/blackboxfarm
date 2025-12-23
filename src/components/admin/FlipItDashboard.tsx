@@ -58,7 +58,7 @@ export function FlipItDashboard() {
   
   // Settings
   const [slippageBps, setSlippageBps] = useState(500); // 5% default
-  const [priorityFeeMode, setPriorityFeeMode] = useState<'low' | 'medium' | 'high' | 'turbo'>('medium');
+  const [priorityFeeMode, setPriorityFeeMode] = useState<'low' | 'medium' | 'high' | 'turbo' | 'ultra'>('medium');
   const [autoMonitorEnabled, setAutoMonitorEnabled] = useState(true);
   const [lastAutoCheck, setLastAutoCheck] = useState<string | null>(null);
 
@@ -476,6 +476,9 @@ export function FlipItDashboard() {
                     <SelectItem value="300">3% (Standard)</SelectItem>
                     <SelectItem value="500">5% (Default)</SelectItem>
                     <SelectItem value="1000">10% (Aggressive)</SelectItem>
+                    <SelectItem value="1500">15% (Very Aggressive)</SelectItem>
+                    <SelectItem value="2000">20% (High Risk)</SelectItem>
+                    <SelectItem value="3000">30% (Maximum)</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
@@ -486,7 +489,7 @@ export function FlipItDashboard() {
                   <Zap className="h-4 w-4" />
                   Priority Fee (Gas)
                 </Label>
-                <Select value={priorityFeeMode} onValueChange={(v: 'low' | 'medium' | 'high' | 'turbo') => setPriorityFeeMode(v)}>
+                <Select value={priorityFeeMode} onValueChange={(v: 'low' | 'medium' | 'high' | 'turbo' | 'ultra') => setPriorityFeeMode(v)}>
                   <SelectTrigger>
                     <SelectValue />
                   </SelectTrigger>
@@ -494,7 +497,8 @@ export function FlipItDashboard() {
                     <SelectItem value="low">Low (~0.0001 SOL)</SelectItem>
                     <SelectItem value="medium">Medium (~0.0005 SOL)</SelectItem>
                     <SelectItem value="high">High (~0.001 SOL)</SelectItem>
-                    <SelectItem value="turbo">Turbo (~0.005 SOL)</SelectItem>
+                    <SelectItem value="turbo">Turbo (~0.0075 SOL)</SelectItem>
+                    <SelectItem value="ultra">ULTRA (~0.009 SOL)</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
