@@ -76,26 +76,38 @@ async function fetchDexScreenerData(mint: string): Promise<Partial<TokenMint> & 
     
     if (!pair) return {};
     
-    // Detect if graduated to Raydium (has Raydium pair with liquidity)
-    const raydiumPair = data.pairs?.find((p: any) => 
-      p.dexId === 'raydium' && p.liquidity?.usd > 0
+    // Detect if graduated - pump.fun now graduates to "pumpswap", also check raydium and orca
+    const graduatedPair = data.pairs?.find((p: any) => 
+      (p.dexId === 'raydium' || p.dexId === 'pumpswap' || p.dexId === 'orca' || p.dexId === 'meteora') && 
+      p.liquidity?.usd > 0
     );
-    const isGraduated = !!raydiumPair;
+    const isGraduated = !!graduatedPair;
     
-    // Detect launchpad from pair URLs or dexId
-    let launchpad: string | undefined;
+    // Detect launchpad from dexId as primary source
+    let detectedLaunchpad: string | undefined;
+    if (data.pairs?.some((p: any) => p.dexId === 'pumpfun' || p.dexId === 'pumpswap')) {
+      detectedLaunchpad = 'pump.fun';
+    } else if (data.pairs?.some((p: any) => p.dexId === 'orca')) {
+      detectedLaunchpad = 'orca';
+    }
+    
+    // Also check URL-based launchpad detection
     const pairUrl = pair.url || '';
     const websiteUrl = pair.info?.websites?.[0]?.url || '';
     
+    let urlBasedLaunchpad: string | undefined;
     if (pairUrl.includes('bags.fm') || websiteUrl.includes('bags.fm')) {
-      launchpad = 'bags.fm';
+      urlBasedLaunchpad = 'bags.fm';
     } else if (pairUrl.includes('bonk.fun') || websiteUrl.includes('bonk.fun')) {
-      launchpad = 'bonk.fun';
-    } else if (pairUrl.includes('pump.fun') || websiteUrl.includes('pump.fun') || pair.labels?.includes('pump.fun')) {
-      launchpad = 'pump.fun';
+      urlBasedLaunchpad = 'bonk.fun';
     }
     
+    // Use dexId-based detection first, then fall back to URL-based
+    const launchpad = detectedLaunchpad || urlBasedLaunchpad;
+    
     return {
+      name: pair.baseToken?.name,
+      symbol: pair.baseToken?.symbol,
       currentPriceUsd: parseFloat(pair.priceUsd) || undefined,
       currentPriceSol: parseFloat(pair.priceNative) || undefined,
       liquidityUsd: pair.liquidity?.usd,
