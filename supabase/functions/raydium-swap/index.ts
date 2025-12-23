@@ -133,25 +133,36 @@ function b64ToU8(b64: string): Uint8Array {
 }
 
 // Try PumpPortal API for pump.fun bonding curve tokens
-async function tryPumpPortalSell(params: {
+async function tryPumpPortalTrade(params: {
   mint: string;
-  sellerPublicKey: string;
-  sellAll: boolean;
+  userPublicKey: string;
+  action: 'buy' | 'sell';
+  amount: string; // For buy: SOL amount like "0.01", for sell: "100%" or token amount
   slippageBps: number;
 }): Promise<{ tx: Uint8Array } | { error: string }> {
   try {
-    const { mint, sellerPublicKey, slippageBps } = params;
+    const { mint, userPublicKey, action, amount, slippageBps } = params;
     
-    const requestBody = {
-      publicKey: sellerPublicKey,
-      action: "sell",
+    const slippagePercent = Math.min(50, Math.max(1, Math.floor(slippageBps / 100)));
+    
+    const requestBody: Record<string, unknown> = {
+      publicKey: userPublicKey,
+      action: action,
       mint: mint,
-      denominatedInSol: "false",
-      amount: "100%",
-      slippage: 25,
-      priorityFee: 0.0005,
-      pool: "auto" // Use "auto" to automatically detect the right exchange
+      priorityFee: 0.0005, // 0.0005 SOL priority fee
+      slippage: slippagePercent,
+      pool: "auto"
     };
+    
+    if (action === 'buy') {
+      // For buys, amount is in SOL
+      requestBody.denominatedInSol = "true";
+      requestBody.amount = amount;
+    } else {
+      // For sells, use percentage or token amount
+      requestBody.denominatedInSol = "false";
+      requestBody.amount = amount;
+    }
     
     console.log("PumpPortal request:", JSON.stringify(requestBody));
     
@@ -701,13 +712,25 @@ serve(async (req) => {
       } else {
         // Jupiter also failed - try PumpPortal for pump.fun tokens as last resort
         const isPumpToken = tokenMint && (String(tokenMint).endsWith('pump') || String(tokenMint).includes('pump'));
-        if (isPumpToken && side === "sell" && amount) {
-          console.log("Raydium and Jupiter failed, trying PumpPortal for pump.fun bonding curve token...");
+        if (isPumpToken) {
+          console.log(`Raydium and Jupiter failed, trying PumpPortal for pump.fun bonding curve token (${side})...`);
           
-          const pumpResult = await tryPumpPortalSell({
+          // Calculate the SOL amount for buys from lamports
+          let pumpAmount: string;
+          if (side === "buy") {
+            // amount is in lamports, convert to SOL for PumpPortal
+            const solAmount = Number(amount) / 1_000_000_000;
+            pumpAmount = solAmount.toString();
+          } else {
+            // For sells, use 100% or the token amount
+            pumpAmount = sellAll ? "100%" : String(amount);
+          }
+          
+          const pumpResult = await tryPumpPortalTrade({
             mint: String(tokenMint),
-            sellerPublicKey: owner.publicKey.toBase58(),
-            sellAll: Boolean(sellAll),
+            userPublicKey: owner.publicKey.toBase58(),
+            action: side as 'buy' | 'sell',
+            amount: pumpAmount,
             slippageBps: Number(slippageBps),
           });
           
@@ -716,21 +739,25 @@ serve(async (req) => {
               const vtx = VersionedTransaction.deserialize(pumpResult.tx);
               vtx.sign([owner]);
               
-              // Use public RPC for PumpPortal transactions (avoid Helius auth issues)
-              const publicRpc = new Connection("https://api.mainnet-beta.solana.com", { commitment: "confirmed" });
-              const { blockhash, lastValidBlockHeight } = await publicRpc.getLatestBlockhash("confirmed");
+              // Use Helius RPC for better transaction submission
+              const HELIUS_API_KEY = Deno.env.get('HELIUS_API_KEY');
+              const txRpc = HELIUS_API_KEY 
+                ? new Connection(`https://mainnet.helius-rpc.com/?api-key=${HELIUS_API_KEY}`, { commitment: "confirmed" })
+                : new Connection("https://api.mainnet-beta.solana.com", { commitment: "confirmed" });
+              
+              const { blockhash, lastValidBlockHeight } = await txRpc.getLatestBlockhash("confirmed");
               
               // Update blockhash before sending
               (vtx as any).message.recentBlockhash = blockhash;
               vtx.sign([owner]); // Re-sign with new blockhash
               
-              const sig = await publicRpc.sendTransaction(vtx, { skipPreflight: true, maxRetries: 3 });
+              const sig = await txRpc.sendTransaction(vtx, { skipPreflight: true, maxRetries: 3 });
               
               if (confirmPolicy !== "none") {
-                await publicRpc.confirmTransaction({ blockhash, lastValidBlockHeight, signature: sig }, confirmPolicy as any);
+                await txRpc.confirmTransaction({ blockhash, lastValidBlockHeight, signature: sig }, confirmPolicy as any);
               }
               
-              console.log("PumpPortal sell successful:", sig);
+              console.log(`PumpPortal ${side} successful:`, sig);
               return ok({ signatures: [sig], source: "pumpportal" });
             } catch (sendError) {
               console.error("PumpPortal transaction send failed:", (sendError as Error).message);
