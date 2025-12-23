@@ -59,10 +59,10 @@ serve(async (req) => {
         }
       });
 
-      // Load wallets
+      // Load wallets (return only non-sensitive fields)
       const { data, error } = await supabaseClient
         .from('super_admin_wallets')
-        .select('*')
+        .select('id,label,pubkey,wallet_type,is_active,created_at,updated_at')
         .order('created_at', { ascending: false });
 
       if (error) {
