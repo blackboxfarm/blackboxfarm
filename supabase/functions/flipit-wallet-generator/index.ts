@@ -1,7 +1,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { Keypair } from "https://esm.sh/@solana/web3.js@1.98.0";
-import { encode as bs58Encode } from "https://esm.sh/bs58@6.0.0";
+import bs58 from "https://esm.sh/bs58@5.0.0";
 import { SecureStorage } from "../_shared/encryption.ts";
 
 const corsHeaders = {
@@ -53,7 +53,7 @@ serve(async (req) => {
     // Generate new Solana keypair
     const keypair = Keypair.generate();
     const pubkey = keypair.publicKey.toBase58();
-    const secretKeyBase58 = bs58Encode(keypair.secretKey);
+    const secretKeyBase58 = bs58.encode(keypair.secretKey);
 
     console.log(`[flipit-wallet-generator] Generated keypair with pubkey: ${pubkey}`);
 
