@@ -40,7 +40,10 @@ serve(async (req) => {
     }
 
     // Check if user is super admin
-    const { data: isSuperAdmin } = await supabase.rpc("is_super_admin", { check_user_id: user.id });
+    const { data: isSuperAdmin, error: superAdminError } = await supabase.rpc("is_super_admin", { _user_id: user.id });
+    if (superAdminError) {
+      console.error("[flipit-wallet-generator] is_super_admin RPC error:", superAdminError);
+    }
     if (!isSuperAdmin) {
       return new Response(
         JSON.stringify({ error: "Super admin access required" }),
