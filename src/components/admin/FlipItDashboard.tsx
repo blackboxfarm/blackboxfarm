@@ -11,6 +11,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { Flame, RefreshCw, TrendingUp, DollarSign, Wallet, Clock, CheckCircle2, XCircle, Loader2, Plus, Copy, ArrowUpRight, Key, Settings, Zap, Activity } from 'lucide-react';
 import { useSolPrice } from '@/hooks/useSolPrice';
+import { FlipItFeeCalculator } from './flipit/FlipItFeeCalculator';
 
 interface FlipPosition {
   id: string;
@@ -622,6 +623,19 @@ export function FlipItDashboard() {
               </Select>
             </div>
           </div>
+
+          {/* Fee Calculator Widget */}
+          {buyAmount && parseFloat(buyAmount) > 0 && solPrice && (
+            <div className="mt-4">
+              <FlipItFeeCalculator
+                buyAmountSol={buyAmountMode === 'sol' ? parseFloat(buyAmount) : parseFloat(buyAmount) / solPrice}
+                solPrice={solPrice}
+                priorityFeeMode={priorityFeeMode}
+                slippageBps={slippageBps}
+                targetMultiplier={targetMultiplier}
+              />
+            </div>
+          )}
 
           <div className="flex gap-2 mt-4">
             <Button
