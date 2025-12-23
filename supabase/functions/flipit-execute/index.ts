@@ -18,25 +18,58 @@ function bad(message: string, status = 400) {
 }
 
 async function fetchTokenPrice(tokenMint: string): Promise<number | null> {
+  // Try Jupiter first
   try {
     const res = await fetch(`https://price.jup.ag/v6/price?ids=${tokenMint}`);
     const json = await res.json();
     const price = json?.data?.[tokenMint]?.price;
-    return price ? Number(price) : null;
+    if (price) return Number(price);
   } catch (e) {
     console.error("Jupiter price fetch failed:", e);
-    return null;
   }
+  
+  // Fallback to DexScreener
+  try {
+    console.log("Trying DexScreener fallback for price...");
+    const dexRes = await fetch(`https://api.dexscreener.com/latest/dex/tokens/${tokenMint}`);
+    const dexData = await dexRes.json();
+    const pair = dexData?.pairs?.[0];
+    if (pair?.priceUsd) {
+      console.log("Got price from DexScreener:", pair.priceUsd);
+      return Number(pair.priceUsd);
+    }
+  } catch (e) {
+    console.error("DexScreener price fetch failed:", e);
+  }
+  
+  return null;
 }
 
 async function fetchSolPrice(): Promise<number> {
+  // Try Jupiter first
   try {
     const res = await fetch("https://price.jup.ag/v6/price?ids=SOL");
     const json = await res.json();
-    return Number(json?.data?.SOL?.price || json?.data?.wSOL?.price || 200);
-  } catch {
-    return 200;
+    const price = json?.data?.SOL?.price || json?.data?.wSOL?.price;
+    if (price) return Number(price);
+  } catch (e) {
+    console.error("Jupiter SOL price failed:", e);
   }
+  
+  // Fallback to CoinGecko
+  try {
+    console.log("Trying CoinGecko fallback for SOL price...");
+    const cgRes = await fetch("https://api.coingecko.com/api/v3/simple/price?ids=solana&vs_currencies=usd");
+    const cgData = await cgRes.json();
+    if (cgData?.solana?.usd) {
+      console.log("Got SOL price from CoinGecko:", cgData.solana.usd);
+      return Number(cgData.solana.usd);
+    }
+  } catch (e) {
+    console.error("CoinGecko SOL price failed:", e);
+  }
+  
+  return 200; // Default fallback
 }
 
 async function fetchTokenMetadata(tokenMint: string): Promise<{ symbol: string; name: string } | null> {
