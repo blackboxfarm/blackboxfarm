@@ -10,6 +10,8 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { Flame, RefreshCw, TrendingUp, DollarSign, Wallet, Clock, CheckCircle2, XCircle, Loader2, Plus, Copy, ArrowUpRight, Key, Settings, Zap, Activity } from 'lucide-react';
+import { useSolPrice } from '@/hooks/useSolPrice';
+import { Connection, PublicKey, LAMPORTS_PER_SOL } from '@solana/web3.js';
 
 interface FlipPosition {
   id: string;
@@ -55,6 +57,9 @@ export function FlipItDashboard() {
   const [isWithdrawing, setIsWithdrawing] = useState(false);
   const [walletBalance, setWalletBalance] = useState<number | null>(null);
   const [isRefreshingBalance, setIsRefreshingBalance] = useState(false);
+  
+  // SOL price for USD conversion
+  const { price: solPrice, isLoading: solPriceLoading } = useSolPrice();
   
   // Settings
   const [slippageBps, setSlippageBps] = useState(500); // 5% default
@@ -104,14 +109,15 @@ export function FlipItDashboard() {
 
     setIsRefreshingBalance(true);
     try {
-      const response = await fetch(`https://api.helius.xyz/v0/addresses/${wallet.pubkey}/balances?api-key=cc91cc33-a6d8-4a97-b09e-f05c2c671f2c`);
-      if (response.ok) {
-        const data = await response.json();
-        const solBalance = (data.nativeBalance || 0) / 1e9;
-        setWalletBalance(solBalance);
-      }
+      // Use Solana mainnet RPC directly - more reliable than Helius for simple balance checks
+      const connection = new Connection('https://api.mainnet-beta.solana.com', 'confirmed');
+      const pubkey = new PublicKey(wallet.pubkey);
+      const balance = await connection.getBalance(pubkey);
+      const solBalance = balance / LAMPORTS_PER_SOL;
+      setWalletBalance(solBalance);
     } catch (err) {
       console.error('Failed to fetch balance:', err);
+      toast.error('Failed to fetch wallet balance');
     } finally {
       setIsRefreshingBalance(false);
     }
@@ -416,20 +422,30 @@ export function FlipItDashboard() {
                     </div>
                     
                     <div className="flex items-center gap-3">
-                      <div className="flex items-center gap-2">
-                        <span className="text-sm text-muted-foreground">Balance:</span>
-                        <span className="font-bold">
-                          {walletBalance !== null ? `${walletBalance.toFixed(4)} SOL` : '...'}
-                        </span>
+                      <div className="flex items-center gap-3 bg-muted/50 px-3 py-2 rounded-lg">
+                        <Wallet className="h-4 w-4 text-primary" />
+                        <div className="flex flex-col">
+                          <span className="text-xs text-muted-foreground">Balance</span>
+                          <div className="flex items-center gap-2">
+                            <span className="font-bold text-lg">
+                              {walletBalance !== null ? `${walletBalance.toFixed(5)} SOL` : '...'}
+                            </span>
+                            {walletBalance !== null && !solPriceLoading && (
+                              <span className="text-sm text-green-500 font-medium">
+                                (${(walletBalance * solPrice).toFixed(2)})
+                              </span>
+                            )}
+                          </div>
+                        </div>
                         <Button 
                           size="icon" 
                           variant="ghost" 
-                          className="h-6 w-6"
+                          className="h-7 w-7 ml-auto"
                           onClick={refreshWalletBalance}
                           disabled={isRefreshingBalance}
                           title="Refresh balance"
                         >
-                          <RefreshCw className={`h-3 w-3 ${isRefreshingBalance ? 'animate-spin' : ''}`} />
+                          <RefreshCw className={`h-4 w-4 ${isRefreshingBalance ? 'animate-spin' : ''}`} />
                         </Button>
                       </div>
                       
