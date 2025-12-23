@@ -36,6 +36,7 @@ const WhaleFrenzyDashboard = lazy(() => import("@/components/admin/WhaleFrenzyDa
 const MegaWhaleDashboard = lazy(() => import("@/components/admin/MegaWhaleDashboard").then(m => ({ default: m.MegaWhaleDashboard })));
 const ApiProviderManager = lazy(() => import("@/components/admin/ApiProviderManager").then(m => ({ default: m.ApiProviderManager })));
 const AdvertiserManagement = lazy(() => import("@/components/admin/AdvertiserManagement"));
+const FlipItDashboard = lazy(() => import("@/components/admin/FlipItDashboard").then(m => ({ default: m.FlipItDashboard })));
 
 export default function SuperAdmin() {
   const [activeTab, setActiveTab] = useState("wallets");
@@ -123,6 +124,7 @@ export default function SuperAdmin() {
             <TabsTrigger value="whale-frenzy" className="flex-shrink-0 data-[state=active]:bg-gradient-to-r data-[state=active]:from-orange-500/30 data-[state=active]:to-red-500/20">🔥 Whale Frenzy</TabsTrigger>
             <TabsTrigger value="mega-whale" className="flex-shrink-0 data-[state=active]:bg-gradient-to-r data-[state=active]:from-yellow-500/30 data-[state=active]:to-amber-500/20">👑 MEGA WHALE</TabsTrigger>
             <TabsTrigger value="api-providers" className="flex-shrink-0 data-[state=active]:bg-gradient-to-r data-[state=active]:from-red-500/30 data-[state=active]:to-orange-500/20">⚡ API Providers</TabsTrigger>
+            <TabsTrigger value="flipit" className="flex-shrink-0 data-[state=active]:bg-gradient-to-r data-[state=active]:from-orange-500/30 data-[state=active]:to-red-500/20">🔥 FlipIt</TabsTrigger>
           </TabsList>
           
           <TabsContent value="master-wallets">
@@ -293,6 +295,12 @@ export default function SuperAdmin() {
           <TabsContent value="api-providers">
             <Suspense fallback={<LazyLoader />}>
               <ApiProviderManager />
+            </Suspense>
+          </TabsContent>
+
+          <TabsContent value="flipit">
+            <Suspense fallback={<LazyLoader />}>
+              <FlipItDashboard />
             </Suspense>
           </TabsContent>
         </Tabs>
