@@ -2377,6 +2377,86 @@ export type Database = {
         }
         Relationships: []
       }
+      flip_positions: {
+        Row: {
+          buy_amount_usd: number | null
+          buy_executed_at: string | null
+          buy_price_usd: number | null
+          buy_signature: string | null
+          created_at: string | null
+          error_message: string | null
+          id: string
+          profit_usd: number | null
+          quantity_tokens: number | null
+          sell_executed_at: string | null
+          sell_price_usd: number | null
+          sell_signature: string | null
+          status: string | null
+          target_multiplier: number | null
+          target_price_usd: number | null
+          token_mint: string
+          token_name: string | null
+          token_symbol: string | null
+          updated_at: string | null
+          user_id: string | null
+          wallet_id: string | null
+        }
+        Insert: {
+          buy_amount_usd?: number | null
+          buy_executed_at?: string | null
+          buy_price_usd?: number | null
+          buy_signature?: string | null
+          created_at?: string | null
+          error_message?: string | null
+          id?: string
+          profit_usd?: number | null
+          quantity_tokens?: number | null
+          sell_executed_at?: string | null
+          sell_price_usd?: number | null
+          sell_signature?: string | null
+          status?: string | null
+          target_multiplier?: number | null
+          target_price_usd?: number | null
+          token_mint: string
+          token_name?: string | null
+          token_symbol?: string | null
+          updated_at?: string | null
+          user_id?: string | null
+          wallet_id?: string | null
+        }
+        Update: {
+          buy_amount_usd?: number | null
+          buy_executed_at?: string | null
+          buy_price_usd?: number | null
+          buy_signature?: string | null
+          created_at?: string | null
+          error_message?: string | null
+          id?: string
+          profit_usd?: number | null
+          quantity_tokens?: number | null
+          sell_executed_at?: string | null
+          sell_price_usd?: number | null
+          sell_signature?: string | null
+          status?: string | null
+          target_multiplier?: number | null
+          target_price_usd?: number | null
+          token_mint?: string
+          token_name?: string | null
+          token_symbol?: string | null
+          updated_at?: string | null
+          user_id?: string | null
+          wallet_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "flip_positions_wallet_id_fkey"
+            columns: ["wallet_id"]
+            isOneToOne: false
+            referencedRelation: "super_admin_wallets"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       fuct_gift_claims: {
         Row: {
           claim_date: string
