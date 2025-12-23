@@ -299,6 +299,7 @@ serve(async (req) => {
       confirmPolicy: _confirmPolicy,
       computeUnitPriceMicroLamports: _feeOverride,
       priorityFeeMicroLamports: _altFeeOverride,
+      priorityFeeMode,
       action,
       preCreateWSOL,
     } = body;
@@ -580,13 +581,26 @@ serve(async (req) => {
       }
     }
 
-    // Priority fee (allow override)
+    // Priority fee (allow override or use priorityFeeMode)
     let computeUnitPriceMicroLamports = Number(_feeOverride ?? _altFeeOverride ?? 0);
     if (!Number.isFinite(computeUnitPriceMicroLamports) || computeUnitPriceMicroLamports <= 0) {
-      computeUnitPriceMicroLamports = await getPriorityFeeMicroLamports(connection);
+      // Map priorityFeeMode to microLamports (1 SOL = 1e9 lamports, 1 lamport = 1e6 microLamports)
+      // low: ~0.0001 SOL, medium: ~0.0005 SOL, high: ~0.001 SOL, turbo: ~0.0075 SOL, ultra: ~0.009 SOL
+      const feeModes: Record<string, number> = {
+        low: 10_000,      // ~0.0001 SOL
+        medium: 50_000,   // ~0.0005 SOL
+        high: 100_000,    // ~0.001 SOL
+        turbo: 750_000,   // ~0.0075 SOL
+        ultra: 900_000,   // ~0.009 SOL
+      };
+      if (priorityFeeMode && feeModes[priorityFeeMode]) {
+        computeUnitPriceMicroLamports = feeModes[priorityFeeMode];
+      } else {
+        computeUnitPriceMicroLamports = await getPriorityFeeMicroLamports(connection);
+      }
     }
-    // Clamp to 5k–50k µLamports to control cost and reduce expiry risk
-    computeUnitPriceMicroLamports = Math.min(Math.max(computeUnitPriceMicroLamports, 5_000), 50_000);
+    // Clamp to 5k–1M µLamports to control cost and allow high fees
+    computeUnitPriceMicroLamports = Math.min(Math.max(computeUnitPriceMicroLamports, 5_000), 1_000_000);
 
     // Jupiter fallback if Raydium compute failed at compute stage
     if (needJupiter) {
