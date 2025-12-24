@@ -883,7 +883,7 @@ export function FlipItDashboard() {
                               <PopoverContent className="w-56 p-2" align="start">
                                 <div className="space-y-1">
                                   <p className="text-xs text-muted-foreground mb-2">Change target:</p>
-                                  {[1.5, 2, 3, 4, 5, 10].map(mult => (
+                                  {[1.5, 2, 3, 4, 5, 6, 7, 8, 9, 10].map(mult => (
                                     <Button
                                       key={mult}
                                       variant={position.target_multiplier === mult ? "default" : "ghost"}
