@@ -317,7 +317,11 @@ serve(async (req) => {
       walletId,
     } = body;
 
-    let rpcUrl = getEnv("SOLANA_RPC_URL");
+    // Use Helius RPC directly - it's the most reliable
+    const heliusApiKey = Deno.env.get("HELIUS_API_KEY");
+    let rpcUrl = heliusApiKey 
+      ? `https://mainnet.helius-rpc.com/?api-key=${heliusApiKey}`
+      : (Deno.env.get("SOLANA_RPC_URL") || "https://api.mainnet-beta.solana.com");
     const bodyOwnerSecret = (body?.ownerSecret ? String(body.ownerSecret) : null);
     const headerSecret = req.headers.get("x-owner-secret");
     const envOwnerSecret = getEnv("TRADER_PRIVATE_KEY");
