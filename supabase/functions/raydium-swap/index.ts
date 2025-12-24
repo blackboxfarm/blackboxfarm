@@ -545,11 +545,13 @@ serve(async (req) => {
                   }
                 }
               } else {
-                return bad(`No token accounts found for ${tokenMint}. Owner: ${owner.publicKey.toBase58().slice(0,8)}...`);
+                // No balance found - the position is effectively empty
+                console.log(`No token balance found for ${tokenMint} in wallet ${owner.publicKey.toBase58()}`);
+                return bad(`No token balance found. The tokens may have already been sold or the buy never completed. Token: ${tokenMint.slice(0,8)}..., Wallet: ${owner.publicKey.toBase58().slice(0,8)}...`);
               }
             } catch (altErr) {
               console.error("Alternative balance check also failed:", altErr);
-              return bad(`No token balance to sell. Owner: ${owner.publicKey.toBase58().slice(0,8)}..., tried both Token-2022 and SPL Token programs`);
+              return bad(`No token balance found. Token: ${tokenMint.slice(0,8)}..., Wallet: ${owner.publicKey.toBase58().slice(0,8)}...`);
             }
           } else {
             console.log("Found token balance:", balanceResult.balance, "using program:", balanceResult.programId.toBase58());

@@ -336,16 +336,45 @@ serve(async (req) => {
         });
 
       } catch (sellErr: any) {
-        // Revert to holding on error
+        const errMsg = sellErr.message || String(sellErr);
+        
+        // If no balance found, mark as sold (tokens already gone)
+        const noBalanceIndicators = [
+          'No token balance',
+          'No token accounts found',
+          'already been sold',
+          'buy never completed'
+        ];
+        const isNoBalance = noBalanceIndicators.some(indicator => errMsg.includes(indicator));
+        
+        if (isNoBalance) {
+          // Mark as sold since there's nothing to sell
+          await supabase
+            .from("flip_positions")
+            .update({
+              status: "sold",
+              error_message: "Position closed: " + errMsg,
+              sell_executed_at: new Date().toISOString(),
+            })
+            .eq("id", positionId);
+          
+          return ok({
+            success: true,
+            message: "Position marked as closed - no tokens to sell",
+            error: errMsg
+          });
+        }
+        
+        // Revert to holding on other errors
         await supabase
           .from("flip_positions")
           .update({
             status: "holding",
-            error_message: sellErr.message
+            error_message: errMsg
           })
           .eq("id", positionId);
 
-        return bad("Sell failed: " + sellErr.message);
+        return bad("Sell failed: " + errMsg);
       }
     }
 
