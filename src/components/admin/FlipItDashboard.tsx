@@ -365,7 +365,34 @@ export function FlipItDashboard() {
       return;
     }
 
-    const loadedPositions = (data || []) as FlipPosition[];
+    let loadedPositions = (data || []) as FlipPosition[];
+    
+    // Fetch token symbols for positions missing them
+    const positionsMissingSymbols = loadedPositions.filter(p => !p.token_symbol);
+    if (positionsMissingSymbols.length > 0) {
+      const uniqueMints = [...new Set(positionsMissingSymbols.map(p => p.token_mint))];
+      const symbolsMap = await fetchTokenSymbols(uniqueMints);
+      
+      // Update positions with fetched symbols
+      loadedPositions = loadedPositions.map(p => {
+        if (!p.token_symbol && symbolsMap[p.token_mint]) {
+          return { ...p, token_symbol: symbolsMap[p.token_mint].symbol, token_name: symbolsMap[p.token_mint].name };
+        }
+        return p;
+      });
+      
+      // Update the database with the symbols (fire and forget)
+      for (const mint of uniqueMints) {
+        if (symbolsMap[mint]) {
+          supabase
+            .from('flip_positions')
+            .update({ token_symbol: symbolsMap[mint].symbol, token_name: symbolsMap[mint].name })
+            .eq('token_mint', mint)
+            .then(() => {});
+        }
+      }
+    }
+    
     setPositions(loadedPositions);
     setIsLoading(false);
     
@@ -374,6 +401,31 @@ export function FlipItDashboard() {
     if (holdingPositions.length > 0) {
       fetchCurrentPrices(holdingPositions.map(p => p.token_mint));
     }
+  };
+  
+  const fetchTokenSymbols = async (mints: string[]): Promise<Record<string, { symbol: string; name: string }>> => {
+    const result: Record<string, { symbol: string; name: string }> = {};
+    
+    try {
+      // Use the token-metadata edge function
+      const { data, error } = await supabase.functions.invoke('token-metadata', {
+        body: { tokenMints: mints }
+      });
+      
+      if (error) throw error;
+      
+      if (data?.tokens) {
+        for (const token of data.tokens) {
+          if (token.mint && token.symbol) {
+            result[token.mint] = { symbol: token.symbol, name: token.name || token.symbol };
+          }
+        }
+      }
+    } catch (err) {
+      console.error('Failed to fetch token symbols:', err);
+    }
+    
+    return result;
   };
   
   const fetchCurrentPrices = async (tokenMints: string[]) => {
