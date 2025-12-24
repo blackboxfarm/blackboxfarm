@@ -10,7 +10,8 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Switch } from '@/components/ui/switch';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
-import { Flame, RefreshCw, TrendingUp, DollarSign, Wallet, Clock, CheckCircle2, XCircle, Loader2, Plus, Copy, ArrowUpRight, Key, Settings, Zap, Activity, Radio } from 'lucide-react';
+import { Flame, RefreshCw, TrendingUp, DollarSign, Wallet, Clock, CheckCircle2, XCircle, Loader2, Plus, Copy, ArrowUpRight, Key, Settings, Zap, Activity, Radio, Pencil } from 'lucide-react';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { useSolPrice } from '@/hooks/useSolPrice';
 import { FlipItFeeCalculator } from './flipit/FlipItFeeCalculator';
 
@@ -398,6 +399,25 @@ export function FlipItDashboard() {
     } catch (err: any) {
       toast.error(err.message || 'Failed to sell');
     }
+  };
+
+  const handleUpdateTarget = async (positionId: string, newMultiplier: number, buyPriceUsd: number) => {
+    const newTargetPrice = buyPriceUsd * newMultiplier;
+    
+    const { error } = await supabase
+      .from('flip_positions')
+      .update({ 
+        target_multiplier: newMultiplier, 
+        target_price_usd: newTargetPrice 
+      })
+      .eq('id', positionId);
+
+    if (error) {
+      toast.error('Failed to update target');
+      return;
+    }
+
+    toast.success(`Target updated to ${newMultiplier}x ($${newTargetPrice.toFixed(8)})`);
   };
 
   const getStatusBadge = (status: string) => {
@@ -839,7 +859,34 @@ export function FlipItDashboard() {
                         ) : '-'}
                       </TableCell>
                       <TableCell>
-                        ${position.target_price_usd?.toFixed(8) || '-'} ({position.target_multiplier}x)
+                        <div className="flex items-center gap-1">
+                          <span>${position.target_price_usd?.toFixed(8) || '-'} ({position.target_multiplier}x)</span>
+                          {position.status === 'holding' && position.buy_price_usd && (
+                            <Popover>
+                              <PopoverTrigger asChild>
+                                <Button variant="ghost" size="icon" className="h-6 w-6">
+                                  <Pencil className="h-3 w-3" />
+                                </Button>
+                              </PopoverTrigger>
+                              <PopoverContent className="w-48 p-2" align="start">
+                                <div className="space-y-1">
+                                  <p className="text-xs text-muted-foreground mb-2">Change target:</p>
+                                  {[1.5, 2, 3, 4, 5, 10].map(mult => (
+                                    <Button
+                                      key={mult}
+                                      variant={position.target_multiplier === mult ? "default" : "ghost"}
+                                      size="sm"
+                                      className="w-full justify-start"
+                                      onClick={() => handleUpdateTarget(position.id, mult, position.buy_price_usd!)}
+                                    >
+                                      {mult}x → ${(position.buy_price_usd! * mult).toFixed(8)}
+                                    </Button>
+                                  ))}
+                                </div>
+                              </PopoverContent>
+                            </Popover>
+                          )}
+                        </div>
                       </TableCell>
                       <TableCell className="w-32">
                         <Progress 
