@@ -244,7 +244,7 @@ serve(async (req) => {
       // Get position
       const { data: position, error: posErr } = await supabase
         .from("flip_positions")
-        .select("*, super_admin_wallets!flip_positions_wallet_id_fkey(secret_key_encrypted)")
+        .select("*, super_admin_wallets!flip_positions_wallet_id_fkey(secret_key_encrypted, pubkey)")
         .eq("id", positionId)
         .single();
 
@@ -254,6 +254,16 @@ serve(async (req) => {
 
       if (position.status !== "holding") {
         return bad("Position is not in holding status");
+      }
+
+      // Check if buy actually succeeded - if no signature or tokens, can't sell
+      if (!position.buy_signature || !position.quantity_tokens) {
+        console.log("Position has no buy_signature or quantity_tokens - marking as failed");
+        await supabase
+          .from("flip_positions")
+          .update({ status: "failed", error_message: "Buy never executed - no tokens to sell" })
+          .eq("id", positionId);
+        return bad("Cannot sell: original buy failed - no tokens were purchased");
       }
 
       // Mark as pending sell
