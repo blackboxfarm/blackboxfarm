@@ -14,6 +14,17 @@ import { Flame, RefreshCw, TrendingUp, DollarSign, Wallet, Clock, CheckCircle2, 
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { useSolPrice } from '@/hooks/useSolPrice';
 import { FlipItFeeCalculator } from './flipit/FlipItFeeCalculator';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from '@/components/ui/alert-dialog';
 
 interface FlipPosition {
   id: string;
@@ -990,13 +1001,41 @@ export function FlipItDashboard() {
                       <TableCell>{getStatusBadge(position.status)}</TableCell>
                       <TableCell>
                         {position.status === 'holding' && (
-                          <Button
-                            size="sm"
-                            variant="destructive"
-                            onClick={() => handleForceSell(position.id)}
-                          >
-                            Sell Now
-                          </Button>
+                          <AlertDialog>
+                            <AlertDialogTrigger asChild>
+                              <Button
+                                size="sm"
+                                variant="destructive"
+                              >
+                                Sell Now
+                              </Button>
+                            </AlertDialogTrigger>
+                            <AlertDialogContent>
+                              <AlertDialogHeader>
+                                <AlertDialogTitle>Confirm Sell</AlertDialogTitle>
+                                <AlertDialogDescription>
+                                  Are you sure you want to sell this position?
+                                  <div className="mt-3 p-3 bg-muted rounded-lg space-y-1 text-sm">
+                                    <div><strong>Token:</strong> {position.token_symbol || position.token_mint.slice(0, 12) + '...'}</div>
+                                    <div><strong>Invested:</strong> ${position.buy_amount_usd?.toFixed(2)}</div>
+                                    <div><strong>Current Value:</strong> {currentValue !== null ? `$${currentValue.toFixed(2)}` : '-'}</div>
+                                    <div className={pnlUsd !== null ? (pnlUsd >= 0 ? 'text-green-500' : 'text-red-500') : ''}>
+                                      <strong>P&L:</strong> {pnlUsd !== null ? `${pnlUsd >= 0 ? '+' : ''}$${pnlUsd.toFixed(2)} (${pnlPercent?.toFixed(1)}%)` : '-'}
+                                    </div>
+                                  </div>
+                                </AlertDialogDescription>
+                              </AlertDialogHeader>
+                              <AlertDialogFooter>
+                                <AlertDialogCancel>Cancel</AlertDialogCancel>
+                                <AlertDialogAction
+                                  onClick={() => handleForceSell(position.id)}
+                                  className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                                >
+                                  Confirm Sell
+                                </AlertDialogAction>
+                              </AlertDialogFooter>
+                            </AlertDialogContent>
+                          </AlertDialog>
                         )}
                       </TableCell>
                     </TableRow>
