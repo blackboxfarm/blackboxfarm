@@ -808,19 +808,6 @@ export function FlipItDashboard() {
             </div>
           </div>
 
-          {/* Fee Calculator Widget */}
-          {buyAmount && parseFloat(buyAmount) > 0 && solPrice && (
-            <div className="mt-4">
-              <FlipItFeeCalculator
-                buyAmountSol={buyAmountMode === 'sol' ? parseFloat(buyAmount) : parseFloat(buyAmount) / solPrice}
-                solPrice={solPrice}
-                priorityFeeMode={priorityFeeMode}
-                slippageBps={slippageBps}
-                targetMultiplier={targetMultiplier}
-              />
-            </div>
-          )}
-
           <div className="flex gap-2 mt-4">
             <Button
               onClick={handleFlip}
@@ -982,6 +969,11 @@ export function FlipItDashboard() {
                             <div className="text-green-500 text-xs">
                               +${targetProfit.toFixed(2)} profit
                             </div>
+                            {position.target_price_usd && (
+                              <div className="text-xs text-muted-foreground">
+                                Target: ${position.target_price_usd.toFixed(8)}
+                              </div>
+                            )}
                           </div>
                           {position.status === 'holding' && position.buy_price_usd && (
                             <Popover>
@@ -1037,6 +1029,17 @@ export function FlipItDashboard() {
             </Table>
           </CardContent>
         </Card>
+      )}
+
+      {/* Fee Calculator Widget - moved under Active Flips */}
+      {buyAmount && parseFloat(buyAmount) > 0 && solPrice && (
+        <FlipItFeeCalculator
+          buyAmountSol={buyAmountMode === 'sol' ? parseFloat(buyAmount) : parseFloat(buyAmount) / solPrice}
+          solPrice={solPrice}
+          priorityFeeMode={priorityFeeMode}
+          slippageBps={slippageBps}
+          targetMultiplier={targetMultiplier}
+        />
       )}
 
       {/* Completed Positions */}
