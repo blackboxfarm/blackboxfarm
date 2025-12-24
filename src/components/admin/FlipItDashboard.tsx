@@ -824,9 +824,9 @@ export function FlipItDashboard() {
               <TableHeader>
                 <TableRow>
                   <TableHead>Token</TableHead>
-                  <TableHead>Entry</TableHead>
-                  <TableHead>Current</TableHead>
-                  <TableHead>Target</TableHead>
+                  <TableHead>Invested</TableHead>
+                  <TableHead>Current Value</TableHead>
+                  <TableHead>Target Value</TableHead>
                   <TableHead>Progress</TableHead>
                   <TableHead>Status</TableHead>
                   <TableHead>Action</TableHead>
@@ -839,6 +839,18 @@ export function FlipItDashboard() {
                   const pnlPercent = position.buy_price_usd && currentPrice
                     ? ((currentPrice - position.buy_price_usd) / position.buy_price_usd) * 100
                     : null;
+                  
+                  // Calculate current value based on quantity and current price
+                  const currentValue = position.quantity_tokens && currentPrice
+                    ? position.quantity_tokens * currentPrice
+                    : null;
+                  const pnlUsd = currentValue && position.buy_amount_usd
+                    ? currentValue - position.buy_amount_usd
+                    : null;
+                  
+                  // Target value
+                  const targetValue = position.buy_amount_usd * position.target_multiplier;
+                  const targetProfit = position.buy_amount_usd * (position.target_multiplier - 1);
 
                   return (
                     <TableRow key={position.id}>
@@ -851,27 +863,42 @@ export function FlipItDashboard() {
                           {position.token_symbol || position.token_mint.slice(0, 8) + '...'}
                           <Copy className="h-3 w-3 opacity-50" />
                         </button>
+                        <div className="text-xs text-muted-foreground mt-0.5">
+                          Entry: ${position.buy_price_usd?.toFixed(8) || '-'}
+                        </div>
                       </TableCell>
                       <TableCell>
-                        ${position.buy_price_usd?.toFixed(8) || '-'}
+                        <div className="font-medium">${position.buy_amount_usd?.toFixed(2) || '-'}</div>
+                        {position.quantity_tokens && (
+                          <div className="text-xs text-muted-foreground">
+                            {position.quantity_tokens.toLocaleString()} tokens
+                          </div>
+                        )}
                       </TableCell>
                       <TableCell>
-                        {currentPrice ? (
-                          <span className={pnlPercent && pnlPercent >= 0 ? 'text-green-500' : 'text-red-500'}>
-                            ${currentPrice.toFixed(8)}
-                            {pnlPercent !== null && ` (${pnlPercent >= 0 ? '+' : ''}${pnlPercent.toFixed(1)}%)`}
-                          </span>
-                        ) : '-'}
+                        {currentValue !== null ? (
+                          <div>
+                            <span className={pnlUsd && pnlUsd >= 0 ? 'text-green-500 font-medium' : 'text-red-500 font-medium'}>
+                              ${currentValue.toFixed(2)}
+                            </span>
+                            {pnlUsd !== null && (
+                              <div className={`text-xs ${pnlUsd >= 0 ? 'text-green-500' : 'text-red-500'}`}>
+                                {pnlUsd >= 0 ? '+' : ''}${pnlUsd.toFixed(2)} ({pnlPercent?.toFixed(1)}%)
+                              </div>
+                            )}
+                          </div>
+                        ) : (
+                          <span className="text-muted-foreground">-</span>
+                        )}
                       </TableCell>
                       <TableCell>
                         <div className="flex items-center gap-1">
                           <div>
-                            <span>${position.target_price_usd?.toFixed(8) || '-'} ({position.target_multiplier}x)</span>
-                            {position.buy_amount_usd && (
-                              <span className="text-green-500 text-xs ml-1">
-                                (+${(position.buy_amount_usd * (position.target_multiplier - 1)).toFixed(2)})
-                              </span>
-                            )}
+                            <span className="font-medium">${targetValue.toFixed(2)}</span>
+                            <span className="text-muted-foreground ml-1">({position.target_multiplier}x)</span>
+                            <div className="text-green-500 text-xs">
+                              +${targetProfit.toFixed(2)} profit
+                            </div>
                           </div>
                           {position.status === 'holding' && position.buy_price_usd && (
                             <Popover>
