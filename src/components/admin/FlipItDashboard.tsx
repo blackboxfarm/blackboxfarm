@@ -871,15 +871,20 @@ export function FlipItDashboard() {
                   const pnlPercent = position.buy_price_usd && currentPrice
                     ? ((currentPrice - position.buy_price_usd) / position.buy_price_usd) * 100
                     : null;
-                  
-                  // Calculate current value based on quantity and current price
-                  const currentValue = position.quantity_tokens && currentPrice
-                    ? position.quantity_tokens * currentPrice
+
+                  // Quantity is sometimes not persisted; derive it from buy_amount_usd / buy_price_usd when needed.
+                  const effectiveQuantityTokens =
+                    position.quantity_tokens ??
+                    (position.buy_price_usd ? position.buy_amount_usd / position.buy_price_usd : null);
+
+                  const currentValue = effectiveQuantityTokens !== null && currentPrice
+                    ? effectiveQuantityTokens * currentPrice
                     : null;
-                  const pnlUsd = currentValue && position.buy_amount_usd
+
+                  const pnlUsd = currentValue !== null
                     ? currentValue - position.buy_amount_usd
                     : null;
-                  
+
                   // Target value
                   const targetValue = position.buy_amount_usd * position.target_multiplier;
                   const targetProfit = position.buy_amount_usd * (position.target_multiplier - 1);
@@ -901,23 +906,38 @@ export function FlipItDashboard() {
                       </TableCell>
                       <TableCell>
                         <div className="font-medium">${position.buy_amount_usd?.toFixed(2) || '-'}</div>
-                        {position.quantity_tokens && (
+                        {effectiveQuantityTokens !== null && (
                           <div className="text-xs text-muted-foreground">
-                            {position.quantity_tokens.toLocaleString()} tokens
+                            {effectiveQuantityTokens.toLocaleString(undefined, { maximumFractionDigits: 2 })} tokens
                           </div>
                         )}
                       </TableCell>
                       <TableCell>
-                        {currentValue !== null ? (
+                        {currentPrice ? (
                           <div>
-                            <span className={pnlUsd && pnlUsd >= 0 ? 'text-green-500 font-medium' : 'text-red-500 font-medium'}>
-                              ${currentValue.toFixed(2)}
-                            </span>
-                            {pnlUsd !== null && (
-                              <div className={`text-xs ${pnlUsd >= 0 ? 'text-green-500' : 'text-red-500'}`}>
-                                {pnlUsd >= 0 ? '+' : ''}${pnlUsd.toFixed(2)} ({pnlPercent?.toFixed(1)}%)
+                            {currentValue !== null ? (
+                              <div>
+                                <span
+                                  className={
+                                    pnlUsd !== null && pnlUsd >= 0
+                                      ? 'text-green-500 font-medium'
+                                      : 'text-red-500 font-medium'
+                                  }
+                                >
+                                  ${currentValue.toFixed(2)}
+                                </span>
+                                {pnlUsd !== null && (
+                                  <div className={`text-xs ${pnlUsd >= 0 ? 'text-green-500' : 'text-red-500'}`}> 
+                                    {pnlUsd >= 0 ? '+' : ''}${pnlUsd.toFixed(2)} ({pnlPercent?.toFixed(1)}%)
+                                  </div>
+                                )}
                               </div>
+                            ) : (
+                              <span className="text-muted-foreground">-</span>
                             )}
+                            <div className="text-xs text-muted-foreground mt-0.5">
+                              {`Price: $${currentPrice.toFixed(8)}`}
+                            </div>
                           </div>
                         ) : (
                           <span className="text-muted-foreground">-</span>
