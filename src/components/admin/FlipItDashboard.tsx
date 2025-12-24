@@ -843,9 +843,14 @@ export function FlipItDashboard() {
                   return (
                     <TableRow key={position.id}>
                       <TableCell>
-                        <div className="font-mono text-xs">
+                        <button
+                          onClick={() => copyToClipboard(position.token_mint, 'Token address')}
+                          className="font-mono text-xs hover:text-primary cursor-pointer flex items-center gap-1"
+                          title={position.token_mint}
+                        >
                           {position.token_symbol || position.token_mint.slice(0, 8) + '...'}
-                        </div>
+                          <Copy className="h-3 w-3 opacity-50" />
+                        </button>
                       </TableCell>
                       <TableCell>
                         ${position.buy_price_usd?.toFixed(8) || '-'}
@@ -938,9 +943,14 @@ export function FlipItDashboard() {
                 {completedPositions.slice(0, 50).map(position => (
                   <TableRow key={position.id}>
                     <TableCell>
-                      <div className="font-mono text-xs">
+                      <button
+                        onClick={() => copyToClipboard(position.token_mint, 'Token address')}
+                        className="font-mono text-xs hover:text-primary cursor-pointer flex items-center gap-1"
+                        title={position.token_mint}
+                      >
                         {position.token_symbol || position.token_mint.slice(0, 8) + '...'}
-                      </div>
+                        <Copy className="h-3 w-3 opacity-50" />
+                      </button>
                     </TableCell>
                     <TableCell>${position.buy_price_usd?.toFixed(8) || '-'}</TableCell>
                     <TableCell>${position.sell_price_usd?.toFixed(8) || '-'}</TableCell>
