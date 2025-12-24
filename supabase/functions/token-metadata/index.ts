@@ -179,7 +179,69 @@ serve(async (req) => {
 
   try {
     const body = await req.json();
-    const { tokenMint } = body;
+    const { tokenMint, tokenMints } = body;
+    
+    // Support batch requests with tokenMints array
+    if (tokenMints && Array.isArray(tokenMints) && tokenMints.length > 0) {
+      console.log(`Batch fetching metadata for ${tokenMints.length} tokens`);
+      const heliusApiKey = Deno.env.get('HELIUS_HOLDERS_KEY') || Deno.env.get('HELIUS_API_KEY');
+      
+      const tokens: Array<{ mint: string; symbol: string; name: string }> = [];
+      
+      for (const mint of tokenMints.slice(0, 20)) { // Limit to 20 tokens
+        if (!/^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(mint)) continue;
+        
+        try {
+          // Try DexScreener first (fast)
+          const dexRes = await fetch(`https://api.dexscreener.com/latest/dex/tokens/${mint}`, {
+            signal: AbortSignal.timeout(3000)
+          });
+          if (dexRes.ok) {
+            const dexData = await dexRes.json();
+            const pair = dexData?.pairs?.[0];
+            if (pair?.baseToken?.symbol) {
+              tokens.push({
+                mint,
+                symbol: pair.baseToken.symbol,
+                name: pair.baseToken.name || pair.baseToken.symbol
+              });
+              continue;
+            }
+          }
+        } catch (e) {
+          console.log(`DexScreener failed for ${mint.slice(0,8)}:`, (e as Error).message);
+        }
+        
+        // Fallback to Helius
+        if (heliusApiKey) {
+          try {
+            const heliusMeta = await fetchHeliusMetadata(mint, heliusApiKey);
+            if (heliusMeta?.symbol) {
+              tokens.push({
+                mint,
+                symbol: heliusMeta.symbol,
+                name: heliusMeta.name || heliusMeta.symbol
+              });
+              continue;
+            }
+          } catch (e) {
+            console.log(`Helius failed for ${mint.slice(0,8)}:`, (e as Error).message);
+          }
+        }
+        
+        // Use mint suffix as fallback
+        tokens.push({
+          mint,
+          symbol: mint.slice(0, 6).toUpperCase(),
+          name: `Token ${mint.slice(0, 8)}`
+        });
+      }
+      
+      return new Response(
+        JSON.stringify({ success: true, tokens }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
     
     if (!tokenMint) {
       throw new Error('Token mint address is required');
