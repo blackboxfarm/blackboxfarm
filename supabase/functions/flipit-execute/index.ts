@@ -17,6 +17,18 @@ function bad(message: string, status = 400) {
   return ok({ error: message }, status);
 }
 
+function firstSignature(swapResult: any): string | null {
+  if (!swapResult) return null;
+  if (typeof swapResult.signature === "string" && swapResult.signature.length > 0) return swapResult.signature;
+  if (Array.isArray(swapResult.signatures) && typeof swapResult.signatures[0] === "string" && swapResult.signatures[0].length > 0) {
+    return swapResult.signatures[0];
+  }
+  if (Array.isArray(swapResult.data?.signatures) && typeof swapResult.data.signatures?.[0] === "string") {
+    return swapResult.data.signatures[0];
+  }
+  return null;
+}
+
 async function fetchTokenPrice(tokenMint: string): Promise<number | null> {
   // Try Jupiter first
   try {
@@ -202,24 +214,31 @@ serve(async (req) => {
           throw new Error(swapResult.error);
         }
 
+        const signature = firstSignature(swapResult);
+        if (!signature) {
+          throw new Error("Swap returned no signature (buy did not confirm)");
+        }
+
         // Update position with buy result
         await supabase
           .from("flip_positions")
           .update({
-            buy_signature: swapResult?.signature || null,
+            buy_signature: signature,
             buy_executed_at: new Date().toISOString(),
-            quantity_tokens: swapResult?.outAmount || null,
-            status: "holding"
+            quantity_tokens: (swapResult as any)?.outAmount ?? null,
+            status: "holding",
+            error_message: null,
           })
           .eq("id", position.id);
 
         return ok({
           success: true,
           positionId: position.id,
-          signature: swapResult?.signature,
+          signature,
+          signatures: (swapResult as any)?.signatures ?? [signature],
           entryPrice: currentPrice,
           targetPrice: targetPrice,
-          multiplier: mult
+          multiplier: mult,
         });
 
       } catch (buyErr: any) {
@@ -252,7 +271,8 @@ serve(async (req) => {
         return bad("Position not found");
       }
 
-      if (position.status !== "holding") {
+      // Allow retry when the UI/database incorrectly marked a sell without a signature.
+      if (position.status !== "holding" && !(position.status === "sold" && !position.sell_signature)) {
         return bad("Position is not in holding status");
       }
 
@@ -290,27 +310,36 @@ serve(async (req) => {
           throw new Error(swapResult.error);
         }
 
+        const signature = firstSignature(swapResult);
+        if (!signature) {
+          throw new Error("Swap returned no signature (sell did not confirm)");
+        }
+
         // Get current price for profit calculation
-        const sellPrice = await fetchTokenPrice(position.token_mint) || position.buy_price_usd;
-        const profit = position.buy_amount_usd * ((sellPrice / position.buy_price_usd) - 1);
+        const sellPrice = (await fetchTokenPrice(position.token_mint)) || position.buy_price_usd;
+        const profit = sellPrice && position.buy_price_usd
+          ? position.buy_amount_usd * ((sellPrice / position.buy_price_usd) - 1)
+          : null;
 
         // Update position with sell result
         await supabase
           .from("flip_positions")
           .update({
-            sell_signature: swapResult?.signature || null,
+            sell_signature: signature,
             sell_executed_at: new Date().toISOString(),
             sell_price_usd: sellPrice,
             profit_usd: profit,
-            status: "sold"
+            status: "sold",
+            error_message: null,
           })
           .eq("id", positionId);
 
         return ok({
           success: true,
-          signature: swapResult?.signature,
-          sellPrice: sellPrice,
-          profit: profit
+          signature,
+          signatures: (swapResult as any)?.signatures ?? [signature],
+          sellPrice,
+          profit,
         });
 
       } catch (sellErr: any) {
