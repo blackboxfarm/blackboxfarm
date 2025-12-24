@@ -1,4 +1,4 @@
-import React, { useState, Suspense, lazy } from "react";
+import React, { useState, lazy } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { AuthButton } from "@/components/auth/AuthButton";
@@ -11,7 +11,7 @@ import { useNavigate } from "react-router-dom";
 import { Shield } from "lucide-react";
 import { SolPriceDisplay } from "@/components/SolPriceDisplay";
 import { NotificationCenter } from "@/components/NotificationCenter";
-import { LazyLoader } from "@/components/ui/lazy-loader";
+import { ActiveTabOnly } from "@/components/ui/ActiveTabOnly";
 
 // Lazy load all tab components
 const OverviewTab = lazy(() => import("@/components/blackbox/OverviewTab").then(m => ({ default: m.OverviewTab })));
@@ -33,6 +33,7 @@ const SecurityDashboard = lazy(() => import("@/components/security/SecurityDashb
 
 export default function BlackBox() {
   const [activeTab, setActiveTab] = useState("overview");
+  const [copyTradingSubTab, setCopyTradingSubTab] = useState("config");
   const { user } = useAuth();
   const { isSuperAdmin, isAdmin, isLoading: rolesLoading } = useUserRoles();
   const navigate = useNavigate();
@@ -102,61 +103,65 @@ export default function BlackBox() {
           </TabsList>
 
           <TabsContent value="overview" className="space-y-6">
-            <Suspense fallback={<LazyLoader />}>
+            <ActiveTabOnly activeTab={activeTab} tabValue="overview">
               <OverviewTab />
-            </Suspense>
+            </ActiveTabOnly>
           </TabsContent>
 
           <TabsContent value="dashboard" className="space-y-6">
-            <RequireAuth>
-              <Suspense fallback={<LazyLoader />}>
+            <ActiveTabOnly activeTab={activeTab} tabValue="dashboard">
+              <RequireAuth>
                 <CampaignDashboard />
                 <WalletGenerator />
-              </Suspense>
-            </RequireAuth>
+              </RequireAuth>
+            </ActiveTabOnly>
           </TabsContent>
 
           <TabsContent value="watcher" className="space-y-6">
-            <Suspense fallback={<LazyLoader />}>
+            <ActiveTabOnly activeTab={activeTab} tabValue="watcher">
               <WalletMonitor />
-            </Suspense>
+            </ActiveTabOnly>
           </TabsContent>
 
           <TabsContent value="breadcrumbs" className="space-y-6">
-            <Suspense fallback={<LazyLoader />}>
+            <ActiveTabOnly activeTab={activeTab} tabValue="breadcrumbs">
               <BreadCrumbsInterface />
-            </Suspense>
+            </ActiveTabOnly>
           </TabsContent>
 
           <TabsContent value="copy-trading" className="space-y-6">
-            <Suspense fallback={<LazyLoader />}>
-              <Tabs defaultValue="config" className="w-full">
+            <ActiveTabOnly activeTab={activeTab} tabValue="copy-trading">
+              <Tabs value={copyTradingSubTab} onValueChange={setCopyTradingSubTab} className="w-full">
                 <TabsList className="grid w-full grid-cols-2">
                   <TabsTrigger value="config">Configuration</TabsTrigger>
                   <TabsTrigger value="dashboard">Dashboard</TabsTrigger>
                 </TabsList>
                 
                 <TabsContent value="config" className="mt-6">
-                  <CopyTradingConfig />
+                  <ActiveTabOnly activeTab={copyTradingSubTab} tabValue="config">
+                    <CopyTradingConfig />
+                  </ActiveTabOnly>
                 </TabsContent>
                 
                 <TabsContent value="dashboard" className="mt-6">
-                  <CopyTradingDashboard />
+                  <ActiveTabOnly activeTab={copyTradingSubTab} tabValue="dashboard">
+                    <CopyTradingDashboard />
+                  </ActiveTabOnly>
                 </TabsContent>
               </Tabs>
-            </Suspense>
+            </ActiveTabOnly>
           </TabsContent>
 
           <TabsContent value="community" className="space-y-6">
-            <Suspense fallback={<LazyLoader />}>
+            <ActiveTabOnly activeTab={activeTab} tabValue="community">
               <RequireAuth fallback={<CommunityWalletPublic />}>
                 <CommunityWalletDashboard />
               </RequireAuth>
-            </Suspense>
+            </ActiveTabOnly>
           </TabsContent>
 
           <TabsContent value="simulator" className="space-y-6">
-            <Suspense fallback={<LazyLoader />}>
+            <ActiveTabOnly activeTab={activeTab} tabValue="simulator">
               <Card>
                 <CardHeader>
                   <CardTitle>Volume Bot Simulator</CardTitle>
@@ -165,45 +170,45 @@ export default function BlackBox() {
                   <VolumeSimulator />
                 </CardContent>
               </Card>
-            </Suspense>
+            </ActiveTabOnly>
           </TabsContent>
 
           <TabsContent value="fees" className="space-y-6">
-            <Suspense fallback={<LazyLoader />}>
+            <ActiveTabOnly activeTab={activeTab} tabValue="fees">
               <FeeCalculator />
-            </Suspense>
+            </ActiveTabOnly>
           </TabsContent>
 
           <TabsContent value="analytics" className="space-y-6">
-            <Suspense fallback={<LazyLoader />}>
+            <ActiveTabOnly activeTab={activeTab} tabValue="analytics">
               <AnalyticsDashboard />
-            </Suspense>
+            </ActiveTabOnly>
           </TabsContent>
 
           <TabsContent value="holders" className="space-y-6">
-            <Suspense fallback={<LazyLoader />}>
+            <ActiveTabOnly activeTab={activeTab} tabValue="holders">
               <div className="w-full md:w-1/2 md:mx-auto px-[5px] md:px-6">
                 <BaglessHoldersReport />
               </div>
-            </Suspense>
+            </ActiveTabOnly>
           </TabsContent>
 
           <TabsContent value="referrals" className="space-y-6">
-            <Suspense fallback={<LazyLoader />}>
+            <ActiveTabOnly activeTab={activeTab} tabValue="referrals">
               <ReferralDashboard />
-            </Suspense>
+            </ActiveTabOnly>
           </TabsContent>
 
           <TabsContent value="wallets" className="space-y-6">
-            <Suspense fallback={<LazyLoader />}>
+            <ActiveTabOnly activeTab={activeTab} tabValue="wallets">
               <EnhancedWalletView />
-            </Suspense>
+            </ActiveTabOnly>
           </TabsContent>
 
           <TabsContent value="security" className="space-y-6">
-            <Suspense fallback={<LazyLoader />}>
+            <ActiveTabOnly activeTab={activeTab} tabValue="security">
               <SecurityDashboard />
-            </Suspense>
+            </ActiveTabOnly>
           </TabsContent>
         </Tabs>
 

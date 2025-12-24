@@ -1,10 +1,10 @@
-import React, { useState, useEffect, Suspense, lazy } from "react";
+import React, { useState, useEffect, lazy } from "react";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useUserRoles } from "@/hooks/useUserRoles";
 import { AlertTriangle } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { LazyLoader } from "@/components/ui/lazy-loader";
+import { ActiveTabOnly } from "@/components/ui/ActiveTabOnly";
 
 // Lazy load ALL admin components - they won't load until their tab is clicked
 const MasterWalletsDashboard = lazy(() => import("@/components/admin/MasterWalletsDashboard").then(m => ({ default: m.MasterWalletsDashboard })));
@@ -128,180 +128,180 @@ export default function SuperAdmin() {
           </TabsList>
           
           <TabsContent value="master-wallets">
-            <Suspense fallback={<LazyLoader />}>
+            <ActiveTabOnly activeTab={activeTab} tabValue="master-wallets">
               <MasterWalletsDashboard />
-            </Suspense>
+            </ActiveTabOnly>
           </TabsContent>
 
           <TabsContent value="wallets">
-            <Suspense fallback={<LazyLoader />}>
+            <ActiveTabOnly activeTab={activeTab} tabValue="wallets">
               <div className="space-y-6">
                 <WalletBalanceMonitor />
                 <SuperAdminWallets />
               </div>
-            </Suspense>
+            </ActiveTabOnly>
           </TabsContent>
           
           <TabsContent value="recovery">
-            <Suspense fallback={<LazyLoader />}>
+            <ActiveTabOnly activeTab={activeTab} tabValue="recovery">
               <AdminWalletRecovery />
-            </Suspense>
+            </ActiveTabOnly>
           </TabsContent>
           
           <TabsContent value="monitor">
-            <Suspense fallback={<LazyLoader />}>
+            <ActiveTabOnly activeTab={activeTab} tabValue="monitor">
               <WalletMonitor />
-            </Suspense>
+            </ActiveTabOnly>
           </TabsContent>
           
           <TabsContent value="security">
-            <Suspense fallback={<LazyLoader />}>
+            <ActiveTabOnly activeTab={activeTab} tabValue="security">
               <SecurityDashboard />
-            </Suspense>
+            </ActiveTabOnly>
           </TabsContent>
           
           <TabsContent value="accounts">
-            <Suspense fallback={<LazyLoader />}>
+            <ActiveTabOnly activeTab={activeTab} tabValue="accounts">
               <AccountViewer />
-            </Suspense>
+            </ActiveTabOnly>
           </TabsContent>
           
           <TabsContent value="holders">
-            <Suspense fallback={<LazyLoader />}>
+            <ActiveTabOnly activeTab={activeTab} tabValue="holders">
               <BaglessHoldersReport />
-            </Suspense>
+            </ActiveTabOnly>
           </TabsContent>
           
           <TabsContent value="liquidity">
-            <Suspense fallback={<LazyLoader />}>
+            <ActiveTabOnly activeTab={activeTab} tabValue="liquidity">
               <LiquidityLockChecker />
-            </Suspense>
+            </ActiveTabOnly>
           </TabsContent>
           
           <TabsContent value="tokens">
-            <Suspense fallback={<LazyLoader />}>
+            <ActiveTabOnly activeTab={activeTab} tabValue="tokens">
               <AllWalletsTokenView />
-            </Suspense>
+            </ActiveTabOnly>
           </TabsContent>
 
           <TabsContent value="developers">
-            <Suspense fallback={<LazyLoader />}>
+            <ActiveTabOnly activeTab={activeTab} tabValue="developers">
               <DeveloperProfiles />
-            </Suspense>
+            </ActiveTabOnly>
           </TabsContent>
 
           <TabsContent value="analysis">
-            <Suspense fallback={<LazyLoader />}>
+            <ActiveTabOnly activeTab={activeTab} tabValue="analysis">
               <AnalysisJobs />
-            </Suspense>
+            </ActiveTabOnly>
           </TabsContent>
 
           <TabsContent value="watchdog">
-            <Suspense fallback={<LazyLoader />}>
+            <ActiveTabOnly activeTab={activeTab} tabValue="watchdog">
               <TokenWatchdog />
-            </Suspense>
+            </ActiveTabOnly>
           </TabsContent>
 
           <TabsContent value="alerts">
-            <Suspense fallback={<LazyLoader />}>
+            <ActiveTabOnly activeTab={activeTab} tabValue="alerts">
               <DeveloperAlerts />
-            </Suspense>
+            </ActiveTabOnly>
           </TabsContent>
 
           <TabsContent value="testing">
-            <Suspense fallback={<LazyLoader />}>
+            <ActiveTabOnly activeTab={activeTab} tabValue="testing">
               <SystemTesting />
-            </Suspense>
+            </ActiveTabOnly>
           </TabsContent>
 
           <TabsContent value="genealogy">
-            <Suspense fallback={<LazyLoader />}>
+            <ActiveTabOnly activeTab={activeTab} tabValue="genealogy">
               <TokenGenealogyDashboard />
-            </Suspense>
+            </ActiveTabOnly>
           </TabsContent>
 
           <TabsContent value="dex-compiles">
-            <Suspense fallback={<LazyLoader />}>
+            <ActiveTabOnly activeTab={activeTab} tabValue="dex-compiles">
               <DexCompilesView />
-            </Suspense>
+            </ActiveTabOnly>
           </TabsContent>
 
           <TabsContent value="html-scrapes">
-            <Suspense fallback={<LazyLoader />}>
+            <ActiveTabOnly activeTab={activeTab} tabValue="html-scrapes">
               <HtmlScrapes />
-            </Suspense>
+            </ActiveTabOnly>
           </TabsContent>
 
           <TabsContent value="token-sets">
-            <Suspense fallback={<LazyLoader />}>
+            <ActiveTabOnly activeTab={activeTab} tabValue="token-sets">
               <TokenSets />
-            </Suspense>
+            </ActiveTabOnly>
           </TabsContent>
 
           <TabsContent value="arbitrage">
-            <Suspense fallback={<LazyLoader />}>
+            <ActiveTabOnly activeTab={activeTab} tabValue="arbitrage">
               <ArbitrageBotDashboard />
-            </Suspense>
+            </ActiveTabOnly>
           </TabsContent>
 
           <TabsContent value="playground">
-            <Suspense fallback={<LazyLoader />}>
+            <ActiveTabOnly activeTab={activeTab} tabValue="playground">
               <Playground />
-            </Suspense>
+            </ActiveTabOnly>
           </TabsContent>
 
           <TabsContent value="airdrops">
-            <Suspense fallback={<LazyLoader />}>
+            <ActiveTabOnly activeTab={activeTab} tabValue="airdrops">
               <AirdropManager />
-            </Suspense>
+            </ActiveTabOnly>
           </TabsContent>
 
           <TabsContent value="fuct-airdrops">
-            <Suspense fallback={<LazyLoader />}>
+            <ActiveTabOnly activeTab={activeTab} tabValue="fuct-airdrops">
               <FuctAirdropGift />
-            </Suspense>
+            </ActiveTabOnly>
           </TabsContent>
 
           <TabsContent value="banners">
-            <Suspense fallback={<LazyLoader />}>
+            <ActiveTabOnly activeTab={activeTab} tabValue="banners">
               <BannerManagement />
-            </Suspense>
+            </ActiveTabOnly>
           </TabsContent>
 
           <TabsContent value="advertisers">
-            <Suspense fallback={<LazyLoader />}>
+            <ActiveTabOnly activeTab={activeTab} tabValue="advertisers">
               <AdvertiserManagement />
-            </Suspense>
+            </ActiveTabOnly>
           </TabsContent>
 
           <TabsContent value="surveys">
-            <Suspense fallback={<LazyLoader />}>
+            <ActiveTabOnly activeTab={activeTab} tabValue="surveys">
               <SurveyManagement />
-            </Suspense>
+            </ActiveTabOnly>
           </TabsContent>
 
           <TabsContent value="whale-frenzy">
-            <Suspense fallback={<LazyLoader />}>
+            <ActiveTabOnly activeTab={activeTab} tabValue="whale-frenzy">
               <WhaleFrenzyDashboard />
-            </Suspense>
+            </ActiveTabOnly>
           </TabsContent>
 
           <TabsContent value="mega-whale">
-            <Suspense fallback={<LazyLoader />}>
+            <ActiveTabOnly activeTab={activeTab} tabValue="mega-whale">
               <MegaWhaleDashboard />
-            </Suspense>
+            </ActiveTabOnly>
           </TabsContent>
 
           <TabsContent value="api-providers">
-            <Suspense fallback={<LazyLoader />}>
+            <ActiveTabOnly activeTab={activeTab} tabValue="api-providers">
               <ApiProviderManager />
-            </Suspense>
+            </ActiveTabOnly>
           </TabsContent>
 
           <TabsContent value="flipit">
-            <Suspense fallback={<LazyLoader />}>
+            <ActiveTabOnly activeTab={activeTab} tabValue="flipit">
               <FlipItDashboard />
-            </Suspense>
+            </ActiveTabOnly>
           </TabsContent>
         </Tabs>
       </div>
