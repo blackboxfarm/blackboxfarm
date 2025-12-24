@@ -2388,6 +2388,12 @@ export type Database = {
           id: string
           profit_usd: number | null
           quantity_tokens: number | null
+          rebuy_amount_usd: number | null
+          rebuy_enabled: boolean | null
+          rebuy_executed_at: string | null
+          rebuy_position_id: string | null
+          rebuy_price_usd: number | null
+          rebuy_status: string | null
           sell_executed_at: string | null
           sell_price_usd: number | null
           sell_signature: string | null
@@ -2411,6 +2417,12 @@ export type Database = {
           id?: string
           profit_usd?: number | null
           quantity_tokens?: number | null
+          rebuy_amount_usd?: number | null
+          rebuy_enabled?: boolean | null
+          rebuy_executed_at?: string | null
+          rebuy_position_id?: string | null
+          rebuy_price_usd?: number | null
+          rebuy_status?: string | null
           sell_executed_at?: string | null
           sell_price_usd?: number | null
           sell_signature?: string | null
@@ -2434,6 +2446,12 @@ export type Database = {
           id?: string
           profit_usd?: number | null
           quantity_tokens?: number | null
+          rebuy_amount_usd?: number | null
+          rebuy_enabled?: boolean | null
+          rebuy_executed_at?: string | null
+          rebuy_position_id?: string | null
+          rebuy_price_usd?: number | null
+          rebuy_status?: string | null
           sell_executed_at?: string | null
           sell_price_usd?: number | null
           sell_signature?: string | null
@@ -2448,6 +2466,13 @@ export type Database = {
           wallet_id?: string | null
         }
         Relationships: [
+          {
+            foreignKeyName: "flip_positions_rebuy_position_id_fkey"
+            columns: ["rebuy_position_id"]
+            isOneToOne: false
+            referencedRelation: "flip_positions"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "flip_positions_wallet_id_fkey"
             columns: ["wallet_id"]

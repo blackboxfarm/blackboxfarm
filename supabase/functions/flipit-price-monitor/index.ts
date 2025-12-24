@@ -182,17 +182,25 @@ serve(async (req) => {
           // Calculate profit
           const profit = position.buy_amount_usd * ((currentPrice / entryPrice) - 1);
 
-          // Update position
+          // Update position - and set rebuy_status to 'watching' if rebuy_enabled
+          const updateData: any = {
+            sell_signature: signature,
+            sell_executed_at: new Date().toISOString(),
+            sell_price_usd: currentPrice,
+            profit_usd: profit,
+            status: "sold",
+            error_message: null,
+          };
+
+          // If rebuy is enabled and has price/amount set, start watching
+          if (position.rebuy_enabled && position.rebuy_price_usd && position.rebuy_amount_usd) {
+            updateData.rebuy_status = "watching";
+            console.log(`Rebuy enabled for ${position.id}, setting status to watching`);
+          }
+
           await supabase
             .from("flip_positions")
-            .update({
-              sell_signature: signature,
-              sell_executed_at: new Date().toISOString(),
-              sell_price_usd: currentPrice,
-              profit_usd: profit,
-              status: "sold",
-              error_message: null,
-            })
+            .update(updateData)
             .eq("id", position.id);
 
           executed.push({
