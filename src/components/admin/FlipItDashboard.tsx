@@ -640,6 +640,9 @@ export function FlipItDashboard() {
                         <WalletTokenManager
                           walletId={selectedWallet}
                           walletPubkey={wallets.find(w => w.id === selectedWallet)?.pubkey || ''}
+                          useDirectSwap={true}
+                          slippageBps={slippageBps}
+                          priorityFeeMode={priorityFeeMode}
                           onTokensSold={() => {
                             refreshWalletBalance();
                             loadPositions();
