@@ -313,6 +313,8 @@ serve(async (req) => {
       priorityFeeMode,
       action,
       preCreateWSOL,
+      // Wallet ID for direct database lookup
+      walletId,
     } = body;
 
     const rpcUrl = getEnv("SOLANA_RPC_URL");
@@ -322,7 +324,46 @@ serve(async (req) => {
     
     // Decrypt if it's from header (encrypted from database)
     let secretToUse = bodyOwnerSecret || envOwnerSecret;
-    if (headerSecret) {
+    
+    // If walletId is provided, fetch the secret from the database
+    if (walletId && !bodyOwnerSecret && !headerSecret) {
+      try {
+        const supabaseUrl = getEnv("SUPABASE_URL");
+        const supabaseKey = getEnv("SUPABASE_SERVICE_ROLE_KEY");
+        
+        // Try super_admin_wallets first (for FlipIt), then blackbox_wallets
+        const tables = ['super_admin_wallets', 'blackbox_wallets', 'airdrop_wallets'];
+        let walletSecret: string | null = null;
+        
+        for (const table of tables) {
+          const res = await fetch(`${supabaseUrl}/rest/v1/${table}?id=eq.${walletId}&select=secret_key_encrypted`, {
+            headers: {
+              'apikey': supabaseKey,
+              'Authorization': `Bearer ${supabaseKey}`,
+            }
+          });
+          
+          if (res.ok) {
+            const rows = await res.json();
+            if (rows?.[0]?.secret_key_encrypted) {
+              console.log(`Found wallet in ${table}`);
+              walletSecret = rows[0].secret_key_encrypted;
+              break;
+            }
+          }
+        }
+        
+        if (!walletSecret) {
+          return bad(`Wallet ${walletId} not found in any wallet table`, 404);
+        }
+        
+        // Decrypt the wallet secret
+        secretToUse = await SecureStorage.decryptWalletSecret(walletSecret);
+        console.log(`Decrypted wallet secret for ${walletId}`);
+      } catch (error) {
+        return bad(`Failed to fetch wallet: ${error instanceof Error ? error.message : String(error)}`, 500);
+      }
+    } else if (headerSecret) {
       // First, try using the header secret directly as base58 (for airdrop wallets)
       try {
         const decoded = bs58.decode(headerSecret.trim());

@@ -28,6 +28,12 @@ interface WalletTokenManagerProps {
   isOrphaned?: boolean;
   onTokensSold?: () => void;
   initialTokens?: TokenBalance[];
+  /** If true, uses raydium-swap directly instead of blackbox commands */
+  useDirectSwap?: boolean;
+  /** Slippage in basis points for direct swap (default 500 = 5%) */
+  slippageBps?: number;
+  /** Priority fee mode for direct swap */
+  priorityFeeMode?: 'low' | 'medium' | 'high' | 'turbo' | 'ultra';
 }
 
 export function WalletTokenManager({ 
@@ -35,7 +41,10 @@ export function WalletTokenManager({
   walletPubkey, 
   isOrphaned = false,
   onTokensSold,
-  initialTokens = []
+  initialTokens = [],
+  useDirectSwap = false,
+  slippageBps = 500,
+  priorityFeeMode = 'medium'
 }: WalletTokenManagerProps) {
   const [tokens, setTokens] = useState<TokenBalance[]>(initialTokens);
   const [isLoading, setIsLoading] = useState(false);
@@ -243,49 +252,78 @@ export function WalletTokenManager({
     setSellLoading(prev => new Set(prev).add(token.mint));
 
     try {
-      // Find active command for this wallet with the token
-      const { data: commandsData, error: commandsError } = await supabase
-        .from('blackbox_command_codes')
-        .select('id, name, config')
-        .eq('wallet_id', walletId)
-        .eq('is_active', true);
-
-      if (commandsError) {
-        throw new Error(`Failed to get commands: ${commandsError.message}`);
-      }
-
-      // Find command that matches this token
-      const relevantCommand = commandsData?.find(cmd => {
-        const config = cmd.config as any;
-        return config && config.tokenAddress === token.mint;
-      });
-
-      if (!relevantCommand) {
-        toast({
-          title: "No active command found",
-          description: `No active command found for token ${token.symbol}. Create a command for this token first.`,
-          variant: "destructive"
+      if (useDirectSwap) {
+        // Direct swap via raydium-swap (for FlipIt and other direct wallet use)
+        console.log(`[WalletTokenManager] Direct swap sell: ${sellAmount} ${token.symbol} from wallet ${walletId}`);
+        
+        const { data, error } = await supabase.functions.invoke('raydium-swap', {
+          body: {
+            walletId: walletId,
+            inputMint: token.mint,
+            outputMint: 'So11111111111111111111111111111111111111112', // SOL
+            amount: Math.floor(sellAmount * Math.pow(10, token.decimals)), // Convert to raw units
+            slippageBps: slippageBps,
+            priorityFeeMode: priorityFeeMode
+          }
         });
-        return;
-      }
 
-      // Execute sell via blackbox executor
-      const { data, error } = await supabase.functions.invoke('blackbox-executor', {
-        body: {
-          command_code_id: relevantCommand.id,
-          action: 'sell',
-          amount: sellType === 'all' ? undefined : sellAmount
+        if (error) {
+          throw new Error(error.message);
         }
-      });
 
-      if (error) {
-        throw new Error(error.message);
+        if (data?.error) {
+          throw new Error(data.error);
+        }
+
+        const sig = data?.signature || data?.signatures?.[0] || data?.data?.signature || data?.data?.signatures?.[0];
+        
+        toast({
+          title: "Sell executed!",
+          description: sig ? `TX: ${sig.slice(0, 8)}...` : `Sold ${description}`,
+        });
+      } else {
+        // Original blackbox command approach
+        const { data: commandsData, error: commandsError } = await supabase
+          .from('blackbox_command_codes')
+          .select('id, name, config')
+          .eq('wallet_id', walletId)
+          .eq('is_active', true);
+
+        if (commandsError) {
+          throw new Error(`Failed to get commands: ${commandsError.message}`);
+        }
+
+        const relevantCommand = commandsData?.find(cmd => {
+          const config = cmd.config as any;
+          return config && config.tokenAddress === token.mint;
+        });
+
+        if (!relevantCommand) {
+          toast({
+            title: "No active command found",
+            description: `No active command found for token ${token.symbol}. Create a command for this token first.`,
+            variant: "destructive"
+          });
+          return;
+        }
+
+        const { data, error } = await supabase.functions.invoke('blackbox-executor', {
+          body: {
+            command_code_id: relevantCommand.id,
+            action: 'sell',
+            amount: sellType === 'all' ? undefined : sellAmount
+          }
+        });
+
+        if (error) {
+          throw new Error(error.message);
+        }
+
+        toast({
+          title: "Sell order executed",
+          description: `Successfully executed sell order for ${description}`,
+        });
       }
-
-      toast({
-        title: "Sell order executed",
-        description: `Successfully executed sell order for ${description}`,
-      });
 
       // Clear the input for this token
       setSellAmounts(prev => ({ ...prev, [token.mint]: '' }));
