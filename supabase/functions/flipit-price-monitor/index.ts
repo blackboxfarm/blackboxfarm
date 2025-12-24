@@ -17,6 +17,18 @@ function bad(message: string, status = 400) {
   return ok({ error: message }, status);
 }
 
+function firstSignature(swapResult: any): string | null {
+  if (!swapResult) return null;
+  if (typeof swapResult.signature === "string" && swapResult.signature.length > 0) return swapResult.signature;
+  if (Array.isArray(swapResult.signatures) && typeof swapResult.signatures[0] === "string" && swapResult.signatures[0].length > 0) {
+    return swapResult.signatures[0];
+  }
+  if (Array.isArray(swapResult.data?.signatures) && typeof swapResult.data.signatures?.[0] === "string") {
+    return swapResult.data.signatures[0];
+  }
+  return null;
+}
+
 async function fetchTokenPrices(tokenMints: string[]): Promise<Record<string, number>> {
   const prices: Record<string, number> = {};
   
@@ -162,6 +174,11 @@ serve(async (req) => {
             throw new Error(swapResult.error);
           }
 
+          const signature = firstSignature(swapResult);
+          if (!signature) {
+            throw new Error("Swap returned no signature (sell did not confirm)");
+          }
+
           // Calculate profit
           const profit = position.buy_amount_usd * ((currentPrice / entryPrice) - 1);
 
@@ -169,11 +186,12 @@ serve(async (req) => {
           await supabase
             .from("flip_positions")
             .update({
-              sell_signature: swapResult?.signature || null,
+              sell_signature: signature,
               sell_executed_at: new Date().toISOString(),
               sell_price_usd: currentPrice,
               profit_usd: profit,
-              status: "sold"
+              status: "sold",
+              error_message: null,
             })
             .eq("id", position.id);
 
@@ -183,7 +201,8 @@ serve(async (req) => {
             entryPrice,
             sellPrice: currentPrice,
             profit,
-            signature: swapResult?.signature
+            signature,
+            signatures: (swapResult as any)?.signatures ?? [signature],
           });
 
           console.log(`Sold position ${position.id} with profit: $${profit.toFixed(2)}`);
