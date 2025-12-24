@@ -317,32 +317,32 @@ serve(async (req) => {
       walletId,
     } = body;
 
-    const rpcUrl = getEnv("SOLANA_RPC_URL");
+    let rpcUrl = getEnv("SOLANA_RPC_URL");
     const bodyOwnerSecret = (body?.ownerSecret ? String(body.ownerSecret) : null);
     const headerSecret = req.headers.get("x-owner-secret");
     const envOwnerSecret = getEnv("TRADER_PRIVATE_KEY");
-    
+
     // Decrypt if it's from header (encrypted from database)
     let secretToUse = bodyOwnerSecret || envOwnerSecret;
-    
+
     // If walletId is provided, fetch the secret from the database
     if (walletId && !bodyOwnerSecret && !headerSecret) {
       try {
         const supabaseUrl = getEnv("SUPABASE_URL");
         const supabaseKey = getEnv("SUPABASE_SERVICE_ROLE_KEY");
-        
+
         // Try super_admin_wallets first (for FlipIt), then blackbox_wallets
-        const tables = ['super_admin_wallets', 'blackbox_wallets', 'airdrop_wallets'];
+        const tables = ["super_admin_wallets", "blackbox_wallets", "airdrop_wallets"];
         let walletSecret: string | null = null;
-        
+
         for (const table of tables) {
           const res = await fetch(`${supabaseUrl}/rest/v1/${table}?id=eq.${walletId}&select=secret_key_encrypted`, {
             headers: {
-              'apikey': supabaseKey,
-              'Authorization': `Bearer ${supabaseKey}`,
-            }
+              apikey: supabaseKey,
+              Authorization: `Bearer ${supabaseKey}`,
+            },
           });
-          
+
           if (res.ok) {
             const rows = await res.json();
             if (rows?.[0]?.secret_key_encrypted) {
@@ -352,11 +352,11 @@ serve(async (req) => {
             }
           }
         }
-        
+
         if (!walletSecret) {
           return bad(`Wallet ${walletId} not found in any wallet table`, 404);
         }
-        
+
         // Decrypt the wallet secret
         secretToUse = await SecureStorage.decryptWalletSecret(walletSecret);
         console.log(`Decrypted wallet secret for ${walletId}`);
@@ -382,23 +382,37 @@ serve(async (req) => {
         }
       }
     }
-    
+
     // Handle base64 encoded secrets (from user_secrets table)
-    if (secretToUse && secretToUse.includes('\n')) {
+    if (secretToUse && secretToUse.includes("\n")) {
       try {
         // This looks like a base64 encoded secret, decode it
-        const decoded = atob(secretToUse.replace(/\s/g, ''));
+        const decoded = atob(secretToUse.replace(/\s/g, ""));
         secretToUse = decoded;
       } catch (error) {
-        console.log('Base64 decode failed, trying as-is:', error);
+        console.log("Base64 decode failed, trying as-is:", error);
       }
     }
-    
+
     owner = parseKeypair(secretToUse);
-    const connection = new Connection(rpcUrl, { commitment: "confirmed" });
 
     const confirmPolicy = String(_confirmPolicy ?? "processed").toLowerCase();
     const desiredCommitment = confirmPolicy === "processed" ? "processed" : "confirmed";
+
+    // Build RPC connection. If the configured RPC uses an invalid API key, fall back to public RPC.
+    let connection = new Connection(rpcUrl, { commitment: desiredCommitment as any });
+    try {
+      await connection.getLatestBlockhash(desiredCommitment as any);
+    } catch (e) {
+      const msg = (e as Error)?.message ?? String(e);
+      if (msg.includes("Invalid API key") || msg.includes("401 Unauthorized")) {
+        console.warn("RPC auth failed (Invalid API key). Falling back to public Solana RPC for this request.");
+        rpcUrl = "https://api.mainnet-beta.solana.com";
+        connection = new Connection(rpcUrl, { commitment: desiredCommitment as any });
+      } else {
+        throw e;
+      }
+    }
 
     // Prepare mode: pre-create ATAs to speed up first swap
     if (action === "prepare") {
