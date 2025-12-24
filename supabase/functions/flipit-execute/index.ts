@@ -283,12 +283,7 @@ serve(async (req) => {
         .eq("id", positionId);
 
       try {
-        // Execute sell via raydium-swap
-        const walletSecret = (position as any).super_admin_wallets?.secret_key_encrypted;
-        if (!walletSecret) {
-          throw new Error("Wallet secret not found");
-        }
-
+        // Execute sell via raydium-swap using wallet ID for direct lookup
         const { data: swapResult, error: swapError } = await supabase.functions.invoke("raydium-swap", {
           body: {
             side: "sell",
@@ -296,10 +291,8 @@ serve(async (req) => {
             sellAll: true,
             slippageBps: effectiveSlippage,
             priorityFeeMode: priorityFeeMode || "medium",
+            walletId: position.wallet_id, // Pass wallet ID for direct DB lookup
           },
-          headers: {
-            "x-owner-secret": walletSecret
-          }
         });
 
         if (swapError) {

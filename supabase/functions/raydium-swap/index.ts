@@ -498,18 +498,45 @@ serve(async (req) => {
             tokenMint
           });
           
-          // Use public RPC for balance check (Helius key may be invalid)
-          const publicConnection = new Connection("https://api.mainnet-beta.solana.com", { commitment: "confirmed" });
+          // Use Helius RPC for balance check - more reliable than public RPC
+          const balanceConnection = connection;
           
           // Try both Token-2022 and SPL Token programs
-          const balanceResult = await getTokenBalance(publicConnection, new PublicKey(tokenMint), owner.publicKey);
+          const balanceResult = await getTokenBalance(balanceConnection, new PublicKey(tokenMint), owner.publicKey);
           
           if (!balanceResult || balanceResult.balance <= 0) {
-            return bad(`No token balance to sell. Owner: ${owner.publicKey.toBase58().slice(0,8)}..., tried both Token-2022 and SPL Token programs`);
+            // Try alternative method: get all token accounts for owner
+            console.log("Primary balance check failed, trying getTokenAccountsByOwner...");
+            try {
+              const tokenAccounts = await balanceConnection.getTokenAccountsByOwner(owner.publicKey, {
+                mint: new PublicKey(tokenMint)
+              });
+              if (tokenAccounts.value.length > 0) {
+                const accountInfo = tokenAccounts.value[0].account;
+                // Parse the token account data to get balance
+                // Token account data: first 64 bytes = mint, next 32 = owner, next 8 = amount (little endian)
+                const data = accountInfo.data;
+                if (data.length >= 72) {
+                  const amountBytes = data.slice(64, 72);
+                  const tokenBalance = Number(amountBytes.readBigUInt64LE(0));
+                  if (tokenBalance > 0) {
+                    console.log("Found balance via getTokenAccountsByOwner:", tokenBalance);
+                    amount = Math.floor(tokenBalance);
+                  } else {
+                    return bad(`Token balance is 0. Owner: ${owner.publicKey.toBase58().slice(0,8)}...`);
+                  }
+                }
+              } else {
+                return bad(`No token accounts found for ${tokenMint}. Owner: ${owner.publicKey.toBase58().slice(0,8)}...`);
+              }
+            } catch (altErr) {
+              console.error("Alternative balance check also failed:", altErr);
+              return bad(`No token balance to sell. Owner: ${owner.publicKey.toBase58().slice(0,8)}..., tried both Token-2022 and SPL Token programs`);
+            }
+          } else {
+            console.log("Found token balance:", balanceResult.balance, "using program:", balanceResult.programId.toBase58());
+            amount = Math.floor(balanceResult.balance);
           }
-          
-          console.log("Found token balance:", balanceResult.balance, "using program:", balanceResult.programId.toBase58());
-          amount = Math.floor(balanceResult.balance);
         } else {
           if (amount == null) return bad("Provide amount when not sellAll");
         }
