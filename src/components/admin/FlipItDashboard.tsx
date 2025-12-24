@@ -1024,6 +1024,7 @@ export function FlipItDashboard() {
                   <TableHead>P&L</TableHead>
                   <TableHead>Status</TableHead>
                   <TableHead>Time</TableHead>
+                  <TableHead>Action</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -1054,6 +1055,17 @@ export function FlipItDashboard() {
                         ? new Date(position.sell_executed_at).toLocaleString()
                         : new Date(position.created_at).toLocaleString()
                       }
+                    </TableCell>
+                    <TableCell>
+                      {position.status === 'sold' && !position.sell_signature && (
+                        <Button
+                          size="sm"
+                          variant="destructive"
+                          onClick={() => handleForceSell(position.id)}
+                        >
+                          Retry Sell
+                        </Button>
+                      )}
                     </TableCell>
                   </TableRow>
                 ))}
