@@ -865,7 +865,14 @@ export function FlipItDashboard() {
                       </TableCell>
                       <TableCell>
                         <div className="flex items-center gap-1">
-                          <span>${position.target_price_usd?.toFixed(8) || '-'} ({position.target_multiplier}x)</span>
+                          <div>
+                            <span>${position.target_price_usd?.toFixed(8) || '-'} ({position.target_multiplier}x)</span>
+                            {position.buy_amount_usd && (
+                              <span className="text-green-500 text-xs ml-1">
+                                (+${(position.buy_amount_usd * (position.target_multiplier - 1)).toFixed(2)})
+                              </span>
+                            )}
+                          </div>
                           {position.status === 'holding' && position.buy_price_usd && (
                             <Popover>
                               <PopoverTrigger asChild>
@@ -873,7 +880,7 @@ export function FlipItDashboard() {
                                   <Pencil className="h-3 w-3" />
                                 </Button>
                               </PopoverTrigger>
-                              <PopoverContent className="w-48 p-2" align="start">
+                              <PopoverContent className="w-56 p-2" align="start">
                                 <div className="space-y-1">
                                   <p className="text-xs text-muted-foreground mb-2">Change target:</p>
                                   {[1.5, 2, 3, 4, 5, 10].map(mult => (
@@ -881,10 +888,11 @@ export function FlipItDashboard() {
                                       key={mult}
                                       variant={position.target_multiplier === mult ? "default" : "ghost"}
                                       size="sm"
-                                      className="w-full justify-start"
+                                      className="w-full justify-between"
                                       onClick={() => handleUpdateTarget(position.id, mult, position.buy_price_usd!)}
                                     >
-                                      {mult}x → ${(position.buy_price_usd! * mult).toFixed(8)}
+                                      <span>{mult}x</span>
+                                      <span className="text-green-500 text-xs">+${(position.buy_amount_usd * (mult - 1)).toFixed(2)}</span>
                                     </Button>
                                   ))}
                                 </div>
