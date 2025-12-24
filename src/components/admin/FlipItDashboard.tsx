@@ -10,10 +10,12 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Switch } from '@/components/ui/switch';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
-import { Flame, RefreshCw, TrendingUp, DollarSign, Wallet, Clock, CheckCircle2, XCircle, Loader2, Plus, Copy, ArrowUpRight, Key, Settings, Zap, Activity, Radio, Pencil } from 'lucide-react';
+import { Flame, RefreshCw, TrendingUp, DollarSign, Wallet, Clock, CheckCircle2, XCircle, Loader2, Plus, Copy, ArrowUpRight, Key, Settings, Zap, Activity, Radio, Pencil, ChevronDown, Coins } from 'lucide-react';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { useSolPrice } from '@/hooks/useSolPrice';
 import { FlipItFeeCalculator } from './flipit/FlipItFeeCalculator';
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
+import { WalletTokenManager } from '@/components/blackbox/WalletTokenManager';
 
 interface FlipPosition {
   id: string;
@@ -60,6 +62,7 @@ export function FlipItDashboard() {
   const [isWithdrawing, setIsWithdrawing] = useState(false);
   const [walletBalance, setWalletBalance] = useState<number | null>(null);
   const [isRefreshingBalance, setIsRefreshingBalance] = useState(false);
+  const [showTokenManager, setShowTokenManager] = useState(false);
   
   // SOL price for USD conversion
   const { price: solPrice, isLoading: solPriceLoading } = useSolPrice();
@@ -550,75 +553,100 @@ export function FlipItDashboard() {
                 </div>
                 
                 {selectedWallet && wallets.find(w => w.id === selectedWallet) && (
-                  <div className="flex items-center justify-between flex-wrap gap-2 p-3 rounded-md bg-muted/50">
-                    <div className="flex items-center gap-2">
-                      <code className="text-sm font-mono">
-                        {wallets.find(w => w.id === selectedWallet)?.pubkey}
-                      </code>
-                      <Button 
-                        size="icon" 
-                        variant="ghost" 
-                        className="h-6 w-6"
-                        onClick={() => copyToClipboard(wallets.find(w => w.id === selectedWallet)?.pubkey || '', 'Address')}
-                        title="Copy wallet address"
-                      >
-                        <Copy className="h-3 w-3" />
-                      </Button>
-                      <a
-                        className="inline-flex"
-                        href={`https://solscan.io/account/${wallets.find(w => w.id === selectedWallet)?.pubkey}`}
-                        target="_blank"
-                        rel="noreferrer"
-                        title="View on Solscan"
-                      >
-                        <Button size="icon" variant="ghost" className="h-6 w-6">
-                          <ArrowUpRight className="h-3 w-3" />
-                        </Button>
-                      </a>
-                    </div>
-                    
-                    <div className="flex items-center gap-3">
-                      <div className="flex items-center gap-3 bg-muted/50 px-3 py-2 rounded-lg">
-                        <Wallet className="h-4 w-4 text-primary" />
-                        <div className="flex flex-col">
-                          <span className="text-xs text-muted-foreground">Balance</span>
-                          <div className="flex items-center gap-2">
-                            <span className="font-bold text-lg">
-                              {walletBalance !== null ? `${walletBalance.toFixed(5)} SOL` : '...'}
-                            </span>
-                            {walletBalance !== null && !solPriceLoading && (
-                              <span className="text-sm text-green-500 font-medium">
-                                (${(walletBalance * solPrice).toFixed(2)})
-                              </span>
-                            )}
-                          </div>
-                        </div>
+                  <div className="space-y-3">
+                    <div className="flex items-center justify-between flex-wrap gap-2 p-3 rounded-md bg-muted/50">
+                      <div className="flex items-center gap-2">
+                        <code className="text-sm font-mono">
+                          {wallets.find(w => w.id === selectedWallet)?.pubkey}
+                        </code>
                         <Button 
                           size="icon" 
                           variant="ghost" 
-                          className="h-7 w-7 ml-auto"
-                          onClick={refreshWalletBalance}
-                          disabled={isRefreshingBalance}
-                          title="Refresh balance"
+                          className="h-6 w-6"
+                          onClick={() => copyToClipboard(wallets.find(w => w.id === selectedWallet)?.pubkey || '', 'Address')}
+                          title="Copy wallet address"
                         >
-                          <RefreshCw className={`h-4 w-4 ${isRefreshingBalance ? 'animate-spin' : ''}`} />
+                          <Copy className="h-3 w-3" />
                         </Button>
+                        <a
+                          className="inline-flex"
+                          href={`https://solscan.io/account/${wallets.find(w => w.id === selectedWallet)?.pubkey}`}
+                          target="_blank"
+                          rel="noreferrer"
+                          title="View on Solscan"
+                        >
+                          <Button size="icon" variant="ghost" className="h-6 w-6">
+                            <ArrowUpRight className="h-3 w-3" />
+                          </Button>
+                        </a>
                       </div>
                       
-                      <Button 
-                        size="sm" 
-                        variant="destructive"
-                        onClick={handleWithdraw}
-                        disabled={isWithdrawing || !walletBalance || walletBalance < 0.001}
-                      >
-                        {isWithdrawing ? (
-                          <Loader2 className="h-4 w-4 mr-1 animate-spin" />
-                        ) : (
-                          <ArrowUpRight className="h-4 w-4 mr-1" />
-                        )}
-                        Withdraw All
-                      </Button>
+                      <div className="flex items-center gap-3">
+                        <div className="flex items-center gap-3 bg-muted/50 px-3 py-2 rounded-lg">
+                          <Wallet className="h-4 w-4 text-primary" />
+                          <div className="flex flex-col">
+                            <span className="text-xs text-muted-foreground">Balance</span>
+                            <div className="flex items-center gap-2">
+                              <span className="font-bold text-lg">
+                                {walletBalance !== null ? `${walletBalance.toFixed(5)} SOL` : '...'}
+                              </span>
+                              {walletBalance !== null && !solPriceLoading && (
+                                <span className="text-sm text-green-500 font-medium">
+                                  (${(walletBalance * solPrice).toFixed(2)})
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                          <Button 
+                            size="icon" 
+                            variant="ghost" 
+                            className="h-7 w-7 ml-auto"
+                            onClick={refreshWalletBalance}
+                            disabled={isRefreshingBalance}
+                            title="Refresh balance"
+                          >
+                            <RefreshCw className={`h-4 w-4 ${isRefreshingBalance ? 'animate-spin' : ''}`} />
+                          </Button>
+                        </div>
+                        
+                        <Button 
+                          size="sm" 
+                          variant="destructive"
+                          onClick={handleWithdraw}
+                          disabled={isWithdrawing || !walletBalance || walletBalance < 0.001}
+                        >
+                          {isWithdrawing ? (
+                            <Loader2 className="h-4 w-4 mr-1 animate-spin" />
+                          ) : (
+                            <ArrowUpRight className="h-4 w-4 mr-1" />
+                          )}
+                          Withdraw All
+                        </Button>
+                      </div>
                     </div>
+                    
+                    {/* Token Manager Toggle */}
+                    <Collapsible open={showTokenManager} onOpenChange={setShowTokenManager}>
+                      <CollapsibleTrigger asChild>
+                        <Button variant="outline" className="w-full justify-between">
+                          <span className="flex items-center gap-2">
+                            <Coins className="h-4 w-4" />
+                            View Wallet Tokens
+                          </span>
+                          <ChevronDown className={`h-4 w-4 transition-transform ${showTokenManager ? 'rotate-180' : ''}`} />
+                        </Button>
+                      </CollapsibleTrigger>
+                      <CollapsibleContent className="mt-3">
+                        <WalletTokenManager
+                          walletId={selectedWallet}
+                          walletPubkey={wallets.find(w => w.id === selectedWallet)?.pubkey || ''}
+                          onTokensSold={() => {
+                            refreshWalletBalance();
+                            loadPositions();
+                          }}
+                        />
+                      </CollapsibleContent>
+                    </Collapsible>
                   </div>
                 )}
               </div>
