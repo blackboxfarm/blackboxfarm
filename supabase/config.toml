@@ -234,3 +234,6 @@ verify_jwt = true
 
 [functions.flipit-wallet-withdrawal]
 verify_jwt = true
+
+[functions.flipit-rebuy-monitor]
+verify_jwt = false

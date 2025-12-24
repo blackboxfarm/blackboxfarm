@@ -10,7 +10,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Switch } from '@/components/ui/switch';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
-import { Flame, RefreshCw, TrendingUp, DollarSign, Wallet, Clock, CheckCircle2, XCircle, Loader2, Plus, Copy, ArrowUpRight, Key, Settings, Zap, Activity, Radio, Pencil, ChevronDown, Coins } from 'lucide-react';
+import { Flame, RefreshCw, TrendingUp, DollarSign, Wallet, Clock, CheckCircle2, XCircle, Loader2, Plus, Copy, ArrowUpRight, Key, Settings, Zap, Activity, Radio, Pencil, ChevronDown, Coins, Eye, RotateCcw } from 'lucide-react';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { useSolPrice } from '@/hooks/useSolPrice';
 import { FlipItFeeCalculator } from './flipit/FlipItFeeCalculator';
@@ -37,6 +37,13 @@ interface FlipPosition {
   error_message: string | null;
   created_at: string;
   wallet_id: string | null;
+  // Rebuy fields
+  rebuy_enabled: boolean | null;
+  rebuy_price_usd: number | null;
+  rebuy_amount_usd: number | null;
+  rebuy_status: string | null;
+  rebuy_executed_at: string | null;
+  rebuy_position_id: string | null;
 }
 
 interface SuperAdminWallet {
@@ -77,6 +84,16 @@ export function FlipItDashboard() {
   const [autoRefreshEnabled, setAutoRefreshEnabled] = useState(true);
   const [countdown, setCountdown] = useState(60);
   const countdownRef = useRef(60);
+  
+  // Rebuy monitoring state
+  const [rebuyMonitorEnabled, setRebuyMonitorEnabled] = useState(true);
+  const [rebuyCountdown, setRebuyCountdown] = useState(15);
+  const rebuyCountdownRef = useRef(15);
+  const [lastRebuyCheck, setLastRebuyCheck] = useState<string | null>(null);
+  const [isRebuyMonitoring, setIsRebuyMonitoring] = useState(false);
+  
+  // Rebuy settings for editing individual positions
+  const [rebuyEditing, setRebuyEditing] = useState<Record<string, { enabled: boolean; price: string; amount: string }>>({});
 
   useEffect(() => {
     loadWallets();
@@ -165,6 +182,68 @@ export function FlipItDashboard() {
       setIsMonitoring(false);
     }
   }, [positions, slippageBps, priorityFeeMode, isMonitoring]);
+
+  // Rebuy monitoring poll (every 15 seconds)
+  useEffect(() => {
+    if (!rebuyMonitorEnabled) {
+      setRebuyCountdown(15);
+      return;
+    }
+
+    // Check if there are any watching rebuy positions
+    const watchingPositions = positions.filter(p => p.rebuy_status === 'watching');
+    if (watchingPositions.length === 0) {
+      setRebuyCountdown(15);
+      return;
+    }
+
+    // Countdown timer
+    const rebuyInterval = setInterval(() => {
+      rebuyCountdownRef.current -= 1;
+      setRebuyCountdown(rebuyCountdownRef.current);
+      
+      if (rebuyCountdownRef.current <= 0) {
+        rebuyCountdownRef.current = 15;
+        setRebuyCountdown(15);
+        // Trigger rebuy check
+        handleRebuyCheck();
+      }
+    }, 1000);
+
+    return () => {
+      clearInterval(rebuyInterval);
+    };
+  }, [rebuyMonitorEnabled, positions]);
+
+  const handleRebuyCheck = useCallback(async () => {
+    const watchingPositions = positions.filter(p => p.rebuy_status === 'watching');
+    if (watchingPositions.length === 0 || isRebuyMonitoring) return;
+
+    setIsRebuyMonitoring(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('flipit-rebuy-monitor', {
+        body: { 
+          slippageBps: slippageBps,
+          priorityFeeMode: priorityFeeMode,
+          targetMultiplier: targetMultiplier
+        }
+      });
+
+      if (error) throw error;
+
+      if (data?.checkedAt) {
+        setLastRebuyCheck(data.checkedAt);
+      }
+      if (data?.executed?.length > 0) {
+        toast.success(`Rebuy executed for ${data.executed.length} position(s)!`);
+        loadPositions();
+      }
+    } catch (err) {
+      console.error('Rebuy check failed:', err);
+    } finally {
+      setIsRebuyMonitoring(false);
+    }
+  }, [positions, slippageBps, priorityFeeMode, targetMultiplier, isRebuyMonitoring]);
 
   useEffect(() => {
     if (selectedWallet) {
@@ -453,6 +532,79 @@ export function FlipItDashboard() {
     }
 
     toast.success(`Target updated to ${newMultiplier}x ($${newTargetPrice.toFixed(8)})`);
+  };
+
+  const handleUpdateRebuySettings = async (positionId: string, enabled: boolean, rebuyPrice: number | null, rebuyAmount: number | null) => {
+    const updateData: any = {
+      rebuy_enabled: enabled,
+      rebuy_price_usd: rebuyPrice,
+      rebuy_amount_usd: rebuyAmount,
+    };
+
+    // If enabling and position is already sold, set status to watching
+    const position = positions.find(p => p.id === positionId);
+    if (enabled && position?.status === 'sold' && rebuyPrice && rebuyAmount) {
+      updateData.rebuy_status = 'watching';
+    } else if (!enabled) {
+      updateData.rebuy_status = null;
+    }
+
+    const { error } = await supabase
+      .from('flip_positions')
+      .update(updateData)
+      .eq('id', positionId);
+
+    if (error) {
+      toast.error('Failed to update rebuy settings');
+      return;
+    }
+
+    toast.success(enabled ? 'Rebuy watching enabled!' : 'Rebuy disabled');
+    loadPositions();
+    
+    // Clear local editing state
+    setRebuyEditing(prev => {
+      const newState = { ...prev };
+      delete newState[positionId];
+      return newState;
+    });
+  };
+
+  const handleCancelRebuy = async (positionId: string) => {
+    const { error } = await supabase
+      .from('flip_positions')
+      .update({ 
+        rebuy_status: 'cancelled',
+        rebuy_enabled: false 
+      })
+      .eq('id', positionId);
+
+    if (error) {
+      toast.error('Failed to cancel rebuy');
+      return;
+    }
+
+    toast.success('Rebuy cancelled');
+    loadPositions();
+  };
+
+  const getRebuyStatusBadge = (status: string | null) => {
+    if (!status) return null;
+    
+    const statusConfig: Record<string, { variant: 'default' | 'secondary' | 'destructive' | 'outline'; icon: React.ReactNode }> = {
+      pending: { variant: 'secondary', icon: <Clock className="w-3 h-3" /> },
+      watching: { variant: 'default', icon: <Eye className="w-3 h-3 animate-pulse" /> },
+      executed: { variant: 'outline', icon: <RotateCcw className="w-3 h-3 text-green-500" /> },
+      cancelled: { variant: 'destructive', icon: <XCircle className="w-3 h-3" /> }
+    };
+
+    const config = statusConfig[status] || statusConfig.pending;
+    return (
+      <Badge variant={config.variant} className="gap-1 text-xs">
+        {config.icon}
+        {status}
+      </Badge>
+    );
   };
 
   const getStatusBadge = (status: string) => {
@@ -1042,11 +1194,40 @@ export function FlipItDashboard() {
         />
       )}
 
-      {/* Completed Positions */}
+      {/* Completed Positions with Rebuy */}
       {completedPositions.length > 0 && (
         <Card>
-          <CardHeader>
+          <CardHeader className="flex flex-row items-center justify-between">
             <CardTitle>Completed Flips (Last 50)</CardTitle>
+            {/* Rebuy Monitor Status */}
+            {positions.filter(p => p.rebuy_status === 'watching').length > 0 && (
+              <div className="flex items-center gap-2 text-sm">
+                <div className="flex items-center gap-1">
+                  <Switch 
+                    checked={rebuyMonitorEnabled} 
+                    onCheckedChange={setRebuyMonitorEnabled}
+                  />
+                  <span className="text-muted-foreground">Rebuy Monitor</span>
+                </div>
+                {rebuyMonitorEnabled && (
+                  <div className="flex items-center gap-2 px-2 py-1 rounded bg-muted/50">
+                    {isRebuyMonitoring ? (
+                      <Loader2 className="h-3 w-3 animate-spin text-primary" />
+                    ) : (
+                      <Eye className="h-3 w-3 text-primary animate-pulse" />
+                    )}
+                    <span className="text-xs">
+                      {isRebuyMonitoring ? 'Checking...' : `Next check in ${rebuyCountdown}s`}
+                    </span>
+                  </div>
+                )}
+                {lastRebuyCheck && (
+                  <span className="text-xs text-muted-foreground">
+                    Last: {new Date(lastRebuyCheck).toLocaleTimeString()}
+                  </span>
+                )}
+              </div>
+            )}
           </CardHeader>
           <CardContent>
             <Table>
@@ -1057,52 +1238,177 @@ export function FlipItDashboard() {
                   <TableHead>Exit</TableHead>
                   <TableHead>P&L</TableHead>
                   <TableHead>Status</TableHead>
-                  <TableHead>Time</TableHead>
+                  <TableHead>REBUY</TableHead>
+                  <TableHead>Rebuy Price</TableHead>
+                  <TableHead>Rebuy Amount</TableHead>
                   <TableHead>Action</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {completedPositions.slice(0, 50).map(position => (
-                  <TableRow key={position.id}>
-                    <TableCell>
-                      <button
-                        onClick={() => copyToClipboard(position.token_mint, 'Token address')}
-                        className="font-mono text-xs hover:text-primary cursor-pointer flex items-center gap-1"
-                        title={position.token_mint}
-                      >
-                        {position.token_symbol || position.token_mint.slice(0, 8) + '...'}
-                        <Copy className="h-3 w-3 opacity-50" />
-                      </button>
-                    </TableCell>
-                    <TableCell>${position.buy_price_usd?.toFixed(8) || '-'}</TableCell>
-                    <TableCell>${position.sell_price_usd?.toFixed(8) || '-'}</TableCell>
-                    <TableCell>
-                      {position.profit_usd !== null ? (
-                        <span className={position.profit_usd >= 0 ? 'text-green-500' : 'text-red-500'}>
-                          {position.profit_usd >= 0 ? '+' : ''}${position.profit_usd.toFixed(2)}
-                        </span>
-                      ) : '-'}
-                    </TableCell>
-                    <TableCell>{getStatusBadge(position.status)}</TableCell>
-                    <TableCell className="text-muted-foreground text-xs">
-                      {position.sell_executed_at 
-                        ? new Date(position.sell_executed_at).toLocaleString()
-                        : new Date(position.created_at).toLocaleString()
-                      }
-                    </TableCell>
-                    <TableCell>
-                      {position.status === 'sold' && !position.sell_signature && (
-                        <Button
-                          size="sm"
-                          variant="destructive"
-                          onClick={() => handleForceSell(position.id)}
+                {completedPositions.slice(0, 50).map(position => {
+                  const editState = rebuyEditing[position.id] || {
+                    enabled: position.rebuy_enabled || false,
+                    price: position.rebuy_price_usd?.toString() || '',
+                    amount: position.rebuy_amount_usd?.toString() || ''
+                  };
+                  
+                  const isWatching = position.rebuy_status === 'watching';
+                  const isExecuted = position.rebuy_status === 'executed';
+                  const isCancelled = position.rebuy_status === 'cancelled';
+                  
+                  return (
+                    <TableRow key={position.id}>
+                      <TableCell>
+                        <button
+                          onClick={() => copyToClipboard(position.token_mint, 'Token address')}
+                          className="font-mono text-xs hover:text-primary cursor-pointer flex items-center gap-1"
+                          title={position.token_mint}
                         >
-                          Retry Sell
-                        </Button>
-                      )}
-                    </TableCell>
-                  </TableRow>
-                ))}
+                          {position.token_symbol || position.token_mint.slice(0, 8) + '...'}
+                          <Copy className="h-3 w-3 opacity-50" />
+                        </button>
+                      </TableCell>
+                      <TableCell className="text-xs">${position.buy_price_usd?.toFixed(8) || '-'}</TableCell>
+                      <TableCell className="text-xs">${position.sell_price_usd?.toFixed(8) || '-'}</TableCell>
+                      <TableCell>
+                        {position.profit_usd !== null ? (
+                          <span className={position.profit_usd >= 0 ? 'text-green-500' : 'text-red-500'}>
+                            {position.profit_usd >= 0 ? '+' : ''}${position.profit_usd.toFixed(2)}
+                          </span>
+                        ) : '-'}
+                      </TableCell>
+                      <TableCell>
+                        <div className="flex flex-col gap-1">
+                          {getStatusBadge(position.status)}
+                          {position.rebuy_status && getRebuyStatusBadge(position.rebuy_status)}
+                        </div>
+                      </TableCell>
+                      
+                      {/* Rebuy Enabled Toggle */}
+                      <TableCell>
+                        <Switch
+                          checked={editState.enabled}
+                          disabled={isExecuted || isWatching}
+                          onCheckedChange={(checked) => {
+                            setRebuyEditing(prev => ({
+                              ...prev,
+                              [position.id]: { ...editState, enabled: checked }
+                            }));
+                          }}
+                        />
+                      </TableCell>
+                      
+                      {/* Rebuy Price Input */}
+                      <TableCell>
+                        <div className="flex items-center gap-1">
+                          <span className="text-xs text-muted-foreground">$</span>
+                          <Input
+                            type="number"
+                            step="0.00000001"
+                            className="w-24 h-7 text-xs"
+                            placeholder={position.sell_price_usd ? (position.sell_price_usd * 0.7).toFixed(8) : '0.0001'}
+                            value={editState.price}
+                            disabled={isExecuted || isWatching}
+                            onChange={(e) => {
+                              setRebuyEditing(prev => ({
+                                ...prev,
+                                [position.id]: { ...editState, price: e.target.value }
+                              }));
+                            }}
+                          />
+                        </div>
+                        {position.sell_price_usd && editState.price && (
+                          <div className="text-xs text-muted-foreground mt-0.5">
+                            {((1 - parseFloat(editState.price) / position.sell_price_usd) * 100).toFixed(1)}% drop
+                          </div>
+                        )}
+                      </TableCell>
+                      
+                      {/* Rebuy Amount Input */}
+                      <TableCell>
+                        <div className="flex items-center gap-1">
+                          <span className="text-xs text-muted-foreground">$</span>
+                          <Input
+                            type="number"
+                            step="0.01"
+                            className="w-20 h-7 text-xs"
+                            placeholder={position.buy_amount_usd?.toString() || '10'}
+                            value={editState.amount}
+                            disabled={isExecuted || isWatching}
+                            onChange={(e) => {
+                              setRebuyEditing(prev => ({
+                                ...prev,
+                                [position.id]: { ...editState, amount: e.target.value }
+                              }));
+                            }}
+                          />
+                        </div>
+                        {solPrice && editState.amount && (
+                          <div className="text-xs text-muted-foreground mt-0.5">
+                            ≈ {(parseFloat(editState.amount) / solPrice).toFixed(4)} SOL
+                          </div>
+                        )}
+                      </TableCell>
+                      
+                      {/* Actions */}
+                      <TableCell>
+                        <div className="flex gap-1">
+                          {position.status === 'sold' && !isWatching && !isExecuted && (
+                            <Button
+                              size="sm"
+                              variant={editState.enabled ? "default" : "outline"}
+                              className="h-7 text-xs"
+                              disabled={!editState.price || !editState.amount}
+                              onClick={() => handleUpdateRebuySettings(
+                                position.id,
+                                editState.enabled,
+                                parseFloat(editState.price) || null,
+                                parseFloat(editState.amount) || null
+                              )}
+                            >
+                              {editState.enabled ? (
+                                <>
+                                  <Eye className="h-3 w-3 mr-1" />
+                                  Start Watching
+                                </>
+                              ) : 'Save'}
+                            </Button>
+                          )}
+                          
+                          {isWatching && (
+                            <Button
+                              size="sm"
+                              variant="destructive"
+                              className="h-7 text-xs"
+                              onClick={() => handleCancelRebuy(position.id)}
+                            >
+                              <XCircle className="h-3 w-3 mr-1" />
+                              Cancel
+                            </Button>
+                          )}
+                          
+                          {isExecuted && position.rebuy_position_id && (
+                            <Badge variant="outline" className="text-xs text-green-500">
+                              <RotateCcw className="h-3 w-3 mr-1" />
+                              Rebought
+                            </Badge>
+                          )}
+                          
+                          {position.status === 'sold' && !position.sell_signature && !isWatching && (
+                            <Button
+                              size="sm"
+                              variant="destructive"
+                              className="h-7 text-xs"
+                              onClick={() => handleForceSell(position.id)}
+                            >
+                              Retry
+                            </Button>
+                          )}
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  );
+                })}
               </TableBody>
             </Table>
           </CardContent>
