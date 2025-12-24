@@ -14,17 +14,6 @@ import { Flame, RefreshCw, TrendingUp, DollarSign, Wallet, Clock, CheckCircle2, 
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { useSolPrice } from '@/hooks/useSolPrice';
 import { FlipItFeeCalculator } from './flipit/FlipItFeeCalculator';
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-  AlertDialogTrigger,
-} from '@/components/ui/alert-dialog';
 
 interface FlipPosition {
   id: string;
