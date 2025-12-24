@@ -283,8 +283,40 @@ export function FlipItDashboard() {
       return;
     }
 
-    setPositions((data || []) as FlipPosition[]);
+    const loadedPositions = (data || []) as FlipPosition[];
+    setPositions(loadedPositions);
     setIsLoading(false);
+    
+    // Fetch current prices for active positions
+    const holdingPositions = loadedPositions.filter(p => p.status === 'holding');
+    if (holdingPositions.length > 0) {
+      fetchCurrentPrices(holdingPositions.map(p => p.token_mint));
+    }
+  };
+  
+  const fetchCurrentPrices = async (tokenMints: string[]) => {
+    if (tokenMints.length === 0) return;
+    
+    try {
+      const { data, error } = await supabase.functions.invoke('flipit-price-monitor', {
+        body: { 
+          action: 'check',
+          slippageBps: slippageBps,
+          priorityFeeMode: priorityFeeMode
+        }
+      });
+
+      if (error) throw error;
+
+      if (data?.prices) {
+        setCurrentPrices(data.prices);
+      }
+      if (data?.checkedAt) {
+        setLastAutoCheck(data.checkedAt);
+      }
+    } catch (err) {
+      console.error('Failed to fetch prices:', err);
+    }
   };
 
   const handleFlip = async () => {
