@@ -1,7 +1,16 @@
 import "https://deno.land/x/xhr@0.1.0/mod.ts";
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import { Connection, PublicKey, VersionedTransaction, Transaction, Keypair, SystemProgram, TransactionInstruction } from "npm:@solana/web3.js@1.95.3";
-import { SecureStorage } from '../_shared/encryption.ts';
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import {
+  Connection,
+  PublicKey,
+  VersionedTransaction,
+  Transaction,
+  Keypair,
+  SystemProgram,
+  TransactionInstruction,
+} from "npm:@solana/web3.js@1.95.3";
+import { SecureStorage } from "../_shared/encryption.ts";
 // Lightweight ATA helper (avoid @solana/spl-token dependency)
 const TOKEN_PROGRAM_ID = new PublicKey("TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA");
 const TOKEN_2022_PROGRAM_ID = new PublicKey("TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb");
@@ -16,7 +25,11 @@ function getAssociatedTokenAddress(mint: PublicKey, owner: PublicKey, programId:
 }
 
 // Helper to get token accounts by owner (tries both token programs)
-async function getTokenBalance(connection: Connection, mint: PublicKey, owner: PublicKey): Promise<{ balance: number; programId: PublicKey } | null> {
+async function getTokenBalance(
+  connection: Connection,
+  mint: PublicKey,
+  owner: PublicKey
+): Promise<{ balance: number; programId: PublicKey } | null> {
   // Try Token-2022 first (pump.fun tokens use this)
   const ata2022 = getAssociatedTokenAddress(mint, owner, TOKEN_2022_PROGRAM_ID);
   try {
@@ -28,7 +41,7 @@ async function getTokenBalance(connection: Connection, mint: PublicKey, owner: P
   } catch (e) {
     console.log("Token-2022 ATA not found:", (e as Error)?.message?.slice(0, 100));
   }
-  
+
   // Try standard SPL Token
   const ataSpl = getAssociatedTokenAddress(mint, owner, TOKEN_PROGRAM_ID);
   try {
@@ -40,7 +53,7 @@ async function getTokenBalance(connection: Connection, mint: PublicKey, owner: P
   } catch (e) {
     console.log("SPL Token ATA not found:", (e as Error)?.message?.slice(0, 100));
   }
-  
+
   return null;
 }
 const NATIVE_MINT = new PublicKey("So11111111111111111111111111111111111111112");
@@ -64,6 +77,57 @@ function ok(data: unknown, status = 200) {
 
 function bad(message: string, status = 400) {
   return ok({ error: message }, status);
+}
+
+function softError(code: string, message: string) {
+  // Return 200 so callers can reliably read the error payload.
+  return ok({ error: message, error_code: code }, 200);
+}
+
+function readU64LE(bytes: Uint8Array): number {
+  if (bytes.length < 8) return 0;
+  const dv = new DataView(bytes.buffer, bytes.byteOffset, 8);
+  const n = dv.getBigUint64(0, true);
+  const asNum = Number(n);
+  return Number.isFinite(asNum) ? asNum : 0;
+}
+
+async function scanTokenAccountsBalance(
+  connection: Connection,
+  mint: PublicKey,
+  owner: PublicKey
+): Promise<{ balance: number; programId: PublicKey } | null> {
+  const programs = [TOKEN_2022_PROGRAM_ID, TOKEN_PROGRAM_ID];
+
+  for (const programId of programs) {
+    try {
+      const tokenAccounts = await connection.getTokenAccountsByOwner(owner, { programId });
+      let total = 0;
+
+      for (const acc of tokenAccounts.value) {
+        const data = acc.account.data as unknown as Uint8Array;
+        if (!data || data.length < 72) continue;
+
+        try {
+          const acctMint = new PublicKey(data.slice(0, 32));
+          if (acctMint.equals(mint)) {
+            total += readU64LE(data.slice(64, 72));
+          }
+        } catch {
+          // ignore malformed accounts
+        }
+      }
+
+      if (total > 0) {
+        console.log(`Found balance via token account scan (${programId.toBase58()}):`, total);
+        return { balance: total, programId };
+      }
+    } catch (e) {
+      console.log("Token account scan failed:", (e as Error)?.message?.slice(0, 140));
+    }
+  }
+
+  return null;
 }
 
 function getEnv(name: string): string {
