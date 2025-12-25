@@ -140,13 +140,14 @@ export default function TelegramChannelMonitor() {
         setCalls(callData as ChannelCall[]);
       }
 
-      // Load FlipIt wallets - use flipit_wallets table
+      // Load FlipIt wallets from super_admin_wallets table
       const { data: walletData } = await supabase
-        .from('flipit_wallets')
+        .from('super_admin_wallets')
         .select('id, nickname, pubkey, sol_balance')
+        .eq('wallet_type', 'flipit')
         .eq('is_active', true);
       if (walletData) {
-        setFlipitWallets(walletData as FlipItWallet[]);
+        setFlipitWallets(walletData as unknown as FlipItWallet[]);
       }
     } catch (error) {
       console.error('Error loading data:', error);
