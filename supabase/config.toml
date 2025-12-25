@@ -237,3 +237,9 @@ verify_jwt = true
 
 [functions.flipit-rebuy-monitor]
 verify_jwt = false
+
+[functions.telegram-session-generator]
+verify_jwt = false
+
+[functions.telegram-channel-monitor]
+verify_jwt = false
