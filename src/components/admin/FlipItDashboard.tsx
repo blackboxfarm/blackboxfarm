@@ -756,106 +756,123 @@ export function FlipItDashboard() {
                   </Button>
                 </div>
                 
-                {selectedWallet && wallets.find(w => w.id === selectedWallet) && (
-                  <div className="space-y-3">
-                    <div className="flex items-center justify-between flex-wrap gap-2 p-3 rounded-md bg-muted/50">
-                      <div className="flex items-center gap-2">
-                        <code className="text-sm font-mono">
-                          {wallets.find(w => w.id === selectedWallet)?.pubkey}
-                        </code>
-                        <Button 
-                          size="icon" 
-                          variant="ghost" 
-                          className="h-6 w-6"
-                          onClick={() => copyToClipboard(wallets.find(w => w.id === selectedWallet)?.pubkey || '', 'Address')}
-                          title="Copy wallet address"
-                        >
-                          <Copy className="h-3 w-3" />
-                        </Button>
-                        <a
-                          className="inline-flex"
-                          href={`https://solscan.io/account/${wallets.find(w => w.id === selectedWallet)?.pubkey}`}
-                          target="_blank"
-                          rel="noreferrer"
-                          title="View on Solscan"
-                        >
-                          <Button size="icon" variant="ghost" className="h-6 w-6">
-                            <ArrowUpRight className="h-3 w-3" />
-                          </Button>
-                        </a>
-                      </div>
-                      
-                      <div className="flex items-center gap-3">
-                        <div className="flex items-center gap-3 bg-muted/50 px-3 py-2 rounded-lg">
-                          <Wallet className="h-4 w-4 text-primary" />
-                          <div className="flex flex-col">
-                            <span className="text-xs text-muted-foreground">Balance</span>
-                            <div className="flex items-center gap-2">
-                              <span className="font-bold text-lg">
-                                {walletBalance !== null ? `${walletBalance.toFixed(5)} SOL` : '...'}
-                              </span>
-                              {walletBalance !== null && !solPriceLoading && (
-                                <span className="text-sm text-green-500 font-medium">
-                                  (${(walletBalance * solPrice).toFixed(2)})
-                                </span>
-                              )}
-                            </div>
+                {(() => {
+                  const wallet = wallets.find(w => w.id === selectedWallet);
+                  const canShowTokens = Boolean(wallet);
+
+                  return (
+                    <div className="space-y-3">
+                      {canShowTokens ? (
+                        <div className="flex items-center justify-between flex-wrap gap-2 p-3 rounded-md bg-muted/50">
+                          <div className="flex items-center gap-2">
+                            <code className="text-sm font-mono">{wallet?.pubkey}</code>
+                            <Button
+                              size="icon"
+                              variant="ghost"
+                              className="h-6 w-6"
+                              onClick={() => copyToClipboard(wallet?.pubkey || '', 'Address')}
+                              title="Copy wallet address"
+                            >
+                              <Copy className="h-3 w-3" />
+                            </Button>
+                            <a
+                              className="inline-flex"
+                              href={`https://solscan.io/account/${wallet?.pubkey}`}
+                              target="_blank"
+                              rel="noreferrer"
+                              title="View on Solscan"
+                            >
+                              <Button size="icon" variant="ghost" className="h-6 w-6">
+                                <ArrowUpRight className="h-3 w-3" />
+                              </Button>
+                            </a>
                           </div>
-                          <Button 
-                            size="icon" 
-                            variant="ghost" 
-                            className="h-7 w-7 ml-auto"
-                            onClick={refreshWalletBalance}
-                            disabled={isRefreshingBalance}
-                            title="Refresh balance"
-                          >
-                            <RefreshCw className={`h-4 w-4 ${isRefreshingBalance ? 'animate-spin' : ''}`} />
-                          </Button>
+
+                          <div className="flex items-center gap-3">
+                            <div className="flex items-center gap-3 bg-muted/50 px-3 py-2 rounded-lg">
+                              <Wallet className="h-4 w-4 text-primary" />
+                              <div className="flex flex-col">
+                                <span className="text-xs text-muted-foreground">Balance</span>
+                                <div className="flex items-center gap-2">
+                                  <span className="font-bold text-lg">
+                                    {walletBalance !== null ? `${walletBalance.toFixed(5)} SOL` : '...'}
+                                  </span>
+                                  {walletBalance !== null && !solPriceLoading && (
+                                    <span className="text-sm text-green-500 font-medium">
+                                      (${(walletBalance * solPrice).toFixed(2)})
+                                    </span>
+                                  )}
+                                </div>
+                              </div>
+                              <Button
+                                size="icon"
+                                variant="ghost"
+                                className="h-7 w-7 ml-auto"
+                                onClick={refreshWalletBalance}
+                                disabled={isRefreshingBalance}
+                                title="Refresh balance"
+                              >
+                                <RefreshCw className={`h-4 w-4 ${isRefreshingBalance ? 'animate-spin' : ''}`} />
+                              </Button>
+                            </div>
+
+                            <Button
+                              size="sm"
+                              variant="destructive"
+                              onClick={handleWithdraw}
+                              disabled={isWithdrawing || !walletBalance || walletBalance < 0.001}
+                            >
+                              {isWithdrawing ? (
+                                <Loader2 className="h-4 w-4 mr-1 animate-spin" />
+                              ) : (
+                                <ArrowUpRight className="h-4 w-4 mr-1" />
+                              )}
+                              Withdraw All
+                            </Button>
+                          </div>
                         </div>
-                        
-                        <Button 
-                          size="sm" 
-                          variant="destructive"
-                          onClick={handleWithdraw}
-                          disabled={isWithdrawing || !walletBalance || walletBalance < 0.001}
-                        >
-                          {isWithdrawing ? (
-                            <Loader2 className="h-4 w-4 mr-1 animate-spin" />
+                      ) : (
+                        <div className="p-3 rounded-md bg-muted/50">
+                          <p className="text-sm text-muted-foreground">Select a wallet above to view wallet tokens.</p>
+                        </div>
+                      )}
+
+                      {/* Token Manager Toggle (always visible) */}
+                      <Collapsible open={showTokenManager} onOpenChange={setShowTokenManager}>
+                        <CollapsibleTrigger asChild>
+                          <Button variant="outline" className="w-full justify-between" disabled={!canShowTokens}>
+                            <span className="flex items-center gap-2">
+                              <Coins className="h-4 w-4" />
+                              View Wallet Tokens
+                            </span>
+                            <ChevronDown
+                              className={`h-4 w-4 transition-transform ${showTokenManager ? 'rotate-180' : ''}`}
+                            />
+                          </Button>
+                        </CollapsibleTrigger>
+                        <CollapsibleContent className="mt-3">
+                          {canShowTokens ? (
+                            <WalletTokenManager
+                              walletId={selectedWallet}
+                              walletPubkey={wallet?.pubkey || ''}
+                              useDirectSwap={true}
+                              slippageBps={slippageBps}
+                              priorityFeeMode={priorityFeeMode}
+                              onTokensSold={() => {
+                                refreshWalletBalance();
+                                loadPositions();
+                              }}
+                            />
                           ) : (
-                            <ArrowUpRight className="h-4 w-4 mr-1" />
+                            <div className="rounded-md border border-border bg-card/50 p-3 text-sm text-muted-foreground">
+                              No wallet selected.
+                            </div>
                           )}
-                          Withdraw All
-                        </Button>
-                      </div>
+                        </CollapsibleContent>
+                      </Collapsible>
                     </div>
-                    
-                    {/* Token Manager Toggle */}
-                    <Collapsible open={showTokenManager} onOpenChange={setShowTokenManager}>
-                      <CollapsibleTrigger asChild>
-                        <Button variant="outline" className="w-full justify-between">
-                          <span className="flex items-center gap-2">
-                            <Coins className="h-4 w-4" />
-                            View Wallet Tokens
-                          </span>
-                          <ChevronDown className={`h-4 w-4 transition-transform ${showTokenManager ? 'rotate-180' : ''}`} />
-                        </Button>
-                      </CollapsibleTrigger>
-                      <CollapsibleContent className="mt-3">
-                        <WalletTokenManager
-                          walletId={selectedWallet}
-                          walletPubkey={wallets.find(w => w.id === selectedWallet)?.pubkey || ''}
-                          useDirectSwap={true}
-                          slippageBps={slippageBps}
-                          priorityFeeMode={priorityFeeMode}
-                          onTokensSold={() => {
-                            refreshWalletBalance();
-                            loadPositions();
-                          }}
-                        />
-                      </CollapsibleContent>
-                    </Collapsible>
-                  </div>
-                )}
+                  );
+                })()}
               </div>
             )}
           </div>
