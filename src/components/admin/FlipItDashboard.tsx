@@ -10,12 +10,13 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Switch } from '@/components/ui/switch';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
-import { Flame, RefreshCw, TrendingUp, DollarSign, Wallet, Clock, CheckCircle2, XCircle, Loader2, Plus, Copy, ArrowUpRight, Key, Settings, Zap, Activity, Radio, Pencil, ChevronDown, Coins, Eye, RotateCcw } from 'lucide-react';
+import { Flame, RefreshCw, TrendingUp, DollarSign, Wallet, Clock, CheckCircle2, XCircle, Loader2, Plus, Copy, ArrowUpRight, Key, Settings, Zap, Activity, Radio, Pencil, ChevronDown, Coins, Eye, EyeOff, RotateCcw, AlertTriangle } from 'lucide-react';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { useSolPrice } from '@/hooks/useSolPrice';
 import { FlipItFeeCalculator } from './flipit/FlipItFeeCalculator';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { WalletTokenManager } from '@/components/blackbox/WalletTokenManager';
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 
 interface FlipPosition {
   id: string;
@@ -69,6 +70,12 @@ export function FlipItDashboard() {
   const [isWithdrawing, setIsWithdrawing] = useState(false);
   const [walletBalance, setWalletBalance] = useState<number | null>(null);
   const [isRefreshingBalance, setIsRefreshingBalance] = useState(false);
+  
+  // Private key modal state
+  const [showKeysModal, setShowKeysModal] = useState(false);
+  const [decryptedPrivateKey, setDecryptedPrivateKey] = useState<string | null>(null);
+  const [isDecrypting, setIsDecrypting] = useState(false);
+  const [showPrivateKey, setShowPrivateKey] = useState(false);
   const [showTokenManager, setShowTokenManager] = useState(false);
   
   // SOL price for USD conversion
@@ -350,6 +357,54 @@ export function FlipItDashboard() {
   const copyToClipboard = (text: string, label: string) => {
     navigator.clipboard.writeText(text);
     toast.success(`${label} copied!`);
+  };
+
+  const handleShowPrivateKey = async () => {
+    if (!selectedWallet) {
+      toast.error('Select a wallet first');
+      return;
+    }
+
+    setIsDecrypting(true);
+    setDecryptedPrivateKey(null);
+    setShowPrivateKey(false);
+
+    try {
+      // Fetch the encrypted secret from the database
+      const { data: walletData, error: fetchError } = await supabase
+        .from('super_admin_wallets')
+        .select('secret_key_encrypted')
+        .eq('id', selectedWallet)
+        .single();
+
+      if (fetchError || !walletData?.secret_key_encrypted) {
+        throw new Error('Could not fetch wallet secret');
+      }
+
+      // Decrypt using the RPC function
+      const { data: decryptedData, error: decryptError } = await supabase.rpc(
+        'decrypt_wallet_secret',
+        { encrypted_secret: walletData.secret_key_encrypted }
+      );
+
+      if (decryptError) {
+        throw new Error(decryptError.message || 'Decryption failed');
+      }
+
+      setDecryptedPrivateKey(decryptedData);
+      setShowKeysModal(true);
+    } catch (err: any) {
+      console.error('Failed to decrypt private key:', err);
+      toast.error(err.message || 'Failed to decrypt private key');
+    } finally {
+      setIsDecrypting(false);
+    }
+  };
+
+  const handleCloseKeysModal = () => {
+    setShowKeysModal(false);
+    setDecryptedPrivateKey(null);
+    setShowPrivateKey(false);
   };
 
   const loadPositions = async () => {
@@ -786,6 +841,23 @@ export function FlipItDashboard() {
                                 <ArrowUpRight className="h-3 w-3" />
                               </Button>
                             </a>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              className="h-6 px-2 text-xs"
+                              onClick={handleShowPrivateKey}
+                              disabled={isDecrypting}
+                              title="Export private key for Phantom"
+                            >
+                              {isDecrypting ? (
+                                <Loader2 className="h-3 w-3 animate-spin" />
+                              ) : (
+                                <>
+                                  <Key className="h-3 w-3 mr-1" />
+                                  KEYS
+                                </>
+                              )}
+                            </Button>
                           </div>
 
                           <div className="flex items-center gap-3">
@@ -1483,6 +1555,102 @@ export function FlipItDashboard() {
           </CardContent>
         </Card>
       )}
+
+      {/* Private Key Export Modal */}
+      <Dialog open={showKeysModal} onOpenChange={handleCloseKeysModal}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Key className="h-5 w-5" />
+              Export Private Key
+            </DialogTitle>
+            <DialogDescription>
+              Export your wallet's private key to import into Phantom or another wallet.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4">
+            {/* Security Warning */}
+            <div className="flex items-start gap-3 p-3 rounded-lg bg-destructive/10 border border-destructive/20">
+              <AlertTriangle className="h-5 w-5 text-destructive shrink-0 mt-0.5" />
+              <div className="text-sm">
+                <p className="font-semibold text-destructive">Security Warning</p>
+                <p className="text-muted-foreground mt-1">
+                  Never share your private key with anyone. Anyone with this key has full control over your wallet and funds.
+                </p>
+              </div>
+            </div>
+
+            {/* Wallet Address */}
+            <div className="space-y-1">
+              <Label className="text-xs text-muted-foreground">Wallet Address</Label>
+              <code className="block text-sm font-mono p-2 bg-muted rounded break-all">
+                {wallets.find(w => w.id === selectedWallet)?.pubkey}
+              </code>
+            </div>
+
+            {/* Private Key */}
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <Label className="text-xs text-muted-foreground">Private Key (Base58)</Label>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  className="h-6 px-2 text-xs"
+                  onClick={() => setShowPrivateKey(!showPrivateKey)}
+                >
+                  {showPrivateKey ? (
+                    <>
+                      <EyeOff className="h-3 w-3 mr-1" />
+                      Hide
+                    </>
+                  ) : (
+                    <>
+                      <Eye className="h-3 w-3 mr-1" />
+                      Show
+                    </>
+                  )}
+                </Button>
+              </div>
+              <div className="relative">
+                <code className="block text-sm font-mono p-2 bg-muted rounded break-all min-h-[60px]">
+                  {showPrivateKey ? decryptedPrivateKey : '••••••••••••••••••••••••••••••••••••••••••••'}
+                </code>
+                {decryptedPrivateKey && (
+                  <Button
+                    size="sm"
+                    variant="secondary"
+                    className="absolute top-2 right-2 h-7"
+                    onClick={() => {
+                      copyToClipboard(decryptedPrivateKey, 'Private Key');
+                    }}
+                  >
+                    <Copy className="h-3 w-3 mr-1" />
+                    Copy
+                  </Button>
+                )}
+              </div>
+            </div>
+
+            {/* Phantom Import Instructions */}
+            <div className="space-y-2 p-3 rounded-lg bg-muted/50 border">
+              <p className="text-sm font-medium">Import to Phantom:</p>
+              <ol className="text-xs text-muted-foreground space-y-1 list-decimal list-inside">
+                <li>Open Phantom wallet extension</li>
+                <li>Click the menu icon → Add/Connect Wallet</li>
+                <li>Select "Import Private Key"</li>
+                <li>Paste your private key and click Import</li>
+              </ol>
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button variant="outline" onClick={handleCloseKeysModal}>
+              Close
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
