@@ -37,6 +37,7 @@ const MegaWhaleDashboard = lazy(() => import("@/components/admin/MegaWhaleDashbo
 const ApiProviderManager = lazy(() => import("@/components/admin/ApiProviderManager").then(m => ({ default: m.ApiProviderManager })));
 const AdvertiserManagement = lazy(() => import("@/components/admin/AdvertiserManagement"));
 const FlipItDashboard = lazy(() => import("@/components/admin/FlipItDashboard").then(m => ({ default: m.FlipItDashboard })));
+const TelegramChannelMonitor = lazy(() => import("@/components/admin/TelegramChannelMonitor"));
 
 export default function SuperAdmin() {
   const [activeTab, setActiveTab] = useState("wallets");
@@ -125,6 +126,7 @@ export default function SuperAdmin() {
             <TabsTrigger value="mega-whale" className="flex-shrink-0 data-[state=active]:bg-gradient-to-r data-[state=active]:from-yellow-500/30 data-[state=active]:to-amber-500/20">👑 MEGA WHALE</TabsTrigger>
             <TabsTrigger value="api-providers" className="flex-shrink-0 data-[state=active]:bg-gradient-to-r data-[state=active]:from-red-500/30 data-[state=active]:to-orange-500/20">⚡ API Providers</TabsTrigger>
             <TabsTrigger value="flipit" className="flex-shrink-0 data-[state=active]:bg-gradient-to-r data-[state=active]:from-orange-500/30 data-[state=active]:to-red-500/20">🔥 FlipIt</TabsTrigger>
+            <TabsTrigger value="telegram" className="flex-shrink-0 data-[state=active]:bg-gradient-to-r data-[state=active]:from-sky-500/30 data-[state=active]:to-blue-500/20">📡 Telegram Monitor</TabsTrigger>
           </TabsList>
           
           <TabsContent value="master-wallets">
@@ -301,6 +303,12 @@ export default function SuperAdmin() {
           <TabsContent value="flipit">
             <ActiveTabOnly activeTab={activeTab} tabValue="flipit">
               <FlipItDashboard />
+            </ActiveTabOnly>
+          </TabsContent>
+
+          <TabsContent value="telegram">
+            <ActiveTabOnly activeTab={activeTab} tabValue="telegram">
+              <TelegramChannelMonitor />
             </ActiveTabOnly>
           </TabsContent>
         </Tabs>
