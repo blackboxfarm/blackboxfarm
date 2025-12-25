@@ -25,7 +25,8 @@ import {
   Sparkles,
   TrendingDown,
   Target,
-  Wallet
+  Wallet,
+  Trash2
 } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
 
@@ -407,6 +408,20 @@ export default function TelegramChannelMonitor() {
       loadData();
     } catch (error: any) {
       toast.error(error.message || 'Failed to update configuration');
+    }
+  };
+
+  const deleteConfig = async (configId: string, channelName: string | null) => {
+    if (!confirm(`Delete channel "${channelName || 'Unknown'}"? This cannot be undone.`)) return;
+    try {
+      await supabase
+        .from('telegram_channel_config')
+        .delete()
+        .eq('id', configId);
+      toast.success('Channel deleted');
+      loadData();
+    } catch (error: any) {
+      toast.error(error.message || 'Failed to delete configuration');
     }
   };
 
@@ -950,13 +965,23 @@ export default function TelegramChannelMonitor() {
                           />
                         </TableCell>
                         <TableCell>
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => testChannelById(config.channel_id, config.channel_username)}
-                          >
-                            Test
-                          </Button>
+                          <div className="flex gap-2">
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => testChannelById(config.channel_id, config.channel_username)}
+                            >
+                              Test
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="text-destructive hover:text-destructive"
+                              onClick={() => deleteConfig(config.id, config.channel_name)}
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </Button>
+                          </div>
                         </TableCell>
                       </TableRow>
                     ))}
