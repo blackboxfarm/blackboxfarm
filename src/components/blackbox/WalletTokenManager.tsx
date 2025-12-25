@@ -254,20 +254,50 @@ export function WalletTokenManager({
     try {
       if (useDirectSwap) {
         // Direct swap via raydium-swap (for FlipIt and other direct wallet use)
-        console.log(`[WalletTokenManager] Direct swap sell: ${sellAmount} ${token.symbol} from wallet ${walletId}`);
-        
+        const isPumpToken = token.mint.endsWith('pump') || token.mint.includes('pump');
+        console.log(
+          `[WalletTokenManager] Direct swap sell: ${sellAmount} ${token.symbol} from wallet ${walletId}`,
+          { isPumpToken }
+        );
+
+        // Pump.fun bonding curve tokens: use the high-level raydium-swap API so it can fall back to PumpPortal
+        if (isPumpToken && sellType !== 'all') {
+          throw new Error('Pump.fun tokens currently only support “Sell All” in direct swap mode.');
+        }
+
+        const body = isPumpToken
+          ? {
+              walletId,
+              side: 'sell',
+              tokenMint: token.mint,
+              sellAll: true,
+              slippageBps,
+              priorityFeeMode,
+            }
+          : {
+              walletId,
+              inputMint: token.mint,
+              outputMint: 'So11111111111111111111111111111111111111112', // SOL
+              amount: Math.floor(sellAmount * Math.pow(10, token.decimals)), // Convert to raw units
+              slippageBps,
+              priorityFeeMode,
+            };
+
         const { data, error } = await supabase.functions.invoke('raydium-swap', {
-          body: {
-            walletId: walletId,
-            inputMint: token.mint,
-            outputMint: 'So11111111111111111111111111111111111111112', // SOL
-            amount: Math.floor(sellAmount * Math.pow(10, token.decimals)), // Convert to raw units
-            slippageBps: slippageBps,
-            priorityFeeMode: priorityFeeMode
-          }
+          body,
         });
 
         if (error) {
+          const ctx = (error as any)?.context;
+          const bodyText = ctx?.bodyText ?? ctx?.responseText ?? ctx?.body;
+          if (typeof bodyText === 'string' && bodyText.trim()) {
+            try {
+              const parsed = JSON.parse(bodyText);
+              throw new Error(parsed?.error || parsed?.message || bodyText);
+            } catch {
+              throw new Error(bodyText);
+            }
+          }
           throw new Error(error.message);
         }
 
