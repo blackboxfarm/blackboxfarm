@@ -4542,6 +4542,7 @@ export type Database = {
           ape_keyword_enabled: boolean | null
           channel_id: string
           channel_name: string | null
+          channel_username: string | null
           created_at: string
           email_notifications: boolean | null
           fantasy_buy_amount_usd: number | null
@@ -4568,6 +4569,7 @@ export type Database = {
           ape_keyword_enabled?: boolean | null
           channel_id: string
           channel_name?: string | null
+          channel_username?: string | null
           created_at?: string
           email_notifications?: boolean | null
           fantasy_buy_amount_usd?: number | null
@@ -4594,6 +4596,7 @@ export type Database = {
           ape_keyword_enabled?: boolean | null
           channel_id?: string
           channel_name?: string | null
+          channel_username?: string | null
           created_at?: string
           email_notifications?: boolean | null
           fantasy_buy_amount_usd?: number | null
