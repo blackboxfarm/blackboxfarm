@@ -587,43 +587,55 @@ serve(async (req) => {
             ownerPubkey: owner.publicKey.toBase58(),
             tokenMint
           });
-          
-          // Use Helius RPC for balance check - more reliable than public RPC
+
+          // Use Helius RPC for balance check - most reliable
           const balanceConnection = connection;
-          
-          // Try both Token-2022 and SPL Token programs
-          const balanceResult = await getTokenBalance(balanceConnection, new PublicKey(tokenMint), owner.publicKey);
-          
+
+          // Try ATA-based balance first (getTokenBalance handles both token programs)
+          let balanceResult = await getTokenBalance(balanceConnection, new PublicKey(tokenMint), owner.publicKey);
+
+          // If ATA lookup failed, try full token account scan (more expensive but catches non-ATA accounts)
           if (!balanceResult || balanceResult.balance <= 0) {
-            // Try alternative method: get all token accounts for owner
-            console.log("Primary balance check failed, trying getTokenAccountsByOwner...");
+            console.log("ATA balance check failed, trying full token account scan...");
+            balanceResult = await scanTokenAccountsBalance(balanceConnection, new PublicKey(tokenMint), owner.publicKey);
+          }
+
+          if (!balanceResult || balanceResult.balance <= 0) {
+            // Last resort: getTokenAccountsByOwner with mint filter
+            console.log("Token account scan failed, trying getTokenAccountsByOwner with mint filter...");
             try {
               const tokenAccounts = await balanceConnection.getTokenAccountsByOwner(owner.publicKey, {
                 mint: new PublicKey(tokenMint)
               });
+
               if (tokenAccounts.value.length > 0) {
                 const accountInfo = tokenAccounts.value[0].account;
-                // Parse the token account data to get balance
-                // Token account data: first 64 bytes = mint, next 32 = owner, next 8 = amount (little endian)
-                const data = accountInfo.data;
-                if (data.length >= 72) {
-                  const amountBytes = data.slice(64, 72);
-                  const tokenBalance = Number(amountBytes.readBigUInt64LE(0));
+                const data = accountInfo.data as unknown as Uint8Array;
+                if (data && data.length >= 72) {
+                  // Parse balance from token account data (bytes 64-72 = amount, little-endian u64)
+                  const tokenBalance = readU64LE(data.slice(64, 72));
                   if (tokenBalance > 0) {
                     console.log("Found balance via getTokenAccountsByOwner:", tokenBalance);
                     amount = Math.floor(tokenBalance);
                   } else {
-                    return bad(`Token balance is 0. Owner: ${owner.publicKey.toBase58().slice(0,8)}...`);
+                    return softError("NO_BALANCE", `Token balance is 0. Owner: ${owner.publicKey.toBase58().slice(0, 8)}...`);
                   }
+                } else {
+                  return softError("NO_BALANCE", `Token account data malformed. Owner: ${owner.publicKey.toBase58().slice(0, 8)}...`);
                 }
               } else {
-                // No balance found - the position is effectively empty
                 console.log(`No token balance found for ${tokenMint} in wallet ${owner.publicKey.toBase58()}`);
-                return bad(`No token balance found. The tokens may have already been sold or the buy never completed. Token: ${tokenMint.slice(0,8)}..., Wallet: ${owner.publicKey.toBase58().slice(0,8)}...`);
+                return softError(
+                  "NO_BALANCE",
+                  `No token balance found. Tokens may have already been sold or buy never completed. Token: ${tokenMint.slice(0, 8)}..., Wallet: ${owner.publicKey.toBase58().slice(0, 8)}...`
+                );
               }
             } catch (altErr) {
-              console.error("Alternative balance check also failed:", altErr);
-              return bad(`No token balance found. Token: ${tokenMint.slice(0,8)}..., Wallet: ${owner.publicKey.toBase58().slice(0,8)}...`);
+              console.error("All balance check methods failed:", altErr);
+              return softError(
+                "BALANCE_CHECK_FAILED",
+                `Balance check failed: ${(altErr as Error).message}. Token: ${tokenMint.slice(0, 8)}..., Wallet: ${owner.publicKey.toBase58().slice(0, 8)}...`
+              );
             }
           } else {
             console.log("Found token balance:", balanceResult.balance, "using program:", balanceResult.programId.toBase58());

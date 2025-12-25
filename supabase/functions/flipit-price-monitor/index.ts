@@ -147,12 +147,7 @@ serve(async (req) => {
             .update({ status: "pending_sell" })
             .eq("id", position.id);
 
-          // Execute sell
-          const walletSecret = (position as any).super_admin_wallets?.secret_key_encrypted;
-          if (!walletSecret) {
-            throw new Error("Wallet secret not found");
-          }
-
+          // Execute sell using walletId for direct DB lookup (more reliable)
           const { data: swapResult, error: swapError } = await supabase.functions.invoke("raydium-swap", {
             body: {
               side: "sell",
@@ -160,14 +155,30 @@ serve(async (req) => {
               sellAll: true,
               slippageBps: effectiveSlippage,
               priorityFeeMode: priorityFeeMode || "medium",
+              walletId: position.wallet_id,
             },
-            headers: {
-              "x-owner-secret": walletSecret
-            }
           });
 
           if (swapError) {
             throw new Error(swapError.message);
+          }
+
+          // Handle soft errors (200 with error_code) - mark as sold if no balance
+          if (swapResult?.error_code) {
+            const noBalanceCodes = ["NO_BALANCE", "BALANCE_CHECK_FAILED"];
+            if (noBalanceCodes.includes(swapResult.error_code)) {
+              console.log(`Position ${position.id} has no balance, marking as sold`);
+              await supabase
+                .from("flip_positions")
+                .update({
+                  status: "sold",
+                  error_message: `Auto-closed: ${swapResult.error}`,
+                  sell_executed_at: new Date().toISOString(),
+                })
+                .eq("id", position.id);
+              continue; // Skip to next position
+            }
+            throw new Error(`[${swapResult.error_code}] ${swapResult.error}`);
           }
 
           if (swapResult?.error) {

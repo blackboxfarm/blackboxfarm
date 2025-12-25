@@ -299,6 +299,11 @@ serve(async (req) => {
           throw new Error(swapError.message);
         }
 
+        // Handle soft errors (200 with error_code)
+        if (swapResult?.error_code) {
+          throw new Error(`[${swapResult.error_code}] ${swapResult.error}`);
+        }
+
         if (swapResult?.error) {
           throw new Error(swapResult.error);
         }
@@ -337,16 +342,21 @@ serve(async (req) => {
 
       } catch (sellErr: any) {
         const errMsg = sellErr.message || String(sellErr);
-        
-        // If no balance found, mark as sold (tokens already gone)
+        console.error("Sell error caught:", errMsg);
+
+        // Check for soft errors returned with error_code from raydium-swap
+        const noBalanceCodes = ["NO_BALANCE", "BALANCE_CHECK_FAILED"];
         const noBalanceIndicators = [
-          'No token balance',
-          'No token accounts found',
-          'already been sold',
-          'buy never completed'
+          "No token balance",
+          "No token accounts found",
+          "already been sold",
+          "buy never completed",
+          "Token balance is 0",
         ];
-        const isNoBalance = noBalanceIndicators.some(indicator => errMsg.includes(indicator));
-        
+        const isNoBalance =
+          noBalanceCodes.some((code) => errMsg.includes(code)) ||
+          noBalanceIndicators.some((indicator) => errMsg.includes(indicator));
+
         if (isNoBalance) {
           // Mark as sold since there's nothing to sell
           await supabase
@@ -357,20 +367,20 @@ serve(async (req) => {
               sell_executed_at: new Date().toISOString(),
             })
             .eq("id", positionId);
-          
+
           return ok({
             success: true,
             message: "Position marked as closed - no tokens to sell",
-            error: errMsg
+            error: errMsg,
           });
         }
-        
+
         // Revert to holding on other errors
         await supabase
           .from("flip_positions")
           .update({
             status: "holding",
-            error_message: errMsg
+            error_message: errMsg,
           })
           .eq("id", positionId);
 
