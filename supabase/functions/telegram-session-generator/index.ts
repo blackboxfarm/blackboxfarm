@@ -156,13 +156,77 @@ serve(async (req) => {
 
     if (action === 'test_channel') {
       // Test if we can access a specific channel
-      const { channelId } = body;
+      const { channelId, channelUsername } = body;
+      
+      // If username is provided, try scraping the public page
+      if (channelUsername) {
+        const cleanUsername = channelUsername.replace('@', '').replace('https://t.me/', '').replace('t.me/', '');
+        const url = `https://t.me/s/${cleanUsername}`;
+        
+        console.log(`[telegram-session-generator] Testing public channel: ${url}`);
+        
+        try {
+          const response = await fetch(url, {
+            headers: {
+              'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+              'Accept': 'text/html,application/xhtml+xml',
+            }
+          });
+          
+          if (!response.ok) {
+            return new Response(JSON.stringify({
+              success: false,
+              error: `Failed to access channel: HTTP ${response.status}`,
+              hint: 'Make sure the channel is public and the username is correct'
+            }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 400 });
+          }
+          
+          const html = await response.text();
+          
+          // Check if we got the channel page
+          const titleMatch = html.match(/<meta property="og:title" content="([^"]+)"/);
+          const descMatch = html.match(/<meta property="og:description" content="([^"]+)"/);
+          
+          if (!titleMatch) {
+            return new Response(JSON.stringify({
+              success: false,
+              error: 'Channel not found or is private',
+              hint: 'Make sure the channel is public and the username is correct'
+            }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 400 });
+          }
+          
+          // Count messages to verify access
+          const messageCount = (html.match(/tgme_widget_message/g) || []).length;
+          
+          return new Response(JSON.stringify({
+            success: true,
+            channel: {
+              username: cleanUsername,
+              title: titleMatch[1],
+              description: descMatch ? descMatch[1] : null,
+              messageCount,
+              isPublic: true
+            },
+            message: `Successfully connected to public channel "${titleMatch[1]}" with ${messageCount} recent messages`
+          }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+          
+        } catch (error) {
+          console.error('[telegram-session-generator] Error testing public channel:', error);
+          return new Response(JSON.stringify({
+            success: false,
+            error: 'Failed to access channel: ' + error.message
+          }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 400 });
+        }
+      }
+      
+      // Fallback to Bot API for non-public channels
       const botToken = Deno.env.get('TELEGRAM_BOT_TOKEN');
       
       if (!botToken) {
         return new Response(JSON.stringify({
           success: false,
-          error: 'TELEGRAM_BOT_TOKEN not configured'
+          error: 'No channel username provided and TELEGRAM_BOT_TOKEN not configured',
+          hint: 'For public channels, provide the username (e.g., blindapee). For private channels, configure a bot token.'
         }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 400 });
       }
 

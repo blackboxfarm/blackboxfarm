@@ -244,6 +244,68 @@ View on DexScreener: https://dexscreener.com/solana/${tokenMint}
   }
 }
 
+// Scrape messages from public Telegram channel web view
+async function scrapePublicChannel(username: string): Promise<Array<{
+  messageId: string;
+  text: string;
+  date: Date;
+}>> {
+  const url = `https://t.me/s/${username}`;
+  console.log(`[telegram-channel-monitor] Scraping public channel: ${url}`);
+  
+  try {
+    const response = await fetch(url, {
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        'Accept': 'text/html,application/xhtml+xml',
+        'Accept-Language': 'en-US,en;q=0.9',
+      }
+    });
+    
+    if (!response.ok) {
+      console.error(`[telegram-channel-monitor] Failed to fetch channel page: ${response.status}`);
+      return [];
+    }
+    
+    const html = await response.text();
+    const messages: Array<{ messageId: string; text: string; date: Date }> = [];
+    
+    // Parse messages using regex (Telegram's public page has a predictable structure)
+    // Each message is in a div with class "tgme_widget_message"
+    const messagePattern = /<div class="tgme_widget_message[^"]*"[^>]*data-post="([^"]+)"[^>]*>[\s\S]*?<div class="tgme_widget_message_text[^"]*"[^>]*>([\s\S]*?)<\/div>[\s\S]*?<time[^>]*datetime="([^"]+)"[^>]*>/gi;
+    
+    let match;
+    while ((match = messagePattern.exec(html)) !== null) {
+      const [, postId, rawText, dateStr] = match;
+      // Clean HTML from text
+      const text = rawText
+        .replace(/<br\s*\/?>/gi, '\n')
+        .replace(/<[^>]+>/g, '')
+        .replace(/&amp;/g, '&')
+        .replace(/&lt;/g, '<')
+        .replace(/&gt;/g, '>')
+        .replace(/&quot;/g, '"')
+        .replace(/&#39;/g, "'")
+        .trim();
+      
+      if (text) {
+        const messageId = postId.split('/').pop() || postId;
+        messages.push({
+          messageId,
+          text,
+          date: new Date(dateStr)
+        });
+      }
+    }
+    
+    console.log(`[telegram-channel-monitor] Scraped ${messages.length} messages from ${username}`);
+    return messages;
+  } catch (error) {
+    console.error(`[telegram-channel-monitor] Error scraping channel:`, error);
+    return [];
+  }
+}
+
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
@@ -253,15 +315,6 @@ serve(async (req) => {
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
     const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
     const supabase = createClient(supabaseUrl, supabaseKey);
-
-    const botToken = Deno.env.get('TELEGRAM_BOT_TOKEN');
-    
-    if (!botToken) {
-      return new Response(JSON.stringify({
-        success: false,
-        error: 'TELEGRAM_BOT_TOKEN not configured'
-      }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 400 });
-    }
 
     const body = await req.json().catch(() => ({}));
     const { action, channelId: requestChannelId } = body;
@@ -298,49 +351,67 @@ serve(async (req) => {
 
     for (const config of configs) {
       const channelId = requestChannelId || config.channel_id;
+      const channelUsername = config.channel_username;
       const isFantasyMode = config.fantasy_mode ?? true;
       const fantasyBuyAmount = config.fantasy_buy_amount_usd || 100;
       
-      console.log(`[telegram-channel-monitor] Processing channel: ${channelId} (${config.channel_name || 'unnamed'}) - Fantasy Mode: ${isFantasyMode}`);
+      console.log(`[telegram-channel-monitor] Processing channel: ${channelUsername || channelId} (${config.channel_name || 'unnamed'}) - Fantasy Mode: ${isFantasyMode}`);
 
       try {
-        // Fetch recent messages using Telegram Bot API
-        const updatesResponse = await fetch(
-          `https://api.telegram.org/bot${botToken}/getUpdates?offset=-100&limit=100`
-        );
-        const updatesData = await updatesResponse.json();
+        let channelMessages: Array<{ messageId: string; text: string; date: Date }> = [];
+        
+        // If channel has a public username, scrape from t.me/s/
+        if (channelUsername) {
+          channelMessages = await scrapePublicChannel(channelUsername);
+        } else {
+          // Fallback to Bot API if no username (requires bot to be in channel)
+          const botToken = Deno.env.get('TELEGRAM_BOT_TOKEN');
+          if (botToken) {
+            const updatesResponse = await fetch(
+              `https://api.telegram.org/bot${botToken}/getUpdates?offset=-100&limit=100`
+            );
+            const updatesData = await updatesResponse.json();
 
-        if (!updatesData.ok) {
-          console.error(`[telegram-channel-monitor] Bot API error:`, updatesData.description);
-          results.push({ channelId, error: updatesData.description, processed: 0 });
-          continue;
+            if (updatesData.ok) {
+              const filtered = updatesData.result?.filter((update: any) => {
+                const msg = update.channel_post || update.message;
+                if (!msg) return false;
+                const chatId = msg.chat?.id?.toString();
+                return chatId === channelId || chatId === channelId.replace('-100', '');
+              }) || [];
+              
+              channelMessages = filtered.map((update: any) => {
+                const msg = update.channel_post || update.message;
+                return {
+                  messageId: msg.message_id.toString(),
+                  text: msg.text || '',
+                  date: new Date(msg.date * 1000)
+                };
+              });
+            }
+          }
         }
 
-        // Filter messages from the target channel
-        const channelMessages = updatesData.result?.filter((update: any) => {
-          const msg = update.channel_post || update.message;
-          if (!msg) return false;
-          const chatId = msg.chat?.id?.toString();
-          return chatId === channelId || chatId === channelId.replace('-100', '');
-        }) || [];
+        console.log(`[telegram-channel-monitor] Found ${channelMessages.length} messages from channel`);
 
-        console.log(`[telegram-channel-monitor] Found ${channelMessages.length} messages from channel ${channelId}`);
+        for (const msg of channelMessages) {
+          if (!msg.text) continue;
 
-        for (const update of channelMessages) {
-          const msg = update.channel_post || update.message;
-          if (!msg?.text) continue;
-
-          const messageId = msg.message_id;
+          const messageId = msg.messageId;
           const messageText = msg.text;
-          const messageDate = new Date(msg.date * 1000);
+          const messageDate = msg.date;
 
           // Skip if message is too old (> 1 hour)
           const messageAgeMinutes = (Date.now() - messageDate.getTime()) / 60000;
           if (messageAgeMinutes > 60) continue;
 
-          // Skip if we already processed this message
-          if (config.last_message_id && messageId <= config.last_message_id) {
-            continue;
+          // Skip if we already processed this message (compare as strings for public channels)
+          if (config.last_message_id) {
+            const lastId = parseInt(config.last_message_id);
+            const currentId = parseInt(messageId);
+            if (!isNaN(lastId) && !isNaN(currentId) && currentId <= lastId) {
+              continue;
+            }
           }
 
           // Extract Solana addresses

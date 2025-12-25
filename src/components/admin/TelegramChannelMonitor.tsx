@@ -33,6 +33,7 @@ interface ChannelConfig {
   id: string;
   channel_id: string;
   channel_name: string | null;
+  channel_username: string | null;
   is_active: boolean;
   ape_keyword_enabled: boolean;
   min_price_threshold: number;
@@ -144,9 +145,11 @@ export default function TelegramChannelMonitor() {
   // New config form state
   const [newChannelId, setNewChannelId] = useState('-1002078711289');
   const [newChannelName, setNewChannelName] = useState('Blind Ape Alpha 🦍');
+  const [newChannelUsername, setNewChannelUsername] = useState('blindapee');
   const [selectedWalletId, setSelectedWalletId] = useState<string>('');
   const [notificationEmail, setNotificationEmail] = useState('');
   const [isAddingConfig, setIsAddingConfig] = useState(false);
+  const [isTestingChannel, setIsTestingChannel] = useState(false);
 
   useEffect(() => {
     loadData();
@@ -237,14 +240,14 @@ export default function TelegramChannelMonitor() {
     }
   };
 
-  const testChannel = async (channelId: string) => {
+  const testChannelById = async (channelId: string, channelUsername?: string) => {
     try {
       const { data, error } = await supabase.functions.invoke('telegram-session-generator', {
-        body: { action: 'test_channel', channelId }
+        body: { action: 'test_channel', channelId, channelUsername }
       });
       if (error) throw error;
       if (data?.success) {
-        toast.success(`Channel accessible: ${data.channel.title}`);
+        toast.success(`Channel accessible: ${data.channel?.title || data.channel?.username}`);
       } else {
         toast.error(data?.error || 'Cannot access channel');
       }
@@ -322,8 +325,12 @@ export default function TelegramChannelMonitor() {
   };
 
   const addChannelConfig = async () => {
-    if (!newChannelId || !selectedWalletId) {
-      toast.error('Channel ID and wallet are required');
+    if (!selectedWalletId) {
+      toast.error('Wallet is required');
+      return;
+    }
+    if (!newChannelUsername && !newChannelId) {
+      toast.error('Channel username or ID is required');
       return;
     }
     setIsAddingConfig(true);
@@ -331,10 +338,13 @@ export default function TelegramChannelMonitor() {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error('Not authenticated');
 
+      const cleanUsername = newChannelUsername?.replace('@', '').replace('https://t.me/', '').replace('t.me/', '') || null;
+
       await supabase.from('telegram_channel_config').insert({
         user_id: user.id,
-        channel_id: newChannelId,
+        channel_id: newChannelId || `@${cleanUsername}`,
         channel_name: newChannelName || null,
+        channel_username: cleanUsername,
         flipit_wallet_id: selectedWalletId,
         notification_email: notificationEmail || null,
         email_notifications: !!notificationEmail,
@@ -346,10 +356,44 @@ export default function TelegramChannelMonitor() {
       loadData();
       setNewChannelId('');
       setNewChannelName('');
+      setNewChannelUsername('');
     } catch (error: any) {
       toast.error(error.message || 'Failed to add configuration');
     } finally {
       setIsAddingConfig(false);
+    }
+  };
+
+  const testChannel = async () => {
+    if (!newChannelUsername && !newChannelId) {
+      toast.error('Enter a channel username or ID to test');
+      return;
+    }
+    setIsTestingChannel(true);
+    try {
+      const cleanUsername = newChannelUsername?.replace('@', '').replace('https://t.me/', '').replace('t.me/', '') || null;
+      
+      const { data, error } = await supabase.functions.invoke('telegram-session-generator', {
+        body: { 
+          action: 'test_channel', 
+          channelId: newChannelId,
+          channelUsername: cleanUsername
+        }
+      });
+      
+      if (error) throw error;
+      if (!data.success) throw new Error(data.error);
+      
+      toast.success(data.message || `Connected to ${data.channel?.title || 'channel'}`);
+      
+      // Auto-fill channel name if empty
+      if (!newChannelName && data.channel?.title) {
+        setNewChannelName(data.channel.title);
+      }
+    } catch (error: any) {
+      toast.error(error.message || 'Failed to test channel');
+    } finally {
+      setIsTestingChannel(false);
     }
   };
 
@@ -783,21 +827,43 @@ export default function TelegramChannelMonitor() {
               <CardDescription>Configure a new Telegram channel to monitor</CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
+              <div className="p-3 bg-muted/50 rounded-md text-sm text-muted-foreground mb-2">
+                💡 <strong>Public channels:</strong> Just enter the username (e.g., "blindapee"). No bot needed!
+              </div>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="space-y-2">
-                  <Label>Channel ID</Label>
-                  <Input
-                    placeholder="-1002078711289"
-                    value={newChannelId}
-                    onChange={(e) => setNewChannelId(e.target.value)}
-                  />
+                  <Label>Channel Username (for public channels)</Label>
+                  <div className="flex gap-2">
+                    <Input
+                      placeholder="blindapee"
+                      value={newChannelUsername}
+                      onChange={(e) => setNewChannelUsername(e.target.value)}
+                      className="flex-1"
+                    />
+                    <Button 
+                      variant="outline" 
+                      onClick={testChannel} 
+                      disabled={isTestingChannel}
+                    >
+                      {isTestingChannel ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Test'}
+                    </Button>
+                  </div>
+                  <p className="text-xs text-muted-foreground">From t.me/blindapee → enter "blindapee"</p>
                 </div>
                 <div className="space-y-2">
-                  <Label>Channel Name (optional)</Label>
+                  <Label>Channel Name (auto-filled on test)</Label>
                   <Input
                     placeholder="Blind Ape Alpha 🦍"
                     value={newChannelName}
                     onChange={(e) => setNewChannelName(e.target.value)}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label>Channel ID (optional, for private channels)</Label>
+                  <Input
+                    placeholder="-1002078711289"
+                    value={newChannelId}
+                    onChange={(e) => setNewChannelId(e.target.value)}
                   />
                 </div>
                 <div className="space-y-2">
@@ -887,7 +953,7 @@ export default function TelegramChannelMonitor() {
                           <Button
                             variant="outline"
                             size="sm"
-                            onClick={() => testChannel(config.channel_id)}
+                            onClick={() => testChannelById(config.channel_id, config.channel_username)}
                           >
                             Test
                           </Button>
