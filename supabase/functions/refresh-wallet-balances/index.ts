@@ -110,33 +110,51 @@ serve(async (req) => {
           }
         }
 
-        // Get token accounts from RPC
+        // Get token accounts from RPC - fetch both programs in parallel
+        let splTokens: TokenBalance[] = [];
+        let token2022Tokens: TokenBalance[] = [];
+        
         for (const rpc of rpcEndpoints) {
-          if (tokens.length > 0) break;
-          
           try {
             logStep("Fetching tokens", { endpoint: rpc.includes('helius') ? 'helius' : rpc.slice(0, 30) });
             
-            // Try SPL Token Program
-            const tokenResponse = await fetch(rpc, {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                jsonrpc: '2.0',
-                id: 1,
-                method: 'getTokenAccountsByOwner',
-                params: [
-                  body.pubkey,
-                  { programId: 'TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA' },
-                  { encoding: 'jsonParsed' }
-                ]
+            // Fetch both SPL Token Program and Token-2022 in parallel
+            const [tokenResponse, token2022Response] = await Promise.all([
+              fetch(rpc, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  jsonrpc: '2.0',
+                  id: 1,
+                  method: 'getTokenAccountsByOwner',
+                  params: [
+                    body.pubkey,
+                    { programId: 'TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA' },
+                    { encoding: 'jsonParsed' }
+                  ]
+                })
+              }),
+              fetch(rpc, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  jsonrpc: '2.0',
+                  id: 2,
+                  method: 'getTokenAccountsByOwner',
+                  params: [
+                    body.pubkey,
+                    { programId: 'TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb' },
+                    { encoding: 'jsonParsed' }
+                  ]
+                })
               })
-            });
+            ]);
             
+            // Parse SPL tokens
             if (tokenResponse.ok) {
               const tokenData = await tokenResponse.json();
               if (tokenData.result?.value) {
-                const foundTokens = tokenData.result.value
+                splTokens = tokenData.result.value
                   .map((account: any) => {
                     const info = account.account?.data?.parsed?.info;
                     if (!info) return null;
@@ -152,33 +170,15 @@ serve(async (req) => {
                   })
                   .filter((t: TokenBalance | null) => t !== null);
                   
-                if (foundTokens.length > 0) {
-                  tokens = foundTokens;
-                  logStep("Tokens found (SPL)", { count: tokens.length });
-                }
+                logStep("Tokens found (SPL)", { count: splTokens.length });
               }
             }
             
-            // Also try Token-2022 program
-            const token2022Response = await fetch(rpc, {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                jsonrpc: '2.0',
-                id: 2,
-                method: 'getTokenAccountsByOwner',
-                params: [
-                  body.pubkey,
-                  { programId: 'TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb' },
-                  { encoding: 'jsonParsed' }
-                ]
-              })
-            });
-            
+            // Parse Token-2022 tokens
             if (token2022Response.ok) {
               const token2022Data = await token2022Response.json();
               if (token2022Data.result?.value) {
-                const found2022Tokens = token2022Data.result.value
+                token2022Tokens = token2022Data.result.value
                   .map((account: any) => {
                     const info = account.account?.data?.parsed?.info;
                     if (!info) return null;
@@ -194,11 +194,15 @@ serve(async (req) => {
                   })
                   .filter((t: TokenBalance | null) => t !== null);
                   
-                tokens = [...tokens, ...found2022Tokens];
-                if (found2022Tokens.length > 0) {
-                  logStep("Tokens found (Token-2022)", { count: found2022Tokens.length });
-                }
+                logStep("Tokens found (Token-2022)", { count: token2022Tokens.length });
               }
+            }
+            
+            // Combine both token types - if we got at least one, use this RPC
+            if (splTokens.length > 0 || token2022Tokens.length > 0) {
+              tokens = [...splTokens, ...token2022Tokens];
+              logStep("Total tokens combined", { spl: splTokens.length, token2022: token2022Tokens.length, total: tokens.length });
+              break; // Successfully got tokens from this RPC
             }
           } catch (tokenError) {
             logStep("RPC token error", { error: String(tokenError) });
