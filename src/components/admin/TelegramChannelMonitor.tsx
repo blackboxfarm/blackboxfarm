@@ -124,9 +124,8 @@ interface SessionStatus {
 
 interface FlipItWallet {
   id: string;
-  nickname: string | null;
+  label: string | null;
   pubkey: string;
-  sol_balance: number | null;
 }
 
 export default function TelegramChannelMonitor() {
@@ -205,11 +204,11 @@ export default function TelegramChannelMonitor() {
       // Load FlipIt wallets
       const { data: walletData } = await supabase
         .from('super_admin_wallets')
-        .select('id, nickname, pubkey, sol_balance')
+        .select('id, label, pubkey')
         .eq('wallet_type', 'flipit')
         .eq('is_active', true);
       if (walletData) {
-        setFlipitWallets(walletData as unknown as FlipItWallet[]);
+        setFlipitWallets(walletData as FlipItWallet[]);
       }
     } catch (error) {
       console.error('Error loading data:', error);
@@ -811,7 +810,7 @@ export default function TelegramChannelMonitor() {
                     <option value="">Select wallet...</option>
                     {flipitWallets.map((w) => (
                       <option key={w.id} value={w.id}>
-                        {w.nickname || w.pubkey.slice(0, 8)} ({w.sol_balance?.toFixed(4) || 0} SOL)
+                        {w.label || w.pubkey.slice(0, 8)}...
                       </option>
                     ))}
                   </select>
