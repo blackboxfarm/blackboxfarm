@@ -4459,6 +4459,192 @@ export type Database = {
         }
         Relationships: []
       }
+      telegram_channel_calls: {
+        Row: {
+          buy_amount_usd: number | null
+          buy_tier: string | null
+          buy_tx_signature: string | null
+          channel_id: string
+          channel_name: string | null
+          contains_ape: boolean | null
+          created_at: string
+          email_sent: boolean | null
+          email_sent_at: string | null
+          id: string
+          market_cap_at_call: number | null
+          message_id: number
+          mint_age_minutes: number | null
+          position_id: string | null
+          price_at_call: number | null
+          raw_message: string | null
+          sell_multiplier: number | null
+          skip_reason: string | null
+          status: string | null
+          token_mint: string
+          token_name: string | null
+          token_symbol: string | null
+          updated_at: string
+        }
+        Insert: {
+          buy_amount_usd?: number | null
+          buy_tier?: string | null
+          buy_tx_signature?: string | null
+          channel_id: string
+          channel_name?: string | null
+          contains_ape?: boolean | null
+          created_at?: string
+          email_sent?: boolean | null
+          email_sent_at?: string | null
+          id?: string
+          market_cap_at_call?: number | null
+          message_id: number
+          mint_age_minutes?: number | null
+          position_id?: string | null
+          price_at_call?: number | null
+          raw_message?: string | null
+          sell_multiplier?: number | null
+          skip_reason?: string | null
+          status?: string | null
+          token_mint: string
+          token_name?: string | null
+          token_symbol?: string | null
+          updated_at?: string
+        }
+        Update: {
+          buy_amount_usd?: number | null
+          buy_tier?: string | null
+          buy_tx_signature?: string | null
+          channel_id?: string
+          channel_name?: string | null
+          contains_ape?: boolean | null
+          created_at?: string
+          email_sent?: boolean | null
+          email_sent_at?: string | null
+          id?: string
+          market_cap_at_call?: number | null
+          message_id?: number
+          mint_age_minutes?: number | null
+          position_id?: string | null
+          price_at_call?: number | null
+          raw_message?: string | null
+          sell_multiplier?: number | null
+          skip_reason?: string | null
+          status?: string | null
+          token_mint?: string
+          token_name?: string | null
+          token_symbol?: string | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      telegram_channel_config: {
+        Row: {
+          ape_keyword_enabled: boolean | null
+          channel_id: string
+          channel_name: string | null
+          created_at: string
+          email_notifications: boolean | null
+          flipit_wallet_id: string | null
+          id: string
+          is_active: boolean | null
+          large_buy_amount_usd: number | null
+          large_sell_multiplier: number | null
+          last_check_at: string | null
+          last_message_id: number | null
+          max_mint_age_minutes: number | null
+          max_price_threshold: number | null
+          min_price_threshold: number | null
+          notification_email: string | null
+          standard_buy_amount_usd: number | null
+          standard_sell_multiplier: number | null
+          total_buys_executed: number | null
+          total_calls_detected: number | null
+          updated_at: string
+          user_id: string | null
+        }
+        Insert: {
+          ape_keyword_enabled?: boolean | null
+          channel_id: string
+          channel_name?: string | null
+          created_at?: string
+          email_notifications?: boolean | null
+          flipit_wallet_id?: string | null
+          id?: string
+          is_active?: boolean | null
+          large_buy_amount_usd?: number | null
+          large_sell_multiplier?: number | null
+          last_check_at?: string | null
+          last_message_id?: number | null
+          max_mint_age_minutes?: number | null
+          max_price_threshold?: number | null
+          min_price_threshold?: number | null
+          notification_email?: string | null
+          standard_buy_amount_usd?: number | null
+          standard_sell_multiplier?: number | null
+          total_buys_executed?: number | null
+          total_calls_detected?: number | null
+          updated_at?: string
+          user_id?: string | null
+        }
+        Update: {
+          ape_keyword_enabled?: boolean | null
+          channel_id?: string
+          channel_name?: string | null
+          created_at?: string
+          email_notifications?: boolean | null
+          flipit_wallet_id?: string | null
+          id?: string
+          is_active?: boolean | null
+          large_buy_amount_usd?: number | null
+          large_sell_multiplier?: number | null
+          last_check_at?: string | null
+          last_message_id?: number | null
+          max_mint_age_minutes?: number | null
+          max_price_threshold?: number | null
+          min_price_threshold?: number | null
+          notification_email?: string | null
+          standard_buy_amount_usd?: number | null
+          standard_sell_multiplier?: number | null
+          total_buys_executed?: number | null
+          total_calls_detected?: number | null
+          updated_at?: string
+          user_id?: string | null
+        }
+        Relationships: []
+      }
+      telegram_session: {
+        Row: {
+          created_at: string
+          id: string
+          is_active: boolean | null
+          last_used_at: string | null
+          phone_number: string | null
+          session_string: string
+          updated_at: string
+          user_id: string | null
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          is_active?: boolean | null
+          last_used_at?: string | null
+          phone_number?: string | null
+          session_string: string
+          updated_at?: string
+          user_id?: string | null
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          is_active?: boolean | null
+          last_used_at?: string | null
+          phone_number?: string | null
+          session_string?: string
+          updated_at?: string
+          user_id?: string | null
+        }
+        Relationships: []
+      }
       token_lifecycle: {
         Row: {
           active_boosts: number | null
