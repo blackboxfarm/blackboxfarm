@@ -20,7 +20,12 @@ import {
   Clock,
   DollarSign,
   Bot,
-  Loader2
+  Loader2,
+  Brain,
+  Sparkles,
+  TrendingDown,
+  Target,
+  Wallet
 } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
 
@@ -44,6 +49,8 @@ interface ChannelConfig {
   total_buys_executed: number;
   last_check_at: string | null;
   last_message_id: number | null;
+  fantasy_mode: boolean;
+  fantasy_buy_amount_usd: number;
 }
 
 interface ChannelCall {
@@ -65,6 +72,39 @@ interface ChannelCall {
   skip_reason: string | null;
   email_sent: boolean;
   buy_tx_signature: string | null;
+  created_at: string;
+}
+
+interface MessageInterpretation {
+  id: string;
+  channel_id: string;
+  message_id: number;
+  raw_message: string | null;
+  ai_summary: string;
+  ai_interpretation: string;
+  extracted_tokens: string[];
+  decision: string;
+  decision_reasoning: string;
+  confidence_score: number;
+  token_mint: string | null;
+  token_symbol: string | null;
+  price_at_detection: number | null;
+  created_at: string;
+}
+
+interface FantasyPosition {
+  id: string;
+  channel_config_id: string;
+  token_mint: string;
+  token_symbol: string | null;
+  token_name: string | null;
+  entry_price_usd: number;
+  entry_amount_usd: number;
+  token_amount: number | null;
+  current_price_usd: number | null;
+  unrealized_pnl_usd: number | null;
+  unrealized_pnl_percent: number | null;
+  status: string;
   created_at: string;
 }
 
@@ -93,11 +133,14 @@ export default function TelegramChannelMonitor() {
   const [sessionStatus, setSessionStatus] = useState<SessionStatus | null>(null);
   const [configs, setConfigs] = useState<ChannelConfig[]>([]);
   const [calls, setCalls] = useState<ChannelCall[]>([]);
+  const [interpretations, setInterpretations] = useState<MessageInterpretation[]>([]);
+  const [fantasyPositions, setFantasyPositions] = useState<FantasyPosition[]>([]);
   const [flipitWallets, setFlipitWallets] = useState<FlipItWallet[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isScanning, setIsScanning] = useState(false);
   const [isTestingBot, setIsTestingBot] = useState(false);
-  const [activeTab, setActiveTab] = useState('calls');
+  const [isUpdatingPrices, setIsUpdatingPrices] = useState(false);
+  const [activeTab, setActiveTab] = useState('ai-log');
 
   // New config form state
   const [newChannelId, setNewChannelId] = useState('-1002078711289');
@@ -140,7 +183,26 @@ export default function TelegramChannelMonitor() {
         setCalls(callData as ChannelCall[]);
       }
 
-      // Load FlipIt wallets from super_admin_wallets table
+      // Load AI interpretations
+      const { data: interpData } = await supabase
+        .from('telegram_message_interpretations')
+        .select('*')
+        .order('created_at', { ascending: false })
+        .limit(100);
+      if (interpData) {
+        setInterpretations(interpData as MessageInterpretation[]);
+      }
+
+      // Load fantasy positions
+      const { data: fantasyData } = await supabase
+        .from('telegram_fantasy_positions')
+        .select('*')
+        .order('created_at', { ascending: false });
+      if (fantasyData) {
+        setFantasyPositions(fantasyData as FantasyPosition[]);
+      }
+
+      // Load FlipIt wallets
       const { data: walletData } = await supabase
         .from('super_admin_wallets')
         .select('id, nickname, pubkey, sol_balance')
@@ -199,12 +261,64 @@ export default function TelegramChannelMonitor() {
         body: { action: 'scan' }
       });
       if (error) throw error;
-      toast.success(`Scan complete: ${data.processed} tokens processed, ${data.buysExecuted} buys executed`);
-      loadData(); // Refresh data
+      toast.success(`Scan complete: ${data.processed} tokens, ${data.fantasyBuysExecuted || 0} fantasy buys`);
+      loadData();
     } catch (error: any) {
       toast.error(error.message || 'Scan failed');
     } finally {
       setIsScanning(false);
+    }
+  };
+
+  const updateFantasyPrices = async () => {
+    setIsUpdatingPrices(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('telegram-fantasy-price-update', {
+        body: {}
+      });
+      if (error) throw error;
+      toast.success(`Updated ${data.updated} positions`);
+      loadData();
+    } catch (error: any) {
+      toast.error(error.message || 'Failed to update prices');
+    } finally {
+      setIsUpdatingPrices(false);
+    }
+  };
+
+  const sellFantasyPosition = async (positionId: string) => {
+    try {
+      const position = fantasyPositions.find(p => p.id === positionId);
+      if (!position) return;
+
+      await supabase
+        .from('telegram_fantasy_positions')
+        .update({
+          status: 'sold',
+          sold_at: new Date().toISOString(),
+          sold_price_usd: position.current_price_usd,
+          realized_pnl_usd: position.unrealized_pnl_usd,
+          realized_pnl_percent: position.unrealized_pnl_percent
+        })
+        .eq('id', positionId);
+
+      toast.success(`Sold ${position.token_symbol} fantasy position`);
+      loadData();
+    } catch (error: any) {
+      toast.error(error.message || 'Failed to sell position');
+    }
+  };
+
+  const toggleFantasyMode = async (configId: string, currentMode: boolean) => {
+    try {
+      await supabase
+        .from('telegram_channel_config')
+        .update({ fantasy_mode: !currentMode })
+        .eq('id', configId);
+      toast.success(currentMode ? 'Switched to REAL trading mode' : 'Switched to Fantasy mode');
+      loadData();
+    } catch (error: any) {
+      toast.error(error.message || 'Failed to toggle mode');
     }
   };
 
@@ -218,17 +332,17 @@ export default function TelegramChannelMonitor() {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error('Not authenticated');
 
-      const { error } = await supabase.from('telegram_channel_config').insert({
+      await supabase.from('telegram_channel_config').insert({
         user_id: user.id,
         channel_id: newChannelId,
         channel_name: newChannelName || null,
         flipit_wallet_id: selectedWalletId,
         notification_email: notificationEmail || null,
         email_notifications: !!notificationEmail,
-        is_active: true
+        is_active: true,
+        fantasy_mode: true
       });
 
-      if (error) throw error;
       toast.success('Channel configuration added');
       loadData();
       setNewChannelId('');
@@ -242,11 +356,10 @@ export default function TelegramChannelMonitor() {
 
   const toggleConfig = async (configId: string, isActive: boolean) => {
     try {
-      const { error } = await supabase
+      await supabase
         .from('telegram_channel_config')
         .update({ is_active: !isActive })
         .eq('id', configId);
-      if (error) throw error;
       toast.success(isActive ? 'Channel monitoring paused' : 'Channel monitoring resumed');
       loadData();
     } catch (error: any) {
@@ -258,6 +371,8 @@ export default function TelegramChannelMonitor() {
     switch (status) {
       case 'bought':
         return <Badge className="bg-green-500"><CheckCircle className="w-3 h-3 mr-1" /> Bought</Badge>;
+      case 'fantasy_bought':
+        return <Badge className="bg-purple-500"><Sparkles className="w-3 h-3 mr-1" /> Fantasy</Badge>;
       case 'detected':
         return <Badge variant="secondary"><Clock className="w-3 h-3 mr-1" /> Detected</Badge>;
       case 'skipped':
@@ -268,6 +383,28 @@ export default function TelegramChannelMonitor() {
         return <Badge>{status}</Badge>;
     }
   };
+
+  const getDecisionBadge = (decision: string) => {
+    switch (decision) {
+      case 'buy':
+        return <Badge className="bg-green-500"><DollarSign className="w-3 h-3 mr-1" /> Buy</Badge>;
+      case 'fantasy_buy':
+        return <Badge className="bg-purple-500"><Sparkles className="w-3 h-3 mr-1" /> Fantasy Buy</Badge>;
+      case 'skip':
+        return <Badge variant="outline"><XCircle className="w-3 h-3 mr-1" /> Skip</Badge>;
+      case 'no_action':
+        return <Badge variant="secondary"><Clock className="w-3 h-3 mr-1" /> No Action</Badge>;
+      default:
+        return <Badge>{decision}</Badge>;
+    }
+  };
+
+  // Calculate fantasy portfolio stats
+  const openPositions = fantasyPositions.filter(p => p.status === 'open');
+  const totalPnl = openPositions.reduce((sum, p) => sum + (p.unrealized_pnl_usd || 0), 0);
+  const totalInvested = openPositions.reduce((sum, p) => sum + p.entry_amount_usd, 0);
+  const winningPositions = openPositions.filter(p => (p.unrealized_pnl_usd || 0) > 0).length;
+  const winRate = openPositions.length > 0 ? (winningPositions / openPositions.length) * 100 : 0;
 
   if (isLoading) {
     return (
@@ -287,7 +424,7 @@ export default function TelegramChannelMonitor() {
             Telegram Channel Monitor
           </h2>
           <p className="text-muted-foreground">
-            Monitor Telegram channels for token calls and auto-ape
+            Monitor Telegram channels for token calls with AI interpretation
           </p>
         </div>
         <div className="flex gap-2">
@@ -303,7 +440,7 @@ export default function TelegramChannelMonitor() {
       </div>
 
       {/* Status Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
         <Card>
           <CardContent className="pt-6">
             <div className="flex items-center justify-between">
@@ -334,10 +471,10 @@ export default function TelegramChannelMonitor() {
           <CardContent className="pt-6">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-muted-foreground">Calls Detected</p>
-                <p className="text-2xl font-bold">{configs.reduce((sum, c) => sum + (c.total_calls_detected || 0), 0)}</p>
+                <p className="text-sm text-muted-foreground">Fantasy Positions</p>
+                <p className="text-2xl font-bold">{openPositions.length}</p>
               </div>
-              <TrendingUp className="w-8 h-8 text-primary" />
+              <Sparkles className="w-8 h-8 text-purple-500" />
             </div>
           </CardContent>
         </Card>
@@ -346,22 +483,218 @@ export default function TelegramChannelMonitor() {
           <CardContent className="pt-6">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-muted-foreground">Buys Executed</p>
-                <p className="text-2xl font-bold">{configs.reduce((sum, c) => sum + (c.total_buys_executed || 0), 0)}</p>
+                <p className="text-sm text-muted-foreground">Fantasy P&L</p>
+                <p className={`text-2xl font-bold ${totalPnl >= 0 ? 'text-green-500' : 'text-red-500'}`}>
+                  ${totalPnl.toFixed(2)}
+                </p>
               </div>
-              <DollarSign className="w-8 h-8 text-green-500" />
+              {totalPnl >= 0 ? (
+                <TrendingUp className="w-8 h-8 text-green-500" />
+              ) : (
+                <TrendingDown className="w-8 h-8 text-red-500" />
+              )}
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardContent className="pt-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm text-muted-foreground">Win Rate</p>
+                <p className="text-2xl font-bold">{winRate.toFixed(0)}%</p>
+              </div>
+              <Target className="w-8 h-8 text-primary" />
             </div>
           </CardContent>
         </Card>
       </div>
 
       <Tabs value={activeTab} onValueChange={setActiveTab}>
-        <TabsList>
+        <TabsList className="flex flex-wrap">
+          <TabsTrigger value="ai-log">🤖 AI Interpretation Log</TabsTrigger>
+          <TabsTrigger value="fantasy">💫 Fantasy Portfolio</TabsTrigger>
           <TabsTrigger value="calls">Recent Calls</TabsTrigger>
           <TabsTrigger value="channels">Channel Config</TabsTrigger>
           <TabsTrigger value="settings">Trading Rules</TabsTrigger>
         </TabsList>
 
+        {/* AI Interpretation Log */}
+        <TabsContent value="ai-log" className="space-y-4">
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Brain className="w-5 h-5" />
+                AI Message Interpretations
+              </CardTitle>
+              <CardDescription>Real-time AI analysis of every channel message</CardDescription>
+            </CardHeader>
+            <CardContent>
+              {interpretations.length === 0 ? (
+                <p className="text-muted-foreground text-center py-8">No interpretations yet. Run a scan to populate.</p>
+              ) : (
+                <div className="space-y-4 max-h-[600px] overflow-y-auto">
+                  {interpretations.map((interp) => (
+                    <div key={interp.id} className="border rounded-lg p-4 space-y-3">
+                      <div className="flex items-start justify-between">
+                        <div className="flex items-center gap-2">
+                          {getDecisionBadge(interp.decision)}
+                          <span className="text-sm text-muted-foreground">
+                            {formatDistanceToNow(new Date(interp.created_at), { addSuffix: true })}
+                          </span>
+                          {interp.confidence_score && (
+                            <Badge variant="outline" className="text-xs">
+                              {(interp.confidence_score * 100).toFixed(0)}% confident
+                            </Badge>
+                          )}
+                        </div>
+                        {interp.token_symbol && (
+                          <a 
+                            href={`https://dexscreener.com/solana/${interp.token_mint}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-primary hover:underline font-medium"
+                          >
+                            {interp.token_symbol}
+                          </a>
+                        )}
+                      </div>
+
+                      <div className="bg-muted/50 rounded p-3">
+                        <p className="text-sm text-muted-foreground italic line-clamp-2">
+                          "{interp.raw_message?.substring(0, 200)}..."
+                        </p>
+                      </div>
+
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                        <div>
+                          <p className="text-xs font-medium text-muted-foreground mb-1">📝 AI Summary</p>
+                          <p className="text-sm">{interp.ai_summary}</p>
+                        </div>
+                        <div>
+                          <p className="text-xs font-medium text-muted-foreground mb-1">🧠 Interpretation</p>
+                          <p className="text-sm">{interp.ai_interpretation}</p>
+                        </div>
+                      </div>
+
+                      <div className="bg-muted/30 rounded p-2">
+                        <p className="text-xs font-medium text-muted-foreground mb-1">💭 Decision Reasoning</p>
+                        <p className="text-sm">{interp.decision_reasoning}</p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        {/* Fantasy Portfolio */}
+        <TabsContent value="fantasy" className="space-y-4">
+          <div className="flex justify-between items-center">
+            <div>
+              <h3 className="text-lg font-semibold">Fantasy Trading Portfolio</h3>
+              <p className="text-sm text-muted-foreground">Track simulated trades before risking real funds</p>
+            </div>
+            <Button onClick={updateFantasyPrices} disabled={isUpdatingPrices}>
+              {isUpdatingPrices ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <RefreshCw className="w-4 h-4 mr-2" />}
+              Update Prices
+            </Button>
+          </div>
+
+          {/* Portfolio Summary */}
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+            <Card>
+              <CardContent className="pt-6">
+                <p className="text-sm text-muted-foreground">Total Invested</p>
+                <p className="text-2xl font-bold">${totalInvested.toFixed(2)}</p>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardContent className="pt-6">
+                <p className="text-sm text-muted-foreground">Current Value</p>
+                <p className="text-2xl font-bold">${(totalInvested + totalPnl).toFixed(2)}</p>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardContent className="pt-6">
+                <p className="text-sm text-muted-foreground">Unrealized P&L</p>
+                <p className={`text-2xl font-bold ${totalPnl >= 0 ? 'text-green-500' : 'text-red-500'}`}>
+                  {totalPnl >= 0 ? '+' : ''}{totalPnl.toFixed(2)} ({totalInvested > 0 ? ((totalPnl / totalInvested) * 100).toFixed(1) : 0}%)
+                </p>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardContent className="pt-6">
+                <p className="text-sm text-muted-foreground">Win/Loss</p>
+                <p className="text-2xl font-bold text-green-500">{winningPositions}/{openPositions.length - winningPositions}</p>
+              </CardContent>
+            </Card>
+          </div>
+
+          {/* Positions Table */}
+          <Card>
+            <CardHeader>
+              <CardTitle>Open Positions</CardTitle>
+            </CardHeader>
+            <CardContent>
+              {openPositions.length === 0 ? (
+                <p className="text-muted-foreground text-center py-8">No fantasy positions yet</p>
+              ) : (
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Token</TableHead>
+                      <TableHead>Entry Price</TableHead>
+                      <TableHead>Current Price</TableHead>
+                      <TableHead>Amount</TableHead>
+                      <TableHead>P&L</TableHead>
+                      <TableHead>Actions</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {openPositions.map((pos) => (
+                      <TableRow key={pos.id}>
+                        <TableCell>
+                          <a 
+                            href={`https://dexscreener.com/solana/${pos.token_mint}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="font-medium text-primary hover:underline"
+                          >
+                            {pos.token_symbol || 'UNKNOWN'}
+                          </a>
+                        </TableCell>
+                        <TableCell>${pos.entry_price_usd?.toFixed(8)}</TableCell>
+                        <TableCell>${pos.current_price_usd?.toFixed(8) || 'N/A'}</TableCell>
+                        <TableCell>${pos.entry_amount_usd.toFixed(2)}</TableCell>
+                        <TableCell>
+                          <span className={`font-medium ${(pos.unrealized_pnl_usd || 0) >= 0 ? 'text-green-500' : 'text-red-500'}`}>
+                            {(pos.unrealized_pnl_usd || 0) >= 0 ? '+' : ''}${(pos.unrealized_pnl_usd || 0).toFixed(2)}
+                            <span className="text-xs ml-1">
+                              ({(pos.unrealized_pnl_percent || 0).toFixed(1)}%)
+                            </span>
+                          </span>
+                        </TableCell>
+                        <TableCell>
+                          <Button 
+                            variant="outline" 
+                            size="sm"
+                            onClick={() => sellFantasyPosition(pos.id)}
+                          >
+                            Sell
+                          </Button>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        {/* Recent Calls Tab */}
         <TabsContent value="calls" className="space-y-4">
           <Card>
             <CardHeader>
@@ -443,8 +776,8 @@ export default function TelegramChannelMonitor() {
           </Card>
         </TabsContent>
 
+        {/* Channel Config Tab */}
         <TabsContent value="channels" className="space-y-4">
-          {/* Add New Channel */}
           <Card>
             <CardHeader>
               <CardTitle>Add Channel</CardTitle>
@@ -500,7 +833,6 @@ export default function TelegramChannelMonitor() {
             </CardContent>
           </Card>
 
-          {/* Existing Channels */}
           <Card>
             <CardHeader>
               <CardTitle>Monitored Channels</CardTitle>
@@ -513,10 +845,10 @@ export default function TelegramChannelMonitor() {
                   <TableHeader>
                     <TableRow>
                       <TableHead>Channel</TableHead>
+                      <TableHead>Mode</TableHead>
                       <TableHead>Wallet</TableHead>
                       <TableHead>Calls</TableHead>
                       <TableHead>Buys</TableHead>
-                      <TableHead>Last Check</TableHead>
                       <TableHead>Active</TableHead>
                       <TableHead>Actions</TableHead>
                     </TableRow>
@@ -530,16 +862,22 @@ export default function TelegramChannelMonitor() {
                             <span className="text-xs text-muted-foreground font-mono">{config.channel_id}</span>
                           </div>
                         </TableCell>
+                        <TableCell>
+                          <div className="flex items-center gap-2">
+                            <Switch
+                              checked={!config.fantasy_mode}
+                              onCheckedChange={() => toggleFantasyMode(config.id, config.fantasy_mode)}
+                            />
+                            <span className={`text-sm ${config.fantasy_mode ? 'text-purple-500' : 'text-green-500'}`}>
+                              {config.fantasy_mode ? '💫 Fantasy' : '💰 Real'}
+                            </span>
+                          </div>
+                        </TableCell>
                         <TableCell className="font-mono text-sm">
                           {config.flipit_wallet_id?.slice(0, 8) || 'Not set'}
                         </TableCell>
                         <TableCell>{config.total_calls_detected || 0}</TableCell>
                         <TableCell>{config.total_buys_executed || 0}</TableCell>
-                        <TableCell className="text-muted-foreground text-sm">
-                          {config.last_check_at 
-                            ? formatDistanceToNow(new Date(config.last_check_at), { addSuffix: true })
-                            : 'Never'}
-                        </TableCell>
                         <TableCell>
                           <Switch
                             checked={config.is_active}
@@ -564,6 +902,7 @@ export default function TelegramChannelMonitor() {
           </Card>
         </TabsContent>
 
+        {/* Trading Rules Tab */}
         <TabsContent value="settings" className="space-y-4">
           <Card>
             <CardHeader>
@@ -576,6 +915,17 @@ export default function TelegramChannelMonitor() {
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-6">
+              <div className="p-4 bg-purple-500/10 border border-purple-500/30 rounded-lg">
+                <div className="flex items-center gap-2 mb-2">
+                  <Sparkles className="w-5 h-5 text-purple-500" />
+                  <h4 className="font-semibold text-purple-500">Fantasy Mode (Default)</h4>
+                </div>
+                <p className="text-sm text-muted-foreground">
+                  In Fantasy Mode, the system simulates trades with $100 per position instead of using real funds.
+                  This lets you test the strategy before risking capital.
+                </p>
+              </div>
+
               <div className="p-4 bg-muted rounded-lg space-y-4">
                 <h4 className="font-semibold">Large Buy Tier (🦍 APE)</h4>
                 <p className="text-sm text-muted-foreground">
@@ -608,6 +958,18 @@ export default function TelegramChannelMonitor() {
                     <p className="text-2xl font-bold text-primary">5x</p>
                   </div>
                 </div>
+              </div>
+
+              <div className="p-4 border rounded-lg space-y-4">
+                <div className="flex items-center gap-2">
+                  <Wallet className="w-5 h-5" />
+                  <h4 className="font-semibold">Real Trading Wallet</h4>
+                </div>
+                <p className="text-sm text-muted-foreground">
+                  When Fantasy Mode is OFF, trades execute using the assigned FlipIt wallet.
+                  The wallet must have sufficient SOL balance. Positions are created in the
+                  `flip_positions` table and monitored by the price monitor for auto-sells.
+                </p>
               </div>
 
               <div className="p-4 border rounded-lg space-y-2">

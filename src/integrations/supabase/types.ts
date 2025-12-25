@@ -4544,6 +4544,8 @@ export type Database = {
           channel_name: string | null
           created_at: string
           email_notifications: boolean | null
+          fantasy_buy_amount_usd: number | null
+          fantasy_mode: boolean | null
           flipit_wallet_id: string | null
           id: string
           is_active: boolean | null
@@ -4568,6 +4570,8 @@ export type Database = {
           channel_name?: string | null
           created_at?: string
           email_notifications?: boolean | null
+          fantasy_buy_amount_usd?: number | null
+          fantasy_mode?: boolean | null
           flipit_wallet_id?: string | null
           id?: string
           is_active?: boolean | null
@@ -4592,6 +4596,8 @@ export type Database = {
           channel_name?: string | null
           created_at?: string
           email_notifications?: boolean | null
+          fantasy_buy_amount_usd?: number | null
+          fantasy_mode?: boolean | null
           flipit_wallet_id?: string | null
           id?: string
           is_active?: boolean | null
@@ -4611,6 +4617,162 @@ export type Database = {
           user_id?: string | null
         }
         Relationships: []
+      }
+      telegram_fantasy_positions: {
+        Row: {
+          call_id: string | null
+          channel_config_id: string | null
+          created_at: string
+          current_price_usd: number | null
+          entry_amount_usd: number
+          entry_price_usd: number
+          id: string
+          interpretation_id: string | null
+          realized_pnl_percent: number | null
+          realized_pnl_usd: number | null
+          sold_at: string | null
+          sold_price_usd: number | null
+          status: string
+          token_amount: number | null
+          token_mint: string
+          token_name: string | null
+          token_symbol: string | null
+          unrealized_pnl_percent: number | null
+          unrealized_pnl_usd: number | null
+          updated_at: string
+          user_id: string | null
+        }
+        Insert: {
+          call_id?: string | null
+          channel_config_id?: string | null
+          created_at?: string
+          current_price_usd?: number | null
+          entry_amount_usd?: number
+          entry_price_usd: number
+          id?: string
+          interpretation_id?: string | null
+          realized_pnl_percent?: number | null
+          realized_pnl_usd?: number | null
+          sold_at?: string | null
+          sold_price_usd?: number | null
+          status?: string
+          token_amount?: number | null
+          token_mint: string
+          token_name?: string | null
+          token_symbol?: string | null
+          unrealized_pnl_percent?: number | null
+          unrealized_pnl_usd?: number | null
+          updated_at?: string
+          user_id?: string | null
+        }
+        Update: {
+          call_id?: string | null
+          channel_config_id?: string | null
+          created_at?: string
+          current_price_usd?: number | null
+          entry_amount_usd?: number
+          entry_price_usd?: number
+          id?: string
+          interpretation_id?: string | null
+          realized_pnl_percent?: number | null
+          realized_pnl_usd?: number | null
+          sold_at?: string | null
+          sold_price_usd?: number | null
+          status?: string
+          token_amount?: number | null
+          token_mint?: string
+          token_name?: string | null
+          token_symbol?: string | null
+          unrealized_pnl_percent?: number | null
+          unrealized_pnl_usd?: number | null
+          updated_at?: string
+          user_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "telegram_fantasy_positions_call_id_fkey"
+            columns: ["call_id"]
+            isOneToOne: false
+            referencedRelation: "telegram_channel_calls"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "telegram_fantasy_positions_channel_config_id_fkey"
+            columns: ["channel_config_id"]
+            isOneToOne: false
+            referencedRelation: "telegram_channel_config"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "telegram_fantasy_positions_interpretation_id_fkey"
+            columns: ["interpretation_id"]
+            isOneToOne: false
+            referencedRelation: "telegram_message_interpretations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      telegram_message_interpretations: {
+        Row: {
+          ai_interpretation: string
+          ai_summary: string
+          channel_config_id: string | null
+          channel_id: string
+          confidence_score: number | null
+          created_at: string
+          decision: string
+          decision_reasoning: string
+          extracted_tokens: string[] | null
+          id: string
+          message_id: number
+          price_at_detection: number | null
+          raw_message: string | null
+          token_mint: string | null
+          token_symbol: string | null
+        }
+        Insert: {
+          ai_interpretation: string
+          ai_summary: string
+          channel_config_id?: string | null
+          channel_id: string
+          confidence_score?: number | null
+          created_at?: string
+          decision: string
+          decision_reasoning: string
+          extracted_tokens?: string[] | null
+          id?: string
+          message_id: number
+          price_at_detection?: number | null
+          raw_message?: string | null
+          token_mint?: string | null
+          token_symbol?: string | null
+        }
+        Update: {
+          ai_interpretation?: string
+          ai_summary?: string
+          channel_config_id?: string | null
+          channel_id?: string
+          confidence_score?: number | null
+          created_at?: string
+          decision?: string
+          decision_reasoning?: string
+          extracted_tokens?: string[] | null
+          id?: string
+          message_id?: number
+          price_at_detection?: number | null
+          raw_message?: string | null
+          token_mint?: string | null
+          token_symbol?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "telegram_message_interpretations_channel_config_id_fkey"
+            columns: ["channel_config_id"]
+            isOneToOne: false
+            referencedRelation: "telegram_channel_config"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       telegram_session: {
         Row: {
