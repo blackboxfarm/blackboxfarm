@@ -110,144 +110,206 @@ serve(async (req) => {
           }
         }
 
-        // Get token accounts from RPC - fetch both programs in parallel
-        let splTokens: TokenBalance[] = [];
-        let token2022Tokens: TokenBalance[] = [];
-        
-        for (const rpc of rpcEndpoints) {
+        // PRIORITY: Use Helius DAS API for most reliable token fetching
+        if (heliusKey) {
           try {
-            logStep("Fetching tokens", { endpoint: rpc.includes('helius') ? 'helius' : rpc.slice(0, 30) });
-            
-            // Fetch both SPL Token Program and Token-2022 in parallel
-            const [tokenResponse, token2022Response] = await Promise.all([
-              fetch(rpc, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                  jsonrpc: '2.0',
-                  id: 1,
-                  method: 'getTokenAccountsByOwner',
-                  params: [
-                    body.pubkey,
-                    { programId: 'TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA' },
-                    { encoding: 'jsonParsed' }
-                  ]
-                })
-              }),
-              fetch(rpc, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                  jsonrpc: '2.0',
-                  id: 2,
-                  method: 'getTokenAccountsByOwner',
-                  params: [
-                    body.pubkey,
-                    { programId: 'TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb' },
-                    { encoding: 'jsonParsed' }
-                  ]
-                })
-              })
-            ]);
-            
-            // Parse SPL tokens
-            if (tokenResponse.ok) {
-              const tokenData = await tokenResponse.json();
-              if (tokenData.result?.value) {
-                splTokens = tokenData.result.value
-                  .map((account: any) => {
-                    const info = account.account?.data?.parsed?.info;
-                    if (!info) return null;
-                    const amount = info.tokenAmount?.uiAmount || 0;
-                    if (amount === 0) return null;
-                    return {
-                      mint: info.mint,
-                      balance: amount,
-                      decimals: info.tokenAmount?.decimals || 0,
-                      symbol: null,
-                      name: null
-                    };
-                  })
-                  .filter((t: TokenBalance | null) => t !== null);
-                  
-                logStep("Tokens found (SPL)", { count: splTokens.length });
-              }
-            }
-            
-            // Parse Token-2022 tokens
-            if (token2022Response.ok) {
-              const token2022Data = await token2022Response.json();
-              if (token2022Data.result?.value) {
-                token2022Tokens = token2022Data.result.value
-                  .map((account: any) => {
-                    const info = account.account?.data?.parsed?.info;
-                    if (!info) return null;
-                    const amount = info.tokenAmount?.uiAmount || 0;
-                    if (amount === 0) return null;
-                    return {
-                      mint: info.mint,
-                      balance: amount,
-                      decimals: info.tokenAmount?.decimals || 0,
-                      symbol: null,
-                      name: null
-                    };
-                  })
-                  .filter((t: TokenBalance | null) => t !== null);
-                  
-                logStep("Tokens found (Token-2022)", { count: token2022Tokens.length });
-              }
-            }
-            
-            // Combine both token types - if we got at least one, use this RPC
-            if (splTokens.length > 0 || token2022Tokens.length > 0) {
-              tokens = [...splTokens, ...token2022Tokens];
-              logStep("Total tokens combined", { spl: splTokens.length, token2022: token2022Tokens.length, total: tokens.length });
-              break; // Successfully got tokens from this RPC
-            }
-          } catch (tokenError) {
-            logStep("RPC token error", { error: String(tokenError) });
-          }
-        }
-
-        // Enrich tokens with Helius DAS API metadata if available
-        if (tokens.length > 0 && heliusKey) {
-          try {
-            logStep("Enriching tokens with Helius metadata");
-            const response = await fetch(`https://mainnet.helius-rpc.com/?api-key=${heliusKey}`, {
+            logStep("Fetching tokens via Helius DAS API (preferred)");
+            const dasResponse = await fetch(`https://mainnet.helius-rpc.com/?api-key=${heliusKey}`, {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({
                 jsonrpc: '2.0',
-                id: 'token-balances',
+                id: 'fungible-tokens',
                 method: 'getAssetsByOwner',
                 params: {
                   ownerAddress: body.pubkey,
                   page: 1,
                   limit: 100,
-                  displayOptions: { showFungible: true }
+                  displayOptions: { 
+                    showFungible: true,
+                    showNativeBalance: false
+                  }
                 }
               })
             });
-            const dasResult = await response.json();
             
-            if (dasResult.result?.items) {
-              const metadataMap = new Map();
-              dasResult.result.items.forEach((item: any) => {
-                metadataMap.set(item.id, {
-                  symbol: item.token_info?.symbol || item.content?.metadata?.symbol,
-                  name: item.content?.metadata?.name
-                });
+            if (dasResponse.ok) {
+              const dasResult = await dasResponse.json();
+              logStep("Helius DAS response", { 
+                hasResult: !!dasResult.result,
+                itemCount: dasResult.result?.items?.length || 0
               });
               
-              tokens = tokens.map(t => ({
-                ...t,
-                symbol: metadataMap.get(t.mint)?.symbol || t.symbol,
-                name: metadataMap.get(t.mint)?.name || t.name
-              }));
-              logStep("Enriched tokens with metadata", { enriched: metadataMap.size });
+              if (dasResult.result?.items) {
+                for (const item of dasResult.result.items) {
+                  // Only include fungible tokens with balance
+                  if (item.interface === 'FungibleToken' || item.interface === 'FungibleAsset') {
+                    const balance = item.token_info?.balance || 0;
+                    const decimals = item.token_info?.decimals || 0;
+                    const uiAmount = balance / Math.pow(10, decimals);
+                    
+                    if (uiAmount > 0) {
+                      tokens.push({
+                        mint: item.id,
+                        balance: uiAmount,
+                        decimals: decimals,
+                        symbol: item.token_info?.symbol || item.content?.metadata?.symbol || null,
+                        name: item.content?.metadata?.name || null
+                      });
+                    }
+                  }
+                }
+                logStep("Tokens from Helius DAS", { count: tokens.length, tokens: tokens.map(t => `${t.symbol || t.mint.slice(0,8)}:${t.balance}`) });
+              }
             }
           } catch (dasError) {
-            logStep("Helius metadata enrichment failed", { error: String(dasError) });
+            logStep("Helius DAS API error", { error: String(dasError) });
+          }
+        }
+
+        // FALLBACK: Use RPC getTokenAccountsByOwner if DAS didn't return tokens
+        if (tokens.length === 0) {
+          logStep("Fallback: Using RPC getTokenAccountsByOwner");
+          
+          let splTokens: TokenBalance[] = [];
+          let token2022Tokens: TokenBalance[] = [];
+          
+          for (const rpc of rpcEndpoints) {
+            try {
+              logStep("Fetching tokens via RPC", { endpoint: rpc.includes('helius') ? 'helius' : rpc.slice(0, 30) });
+              
+              // Fetch both SPL Token Program and Token-2022 in parallel
+              const [tokenResponse, token2022Response] = await Promise.all([
+                fetch(rpc, {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({
+                    jsonrpc: '2.0',
+                    id: 1,
+                    method: 'getTokenAccountsByOwner',
+                    params: [
+                      body.pubkey,
+                      { programId: 'TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA' },
+                      { encoding: 'jsonParsed' }
+                    ]
+                  })
+                }),
+                fetch(rpc, {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({
+                    jsonrpc: '2.0',
+                    id: 2,
+                    method: 'getTokenAccountsByOwner',
+                    params: [
+                      body.pubkey,
+                      { programId: 'TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb' },
+                      { encoding: 'jsonParsed' }
+                    ]
+                  })
+                })
+              ]);
+              
+              // Parse SPL tokens
+              if (tokenResponse.ok) {
+                const tokenData = await tokenResponse.json();
+                logStep("SPL RPC response", { hasValue: !!tokenData.result?.value, count: tokenData.result?.value?.length || 0 });
+                if (tokenData.result?.value) {
+                  splTokens = tokenData.result.value
+                    .map((account: any) => {
+                      const info = account.account?.data?.parsed?.info;
+                      if (!info) return null;
+                      const amount = info.tokenAmount?.uiAmount || 0;
+                      if (amount === 0) return null;
+                      return {
+                        mint: info.mint,
+                        balance: amount,
+                        decimals: info.tokenAmount?.decimals || 0,
+                        symbol: null,
+                        name: null
+                      };
+                    })
+                    .filter((t: TokenBalance | null) => t !== null);
+                    
+                  logStep("Tokens found (SPL)", { count: splTokens.length });
+                }
+              }
+              
+              // Parse Token-2022 tokens
+              if (token2022Response.ok) {
+                const token2022Data = await token2022Response.json();
+                logStep("Token-2022 RPC response", { hasValue: !!token2022Data.result?.value, count: token2022Data.result?.value?.length || 0 });
+                if (token2022Data.result?.value) {
+                  token2022Tokens = token2022Data.result.value
+                    .map((account: any) => {
+                      const info = account.account?.data?.parsed?.info;
+                      if (!info) return null;
+                      const amount = info.tokenAmount?.uiAmount || 0;
+                      if (amount === 0) return null;
+                      return {
+                        mint: info.mint,
+                        balance: amount,
+                        decimals: info.tokenAmount?.decimals || 0,
+                        symbol: null,
+                        name: null
+                      };
+                    })
+                    .filter((t: TokenBalance | null) => t !== null);
+                    
+                  logStep("Tokens found (Token-2022)", { count: token2022Tokens.length });
+                }
+              }
+              
+              // Combine both token types
+              tokens = [...splTokens, ...token2022Tokens];
+              logStep("Total tokens combined", { spl: splTokens.length, token2022: token2022Tokens.length, total: tokens.length });
+              
+              if (tokens.length > 0) break; // Got tokens from this RPC
+            } catch (tokenError) {
+              logStep("RPC token error", { error: String(tokenError) });
+            }
+          }
+          
+          // Enrich tokens with metadata if we got any from RPC fallback
+          if (tokens.length > 0 && heliusKey) {
+            try {
+              logStep("Enriching RPC tokens with Helius metadata");
+              const response = await fetch(`https://mainnet.helius-rpc.com/?api-key=${heliusKey}`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  jsonrpc: '2.0',
+                  id: 'token-balances',
+                  method: 'getAssetsByOwner',
+                  params: {
+                    ownerAddress: body.pubkey,
+                    page: 1,
+                    limit: 100,
+                    displayOptions: { showFungible: true }
+                  }
+                })
+              });
+              const dasResult = await response.json();
+              
+              if (dasResult.result?.items) {
+                const metadataMap = new Map();
+                dasResult.result.items.forEach((item: any) => {
+                  metadataMap.set(item.id, {
+                    symbol: item.token_info?.symbol || item.content?.metadata?.symbol,
+                    name: item.content?.metadata?.name
+                  });
+                });
+                
+                tokens = tokens.map(t => ({
+                  ...t,
+                  symbol: metadataMap.get(t.mint)?.symbol || t.symbol,
+                  name: metadataMap.get(t.mint)?.name || t.name
+                }));
+                logStep("Enriched tokens with metadata", { enriched: metadataMap.size });
+              }
+            } catch (dasError) {
+              logStep("Helius metadata enrichment failed", { error: String(dasError) });
+            }
           }
         }
 
