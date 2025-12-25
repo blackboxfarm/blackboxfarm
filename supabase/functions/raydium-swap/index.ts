@@ -399,37 +399,45 @@ serve(async (req) => {
         const supabaseUrl = getEnv("SUPABASE_URL");
         const supabaseKey = getEnv("SUPABASE_SERVICE_ROLE_KEY");
 
-        // Try super_admin_wallets first (for FlipIt), then blackbox_wallets
-        const tables = ["super_admin_wallets", "blackbox_wallets", "airdrop_wallets"];
+        const supabaseAdmin = createClient(supabaseUrl, supabaseKey, {
+          auth: { persistSession: false, autoRefreshToken: false },
+        });
+
+        // Try super_admin_wallets first (for FlipIt), then blackbox_wallets, then airdrop_wallets
+        const tables = ["super_admin_wallets", "blackbox_wallets", "airdrop_wallets"] as const;
         let walletSecret: string | null = null;
 
         for (const table of tables) {
-          const res = await fetch(`${supabaseUrl}/rest/v1/${table}?id=eq.${walletId}&select=secret_key_encrypted`, {
-            headers: {
-              apikey: supabaseKey,
-              Authorization: `Bearer ${supabaseKey}`,
-            },
-          });
+          const { data, error } = await supabaseAdmin
+            .from(table)
+            .select("secret_key_encrypted")
+            .eq("id", walletId)
+            .maybeSingle();
 
-          if (res.ok) {
-            const rows = await res.json();
-            if (rows?.[0]?.secret_key_encrypted) {
-              console.log(`Found wallet in ${table}`);
-              walletSecret = rows[0].secret_key_encrypted;
-              break;
-            }
+          if (error) {
+            console.log(`Wallet lookup error in ${table}:`, error.message);
+            continue;
+          }
+
+          if (data?.secret_key_encrypted) {
+            console.log(`Found wallet in ${table}`);
+            walletSecret = data.secret_key_encrypted;
+            break;
           }
         }
 
         if (!walletSecret) {
-          return bad(`Wallet ${walletId} not found in any wallet table`, 404);
+          return softError("WALLET_NOT_FOUND", `Wallet ${walletId} not found in any wallet table`);
         }
 
         // Decrypt the wallet secret
         secretToUse = await SecureStorage.decryptWalletSecret(walletSecret);
         console.log(`Decrypted wallet secret for ${walletId}`);
       } catch (error) {
-        return bad(`Failed to fetch wallet: ${error instanceof Error ? error.message : String(error)}`, 500);
+        return softError(
+          "WALLET_LOOKUP_FAILED",
+          `Failed to fetch wallet: ${error instanceof Error ? error.message : String(error)}`
+        );
       }
     } else if (headerSecret) {
       // First, try using the header secret directly as base58 (for airdrop wallets)
