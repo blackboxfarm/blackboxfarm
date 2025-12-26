@@ -11,7 +11,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { toast } from "sonner";
-import { Plus, Eye, EyeOff, Pencil, Trash2, Upload, LayoutGrid, Table as TableIcon, Twitter, Copy, CheckCircle, XCircle, AlertCircle, GripVertical } from "lucide-react";
+import { Plus, Eye, EyeOff, Pencil, Trash2, Upload, LayoutGrid, Table as TableIcon, Twitter, Copy, CheckCircle, XCircle, AlertCircle, GripVertical, RefreshCw, Users, MessageSquare, Calendar } from "lucide-react";
 
 interface TwitterAccount {
   id: string;
@@ -32,6 +32,15 @@ interface TwitterAccount {
   verification_type: string;
   follower_count: number;
   following_count: number;
+  tweet_count: number;
+  likes_count: number;
+  listed_count: number;
+  media_count: number;
+  twitter_id: string | null;
+  join_date: string | null;
+  is_protected: boolean;
+  is_verified: boolean;
+  last_enriched_at: string | null;
   position: number;
   created_at: string;
   updated_at: string;
@@ -77,6 +86,8 @@ const TwitterAccountManager = () => {
   const [showPasswords, setShowPasswords] = useState<Record<string, boolean>>({});
   const [groupFilter, setGroupFilter] = useState<string>("all");
   const [draggedId, setDraggedId] = useState<string | null>(null);
+  const [enriching, setEnriching] = useState(false);
+  const [enrichingAccount, setEnrichingAccount] = useState<string | null>(null);
 
   // Form state
   const [formData, setFormData] = useState({
@@ -345,6 +356,74 @@ const TwitterAccountManager = () => {
     setDraggedId(null);
   };
 
+  // Enrich all accounts via Apify
+  const enrichAllAccounts = async () => {
+    if (accounts.length === 0) {
+      toast.error("No accounts to enrich");
+      return;
+    }
+
+    setEnriching(true);
+    try {
+      const usernames = accounts.map(a => a.username);
+      toast.info(`Enriching ${usernames.length} accounts via Apify...`);
+
+      const { data, error } = await supabase.functions.invoke("twitter-profile-enricher", {
+        body: { usernames },
+      });
+
+      if (error) throw error;
+
+      if (data.success) {
+        toast.success(`Enriched ${data.enriched}/${data.total} accounts`);
+        fetchAccounts();
+      } else {
+        throw new Error(data.error || "Enrichment failed");
+      }
+    } catch (err: any) {
+      console.error("Enrichment error:", err);
+      toast.error("Enrichment failed: " + err.message);
+    } finally {
+      setEnriching(false);
+    }
+  };
+
+  // Enrich single account
+  const enrichSingleAccount = async (username: string) => {
+    setEnrichingAccount(username);
+    try {
+      const { data, error } = await supabase.functions.invoke("twitter-profile-enricher", {
+        body: { usernames: [username] },
+      });
+
+      if (error) throw error;
+
+      if (data.success && data.enriched > 0) {
+        toast.success(`@${username} enriched`);
+        fetchAccounts();
+      } else {
+        const result = data.results?.find((r: any) => r.username.toLowerCase() === username.toLowerCase());
+        throw new Error(result?.error || "Profile not found");
+      }
+    } catch (err: any) {
+      toast.error(`Failed to enrich @${username}: ${err.message}`);
+    } finally {
+      setEnrichingAccount(null);
+    }
+  };
+
+  const formatNumber = (num: number | null | undefined): string => {
+    if (!num) return "0";
+    if (num >= 1000000) return (num / 1000000).toFixed(1) + "M";
+    if (num >= 1000) return (num / 1000).toFixed(1) + "K";
+    return num.toString();
+  };
+
+  const formatDate = (dateStr: string | null): string => {
+    if (!dateStr) return "-";
+    return new Date(dateStr).toLocaleDateString("en-US", { month: "short", year: "numeric" });
+  };
+
   if (loading) {
     return <div className="p-6 text-center text-muted-foreground">Loading accounts...</div>;
   }
@@ -361,7 +440,16 @@ const TwitterAccountManager = () => {
           <p className="text-muted-foreground">{accounts.length} accounts</p>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
+          <Button 
+            variant="outline" 
+            onClick={enrichAllAccounts} 
+            disabled={enriching || accounts.length === 0}
+          >
+            <RefreshCw className={`h-4 w-4 mr-2 ${enriching ? 'animate-spin' : ''}`} />
+            {enriching ? "Enriching..." : "Enrich All"}
+          </Button>
+
           <Select value={groupFilter} onValueChange={setGroupFilter}>
             <SelectTrigger className="w-40">
               <SelectValue placeholder="Filter by group" />
@@ -694,10 +782,11 @@ const TwitterAccountManager = () => {
                 <TableHeader>
                   <TableRow>
                     <TableHead className="w-8"></TableHead>
-                    <TableHead>Username</TableHead>
-                    <TableHead>Display Name</TableHead>
+                    <TableHead>Account</TableHead>
+                    <TableHead className="text-center">Followers</TableHead>
+                    <TableHead className="text-center">Tweets</TableHead>
+                    <TableHead>Joined</TableHead>
                     <TableHead>Email</TableHead>
-                    <TableHead>Email PW</TableHead>
                     <TableHead>TW Password</TableHead>
                     <TableHead>Group</TableHead>
                     <TableHead>Status</TableHead>
@@ -721,41 +810,44 @@ const TwitterAccountManager = () => {
                       <TableCell>
                         <div className="flex items-center gap-2">
                           {account.profile_image_url ? (
-                            <img src={account.profile_image_url} className="h-8 w-8 rounded-full" />
+                            <img src={account.profile_image_url} className="h-10 w-10 rounded-full object-cover" />
                           ) : (
-                            <div className="h-8 w-8 rounded-full bg-muted flex items-center justify-center">
-                              <Twitter className="h-4 w-4 text-muted-foreground" />
+                            <div className="h-10 w-10 rounded-full bg-muted flex items-center justify-center">
+                              <Twitter className="h-5 w-5 text-muted-foreground" />
                             </div>
                           )}
-                          <div className="flex items-center gap-1">
-                            <span className="font-medium">@{account.username}</span>
-                            {getVerificationIcon(account.verification_type)}
+                          <div>
+                            <div className="flex items-center gap-1">
+                              <span className="font-medium">{account.display_name || account.username}</span>
+                              {getVerificationIcon(account.verification_type)}
+                            </div>
+                            <p className="text-sm text-muted-foreground">@{account.username}</p>
                           </div>
                         </div>
                       </TableCell>
+                      <TableCell className="text-center">
+                        <div className="flex items-center justify-center gap-1">
+                          <Users className="h-3 w-3 text-muted-foreground" />
+                          <span className="font-medium">{formatNumber(account.follower_count)}</span>
+                        </div>
+                      </TableCell>
+                      <TableCell className="text-center">
+                        <div className="flex items-center justify-center gap-1">
+                          <MessageSquare className="h-3 w-3 text-muted-foreground" />
+                          <span>{formatNumber(account.tweet_count)}</span>
+                        </div>
+                      </TableCell>
                       <TableCell>
-                        <span className="text-muted-foreground">{account.display_name || '-'}</span>
+                        <div className="flex items-center gap-1 text-sm text-muted-foreground">
+                          <Calendar className="h-3 w-3" />
+                          {formatDate(account.join_date)}
+                        </div>
                       </TableCell>
                       <TableCell>
                         {account.email && (
                           <div className="flex items-center gap-1">
-                            <span className="truncate max-w-32">{account.email}</span>
+                            <span className="truncate max-w-24 text-sm">{account.email}</span>
                             <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => copyToClipboard(account.email!, "Email")}>
-                              <Copy className="h-3 w-3" />
-                            </Button>
-                          </div>
-                        )}
-                      </TableCell>
-                      <TableCell>
-                        {account.email_password_encrypted && (
-                          <div className="flex items-center gap-1">
-                            <span className="font-mono text-sm">
-                              {showPasswords[`email_${account.id}`] ? account.email_password_encrypted : "••••"}
-                            </span>
-                            <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => togglePassword(`email_${account.id}`)}>
-                              {showPasswords[`email_${account.id}`] ? <EyeOff className="h-3 w-3" /> : <Eye className="h-3 w-3" />}
-                            </Button>
-                            <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => copyToClipboard(account.email_password_encrypted!, "Email Password")}>
                               <Copy className="h-3 w-3" />
                             </Button>
                           </div>
@@ -776,10 +868,22 @@ const TwitterAccountManager = () => {
                           </div>
                         )}
                       </TableCell>
-                      <TableCell>{account.group_name}</TableCell>
+                      <TableCell>
+                        <Badge variant="outline">{account.group_name}</Badge>
+                      </TableCell>
                       <TableCell>{getStatusBadge(account.account_status)}</TableCell>
                       <TableCell>
                         <div className="flex gap-1">
+                          <Button 
+                            variant="ghost" 
+                            size="icon" 
+                            className="h-8 w-8" 
+                            onClick={() => enrichSingleAccount(account.username)}
+                            disabled={enrichingAccount === account.username}
+                            title="Refresh from Twitter"
+                          >
+                            <RefreshCw className={`h-4 w-4 ${enrichingAccount === account.username ? 'animate-spin' : ''}`} />
+                          </Button>
                           <Button variant="outline" size="icon" className="h-8 w-8" onClick={() => openEditDialog(account)}>
                             <Pencil className="h-4 w-4" />
                           </Button>
@@ -792,7 +896,7 @@ const TwitterAccountManager = () => {
                   ))}
                   {filteredAccounts.length === 0 && (
                     <TableRow>
-                      <TableCell colSpan={9} className="text-center py-8 text-muted-foreground">
+                      <TableCell colSpan={10} className="text-center py-8 text-muted-foreground">
                         No accounts found
                       </TableCell>
                     </TableRow>

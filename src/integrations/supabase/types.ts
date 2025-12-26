@@ -5379,12 +5379,21 @@ export type Database = {
           following_count: number | null
           group_name: string | null
           id: string
+          is_protected: boolean | null
+          is_verified: boolean | null
+          join_date: string | null
+          last_enriched_at: string | null
+          likes_count: number | null
+          listed_count: number | null
           location: string | null
+          media_count: number | null
           notes: string | null
           password_encrypted: string | null
           position: number | null
           profile_image_url: string | null
           tags: string[] | null
+          tweet_count: number | null
+          twitter_id: string | null
           updated_at: string | null
           user_id: string | null
           username: string
@@ -5403,12 +5412,21 @@ export type Database = {
           following_count?: number | null
           group_name?: string | null
           id?: string
+          is_protected?: boolean | null
+          is_verified?: boolean | null
+          join_date?: string | null
+          last_enriched_at?: string | null
+          likes_count?: number | null
+          listed_count?: number | null
           location?: string | null
+          media_count?: number | null
           notes?: string | null
           password_encrypted?: string | null
           position?: number | null
           profile_image_url?: string | null
           tags?: string[] | null
+          tweet_count?: number | null
+          twitter_id?: string | null
           updated_at?: string | null
           user_id?: string | null
           username: string
@@ -5427,12 +5445,21 @@ export type Database = {
           following_count?: number | null
           group_name?: string | null
           id?: string
+          is_protected?: boolean | null
+          is_verified?: boolean | null
+          join_date?: string | null
+          last_enriched_at?: string | null
+          likes_count?: number | null
+          listed_count?: number | null
           location?: string | null
+          media_count?: number | null
           notes?: string | null
           password_encrypted?: string | null
           position?: number | null
           profile_image_url?: string | null
           tags?: string[] | null
+          tweet_count?: number | null
+          twitter_id?: string | null
           updated_at?: string | null
           user_id?: string | null
           username?: string
