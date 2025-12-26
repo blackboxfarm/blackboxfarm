@@ -281,14 +281,23 @@ export function FlipItDashboard() {
     setIsLoadingInputPrice(true);
     inputPriceTimeoutRef.current = setTimeout(async () => {
       try {
-        const { data, error } = await supabase.functions.invoke('raydium-quote', {
-          body: { priceMint: tokenAddress.trim() }
-        });
+        // Use fetch with query param since priceMint needs to be in URL
+        const response = await fetch(
+          `https://apxauapuusmgwbbzjgfl.supabase.co/functions/v1/raydium-quote?priceMint=${encodeURIComponent(tokenAddress.trim())}`,
+          {
+            method: 'GET',
+            headers: {
+              'apikey': 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFweGF1YXB1dXNtZ3diYnpqZ2ZsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTQ1OTEzMDUsImV4cCI6MjA3MDE2NzMwNX0.w8IrKq4YVStF3TkdEcs5mCSeJsxjkaVq2NFkypYOXHU'
+            }
+          }
+        );
         
-        if (error) throw error;
+        if (!response.ok) throw new Error('Price fetch failed');
         
-        if (data?.priceUsd !== undefined) {
-          setInputTokenPrice(data.priceUsd);
+        const data = await response.json();
+        
+        if (data?.priceUSD !== undefined) {
+          setInputTokenPrice(data.priceUSD);
         } else {
           setInputTokenPrice(null);
         }
