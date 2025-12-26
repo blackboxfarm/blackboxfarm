@@ -12,17 +12,19 @@ interface ApifyTwitterProfile {
   description: string;
   location: string;
   url: string;
-  profileImageUrl: string;
-  profileBannerUrl: string;
-  followersCount: number;
-  friendsCount: number;
+  // Actual field names from apidojo/twitter-user-scraper
+  profilePicture: string;
+  coverPicture: string;
+  followers: number;
+  following: number;
   statusesCount: number;
   favouritesCount: number;
   listedCount: number;
   mediaCount: number;
   createdAt: string;
   isVerified: boolean;
-  isProtected: boolean;
+  isBlueVerified: boolean;
+  protected: boolean;
 }
 
 interface EnrichmentResult {
@@ -84,6 +86,10 @@ Deno.serve(async (req) => {
 
     const profiles: ApifyTwitterProfile[] = await runResponse.json();
     console.log(`Got ${profiles.length} profiles from Apify`);
+    if (profiles.length > 0) {
+      console.log("Sample profile fields:", Object.keys(profiles[0]));
+      console.log("Sample followers value:", profiles[0].followers);
+    }
 
     const results: EnrichmentResult[] = [];
 
@@ -95,7 +101,7 @@ Deno.serve(async (req) => {
           continue;
         }
 
-        console.log(`Processing @${username}: ${profile.followersCount} followers`);
+        console.log(`Processing @${username}: ${profile.followers} followers, ${profile.following} following`);
 
         // Parse join date
         let joinDate: string | null = null;
@@ -107,7 +113,7 @@ Deno.serve(async (req) => {
           }
         }
 
-        // Update the database
+        // Update the database - use correct field names from Apify
         const { error: updateError } = await supabase
           .from("twitter_accounts")
           .update({
@@ -116,17 +122,17 @@ Deno.serve(async (req) => {
             bio: profile.description || null,
             location: profile.location || null,
             website: profile.url || null,
-            profile_image_url: profile.profileImageUrl?.replace("_normal", "_400x400") || null,
-            banner_image_url: profile.profileBannerUrl || null,
-            follower_count: profile.followersCount || 0,
-            following_count: profile.friendsCount || 0,
+            profile_image_url: profile.profilePicture?.replace("_normal", "_400x400") || null,
+            banner_image_url: profile.coverPicture || null,
+            follower_count: profile.followers || 0,
+            following_count: profile.following || 0,
             tweet_count: profile.statusesCount || 0,
             likes_count: profile.favouritesCount || 0,
             listed_count: profile.listedCount || 0,
             media_count: profile.mediaCount || 0,
             join_date: joinDate,
-            is_verified: profile.isVerified || false,
-            is_protected: profile.isProtected || false,
+            is_verified: profile.isVerified || profile.isBlueVerified || false,
+            is_protected: profile.protected || false,
             last_enriched_at: new Date().toISOString(),
           })
           .ilike("username", username);
