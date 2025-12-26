@@ -1620,10 +1620,9 @@ export function FlipItDashboard() {
                             }
                             onCheckedChange={(checked) => {
                               if (checked) {
-                                // Enable: open editing mode with default price (50% of current or entry)
-                                const defaultPrice = currentPrice 
-                                  ? currentPrice * 0.5 
-                                  : (position.buy_price_usd ? position.buy_price_usd * 0.5 : 0);
+                                // Enable: default stop-loss at 5% below entry price (95% of entry)
+                                const entryPrice = position.buy_price_usd || 0;
+                                const defaultPrice = entryPrice * 0.95; // 5% below entry
                                 setEmergencyEditing(prev => ({
                                   ...prev,
                                   [position.id]: { enabled: true, price: defaultPrice.toFixed(10).replace(/\.?0+$/, '') }
