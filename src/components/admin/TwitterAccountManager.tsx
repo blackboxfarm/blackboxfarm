@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -11,7 +11,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { toast } from "sonner";
-import { Plus, Eye, EyeOff, Pencil, Trash2, Upload, LayoutGrid, Table as TableIcon, Twitter, Copy, CheckCircle, XCircle, AlertCircle } from "lucide-react";
+import { Plus, Eye, EyeOff, Pencil, Trash2, Upload, LayoutGrid, Table as TableIcon, Twitter, Copy, CheckCircle, XCircle, AlertCircle, GripVertical } from "lucide-react";
 
 interface TwitterAccount {
   id: string;
@@ -32,6 +32,7 @@ interface TwitterAccount {
   verification_type: string;
   follower_count: number;
   following_count: number;
+  position: number;
   created_at: string;
   updated_at: string;
 }
@@ -70,11 +71,12 @@ const getVerificationIcon = (verificationType: string) => {
 const TwitterAccountManager = () => {
   const [accounts, setAccounts] = useState<TwitterAccount[]>([]);
   const [loading, setLoading] = useState(true);
-  const [viewMode, setViewMode] = useState<"cards" | "table">("cards");
+  const [viewMode, setViewMode] = useState<"cards" | "table">("table");
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingAccount, setEditingAccount] = useState<TwitterAccount | null>(null);
   const [showPasswords, setShowPasswords] = useState<Record<string, boolean>>({});
   const [groupFilter, setGroupFilter] = useState<string>("all");
+  const [draggedId, setDraggedId] = useState<string | null>(null);
 
   // Form state
   const [formData, setFormData] = useState({
@@ -103,7 +105,7 @@ const TwitterAccountManager = () => {
       const { data, error } = await supabase
         .from("twitter_accounts")
         .select("*")
-        .order("group_name", { ascending: true })
+        .order("position", { ascending: true })
         .order("username", { ascending: true });
 
       if (error) throw error;
@@ -277,6 +279,70 @@ const TwitterAccountManager = () => {
   const copyToClipboard = (text: string, label: string) => {
     navigator.clipboard.writeText(text);
     toast.success(`${label} copied`);
+  };
+
+  // Drag and drop handlers
+  const handleDragStart = (e: React.DragEvent, id: string) => {
+    setDraggedId(id);
+    e.dataTransfer.effectAllowed = "move";
+  };
+
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = "move";
+  };
+
+  const handleDrop = async (e: React.DragEvent, targetId: string) => {
+    e.preventDefault();
+    if (!draggedId || draggedId === targetId) {
+      setDraggedId(null);
+      return;
+    }
+
+    const draggedIndex = filteredAccounts.findIndex(a => a.id === draggedId);
+    const targetIndex = filteredAccounts.findIndex(a => a.id === targetId);
+    
+    if (draggedIndex === -1 || targetIndex === -1) {
+      setDraggedId(null);
+      return;
+    }
+
+    // Reorder locally first for instant feedback
+    const newAccounts = [...filteredAccounts];
+    const [draggedItem] = newAccounts.splice(draggedIndex, 1);
+    newAccounts.splice(targetIndex, 0, draggedItem);
+    
+    // Update positions
+    const updates = newAccounts.map((account, index) => ({
+      id: account.id,
+      position: index + 1,
+    }));
+
+    // Update local state
+    setAccounts(prev => {
+      const updated = [...prev];
+      updates.forEach(u => {
+        const idx = updated.findIndex(a => a.id === u.id);
+        if (idx !== -1) updated[idx] = { ...updated[idx], position: u.position };
+      });
+      return updated.sort((a, b) => a.position - b.position);
+    });
+
+    setDraggedId(null);
+
+    // Save to database
+    try {
+      for (const u of updates) {
+        await supabase.from("twitter_accounts").update({ position: u.position }).eq("id", u.id);
+      }
+    } catch (err: any) {
+      toast.error("Failed to save order: " + err.message);
+      fetchAccounts(); // Revert on error
+    }
+  };
+
+  const handleDragEnd = () => {
+    setDraggedId(null);
   };
 
   if (loading) {
@@ -627,19 +693,31 @@ const TwitterAccountManager = () => {
               <Table>
                 <TableHeader>
                   <TableRow>
+                    <TableHead className="w-8"></TableHead>
                     <TableHead>Username</TableHead>
+                    <TableHead>Display Name</TableHead>
                     <TableHead>Email</TableHead>
                     <TableHead>Email PW</TableHead>
                     <TableHead>TW Password</TableHead>
                     <TableHead>Group</TableHead>
                     <TableHead>Status</TableHead>
-                    <TableHead>Followers</TableHead>
                     <TableHead>Actions</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {filteredAccounts.map(account => (
-                    <TableRow key={account.id}>
+                    <TableRow 
+                      key={account.id}
+                      draggable
+                      onDragStart={(e) => handleDragStart(e, account.id)}
+                      onDragOver={handleDragOver}
+                      onDrop={(e) => handleDrop(e, account.id)}
+                      onDragEnd={handleDragEnd}
+                      className={`cursor-move ${draggedId === account.id ? 'opacity-50 bg-muted' : ''}`}
+                    >
+                      <TableCell className="w-8">
+                        <GripVertical className="h-4 w-4 text-muted-foreground" />
+                      </TableCell>
                       <TableCell>
                         <div className="flex items-center gap-2">
                           {account.profile_image_url ? (
@@ -649,11 +727,14 @@ const TwitterAccountManager = () => {
                               <Twitter className="h-4 w-4 text-muted-foreground" />
                             </div>
                           )}
-                          <div>
+                          <div className="flex items-center gap-1">
                             <span className="font-medium">@{account.username}</span>
                             {getVerificationIcon(account.verification_type)}
                           </div>
                         </div>
+                      </TableCell>
+                      <TableCell>
+                        <span className="text-muted-foreground">{account.display_name || '-'}</span>
                       </TableCell>
                       <TableCell>
                         {account.email && (
@@ -697,7 +778,6 @@ const TwitterAccountManager = () => {
                       </TableCell>
                       <TableCell>{account.group_name}</TableCell>
                       <TableCell>{getStatusBadge(account.account_status)}</TableCell>
-                      <TableCell>{account.follower_count?.toLocaleString()}</TableCell>
                       <TableCell>
                         <div className="flex gap-1">
                           <Button variant="outline" size="icon" className="h-8 w-8" onClick={() => openEditDialog(account)}>
@@ -712,7 +792,7 @@ const TwitterAccountManager = () => {
                   ))}
                   {filteredAccounts.length === 0 && (
                     <TableRow>
-                      <TableCell colSpan={8} className="text-center py-8 text-muted-foreground">
+                      <TableCell colSpan={9} className="text-center py-8 text-muted-foreground">
                         No accounts found
                       </TableCell>
                     </TableRow>
