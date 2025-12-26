@@ -57,8 +57,9 @@ Deno.serve(async (req) => {
     console.log(`Enriching ${usernames.length} Twitter profiles:`, usernames);
 
     // Call Apify Twitter profile scraper
-    // Using danek/twitter-profile which is simple and returns profile data
     const actorId = "apidojo~twitter-user-scraper";
+    
+    console.log("Calling Apify with twitterHandles:", usernames);
     
     const runResponse = await fetch(
       `https://api.apify.com/v2/acts/${actorId}/run-sync-get-dataset-items?token=${APIFY_API_KEY}`,
@@ -66,9 +67,11 @@ Deno.serve(async (req) => {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          handles: usernames,
-          tweetsDesired: 0,
-          proxyConfig: { useApifyProxy: true }
+          twitterHandles: usernames,
+          maxItems: usernames.length,
+          getFollowers: false,
+          getFollowing: false,
+          getRetweeters: false
         }),
       }
     );
