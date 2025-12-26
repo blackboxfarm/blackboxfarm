@@ -1086,36 +1086,32 @@ export function FlipItDashboard() {
 
             {/* Token Input */}
             <div className="space-y-2">
-              <Label>Token Address</Label>
-              <div className="relative">
-                <Input
-                  placeholder="Paste token address..."
-                  value={tokenAddress}
-                  onChange={e => setTokenAddress(e.target.value)}
-                  className={inputTokenPrice !== null ? 'pr-28' : ''}
-                />
+              <Label className="flex items-center justify-between">
+                <span>Token Address</span>
                 {isLoadingInputPrice && (
-                  <div className="absolute right-2 top-1/2 -translate-y-1/2">
-                    <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
-                  </div>
+                  <span className="flex items-center gap-1 text-xs text-muted-foreground">
+                    <Loader2 className="h-3 w-3 animate-spin" /> Fetching price...
+                  </span>
                 )}
                 {!isLoadingInputPrice && inputTokenPrice !== null && (
-                  <Badge 
-                    variant="secondary" 
-                    className="absolute right-2 top-1/2 -translate-y-1/2 bg-green-500/20 text-green-400 border-green-500/30"
-                  >
-                    ${inputTokenPrice < 0.01 ? inputTokenPrice.toExponential(2) : inputTokenPrice.toFixed(6)}
-                  </Badge>
+                  <span className="text-sm font-bold text-green-400">
+                    ${inputTokenPrice < 0.0001 ? inputTokenPrice.toExponential(2) : inputTokenPrice.toFixed(8)}
+                  </span>
                 )}
-              </div>
+              </Label>
+              <Input
+                placeholder="Paste token address..."
+                value={tokenAddress}
+                onChange={e => setTokenAddress(e.target.value)}
+              />
               {inputTokenPrice !== null && buyAmount && (
                 <p className="text-xs text-muted-foreground">
-                  Entry: {(() => {
+                  Entry: ~{(() => {
                     const amt = parseFloat(buyAmount);
                     if (isNaN(amt) || amt <= 0) return '—';
                     const usdAmount = buyAmountMode === 'sol' && solPrice ? amt * solPrice : amt;
                     const tokens = usdAmount / inputTokenPrice;
-                    return `~${tokens.toLocaleString(undefined, { maximumFractionDigits: 2 })} tokens @ $${inputTokenPrice < 0.01 ? inputTokenPrice.toExponential(2) : inputTokenPrice.toFixed(6)}`;
+                    return `${tokens.toLocaleString(undefined, { maximumFractionDigits: 0 })} tokens`;
                   })()}
                 </p>
               )}
