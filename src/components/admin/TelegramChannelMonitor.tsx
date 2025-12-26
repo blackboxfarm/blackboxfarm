@@ -321,14 +321,17 @@ export default function TelegramChannelMonitor() {
 
   const toggleFantasyMode = async (configId: string, currentMode: boolean) => {
     try {
-      await supabase
+      const { error } = await supabase
         .from('telegram_channel_config')
         .update({ fantasy_mode: !currentMode })
         .eq('id', configId);
+
+      if (error) throw error;
+
       toast.success(currentMode ? 'Switched to REAL trading mode' : 'Switched to Fantasy mode');
       loadData();
     } catch (error: any) {
-      toast.error(error.message || 'Failed to toggle mode');
+      toast.error(error?.message || 'Failed to toggle mode');
     }
   };
 
@@ -343,12 +346,15 @@ export default function TelegramChannelMonitor() {
     }
     setIsAddingConfig(true);
     try {
-      const { data: { user } } = await supabase.auth.getUser();
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
       if (!user) throw new Error('Not authenticated');
 
-      const cleanUsername = newChannelUsername?.replace('@', '').replace('https://t.me/', '').replace('t.me/', '') || null;
+      const cleanUsername =
+        newChannelUsername?.replace('@', '').replace('https://t.me/', '').replace('t.me/', '') || null;
 
-      await supabase.from('telegram_channel_config').insert({
+      const { error } = await supabase.from('telegram_channel_config').insert({
         user_id: user.id,
         channel_id: newChannelId || `@${cleanUsername}`,
         channel_name: newChannelName || null,
@@ -357,8 +363,10 @@ export default function TelegramChannelMonitor() {
         notification_email: notificationEmail || null,
         email_notifications: !!notificationEmail,
         is_active: true,
-        fantasy_mode: true
+        fantasy_mode: true,
       });
+
+      if (error) throw error;
 
       toast.success('Channel configuration added');
       loadData();
@@ -366,7 +374,7 @@ export default function TelegramChannelMonitor() {
       setNewChannelName('');
       setNewChannelUsername('');
     } catch (error: any) {
-      toast.error(error.message || 'Failed to add configuration');
+      toast.error(error?.message || 'Failed to add configuration');
     } finally {
       setIsAddingConfig(false);
     }
@@ -407,28 +415,34 @@ export default function TelegramChannelMonitor() {
 
   const toggleConfig = async (configId: string, isActive: boolean) => {
     try {
-      await supabase
+      const { error } = await supabase
         .from('telegram_channel_config')
         .update({ is_active: !isActive })
         .eq('id', configId);
+
+      if (error) throw error;
+
       toast.success(isActive ? 'Channel monitoring paused' : 'Channel monitoring resumed');
       loadData();
     } catch (error: any) {
-      toast.error(error.message || 'Failed to update configuration');
+      toast.error(error?.message || 'Failed to update configuration');
     }
   };
 
   const deleteConfig = async (configId: string, channelName: string | null) => {
     if (!confirm(`Delete channel "${channelName || 'Unknown'}"? This cannot be undone.`)) return;
     try {
-      await supabase
+      const { error } = await supabase
         .from('telegram_channel_config')
         .delete()
         .eq('id', configId);
+
+      if (error) throw error;
+
       toast.success('Channel deleted');
       loadData();
     } catch (error: any) {
-      toast.error(error.message || 'Failed to delete configuration');
+      toast.error(error?.message || 'Failed to delete configuration');
     }
   };
 
@@ -445,23 +459,26 @@ export default function TelegramChannelMonitor() {
     if (!editingConfigId) return;
     setIsSavingEdit(true);
     try {
-      const cleanUsername = editUsername?.replace('@', '').replace('https://t.me/', '').replace('t.me/', '') || null;
-      
-      await supabase
+      const cleanUsername =
+        editUsername?.replace('@', '').replace('https://t.me/', '').replace('t.me/', '') || null;
+
+      const { error } = await supabase
         .from('telegram_channel_config')
         .update({
           notification_email: editEmail || null,
           email_notifications: !!editEmail,
           flipit_wallet_id: editWalletId || null,
-          channel_username: cleanUsername
+          channel_username: cleanUsername,
         })
         .eq('id', editingConfigId);
-      
+
+      if (error) throw error;
+
       toast.success('Settings saved');
       setEditingConfigId(null);
       loadData();
     } catch (error: any) {
-      toast.error(error.message || 'Failed to save settings');
+      toast.error(error?.message || 'Failed to save settings');
     } finally {
       setIsSavingEdit(false);
     }
