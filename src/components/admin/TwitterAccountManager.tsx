@@ -10,8 +10,9 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { toast } from "sonner";
-import { Plus, Eye, EyeOff, Pencil, Trash2, Upload, LayoutGrid, Table as TableIcon, Twitter, Copy, CheckCircle, XCircle, AlertCircle, GripVertical, RefreshCw, Users, MessageSquare, Calendar } from "lucide-react";
+import { Plus, Eye, EyeOff, Pencil, Trash2, Upload, LayoutGrid, Table as TableIcon, Twitter, Copy, CheckCircle, XCircle, AlertCircle, GripVertical, RefreshCw, Users, MessageSquare, Calendar, Info, Mail, Shield, Briefcase, Globe, Lock } from "lucide-react";
 
 interface TwitterAccount {
   id: string;
@@ -44,6 +45,18 @@ interface TwitterAccount {
   position: number;
   created_at: string;
   updated_at: string;
+  // New enrichment fields
+  verified_type: string | null;
+  can_dm: boolean;
+  can_media_tag: boolean;
+  fast_followers_count: number;
+  has_custom_timelines: boolean;
+  is_translator: boolean;
+  professional_type: string | null;
+  professional_category: string[] | null;
+  bio_urls: any | null;
+  profile_urls: any | null;
+  withheld_countries: string[] | null;
 }
 
 const STATUS_OPTIONS = ["active", "suspended", "locked", "unverified", "inactive"];
@@ -785,7 +798,7 @@ const TwitterAccountManager = () => {
                     <TableHead>Account</TableHead>
                     <TableHead className="text-center">Followers</TableHead>
                     <TableHead className="text-center">Tweets</TableHead>
-                    <TableHead>Joined</TableHead>
+                    <TableHead>Info</TableHead>
                     <TableHead>Email</TableHead>
                     <TableHead>TW Password</TableHead>
                     <TableHead>Group</TableHead>
@@ -838,10 +851,117 @@ const TwitterAccountManager = () => {
                         </div>
                       </TableCell>
                       <TableCell>
-                        <div className="flex items-center gap-1 text-sm text-muted-foreground">
-                          <Calendar className="h-3 w-3" />
-                          {formatDate(account.join_date)}
-                        </div>
+                        <Popover>
+                          <PopoverTrigger asChild>
+                            <Button variant="ghost" size="sm" className="h-7 px-2 gap-1">
+                              <Info className="h-3 w-3" />
+                              <span className="text-xs">Details</span>
+                            </Button>
+                          </PopoverTrigger>
+                          <PopoverContent className="w-80" align="start">
+                            <div className="space-y-3">
+                              <h4 className="font-semibold text-sm">Account Details</h4>
+                              <div className="grid grid-cols-2 gap-2 text-xs">
+                                <div className="flex items-center gap-1">
+                                  <Calendar className="h-3 w-3 text-muted-foreground" />
+                                  <span className="text-muted-foreground">Joined:</span>
+                                </div>
+                                <span>{formatDate(account.join_date)}</span>
+                                
+                                <div className="flex items-center gap-1">
+                                  <Users className="h-3 w-3 text-muted-foreground" />
+                                  <span className="text-muted-foreground">Following:</span>
+                                </div>
+                                <span>{formatNumber(account.following_count)}</span>
+                                
+                                <div className="flex items-center gap-1">
+                                  <span className="text-muted-foreground">Listed:</span>
+                                </div>
+                                <span>{formatNumber(account.listed_count)}</span>
+                                
+                                <div className="flex items-center gap-1">
+                                  <span className="text-muted-foreground">Likes:</span>
+                                </div>
+                                <span>{formatNumber(account.likes_count)}</span>
+                                
+                                <div className="flex items-center gap-1">
+                                  <span className="text-muted-foreground">Media:</span>
+                                </div>
+                                <span>{formatNumber(account.media_count)}</span>
+                              </div>
+                              
+                              <div className="border-t pt-2 space-y-2">
+                                <h5 className="font-medium text-xs text-muted-foreground">Capabilities</h5>
+                                <div className="flex flex-wrap gap-1">
+                                  {account.can_dm && (
+                                    <Badge variant="secondary" className="text-xs gap-1">
+                                      <Mail className="h-3 w-3" />
+                                      DMs Open
+                                    </Badge>
+                                  )}
+                                  {account.is_protected && (
+                                    <Badge variant="outline" className="text-xs gap-1">
+                                      <Lock className="h-3 w-3" />
+                                      Protected
+                                    </Badge>
+                                  )}
+                                  {account.is_verified && (
+                                    <Badge variant="default" className="text-xs gap-1 bg-sky-500">
+                                      <CheckCircle className="h-3 w-3" />
+                                      Verified
+                                    </Badge>
+                                  )}
+                                  {account.verified_type && account.verified_type !== "none" && (
+                                    <Badge variant="secondary" className="text-xs">
+                                      {account.verified_type}
+                                    </Badge>
+                                  )}
+                                </div>
+                              </div>
+
+                              {account.professional_type && (
+                                <div className="border-t pt-2 space-y-1">
+                                  <h5 className="font-medium text-xs text-muted-foreground flex items-center gap-1">
+                                    <Briefcase className="h-3 w-3" />
+                                    Professional Account
+                                  </h5>
+                                  <Badge variant="outline" className="text-xs">
+                                    {account.professional_type}
+                                  </Badge>
+                                  {account.professional_category && account.professional_category.length > 0 && (
+                                    <div className="flex flex-wrap gap-1 mt-1">
+                                      {account.professional_category.map((cat, i) => (
+                                        <Badge key={i} variant="secondary" className="text-xs">{cat}</Badge>
+                                      ))}
+                                    </div>
+                                  )}
+                                </div>
+                              )}
+
+                              {account.bio && (
+                                <div className="border-t pt-2">
+                                  <h5 className="font-medium text-xs text-muted-foreground mb-1">Bio</h5>
+                                  <p className="text-xs text-muted-foreground line-clamp-3">{account.bio}</p>
+                                </div>
+                              )}
+
+                              {account.website && (
+                                <div className="border-t pt-2 flex items-center gap-1 text-xs">
+                                  <Globe className="h-3 w-3 text-muted-foreground" />
+                                  <a href={account.website} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline truncate">
+                                    {account.website}
+                                  </a>
+                                </div>
+                              )}
+
+                              {account.twitter_id && (
+                                <div className="border-t pt-2 text-xs text-muted-foreground">
+                                  Twitter ID: <span className="font-mono">{account.twitter_id}</span>
+                                </div>
+                              )}
+                            </div>
+                          </PopoverContent>
+                        </Popover>
                       </TableCell>
                       <TableCell>
                         {account.email && (

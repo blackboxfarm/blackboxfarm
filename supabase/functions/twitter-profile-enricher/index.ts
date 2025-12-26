@@ -24,7 +24,23 @@ interface ApifyTwitterProfile {
   createdAt: string;
   isVerified: boolean;
   isBlueVerified: boolean;
+  verifiedType?: string;
   protected: boolean;
+  canDm?: boolean;
+  canMediaTag?: boolean;
+  fastFollowersCount?: number;
+  hasCustomTimelines?: boolean;
+  isTranslator?: boolean;
+  withheldInCountries?: string[];
+  entities?: {
+    description?: { urls?: Array<{ display_url: string; expanded_url: string; url: string }> };
+    url?: { urls?: Array<{ display_url: string; expanded_url: string; url: string }> };
+  };
+  professional?: {
+    category?: Array<{ name?: string }>;
+    professional_type?: string;
+    rest_id?: string;
+  };
 }
 
 interface EnrichmentResult {
@@ -113,6 +129,15 @@ Deno.serve(async (req) => {
           }
         }
 
+        // Extract professional category names
+        const professionalCategories = profile.professional?.category
+          ?.map(c => c.name)
+          .filter(Boolean) || null;
+
+        // Extract URLs from entities
+        const bioUrls = profile.entities?.description?.urls || null;
+        const profileUrls = profile.entities?.url?.urls || null;
+
         // Update the database - use correct field names from Apify
         const { error: updateError } = await supabase
           .from("twitter_accounts")
@@ -133,6 +158,18 @@ Deno.serve(async (req) => {
             join_date: joinDate,
             is_verified: profile.isVerified || profile.isBlueVerified || false,
             is_protected: profile.protected || false,
+            // New fields
+            verified_type: profile.verifiedType || null,
+            can_dm: profile.canDm || false,
+            can_media_tag: profile.canMediaTag || false,
+            fast_followers_count: profile.fastFollowersCount || 0,
+            has_custom_timelines: profile.hasCustomTimelines || false,
+            is_translator: profile.isTranslator || false,
+            professional_type: profile.professional?.professional_type || null,
+            professional_category: professionalCategories,
+            bio_urls: bioUrls,
+            profile_urls: profileUrls,
+            withheld_countries: profile.withheldInCountries || null,
             last_enriched_at: new Date().toISOString(),
           })
           .ilike("username", username);
