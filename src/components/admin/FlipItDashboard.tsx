@@ -71,6 +71,7 @@ export function FlipItDashboard() {
   const [isFlipping, setIsFlipping] = useState(false);
   const [isMonitoring, setIsMonitoring] = useState(false);
   const [currentPrices, setCurrentPrices] = useState<Record<string, number>>({});
+  const [tokenImages, setTokenImages] = useState<Record<string, string>>({});
   const [isGeneratingWallet, setIsGeneratingWallet] = useState(false);
   const [isWithdrawing, setIsWithdrawing] = useState(false);
   const [walletBalance, setWalletBalance] = useState<number | null>(null);
@@ -614,13 +615,14 @@ export function FlipItDashboard() {
 
     let loadedPositions = (data || []) as FlipPosition[];
     
-    // Fetch token symbols for positions missing them
-    const positionsMissingSymbols = loadedPositions.filter(p => !p.token_symbol);
-    if (positionsMissingSymbols.length > 0) {
-      const uniqueMints = [...new Set(positionsMissingSymbols.map(p => p.token_mint))];
-      const symbolsMap = await fetchTokenSymbols(uniqueMints);
+    // Collect all unique mints to fetch metadata (for symbols and images)
+    const allUniqueMints = [...new Set(loadedPositions.map(p => p.token_mint))];
+    
+    // Fetch token metadata for all positions (to get images and missing symbols)
+    if (allUniqueMints.length > 0) {
+      const symbolsMap = await fetchTokenSymbols(allUniqueMints);
       
-      // Update positions with fetched symbols
+      // Update positions missing symbols
       loadedPositions = loadedPositions.map(p => {
         if (!p.token_symbol && symbolsMap[p.token_mint]) {
           return { ...p, token_symbol: symbolsMap[p.token_mint].symbol, token_name: symbolsMap[p.token_mint].name };
@@ -628,8 +630,9 @@ export function FlipItDashboard() {
         return p;
       });
       
-      // Update the database with the symbols (fire and forget)
-      for (const mint of uniqueMints) {
+      // Update the database with the symbols for positions missing them (fire and forget)
+      const positionsMissingSymbols = loadedPositions.filter(p => !p.token_symbol);
+      for (const mint of [...new Set(positionsMissingSymbols.map(p => p.token_mint))]) {
         if (symbolsMap[mint]) {
           supabase
             .from('flip_positions')
@@ -652,6 +655,7 @@ export function FlipItDashboard() {
   
   const fetchTokenSymbols = async (mints: string[]): Promise<Record<string, { symbol: string; name: string }>> => {
     const result: Record<string, { symbol: string; name: string }> = {};
+    const images: Record<string, string> = {};
     
     try {
       // Use the token-metadata edge function
@@ -666,7 +670,16 @@ export function FlipItDashboard() {
           if (token.mint && token.symbol) {
             result[token.mint] = { symbol: token.symbol, name: token.name || token.symbol };
           }
+          // Also capture the image if available
+          if (token.mint && (token.image || token.logoURI)) {
+            images[token.mint] = token.image || token.logoURI;
+          }
         }
+      }
+      
+      // Update token images state
+      if (Object.keys(images).length > 0) {
+        setTokenImages(prev => ({ ...prev, ...images }));
       }
     } catch (err) {
       console.error('Failed to fetch token symbols:', err);
@@ -1510,16 +1523,37 @@ export function FlipItDashboard() {
                   return (
                     <TableRow key={position.id}>
                       <TableCell>
-                        <button
-                          onClick={() => copyToClipboard(position.token_mint, 'Token address')}
-                          className="font-mono text-xs hover:text-primary cursor-pointer flex items-center gap-1"
-                          title={position.token_mint}
-                        >
-                          {position.token_symbol || position.token_mint.slice(0, 8) + '...'}
-                          <Copy className="h-3 w-3 opacity-50" />
-                        </button>
-                        <div className="text-xs text-muted-foreground mt-0.5">
-                          Entry: ${position.buy_price_usd?.toFixed(8) || '-'}
+                        <div className="flex items-center gap-2">
+                          {tokenImages[position.token_mint] && (
+                            <img 
+                              src={tokenImages[position.token_mint]} 
+                              alt={position.token_symbol || 'Token'} 
+                              className="w-8 h-8 rounded-full object-cover flex-shrink-0"
+                              onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
+                            />
+                          )}
+                          <div>
+                            <a
+                              href={`https://dexscreener.com/solana/${position.token_mint}`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="font-mono text-xs hover:text-primary cursor-pointer flex items-center gap-1"
+                              title={`View on DexScreener: ${position.token_mint}`}
+                            >
+                              {position.token_symbol || position.token_mint.slice(0, 8) + '...'}
+                              <ArrowUpRight className="h-3 w-3 opacity-50" />
+                            </a>
+                            <button
+                              onClick={() => copyToClipboard(position.token_mint, 'Token address')}
+                              className="text-xs text-muted-foreground hover:text-primary flex items-center gap-1 mt-0.5"
+                            >
+                              {position.token_mint.slice(0, 6)}...{position.token_mint.slice(-4)}
+                              <Copy className="h-3 w-3 opacity-50" />
+                            </button>
+                            <div className="text-xs text-muted-foreground mt-0.5">
+                              Entry: ${position.buy_price_usd?.toFixed(8) || '-'}
+                            </div>
+                          </div>
                         </div>
                       </TableCell>
                       <TableCell>
@@ -1785,14 +1819,28 @@ export function FlipItDashboard() {
                   return (
                     <TableRow key={position.id}>
                       <TableCell>
-                        <button
-                          onClick={() => copyToClipboard(position.token_mint, 'Token address')}
-                          className="font-mono text-xs hover:text-primary cursor-pointer flex items-center gap-1"
-                          title={position.token_mint}
-                        >
-                          {position.token_symbol || position.token_mint.slice(0, 8) + '...'}
-                          <Copy className="h-3 w-3 opacity-50" />
-                        </button>
+                        <div className="flex items-center gap-2">
+                          {tokenImages[position.token_mint] && (
+                            <img 
+                              src={tokenImages[position.token_mint]} 
+                              alt={position.token_symbol || 'Token'} 
+                              className="w-6 h-6 rounded-full object-cover flex-shrink-0"
+                              onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
+                            />
+                          )}
+                          <div>
+                            <a
+                              href={`https://dexscreener.com/solana/${position.token_mint}`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="font-mono text-xs hover:text-primary cursor-pointer flex items-center gap-1"
+                              title={`View on DexScreener: ${position.token_mint}`}
+                            >
+                              {position.token_symbol || position.token_mint.slice(0, 8) + '...'}
+                              <ArrowUpRight className="h-3 w-3 opacity-50" />
+                            </a>
+                          </div>
+                        </div>
                       </TableCell>
                       <TableCell className="text-xs">${position.buy_price_usd?.toFixed(8) || '-'}</TableCell>
                       <TableCell className="text-xs">${position.sell_price_usd?.toFixed(8) || '-'}</TableCell>
