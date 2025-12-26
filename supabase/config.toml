@@ -243,3 +243,6 @@ verify_jwt = false
 
 [functions.telegram-channel-monitor]
 verify_jwt = false
+
+[functions.flipit-emergency-monitor]
+verify_jwt = false
