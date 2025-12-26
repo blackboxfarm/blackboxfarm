@@ -2384,6 +2384,10 @@ export type Database = {
           buy_price_usd: number | null
           buy_signature: string | null
           created_at: string | null
+          emergency_sell_enabled: boolean | null
+          emergency_sell_executed_at: string | null
+          emergency_sell_price_usd: number | null
+          emergency_sell_status: string | null
           error_message: string | null
           id: string
           profit_usd: number | null
@@ -2413,6 +2417,10 @@ export type Database = {
           buy_price_usd?: number | null
           buy_signature?: string | null
           created_at?: string | null
+          emergency_sell_enabled?: boolean | null
+          emergency_sell_executed_at?: string | null
+          emergency_sell_price_usd?: number | null
+          emergency_sell_status?: string | null
           error_message?: string | null
           id?: string
           profit_usd?: number | null
@@ -2442,6 +2450,10 @@ export type Database = {
           buy_price_usd?: number | null
           buy_signature?: string | null
           created_at?: string | null
+          emergency_sell_enabled?: boolean | null
+          emergency_sell_executed_at?: string | null
+          emergency_sell_price_usd?: number | null
+          emergency_sell_status?: string | null
           error_message?: string | null
           id?: string
           profit_usd?: number | null

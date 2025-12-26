@@ -45,6 +45,11 @@ interface FlipPosition {
   rebuy_status: string | null;
   rebuy_executed_at: string | null;
   rebuy_position_id: string | null;
+  // Emergency sell fields
+  emergency_sell_enabled: boolean | null;
+  emergency_sell_price_usd: number | null;
+  emergency_sell_status: string | null;
+  emergency_sell_executed_at: string | null;
 }
 
 interface SuperAdminWallet {
@@ -106,6 +111,14 @@ export function FlipItDashboard() {
   
   // Rebuy settings for editing individual positions
   const [rebuyEditing, setRebuyEditing] = useState<Record<string, { enabled: boolean; price: string; amount: string }>>({});
+
+  // Emergency sell monitoring state
+  const [emergencyMonitorEnabled, setEmergencyMonitorEnabled] = useState(true);
+  const [emergencyCountdown, setEmergencyCountdown] = useState(5);
+  const emergencyCountdownRef = useRef(5);
+  const [lastEmergencyCheck, setLastEmergencyCheck] = useState<string | null>(null);
+  const [isEmergencyMonitoring, setIsEmergencyMonitoring] = useState(false);
+  const [emergencyEditing, setEmergencyEditing] = useState<Record<string, { enabled: boolean; price: string }>>({});
 
   useEffect(() => {
     loadWallets();
@@ -226,6 +239,67 @@ export function FlipItDashboard() {
       clearInterval(rebuyInterval);
     };
   }, [rebuyMonitorEnabled, positions]);
+
+  // Emergency sell monitoring poll (every 5 seconds)
+  useEffect(() => {
+    if (!emergencyMonitorEnabled) {
+      setEmergencyCountdown(5);
+      return;
+    }
+
+    // Check if there are any watching emergency sell positions
+    const watchingPositions = positions.filter(p => p.status === 'holding' && p.emergency_sell_status === 'watching');
+    if (watchingPositions.length === 0) {
+      setEmergencyCountdown(5);
+      return;
+    }
+
+    // Countdown timer
+    const emergencyInterval = setInterval(() => {
+      emergencyCountdownRef.current -= 1;
+      setEmergencyCountdown(emergencyCountdownRef.current);
+      
+      if (emergencyCountdownRef.current <= 0) {
+        emergencyCountdownRef.current = 5;
+        setEmergencyCountdown(5);
+        // Trigger emergency check
+        handleEmergencyCheck();
+      }
+    }, 1000);
+
+    return () => {
+      clearInterval(emergencyInterval);
+    };
+  }, [emergencyMonitorEnabled, positions]);
+
+  const handleEmergencyCheck = useCallback(async () => {
+    const watchingPositions = positions.filter(p => p.status === 'holding' && p.emergency_sell_status === 'watching');
+    if (watchingPositions.length === 0 || isEmergencyMonitoring) return;
+
+    setIsEmergencyMonitoring(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('flipit-emergency-monitor');
+
+      if (error) throw error;
+
+      if (data?.checkedAt) {
+        setLastEmergencyCheck(data.checkedAt);
+      }
+      if (data?.prices) {
+        setCurrentPrices(prev => ({ ...prev, ...data.prices }));
+      }
+      if (data?.executed?.length > 0) {
+        toast.error(`🚨 EMERGENCY SELL: ${data.executed.length} position(s) sold at stop-loss!`, {
+          duration: 10000,
+        });
+        loadPositions();
+      }
+    } catch (err) {
+      console.error('Emergency check failed:', err);
+    } finally {
+      setIsEmergencyMonitoring(false);
+    }
+  }, [positions, isEmergencyMonitoring]);
 
   const handleRebuyCheck = useCallback(async () => {
     const watchingPositions = positions.filter(p => p.rebuy_status === 'watching');
@@ -623,6 +697,36 @@ export function FlipItDashboard() {
       }
     } catch (err) {
       console.error('Failed to fetch prices:', err);
+    }
+  };
+
+  // Handle emergency sell toggle/save
+  const handleEmergencySellUpdate = async (positionId: string, enabled: boolean, priceUsd: number | null) => {
+    try {
+      const updateData: any = {
+        emergency_sell_enabled: enabled,
+        emergency_sell_price_usd: priceUsd,
+        emergency_sell_status: enabled && priceUsd ? 'watching' : 'pending',
+      };
+
+      const { error } = await supabase
+        .from('flip_positions')
+        .update(updateData)
+        .eq('id', positionId);
+
+      if (error) throw error;
+
+      toast.success(enabled ? `Stop-loss set at $${priceUsd?.toFixed(10).replace(/\.?0+$/, '')}` : 'Stop-loss disabled');
+      loadPositions();
+      
+      // Clear editing state
+      setEmergencyEditing(prev => {
+        const newState = { ...prev };
+        delete newState[positionId];
+        return newState;
+      });
+    } catch (err: any) {
+      toast.error(err.message || 'Failed to update stop-loss');
     }
   };
 
@@ -1323,8 +1427,45 @@ export function FlipItDashboard() {
       {/* Active Positions */}
       {activePositions.length > 0 && (
         <Card>
-          <CardHeader>
-            <CardTitle>Active Flips ({activePositions.length})</CardTitle>
+          <CardHeader className="flex flex-row items-center justify-between">
+            <CardTitle className="flex items-center gap-2">
+              Active Flips ({activePositions.length})
+              {positions.filter(p => p.status === 'holding' && p.emergency_sell_status === 'watching').length > 0 && (
+                <Badge variant="destructive" className="gap-1">
+                  <AlertTriangle className="h-3 w-3" />
+                  {positions.filter(p => p.status === 'holding' && p.emergency_sell_status === 'watching').length} Stop-Loss Active
+                </Badge>
+              )}
+            </CardTitle>
+            {/* Emergency Sell Monitor Status */}
+            {positions.filter(p => p.status === 'holding' && p.emergency_sell_status === 'watching').length > 0 && (
+              <div className="flex items-center gap-2 text-sm">
+                <div className="flex items-center gap-1">
+                  <Switch 
+                    checked={emergencyMonitorEnabled} 
+                    onCheckedChange={setEmergencyMonitorEnabled}
+                  />
+                  <span className="text-muted-foreground">Emergency Monitor</span>
+                </div>
+                {emergencyMonitorEnabled && (
+                  <div className="flex items-center gap-2 px-2 py-1 rounded bg-destructive/20 border border-destructive/30">
+                    {isEmergencyMonitoring ? (
+                      <Loader2 className="h-3 w-3 animate-spin text-destructive" />
+                    ) : (
+                      <AlertTriangle className="h-3 w-3 text-destructive animate-pulse" />
+                    )}
+                    <span className="text-xs text-destructive font-medium">
+                      {isEmergencyMonitoring ? 'Checking...' : `Next check in ${emergencyCountdown}s`}
+                    </span>
+                  </div>
+                )}
+                {lastEmergencyCheck && (
+                  <span className="text-xs text-muted-foreground">
+                    Last: {new Date(lastEmergencyCheck).toLocaleTimeString()}
+                  </span>
+                )}
+              </div>
+            )}
           </CardHeader>
           <CardContent>
             <Table>
@@ -1335,6 +1476,8 @@ export function FlipItDashboard() {
                   <TableHead>Current Value</TableHead>
                   <TableHead>Target Value</TableHead>
                   <TableHead>Progress</TableHead>
+                  <TableHead className="text-center">STOP-LOSS</TableHead>
+                  <TableHead>SL Price</TableHead>
                   <TableHead>Status</TableHead>
                   <TableHead>Action</TableHead>
                 </TableRow>
@@ -1466,6 +1609,85 @@ export function FlipItDashboard() {
                           className={`h-2 ${progress >= 100 ? 'bg-green-500' : progress < 0 ? 'bg-red-500' : ''}`}
                         />
                         <span className="text-xs text-muted-foreground">{progress.toFixed(0)}%</span>
+                      </TableCell>
+                      {/* Stop-Loss Toggle */}
+                      <TableCell className="text-center">
+                        {position.status === 'holding' && (
+                          <Switch
+                            checked={
+                              emergencyEditing[position.id]?.enabled ?? 
+                              (position.emergency_sell_status === 'watching')
+                            }
+                            onCheckedChange={(checked) => {
+                              if (checked) {
+                                // Enable: open editing mode with default price (50% of current or entry)
+                                const defaultPrice = currentPrice 
+                                  ? currentPrice * 0.5 
+                                  : (position.buy_price_usd ? position.buy_price_usd * 0.5 : 0);
+                                setEmergencyEditing(prev => ({
+                                  ...prev,
+                                  [position.id]: { enabled: true, price: defaultPrice.toFixed(10).replace(/\.?0+$/, '') }
+                                }));
+                              } else {
+                                // Disable: save immediately
+                                handleEmergencySellUpdate(position.id, false, null);
+                              }
+                            }}
+                          />
+                        )}
+                      </TableCell>
+                      {/* Stop-Loss Price */}
+                      <TableCell>
+                        {position.status === 'holding' && (
+                          <div className="flex flex-col gap-1">
+                            {emergencyEditing[position.id]?.enabled || position.emergency_sell_status === 'watching' ? (
+                              <div className="flex items-center gap-1">
+                                <span className="text-xs text-muted-foreground">$</span>
+                                <Input
+                                  type="text"
+                                  className="h-7 w-28 text-xs font-mono"
+                                  placeholder="0.0000001"
+                                  value={
+                                    emergencyEditing[position.id]?.price ?? 
+                                    (position.emergency_sell_price_usd?.toString() || '')
+                                  }
+                                  onChange={(e) => {
+                                    setEmergencyEditing(prev => ({
+                                      ...prev,
+                                      [position.id]: { 
+                                        enabled: true, 
+                                        price: e.target.value 
+                                      }
+                                    }));
+                                  }}
+                                />
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  className="h-7 px-2"
+                                  onClick={() => {
+                                    const priceVal = parseFloat(emergencyEditing[position.id]?.price || position.emergency_sell_price_usd?.toString() || '0');
+                                    if (priceVal > 0) {
+                                      handleEmergencySellUpdate(position.id, true, priceVal);
+                                    } else {
+                                      toast.error('Enter a valid stop-loss price');
+                                    }
+                                  }}
+                                >
+                                  <CheckCircle2 className="h-3 w-3" />
+                                </Button>
+                              </div>
+                            ) : (
+                              <span className="text-xs text-muted-foreground">-</span>
+                            )}
+                            {position.emergency_sell_status === 'watching' && !emergencyEditing[position.id] && (
+                              <Badge variant="destructive" className="text-[10px] w-fit">
+                                <AlertTriangle className="h-2 w-2 mr-1" />
+                                WATCHING
+                              </Badge>
+                            )}
+                          </div>
+                        )}
                       </TableCell>
                       <TableCell>{getStatusBadge(position.status)}</TableCell>
                       <TableCell>
