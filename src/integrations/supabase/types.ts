@@ -5382,6 +5382,7 @@ export type Database = {
           location: string | null
           notes: string | null
           password_encrypted: string | null
+          position: number | null
           profile_image_url: string | null
           tags: string[] | null
           updated_at: string | null
@@ -5405,6 +5406,7 @@ export type Database = {
           location?: string | null
           notes?: string | null
           password_encrypted?: string | null
+          position?: number | null
           profile_image_url?: string | null
           tags?: string[] | null
           updated_at?: string | null
@@ -5428,6 +5430,7 @@ export type Database = {
           location?: string | null
           notes?: string | null
           password_encrypted?: string | null
+          position?: number | null
           profile_image_url?: string | null
           tags?: string[] | null
           updated_at?: string | null
