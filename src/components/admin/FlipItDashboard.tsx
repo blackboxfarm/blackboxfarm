@@ -370,28 +370,20 @@ export function FlipItDashboard() {
     setShowPrivateKey(false);
 
     try {
-      // Fetch the encrypted secret from the database
-      const { data: walletData, error: fetchError } = await supabase
-        .from('super_admin_wallets')
-        .select('secret_key_encrypted')
-        .eq('id', selectedWallet)
-        .single();
+      // Use the edge function that properly decrypts using AES-256-GCM
+      const { data, error } = await supabase.functions.invoke('decrypt-super-admin-wallet', {
+        body: { wallet_id: selectedWallet }
+      });
 
-      if (fetchError || !walletData?.secret_key_encrypted) {
-        throw new Error('Could not fetch wallet secret');
+      if (error) {
+        throw new Error(error.message || 'Decryption failed');
       }
 
-      // Decrypt using the RPC function
-      const { data: decryptedData, error: decryptError } = await supabase.rpc(
-        'decrypt_wallet_secret',
-        { encrypted_secret: walletData.secret_key_encrypted }
-      );
-
-      if (decryptError) {
-        throw new Error(decryptError.message || 'Decryption failed');
+      if (!data?.success || !data?.secret_key) {
+        throw new Error(data?.error || 'Could not decrypt wallet secret');
       }
 
-      setDecryptedPrivateKey(decryptedData);
+      setDecryptedPrivateKey(data.secret_key);
       setShowKeysModal(true);
     } catch (err: any) {
       console.error('Failed to decrypt private key:', err);
