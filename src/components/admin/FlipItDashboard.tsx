@@ -78,6 +78,11 @@ export function FlipItDashboard() {
   const [showPrivateKey, setShowPrivateKey] = useState(false);
   const [showTokenManager, setShowTokenManager] = useState(false);
   
+  // Input token price state (for live preview before adding)
+  const [inputTokenPrice, setInputTokenPrice] = useState<number | null>(null);
+  const [isLoadingInputPrice, setIsLoadingInputPrice] = useState(false);
+  const inputPriceTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  
   // SOL price for USD conversion
   const { price: solPrice, isLoading: solPriceLoading } = useSolPrice();
   
@@ -257,6 +262,50 @@ export function FlipItDashboard() {
       refreshWalletBalance();
     }
   }, [selectedWallet]);
+
+  // Debounced price fetch for token input
+  useEffect(() => {
+    // Clear previous timeout
+    if (inputPriceTimeoutRef.current) {
+      clearTimeout(inputPriceTimeoutRef.current);
+    }
+    
+    // Reset price if input is cleared
+    if (!tokenAddress.trim() || tokenAddress.trim().length < 32) {
+      setInputTokenPrice(null);
+      setIsLoadingInputPrice(false);
+      return;
+    }
+
+    // Debounce: wait 500ms after user stops typing
+    setIsLoadingInputPrice(true);
+    inputPriceTimeoutRef.current = setTimeout(async () => {
+      try {
+        const { data, error } = await supabase.functions.invoke('raydium-quote', {
+          body: { priceMint: tokenAddress.trim() }
+        });
+        
+        if (error) throw error;
+        
+        if (data?.priceUsd !== undefined) {
+          setInputTokenPrice(data.priceUsd);
+        } else {
+          setInputTokenPrice(null);
+        }
+      } catch (err) {
+        console.error('Failed to fetch input token price:', err);
+        setInputTokenPrice(null);
+      } finally {
+        setIsLoadingInputPrice(false);
+      }
+    }, 500);
+
+    return () => {
+      if (inputPriceTimeoutRef.current) {
+        clearTimeout(inputPriceTimeoutRef.current);
+      }
+    };
+  }, [tokenAddress]);
 
   const loadWallets = async () => {
     const { data: sessionData } = await supabase.auth.getSession();
@@ -1029,11 +1078,38 @@ export function FlipItDashboard() {
             {/* Token Input */}
             <div className="space-y-2">
               <Label>Token Address</Label>
-              <Input
-                placeholder="Paste token address..."
-                value={tokenAddress}
-                onChange={e => setTokenAddress(e.target.value)}
-              />
+              <div className="relative">
+                <Input
+                  placeholder="Paste token address..."
+                  value={tokenAddress}
+                  onChange={e => setTokenAddress(e.target.value)}
+                  className={inputTokenPrice !== null ? 'pr-28' : ''}
+                />
+                {isLoadingInputPrice && (
+                  <div className="absolute right-2 top-1/2 -translate-y-1/2">
+                    <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+                  </div>
+                )}
+                {!isLoadingInputPrice && inputTokenPrice !== null && (
+                  <Badge 
+                    variant="secondary" 
+                    className="absolute right-2 top-1/2 -translate-y-1/2 bg-green-500/20 text-green-400 border-green-500/30"
+                  >
+                    ${inputTokenPrice < 0.01 ? inputTokenPrice.toExponential(2) : inputTokenPrice.toFixed(6)}
+                  </Badge>
+                )}
+              </div>
+              {inputTokenPrice !== null && buyAmount && (
+                <p className="text-xs text-muted-foreground">
+                  Entry: {(() => {
+                    const amt = parseFloat(buyAmount);
+                    if (isNaN(amt) || amt <= 0) return '—';
+                    const usdAmount = buyAmountMode === 'sol' && solPrice ? amt * solPrice : amt;
+                    const tokens = usdAmount / inputTokenPrice;
+                    return `~${tokens.toLocaleString(undefined, { maximumFractionDigits: 2 })} tokens @ $${inputTokenPrice < 0.01 ? inputTokenPrice.toExponential(2) : inputTokenPrice.toFixed(6)}`;
+                  })()}
+                </p>
+              )}
             </div>
 
             {/* Amount */}
