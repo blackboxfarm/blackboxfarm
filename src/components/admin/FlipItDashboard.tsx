@@ -1620,9 +1620,9 @@ export function FlipItDashboard() {
                             }
                             onCheckedChange={(checked) => {
                               if (checked) {
-                                // Enable: default stop-loss at 5% below entry price (95% of entry)
+                                // Enable: default stop-loss at 5% above entry price (105% of entry)
                                 const entryPrice = position.buy_price_usd || 0;
-                                const defaultPrice = entryPrice * 0.95; // 5% below entry
+                                const defaultPrice = entryPrice * 1.05; // 5% above entry
                                 setEmergencyEditing(prev => ({
                                   ...prev,
                                   [position.id]: { enabled: true, price: defaultPrice.toFixed(10).replace(/\.?0+$/, '') }
