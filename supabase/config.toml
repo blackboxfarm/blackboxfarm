@@ -246,3 +246,6 @@ verify_jwt = false
 
 [functions.flipit-emergency-monitor]
 verify_jwt = false
+
+[functions.twitter-profile-enricher]
+verify_jwt = false
