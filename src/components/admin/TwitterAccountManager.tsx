@@ -29,7 +29,7 @@ interface TwitterAccount {
   tags: string[];
   account_status: string;
   notes: string | null;
-  is_verified: boolean;
+  verification_type: string;
   follower_count: number;
   following_count: number;
   created_at: string;
@@ -37,6 +37,12 @@ interface TwitterAccount {
 }
 
 const STATUS_OPTIONS = ["active", "suspended", "locked", "unverified", "inactive"];
+const VERIFICATION_OPTIONS = [
+  { value: "none", label: "None", color: "" },
+  { value: "blue", label: "Blue Check", color: "text-sky-500" },
+  { value: "gold", label: "Gold/Yellow Check", color: "text-yellow-500" },
+  { value: "grey", label: "Grey Check", color: "text-gray-400" },
+];
 
 const getStatusBadge = (status: string) => {
   const variants: Record<string, { variant: "default" | "secondary" | "destructive" | "outline"; icon: React.ReactNode }> = {
@@ -53,6 +59,12 @@ const getStatusBadge = (status: string) => {
       {status}
     </Badge>
   );
+};
+
+const getVerificationIcon = (verificationType: string) => {
+  const opt = VERIFICATION_OPTIONS.find(o => o.value === verificationType);
+  if (!opt || opt.value === "none") return null;
+  return <CheckCircle className={`h-4 w-4 ${opt.color}`} />;
 };
 
 const TwitterAccountManager = () => {
@@ -78,7 +90,7 @@ const TwitterAccountManager = () => {
     tags: "",
     account_status: "active",
     notes: "",
-    is_verified: false,
+    verification_type: "none",
     follower_count: 0,
     following_count: 0,
   });
@@ -133,7 +145,7 @@ const TwitterAccountManager = () => {
       tags: "",
       account_status: "active",
       notes: "",
-      is_verified: false,
+      verification_type: "none",
       follower_count: 0,
       following_count: 0,
     });
@@ -157,7 +169,7 @@ const TwitterAccountManager = () => {
       tags: account.tags?.join(", ") || "",
       account_status: account.account_status || "active",
       notes: account.notes || "",
-      is_verified: account.is_verified || false,
+      verification_type: account.verification_type || "none",
       follower_count: account.follower_count || 0,
       following_count: account.following_count || 0,
     });
@@ -214,7 +226,7 @@ const TwitterAccountManager = () => {
         tags: formData.tags ? formData.tags.split(",").map(t => t.trim()).filter(Boolean) : [],
         account_status: formData.account_status,
         notes: formData.notes || null,
-        is_verified: formData.is_verified,
+        verification_type: formData.verification_type,
         follower_count: formData.follower_count,
         following_count: formData.following_count,
         profile_image_url,
@@ -457,15 +469,23 @@ const TwitterAccountManager = () => {
                       </SelectContent>
                     </Select>
                   </div>
-                  <div className="flex items-center gap-4 pt-6">
-                    <label className="flex items-center gap-2">
-                      <input
-                        type="checkbox"
-                        checked={formData.is_verified}
-                        onChange={(e) => setFormData({ ...formData, is_verified: e.target.checked })}
-                      />
-                      Verified
-                    </label>
+                  <div>
+                    <Label>Verification</Label>
+                    <Select value={formData.verification_type} onValueChange={(v) => setFormData({ ...formData, verification_type: v })}>
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {VERIFICATION_OPTIONS.map(opt => (
+                          <SelectItem key={opt.value} value={opt.value}>
+                            <div className="flex items-center gap-2">
+                              {opt.value !== "none" && <CheckCircle className={`h-4 w-4 ${opt.color}`} />}
+                              {opt.label}
+                            </div>
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
                   </div>
                 </div>
 
@@ -534,7 +554,7 @@ const TwitterAccountManager = () => {
                           <div className="flex-1 min-w-0">
                             <div className="flex items-center gap-1">
                               <span className="font-semibold truncate">{account.display_name || account.username}</span>
-                              {account.is_verified && <CheckCircle className="h-4 w-4 text-primary" />}
+                              {getVerificationIcon(account.verification_type)}
                             </div>
                             <p className="text-sm text-muted-foreground">@{account.username}</p>
                             {getStatusBadge(account.account_status)}
@@ -631,7 +651,7 @@ const TwitterAccountManager = () => {
                           )}
                           <div>
                             <span className="font-medium">@{account.username}</span>
-                            {account.is_verified && <CheckCircle className="h-3 w-3 text-primary inline ml-1" />}
+                            {getVerificationIcon(account.verification_type)}
                           </div>
                         </div>
                       </TableCell>

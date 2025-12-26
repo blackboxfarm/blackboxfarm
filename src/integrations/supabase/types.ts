@@ -5379,7 +5379,6 @@ export type Database = {
           following_count: number | null
           group_name: string | null
           id: string
-          is_verified: boolean | null
           location: string | null
           notes: string | null
           password_encrypted: string | null
@@ -5388,6 +5387,7 @@ export type Database = {
           updated_at: string | null
           user_id: string | null
           username: string
+          verification_type: string | null
           website: string | null
         }
         Insert: {
@@ -5402,7 +5402,6 @@ export type Database = {
           following_count?: number | null
           group_name?: string | null
           id?: string
-          is_verified?: boolean | null
           location?: string | null
           notes?: string | null
           password_encrypted?: string | null
@@ -5411,6 +5410,7 @@ export type Database = {
           updated_at?: string | null
           user_id?: string | null
           username: string
+          verification_type?: string | null
           website?: string | null
         }
         Update: {
@@ -5425,7 +5425,6 @@ export type Database = {
           following_count?: number | null
           group_name?: string | null
           id?: string
-          is_verified?: boolean | null
           location?: string | null
           notes?: string | null
           password_encrypted?: string | null
@@ -5434,6 +5433,7 @@ export type Database = {
           updated_at?: string | null
           user_id?: string | null
           username?: string
+          verification_type?: string | null
           website?: string | null
         }
         Relationships: []
