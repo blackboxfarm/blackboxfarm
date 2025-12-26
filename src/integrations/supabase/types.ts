@@ -5366,6 +5366,78 @@ export type Database = {
         }
         Relationships: []
       }
+      twitter_accounts: {
+        Row: {
+          account_status: string | null
+          banner_image_url: string | null
+          bio: string | null
+          created_at: string | null
+          display_name: string | null
+          email: string | null
+          email_password_encrypted: string | null
+          follower_count: number | null
+          following_count: number | null
+          group_name: string | null
+          id: string
+          is_verified: boolean | null
+          location: string | null
+          notes: string | null
+          password_encrypted: string | null
+          profile_image_url: string | null
+          tags: string[] | null
+          updated_at: string | null
+          user_id: string | null
+          username: string
+          website: string | null
+        }
+        Insert: {
+          account_status?: string | null
+          banner_image_url?: string | null
+          bio?: string | null
+          created_at?: string | null
+          display_name?: string | null
+          email?: string | null
+          email_password_encrypted?: string | null
+          follower_count?: number | null
+          following_count?: number | null
+          group_name?: string | null
+          id?: string
+          is_verified?: boolean | null
+          location?: string | null
+          notes?: string | null
+          password_encrypted?: string | null
+          profile_image_url?: string | null
+          tags?: string[] | null
+          updated_at?: string | null
+          user_id?: string | null
+          username: string
+          website?: string | null
+        }
+        Update: {
+          account_status?: string | null
+          banner_image_url?: string | null
+          bio?: string | null
+          created_at?: string | null
+          display_name?: string | null
+          email?: string | null
+          email_password_encrypted?: string | null
+          follower_count?: number | null
+          following_count?: number | null
+          group_name?: string | null
+          id?: string
+          is_verified?: boolean | null
+          location?: string | null
+          notes?: string | null
+          password_encrypted?: string | null
+          profile_image_url?: string | null
+          tags?: string[] | null
+          updated_at?: string | null
+          user_id?: string | null
+          username?: string
+          website?: string | null
+        }
+        Relationships: []
+      }
       user_preferences: {
         Row: {
           alert_types: Json | null
