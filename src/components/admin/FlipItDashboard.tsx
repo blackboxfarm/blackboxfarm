@@ -316,6 +316,45 @@ export function FlipItDashboard() {
     };
   }, [tokenAddress]);
 
+  // Manual price check function
+  const handleCheckPrice = async () => {
+    if (!tokenAddress.trim() || tokenAddress.trim().length < 32) {
+      toast.error('Enter a valid token address');
+      return;
+    }
+    
+    setIsLoadingInputPrice(true);
+    try {
+      const response = await fetch(
+        `https://apxauapuusmgwbbzjgfl.supabase.co/functions/v1/raydium-quote?priceMint=${encodeURIComponent(tokenAddress.trim())}`,
+        {
+          method: 'GET',
+          headers: {
+            'apikey': 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFweGF1YXB1dXNtZ3diYnpqZ2ZsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTQ1OTEzMDUsImV4cCI6MjA3MDE2NzMwNX0.w8IrKq4YVStF3TkdEcs5mCSeJsxjkaVq2NFkypYOXHU'
+          }
+        }
+      );
+      
+      if (!response.ok) throw new Error('Price fetch failed');
+      
+      const data = await response.json();
+      
+      if (data?.priceUSD !== undefined) {
+        setInputTokenPrice(data.priceUSD);
+        toast.success(`Price: $${data.priceUSD.toFixed(10).replace(/\.?0+$/, '')}`);
+      } else {
+        setInputTokenPrice(null);
+        toast.error('No price found');
+      }
+    } catch (err) {
+      console.error('Failed to fetch price:', err);
+      toast.error('Failed to fetch price');
+      setInputTokenPrice(null);
+    } finally {
+      setIsLoadingInputPrice(false);
+    }
+  };
+
   const loadWallets = async () => {
     const { data: sessionData } = await supabase.auth.getSession();
     const accessToken = sessionData.session?.access_token;
@@ -1099,11 +1138,27 @@ export function FlipItDashboard() {
                   </span>
                 )}
               </Label>
-              <Input
-                placeholder="Paste token address..."
-                value={tokenAddress}
-                onChange={e => setTokenAddress(e.target.value)}
-              />
+              <div className="flex gap-2">
+                <Input
+                  placeholder="Paste token address..."
+                  value={tokenAddress}
+                  onChange={e => setTokenAddress(e.target.value)}
+                  className="flex-1"
+                />
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={handleCheckPrice}
+                  disabled={isLoadingInputPrice || !tokenAddress.trim()}
+                  className="shrink-0"
+                >
+                  {isLoadingInputPrice ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <RefreshCw className="h-4 w-4" />
+                  )}
+                </Button>
+              </div>
               {inputTokenPrice !== null && buyAmount && (
                 <p className="text-xs text-muted-foreground">
                   Entry: ~{(() => {
