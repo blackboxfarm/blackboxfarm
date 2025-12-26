@@ -151,6 +151,13 @@ export default function TelegramChannelMonitor() {
   const [notificationEmail, setNotificationEmail] = useState('');
   const [isAddingConfig, setIsAddingConfig] = useState(false);
   const [isTestingChannel, setIsTestingChannel] = useState(false);
+  
+  // Edit config state
+  const [editingConfigId, setEditingConfigId] = useState<string | null>(null);
+  const [editEmail, setEditEmail] = useState('');
+  const [editWalletId, setEditWalletId] = useState('');
+  const [editUsername, setEditUsername] = useState('');
+  const [isSavingEdit, setIsSavingEdit] = useState(false);
 
   useEffect(() => {
     loadData();
@@ -422,6 +429,41 @@ export default function TelegramChannelMonitor() {
       loadData();
     } catch (error: any) {
       toast.error(error.message || 'Failed to delete configuration');
+    }
+  };
+
+  // Start editing a config
+  const startEditConfig = (config: ChannelConfig) => {
+    setEditingConfigId(config.id);
+    setEditEmail(config.notification_email || '');
+    setEditWalletId(config.flipit_wallet_id || '');
+    setEditUsername(config.channel_username || '');
+  };
+
+  // Save edited config
+  const saveEditConfig = async () => {
+    if (!editingConfigId) return;
+    setIsSavingEdit(true);
+    try {
+      const cleanUsername = editUsername?.replace('@', '').replace('https://t.me/', '').replace('t.me/', '') || null;
+      
+      await supabase
+        .from('telegram_channel_config')
+        .update({
+          notification_email: editEmail || null,
+          email_notifications: !!editEmail,
+          flipit_wallet_id: editWalletId || null,
+          channel_username: cleanUsername
+        })
+        .eq('id', editingConfigId);
+      
+      toast.success('Settings saved');
+      setEditingConfigId(null);
+      loadData();
+    } catch (error: any) {
+      toast.error(error.message || 'Failed to save settings');
+    } finally {
+      setIsSavingEdit(false);
     }
   };
 
@@ -916,8 +958,19 @@ export default function TelegramChannelMonitor() {
           <Card>
             <CardHeader>
               <CardTitle>Monitored Channels</CardTitle>
+              <CardDescription>
+                Edit channels to add username, email, and wallet settings
+              </CardDescription>
             </CardHeader>
             <CardContent>
+              {/* Warning if any config missing username */}
+              {configs.some(c => !c.channel_username) && (
+                <div className="p-3 mb-4 bg-destructive/10 border border-destructive/30 rounded-md text-sm">
+                  <strong className="text-destructive">⚠️ Cannot scrape chats:</strong> Some channels are missing the <strong>Username</strong> field. 
+                  The scraper needs the public username (e.g., "blindapee") to fetch messages from t.me/s/username. 
+                  Click <strong>Edit</strong> to add it.
+                </div>
+              )}
               {configs.length === 0 ? (
                 <p className="text-muted-foreground text-center py-8">No channels configured</p>
               ) : (
@@ -925,66 +978,125 @@ export default function TelegramChannelMonitor() {
                   <TableHeader>
                     <TableRow>
                       <TableHead>Channel</TableHead>
+                      <TableHead>Username</TableHead>
+                      <TableHead>Email</TableHead>
                       <TableHead>Mode</TableHead>
-                      <TableHead>Wallet</TableHead>
-                      <TableHead>Calls</TableHead>
-                      <TableHead>Buys</TableHead>
                       <TableHead>Active</TableHead>
                       <TableHead>Actions</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {configs.map((config) => (
-                      <TableRow key={config.id}>
-                        <TableCell>
-                          <div className="flex flex-col">
-                            <span className="font-medium">{config.channel_name || 'Unnamed'}</span>
-                            <span className="text-xs text-muted-foreground font-mono">{config.channel_id}</span>
-                          </div>
-                        </TableCell>
-                        <TableCell>
-                          <div className="flex items-center gap-2">
+                    {configs.map((config) => {
+                      const isEditing = editingConfigId === config.id;
+                      return (
+                        <TableRow key={config.id}>
+                          <TableCell>
+                            <div className="flex flex-col">
+                              <span className="font-medium">{config.channel_name || 'Unnamed'}</span>
+                              <span className="text-xs text-muted-foreground font-mono">{config.channel_id}</span>
+                            </div>
+                          </TableCell>
+                          <TableCell>
+                            {isEditing ? (
+                              <Input
+                                value={editUsername}
+                                onChange={(e) => setEditUsername(e.target.value)}
+                                placeholder="blindapee"
+                                className="w-28"
+                              />
+                            ) : (
+                              <div className="flex items-center gap-1">
+                                {config.channel_username ? (
+                                  <span className="text-sm">@{config.channel_username}</span>
+                                ) : (
+                                  <span className="text-sm text-destructive">⚠️ Not set</span>
+                                )}
+                              </div>
+                            )}
+                          </TableCell>
+                          <TableCell>
+                            {isEditing ? (
+                              <Input
+                                type="email"
+                                value={editEmail}
+                                onChange={(e) => setEditEmail(e.target.value)}
+                                placeholder="email@example.com"
+                                className="w-40"
+                              />
+                            ) : (
+                              <span className="text-sm">
+                                {config.notification_email || <span className="text-muted-foreground">Not set</span>}
+                              </span>
+                            )}
+                          </TableCell>
+                          <TableCell>
+                            <div className="flex items-center gap-2">
+                              <Switch
+                                checked={!config.fantasy_mode}
+                                onCheckedChange={() => toggleFantasyMode(config.id, config.fantasy_mode)}
+                              />
+                              <span className={`text-sm ${config.fantasy_mode ? 'text-purple-500' : 'text-green-500'}`}>
+                                {config.fantasy_mode ? '💫 Fantasy' : '💰 Real'}
+                              </span>
+                            </div>
+                          </TableCell>
+                          <TableCell>
                             <Switch
-                              checked={!config.fantasy_mode}
-                              onCheckedChange={() => toggleFantasyMode(config.id, config.fantasy_mode)}
+                              checked={config.is_active}
+                              onCheckedChange={() => toggleConfig(config.id, config.is_active)}
                             />
-                            <span className={`text-sm ${config.fantasy_mode ? 'text-purple-500' : 'text-green-500'}`}>
-                              {config.fantasy_mode ? '💫 Fantasy' : '💰 Real'}
-                            </span>
-                          </div>
-                        </TableCell>
-                        <TableCell className="font-mono text-sm">
-                          {config.flipit_wallet_id?.slice(0, 8) || 'Not set'}
-                        </TableCell>
-                        <TableCell>{config.total_calls_detected || 0}</TableCell>
-                        <TableCell>{config.total_buys_executed || 0}</TableCell>
-                        <TableCell>
-                          <Switch
-                            checked={config.is_active}
-                            onCheckedChange={() => toggleConfig(config.id, config.is_active)}
-                          />
-                        </TableCell>
-                        <TableCell>
-                          <div className="flex gap-2">
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              onClick={() => testChannelById(config.channel_id, config.channel_username)}
-                            >
-                              Test
-                            </Button>
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              className="text-destructive hover:text-destructive"
-                              onClick={() => deleteConfig(config.id, config.channel_name)}
-                            >
-                              <Trash2 className="w-4 h-4" />
-                            </Button>
-                          </div>
-                        </TableCell>
-                      </TableRow>
-                    ))}
+                          </TableCell>
+                          <TableCell>
+                            <div className="flex gap-2">
+                              {isEditing ? (
+                                <>
+                                  <Button
+                                    variant="default"
+                                    size="sm"
+                                    onClick={saveEditConfig}
+                                    disabled={isSavingEdit}
+                                  >
+                                    {isSavingEdit ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Save'}
+                                  </Button>
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    onClick={() => setEditingConfigId(null)}
+                                  >
+                                    Cancel
+                                  </Button>
+                                </>
+                              ) : (
+                                <>
+                                  <Button
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={() => startEditConfig(config)}
+                                  >
+                                    Edit
+                                  </Button>
+                                  <Button
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={() => testChannelById(config.channel_id, config.channel_username)}
+                                  >
+                                    Test
+                                  </Button>
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    className="text-destructive hover:text-destructive"
+                                    onClick={() => deleteConfig(config.id, config.channel_name)}
+                                  >
+                                    <Trash2 className="w-4 h-4" />
+                                  </Button>
+                                </>
+                              )}
+                            </div>
+                          </TableCell>
+                        </TableRow>
+                      );
+                    })}
                   </TableBody>
                 </Table>
               )}
