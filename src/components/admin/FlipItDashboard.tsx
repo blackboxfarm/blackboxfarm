@@ -1095,7 +1095,7 @@ export function FlipItDashboard() {
                 )}
                 {!isLoadingInputPrice && inputTokenPrice !== null && (
                   <span className="text-sm font-bold text-green-400">
-                    ${inputTokenPrice < 0.0001 ? inputTokenPrice.toExponential(2) : inputTokenPrice.toFixed(8)}
+                    ${inputTokenPrice.toFixed(10).replace(/\.?0+$/, '')}
                   </span>
                 )}
               </Label>
