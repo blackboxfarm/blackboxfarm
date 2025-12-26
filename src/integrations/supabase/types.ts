@@ -5371,15 +5371,21 @@ export type Database = {
           account_status: string | null
           banner_image_url: string | null
           bio: string | null
+          bio_urls: Json | null
+          can_dm: boolean | null
+          can_media_tag: boolean | null
           created_at: string | null
           display_name: string | null
           email: string | null
           email_password_encrypted: string | null
+          fast_followers_count: number | null
           follower_count: number | null
           following_count: number | null
           group_name: string | null
+          has_custom_timelines: boolean | null
           id: string
           is_protected: boolean | null
+          is_translator: boolean | null
           is_verified: boolean | null
           join_date: string | null
           last_enriched_at: string | null
@@ -5390,7 +5396,10 @@ export type Database = {
           notes: string | null
           password_encrypted: string | null
           position: number | null
+          professional_category: string[] | null
+          professional_type: string | null
           profile_image_url: string | null
+          profile_urls: Json | null
           tags: string[] | null
           tweet_count: number | null
           twitter_id: string | null
@@ -5398,21 +5407,29 @@ export type Database = {
           user_id: string | null
           username: string
           verification_type: string | null
+          verified_type: string | null
           website: string | null
+          withheld_countries: string[] | null
         }
         Insert: {
           account_status?: string | null
           banner_image_url?: string | null
           bio?: string | null
+          bio_urls?: Json | null
+          can_dm?: boolean | null
+          can_media_tag?: boolean | null
           created_at?: string | null
           display_name?: string | null
           email?: string | null
           email_password_encrypted?: string | null
+          fast_followers_count?: number | null
           follower_count?: number | null
           following_count?: number | null
           group_name?: string | null
+          has_custom_timelines?: boolean | null
           id?: string
           is_protected?: boolean | null
+          is_translator?: boolean | null
           is_verified?: boolean | null
           join_date?: string | null
           last_enriched_at?: string | null
@@ -5423,7 +5440,10 @@ export type Database = {
           notes?: string | null
           password_encrypted?: string | null
           position?: number | null
+          professional_category?: string[] | null
+          professional_type?: string | null
           profile_image_url?: string | null
+          profile_urls?: Json | null
           tags?: string[] | null
           tweet_count?: number | null
           twitter_id?: string | null
@@ -5431,21 +5451,29 @@ export type Database = {
           user_id?: string | null
           username: string
           verification_type?: string | null
+          verified_type?: string | null
           website?: string | null
+          withheld_countries?: string[] | null
         }
         Update: {
           account_status?: string | null
           banner_image_url?: string | null
           bio?: string | null
+          bio_urls?: Json | null
+          can_dm?: boolean | null
+          can_media_tag?: boolean | null
           created_at?: string | null
           display_name?: string | null
           email?: string | null
           email_password_encrypted?: string | null
+          fast_followers_count?: number | null
           follower_count?: number | null
           following_count?: number | null
           group_name?: string | null
+          has_custom_timelines?: boolean | null
           id?: string
           is_protected?: boolean | null
+          is_translator?: boolean | null
           is_verified?: boolean | null
           join_date?: string | null
           last_enriched_at?: string | null
@@ -5456,7 +5484,10 @@ export type Database = {
           notes?: string | null
           password_encrypted?: string | null
           position?: number | null
+          professional_category?: string[] | null
+          professional_type?: string | null
           profile_image_url?: string | null
+          profile_urls?: Json | null
           tags?: string[] | null
           tweet_count?: number | null
           twitter_id?: string | null
@@ -5464,7 +5495,9 @@ export type Database = {
           user_id?: string | null
           username?: string
           verification_type?: string | null
+          verified_type?: string | null
           website?: string | null
+          withheld_countries?: string[] | null
         }
         Relationships: []
       }
