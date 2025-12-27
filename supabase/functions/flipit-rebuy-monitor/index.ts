@@ -85,6 +85,35 @@ async function fetchSolPrice(): Promise<number> {
   return 180; // Fallback default
 }
 
+async function sendTweet(supabase: any, tweetData: {
+  type: 'buy' | 'sell' | 'rebuy';
+  tokenSymbol: string;
+  tokenName?: string;
+  entryPrice?: number;
+  exitPrice?: number;
+  targetMultiplier?: number;
+  profitPercent?: number;
+  profitSol?: number;
+  amountSol?: number;
+  txSignature?: string;
+}) {
+  try {
+    console.log("Sending tweet for:", tweetData.type, tweetData.tokenSymbol);
+    const { data, error } = await supabase.functions.invoke("flipit-tweet", {
+      body: tweetData
+    });
+    if (error) {
+      console.error("Tweet failed:", error);
+    } else {
+      console.log("Tweet sent successfully:", data?.tweet_id);
+    }
+    return data;
+  } catch (e) {
+    console.error("Tweet error:", e);
+    return null;
+  }
+}
+
 serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
@@ -273,6 +302,18 @@ serve(async (req) => {
           } catch (emailErr) {
             console.error("Failed to send rebuy notification email:", emailErr);
           }
+
+          // Send rebuy tweet (fire and forget)
+          const amountSol = rebuyAmountUsd / solPrice;
+          sendTweet(supabase, {
+            type: 'rebuy',
+            tokenSymbol: position.token_symbol || 'TOKEN',
+            tokenName: position.token_name,
+            entryPrice: currentPrice,
+            targetMultiplier: positionRebuyMultiplier,
+            amountSol: amountSol,
+            txSignature: signature,
+          });
 
         } catch (rebuyErr: any) {
           console.error(`Failed to execute rebuy for position ${position.id}:`, rebuyErr);

@@ -110,6 +110,35 @@ async function fetchTokenMetadata(tokenMint: string): Promise<{ symbol: string; 
   return null;
 }
 
+async function sendTweet(supabase: any, tweetData: {
+  type: 'buy' | 'sell' | 'rebuy';
+  tokenSymbol: string;
+  tokenName?: string;
+  entryPrice?: number;
+  exitPrice?: number;
+  targetMultiplier?: number;
+  profitPercent?: number;
+  profitSol?: number;
+  amountSol?: number;
+  txSignature?: string;
+}) {
+  try {
+    console.log("Sending tweet for:", tweetData.type, tweetData.tokenSymbol);
+    const { data, error } = await supabase.functions.invoke("flipit-tweet", {
+      body: tweetData
+    });
+    if (error) {
+      console.error("Tweet failed:", error);
+    } else {
+      console.log("Tweet sent successfully:", data?.tweet_id);
+    }
+    return data;
+  } catch (e) {
+    console.error("Tweet error:", e);
+    return null;
+  }
+}
+
 serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
@@ -235,6 +264,21 @@ serve(async (req) => {
           })
           .eq("id", position.id);
 
+        // Calculate SOL amount from USD
+        const solPrice = await fetchSolPrice();
+        const amountSol = (buyAmountUsd || 10) / solPrice;
+
+        // Send buy tweet (fire and forget)
+        sendTweet(supabase, {
+          type: 'buy',
+          tokenSymbol: metadata?.symbol || 'TOKEN',
+          tokenName: metadata?.name,
+          entryPrice: currentPrice,
+          targetMultiplier: mult,
+          amountSol: amountSol,
+          txSignature: signature,
+        });
+
         return ok({
           success: true,
           positionId: position.id,
@@ -335,6 +379,25 @@ serve(async (req) => {
             error_message: null,
           })
           .eq("id", positionId);
+
+        // Calculate profit percent and SOL values for tweet
+        const profitPercent = position.buy_price_usd && sellPrice
+          ? ((sellPrice / position.buy_price_usd) - 1) * 100
+          : 0;
+        const solPrice = await fetchSolPrice();
+        const profitSol = profit ? profit / solPrice : 0;
+
+        // Send sell tweet (fire and forget)
+        sendTweet(supabase, {
+          type: 'sell',
+          tokenSymbol: position.token_symbol || 'TOKEN',
+          tokenName: position.token_name,
+          entryPrice: position.buy_price_usd,
+          exitPrice: sellPrice,
+          profitPercent: profitPercent,
+          profitSol: profitSol,
+          txSignature: signature,
+        });
 
         return ok({
           success: true,
