@@ -264,8 +264,7 @@ serve(async (req) => {
           })
           .eq("id", position.id);
 
-        // Calculate SOL amount from USD
-        const solPrice = await fetchSolPrice();
+        // Calculate SOL amount from USD (reuse solPrice from above)
         const amountSol = (buyAmountUsd || 10) / solPrice;
 
         // Send buy tweet (fire and forget)

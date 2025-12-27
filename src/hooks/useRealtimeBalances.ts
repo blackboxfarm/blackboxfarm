@@ -7,6 +7,8 @@ interface WalletBalance {
   sol_balance: number;
   last_balance_check: string;
   wallet_type: 'pool' | 'blackbox' | 'super_admin';
+  label?: string;
+  sub_type?: string;
 }
 
 interface BalanceState {
@@ -64,8 +66,8 @@ export function useRealtimeBalances() {
 
   const loadWalletBalances = useCallback(async () => {
     try {
-      // Load from different wallet types
-      const [poolWallets, blackboxWallets] = await Promise.all([
+      // Load from different wallet types (including super_admin_wallets)
+      const [poolWallets, blackboxWallets, superAdminWallets] = await Promise.all([
         supabase
           .from('wallet_pools')
           .select('pubkey, sol_balance, last_balance_check')
@@ -73,10 +75,22 @@ export function useRealtimeBalances() {
         supabase
           .from('blackbox_wallets')
           .select('pubkey, sol_balance, updated_at')
+          .eq('is_active', true),
+        supabase
+          .from('super_admin_wallets')
+          .select('pubkey, label, wallet_type, updated_at')
           .eq('is_active', true)
       ]);
 
       const wallets: WalletBalance[] = [
+        ...(superAdminWallets.data || []).map((w: any) => ({
+          pubkey: w.pubkey,
+          sol_balance: 0, // No sol_balance column yet - will fetch on demand
+          last_balance_check: w.updated_at || new Date().toISOString(),
+          wallet_type: 'super_admin' as const,
+          label: w.label,
+          sub_type: w.wallet_type
+        })),
         ...(poolWallets.data || []).map(w => ({
           pubkey: w.pubkey,
           sol_balance: w.sol_balance || 0,
