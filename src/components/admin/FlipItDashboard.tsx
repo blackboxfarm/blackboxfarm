@@ -79,6 +79,9 @@ interface InputTokenData {
 
 export function FlipItDashboard() {
   const isPreviewAdmin = usePreviewSuperAdmin();
+  const navigate = useNavigate();
+  const { isAuthenticated, loading: authLoading } = useAuth();
+
   const [positions, setPositions] = useState<FlipPosition[]>([]);
   const [wallets, setWallets] = useState<SuperAdminWallet[]>([]);
   const [selectedWallet, setSelectedWallet] = useState<string>('');
@@ -149,9 +152,27 @@ export function FlipItDashboard() {
   const [emergencyEditing, setEmergencyEditing] = useState<Record<string, { enabled: boolean; price: string }>>({});
 
   useEffect(() => {
+    // RLS is enforced by Supabase using your auth session.
+    // "Preview admin" only affects UI gating; it does NOT create an auth session.
+    if (authLoading) return;
+
+    if (!isAuthenticated) {
+      setWallets([]);
+      setSelectedWallet('');
+      setPositions([]);
+
+      // In preview, it's easy to land here "as admin" without actually being signed in.
+      // Redirect to /auth so you can establish a real session and load your wallets.
+      if (isPreviewAdmin) {
+        toast.error('Sign in required to load FlipIt wallets');
+        navigate('/auth');
+      }
+      return;
+    }
+
     loadWallets();
     loadPositions();
-  }, [isPreviewAdmin]);
+  }, [isPreviewAdmin, isAuthenticated, authLoading]);
 
   // Real-time subscription to flip_positions changes
   useEffect(() => {
