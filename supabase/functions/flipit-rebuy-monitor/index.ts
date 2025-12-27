@@ -140,19 +140,24 @@ serve(async (req) => {
         continue;
       }
 
-      const rebuyPrice = position.rebuy_price_usd;
+      const rebuyPriceHigh = position.rebuy_price_high_usd;
+      const rebuyPriceLow = position.rebuy_price_low_usd;
       const rebuyAmountUsd = position.rebuy_amount_usd;
 
-      if (!rebuyPrice || !rebuyAmountUsd) {
-        console.log(`Position ${position.id} missing rebuy price or amount`);
+      // Fallback to legacy single price if range not set
+      const effectiveHigh = rebuyPriceHigh ?? position.rebuy_price_usd ?? 0;
+      const effectiveLow = rebuyPriceLow ?? position.rebuy_price_usd ?? 0;
+
+      if (!effectiveHigh || !effectiveLow || !rebuyAmountUsd) {
+        console.log(`Position ${position.id} missing rebuy price range or amount`);
         continue;
       }
 
-      console.log(`Position ${position.id}: current=${currentPrice}, rebuy_target=${rebuyPrice}`);
+      console.log(`Position ${position.id}: current=${currentPrice}, rebuy_range=[${effectiveLow}, ${effectiveHigh}]`);
 
-      // Check if price has dipped to rebuy level
-      if (currentPrice <= rebuyPrice) {
-        console.log(`REBUY TRIGGERED for ${position.token_mint}! Current: $${currentPrice}, Target: $${rebuyPrice}`);
+      // Check if price is within the rebuy range (between low and high)
+      if (currentPrice >= effectiveLow && currentPrice <= effectiveHigh) {
+        console.log(`REBUY TRIGGERED for ${position.token_mint}! Current: $${currentPrice} is within range [$${effectiveLow}, $${effectiveHigh}]`);
 
         try {
           // Calculate target price for new position
@@ -197,7 +202,8 @@ serve(async (req) => {
               .from("flip_positions")
               .update({
                 rebuy_enabled: true,
-                rebuy_price_usd: rebuyPrice, // Keep same rebuy price
+                rebuy_price_high_usd: effectiveHigh,
+                rebuy_price_low_usd: effectiveLow,
                 rebuy_amount_usd: rebuyAmountUsd,
                 rebuy_status: "pending", // Will activate after this position sells
               })

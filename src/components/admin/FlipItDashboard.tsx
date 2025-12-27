@@ -41,6 +41,8 @@ interface FlipPosition {
   // Rebuy fields
   rebuy_enabled: boolean | null;
   rebuy_price_usd: number | null;
+  rebuy_price_high_usd: number | null;
+  rebuy_price_low_usd: number | null;
   rebuy_amount_usd: number | null;
   rebuy_status: string | null;
   rebuy_executed_at: string | null;
@@ -129,7 +131,7 @@ export function FlipItDashboard() {
   const [isRebuyMonitoring, setIsRebuyMonitoring] = useState(false);
   
   // Rebuy settings for editing individual positions
-  const [rebuyEditing, setRebuyEditing] = useState<Record<string, { enabled: boolean; price: string; amount: string }>>({});
+  const [rebuyEditing, setRebuyEditing] = useState<Record<string, { enabled: boolean; priceHigh: string; priceLow: string; amount: string }>>({});
 
   // Emergency sell monitoring state
   const [emergencyMonitorEnabled, setEmergencyMonitorEnabled] = useState(true);
@@ -936,16 +938,25 @@ export function FlipItDashboard() {
     toast.success(`Target updated to ${newMultiplier}x ($${newTargetPrice.toFixed(8)})`);
   };
 
-  const handleUpdateRebuySettings = async (positionId: string, enabled: boolean, rebuyPrice: number | null, rebuyAmount: number | null) => {
+  const handleUpdateRebuySettings = async (
+    positionId: string, 
+    enabled: boolean, 
+    rebuyPriceHigh: number | null, 
+    rebuyPriceLow: number | null, 
+    rebuyAmount: number | null
+  ) => {
     const updateData: any = {
       rebuy_enabled: enabled,
-      rebuy_price_usd: rebuyPrice,
+      rebuy_price_high_usd: rebuyPriceHigh,
+      rebuy_price_low_usd: rebuyPriceLow,
       rebuy_amount_usd: rebuyAmount,
+      // Keep legacy field for backwards compatibility
+      rebuy_price_usd: rebuyPriceLow, 
     };
 
     // If enabling and position is already sold, set status to watching
     const position = positions.find(p => p.id === positionId);
-    if (enabled && position?.status === 'sold' && rebuyPrice && rebuyAmount) {
+    if (enabled && position?.status === 'sold' && rebuyPriceHigh && rebuyPriceLow && rebuyAmount) {
       updateData.rebuy_status = 'watching';
     } else if (!enabled) {
       updateData.rebuy_status = null;
@@ -961,7 +972,7 @@ export function FlipItDashboard() {
       return;
     }
 
-    toast.success(enabled ? 'Rebuy watching enabled!' : 'Rebuy disabled');
+    toast.success(enabled ? 'Rebuy range configured!' : 'Rebuy disabled');
     loadPositions();
     
     // Clear local editing state
@@ -1563,7 +1574,8 @@ export function FlipItDashboard() {
                   <TableHead className="text-center">STOP-LOSS</TableHead>
                   <TableHead>SL Price</TableHead>
                   <TableHead className="text-center">REBUY</TableHead>
-                  <TableHead>Rebuy Price</TableHead>
+                  <TableHead>Rebuy Low</TableHead>
+                  <TableHead>Rebuy High</TableHead>
                   <TableHead>Rebuy Amt</TableHead>
                   <TableHead>Status</TableHead>
                   <TableHead>Action</TableHead>
@@ -1807,28 +1819,30 @@ export function FlipItDashboard() {
                             }
                             onCheckedChange={(checked) => {
                               if (checked) {
-                                // Enable: default rebuy at 50% of entry price, same amount
+                                // Enable: default rebuy range at ±10% of entry price, same amount
                                 const entryPrice = position.buy_price_usd || 0;
-                                const defaultRebuyPrice = entryPrice * 0.5; // 50% of entry
+                                const defaultPriceHigh = entryPrice * 1.10; // 10% above entry
+                                const defaultPriceLow = entryPrice * 0.90;  // 10% below entry
                                 const defaultAmount = position.buy_amount_usd || 10;
                                 setRebuyEditing(prev => ({
                                   ...prev,
                                   [position.id]: { 
                                     enabled: true, 
-                                    price: defaultRebuyPrice.toFixed(10).replace(/\.?0+$/, ''),
+                                    priceHigh: defaultPriceHigh.toFixed(10).replace(/\.?0+$/, ''),
+                                    priceLow: defaultPriceLow.toFixed(10).replace(/\.?0+$/, ''),
                                     amount: defaultAmount.toFixed(2)
                                   }
                                 }));
                               } else {
                                 // Disable: save immediately
-                                handleUpdateRebuySettings(position.id, false, null, null);
+                                handleUpdateRebuySettings(position.id, false, null, null, null);
                               }
                             }}
                           />
                         )}
                       </TableCell>
                       
-                      {/* Rebuy Price Input */}
+                      {/* Rebuy Low Price Input */}
                       <TableCell>
                         {position.status === 'holding' && (
                           <div className="flex flex-col gap-1">
@@ -1838,17 +1852,18 @@ export function FlipItDashboard() {
                                 <Input
                                   type="text"
                                   className="h-7 w-24 text-xs font-mono"
-                                  placeholder="0.0000001"
+                                  placeholder="Low"
                                   value={
-                                    rebuyEditing[position.id]?.price ?? 
-                                    (position.rebuy_price_usd?.toString() || '')
+                                    rebuyEditing[position.id]?.priceLow ?? 
+                                    (position.rebuy_price_low_usd?.toString() || '')
                                   }
                                   onChange={(e) => {
                                     setRebuyEditing(prev => ({
                                       ...prev,
                                       [position.id]: { 
                                         enabled: true, 
-                                        price: e.target.value,
+                                        priceLow: e.target.value,
+                                        priceHigh: prev[position.id]?.priceHigh || position.rebuy_price_high_usd?.toString() || '',
                                         amount: prev[position.id]?.amount || position.rebuy_amount_usd?.toString() || position.buy_amount_usd?.toFixed(2) || '10'
                                       }
                                     }));
@@ -1858,9 +1873,49 @@ export function FlipItDashboard() {
                             ) : (
                               <span className="text-xs text-muted-foreground">-</span>
                             )}
-                            {position.buy_price_usd && (rebuyEditing[position.id]?.price || position.rebuy_price_usd) && (
+                            {position.buy_price_usd && (rebuyEditing[position.id]?.priceLow || position.rebuy_price_low_usd) && (
                               <div className="text-xs text-muted-foreground">
-                                {((1 - parseFloat(rebuyEditing[position.id]?.price || position.rebuy_price_usd?.toString() || '0') / position.buy_price_usd) * 100).toFixed(0)}% drop
+                                {((1 - parseFloat(rebuyEditing[position.id]?.priceLow || position.rebuy_price_low_usd?.toString() || '0') / position.buy_price_usd) * 100).toFixed(0)}% drop
+                              </div>
+                            )}
+                          </div>
+                        )}
+                      </TableCell>
+                      
+                      {/* Rebuy High Price Input */}
+                      <TableCell>
+                        {position.status === 'holding' && (
+                          <div className="flex flex-col gap-1">
+                            {(rebuyEditing[position.id]?.enabled || position.rebuy_enabled) ? (
+                              <div className="flex items-center gap-1">
+                                <span className="text-xs text-muted-foreground">$</span>
+                                <Input
+                                  type="text"
+                                  className="h-7 w-24 text-xs font-mono"
+                                  placeholder="High"
+                                  value={
+                                    rebuyEditing[position.id]?.priceHigh ?? 
+                                    (position.rebuy_price_high_usd?.toString() || '')
+                                  }
+                                  onChange={(e) => {
+                                    setRebuyEditing(prev => ({
+                                      ...prev,
+                                      [position.id]: { 
+                                        enabled: true, 
+                                        priceHigh: e.target.value,
+                                        priceLow: prev[position.id]?.priceLow || position.rebuy_price_low_usd?.toString() || '',
+                                        amount: prev[position.id]?.amount || position.rebuy_amount_usd?.toString() || position.buy_amount_usd?.toFixed(2) || '10'
+                                      }
+                                    }));
+                                  }}
+                                />
+                              </div>
+                            ) : (
+                              <span className="text-xs text-muted-foreground">-</span>
+                            )}
+                            {position.buy_price_usd && (rebuyEditing[position.id]?.priceHigh || position.rebuy_price_high_usd) && (
+                              <div className="text-xs text-muted-foreground">
+                                +{((parseFloat(rebuyEditing[position.id]?.priceHigh || position.rebuy_price_high_usd?.toString() || '0') / position.buy_price_usd - 1) * 100).toFixed(0)}%
                               </div>
                             )}
                           </div>
@@ -1887,7 +1942,8 @@ export function FlipItDashboard() {
                                       ...prev,
                                       [position.id]: { 
                                         enabled: true, 
-                                        price: prev[position.id]?.price || position.rebuy_price_usd?.toString() || '',
+                                        priceHigh: prev[position.id]?.priceHigh || position.rebuy_price_high_usd?.toString() || '',
+                                        priceLow: prev[position.id]?.priceLow || position.rebuy_price_low_usd?.toString() || '',
                                         amount: e.target.value
                                       }
                                     }));
@@ -1898,12 +1954,13 @@ export function FlipItDashboard() {
                                   variant="outline"
                                   className="h-7 px-2"
                                   onClick={() => {
-                                    const priceVal = parseFloat(rebuyEditing[position.id]?.price || position.rebuy_price_usd?.toString() || '0');
+                                    const priceHighVal = parseFloat(rebuyEditing[position.id]?.priceHigh || position.rebuy_price_high_usd?.toString() || '0');
+                                    const priceLowVal = parseFloat(rebuyEditing[position.id]?.priceLow || position.rebuy_price_low_usd?.toString() || '0');
                                     const amountVal = parseFloat(rebuyEditing[position.id]?.amount || position.rebuy_amount_usd?.toString() || '0');
-                                    if (priceVal > 0 && amountVal > 0) {
-                                      handleUpdateRebuySettings(position.id, true, priceVal, amountVal);
+                                    if (priceHighVal > 0 && priceLowVal > 0 && amountVal > 0) {
+                                      handleUpdateRebuySettings(position.id, true, priceHighVal, priceLowVal, amountVal);
                                     } else {
-                                      toast.error('Enter valid rebuy price and amount');
+                                      toast.error('Enter valid rebuy price range and amount');
                                     }
                                   }}
                                 >
@@ -2000,7 +2057,8 @@ export function FlipItDashboard() {
                   <TableHead>P&L</TableHead>
                   <TableHead>Status</TableHead>
                   <TableHead>REBUY</TableHead>
-                  <TableHead>Rebuy Price</TableHead>
+                  <TableHead>Rebuy Low</TableHead>
+                  <TableHead>Rebuy High</TableHead>
                   <TableHead>Rebuy Amount</TableHead>
                   <TableHead>Action</TableHead>
                 </TableRow>
@@ -2009,7 +2067,8 @@ export function FlipItDashboard() {
                 {completedPositions.slice(0, 50).map(position => {
                   const editState = rebuyEditing[position.id] || {
                     enabled: position.rebuy_enabled || false,
-                    price: position.rebuy_price_usd?.toString() || '',
+                    priceHigh: position.rebuy_price_high_usd?.toString() || '',
+                    priceLow: position.rebuy_price_low_usd?.toString() || '',
                     amount: position.rebuy_amount_usd?.toString() || ''
                   };
                   
@@ -2073,7 +2132,7 @@ export function FlipItDashboard() {
                         />
                       </TableCell>
                       
-                      {/* Rebuy Price Input */}
+                      {/* Rebuy Low Price Input */}
                       <TableCell>
                         <div className="flex items-center gap-1">
                           <span className="text-xs text-muted-foreground">$</span>
@@ -2081,20 +2140,46 @@ export function FlipItDashboard() {
                             type="number"
                             step="0.00000001"
                             className="w-24 h-7 text-xs"
-                            placeholder={position.sell_price_usd ? (position.sell_price_usd * 0.7).toFixed(8) : '0.0001'}
-                            value={editState.price}
+                            placeholder={position.sell_price_usd ? (position.sell_price_usd * 0.9).toFixed(8) : '0.0001'}
+                            value={editState.priceLow}
                             disabled={isExecuted || isWatching}
                             onChange={(e) => {
                               setRebuyEditing(prev => ({
                                 ...prev,
-                                [position.id]: { ...editState, price: e.target.value }
+                                [position.id]: { ...editState, priceLow: e.target.value }
                               }));
                             }}
                           />
                         </div>
-                        {position.sell_price_usd && editState.price && (
+                        {position.sell_price_usd && editState.priceLow && (
                           <div className="text-xs text-muted-foreground mt-0.5">
-                            {((1 - parseFloat(editState.price) / position.sell_price_usd) * 100).toFixed(1)}% drop
+                            {((1 - parseFloat(editState.priceLow) / position.sell_price_usd) * 100).toFixed(1)}% drop
+                          </div>
+                        )}
+                      </TableCell>
+                      
+                      {/* Rebuy High Price Input */}
+                      <TableCell>
+                        <div className="flex items-center gap-1">
+                          <span className="text-xs text-muted-foreground">$</span>
+                          <Input
+                            type="number"
+                            step="0.00000001"
+                            className="w-24 h-7 text-xs"
+                            placeholder={position.sell_price_usd ? (position.sell_price_usd * 1.1).toFixed(8) : '0.0001'}
+                            value={editState.priceHigh}
+                            disabled={isExecuted || isWatching}
+                            onChange={(e) => {
+                              setRebuyEditing(prev => ({
+                                ...prev,
+                                [position.id]: { ...editState, priceHigh: e.target.value }
+                              }));
+                            }}
+                          />
+                        </div>
+                        {position.sell_price_usd && editState.priceHigh && (
+                          <div className="text-xs text-muted-foreground mt-0.5">
+                            +{((parseFloat(editState.priceHigh) / position.sell_price_usd - 1) * 100).toFixed(1)}%
                           </div>
                         )}
                       </TableCell>
@@ -2133,11 +2218,12 @@ export function FlipItDashboard() {
                               size="sm"
                               variant={editState.enabled ? "default" : "outline"}
                               className="h-7 text-xs"
-                              disabled={!editState.price || !editState.amount}
+                              disabled={!editState.priceLow || !editState.priceHigh || !editState.amount}
                               onClick={() => handleUpdateRebuySettings(
                                 position.id,
                                 editState.enabled,
-                                parseFloat(editState.price) || null,
+                                parseFloat(editState.priceHigh) || null,
+                                parseFloat(editState.priceLow) || null,
                                 parseFloat(editState.amount) || null
                               )}
                             >
