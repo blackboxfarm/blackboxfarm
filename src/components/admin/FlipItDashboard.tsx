@@ -59,6 +59,16 @@ interface SuperAdminWallet {
   wallet_type?: string;
 }
 
+interface InputTokenData {
+  mint: string;
+  symbol: string | null;
+  name: string | null;
+  price: number | null;
+  image: string | null;
+  lastFetched: string | null;
+  source: 'token-metadata' | 'raydium-quote' | 'dexscreener' | null;
+}
+
 export function FlipItDashboard() {
   const [positions, setPositions] = useState<FlipPosition[]>([]);
   const [wallets, setWallets] = useState<SuperAdminWallet[]>([]);
@@ -84,10 +94,18 @@ export function FlipItDashboard() {
   const [showPrivateKey, setShowPrivateKey] = useState(false);
   const [showTokenManager, setShowTokenManager] = useState(false);
   
-  // Input token price state (for live preview before adding)
-  const [inputTokenPrice, setInputTokenPrice] = useState<number | null>(null);
-  const [isLoadingInputPrice, setIsLoadingInputPrice] = useState(false);
-  const inputPriceTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  // Unified input token state - single source of truth
+  const [inputToken, setInputToken] = useState<InputTokenData>({
+    mint: '',
+    symbol: null,
+    name: null,
+    price: null,
+    image: null,
+    lastFetched: null,
+    source: null
+  });
+  const [isLoadingInputToken, setIsLoadingInputToken] = useState(false);
+  const inputFetchTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   
   // SOL price for USD conversion
   const { price: solPrice, isLoading: solPriceLoading } = useSolPrice();
@@ -338,125 +356,157 @@ export function FlipItDashboard() {
     }
   }, [selectedWallet]);
 
-  // Debounced price fetch for token input
+  // Unified token data fetch function - single source of truth
+  const fetchInputTokenData = useCallback(async (tokenMint: string, forceRefresh = false): Promise<boolean> => {
+    const mint = tokenMint.trim();
+    if (!mint || mint.length < 32) {
+      setInputToken(prev => ({ ...prev, mint: '', symbol: null, name: null, price: null, image: null, lastFetched: null, source: null }));
+      return false;
+    }
+
+    // Skip if same mint and not forcing refresh and has recent data
+    if (!forceRefresh && inputToken.mint === mint && inputToken.lastFetched) {
+      const lastFetchTime = new Date(inputToken.lastFetched).getTime();
+      const now = Date.now();
+      if (now - lastFetchTime < 30000) { // 30 second cache
+        return true;
+      }
+    }
+
+    setIsLoadingInputToken(true);
+    
+    try {
+      // Primary: Use token-metadata which returns both metadata AND price
+      const { data: metaData, error: metaError } = await supabase.functions.invoke('token-metadata', {
+        body: { tokenMint: mint }
+      });
+
+      if (metaError) throw metaError;
+
+      if (metaData?.success && metaData?.metadata) {
+        const meta = metaData.metadata;
+        const priceInfo = metaData.priceInfo;
+        
+        setInputToken({
+          mint: mint,
+          symbol: meta.symbol || null,
+          name: meta.name || null,
+          price: priceInfo?.priceUsd ?? null,
+          image: meta.image || meta.logoURI || null,
+          lastFetched: new Date().toISOString(),
+          source: 'token-metadata'
+        });
+
+        // If token-metadata returned a price, we're done
+        if (priceInfo?.priceUsd) {
+          toast.success(`${meta.symbol || 'Token'}: $${priceInfo.priceUsd.toFixed(10).replace(/\.?0+$/, '')}`);
+          return true;
+        }
+
+        // Fallback: If no price from token-metadata, try raydium-quote
+        try {
+          const response = await fetch(
+            `https://apxauapuusmgwbbzjgfl.supabase.co/functions/v1/raydium-quote?priceMint=${encodeURIComponent(mint)}`,
+            {
+              method: 'GET',
+              headers: {
+                'apikey': 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFweGF1YXB1dXNtZ3diYnpqZ2ZsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTQ1OTEzMDUsImV4cCI6MjA3MDE2NzMwNX0.w8IrKq4YVStF3TkdEcs5mCSeJsxjkaVq2NFkypYOXHU'
+              }
+            }
+          );
+          
+          if (response.ok) {
+            const priceData = await response.json();
+            if (priceData?.priceUSD) {
+              setInputToken(prev => ({
+                ...prev,
+                price: priceData.priceUSD,
+                source: 'raydium-quote',
+                lastFetched: new Date().toISOString()
+              }));
+              toast.success(`${meta.symbol || 'Token'}: $${priceData.priceUSD.toFixed(10).replace(/\.?0+$/, '')}`);
+              return true;
+            }
+          }
+        } catch (priceErr) {
+          console.warn('Raydium price fallback failed:', priceErr);
+        }
+
+        // Got metadata but no price
+        toast.info(`${meta.symbol || 'Token'} loaded (no price available)`);
+        return true;
+      }
+
+      // token-metadata failed - try raydium-quote alone as last resort
+      const response = await fetch(
+        `https://apxauapuusmgwbbzjgfl.supabase.co/functions/v1/raydium-quote?priceMint=${encodeURIComponent(mint)}`,
+        {
+          method: 'GET',
+          headers: {
+            'apikey': 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFweGF1YXB1dXNtZ3diYnpqZ2ZsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTQ1OTEzMDUsImV4cCI6MjA3MDE2NzMwNX0.w8IrKq4YVStF3TkdEcs5mCSeJsxjkaVq2NFkypYOXHU'
+          }
+        }
+      );
+      
+      if (response.ok) {
+        const priceData = await response.json();
+        if (priceData?.priceUSD) {
+          setInputToken({
+            mint: mint,
+            symbol: null,
+            name: null,
+            price: priceData.priceUSD,
+            image: null,
+            lastFetched: new Date().toISOString(),
+            source: 'raydium-quote'
+          });
+          toast.success(`Price: $${priceData.priceUSD.toFixed(10).replace(/\.?0+$/, '')}`);
+          return true;
+        }
+      }
+
+      toast.error('Could not fetch token data');
+      return false;
+    } catch (err: any) {
+      console.error('Failed to fetch token data:', err);
+      toast.error(err.message || 'Failed to fetch token data');
+      return false;
+    } finally {
+      setIsLoadingInputToken(false);
+    }
+  }, [inputToken.mint, inputToken.lastFetched]);
+
+  // Debounced auto-fetch when token address changes
   useEffect(() => {
-    // Clear previous timeout
-    if (inputPriceTimeoutRef.current) {
-      clearTimeout(inputPriceTimeoutRef.current);
+    if (inputFetchTimeoutRef.current) {
+      clearTimeout(inputFetchTimeoutRef.current);
     }
     
-    // Reset price if input is cleared
-    if (!tokenAddress.trim() || tokenAddress.trim().length < 32) {
-      setInputTokenPrice(null);
-      setIsLoadingInputPrice(false);
+    const mint = tokenAddress.trim();
+    if (!mint || mint.length < 32) {
+      setInputToken(prev => ({ ...prev, mint: '', symbol: null, name: null, price: null, image: null, lastFetched: null, source: null }));
       return;
     }
 
     // Debounce: wait 500ms after user stops typing
-    setIsLoadingInputPrice(true);
-    inputPriceTimeoutRef.current = setTimeout(async () => {
-      try {
-        // Use fetch with query param since priceMint needs to be in URL
-        const response = await fetch(
-          `https://apxauapuusmgwbbzjgfl.supabase.co/functions/v1/raydium-quote?priceMint=${encodeURIComponent(tokenAddress.trim())}`,
-          {
-            method: 'GET',
-            headers: {
-              'apikey': 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFweGF1YXB1dXNtZ3diYnpqZ2ZsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTQ1OTEzMDUsImV4cCI6MjA3MDE2NzMwNX0.w8IrKq4YVStF3TkdEcs5mCSeJsxjkaVq2NFkypYOXHU'
-            }
-          }
-        );
-        
-        if (!response.ok) throw new Error('Price fetch failed');
-        
-        const data = await response.json();
-        
-        if (data?.priceUSD !== undefined) {
-          setInputTokenPrice(data.priceUSD);
-        } else {
-          setInputTokenPrice(null);
-        }
-      } catch (err) {
-        console.error('Failed to fetch input token price:', err);
-        setInputTokenPrice(null);
-      } finally {
-        setIsLoadingInputPrice(false);
-      }
+    inputFetchTimeoutRef.current = setTimeout(() => {
+      fetchInputTokenData(mint, false);
     }, 500);
 
     return () => {
-      if (inputPriceTimeoutRef.current) {
-        clearTimeout(inputPriceTimeoutRef.current);
+      if (inputFetchTimeoutRef.current) {
+        clearTimeout(inputFetchTimeoutRef.current);
       }
     };
-  }, [tokenAddress]);
+  }, [tokenAddress, fetchInputTokenData]);
 
-  // State for token name/symbol from price check
-  const [inputTokenName, setInputTokenName] = useState<string | null>(null);
-  const [inputTokenSymbol, setInputTokenSymbol] = useState<string | null>(null);
-
-  // Manual price check function
-  const handleCheckPrice = async () => {
+  // Manual refresh button handler
+  const handleCheckPrice = () => {
     if (!tokenAddress.trim() || tokenAddress.trim().length < 32) {
       toast.error('Enter a valid token address');
       return;
     }
-    
-    setIsLoadingInputPrice(true);
-    setInputTokenName(null);
-    setInputTokenSymbol(null);
-    
-    try {
-      // Fetch price and metadata in parallel
-      const [priceRes, metaRes] = await Promise.all([
-        fetch(
-          `https://apxauapuusmgwbbzjgfl.supabase.co/functions/v1/raydium-quote?priceMint=${encodeURIComponent(tokenAddress.trim())}`,
-          {
-            method: 'GET',
-            headers: {
-              'apikey': 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFweGF1YXB1dXNtZ3diYnpqZ2ZsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTQ1OTEzMDUsImV4cCI6MjA3MDE2NzMwNX0.w8IrKq4YVStF3TkdEcs5mCSeJsxjkaVq2NFkypYOXHU'
-            }
-          }
-        ),
-        supabase.functions.invoke('token-metadata', {
-          body: { tokenMint: tokenAddress.trim() }
-        })
-      ]);
-      
-      // Handle price
-      if (priceRes.ok) {
-        const priceData = await priceRes.json();
-        if (priceData?.priceUSD !== undefined) {
-          setInputTokenPrice(priceData.priceUSD);
-        } else {
-          setInputTokenPrice(null);
-        }
-      }
-      
-      // Handle metadata
-      if (metaRes.data?.metadata) {
-        const meta = metaRes.data.metadata;
-        setInputTokenSymbol(meta.symbol || null);
-        setInputTokenName(meta.name || null);
-        
-        const symbol = meta.symbol || 'Token';
-        const price = metaRes.data?.priceInfo?.priceUsd;
-        if (price) {
-          setInputTokenPrice(price);
-          toast.success(`${symbol}: $${price.toFixed(10).replace(/\.?0+$/, '')}`);
-        } else {
-          toast.info(`${symbol} loaded`);
-        }
-      } else {
-        toast.error('No metadata found');
-      }
-    } catch (err) {
-      console.error('Failed to fetch price:', err);
-      toast.error('Failed to fetch price');
-      setInputTokenPrice(null);
-    } finally {
-      setIsLoadingInputPrice(false);
-    }
+    fetchInputTokenData(tokenAddress.trim(), true); // Force refresh
   };
 
   const loadWallets = async () => {
@@ -786,6 +836,16 @@ export function FlipItDashboard() {
       } else {
         toast.success(`Flip initiated! ${data?.signature ? 'TX: ' + data.signature.slice(0, 8) + '...' : ''}`);
         setTokenAddress('');
+        // Clear input token state
+        setInputToken({
+          mint: '',
+          symbol: null,
+          name: null,
+          price: null,
+          image: null,
+          lastFetched: null,
+          source: null
+        });
         loadPositions();
       }
     } catch (err: any) {
@@ -1274,20 +1334,25 @@ export function FlipItDashboard() {
               <Label className="flex items-center justify-between flex-wrap gap-2">
                 <span className="flex items-center gap-2">
                   Token Address
-                  {inputTokenSymbol && (
+                  {inputToken.symbol && (
                     <span className="font-bold text-primary">
-                      {inputTokenSymbol}{inputTokenName ? ` (${inputTokenName})` : ''}
+                      {inputToken.symbol}{inputToken.name ? ` (${inputToken.name})` : ''}
                     </span>
                   )}
                 </span>
-                {isLoadingInputPrice && (
+                {isLoadingInputToken && (
                   <span className="flex items-center gap-1 text-xs text-muted-foreground">
                     <Loader2 className="h-3 w-3 animate-spin" /> Fetching...
                   </span>
                 )}
-                {!isLoadingInputPrice && inputTokenPrice !== null && (
+                {!isLoadingInputToken && inputToken.price !== null && (
                   <span className="text-sm font-bold text-green-400">
-                    ${inputTokenPrice.toFixed(10).replace(/\.?0+$/, '')}
+                    ${inputToken.price.toFixed(10).replace(/\.?0+$/, '')}
+                    {inputToken.source && (
+                      <span className="text-xs text-muted-foreground ml-1">
+                        ({inputToken.source})
+                      </span>
+                    )}
                   </span>
                 )}
               </Label>
@@ -1302,25 +1367,31 @@ export function FlipItDashboard() {
                   size="sm"
                   variant="outline"
                   onClick={handleCheckPrice}
-                  disabled={isLoadingInputPrice || !tokenAddress.trim()}
+                  disabled={isLoadingInputToken || !tokenAddress.trim()}
                   className="shrink-0"
+                  title="Refresh token data"
                 >
-                  {isLoadingInputPrice ? (
+                  {isLoadingInputToken ? (
                     <Loader2 className="h-4 w-4 animate-spin" />
                   ) : (
                     <RefreshCw className="h-4 w-4" />
                   )}
                 </Button>
               </div>
-              {inputTokenPrice !== null && buyAmount && (
+              {inputToken.price !== null && buyAmount && (
                 <p className="text-xs text-muted-foreground">
                   Entry: ~{(() => {
                     const amt = parseFloat(buyAmount);
                     if (isNaN(amt) || amt <= 0) return '—';
                     const usdAmount = buyAmountMode === 'sol' && solPrice ? amt * solPrice : amt;
-                    const tokens = usdAmount / inputTokenPrice;
+                    const tokens = usdAmount / inputToken.price!;
                     return `${tokens.toLocaleString(undefined, { maximumFractionDigits: 0 })} tokens`;
                   })()}
+                  {inputToken.lastFetched && (
+                    <span className="ml-2 text-muted-foreground/70">
+                      • {new Date(inputToken.lastFetched).toLocaleTimeString()}
+                    </span>
+                  )}
                 </p>
               )}
             </div>
