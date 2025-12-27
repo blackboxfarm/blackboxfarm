@@ -10,13 +10,14 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Switch } from '@/components/ui/switch';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
-import { Flame, RefreshCw, TrendingUp, DollarSign, Wallet, Clock, CheckCircle2, XCircle, Loader2, Plus, Copy, ArrowUpRight, Key, Settings, Zap, Activity, Radio, Pencil, ChevronDown, Coins, Eye, EyeOff, RotateCcw, AlertTriangle } from 'lucide-react';
+import { Flame, RefreshCw, TrendingUp, DollarSign, Wallet, Clock, CheckCircle2, XCircle, Loader2, Plus, Copy, ArrowUpRight, Key, Settings, Zap, Activity, Radio, Pencil, ChevronDown, Coins, Eye, EyeOff, RotateCcw, AlertTriangle, Twitter } from 'lucide-react';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { useSolPrice } from '@/hooks/useSolPrice';
 import { FlipItFeeCalculator } from './flipit/FlipItFeeCalculator';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { WalletTokenManager } from '@/components/blackbox/WalletTokenManager';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import TweetTemplateEditor from './TweetTemplateEditor';
 
 interface FlipPosition {
   id: string;
@@ -1343,6 +1344,22 @@ export function FlipItDashboard() {
               </div>
             </div>
           </div>
+
+          {/* Tweet Templates Section */}
+          <Collapsible className="mb-6">
+            <CollapsibleTrigger asChild>
+              <Button variant="outline" className="w-full justify-between mb-2">
+                <span className="flex items-center gap-2">
+                  <Twitter className="h-4 w-4" />
+                  Tweet Templates
+                </span>
+                <ChevronDown className="h-4 w-4" />
+              </Button>
+            </CollapsibleTrigger>
+            <CollapsibleContent>
+              <TweetTemplateEditor />
+            </CollapsibleContent>
+          </Collapsible>
 
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
 
