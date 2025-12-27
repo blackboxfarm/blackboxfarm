@@ -2506,6 +2506,33 @@ export type Database = {
           },
         ]
       }
+      flipit_tweet_templates: {
+        Row: {
+          created_at: string
+          id: string
+          is_enabled: boolean
+          template_text: string
+          template_type: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          is_enabled?: boolean
+          template_text: string
+          template_type: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          is_enabled?: boolean
+          template_text?: string
+          template_type?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       fuct_gift_claims: {
         Row: {
           claim_date: string

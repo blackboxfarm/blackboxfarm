@@ -1,4 +1,5 @@
 import { createHmac } from "node:crypto";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -80,51 +81,104 @@ interface TweetRequest {
   txSignature?: string;
 }
 
-function buildTweetText(data: TweetRequest): string {
-  const { type, tokenSymbol, tokenName, entryPrice, exitPrice, targetMultiplier, profitPercent, profitSol, amountSol, txSignature } = data;
-  
-  const symbol = tokenSymbol || 'TOKEN';
-  const name = tokenName || symbol;
-  
-  switch (type) {
-    case 'buy':
-      return `🎯 FLIP IT: Just entered $${symbol}
+// Default templates (fallback if DB not available)
+const DEFAULT_TEMPLATES: Record<string, string> = {
+  buy: `🎯 FLIP IT: Just entered ${{TOKEN_SYMBOL}}
 
-💰 Entry: $${entryPrice?.toFixed(8) || 'N/A'}
-🎯 Target: ${targetMultiplier || 2}x
-📊 Amount: ${amountSol?.toFixed(4) || 'N/A'} SOL
+💰 Entry: ${{ENTRY_PRICE}}
+🎯 Target: {{TARGET_MULTIPLIER}}x
+📊 Amount: {{AMOUNT_SOL}} SOL
 
 Let's see if this one prints! 🚀
 
-#Solana #${symbol} #FlipIt`;
+#Solana #{{TOKEN_SYMBOL}} #FlipIt`,
+  sell: `{{PROFIT_EMOJI}} FLIP IT CLOSED: ${{TOKEN_SYMBOL}}
 
-    case 'sell':
-      const emoji = (profitPercent || 0) >= 0 ? '🟢' : '🔴';
-      const profitEmoji = (profitPercent || 0) >= 100 ? '🚀' : (profitPercent || 0) >= 50 ? '💪' : (profitPercent || 0) >= 0 ? '✅' : '📉';
-      return `${emoji} FLIP IT CLOSED: $${symbol}
+💰 Entry: ${{ENTRY_PRICE}}
+💵 Exit: ${{EXIT_PRICE}}
+{{RESULT_EMOJI}} PnL: {{PROFIT_SIGN}}{{PROFIT_PERCENT}}% ({{PROFIT_SIGN}}{{PROFIT_SOL}} SOL)
 
-💰 Entry: $${entryPrice?.toFixed(8) || 'N/A'}
-💵 Exit: $${exitPrice?.toFixed(8) || 'N/A'}
-${profitEmoji} PnL: ${(profitPercent || 0) >= 0 ? '+' : ''}${profitPercent?.toFixed(2) || '0'}% (${(profitSol || 0) >= 0 ? '+' : ''}${profitSol?.toFixed(4) || '0'} SOL)
+{{RESULT_MESSAGE}}
 
-${(profitPercent || 0) >= 100 ? 'MASSIVE WIN! 🎉' : (profitPercent || 0) >= 50 ? 'Solid flip! 💰' : (profitPercent || 0) >= 0 ? 'Small win!' : 'Took the L, moving on.'}
+#Solana #{{TOKEN_SYMBOL}} #FlipIt`,
+  rebuy: `🔄 FLIP IT REBUY: ${{TOKEN_SYMBOL}}
 
-#Solana #${symbol} #FlipIt`;
-
-    case 'rebuy':
-      return `🔄 FLIP IT REBUY: $${symbol}
-
-💰 New Entry: $${entryPrice?.toFixed(8) || 'N/A'}
-🎯 Target: ${targetMultiplier || 2}x
-📊 Amount: ${amountSol?.toFixed(4) || 'N/A'} SOL
+💰 New Entry: ${{ENTRY_PRICE}}
+🎯 Target: {{TARGET_MULTIPLIER}}x
+📊 Amount: {{AMOUNT_SOL}} SOL
 
 Back in for another round! 🎰
 
-#Solana #${symbol} #FlipIt`;
+#Solana #{{TOKEN_SYMBOL}} #FlipIt`,
+};
 
-    default:
-      return `FlipIt trade on $${symbol}`;
+async function getTemplate(supabase: any, templateType: string): Promise<{ text: string; enabled: boolean }> {
+  try {
+    const { data, error } = await supabase
+      .from("flipit_tweet_templates")
+      .select("template_text, is_enabled")
+      .eq("template_type", templateType)
+      .single();
+
+    if (error || !data) {
+      console.log(`Using default template for ${templateType}`);
+      return { text: DEFAULT_TEMPLATES[templateType] || "", enabled: true };
+    }
+
+    return { text: data.template_text, enabled: data.is_enabled };
+  } catch (e) {
+    console.error("Failed to fetch template:", e);
+    return { text: DEFAULT_TEMPLATES[templateType] || "", enabled: true };
   }
+}
+
+function buildTweetText(template: string, data: TweetRequest): string {
+  const { type, tokenSymbol, tokenName, entryPrice, exitPrice, targetMultiplier, profitPercent, profitSol, amountSol } = data;
+  
+  const symbol = tokenSymbol || 'TOKEN';
+  const profitSign = (profitPercent || 0) >= 0 ? '+' : '';
+  const profitEmoji = (profitPercent || 0) >= 0 ? '🟢' : '🔴';
+  
+  let resultEmoji = '✅';
+  let resultMessage = 'Small win!';
+  
+  if (type === 'sell') {
+    if ((profitPercent || 0) >= 100) {
+      resultEmoji = '🚀';
+      resultMessage = 'MASSIVE WIN! 🎉';
+    } else if ((profitPercent || 0) >= 50) {
+      resultEmoji = '💪';
+      resultMessage = 'Solid flip! 💰';
+    } else if ((profitPercent || 0) >= 0) {
+      resultEmoji = '✅';
+      resultMessage = 'Small win!';
+    } else {
+      resultEmoji = '📉';
+      resultMessage = 'Took the L, moving on.';
+    }
+  }
+
+  const replacements: Record<string, string> = {
+    '{{TOKEN_SYMBOL}}': symbol,
+    '{{TOKEN_NAME}}': tokenName || symbol,
+    '{{ENTRY_PRICE}}': entryPrice?.toFixed(8) || 'N/A',
+    '{{EXIT_PRICE}}': exitPrice?.toFixed(8) || 'N/A',
+    '{{TARGET_MULTIPLIER}}': String(targetMultiplier || 2),
+    '{{AMOUNT_SOL}}': amountSol?.toFixed(4) || 'N/A',
+    '{{PROFIT_PERCENT}}': Math.abs(profitPercent || 0).toFixed(2),
+    '{{PROFIT_SOL}}': Math.abs(profitSol || 0).toFixed(4),
+    '{{PROFIT_SIGN}}': profitSign,
+    '{{PROFIT_EMOJI}}': profitEmoji,
+    '{{RESULT_EMOJI}}': resultEmoji,
+    '{{RESULT_MESSAGE}}': resultMessage,
+  };
+
+  let text = template;
+  Object.entries(replacements).forEach(([key, value]) => {
+    text = text.replace(new RegExp(key.replace(/[{}]/g, '\\$&'), 'g'), value);
+  });
+
+  return text;
 }
 
 async function sendTweet(tweetText: string): Promise<any> {
@@ -161,10 +215,28 @@ Deno.serve(async (req) => {
   try {
     validateEnvironmentVariables();
     
+    const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
+    const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+    const supabase = createClient(supabaseUrl, supabaseServiceKey);
+    
     const body: TweetRequest = await req.json();
     console.log("Tweet request:", JSON.stringify(body));
     
-    const tweetText = buildTweetText(body);
+    // Get template from database
+    const { text: template, enabled } = await getTemplate(supabase, body.type);
+    
+    if (!enabled) {
+      console.log(`Tweeting disabled for ${body.type}`);
+      return new Response(JSON.stringify({ 
+        success: false, 
+        skipped: true,
+        reason: `${body.type} tweets are disabled`
+      }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+    
+    const tweetText = buildTweetText(template, body);
     console.log("Generated tweet text:", tweetText);
     
     const result = await sendTweet(tweetText);
