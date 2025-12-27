@@ -165,7 +165,7 @@ export function FlipItDashboard() {
       // Redirect to /auth so you can establish a real session and load your wallets.
       if (isPreviewAdmin) {
         toast.error('Sign in required to load FlipIt wallets');
-        navigate('/auth');
+        navigate('/auth?tab=signin&next=/super-admin', { replace: true });
       }
       return;
     }
@@ -552,7 +552,7 @@ export function FlipItDashboard() {
 
         if (dbError) {
           console.error('Failed to load wallets from DB:', dbError);
-          toast.error('Failed to load wallets');
+          toast.error(dbError.message || 'Failed to load wallets');
           return;
         }
 

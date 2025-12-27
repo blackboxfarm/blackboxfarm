@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { AuthModal } from '@/components/auth/AuthModal';
@@ -10,12 +10,36 @@ import { Shield, UserPlus, Mail, Smartphone, Key, CheckCircle, ArrowLeft } from 
 import { FarmBanner } from '@/components/FarmBanner';
 import { AuthButton } from '@/components/auth/AuthButton';
 import { NotificationCenter } from '@/components/NotificationCenter';
-import { Link } from 'react-router-dom';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 
 export default function AuthPage() {
+  const location = useLocation();
+  const navigate = useNavigate();
+
   const [showAuthModal, setShowAuthModal] = useState(false);
   const [authModalTab, setAuthModalTab] = useState<'signin' | 'signup'>('signin');
   const { user, signOut } = useAuth();
+
+  // If we were redirected here (e.g. from /super-admin), auto-open the right tab
+  useEffect(() => {
+    if (user) return;
+    const sp = new URLSearchParams(location.search);
+    const tab = sp.get('tab');
+    if (tab === 'signin' || tab === 'signup') {
+      setAuthModalTab(tab);
+      setShowAuthModal(true);
+    }
+  }, [location.search, user]);
+
+  // If we have a next= param and the user is authenticated, take them there automatically
+  useEffect(() => {
+    if (!user) return;
+    const sp = new URLSearchParams(location.search);
+    const next = sp.get('next');
+    if (next) {
+      navigate(next, { replace: true });
+    }
+  }, [location.search, navigate, user]);
 
   const openSignIn = () => {
     setAuthModalTab('signin');
@@ -29,6 +53,7 @@ export default function AuthPage() {
 
   const handleSignOut = async () => {
     await signOut();
+    navigate('/auth', { replace: true });
   };
 
   if (user) {
