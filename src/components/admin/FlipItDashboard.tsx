@@ -122,8 +122,8 @@ export function FlipItDashboard() {
   
   // Auto-refresh state
   const [autoRefreshEnabled, setAutoRefreshEnabled] = useState(true);
-  const [countdown, setCountdown] = useState(60);
-  const countdownRef = useRef(60);
+  const [countdown, setCountdown] = useState(15);
+  const countdownRef = useRef(15);
   
   // Rebuy monitoring state
   const [rebuyMonitorEnabled, setRebuyMonitorEnabled] = useState(true);
@@ -170,13 +170,13 @@ export function FlipItDashboard() {
   // Auto-refresh polling with countdown
   useEffect(() => {
     if (!autoRefreshEnabled) {
-      setCountdown(60);
+      setCountdown(15);
       return;
     }
 
     const activeHoldings = positions.filter(p => p.status === 'holding');
     if (activeHoldings.length === 0) {
-      setCountdown(60);
+      setCountdown(15);
       return;
     }
 
@@ -186,8 +186,8 @@ export function FlipItDashboard() {
       setCountdown(countdownRef.current);
       
       if (countdownRef.current <= 0) {
-        countdownRef.current = 60;
-        setCountdown(60);
+        countdownRef.current = 15;
+        setCountdown(15);
         // Trigger price refresh
         handleAutoRefresh();
       }
