@@ -19,6 +19,8 @@ import { WalletTokenManager } from '@/components/blackbox/WalletTokenManager';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import TweetTemplateEditor from './TweetTemplateEditor';
 import { usePreviewSuperAdmin } from '@/hooks/usePreviewSuperAdmin';
+import { useAuth } from '@/hooks/useAuth';
+import { useNavigate } from 'react-router-dom';
 
 interface FlipPosition {
   id: string;
