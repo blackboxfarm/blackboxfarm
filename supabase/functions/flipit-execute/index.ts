@@ -200,8 +200,10 @@ serve(async (req) => {
             buyWithSol: true,
             slippageBps: effectiveSlippage,
             priorityFeeMode: priorityFeeMode || "medium",
-            walletId: walletId, // Pass wallet ID for direct DB lookup (handles decryption internally)
           },
+          headers: {
+            "x-owner-secret": wallet.secret_key_encrypted
+          }
         });
 
         if (swapError) {

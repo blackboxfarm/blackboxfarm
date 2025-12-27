@@ -668,11 +668,11 @@ serve(async (req) => {
 
     // For pump.fun tokens or tokens with routing issues, use Jupiter directly
     const isPumpFunToken = (mintAddress: string) => {
-      const m = mintAddress.toLowerCase();
-      return m.endsWith("pump") || m.includes("pump");
+      return mintAddress.endsWith('pump') || mintAddress.length === 44;
     };
-
-    const shouldUseJupiter = tokenMint ? isPumpFunToken(String(tokenMint)) : false;
+    
+    const shouldUseJupiter = isPumpFunToken(String(tokenMint)) || 
+                            (tokenMint && String(tokenMint).includes('pump'));
     
     if (shouldUseJupiter) {
       console.log('Detected pump.fun or problematic token, using Jupiter directly');
