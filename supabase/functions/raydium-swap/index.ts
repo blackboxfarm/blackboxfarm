@@ -666,19 +666,19 @@ serve(async (req) => {
     let needJupiter = false;
     let jupReason: string | undefined;
 
-    // For pump.fun tokens or tokens with routing issues, use Jupiter directly
-    const isPumpFunToken = (mintAddress: string) => {
-      return mintAddress.endsWith('pump') || mintAddress.length === 44;
+    // Only use alternate routing for ACTUAL pump.fun bonding curve tokens
+    // These have mint addresses ending in "pump" - NOT based on address length
+    const isPumpFunToken = (mintAddress: string): boolean => {
+      if (!mintAddress) return false;
+      const lower = mintAddress.toLowerCase();
+      // Only actual pump.fun bonding curve mints end with "pump"
+      return lower.endsWith('pump');
     };
+
+    const isPumpToken = tokenMint ? isPumpFunToken(String(tokenMint)) : false;
     
-    const shouldUseJupiter = isPumpFunToken(String(tokenMint)) || 
-                            (tokenMint && String(tokenMint).includes('pump'));
-    
-    if (shouldUseJupiter) {
-      console.log('Detected pump.fun or problematic token, using Jupiter directly');
-      needJupiter = true;
-      jupReason = 'Pump.fun token detected - using Jupiter for better routing';
-    }
+    // Log routing decision
+    console.log(`Routing decision: token=${tokenMint}, isPumpToken=${isPumpToken}, side=${side}`);
 
     // Get ATAs when not SOL
     let isInputSol = isSolMint(String(inputMint));
@@ -883,8 +883,8 @@ serve(async (req) => {
         return ok({ signatures: sigs });
       } else {
         // Jupiter also failed - try PumpPortal for pump.fun tokens as last resort
-        const isPumpToken = tokenMint && (String(tokenMint).endsWith('pump') || String(tokenMint).includes('pump'));
-        if (isPumpToken) {
+        const isPumpTokenFallback = tokenMint && String(tokenMint).toLowerCase().endsWith('pump');
+        if (isPumpTokenFallback) {
           console.log(`Raydium and Jupiter failed, trying PumpPortal for pump.fun bonding curve token (${side})...`);
           
           // Calculate the SOL amount for buys from lamports
