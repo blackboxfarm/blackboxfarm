@@ -1622,6 +1622,10 @@ export function FlipItDashboard() {
                   const targetValue = position.buy_amount_usd * position.target_multiplier;
                   const targetProfit = position.buy_amount_usd * (position.target_multiplier - 1);
 
+                  // Check if this position was created from a rebuy (parent position has rebuy_position_id pointing here)
+                  const parentRebuyPosition = positions.find(p => p.rebuy_position_id === position.id);
+                  const isFromRebuy = !!parentRebuyPosition;
+
                   return (
                     <TableRow key={position.id}>
                       <TableCell>
@@ -1635,16 +1639,24 @@ export function FlipItDashboard() {
                             />
                           )}
                           <div>
-                            <a
-                              href={`https://dexscreener.com/solana/${position.token_mint}`}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="font-mono text-xs hover:text-primary cursor-pointer flex items-center gap-1"
-                              title={`View on DexScreener: ${position.token_mint}`}
-                            >
-                              {position.token_symbol || position.token_mint.slice(0, 8) + '...'}
-                              <ArrowUpRight className="h-3 w-3 opacity-50" />
-                            </a>
+                            <div className="flex items-center gap-1">
+                              <a
+                                href={`https://dexscreener.com/solana/${position.token_mint}`}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="font-mono text-xs hover:text-primary cursor-pointer flex items-center gap-1"
+                                title={`View on DexScreener: ${position.token_mint}`}
+                              >
+                                {position.token_symbol || position.token_mint.slice(0, 8) + '...'}
+                                <ArrowUpRight className="h-3 w-3 opacity-50" />
+                              </a>
+                              {isFromRebuy && (
+                                <Badge variant="secondary" className="text-[9px] px-1 py-0 gap-0.5">
+                                  <RotateCcw className="h-2 w-2" />
+                                  REBUY
+                                </Badge>
+                              )}
+                            </div>
                             <button
                               onClick={() => copyToClipboard(position.token_mint, 'Token address')}
                               className="text-xs text-muted-foreground hover:text-primary flex items-center gap-1 mt-0.5"
@@ -2172,6 +2184,22 @@ export function FlipItDashboard() {
                         <div className="flex flex-col gap-1">
                           {getStatusBadge(position.status)}
                           {position.rebuy_status && getRebuyStatusBadge(position.rebuy_status)}
+                          {isExecuted && position.rebuy_position_id && (
+                            <Badge 
+                              variant="outline" 
+                              className="text-[9px] px-1 py-0 gap-0.5 text-green-600 border-green-600/30 cursor-pointer hover:bg-green-500/10"
+                              onClick={() => {
+                                // Find and highlight the new position
+                                const newPosition = positions.find(p => p.id === position.rebuy_position_id);
+                                if (newPosition) {
+                                  toast.info(`New position: ${newPosition.token_symbol || newPosition.token_mint.slice(0, 8)}... - Status: ${newPosition.status}`);
+                                }
+                              }}
+                            >
+                              <CheckCircle2 className="h-2 w-2" />
+                              → New Flip
+                            </Badge>
+                          )}
                         </div>
                       </TableCell>
                       
