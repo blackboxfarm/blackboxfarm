@@ -18,6 +18,7 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/component
 import { WalletTokenManager } from '@/components/blackbox/WalletTokenManager';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import TweetTemplateEditor from './TweetTemplateEditor';
+import { usePreviewSuperAdmin } from '@/hooks/usePreviewSuperAdmin';
 
 interface FlipPosition {
   id: string;
@@ -75,6 +76,7 @@ interface InputTokenData {
 }
 
 export function FlipItDashboard() {
+  const isPreviewAdmin = usePreviewSuperAdmin();
   const [positions, setPositions] = useState<FlipPosition[]>([]);
   const [wallets, setWallets] = useState<SuperAdminWallet[]>([]);
   const [selectedWallet, setSelectedWallet] = useState<string>('');
@@ -147,7 +149,7 @@ export function FlipItDashboard() {
   useEffect(() => {
     loadWallets();
     loadPositions();
-  }, []);
+  }, [isPreviewAdmin]);
 
   // Real-time subscription to flip_positions changes
   useEffect(() => {
@@ -515,25 +517,54 @@ export function FlipItDashboard() {
   };
 
   const loadWallets = async () => {
-    const { data: sessionData } = await supabase.auth.getSession();
-    const accessToken = sessionData.session?.access_token;
+    try {
+      // In preview mode, directly query the database
+      if (isPreviewAdmin) {
+        const { data: walletsData, error: dbError } = await supabase
+          .from('super_admin_wallets')
+          .select('id, label, pubkey, wallet_type, is_active')
+          .eq('wallet_type', 'flipit')
+          .eq('is_active', true)
+          .order('created_at', { ascending: false });
 
-    const { data: response, error } = await supabase.functions.invoke('super-admin-wallet-generator', {
-      method: 'GET',
-      headers: accessToken ? { Authorization: `Bearer ${accessToken}` } : undefined,
-    });
+        if (dbError) {
+          console.error('Failed to load wallets from DB:', dbError);
+          toast.error('Failed to load wallets');
+          return;
+        }
 
-    if (error) {
+        const flipitWallets = (walletsData || []) as SuperAdminWallet[];
+        setWallets(flipitWallets);
+        if (flipitWallets.length > 0 && !selectedWallet) {
+          setSelectedWallet(flipitWallets[0].id);
+        }
+        return;
+      }
+
+      // Normal authenticated flow
+      const { data: sessionData } = await supabase.auth.getSession();
+      const accessToken = sessionData.session?.access_token;
+
+      const { data: response, error } = await supabase.functions.invoke('super-admin-wallet-generator', {
+        method: 'GET',
+        headers: accessToken ? { Authorization: `Bearer ${accessToken}` } : undefined,
+      });
+
+      if (error) {
+        toast.error('Failed to load wallets');
+        return;
+      }
+
+      const allWallets = (response as any)?.data as SuperAdminWallet[] | undefined;
+      const flipitWallets = (allWallets || []).filter((w: any) => w.wallet_type === 'flipit' && w.is_active);
+
+      setWallets(flipitWallets);
+      if (flipitWallets.length > 0 && !selectedWallet) {
+        setSelectedWallet(flipitWallets[0].id);
+      }
+    } catch (err) {
+      console.error('Error loading wallets:', err);
       toast.error('Failed to load wallets');
-      return;
-    }
-
-    const allWallets = (response as any)?.data as SuperAdminWallet[] | undefined;
-    const flipitWallets = (allWallets || []).filter((w: any) => w.wallet_type === 'flipit' && w.is_active);
-
-    setWallets(flipitWallets);
-    if (flipitWallets.length > 0 && !selectedWallet) {
-      setSelectedWallet(flipitWallets[0].id);
     }
   };
 
