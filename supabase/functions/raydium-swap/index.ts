@@ -913,22 +913,22 @@ serve(async (req) => {
         }
         return ok({ signatures: sigs });
       } else {
-        // Jupiter also failed - try PumpPortal for pump.fun tokens as last resort
-        const isPumpTokenFallback = tokenMint && String(tokenMint).toLowerCase().endsWith('pump');
-        if (isPumpTokenFallback) {
-          console.log(`Raydium and Jupiter failed, trying PumpPortal for pump.fun bonding curve token (${side})...`);
-          
-          // Calculate the SOL amount for buys from lamports
-          let pumpAmount: string;
-          if (side === "buy") {
-            // amount is in lamports, convert to SOL for PumpPortal
-            const solAmount = Number(amount) / 1_000_000_000;
-            pumpAmount = solAmount.toString();
-          } else {
-            // For sells, use 100% or the token amount
-            pumpAmount = sellAll ? "100%" : String(amount);
-          }
-          
+        // Jupiter also failed - try PumpPortal as LAST RESORT for ANY token
+        // PumpPortal will quickly fail if the token is not on pump.fun bonding curve
+        console.log(`Raydium and Jupiter failed, trying PumpPortal as last resort for any bonding curve token (${side})...`);
+        
+        // Calculate the SOL amount for buys from lamports
+        let pumpAmount: string;
+        if (side === "buy") {
+          // amount is in lamports, convert to SOL for PumpPortal
+          const solAmount = Number(amount) / 1_000_000_000;
+          pumpAmount = solAmount.toString();
+        } else {
+          // For sells, use 100% or the token amount
+          pumpAmount = sellAll ? "100%" : String(amount);
+        }
+        
+        try {
           const pumpResult = await tryPumpPortalTrade({
             mint: String(tokenMint),
             userPublicKey: owner.publicKey.toBase58(),
@@ -966,21 +966,24 @@ serve(async (req) => {
               console.error("PumpPortal transaction send failed:", (sendError as Error).message);
               return softError(
                 "SWAP_FAILED",
-                `All swap methods failed. Raydium: ${jupReason}; Jupiter: ${j.error}; PumpPortal: ${(sendError as Error).message}`
+                `All swap methods failed. Raydium: ${jupReason}; Jupiter: ${j.error}; PumpPortal send: ${(sendError as Error).message}`
               );
             }
           } else {
+            // PumpPortal returned an error - token probably not on pump.fun bonding curve
+            console.log("PumpPortal also failed:", pumpResult.error);
             return softError(
               "SWAP_FAILED",
               `All swap methods failed. Raydium: ${jupReason}; Jupiter: ${j.error}; PumpPortal: ${pumpResult.error}`
             );
           }
+        } catch (pumpError) {
+          console.error("PumpPortal attempt failed:", (pumpError as Error).message);
+          return softError(
+            "SWAP_FAILED",
+            `All swap methods failed. Raydium: ${jupReason}; Jupiter: ${j.error}; PumpPortal error: ${(pumpError as Error).message}`
+          );
         }
-        
-        return softError(
-          "SWAP_FAILED",
-          `${jupReason ?? "Raydium compute failed"}; Jupiter fallback: ${j.error}`
-        );
       }
     }
 
