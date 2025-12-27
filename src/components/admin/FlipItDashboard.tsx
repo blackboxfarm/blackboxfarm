@@ -44,6 +44,7 @@ interface FlipPosition {
   rebuy_price_high_usd: number | null;
   rebuy_price_low_usd: number | null;
   rebuy_amount_usd: number | null;
+  rebuy_target_multiplier: number | null;
   rebuy_status: string | null;
   rebuy_executed_at: string | null;
   rebuy_position_id: string | null;
@@ -131,7 +132,7 @@ export function FlipItDashboard() {
   const [isRebuyMonitoring, setIsRebuyMonitoring] = useState(false);
   
   // Rebuy settings for editing individual positions
-  const [rebuyEditing, setRebuyEditing] = useState<Record<string, { enabled: boolean; priceHigh: string; priceLow: string; amount: string }>>({});
+  const [rebuyEditing, setRebuyEditing] = useState<Record<string, { enabled: boolean; priceHigh: string; priceLow: string; amount: string; targetMultiplier: number }>>({});
 
   // Emergency sell monitoring state
   const [emergencyMonitorEnabled, setEmergencyMonitorEnabled] = useState(true);
@@ -943,13 +944,15 @@ export function FlipItDashboard() {
     enabled: boolean, 
     rebuyPriceHigh: number | null, 
     rebuyPriceLow: number | null, 
-    rebuyAmount: number | null
+    rebuyAmount: number | null,
+    rebuyTargetMultiplier: number | null = 2
   ) => {
     const updateData: any = {
       rebuy_enabled: enabled,
       rebuy_price_high_usd: rebuyPriceHigh,
       rebuy_price_low_usd: rebuyPriceLow,
       rebuy_amount_usd: rebuyAmount,
+      rebuy_target_multiplier: rebuyTargetMultiplier,
       // Keep legacy field for backwards compatibility
       rebuy_price_usd: rebuyPriceLow, 
     };
@@ -1589,6 +1592,7 @@ export function FlipItDashboard() {
                   <TableHead>Rebuy Low</TableHead>
                   <TableHead>Rebuy High</TableHead>
                   <TableHead>Rebuy Amt</TableHead>
+                  <TableHead>Rebuy Target</TableHead>
                   <TableHead>Status</TableHead>
                   <TableHead>Action</TableHead>
                 </TableRow>
@@ -1842,7 +1846,8 @@ export function FlipItDashboard() {
                                     enabled: true, 
                                     priceHigh: defaultPriceHigh.toFixed(10).replace(/\.?0+$/, ''),
                                     priceLow: defaultPriceLow.toFixed(10).replace(/\.?0+$/, ''),
-                                    amount: defaultAmount.toFixed(2)
+                                    amount: defaultAmount.toFixed(2),
+                                    targetMultiplier: position.rebuy_target_multiplier || 2
                                   }
                                 }));
                               } else {
@@ -1876,7 +1881,8 @@ export function FlipItDashboard() {
                                         enabled: true, 
                                         priceLow: e.target.value,
                                         priceHigh: prev[position.id]?.priceHigh || position.rebuy_price_high_usd?.toString() || '',
-                                        amount: prev[position.id]?.amount || position.rebuy_amount_usd?.toString() || position.buy_amount_usd?.toFixed(2) || '10'
+                                        amount: prev[position.id]?.amount || position.rebuy_amount_usd?.toString() || position.buy_amount_usd?.toFixed(2) || '10',
+                                        targetMultiplier: prev[position.id]?.targetMultiplier || position.rebuy_target_multiplier || 2
                                       }
                                     }));
                                   }}
@@ -1911,7 +1917,8 @@ export function FlipItDashboard() {
                                         enabled: true, 
                                         priceHigh: e.target.value,
                                         priceLow: prev[position.id]?.priceLow || position.rebuy_price_low_usd?.toString() || '',
-                                        amount: prev[position.id]?.amount || position.rebuy_amount_usd?.toString() || position.buy_amount_usd?.toFixed(2) || '10'
+                                        amount: prev[position.id]?.amount || position.rebuy_amount_usd?.toString() || position.buy_amount_usd?.toFixed(2) || '10',
+                                        targetMultiplier: prev[position.id]?.targetMultiplier || position.rebuy_target_multiplier || 2
                                       }
                                     }));
                                   }}
@@ -1946,7 +1953,8 @@ export function FlipItDashboard() {
                                         enabled: true, 
                                         priceHigh: prev[position.id]?.priceHigh || position.rebuy_price_high_usd?.toString() || '',
                                         priceLow: prev[position.id]?.priceLow || position.rebuy_price_low_usd?.toString() || '',
-                                        amount: e.target.value
+                                        amount: e.target.value,
+                                        targetMultiplier: prev[position.id]?.targetMultiplier || position.rebuy_target_multiplier || 2
                                       }
                                     }));
                                   }}
@@ -1959,8 +1967,9 @@ export function FlipItDashboard() {
                                     const priceHighVal = parseFloat(rebuyEditing[position.id]?.priceHigh || position.rebuy_price_high_usd?.toString() || '0');
                                     const priceLowVal = parseFloat(rebuyEditing[position.id]?.priceLow || position.rebuy_price_low_usd?.toString() || '0');
                                     const amountVal = parseFloat(rebuyEditing[position.id]?.amount || position.rebuy_amount_usd?.toString() || '0');
+                                    const targetVal = rebuyEditing[position.id]?.targetMultiplier || position.rebuy_target_multiplier || 2;
                                     if (priceHighVal > 0 && priceLowVal > 0 && amountVal > 0) {
-                                      handleUpdateRebuySettings(position.id, true, priceHighVal, priceLowVal, amountVal);
+                                      handleUpdateRebuySettings(position.id, true, priceHighVal, priceLowVal, amountVal, targetVal);
                                     } else {
                                       toast.error('Enter valid rebuy price range and amount');
                                     }
@@ -1979,6 +1988,50 @@ export function FlipItDashboard() {
                               </Badge>
                             )}
                           </div>
+                        )}
+                      </TableCell>
+                      
+                      {/* Rebuy Target Selector */}
+                      <TableCell>
+                        {position.status === 'holding' && (rebuyEditing[position.id]?.enabled || position.rebuy_enabled) && (
+                          <Select
+                            value={(rebuyEditing[position.id]?.targetMultiplier || position.rebuy_target_multiplier || 2).toString()}
+                            onValueChange={(value) => {
+                              setRebuyEditing(prev => ({
+                                ...prev,
+                                [position.id]: {
+                                  enabled: true,
+                                  priceHigh: prev[position.id]?.priceHigh || position.rebuy_price_high_usd?.toString() || '',
+                                  priceLow: prev[position.id]?.priceLow || position.rebuy_price_low_usd?.toString() || '',
+                                  amount: prev[position.id]?.amount || position.rebuy_amount_usd?.toString() || position.buy_amount_usd?.toFixed(2) || '10',
+                                  targetMultiplier: parseFloat(value)
+                                }
+                              }));
+                            }}
+                          >
+                            <SelectTrigger className="h-7 w-20 text-xs">
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent className="max-h-64 overflow-y-auto">
+                              <SelectItem value="1.25">1.25x</SelectItem>
+                              <SelectItem value="1.30">1.30x</SelectItem>
+                              <SelectItem value="1.50">1.50x</SelectItem>
+                              <SelectItem value="1.75">1.75x</SelectItem>
+                              <SelectItem value="2">2x</SelectItem>
+                              <SelectItem value="2.5">2.5x</SelectItem>
+                              <SelectItem value="3">3x</SelectItem>
+                              <SelectItem value="4">4x</SelectItem>
+                              <SelectItem value="5">5x</SelectItem>
+                              <SelectItem value="6">6x</SelectItem>
+                              <SelectItem value="7">7x</SelectItem>
+                              <SelectItem value="8">8x</SelectItem>
+                              <SelectItem value="9">9x</SelectItem>
+                              <SelectItem value="10">10x</SelectItem>
+                              <SelectItem value="15">15x</SelectItem>
+                              <SelectItem value="20">20x</SelectItem>
+                              <SelectItem value="25">25x</SelectItem>
+                            </SelectContent>
+                          </Select>
                         )}
                       </TableCell>
                       
@@ -2062,6 +2115,7 @@ export function FlipItDashboard() {
                   <TableHead>Rebuy Low</TableHead>
                   <TableHead>Rebuy High</TableHead>
                   <TableHead>Rebuy Amount</TableHead>
+                  <TableHead>Rebuy Target</TableHead>
                   <TableHead>Action</TableHead>
                 </TableRow>
               </TableHeader>
@@ -2071,7 +2125,8 @@ export function FlipItDashboard() {
                     enabled: position.rebuy_enabled || false,
                     priceHigh: position.rebuy_price_high_usd?.toString() || '',
                     priceLow: position.rebuy_price_low_usd?.toString() || '',
-                    amount: position.rebuy_amount_usd?.toString() || ''
+                    amount: position.rebuy_amount_usd?.toString() || '',
+                    targetMultiplier: position.rebuy_target_multiplier || 2
                   };
                   
                   const isWatching = position.rebuy_status === 'watching';
@@ -2212,6 +2267,43 @@ export function FlipItDashboard() {
                         )}
                       </TableCell>
                       
+                      {/* Rebuy Target Selector */}
+                      <TableCell>
+                        <Select
+                          value={editState.targetMultiplier.toString()}
+                          disabled={isExecuted || isWatching}
+                          onValueChange={(value) => {
+                            setRebuyEditing(prev => ({
+                              ...prev,
+                              [position.id]: { ...editState, targetMultiplier: parseFloat(value) }
+                            }));
+                          }}
+                        >
+                          <SelectTrigger className="h-7 w-20 text-xs">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent className="max-h-64 overflow-y-auto">
+                            <SelectItem value="1.25">1.25x</SelectItem>
+                            <SelectItem value="1.30">1.30x</SelectItem>
+                            <SelectItem value="1.50">1.50x</SelectItem>
+                            <SelectItem value="1.75">1.75x</SelectItem>
+                            <SelectItem value="2">2x</SelectItem>
+                            <SelectItem value="2.5">2.5x</SelectItem>
+                            <SelectItem value="3">3x</SelectItem>
+                            <SelectItem value="4">4x</SelectItem>
+                            <SelectItem value="5">5x</SelectItem>
+                            <SelectItem value="6">6x</SelectItem>
+                            <SelectItem value="7">7x</SelectItem>
+                            <SelectItem value="8">8x</SelectItem>
+                            <SelectItem value="9">9x</SelectItem>
+                            <SelectItem value="10">10x</SelectItem>
+                            <SelectItem value="15">15x</SelectItem>
+                            <SelectItem value="20">20x</SelectItem>
+                            <SelectItem value="25">25x</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </TableCell>
+                      
                       {/* Actions */}
                       <TableCell>
                         <div className="flex gap-1">
@@ -2226,7 +2318,8 @@ export function FlipItDashboard() {
                                 editState.enabled,
                                 parseFloat(editState.priceHigh) || null,
                                 parseFloat(editState.priceLow) || null,
-                                parseFloat(editState.amount) || null
+                                parseFloat(editState.amount) || null,
+                                editState.targetMultiplier
                               )}
                             >
                               {editState.enabled ? (

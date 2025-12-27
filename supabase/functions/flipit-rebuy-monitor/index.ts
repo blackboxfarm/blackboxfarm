@@ -160,8 +160,13 @@ serve(async (req) => {
         console.log(`REBUY TRIGGERED for ${position.token_mint}! Current: $${currentPrice} is within range [$${effectiveLow}, $${effectiveHigh}]`);
 
         try {
+          // Use per-position rebuy target multiplier, fallback to global or default 2x
+          const positionRebuyMultiplier = position.rebuy_target_multiplier || effectiveMultiplier;
+          
           // Calculate target price for new position
-          const newTargetPrice = currentPrice * effectiveMultiplier;
+          const newTargetPrice = currentPrice * positionRebuyMultiplier;
+
+          console.log(`Using rebuy target multiplier: ${positionRebuyMultiplier}x (new target: $${newTargetPrice})`);
 
           // Create new position via flipit-execute
           const { data: buyResult, error: buyError } = await supabase.functions.invoke("flipit-execute", {
@@ -170,7 +175,7 @@ serve(async (req) => {
               tokenMint: position.token_mint,
               walletId: position.wallet_id,
               buyAmountUsd: rebuyAmountUsd,
-              targetMultiplier: effectiveMultiplier,
+              targetMultiplier: positionRebuyMultiplier,
               slippageBps: effectiveSlippage,
               priorityFeeMode: effectivePriorityFee,
             }
