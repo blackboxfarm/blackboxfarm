@@ -1562,6 +1562,9 @@ export function FlipItDashboard() {
                   <TableHead>Progress</TableHead>
                   <TableHead className="text-center">STOP-LOSS</TableHead>
                   <TableHead>SL Price</TableHead>
+                  <TableHead className="text-center">REBUY</TableHead>
+                  <TableHead>Rebuy Price</TableHead>
+                  <TableHead>Rebuy Amt</TableHead>
                   <TableHead>Status</TableHead>
                   <TableHead>Action</TableHead>
                 </TableRow>
@@ -1793,6 +1796,133 @@ export function FlipItDashboard() {
                           </div>
                         )}
                       </TableCell>
+                      
+                      {/* Rebuy Toggle - Pre-configure for auto-buy after sell */}
+                      <TableCell className="text-center">
+                        {position.status === 'holding' && (
+                          <Switch
+                            checked={
+                              rebuyEditing[position.id]?.enabled ?? 
+                              (position.rebuy_enabled || false)
+                            }
+                            onCheckedChange={(checked) => {
+                              if (checked) {
+                                // Enable: default rebuy at 50% of entry price, same amount
+                                const entryPrice = position.buy_price_usd || 0;
+                                const defaultRebuyPrice = entryPrice * 0.5; // 50% of entry
+                                const defaultAmount = position.buy_amount_usd || 10;
+                                setRebuyEditing(prev => ({
+                                  ...prev,
+                                  [position.id]: { 
+                                    enabled: true, 
+                                    price: defaultRebuyPrice.toFixed(10).replace(/\.?0+$/, ''),
+                                    amount: defaultAmount.toFixed(2)
+                                  }
+                                }));
+                              } else {
+                                // Disable: save immediately
+                                handleUpdateRebuySettings(position.id, false, null, null);
+                              }
+                            }}
+                          />
+                        )}
+                      </TableCell>
+                      
+                      {/* Rebuy Price Input */}
+                      <TableCell>
+                        {position.status === 'holding' && (
+                          <div className="flex flex-col gap-1">
+                            {(rebuyEditing[position.id]?.enabled || position.rebuy_enabled) ? (
+                              <div className="flex items-center gap-1">
+                                <span className="text-xs text-muted-foreground">$</span>
+                                <Input
+                                  type="text"
+                                  className="h-7 w-24 text-xs font-mono"
+                                  placeholder="0.0000001"
+                                  value={
+                                    rebuyEditing[position.id]?.price ?? 
+                                    (position.rebuy_price_usd?.toString() || '')
+                                  }
+                                  onChange={(e) => {
+                                    setRebuyEditing(prev => ({
+                                      ...prev,
+                                      [position.id]: { 
+                                        enabled: true, 
+                                        price: e.target.value,
+                                        amount: prev[position.id]?.amount || position.rebuy_amount_usd?.toString() || position.buy_amount_usd?.toFixed(2) || '10'
+                                      }
+                                    }));
+                                  }}
+                                />
+                              </div>
+                            ) : (
+                              <span className="text-xs text-muted-foreground">-</span>
+                            )}
+                            {position.buy_price_usd && (rebuyEditing[position.id]?.price || position.rebuy_price_usd) && (
+                              <div className="text-xs text-muted-foreground">
+                                {((1 - parseFloat(rebuyEditing[position.id]?.price || position.rebuy_price_usd?.toString() || '0') / position.buy_price_usd) * 100).toFixed(0)}% drop
+                              </div>
+                            )}
+                          </div>
+                        )}
+                      </TableCell>
+                      
+                      {/* Rebuy Amount Input + Save */}
+                      <TableCell>
+                        {position.status === 'holding' && (
+                          <div className="flex flex-col gap-1">
+                            {(rebuyEditing[position.id]?.enabled || position.rebuy_enabled) ? (
+                              <div className="flex items-center gap-1">
+                                <span className="text-xs text-muted-foreground">$</span>
+                                <Input
+                                  type="text"
+                                  className="h-7 w-16 text-xs font-mono"
+                                  placeholder="10"
+                                  value={
+                                    rebuyEditing[position.id]?.amount ?? 
+                                    (position.rebuy_amount_usd?.toString() || '')
+                                  }
+                                  onChange={(e) => {
+                                    setRebuyEditing(prev => ({
+                                      ...prev,
+                                      [position.id]: { 
+                                        enabled: true, 
+                                        price: prev[position.id]?.price || position.rebuy_price_usd?.toString() || '',
+                                        amount: e.target.value
+                                      }
+                                    }));
+                                  }}
+                                />
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  className="h-7 px-2"
+                                  onClick={() => {
+                                    const priceVal = parseFloat(rebuyEditing[position.id]?.price || position.rebuy_price_usd?.toString() || '0');
+                                    const amountVal = parseFloat(rebuyEditing[position.id]?.amount || position.rebuy_amount_usd?.toString() || '0');
+                                    if (priceVal > 0 && amountVal > 0) {
+                                      handleUpdateRebuySettings(position.id, true, priceVal, amountVal);
+                                    } else {
+                                      toast.error('Enter valid rebuy price and amount');
+                                    }
+                                  }}
+                                >
+                                  <CheckCircle2 className="h-3 w-3" />
+                                </Button>
+                              </div>
+                            ) : (
+                              <span className="text-xs text-muted-foreground">-</span>
+                            )}
+                            {position.rebuy_enabled && !rebuyEditing[position.id] && (
+                              <Badge variant="secondary" className="text-[10px] w-fit">
+                                <RotateCcw className="h-2 w-2 mr-1" />
+                                READY
+                              </Badge>
+                            )}
+                          </div>
+                        )}
+                      </TableCell>
+                      
                       <TableCell>{getStatusBadge(position.status)}</TableCell>
                       <TableCell>
                         {position.status === 'holding' && (
