@@ -2400,6 +2400,7 @@ export type Database = {
           rebuy_price_low_usd: number | null
           rebuy_price_usd: number | null
           rebuy_status: string | null
+          rebuy_target_multiplier: number | null
           sell_executed_at: string | null
           sell_price_usd: number | null
           sell_signature: string | null
@@ -2435,6 +2436,7 @@ export type Database = {
           rebuy_price_low_usd?: number | null
           rebuy_price_usd?: number | null
           rebuy_status?: string | null
+          rebuy_target_multiplier?: number | null
           sell_executed_at?: string | null
           sell_price_usd?: number | null
           sell_signature?: string | null
@@ -2470,6 +2472,7 @@ export type Database = {
           rebuy_price_low_usd?: number | null
           rebuy_price_usd?: number | null
           rebuy_status?: string | null
+          rebuy_target_multiplier?: number | null
           sell_executed_at?: string | null
           sell_price_usd?: number | null
           sell_signature?: string | null
