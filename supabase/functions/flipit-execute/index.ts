@@ -210,10 +210,14 @@ serve(async (req) => {
           throw new Error(swapError.message);
         }
 
+        // Handle soft errors (200 with error_code)
+        if (swapResult?.error_code) {
+          throw new Error(`[${swapResult.error_code}] ${swapResult.error}`);
+        }
+
         if (swapResult?.error) {
           throw new Error(swapResult.error);
         }
-
         const signature = firstSignature(swapResult);
         if (!signature) {
           throw new Error("Swap returned no signature (buy did not confirm)");
