@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -13,6 +13,7 @@ import bs58 from "bs58";
 import { toast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { WalletTokenManager } from "@/components/blackbox/WalletTokenManager";
+import { useAuth } from "@/hooks/useAuth";
 
 interface SuperAdminWallet {
   id: string;
@@ -24,7 +25,10 @@ interface SuperAdminWallet {
 }
 
 export function SuperAdminWallets() {
+  const { session, loading: authLoading } = useAuth();
+
   const [wallets, setWallets] = useState<SuperAdminWallet[]>([]);
+  const [authError, setAuthError] = useState<string | null>(null);
   const [showCreateForm, setShowCreateForm] = useState(false);
   const [newWallet, setNewWallet] = useState({
     label: "",
@@ -73,55 +77,56 @@ export function SuperAdminWallets() {
 
   const creatableWalletTypes = walletTypes.filter((t) => t.value !== "flipit");
 
+  const loadSuperAdminWallets = useCallback(async () => {
+    if (authLoading) return;
+
+    const token = session?.access_token;
+    if (!token) {
+      setAuthError('Not authenticated. Please sign in again.');
+      setWallets([]);
+      return;
+    }
+
+    try {
+      const { data: response, error } = await supabase.functions.invoke('super-admin-wallet-generator', {
+        method: 'GET',
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
+
+      if (error) throw error;
+      setAuthError(null);
+      setWallets(response?.data || []);
+    } catch (error: any) {
+      const message = error?.message || 'Failed to load wallets';
+      setAuthError(message);
+      toast({
+        title: 'Error loading wallets',
+        description: message,
+      });
+    }
+  }, [authLoading, session?.access_token]);
+
   useEffect(() => {
     loadSuperAdminWallets();
-    
-    // Set up real-time subscription for wallet updates
+  }, [loadSuperAdminWallets]);
+
+  // Set up real-time subscription for wallet updates
+  useEffect(() => {
+    if (authLoading || !session?.access_token) return;
+
     const channel = supabase
       .channel('super_admin_wallets_changes')
-      .on(
-        'postgres_changes',
-        {
-          event: '*',
-          schema: 'public',
-          table: 'super_admin_wallets'
-        },
-        () => {
-          console.log('Super admin wallets updated, reloading...');
-          loadSuperAdminWallets();
-        }
-      )
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'super_admin_wallets' }, () => {
+        loadSuperAdminWallets();
+      })
       .subscribe();
 
     return () => {
       supabase.removeChannel(channel);
     };
-  }, []);
-
-  const loadSuperAdminWallets = async () => {
-    try {
-      // Ensure we pass the authenticated access token explicitly
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session?.access_token) {
-        throw new Error('Not authenticated. Please sign in again.');
-      }
-
-      const { data: response, error } = await supabase.functions.invoke('super-admin-wallet-generator', {
-        method: 'GET',
-        headers: {
-          Authorization: `Bearer ${session.access_token}`,
-        },
-      });
-
-      if (error) throw error;
-      setWallets(response?.data || []);
-    } catch (error: any) {
-      toast({ 
-        title: "Error loading wallets", 
-        description: error.message 
-      });
-    }
-  };
+  }, [authLoading, session?.access_token, loadSuperAdminWallets]);
 
   const generateSuperAdminWallet = async () => {
     if (!newWallet.label.trim()) {
