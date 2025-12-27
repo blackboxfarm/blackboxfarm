@@ -981,6 +981,7 @@ serve(async (req) => {
           "SWAP_FAILED",
           `${jupReason ?? "Raydium compute failed"}; Jupiter fallback: ${j.error}`
         );
+      }
     }
 
     // Build transactions (first try)
