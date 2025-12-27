@@ -17,7 +17,7 @@ interface UserRolesContextValue {
 const UserRolesContext = createContext<UserRolesContextValue | null>(null);
 
 export const UserRolesProvider = ({ children }: { children: ReactNode }) => {
-  const { user, isAuthenticated } = useAuthContext();
+  const { user, isAuthenticated, loading: authLoading } = useAuthContext();
   const [roles, setRoles] = useState<UserRole[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const isPreviewAdmin = usePreviewSuperAdmin();
@@ -27,6 +27,12 @@ export const UserRolesProvider = ({ children }: { children: ReactNode }) => {
     if (isPreviewAdmin) {
       setRoles(['super_admin']);
       setIsLoading(false);
+      return;
+    }
+
+    // Don't decide roles until auth has finished bootstrapping; prevents "flash logout".
+    if (authLoading) {
+      setIsLoading(true);
       return;
     }
 
@@ -67,7 +73,7 @@ export const UserRolesProvider = ({ children }: { children: ReactNode }) => {
     } finally {
       setIsLoading(false);
     }
-  }, [user, isAuthenticated, isPreviewAdmin]);
+  }, [user, isAuthenticated, isPreviewAdmin, authLoading]);
 
   useEffect(() => {
     fetchUserRoles();

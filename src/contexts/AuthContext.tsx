@@ -28,7 +28,12 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       (event, session) => {
         setSession(session);
         setUser(session?.user ?? null);
-        setLoading(false);
+
+        // Avoid briefly reporting "not authenticated" during the initial session bootstrap.
+        // We'll flip loading=false after getSession() resolves below.
+        if (event !== 'INITIAL_SESSION') {
+          setLoading(false);
+        }
       }
     );
 
