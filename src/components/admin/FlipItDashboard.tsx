@@ -1454,11 +1454,23 @@ export function FlipItDashboard() {
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="1.5">1.5x (+50%)</SelectItem>
+                  <SelectItem value="1.25">1.25x (+25%)</SelectItem>
+                  <SelectItem value="1.30">1.30x (+30%)</SelectItem>
+                  <SelectItem value="1.50">1.50x (+50%)</SelectItem>
+                  <SelectItem value="1.75">1.75x (+75%)</SelectItem>
                   <SelectItem value="2">2x (+100%)</SelectItem>
+                  <SelectItem value="2.5">2.5x (+150%)</SelectItem>
                   <SelectItem value="3">3x (+200%)</SelectItem>
+                  <SelectItem value="4">4x (+300%)</SelectItem>
                   <SelectItem value="5">5x (+400%)</SelectItem>
+                  <SelectItem value="6">6x (+500%)</SelectItem>
+                  <SelectItem value="7">7x (+600%)</SelectItem>
+                  <SelectItem value="8">8x (+700%)</SelectItem>
+                  <SelectItem value="9">9x (+800%)</SelectItem>
                   <SelectItem value="10">10x (+900%)</SelectItem>
+                  <SelectItem value="15">15x (+1400%)</SelectItem>
+                  <SelectItem value="20">20x (+1900%)</SelectItem>
+                  <SelectItem value="25">25x (+2400%)</SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -1703,9 +1715,9 @@ export function FlipItDashboard() {
                                 </Button>
                               </PopoverTrigger>
                               <PopoverContent className="w-56 p-2" align="start">
-                                <div className="space-y-1">
+                                <div className="space-y-1 max-h-64 overflow-y-auto">
                                   <p className="text-xs text-muted-foreground mb-2">Change target:</p>
-                                  {[1.5, 2, 3, 4, 5, 6, 7, 8, 9, 10].map(mult => (
+                                  {[1.25, 1.30, 1.50, 1.75, 2, 2.5, 3, 4, 5, 6, 7, 8, 9, 10, 15, 20, 25].map(mult => (
                                     <Button
                                       key={mult}
                                       variant={position.target_multiplier === mult ? "default" : "ghost"}
@@ -1873,11 +1885,6 @@ export function FlipItDashboard() {
                             ) : (
                               <span className="text-xs text-muted-foreground">-</span>
                             )}
-                            {position.buy_price_usd && (rebuyEditing[position.id]?.priceLow || position.rebuy_price_low_usd) && (
-                              <div className="text-xs text-muted-foreground">
-                                {((1 - parseFloat(rebuyEditing[position.id]?.priceLow || position.rebuy_price_low_usd?.toString() || '0') / position.buy_price_usd) * 100).toFixed(0)}% drop
-                              </div>
-                            )}
                           </div>
                         )}
                       </TableCell>
@@ -1912,11 +1919,6 @@ export function FlipItDashboard() {
                               </div>
                             ) : (
                               <span className="text-xs text-muted-foreground">-</span>
-                            )}
-                            {position.buy_price_usd && (rebuyEditing[position.id]?.priceHigh || position.rebuy_price_high_usd) && (
-                              <div className="text-xs text-muted-foreground">
-                                +{((parseFloat(rebuyEditing[position.id]?.priceHigh || position.rebuy_price_high_usd?.toString() || '0') / position.buy_price_usd - 1) * 100).toFixed(0)}%
-                              </div>
                             )}
                           </div>
                         )}
