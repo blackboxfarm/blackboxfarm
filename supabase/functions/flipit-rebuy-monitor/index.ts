@@ -201,8 +201,9 @@ serve(async (req) => {
             })
             .eq("id", position.id);
 
-          // Mark the new position with rebuy enabled from parent settings if desired
-          if (newPositionId && position.rebuy_enabled) {
+          // Mark the new position with rebuy enabled from parent settings if loop is enabled
+          if (newPositionId && position.rebuy_enabled && position.rebuy_loop_enabled) {
+            console.log(`Loop mode enabled - copying rebuy settings to new position ${newPositionId}`);
             await supabase
               .from("flip_positions")
               .update({
@@ -210,6 +211,8 @@ serve(async (req) => {
                 rebuy_price_high_usd: effectiveHigh,
                 rebuy_price_low_usd: effectiveLow,
                 rebuy_amount_usd: rebuyAmountUsd,
+                rebuy_target_multiplier: positionRebuyMultiplier,
+                rebuy_loop_enabled: true, // Carry forward the loop setting
                 rebuy_status: "pending", // Will activate after this position sells
               })
               .eq("id", newPositionId);

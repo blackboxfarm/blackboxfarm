@@ -48,6 +48,7 @@ interface FlipPosition {
   rebuy_status: string | null;
   rebuy_executed_at: string | null;
   rebuy_position_id: string | null;
+  rebuy_loop_enabled: boolean | null;
   // Emergency sell fields
   emergency_sell_enabled: boolean | null;
   emergency_sell_price_usd: number | null;
@@ -132,7 +133,7 @@ export function FlipItDashboard() {
   const [isRebuyMonitoring, setIsRebuyMonitoring] = useState(false);
   
   // Rebuy settings for editing individual positions
-  const [rebuyEditing, setRebuyEditing] = useState<Record<string, { enabled: boolean; priceHigh: string; priceLow: string; amount: string; targetMultiplier: number }>>({});
+  const [rebuyEditing, setRebuyEditing] = useState<Record<string, { enabled: boolean; priceHigh: string; priceLow: string; amount: string; targetMultiplier: number; loopEnabled: boolean }>>({});
 
   // Emergency sell monitoring state
   const [emergencyMonitorEnabled, setEmergencyMonitorEnabled] = useState(true);
@@ -945,7 +946,8 @@ export function FlipItDashboard() {
     rebuyPriceHigh: number | null, 
     rebuyPriceLow: number | null, 
     rebuyAmount: number | null,
-    rebuyTargetMultiplier: number | null = 2
+    rebuyTargetMultiplier: number | null = 2,
+    rebuyLoopEnabled: boolean = false
   ) => {
     const updateData: any = {
       rebuy_enabled: enabled,
@@ -953,6 +955,7 @@ export function FlipItDashboard() {
       rebuy_price_low_usd: rebuyPriceLow,
       rebuy_amount_usd: rebuyAmount,
       rebuy_target_multiplier: rebuyTargetMultiplier,
+      rebuy_loop_enabled: rebuyLoopEnabled,
       // Keep legacy field for backwards compatibility
       rebuy_price_usd: rebuyPriceLow, 
     };
@@ -1859,7 +1862,8 @@ export function FlipItDashboard() {
                                     priceHigh: defaultPriceHigh.toFixed(10).replace(/\.?0+$/, ''),
                                     priceLow: defaultPriceLow.toFixed(10).replace(/\.?0+$/, ''),
                                     amount: defaultAmount.toFixed(2),
-                                    targetMultiplier: position.rebuy_target_multiplier || 2
+                                    targetMultiplier: position.rebuy_target_multiplier || 2,
+                                    loopEnabled: position.rebuy_loop_enabled || false
                                   }
                                 }));
                               } else {
@@ -1894,7 +1898,8 @@ export function FlipItDashboard() {
                                         priceLow: e.target.value,
                                         priceHigh: prev[position.id]?.priceHigh || position.rebuy_price_high_usd?.toString() || '',
                                         amount: prev[position.id]?.amount || position.rebuy_amount_usd?.toString() || position.buy_amount_usd?.toFixed(2) || '10',
-                                        targetMultiplier: prev[position.id]?.targetMultiplier || position.rebuy_target_multiplier || 2
+                                        targetMultiplier: prev[position.id]?.targetMultiplier || position.rebuy_target_multiplier || 2,
+                                        loopEnabled: prev[position.id]?.loopEnabled ?? position.rebuy_loop_enabled ?? false
                                       }
                                     }));
                                   }}
@@ -1930,7 +1935,8 @@ export function FlipItDashboard() {
                                         priceHigh: e.target.value,
                                         priceLow: prev[position.id]?.priceLow || position.rebuy_price_low_usd?.toString() || '',
                                         amount: prev[position.id]?.amount || position.rebuy_amount_usd?.toString() || position.buy_amount_usd?.toFixed(2) || '10',
-                                        targetMultiplier: prev[position.id]?.targetMultiplier || position.rebuy_target_multiplier || 2
+                                        targetMultiplier: prev[position.id]?.targetMultiplier || position.rebuy_target_multiplier || 2,
+                                        loopEnabled: prev[position.id]?.loopEnabled ?? position.rebuy_loop_enabled ?? false
                                       }
                                     }));
                                   }}
@@ -1966,7 +1972,8 @@ export function FlipItDashboard() {
                                         priceHigh: prev[position.id]?.priceHigh || position.rebuy_price_high_usd?.toString() || '',
                                         priceLow: prev[position.id]?.priceLow || position.rebuy_price_low_usd?.toString() || '',
                                         amount: e.target.value,
-                                        targetMultiplier: prev[position.id]?.targetMultiplier || position.rebuy_target_multiplier || 2
+                                        targetMultiplier: prev[position.id]?.targetMultiplier || position.rebuy_target_multiplier || 2,
+                                        loopEnabled: prev[position.id]?.loopEnabled ?? position.rebuy_loop_enabled ?? false
                                       }
                                     }));
                                   }}
@@ -1980,8 +1987,9 @@ export function FlipItDashboard() {
                                     const priceLowVal = parseFloat(rebuyEditing[position.id]?.priceLow || position.rebuy_price_low_usd?.toString() || '0');
                                     const amountVal = parseFloat(rebuyEditing[position.id]?.amount || position.rebuy_amount_usd?.toString() || '0');
                                     const targetVal = rebuyEditing[position.id]?.targetMultiplier || position.rebuy_target_multiplier || 2;
+                                    const loopVal = rebuyEditing[position.id]?.loopEnabled ?? position.rebuy_loop_enabled ?? false;
                                     if (priceHighVal > 0 && priceLowVal > 0 && amountVal > 0) {
-                                      handleUpdateRebuySettings(position.id, true, priceHighVal, priceLowVal, amountVal, targetVal);
+                                      handleUpdateRebuySettings(position.id, true, priceHighVal, priceLowVal, amountVal, targetVal, loopVal);
                                     } else {
                                       toast.error('Enter valid rebuy price range and amount');
                                     }
@@ -2003,47 +2011,97 @@ export function FlipItDashboard() {
                         )}
                       </TableCell>
                       
-                      {/* Rebuy Target Selector */}
+                      {/* Rebuy Target Selector + Loop */}
                       <TableCell>
                         {position.status === 'holding' && (rebuyEditing[position.id]?.enabled || position.rebuy_enabled) && (
-                          <Select
-                            value={(rebuyEditing[position.id]?.targetMultiplier || position.rebuy_target_multiplier || 2).toString()}
-                            onValueChange={(value) => {
-                              setRebuyEditing(prev => ({
-                                ...prev,
-                                [position.id]: {
-                                  enabled: true,
-                                  priceHigh: prev[position.id]?.priceHigh || position.rebuy_price_high_usd?.toString() || '',
-                                  priceLow: prev[position.id]?.priceLow || position.rebuy_price_low_usd?.toString() || '',
-                                  amount: prev[position.id]?.amount || position.rebuy_amount_usd?.toString() || position.buy_amount_usd?.toFixed(2) || '10',
-                                  targetMultiplier: parseFloat(value)
-                                }
-                              }));
-                            }}
-                          >
-                            <SelectTrigger className="h-7 w-20 text-xs">
-                              <SelectValue />
-                            </SelectTrigger>
-                            <SelectContent className="max-h-64 overflow-y-auto">
-                              <SelectItem value="1.25">1.25x</SelectItem>
-                              <SelectItem value="1.30">1.30x</SelectItem>
-                              <SelectItem value="1.50">1.50x</SelectItem>
-                              <SelectItem value="1.75">1.75x</SelectItem>
-                              <SelectItem value="2">2x</SelectItem>
-                              <SelectItem value="2.5">2.5x</SelectItem>
-                              <SelectItem value="3">3x</SelectItem>
-                              <SelectItem value="4">4x</SelectItem>
-                              <SelectItem value="5">5x</SelectItem>
-                              <SelectItem value="6">6x</SelectItem>
-                              <SelectItem value="7">7x</SelectItem>
-                              <SelectItem value="8">8x</SelectItem>
-                              <SelectItem value="9">9x</SelectItem>
-                              <SelectItem value="10">10x</SelectItem>
-                              <SelectItem value="15">15x</SelectItem>
-                              <SelectItem value="20">20x</SelectItem>
-                              <SelectItem value="25">25x</SelectItem>
-                            </SelectContent>
-                          </Select>
+                          <div className="flex items-center gap-2">
+                            <Select
+                              value={(() => {
+                                const raw = rebuyEditing[position.id]?.targetMultiplier ?? position.rebuy_target_multiplier ?? 2;
+                                // Normalize to match SelectItem values exactly
+                                const num = Number(raw);
+                                if (num === 1.25) return "1.25";
+                                if (num === 1.3) return "1.30";
+                                if (num === 1.5) return "1.50";
+                                if (num === 1.75) return "1.75";
+                                if (num === 2) return "2";
+                                if (num === 2.5) return "2.5";
+                                if (num === 3) return "3";
+                                if (num === 4) return "4";
+                                if (num === 5) return "5";
+                                if (num === 6) return "6";
+                                if (num === 7) return "7";
+                                if (num === 8) return "8";
+                                if (num === 9) return "9";
+                                if (num === 10) return "10";
+                                if (num === 15) return "15";
+                                if (num === 20) return "20";
+                                if (num === 25) return "25";
+                                return "2"; // Default fallback
+                              })()}
+                              onValueChange={(value) => {
+                                setRebuyEditing(prev => ({
+                                  ...prev,
+                                  [position.id]: {
+                                    enabled: true,
+                                    priceHigh: prev[position.id]?.priceHigh || position.rebuy_price_high_usd?.toString() || '',
+                                    priceLow: prev[position.id]?.priceLow || position.rebuy_price_low_usd?.toString() || '',
+                                    amount: prev[position.id]?.amount || position.rebuy_amount_usd?.toString() || position.buy_amount_usd?.toFixed(2) || '10',
+                                    targetMultiplier: parseFloat(value),
+                                    loopEnabled: prev[position.id]?.loopEnabled ?? position.rebuy_loop_enabled ?? false
+                                  }
+                                }));
+                              }}
+                            >
+                              <SelectTrigger className="h-7 w-20 text-xs">
+                                <SelectValue />
+                              </SelectTrigger>
+                              <SelectContent className="max-h-64 overflow-y-auto">
+                                <SelectItem value="1.25">1.25x</SelectItem>
+                                <SelectItem value="1.30">1.30x</SelectItem>
+                                <SelectItem value="1.50">1.50x</SelectItem>
+                                <SelectItem value="1.75">1.75x</SelectItem>
+                                <SelectItem value="2">2x</SelectItem>
+                                <SelectItem value="2.5">2.5x</SelectItem>
+                                <SelectItem value="3">3x</SelectItem>
+                                <SelectItem value="4">4x</SelectItem>
+                                <SelectItem value="5">5x</SelectItem>
+                                <SelectItem value="6">6x</SelectItem>
+                                <SelectItem value="7">7x</SelectItem>
+                                <SelectItem value="8">8x</SelectItem>
+                                <SelectItem value="9">9x</SelectItem>
+                                <SelectItem value="10">10x</SelectItem>
+                                <SelectItem value="15">15x</SelectItem>
+                                <SelectItem value="20">20x</SelectItem>
+                                <SelectItem value="25">25x</SelectItem>
+                              </SelectContent>
+                            </Select>
+                            {/* Loop Mode Toggle */}
+                            <div className="flex items-center gap-1">
+                              <Switch
+                                checked={rebuyEditing[position.id]?.loopEnabled ?? position.rebuy_loop_enabled ?? false}
+                                onCheckedChange={(checked) => {
+                                  setRebuyEditing(prev => ({
+                                    ...prev,
+                                    [position.id]: {
+                                      enabled: true,
+                                      priceHigh: prev[position.id]?.priceHigh || position.rebuy_price_high_usd?.toString() || '',
+                                      priceLow: prev[position.id]?.priceLow || position.rebuy_price_low_usd?.toString() || '',
+                                      amount: prev[position.id]?.amount || position.rebuy_amount_usd?.toString() || position.buy_amount_usd?.toFixed(2) || '10',
+                                      targetMultiplier: prev[position.id]?.targetMultiplier || position.rebuy_target_multiplier || 2,
+                                      loopEnabled: checked
+                                    }
+                                  }));
+                                }}
+                              />
+                              <span className="text-[9px] text-muted-foreground">♻️</span>
+                            </div>
+                            {(rebuyEditing[position.id]?.loopEnabled || position.rebuy_loop_enabled) && (
+                              <Badge variant="secondary" className="text-[9px] px-1 py-0 gap-0.5">
+                                ♻️ LOOP
+                              </Badge>
+                            )}
+                          </div>
                         )}
                       </TableCell>
                       
@@ -2138,7 +2196,8 @@ export function FlipItDashboard() {
                     priceHigh: position.rebuy_price_high_usd?.toString() || '',
                     priceLow: position.rebuy_price_low_usd?.toString() || '',
                     amount: position.rebuy_amount_usd?.toString() || '',
-                    targetMultiplier: position.rebuy_target_multiplier || 2
+                    targetMultiplier: position.rebuy_target_multiplier || 2,
+                    loopEnabled: position.rebuy_loop_enabled || false
                   };
                   
                   const isWatching = position.rebuy_status === 'watching';
@@ -2297,39 +2356,80 @@ export function FlipItDashboard() {
                       
                       {/* Rebuy Target Selector */}
                       <TableCell>
-                        <Select
-                          value={editState.targetMultiplier.toString()}
-                          disabled={isExecuted || isWatching}
-                          onValueChange={(value) => {
-                            setRebuyEditing(prev => ({
-                              ...prev,
-                              [position.id]: { ...editState, targetMultiplier: parseFloat(value) }
-                            }));
-                          }}
-                        >
-                          <SelectTrigger className="h-7 w-20 text-xs">
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent className="max-h-64 overflow-y-auto">
-                            <SelectItem value="1.25">1.25x</SelectItem>
-                            <SelectItem value="1.30">1.30x</SelectItem>
-                            <SelectItem value="1.50">1.50x</SelectItem>
-                            <SelectItem value="1.75">1.75x</SelectItem>
-                            <SelectItem value="2">2x</SelectItem>
-                            <SelectItem value="2.5">2.5x</SelectItem>
-                            <SelectItem value="3">3x</SelectItem>
-                            <SelectItem value="4">4x</SelectItem>
-                            <SelectItem value="5">5x</SelectItem>
-                            <SelectItem value="6">6x</SelectItem>
-                            <SelectItem value="7">7x</SelectItem>
-                            <SelectItem value="8">8x</SelectItem>
-                            <SelectItem value="9">9x</SelectItem>
-                            <SelectItem value="10">10x</SelectItem>
-                            <SelectItem value="15">15x</SelectItem>
-                            <SelectItem value="20">20x</SelectItem>
-                            <SelectItem value="25">25x</SelectItem>
-                          </SelectContent>
-                        </Select>
+                        <div className="flex items-center gap-2">
+                          <Select
+                            value={(() => {
+                              const num = Number(editState.targetMultiplier);
+                              if (num === 1.25) return "1.25";
+                              if (num === 1.3) return "1.30";
+                              if (num === 1.5) return "1.50";
+                              if (num === 1.75) return "1.75";
+                              if (num === 2) return "2";
+                              if (num === 2.5) return "2.5";
+                              if (num === 3) return "3";
+                              if (num === 4) return "4";
+                              if (num === 5) return "5";
+                              if (num === 6) return "6";
+                              if (num === 7) return "7";
+                              if (num === 8) return "8";
+                              if (num === 9) return "9";
+                              if (num === 10) return "10";
+                              if (num === 15) return "15";
+                              if (num === 20) return "20";
+                              if (num === 25) return "25";
+                              return "2";
+                            })()}
+                            disabled={isExecuted || isWatching}
+                            onValueChange={(value) => {
+                              setRebuyEditing(prev => ({
+                                ...prev,
+                                [position.id]: { ...editState, targetMultiplier: parseFloat(value) }
+                              }));
+                            }}
+                          >
+                            <SelectTrigger className="h-7 w-20 text-xs">
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent className="max-h-64 overflow-y-auto">
+                              <SelectItem value="1.25">1.25x</SelectItem>
+                              <SelectItem value="1.30">1.30x</SelectItem>
+                              <SelectItem value="1.50">1.50x</SelectItem>
+                              <SelectItem value="1.75">1.75x</SelectItem>
+                              <SelectItem value="2">2x</SelectItem>
+                              <SelectItem value="2.5">2.5x</SelectItem>
+                              <SelectItem value="3">3x</SelectItem>
+                              <SelectItem value="4">4x</SelectItem>
+                              <SelectItem value="5">5x</SelectItem>
+                              <SelectItem value="6">6x</SelectItem>
+                              <SelectItem value="7">7x</SelectItem>
+                              <SelectItem value="8">8x</SelectItem>
+                              <SelectItem value="9">9x</SelectItem>
+                              <SelectItem value="10">10x</SelectItem>
+                              <SelectItem value="15">15x</SelectItem>
+                              <SelectItem value="20">20x</SelectItem>
+                              <SelectItem value="25">25x</SelectItem>
+                            </SelectContent>
+                          </Select>
+                          {/* Loop Mode Toggle */}
+                          <div className="flex items-center gap-1">
+                            <Switch
+                              checked={editState.loopEnabled}
+                              disabled={isExecuted || isWatching}
+                              onCheckedChange={(checked) => {
+                                setRebuyEditing(prev => ({
+                                  ...prev,
+                                  [position.id]: { ...editState, loopEnabled: checked }
+                                }));
+                              }}
+                            />
+                            <span className="text-[9px] text-muted-foreground">♻️</span>
+                          </div>
+                          {editState.loopEnabled && (
+                            <Badge variant="secondary" className="text-[9px] px-1 py-0 gap-0.5">
+                              ♻️ LOOP
+                            </Badge>
+                          )}
+                        </div>
                       </TableCell>
                       
                       {/* Actions */}
@@ -2347,7 +2447,8 @@ export function FlipItDashboard() {
                                 parseFloat(editState.priceHigh) || null,
                                 parseFloat(editState.priceLow) || null,
                                 parseFloat(editState.amount) || null,
-                                editState.targetMultiplier
+                                editState.targetMultiplier,
+                                editState.loopEnabled
                               )}
                             >
                               {editState.enabled ? (
