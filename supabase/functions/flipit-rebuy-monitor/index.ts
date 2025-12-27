@@ -218,17 +218,61 @@ serve(async (req) => {
               .eq("id", newPositionId);
           }
 
+          const signature = buyResult?.position?.buy_signature;
+          
           executed.push({
             originalPositionId: position.id,
             newPositionId,
             tokenMint: position.token_mint,
-            rebuyPrice,
+            rebuyPriceLow: effectiveLow,
+            rebuyPriceHigh: effectiveHigh,
             currentPrice,
             amountUsd: rebuyAmountUsd,
-            signature: buyResult?.position?.buy_signature,
+            signature,
           });
 
           console.log(`Rebuy executed for ${position.token_mint}: new position ${newPositionId}`);
+
+          // Send email notification for successful rebuy
+          try {
+            const profitPct = position.profit_usd && position.buy_amount_usd 
+              ? ((position.profit_usd / position.buy_amount_usd) * 100).toFixed(1) 
+              : "N/A";
+            
+            await supabase.functions.invoke("send-email-notification", {
+              body: {
+                to: "wilsondavid@live.ca",
+                subject: `🔄 FlipIt Rebuy: ${position.token_symbol || position.token_mint.slice(0, 8)} @ $${currentPrice.toFixed(6)}`,
+                title: "Rebuy Triggered!",
+                message: `
+<strong>Token:</strong> ${position.token_name || position.token_symbol || "Unknown"} (${position.token_symbol || position.token_mint.slice(0, 8)})
+
+<strong>Rebuy Details:</strong>
+• Current Price: <strong>$${currentPrice.toFixed(8)}</strong>
+• Rebuy Range: $${effectiveLow.toFixed(8)} - $${effectiveHigh.toFixed(8)}
+• Amount: <strong>$${rebuyAmountUsd.toFixed(2)} USD</strong>
+• New Target: <strong>$${newTargetPrice.toFixed(8)} (${positionRebuyMultiplier}x)</strong>
+
+<strong>Previous Position:</strong>
+• Profit: $${position.profit_usd?.toFixed(2) || "0.00"} (${profitPct}%)
+• Entry: $${position.buy_price_usd?.toFixed(8) || "N/A"}
+• Exit: $${position.sell_price_usd?.toFixed(8) || "N/A"}
+
+<strong>Loop Mode:</strong> ${position.rebuy_loop_enabled ? "♻️ ENABLED - Will continue cycling" : "❌ Disabled"}
+                `,
+                type: "success",
+                metadata: {
+                  tokenMint: position.token_mint,
+                  actionUrl: `https://solscan.io/tx/${signature}`,
+                  actionText: "View Transaction",
+                  chartUrl: `https://dexscreener.com/solana/${position.token_mint}`,
+                }
+              }
+            });
+            console.log("Rebuy notification email sent");
+          } catch (emailErr) {
+            console.error("Failed to send rebuy notification email:", emailErr);
+          }
 
         } catch (rebuyErr: any) {
           console.error(`Failed to execute rebuy for position ${position.id}:`, rebuyErr);

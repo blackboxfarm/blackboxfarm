@@ -226,6 +226,44 @@ serve(async (req) => {
 
           console.log(`Sold position ${position.id} with profit: $${profit.toFixed(2)}`);
 
+          // Send email notification for successful sell
+          try {
+            const profitPct = ((currentPrice / entryPrice) - 1) * 100;
+            const isProfit = profit >= 0;
+            
+            await supabase.functions.invoke("send-email-notification", {
+              body: {
+                to: "wilsondavid@live.ca",
+                subject: `${isProfit ? "💰" : "📉"} FlipIt Sold: ${position.token_symbol || position.token_mint.slice(0, 8)} | ${isProfit ? "+" : ""}$${profit.toFixed(2)}`,
+                title: isProfit ? "Target Hit - Position Sold!" : "Position Sold",
+                message: `
+<strong>Token:</strong> ${position.token_name || position.token_symbol || "Unknown"} (${position.token_symbol || position.token_mint.slice(0, 8)})
+
+<strong>Trade Summary:</strong>
+• Entry Price: $${entryPrice.toFixed(8)}
+• Sell Price: <strong>$${currentPrice.toFixed(8)}</strong>
+• Target Price: $${targetPrice.toFixed(8)}
+• Buy Amount: $${position.buy_amount_usd?.toFixed(2) || "N/A"}
+
+<strong>Result:</strong>
+• Profit/Loss: <strong style="color: ${isProfit ? "#22c55e" : "#ef4444"}">${isProfit ? "+" : ""}$${profit.toFixed(2)} (${isProfit ? "+" : ""}${profitPct.toFixed(1)}%)</strong>
+
+<strong>Rebuy Status:</strong> ${updateData.rebuy_status === "watching" ? "👀 Watching for rebuy opportunity" : "❌ Not enabled"}
+                `,
+                type: isProfit ? "success" : "warning",
+                metadata: {
+                  tokenMint: position.token_mint,
+                  actionUrl: `https://solscan.io/tx/${signature}`,
+                  actionText: "View Transaction",
+                  chartUrl: `https://dexscreener.com/solana/${position.token_mint}`,
+                }
+              }
+            });
+            console.log("Sell notification email sent");
+          } catch (emailErr) {
+            console.error("Failed to send sell notification email:", emailErr);
+          }
+
         } catch (sellErr: any) {
           console.error(`Failed to sell position ${position.id}:`, sellErr);
           
