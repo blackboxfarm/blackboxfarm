@@ -2395,6 +2395,7 @@ export type Database = {
           rebuy_amount_usd: number | null
           rebuy_enabled: boolean | null
           rebuy_executed_at: string | null
+          rebuy_loop_enabled: boolean | null
           rebuy_position_id: string | null
           rebuy_price_high_usd: number | null
           rebuy_price_low_usd: number | null
@@ -2431,6 +2432,7 @@ export type Database = {
           rebuy_amount_usd?: number | null
           rebuy_enabled?: boolean | null
           rebuy_executed_at?: string | null
+          rebuy_loop_enabled?: boolean | null
           rebuy_position_id?: string | null
           rebuy_price_high_usd?: number | null
           rebuy_price_low_usd?: number | null
@@ -2467,6 +2469,7 @@ export type Database = {
           rebuy_amount_usd?: number | null
           rebuy_enabled?: boolean | null
           rebuy_executed_at?: string | null
+          rebuy_loop_enabled?: boolean | null
           rebuy_position_id?: string | null
           rebuy_price_high_usd?: number | null
           rebuy_price_low_usd?: number | null
