@@ -156,17 +156,11 @@ export function FlipItDashboard() {
     // "Preview admin" only affects UI gating; it does NOT create an auth session.
     if (authLoading) return;
 
-    if (!isAuthenticated) {
+    // Preview admins can proceed even without Supabase auth session
+    if (!isAuthenticated && !isPreviewAdmin) {
       setWallets([]);
       setSelectedWallet('');
       setPositions([]);
-
-      // In preview, it's easy to land here "as admin" without actually being signed in.
-      // Redirect to /auth so you can establish a real session and load your wallets.
-      if (isPreviewAdmin) {
-        toast.error('Sign in required to load FlipIt wallets');
-        navigate('/auth?tab=signin&next=/super-admin', { replace: true });
-      }
       return;
     }
 
