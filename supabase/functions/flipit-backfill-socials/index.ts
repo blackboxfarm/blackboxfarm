@@ -16,20 +16,19 @@ serve(async (req) => {
     const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
     const supabase = createClient(supabaseUrl, supabaseKey);
 
-    // Fetch active positions missing social data
+    // Fetch ALL holding positions (not just missing socials)
     const { data: positions, error: fetchError } = await supabase
       .from('flip_positions')
       .select('id, token_mint, token_image, twitter_url, website_url, telegram_url')
-      .eq('status', 'active')
-      .or('token_image.is.null,twitter_url.is.null,website_url.is.null,telegram_url.is.null');
+      .eq('status', 'holding');
 
     if (fetchError) {
       throw new Error(`Failed to fetch positions: ${fetchError.message}`);
     }
 
-    console.log(`Found ${positions?.length || 0} positions to backfill`);
+    console.log(`Found ${positions?.length || 0} holding positions to backfill`);
 
-    const results: { id: string; token_mint: string; success: boolean; error?: string }[] = [];
+    const results: { id: string; token_mint: string; success: boolean; error?: string; socials?: any }[] = [];
 
     for (const position of positions || []) {
       try {
@@ -65,6 +64,8 @@ serve(async (req) => {
           }
         }
 
+        console.log(`Token ${position.token_mint}: image=${tokenImage}, twitter=${twitterUrl}, website=${websiteUrl}, telegram=${telegramUrl}`);
+
         // Update the position
         const { error: updateError } = await supabase
           .from('flip_positions')
@@ -79,12 +80,17 @@ serve(async (req) => {
         if (updateError) {
           results.push({ id: position.id, token_mint: position.token_mint, success: false, error: updateError.message });
         } else {
-          results.push({ id: position.id, token_mint: position.token_mint, success: true });
+          results.push({ 
+            id: position.id, 
+            token_mint: position.token_mint, 
+            success: true,
+            socials: { tokenImage, twitterUrl, websiteUrl, telegramUrl }
+          });
           console.log(`Updated position ${position.id} with socials`);
         }
 
         // Small delay to avoid rate limiting
-        await new Promise(resolve => setTimeout(resolve, 200));
+        await new Promise(resolve => setTimeout(resolve, 300));
 
       } catch (err) {
         results.push({ id: position.id, token_mint: position.token_mint, success: false, error: String(err) });
