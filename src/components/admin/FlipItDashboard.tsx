@@ -187,6 +187,92 @@ export function FlipItDashboard() {
     };
   }, []);
 
+  // Define handlers BEFORE useEffect hooks that reference them
+  const handleAutoRefresh = useCallback(async () => {
+    const holdingPositions = positions.filter(p => p.status === 'holding');
+    if (holdingPositions.length === 0) return;
+
+    try {
+      const { data, error } = await supabase.functions.invoke('flipit-price-monitor', {
+        body: { 
+          action: 'check',
+          slippageBps: slippageBps,
+          priorityFeeMode: priorityFeeMode
+        }
+      });
+
+      if (error) throw error;
+
+      if (data?.prices) {
+        setCurrentPrices(data.prices);
+      }
+      if (data?.checkedAt) {
+        setLastAutoCheck(data.checkedAt);
+      }
+    } catch (err) {
+      console.error('Auto-refresh failed:', err);
+    }
+  }, [positions, slippageBps, priorityFeeMode]);
+
+  const handleRebuyCheck = useCallback(async () => {
+    const watchingPositions = positions.filter(p => p.rebuy_status === 'watching');
+    if (watchingPositions.length === 0 || isRebuyMonitoring) return;
+
+    setIsRebuyMonitoring(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('flipit-rebuy-monitor', {
+        body: { 
+          slippageBps: slippageBps,
+          priorityFeeMode: priorityFeeMode,
+          targetMultiplier: targetMultiplier
+        }
+      });
+
+      if (error) throw error;
+
+      if (data?.checkedAt) {
+        setLastRebuyCheck(data.checkedAt);
+      }
+      if (data?.executed?.length > 0) {
+        toast.success(`Rebuy executed for ${data.executed.length} position(s)!`);
+        loadPositions();
+      }
+    } catch (err) {
+      console.error('Rebuy check failed:', err);
+    } finally {
+      setIsRebuyMonitoring(false);
+    }
+  }, [positions, slippageBps, priorityFeeMode, targetMultiplier, isRebuyMonitoring]);
+
+  const handleEmergencyCheck = useCallback(async () => {
+    const watchingPositions = positions.filter(p => p.status === 'holding' && p.emergency_sell_status === 'watching');
+    if (watchingPositions.length === 0 || isEmergencyMonitoring) return;
+
+    setIsEmergencyMonitoring(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('flipit-emergency-monitor');
+
+      if (error) throw error;
+
+      if (data?.checkedAt) {
+        setLastEmergencyCheck(data.checkedAt);
+      }
+      if (data?.prices) {
+        setCurrentPrices(prev => ({ ...prev, ...data.prices }));
+      }
+      if (data?.executed?.length > 0) {
+        toast.error(`🚨 EMERGENCY SELL: ${data.executed.length} position(s) sold at stop-loss!`, {
+          duration: 10000,
+        });
+        loadPositions();
+      }
+    } catch (err) {
+      console.error('Emergency check failed:', err);
+    } finally {
+      setIsEmergencyMonitoring(false);
+    }
+  }, [positions, isEmergencyMonitoring]);
+
   // Auto-refresh polling (every 15 seconds)
   useEffect(() => {
     if (!autoRefreshEnabled) return;
@@ -194,7 +280,6 @@ export function FlipItDashboard() {
     const hasHoldings = positions.some((p) => p.status === 'holding');
     if (!hasHoldings) return;
 
-    // Keep the UI indicator simple (avoid per-second state updates)
     setCountdown(15);
     countdownRef.current = 15;
 
@@ -246,65 +331,6 @@ export function FlipItDashboard() {
       clearInterval(id);
     };
   }, [emergencyMonitorEnabled, positions, handleEmergencyCheck]);
-
-  const handleEmergencyCheck = useCallback(async () => {
-    const watchingPositions = positions.filter(p => p.status === 'holding' && p.emergency_sell_status === 'watching');
-    if (watchingPositions.length === 0 || isEmergencyMonitoring) return;
-
-    setIsEmergencyMonitoring(true);
-    try {
-      const { data, error } = await supabase.functions.invoke('flipit-emergency-monitor');
-
-      if (error) throw error;
-
-      if (data?.checkedAt) {
-        setLastEmergencyCheck(data.checkedAt);
-      }
-      if (data?.prices) {
-        setCurrentPrices(prev => ({ ...prev, ...data.prices }));
-      }
-      if (data?.executed?.length > 0) {
-        toast.error(`🚨 EMERGENCY SELL: ${data.executed.length} position(s) sold at stop-loss!`, {
-          duration: 10000,
-        });
-        loadPositions();
-      }
-    } catch (err) {
-      console.error('Emergency check failed:', err);
-    } finally {
-      setIsEmergencyMonitoring(false);
-    }
-  }, [positions, isEmergencyMonitoring]);
-
-  const handleRebuyCheck = useCallback(async () => {
-    const watchingPositions = positions.filter(p => p.rebuy_status === 'watching');
-    if (watchingPositions.length === 0 || isRebuyMonitoring) return;
-
-    setIsRebuyMonitoring(true);
-    try {
-      const { data, error } = await supabase.functions.invoke('flipit-rebuy-monitor', {
-        body: { 
-          slippageBps: slippageBps,
-          priorityFeeMode: priorityFeeMode,
-          targetMultiplier: targetMultiplier
-        }
-      });
-
-      if (error) throw error;
-
-      if (data?.checkedAt) {
-        setLastRebuyCheck(data.checkedAt);
-      }
-      if (data?.executed?.length > 0) {
-        toast.success(`Rebuy executed for ${data.executed.length} position(s)!`);
-        loadPositions();
-      }
-    } catch (err) {
-      console.error('Rebuy check failed:', err);
-    } finally {
-      setIsRebuyMonitoring(false);
-    }
-  }, [positions, slippageBps, priorityFeeMode, targetMultiplier, isRebuyMonitoring]);
 
   useEffect(() => {
     if (selectedWallet) {
