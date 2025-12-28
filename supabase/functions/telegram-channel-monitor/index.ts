@@ -722,6 +722,24 @@ serve(async (req) => {
                     .from('telegram_channel_calls')
                     .update({ status: 'fantasy_bought' })
                     .eq('id', callRecord.id);
+
+                  // Send email notification for fantasy trade
+                  if (config.email_notifications && config.notification_email) {
+                    const emailSent = await sendEmailNotification(
+                      supabase,
+                      config.notification_email,
+                      tokenMint,
+                      currentTokenData?.symbol || 'UNKNOWN',
+                      price!,
+                      hasApeKeyword,
+                      'fantasy',
+                      entryAmount,
+                      null
+                    );
+                    if (emailSent) {
+                      console.log(`[telegram-channel-monitor] Fantasy trade email sent to ${config.notification_email}`);
+                    }
+                  }
                 }
               } else if (config.flipit_wallet_id) {
                 // Real trading mode
