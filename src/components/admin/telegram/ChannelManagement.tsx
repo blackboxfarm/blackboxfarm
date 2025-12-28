@@ -41,6 +41,7 @@ interface ChannelConfig {
   large_buy_amount_usd: number;
   standard_buy_amount_usd: number;
   max_mint_age_minutes: number;
+  scan_window_minutes: number;
   total_calls_detected: number;
   total_buys_executed: number;
   last_check_at: string | null;
@@ -66,7 +67,8 @@ export function ChannelManagement() {
     fantasy_mode: true,
     fantasy_buy_amount_usd: 100,
     ape_keyword_enabled: true,
-    max_mint_age_minutes: 60
+    max_mint_age_minutes: 60,
+    scan_window_minutes: 1440
   });
   
   // Per-channel scan/test state
@@ -126,6 +128,7 @@ export function ChannelManagement() {
           fantasy_buy_amount_usd: formData.fantasy_buy_amount_usd,
           ape_keyword_enabled: formData.ape_keyword_enabled,
           max_mint_age_minutes: formData.max_mint_age_minutes,
+          scan_window_minutes: formData.scan_window_minutes,
         });
 
       if (error) throw error;
@@ -153,6 +156,7 @@ export function ChannelManagement() {
           fantasy_buy_amount_usd: formData.fantasy_buy_amount_usd,
           ape_keyword_enabled: formData.ape_keyword_enabled,
           max_mint_age_minutes: formData.max_mint_age_minutes,
+          scan_window_minutes: formData.scan_window_minutes,
           updated_at: new Date().toISOString()
         })
         .eq('id', editingChannel.id);
@@ -213,7 +217,8 @@ export function ChannelManagement() {
       fantasy_mode: true,
       fantasy_buy_amount_usd: 100,
       ape_keyword_enabled: true,
-      max_mint_age_minutes: 60
+      max_mint_age_minutes: 60,
+      scan_window_minutes: 1440
     });
     setGroupTestResult(null);
     setSessionString('');
@@ -227,7 +232,8 @@ export function ChannelManagement() {
       fantasy_mode: channel.fantasy_mode,
       fantasy_buy_amount_usd: channel.fantasy_buy_amount_usd,
       ape_keyword_enabled: channel.ape_keyword_enabled,
-      max_mint_age_minutes: channel.max_mint_age_minutes
+      max_mint_age_minutes: channel.max_mint_age_minutes,
+      scan_window_minutes: channel.scan_window_minutes || 1440
     });
     setEditingChannel(channel);
     setGroupTestResult(null);
@@ -568,6 +574,21 @@ with TelegramClient(StringSession(), api_id, api_hash) as client:
           value={formData.max_mint_age_minutes}
           onChange={(e) => setFormData(prev => ({ ...prev, max_mint_age_minutes: Number(e.target.value) }))}
         />
+        <p className="text-xs text-muted-foreground mt-1">
+          Skip tokens minted more than this many minutes ago
+        </p>
+      </div>
+      <div>
+        <Label htmlFor={isEdit ? "edit_scan_window" : "scan_window"}>Message Scan Window (minutes)</Label>
+        <Input
+          id={isEdit ? "edit_scan_window" : "scan_window"}
+          type="number"
+          value={formData.scan_window_minutes}
+          onChange={(e) => setFormData(prev => ({ ...prev, scan_window_minutes: Number(e.target.value) }))}
+        />
+        <p className="text-xs text-muted-foreground mt-1">
+          Process messages up to this many minutes old (1440 = 24 hours)
+        </p>
       </div>
       <Button onClick={isEdit ? updateChannel : addChannel} className="w-full">
         {isEdit ? 'Save Changes' : 'Add Channel'}
