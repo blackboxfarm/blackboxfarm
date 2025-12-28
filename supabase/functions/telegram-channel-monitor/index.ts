@@ -401,9 +401,9 @@ serve(async (req) => {
     const supabase = createClient(supabaseUrl, supabaseKey);
 
     const body = await req.json().catch(() => ({}));
-    const { action, channelId: requestChannelId, singleChannel } = body;
+    const { action, channelId: requestChannelId, singleChannel, deepScan, resetMessageId } = body;
 
-    console.log(`[telegram-channel-monitor] Action: ${action || 'scan'}, singleChannel: ${singleChannel}, channelId: ${requestChannelId}`);
+    console.log(`[telegram-channel-monitor] Action: ${action || 'scan'}, singleChannel: ${singleChannel}, channelId: ${requestChannelId}, deepScan: ${deepScan}`);
 
     // Build query for channel configurations
     let query = supabase.from('telegram_channel_config').select('*');
@@ -440,6 +440,7 @@ serve(async (req) => {
     let totalProcessed = 0;
     let totalBuys = 0;
     let totalFantasyBuys = 0;
+    let totalRawMessages = 0;
 
     for (const config of configs) {
       const channelId = requestChannelId || config.channel_id;
@@ -527,6 +528,10 @@ serve(async (req) => {
           channelMessages = await scrapePublicChannel(channelUsername);
         }
 
+        // Track raw messages retrieved
+        totalRawMessages += channelMessages.length;
+        console.log(`[telegram-channel-monitor] Retrieved ${channelMessages.length} raw messages from @${channelUsername}`);
+
         // Log warning for groups that couldn't be accessed
         if (groupWarning && channelMessages.length === 0) {
           console.log(`[telegram-channel-monitor] WARNING: ${groupWarning}`);
@@ -549,16 +554,16 @@ serve(async (req) => {
           const callerUsername = msg.callerUsername;
           const callerDisplayName = msg.callerDisplayName;
 
-          // Skip if message is too old (configurable, default 24 hours)
+          // Skip if message is too old (configurable, default 24 hours) - UNLESS deepScan mode
           const scanWindowMinutes = config.scan_window_minutes ?? 1440;
           const messageAgeMinutes = (Date.now() - messageDate.getTime()) / 60000;
-          if (messageAgeMinutes > scanWindowMinutes) {
+          if (!deepScan && messageAgeMinutes > scanWindowMinutes) {
             console.log(`[telegram-channel-monitor] Skipping message ${messageId}: ${messageAgeMinutes.toFixed(0)}min old, exceeds ${scanWindowMinutes}min window`);
             continue;
           }
 
-          // Skip if we already processed this message
-          if (config.last_message_id) {
+          // Skip if we already processed this message - UNLESS resetMessageId mode
+          if (!resetMessageId && config.last_message_id) {
             const lastId = parseInt(config.last_message_id);
             const currentId = parseInt(messageId);
             if (!isNaN(lastId) && !isNaN(currentId) && currentId <= lastId) {
@@ -867,6 +872,7 @@ serve(async (req) => {
       processed: totalProcessed,
       buysExecuted: totalBuys,
       fantasyBuysExecuted: totalFantasyBuys,
+      rawMessagesRetrieved: totalRawMessages,
       channels: results
     }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' }
