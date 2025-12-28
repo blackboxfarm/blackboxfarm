@@ -85,7 +85,11 @@ const DEFAULT_RULE: Partial<TradingRule> = {
   fallback_to_fantasy: true,
 };
 
-export function TradingRulesManager() {
+interface TradingRulesManagerProps {
+  channelId?: string;
+}
+
+export function TradingRulesManager({ channelId }: TradingRulesManagerProps) {
   const [rules, setRules] = useState<TradingRule[]>([]);
   const [channels, setChannels] = useState<ChannelConfig[]>([]);
   const [loading, setLoading] = useState(true);
@@ -98,13 +102,20 @@ export function TradingRulesManager() {
 
   useEffect(() => {
     loadData();
-  }, []);
+  }, [channelId]);
 
   const loadData = async () => {
     setLoading(true);
     try {
+      let rulesQuery = supabase.from('trading_rules').select('*').order('priority', { ascending: true });
+      
+      // If channelId is provided, filter to show only global rules or rules for this channel
+      if (channelId) {
+        rulesQuery = rulesQuery.or(`channel_id.is.null,channel_id.eq.${channelId}`);
+      }
+      
       const [rulesRes, channelsRes] = await Promise.all([
-        supabase.from('trading_rules').select('*').order('priority', { ascending: true }),
+        rulesQuery,
         supabase.from('telegram_channel_config').select('id, channel_name')
       ]);
 

@@ -24,10 +24,14 @@ import {
   CheckCircle2,
   XCircle,
   RefreshCw,
-  FileText
+  FileText,
+  Settings2,
+  Sparkles
 } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
 import { ChannelScanLogs } from './ChannelScanLogs';
+import { TradingRulesManager } from './TradingRulesManager';
+import { TradingKeywordsManager } from './TradingKeywordsManager';
 
 interface ChannelConfig {
   id: string;
@@ -48,6 +52,7 @@ interface ChannelConfig {
   total_calls_detected: number;
   total_buys_executed: number;
   last_check_at: string | null;
+  trading_mode: 'simple' | 'advanced' | null;
 }
 
 export function ChannelManagement() {
@@ -78,11 +83,13 @@ export function ChannelManagement() {
   const [scanningChannelId, setScanningChannelId] = useState<string | null>(null);
   const [testingChannelId, setTestingChannelId] = useState<string | null>(null);
   const [expandedLogs, setExpandedLogs] = useState<string | null>(null);
+  const [expandedRules, setExpandedRules] = useState<string | null>(null);
+  const [expandedKeywords, setExpandedKeywords] = useState<string | null>(null);
   const [channelTestResults, setChannelTestResults] = useState<Record<string, {
     success: boolean;
     message: string;
     messageCount?: number;
-  }>>({});
+  }>>({})
 
   useEffect(() => {
     loadChannels();
@@ -191,6 +198,24 @@ export function ChannelManagement() {
     } catch (err) {
       console.error('Error toggling channel:', err);
       toast.error('Failed to toggle channel');
+    }
+  };
+
+  const toggleTradingMode = async (channel: ChannelConfig) => {
+    const newMode = channel.trading_mode === 'advanced' ? 'simple' : 'advanced';
+    try {
+      const { error } = await supabase
+        .from('telegram_channel_config')
+        .update({ trading_mode: newMode })
+        .eq('id', channel.id);
+
+      if (error) throw error;
+
+      toast.success(`Switched to ${newMode} trading mode`);
+      loadChannels();
+    } catch (err) {
+      console.error('Error toggling trading mode:', err);
+      toast.error('Failed to toggle trading mode');
     }
   };
 
@@ -683,6 +708,70 @@ with TelegramClient(StringSession(), api_id, api_hash) as client:
                   </div>
                 </div>
 
+                {/* Trading Mode Toggle */}
+                <div className="p-3 bg-muted/30 rounded-lg border border-border/50">
+                  <div className="flex items-center justify-between mb-2">
+                    <div className="flex items-center gap-2">
+                      {channel.trading_mode === 'advanced' ? (
+                        <Sparkles className="h-4 w-4 text-amber-500" />
+                      ) : (
+                        <Settings2 className="h-4 w-4 text-muted-foreground" />
+                      )}
+                      <span className="text-sm font-medium">Trading Mode</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span className={`text-xs ${channel.trading_mode !== 'advanced' ? 'text-foreground font-medium' : 'text-muted-foreground'}`}>
+                        Simple
+                      </span>
+                      <Switch
+                        checked={channel.trading_mode === 'advanced'}
+                        onCheckedChange={() => toggleTradingMode(channel)}
+                      />
+                      <span className={`text-xs ${channel.trading_mode === 'advanced' ? 'text-amber-500 font-medium' : 'text-muted-foreground'}`}>
+                        Advanced
+                      </span>
+                    </div>
+                  </div>
+                  
+                  {channel.trading_mode === 'advanced' ? (
+                    <div className="space-y-2">
+                      <p className="text-xs text-muted-foreground">
+                        Uses keyword detection and configurable rules for trading decisions.
+                      </p>
+                      <div className="flex flex-wrap gap-2">
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => {
+                            setExpandedRules(expandedRules === channel.id ? null : channel.id);
+                            if (expandedKeywords === channel.id) setExpandedKeywords(null);
+                          }}
+                          className="border-amber-500/30 text-amber-500 hover:bg-amber-500/10 text-xs"
+                        >
+                          <Settings2 className="h-3 w-3 mr-1" />
+                          {expandedRules === channel.id ? 'Hide Rules' : 'Configure Rules'}
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => {
+                            setExpandedKeywords(expandedKeywords === channel.id ? null : channel.id);
+                            if (expandedRules === channel.id) setExpandedRules(null);
+                          }}
+                          className="border-purple-500/30 text-purple-400 hover:bg-purple-500/10 text-xs"
+                        >
+                          <Sparkles className="h-3 w-3 mr-1" />
+                          {expandedKeywords === channel.id ? 'Hide Keywords' : 'Manage Keywords'}
+                        </Button>
+                      </div>
+                    </div>
+                  ) : (
+                    <p className="text-xs text-muted-foreground">
+                      Uses basic APE keyword detection with fixed thresholds.
+                    </p>
+                  )}
+                </div>
+
                 {channel.last_check_at && (
                   <div className="flex items-center gap-1 text-xs text-muted-foreground">
                     <Clock className="h-3 w-3" />
@@ -795,6 +884,20 @@ with TelegramClient(StringSession(), api_id, api_hash) as client:
                     )}
                   </Button>
                 </div>
+                
+                {/* Expandable Rules Manager */}
+                {expandedRules === channel.id && (
+                  <div className="mt-4 pt-4 border-t border-border">
+                    <TradingRulesManager channelId={channel.id} />
+                  </div>
+                )}
+
+                {/* Expandable Keywords Manager */}
+                {expandedKeywords === channel.id && (
+                  <div className="mt-4 pt-4 border-t border-border">
+                    <TradingKeywordsManager />
+                  </div>
+                )}
                 
                 {/* Expandable Scan Logs */}
                 {expandedLogs === channel.id && (
