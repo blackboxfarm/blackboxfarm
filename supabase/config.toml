@@ -252,3 +252,6 @@ verify_jwt = false
 
 [functions.flipit-tweet]
 verify_jwt = false
+
+[functions.flipit-limit-order-monitor]
+verify_jwt = false
