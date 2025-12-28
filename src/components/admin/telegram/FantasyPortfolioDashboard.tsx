@@ -124,10 +124,12 @@ export function FantasyPortfolioDashboard() {
   const updatePrices = async () => {
     setUpdatingPrices(true);
     try {
-      const { error } = await supabase.functions.invoke('update-fantasy-prices');
+      const { data, error } = await supabase.functions.invoke('telegram-fantasy-price-update', {
+        body: { action: 'update' }
+      });
       if (error) throw error;
       
-      toast.success('Prices updated');
+      toast.success(`Prices updated for ${data?.updated || 0} positions`);
       await loadPositions();
     } catch (err) {
       console.error('Error updating prices:', err);
