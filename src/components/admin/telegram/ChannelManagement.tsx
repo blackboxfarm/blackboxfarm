@@ -20,11 +20,14 @@ import {
   Pause,
   Search,
   ChevronDown,
+  ChevronUp,
   CheckCircle2,
   XCircle,
-  RefreshCw
+  RefreshCw,
+  FileText
 } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
+import { ChannelScanLogs } from './ChannelScanLogs';
 
 interface ChannelConfig {
   id: string;
@@ -74,6 +77,7 @@ export function ChannelManagement() {
   // Per-channel scan/test state
   const [scanningChannelId, setScanningChannelId] = useState<string | null>(null);
   const [testingChannelId, setTestingChannelId] = useState<string | null>(null);
+  const [expandedLogs, setExpandedLogs] = useState<string | null>(null);
   const [channelTestResults, setChannelTestResults] = useState<Record<string, {
     success: boolean;
     message: string;
@@ -768,7 +772,39 @@ with TelegramClient(StringSession(), api_id, api_hash) as client:
                   >
                     <Trash2 className="h-4 w-4" />
                   </Button>
+                  
+                  {/* View Logs button */}
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => setExpandedLogs(expandedLogs === channel.id ? null : channel.id)}
+                    className="border-purple-500/30 text-purple-400 hover:bg-purple-500/10"
+                  >
+                    <FileText className="h-4 w-4 mr-1" />
+                    {expandedLogs === channel.id ? (
+                      <>
+                        <ChevronUp className="h-3 w-3 ml-1" />
+                        Hide Logs
+                      </>
+                    ) : (
+                      <>
+                        <ChevronDown className="h-3 w-3 ml-1" />
+                        View Logs
+                      </>
+                    )}
+                  </Button>
                 </div>
+                
+                {/* Expandable Scan Logs */}
+                {expandedLogs === channel.id && (
+                  <div className="mt-4 pt-4 border-t border-border">
+                    <ChannelScanLogs 
+                      channelId={channel.channel_id}
+                      channelUsername={channel.channel_username || ''}
+                      configId={channel.id}
+                    />
+                  </div>
+                )}
               </div>
             </CardContent>
           </Card>
