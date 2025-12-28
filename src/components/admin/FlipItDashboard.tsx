@@ -1489,7 +1489,7 @@ export function FlipItDashboard() {
               Trading Settings
             </Label>
             
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
               {/* Slippage */}
               <div className="space-y-2">
                 <Label className="flex items-center gap-1 text-sm">
@@ -1532,6 +1532,23 @@ export function FlipItDashboard() {
                 </Select>
               </div>
 
+              {/* Limit Order Mode Toggle */}
+              <div className="space-y-2">
+                <Label className="flex items-center gap-1 text-sm">
+                  <Clock className="h-4 w-4" />
+                  Limit Order Mode
+                </Label>
+                <div className="flex items-center gap-2 p-2 rounded-md bg-muted/50 h-10">
+                  <Switch 
+                    checked={limitOrderMode} 
+                    onCheckedChange={setLimitOrderMode}
+                  />
+                  <span className={`text-sm font-medium ${limitOrderMode ? 'text-amber-500' : 'text-muted-foreground'}`}>
+                    {limitOrderMode ? 'Queue Buy Orders' : 'Instant Buy'}
+                  </span>
+                </div>
+              </div>
+
               {/* Auto-Refresh Control */}
               <div className="space-y-2">
                 <Label className="flex items-center gap-1 text-sm">
@@ -1563,6 +1580,73 @@ export function FlipItDashboard() {
                 </div>
               </div>
             </div>
+
+            {/* Limit Order Price Range - Only show when limit mode is enabled */}
+            {limitOrderMode && (
+              <div className="mt-4 p-4 rounded-lg border border-amber-500/30 bg-amber-500/5">
+                <Label className="flex items-center gap-2 mb-3 text-amber-500">
+                  <Clock className="h-4 w-4" />
+                  Limit Order Settings
+                </Label>
+                <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                  <div className="space-y-2">
+                    <Label className="text-xs text-muted-foreground">Min Price (Buy when ≥)</Label>
+                    <Input
+                      type="text"
+                      placeholder="0.000001"
+                      value={limitPriceMin}
+                      onChange={e => setLimitPriceMin(e.target.value)}
+                      className="font-mono"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label className="text-xs text-muted-foreground">Max Price (Buy when ≤)</Label>
+                    <Input
+                      type="text"
+                      placeholder="0.00001"
+                      value={limitPriceMax}
+                      onChange={e => setLimitPriceMax(e.target.value)}
+                      className="font-mono"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label className="text-xs text-muted-foreground">Order Expiry</Label>
+                    <Select value={limitExpiry} onValueChange={setLimitExpiry}>
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="1">1 Hour</SelectItem>
+                        <SelectItem value="3">3 Hours</SelectItem>
+                        <SelectItem value="6">6 Hours</SelectItem>
+                        <SelectItem value="12">12 Hours</SelectItem>
+                        <SelectItem value="24">24 Hours</SelectItem>
+                        <SelectItem value="48">48 Hours</SelectItem>
+                        <SelectItem value="72">72 Hours</SelectItem>
+                        <SelectItem value="168">7 Days (Default)</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-2">
+                    <Label className="text-xs text-muted-foreground">Notification Email</Label>
+                    <Input
+                      type="email"
+                      placeholder="your@email.com"
+                      value={notificationEmail}
+                      onChange={e => setNotificationEmail(e.target.value)}
+                    />
+                  </div>
+                </div>
+                {inputToken.price !== null && (
+                  <p className="text-xs text-muted-foreground mt-2">
+                    Current price: <span className="text-amber-500 font-mono">${inputToken.price.toFixed(10).replace(/\.?0+$/, '')}</span>
+                    {limitPriceMin && limitPriceMax && inputToken.price >= parseFloat(limitPriceMin) && inputToken.price <= parseFloat(limitPriceMax) && (
+                      <span className="text-green-500 ml-2">✓ Currently in range - will execute immediately!</span>
+                    )}
+                  </p>
+                )}
+              </div>
+            )}
           </div>
 
           {/* Tweet Templates Section */}
@@ -1720,18 +1804,33 @@ export function FlipItDashboard() {
           </div>
 
           <div className="flex gap-2 mt-4">
-            <Button
-              onClick={handleFlip}
-              disabled={isFlipping || !tokenAddress.trim() || !selectedWallet}
-              className="bg-gradient-to-r from-orange-500 to-red-500 hover:from-orange-600 hover:to-red-600"
-            >
-              {isFlipping ? (
-                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-              ) : (
-                <Flame className="h-4 w-4 mr-2" />
-              )}
-              FLIP IT
-            </Button>
+            {limitOrderMode ? (
+              <Button
+                onClick={handleSubmitLimitOrder}
+                disabled={isSubmittingLimitOrder || !tokenAddress.trim() || !selectedWallet || !limitPriceMin || !limitPriceMax}
+                className="bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600"
+              >
+                {isSubmittingLimitOrder ? (
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                ) : (
+                  <Clock className="h-4 w-4 mr-2" />
+                )}
+                QUEUE LIMIT ORDER
+              </Button>
+            ) : (
+              <Button
+                onClick={handleFlip}
+                disabled={isFlipping || !tokenAddress.trim() || !selectedWallet}
+                className="bg-gradient-to-r from-orange-500 to-red-500 hover:from-orange-600 hover:to-red-600"
+              >
+                {isFlipping ? (
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                ) : (
+                  <Flame className="h-4 w-4 mr-2" />
+                )}
+                FLIP IT
+              </Button>
+            )}
 
             <Button variant="outline" onClick={handleRefreshPrices} disabled={isMonitoring}>
               {isMonitoring ? (
@@ -1773,6 +1872,129 @@ export function FlipItDashboard() {
           </CardContent>
         </Card>
       </div>
+
+      {/* Pending Limit Orders */}
+      {limitOrders.filter(o => o.status === 'watching').length > 0 && (
+        <Card className="border-amber-500/30">
+          <CardHeader className="flex flex-row items-center justify-between">
+            <CardTitle className="flex items-center gap-2 text-amber-500">
+              <Clock className="h-5 w-5" />
+              Pending Limit Orders ({limitOrders.filter(o => o.status === 'watching').length})
+            </CardTitle>
+            <div className="flex items-center gap-2 text-sm">
+              <div className="flex items-center gap-1">
+                <Switch 
+                  checked={limitOrderMonitorEnabled} 
+                  onCheckedChange={setLimitOrderMonitorEnabled}
+                />
+                <span className="text-muted-foreground">Monitor</span>
+              </div>
+              {limitOrderMonitorEnabled && (
+                <div className="flex items-center gap-2 px-2 py-1 rounded bg-amber-500/20 border border-amber-500/30">
+                  {isLimitOrderMonitoring ? (
+                    <Loader2 className="h-3 w-3 animate-spin text-amber-500" />
+                  ) : (
+                    <Eye className="h-3 w-3 text-amber-500 animate-pulse" />
+                  )}
+                  <span className="text-xs text-amber-500 font-medium">
+                    {isLimitOrderMonitoring ? 'Checking...' : `Next check in ${limitOrderCountdown}s`}
+                  </span>
+                </div>
+              )}
+              {lastLimitOrderCheck && (
+                <span className="text-xs text-muted-foreground">
+                  Last: {new Date(lastLimitOrderCheck).toLocaleTimeString()}
+                </span>
+              )}
+            </div>
+          </CardHeader>
+          <CardContent>
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Token</TableHead>
+                  <TableHead>Price Range</TableHead>
+                  <TableHead>Amount</TableHead>
+                  <TableHead>Target</TableHead>
+                  <TableHead>Expires</TableHead>
+                  <TableHead>Actions</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {limitOrders.filter(o => o.status === 'watching').map(order => (
+                  <TableRow key={order.id}>
+                    <TableCell>
+                      <div className="flex items-center gap-2">
+                        <span className="font-bold">{order.token_symbol || 'Unknown'}</span>
+                        <Button
+                          size="icon"
+                          variant="ghost"
+                          className="h-5 w-5"
+                          onClick={() => copyToClipboard(order.token_mint, 'Token address')}
+                        >
+                          <Copy className="h-3 w-3" />
+                        </Button>
+                      </div>
+                      {order.token_name && (
+                        <div className="text-xs text-muted-foreground">{order.token_name}</div>
+                      )}
+                    </TableCell>
+                    <TableCell>
+                      <div className="font-mono text-sm">
+                        <span className="text-green-500">${order.buy_price_min_usd.toFixed(10).replace(/\.?0+$/, '')}</span>
+                        <span className="text-muted-foreground mx-1">→</span>
+                        <span className="text-amber-500">${order.buy_price_max_usd.toFixed(10).replace(/\.?0+$/, '')}</span>
+                      </div>
+                    </TableCell>
+                    <TableCell>
+                      <span className="font-mono">{order.buy_amount_sol.toFixed(4)} SOL</span>
+                      {solPrice && (
+                        <div className="text-xs text-muted-foreground">
+                          ≈ ${(order.buy_amount_sol * solPrice).toFixed(2)}
+                        </div>
+                      )}
+                    </TableCell>
+                    <TableCell>
+                      <Badge variant="outline">{order.target_multiplier}x</Badge>
+                    </TableCell>
+                    <TableCell>
+                      <div className="text-sm">
+                        {(() => {
+                          const expiresAt = new Date(order.expires_at);
+                          const now = new Date();
+                          const hoursLeft = Math.max(0, Math.floor((expiresAt.getTime() - now.getTime()) / (1000 * 60 * 60)));
+                          const daysLeft = Math.floor(hoursLeft / 24);
+                          
+                          if (daysLeft > 0) {
+                            return <span className="text-muted-foreground">{daysLeft}d {hoursLeft % 24}h left</span>;
+                          } else if (hoursLeft > 0) {
+                            return <span className="text-amber-500">{hoursLeft}h left</span>;
+                          } else {
+                            return <span className="text-destructive">Expiring soon</span>;
+                          }
+                        })()}
+                      </div>
+                      <div className="text-xs text-muted-foreground">
+                        {new Date(order.expires_at).toLocaleString()}
+                      </div>
+                    </TableCell>
+                    <TableCell>
+                      <Button
+                        size="sm"
+                        variant="destructive"
+                        onClick={() => handleCancelLimitOrder(order.id)}
+                      >
+                        <XCircle className="h-4 w-4 mr-1" />
+                        Cancel
+                      </Button>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Active Positions */}
       {activePositions.length > 0 && (
