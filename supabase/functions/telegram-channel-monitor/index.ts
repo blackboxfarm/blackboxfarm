@@ -9,7 +9,85 @@ const corsHeaders = {
 // Solana address regex - matches base58 addresses 32-44 chars
 const SOLANA_ADDRESS_REGEX = /[1-9A-HJ-NP-Za-km-z]{32,44}/g;
 
-// Helper to extract Solana addresses from text
+// ============================================================================
+// TYPES
+// ============================================================================
+
+interface TradingKeyword {
+  id: string;
+  keyword: string;
+  category: string;
+  weight: number;
+  is_active: boolean;
+}
+
+interface TradingRule {
+  id: string;
+  name: string;
+  description: string | null;
+  priority: number;
+  is_active: boolean;
+  required_keywords: string[];
+  excluded_keywords: string[];
+  min_keyword_weight: number | null;
+  min_price_usd: number | null;
+  max_price_usd: number | null;
+  bonding_curve_position: string | null;
+  min_bonding_pct: number | null;
+  max_bonding_pct: number | null;
+  require_on_curve: boolean | null;
+  require_graduated: boolean | null;
+  min_age_minutes: number | null;
+  max_age_minutes: number | null;
+  min_market_cap_usd: number | null;
+  max_market_cap_usd: number | null;
+  platforms: string[];
+  price_change_5m_min: number | null;
+  price_change_5m_max: number | null;
+  buy_amount_usd: number;
+  sell_target_multiplier: number;
+  stop_loss_pct: number | null;
+  stop_loss_enabled: boolean;
+  fallback_to_fantasy: boolean;
+}
+
+interface KeywordMatchResult {
+  matchedKeywords: string[];
+  totalWeight: number;
+  categories: Record<string, number>;
+  hasBearishSignal: boolean;
+  hasHighConviction: boolean;
+}
+
+interface EnrichedTokenData {
+  symbol: string | null;
+  name: string | null;
+  price: number | null;
+  marketCap: number | null;
+  ageMinutes: number | null;
+  platform: string | null;
+  isOnBondingCurve: boolean;
+  bondingCurvePercent: number | null;
+  bondingCurvePosition: 'early' | 'mid' | 'late' | 'graduated' | null;
+  hasGraduated: boolean;
+  priceChange5m: number | null;
+}
+
+interface RuleEvaluationResult {
+  matchedRule: TradingRule | null;
+  decision: 'buy' | 'fantasy_buy' | 'skip' | 'no_action';
+  buyAmount: number;
+  sellTarget: number;
+  stopLoss: number | null;
+  stopLossEnabled: boolean;
+  reasoning: string;
+  ruleId: string | null;
+}
+
+// ============================================================================
+// HELPER FUNCTIONS
+// ============================================================================
+
 function extractSolanaAddresses(text: string): string[] {
   const matches = text.match(SOLANA_ADDRESS_REGEX) || [];
   return matches.filter(addr => {
@@ -21,116 +99,75 @@ function extractSolanaAddresses(text: string): string[] {
   });
 }
 
-// Check if message contains "ape" keyword (case insensitive)
+// Check if message contains "ape" keyword (case insensitive) - legacy simple mode
 function containsApeKeyword(text: string): boolean {
   const apePattern = /\bape\b/i;
   return apePattern.test(text);
 }
 
-// Generate AI interpretation of a message
-function generateAIInterpretation(
-  messageText: string,
-  extractedTokens: string[],
-  hasApeKeyword: boolean,
-  tokenData: { symbol?: string; price?: number; age?: number } | null
-): {
-  summary: string;
-  interpretation: string;
-  decision: 'buy' | 'fantasy_buy' | 'skip' | 'no_action';
-  reasoning: string;
-  confidence: number;
-} {
-  const truncatedMsg = messageText.length > 200 ? messageText.substring(0, 200) + '...' : messageText;
-  
-  let messageType = 'unknown';
-  let confidence = 0.5;
-  
-  if (extractedTokens.length > 0) {
-    if (hasApeKeyword) {
-      messageType = 'high_conviction_call';
-      confidence = 0.9;
-    } else if (/buy|long|bullish|moon|pump|🚀|💎|🔥/i.test(messageText)) {
-      messageType = 'token_call';
-      confidence = 0.7;
-    } else {
-      messageType = 'token_mention';
-      confidence = 0.5;
+// ============================================================================
+// KEYWORD DETECTION ENGINE (Advanced Mode)
+// ============================================================================
+
+async function detectKeywords(
+  text: string,
+  supabase: any
+): Promise<KeywordMatchResult> {
+  const { data: keywords, error } = await supabase
+    .from('trading_keywords')
+    .select('*')
+    .eq('is_active', true);
+
+  if (error || !keywords) {
+    console.error('[telegram-channel-monitor] Error fetching keywords:', error);
+    return {
+      matchedKeywords: [],
+      totalWeight: 0,
+      categories: {},
+      hasBearishSignal: false,
+      hasHighConviction: false
+    };
+  }
+
+  const lowerText = text.toLowerCase();
+  const matchedKeywords: string[] = [];
+  const categories: Record<string, number> = {};
+  let totalWeight = 0;
+  let hasBearishSignal = false;
+  let hasHighConviction = false;
+
+  for (const kw of keywords as TradingKeyword[]) {
+    // Check if keyword exists in text (word boundary aware)
+    const regex = new RegExp(`\\b${kw.keyword.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'i');
+    if (regex.test(lowerText)) {
+      matchedKeywords.push(kw.keyword);
+      totalWeight += kw.weight;
+      categories[kw.category] = (categories[kw.category] || 0) + kw.weight;
+      
+      if (kw.category === 'bearish') {
+        hasBearishSignal = true;
+      }
+      if (kw.category === 'high_conviction') {
+        hasHighConviction = true;
+      }
     }
-  } else if (/gm|gn|lol|haha|thanks/i.test(messageText)) {
-    messageType = 'casual_chat';
-    confidence = 0.3;
-  } else if (/market|analysis|ta|chart/i.test(messageText)) {
-    messageType = 'analysis';
-    confidence = 0.4;
-  } else {
-    messageType = 'general_discussion';
-    confidence = 0.3;
   }
 
-  let summary = '';
-  let interpretation = '';
-  let decision: 'buy' | 'fantasy_buy' | 'skip' | 'no_action' = 'no_action';
-  let reasoning = '';
+  console.log(`[telegram-channel-monitor] Keywords detected: ${matchedKeywords.join(', ')} (weight: ${totalWeight.toFixed(2)})`);
 
-  switch (messageType) {
-    case 'high_conviction_call':
-      summary = `🦍 APE call detected with token address. User appears highly bullish.`;
-      interpretation = `High-conviction buy signal with "APE" keyword. Token: ${tokenData?.symbol || 'Unknown'}. Price: $${tokenData?.price?.toFixed(8) || 'N/A'}. Age: ${tokenData?.age || 'N/A'}min.`;
-      break;
-    case 'token_call':
-      summary = `Token call posted with bullish sentiment indicators.`;
-      interpretation = `Moderate conviction call. Token: ${tokenData?.symbol || 'Unknown'}. Bullish language detected but no explicit "APE" signal.`;
-      break;
-    case 'token_mention':
-      summary = `Token address shared without strong conviction signals.`;
-      interpretation = `Token mentioned casually. May be discussion or weak call. Token: ${tokenData?.symbol || 'Unknown'}.`;
-      break;
-    case 'casual_chat':
-      summary = `Casual conversation (greeting/social).`;
-      interpretation = `Non-trading related social message. No actionable content.`;
-      break;
-    case 'analysis':
-      summary = `Market analysis or chart discussion.`;
-      interpretation = `Educational/analytical content. May inform but not a direct call.`;
-      break;
-    default:
-      summary = `General channel message.`;
-      interpretation = `Standard message without clear trading signals.`;
-  }
-
-  if (extractedTokens.length === 0) {
-    decision = 'no_action';
-    reasoning = 'No token address found in message. Nothing to trade.';
-  } else if (!tokenData?.price) {
-    decision = 'skip';
-    reasoning = 'Token address found but unable to fetch price data. May be too new or invalid.';
-  } else if (tokenData.age && tokenData.age > 10080) {
-    // Only skip extremely old tokens (7 days) in the AI interpretation layer
-    // The real token age filtering happens in the trading rules using config.max_mint_age_minutes
-    decision = 'skip';
-    reasoning = `Token is ${tokenData.age} minutes old, exceeds 7-day maximum threshold.`;
-  } else if (hasApeKeyword && tokenData.price < 0.00002) {
-    decision = 'buy';
-    reasoning = `High conviction: APE keyword + low price ($${tokenData.price.toFixed(8)} < $0.00002). Triggers large buy tier.`;
-    confidence = 0.9;
-  } else if (tokenData.price > 0.00004) {
-    decision = 'buy';
-    reasoning = `Token price ($${tokenData.price.toFixed(8)}) above standard threshold. Triggers standard buy tier.`;
-    confidence = 0.7;
-  } else if (hasApeKeyword) {
-    decision = 'buy';
-    reasoning = `APE keyword present with mid-range price. Triggers standard buy with higher target.`;
-    confidence = 0.75;
-  } else {
-    decision = 'skip';
-    reasoning = `Price in middle range ($0.00002-$0.00004) without APE keyword. Insufficient conviction.`;
-    confidence = 0.4;
-  }
-
-  return { summary, interpretation, decision, reasoning, confidence };
+  return {
+    matchedKeywords,
+    totalWeight,
+    categories,
+    hasBearishSignal,
+    hasHighConviction
+  };
 }
 
-// Fetch token price from Jupiter
+// ============================================================================
+// TOKEN ENRICHMENT
+// ============================================================================
+
 async function fetchTokenPrice(tokenMint: string): Promise<number | null> {
   try {
     const response = await fetch(`https://api.jup.ag/price/v2?ids=${tokenMint}`);
@@ -145,25 +182,33 @@ async function fetchTokenPrice(tokenMint: string): Promise<number | null> {
   }
 }
 
-// Fetch token price from DexScreener as fallback
-async function fetchDexScreenerPrice(tokenMint: string): Promise<{ price: number | null; marketCap: number | null }> {
+async function fetchDexScreenerData(tokenMint: string): Promise<{
+  price: number | null;
+  marketCap: number | null;
+  pairCreatedAt: number | null;
+  priceChange5m: number | null;
+  dexId: string | null;
+}> {
   try {
     const response = await fetch(`https://api.dexscreener.com/latest/dex/tokens/${tokenMint}`);
     const data = await response.json();
     if (data.pairs?.[0]) {
+      const pair = data.pairs[0];
       return {
-        price: parseFloat(data.pairs[0].priceUsd) || null,
-        marketCap: data.pairs[0].marketCap || null
+        price: parseFloat(pair.priceUsd) || null,
+        marketCap: pair.marketCap || null,
+        pairCreatedAt: pair.pairCreatedAt || null,
+        priceChange5m: pair.priceChange?.m5 || null,
+        dexId: pair.dexId || null
       };
     }
-    return { price: null, marketCap: null };
+    return { price: null, marketCap: null, pairCreatedAt: null, priceChange5m: null, dexId: null };
   } catch (error) {
-    console.error(`[telegram-channel-monitor] Error fetching DexScreener price:`, error);
-    return { price: null, marketCap: null };
+    console.error(`[telegram-channel-monitor] Error fetching DexScreener data:`, error);
+    return { price: null, marketCap: null, pairCreatedAt: null, priceChange5m: null, dexId: null };
   }
 }
 
-// Fetch token metadata from Jupiter
 async function fetchTokenMetadata(tokenMint: string): Promise<{ symbol: string; name: string } | null> {
   try {
     const response = await fetch(`https://tokens.jup.ag/token/${tokenMint}`);
@@ -179,55 +224,480 @@ async function fetchTokenMetadata(tokenMint: string): Promise<{ symbol: string; 
   }
 }
 
-// Estimate token age from DexScreener
-async function estimateTokenAge(tokenMint: string): Promise<number | null> {
+async function checkPumpFunBondingCurve(tokenMint: string): Promise<{
+  isOnCurve: boolean;
+  bondingPercent: number | null;
+  hasGraduated: boolean;
+}> {
   try {
-    const response = await fetch(`https://api.dexscreener.com/latest/dex/tokens/${tokenMint}`);
-    const data = await response.json();
-    if (data.pairs?.[0]?.pairCreatedAt) {
-      const createdAt = data.pairs[0].pairCreatedAt;
-      const ageMs = Date.now() - createdAt;
-      return Math.floor(ageMs / 60000);
+    // Check pump.fun API for bonding curve status
+    const response = await fetch(`https://frontend-api.pump.fun/coins/${tokenMint}`);
+    if (!response.ok) {
+      return { isOnCurve: false, bondingPercent: null, hasGraduated: false };
     }
-    return null;
+    const data = await response.json();
+    
+    // Pump.fun uses virtual_sol_reserves and real_sol_reserves to calculate progress
+    // Token graduates at ~85 SOL in bonding curve
+    const virtualSolReserves = data.virtual_sol_reserves || 0;
+    const realSolReserves = data.real_sol_reserves || 0;
+    const complete = data.complete || false;
+    
+    // Calculate bonding curve progress (roughly 0-100%)
+    const bondingPercent = complete ? 100 : Math.min(100, (realSolReserves / 85) * 100);
+    
+    return {
+      isOnCurve: !complete,
+      bondingPercent: bondingPercent,
+      hasGraduated: complete
+    };
   } catch (error) {
-    console.error(`[telegram-channel-monitor] Error estimating token age:`, error);
-    return null;
+    console.error(`[telegram-channel-monitor] Error checking pump.fun bonding curve:`, error);
+    return { isOnCurve: false, bondingPercent: null, hasGraduated: false };
   }
 }
 
-// Send email notification
+function determinePlatform(dexId: string | null): string {
+  if (!dexId) return 'unknown';
+  const lower = dexId.toLowerCase();
+  if (lower.includes('pump') || lower === 'pumpfun') return 'pump.fun';
+  if (lower.includes('raydium')) return 'raydium';
+  if (lower.includes('orca')) return 'orca';
+  if (lower.includes('moonshot')) return 'moonshot';
+  return dexId;
+}
+
+function getBondingCurvePosition(percent: number | null): 'early' | 'mid' | 'late' | null {
+  if (percent === null) return null;
+  if (percent <= 25) return 'early';
+  if (percent <= 75) return 'mid';
+  return 'late';
+}
+
+async function enrichTokenData(tokenMint: string): Promise<EnrichedTokenData> {
+  // Fetch all data in parallel
+  const [jupiterPrice, dexData, metadata, bondingCurve] = await Promise.all([
+    fetchTokenPrice(tokenMint),
+    fetchDexScreenerData(tokenMint),
+    fetchTokenMetadata(tokenMint),
+    checkPumpFunBondingCurve(tokenMint)
+  ]);
+
+  const price = jupiterPrice ?? dexData.price;
+  const platform = determinePlatform(dexData.dexId);
+  const ageMinutes = dexData.pairCreatedAt 
+    ? Math.floor((Date.now() - dexData.pairCreatedAt) / 60000)
+    : null;
+
+  const bondingPosition = bondingCurve.hasGraduated 
+    ? 'graduated' as const
+    : getBondingCurvePosition(bondingCurve.bondingPercent);
+
+  return {
+    symbol: metadata?.symbol || null,
+    name: metadata?.name || null,
+    price,
+    marketCap: dexData.marketCap,
+    ageMinutes,
+    platform,
+    isOnBondingCurve: bondingCurve.isOnCurve,
+    bondingCurvePercent: bondingCurve.bondingPercent,
+    bondingCurvePosition: bondingPosition,
+    hasGraduated: bondingCurve.hasGraduated,
+    priceChange5m: dexData.priceChange5m
+  };
+}
+
+// ============================================================================
+// RULES ENGINE
+// ============================================================================
+
+async function evaluateRules(
+  config: any,
+  tokenData: EnrichedTokenData,
+  keywordResult: KeywordMatchResult,
+  supabase: any
+): Promise<RuleEvaluationResult> {
+  const tradingMode = config.trading_mode || 'simple';
+  const isFantasyMode = config.fantasy_mode ?? true;
+
+  console.log(`[telegram-channel-monitor] Trading mode: ${tradingMode}, Fantasy: ${isFantasyMode}`);
+
+  // ========== SIMPLE MODE ==========
+  if (tradingMode === 'simple') {
+    return evaluateSimpleMode(config, tokenData, keywordResult.hasHighConviction || containsApeKeyword('ape'), isFantasyMode);
+  }
+
+  // ========== ADVANCED MODE ==========
+  // Fetch rules for this channel + global rules
+  const { data: rules, error } = await supabase
+    .from('trading_rules')
+    .select('*')
+    .eq('is_active', true)
+    .or(`channel_id.is.null,channel_id.eq.${config.id}`)
+    .order('priority', { ascending: true });
+
+  if (error) {
+    console.error('[telegram-channel-monitor] Error fetching rules:', error);
+    // Fallback to simple mode on error
+    return evaluateSimpleMode(config, tokenData, keywordResult.hasHighConviction, isFantasyMode);
+  }
+
+  // If no rules, check fallback behavior
+  if (!rules || rules.length === 0) {
+    console.log('[telegram-channel-monitor] No rules found, falling back to simple mode');
+    return evaluateSimpleMode(config, tokenData, keywordResult.hasHighConviction, isFantasyMode);
+  }
+
+  // Evaluate rules by priority
+  for (const rule of rules as TradingRule[]) {
+    const matchResult = evaluateSingleRule(rule, tokenData, keywordResult);
+    if (matchResult.matches) {
+      console.log(`[telegram-channel-monitor] Rule matched: "${rule.name}" - ${matchResult.reason}`);
+      
+      const decision = isFantasyMode ? 'fantasy_buy' : 'buy';
+      
+      return {
+        matchedRule: rule,
+        decision,
+        buyAmount: rule.buy_amount_usd,
+        sellTarget: rule.sell_target_multiplier,
+        stopLoss: rule.stop_loss_pct,
+        stopLossEnabled: rule.stop_loss_enabled,
+        reasoning: `Rule "${rule.name}": ${matchResult.reason}`,
+        ruleId: rule.id
+      };
+    } else {
+      console.log(`[telegram-channel-monitor] Rule "${rule.name}" not matched: ${matchResult.reason}`);
+    }
+  }
+
+  // No rules matched - check fallback
+  const lastRule = rules[rules.length - 1] as TradingRule;
+  if (lastRule?.fallback_to_fantasy && isFantasyMode) {
+    console.log('[telegram-channel-monitor] No rules matched, falling back to fantasy default');
+    return {
+      matchedRule: null,
+      decision: 'fantasy_buy',
+      buyAmount: config.fantasy_buy_amount_usd || 50,
+      sellTarget: 2.0,
+      stopLoss: null,
+      stopLossEnabled: false,
+      reasoning: 'No rules matched, using fantasy fallback',
+      ruleId: null
+    };
+  }
+
+  return {
+    matchedRule: null,
+    decision: 'skip',
+    buyAmount: 0,
+    sellTarget: 0,
+    stopLoss: null,
+    stopLossEnabled: false,
+    reasoning: 'No matching rules and no fallback enabled',
+    ruleId: null
+  };
+}
+
+function evaluateSingleRule(
+  rule: TradingRule,
+  tokenData: EnrichedTokenData,
+  keywordResult: KeywordMatchResult
+): { matches: boolean; reason: string } {
+  // Check required keywords (ANY must match)
+  if (rule.required_keywords && rule.required_keywords.length > 0) {
+    const hasRequiredKeyword = rule.required_keywords.some(kw => 
+      keywordResult.matchedKeywords.includes(kw.toLowerCase())
+    );
+    if (!hasRequiredKeyword) {
+      return { matches: false, reason: `Missing required keywords: ${rule.required_keywords.join(', ')}` };
+    }
+  }
+
+  // Check excluded keywords (NONE should match)
+  if (rule.excluded_keywords && rule.excluded_keywords.length > 0) {
+    const hasExcludedKeyword = rule.excluded_keywords.some(kw => 
+      keywordResult.matchedKeywords.includes(kw.toLowerCase())
+    );
+    if (hasExcludedKeyword) {
+      return { matches: false, reason: 'Contains excluded keyword' };
+    }
+  }
+
+  // Check minimum keyword weight
+  if (rule.min_keyword_weight !== null && keywordResult.totalWeight < rule.min_keyword_weight) {
+    return { matches: false, reason: `Keyword weight ${keywordResult.totalWeight.toFixed(2)} < required ${rule.min_keyword_weight}` };
+  }
+
+  // Check price range
+  if (tokenData.price !== null) {
+    if (rule.min_price_usd !== null && tokenData.price < rule.min_price_usd) {
+      return { matches: false, reason: `Price $${tokenData.price} below minimum $${rule.min_price_usd}` };
+    }
+    if (rule.max_price_usd !== null && tokenData.price > rule.max_price_usd) {
+      return { matches: false, reason: `Price $${tokenData.price} above maximum $${rule.max_price_usd}` };
+    }
+  }
+
+  // Check bonding curve position
+  if (rule.bonding_curve_position && rule.bonding_curve_position !== 'any') {
+    if (tokenData.bondingCurvePosition !== rule.bonding_curve_position) {
+      return { matches: false, reason: `Bonding curve position "${tokenData.bondingCurvePosition}" != required "${rule.bonding_curve_position}"` };
+    }
+  }
+
+  // Check bonding curve percentage
+  if (tokenData.bondingCurvePercent !== null) {
+    if (rule.min_bonding_pct !== null && tokenData.bondingCurvePercent < rule.min_bonding_pct) {
+      return { matches: false, reason: `Bonding ${tokenData.bondingCurvePercent}% below minimum ${rule.min_bonding_pct}%` };
+    }
+    if (rule.max_bonding_pct !== null && tokenData.bondingCurvePercent > rule.max_bonding_pct) {
+      return { matches: false, reason: `Bonding ${tokenData.bondingCurvePercent}% above maximum ${rule.max_bonding_pct}%` };
+    }
+  }
+
+  // Check require on curve
+  if (rule.require_on_curve === true && !tokenData.isOnBondingCurve) {
+    return { matches: false, reason: 'Token not on bonding curve' };
+  }
+
+  // Check require graduated
+  if (rule.require_graduated === true && !tokenData.hasGraduated) {
+    return { matches: false, reason: 'Token has not graduated' };
+  }
+
+  // Check age
+  if (tokenData.ageMinutes !== null) {
+    if (rule.min_age_minutes !== null && tokenData.ageMinutes < rule.min_age_minutes) {
+      return { matches: false, reason: `Age ${tokenData.ageMinutes}min below minimum ${rule.min_age_minutes}min` };
+    }
+    if (rule.max_age_minutes !== null && tokenData.ageMinutes > rule.max_age_minutes) {
+      return { matches: false, reason: `Age ${tokenData.ageMinutes}min above maximum ${rule.max_age_minutes}min` };
+    }
+  }
+
+  // Check market cap
+  if (tokenData.marketCap !== null) {
+    if (rule.min_market_cap_usd !== null && tokenData.marketCap < rule.min_market_cap_usd) {
+      return { matches: false, reason: `Market cap $${tokenData.marketCap} below minimum` };
+    }
+    if (rule.max_market_cap_usd !== null && tokenData.marketCap > rule.max_market_cap_usd) {
+      return { matches: false, reason: `Market cap $${tokenData.marketCap} above maximum` };
+    }
+  }
+
+  // Check platforms
+  if (rule.platforms && rule.platforms.length > 0 && tokenData.platform) {
+    if (!rule.platforms.includes(tokenData.platform)) {
+      return { matches: false, reason: `Platform "${tokenData.platform}" not in allowed: ${rule.platforms.join(', ')}` };
+    }
+  }
+
+  // Check price change 5m
+  if (tokenData.priceChange5m !== null) {
+    if (rule.price_change_5m_min !== null && tokenData.priceChange5m < rule.price_change_5m_min) {
+      return { matches: false, reason: `5m price change ${tokenData.priceChange5m}% below minimum` };
+    }
+    if (rule.price_change_5m_max !== null && tokenData.priceChange5m > rule.price_change_5m_max) {
+      return { matches: false, reason: `5m price change ${tokenData.priceChange5m}% above maximum (too volatile)` };
+    }
+  }
+
+  // All conditions passed!
+  return { matches: true, reason: 'All conditions met' };
+}
+
+function evaluateSimpleMode(
+  config: any,
+  tokenData: EnrichedTokenData,
+  hasApeKeyword: boolean,
+  isFantasyMode: boolean
+): RuleEvaluationResult {
+  const price = tokenData.price;
+  const tokenAge = tokenData.ageMinutes;
+
+  // Check token age
+  const maxTokenAgeMinutes = config.max_mint_age_minutes ?? 10080;
+  if (tokenAge !== null && tokenAge > maxTokenAgeMinutes) {
+    return {
+      matchedRule: null,
+      decision: 'skip',
+      buyAmount: 0,
+      sellTarget: 0,
+      stopLoss: null,
+      stopLossEnabled: false,
+      reasoning: `Token too old: ${tokenAge} minutes (max: ${maxTokenAgeMinutes})`,
+      ruleId: null
+    };
+  }
+
+  if (price === null) {
+    return {
+      matchedRule: null,
+      decision: 'skip',
+      buyAmount: 0,
+      sellTarget: 0,
+      stopLoss: null,
+      stopLossEnabled: false,
+      reasoning: 'Unable to fetch price',
+      ruleId: null
+    };
+  }
+
+  const minPriceThreshold = config.min_price_threshold || 0.00002;
+  const maxPriceThreshold = config.max_price_threshold || 0.00004;
+  const decision = isFantasyMode ? 'fantasy_buy' : 'buy';
+
+  if (hasApeKeyword && price < minPriceThreshold) {
+    return {
+      matchedRule: null,
+      decision,
+      buyAmount: config.large_buy_amount_usd || 100,
+      sellTarget: config.large_sell_multiplier || 5,
+      stopLoss: null,
+      stopLossEnabled: false,
+      reasoning: `APE keyword + low price ($${price.toFixed(8)} < $${minPriceThreshold}). Large buy tier.`,
+      ruleId: null
+    };
+  } else if (price >= minPriceThreshold && price < maxPriceThreshold) {
+    return {
+      matchedRule: null,
+      decision,
+      buyAmount: config.standard_buy_amount_usd || 50,
+      sellTarget: config.standard_sell_multiplier || 3,
+      stopLoss: null,
+      stopLossEnabled: false,
+      reasoning: `Standard price range. Standard buy tier.`,
+      ruleId: null
+    };
+  } else if (price >= maxPriceThreshold) {
+    return {
+      matchedRule: null,
+      decision,
+      buyAmount: config.standard_buy_amount_usd || 50,
+      sellTarget: config.standard_sell_multiplier || 2,
+      stopLoss: null,
+      stopLossEnabled: false,
+      reasoning: `Price above threshold. Standard buy tier.`,
+      ruleId: null
+    };
+  }
+
+  return {
+    matchedRule: null,
+    decision: 'skip',
+    buyAmount: 0,
+    sellTarget: 0,
+    stopLoss: null,
+    stopLossEnabled: false,
+    reasoning: `Price in middle range without APE keyword. Insufficient conviction.`,
+    ruleId: null
+  };
+}
+
+// ============================================================================
+// AI INTERPRETATION (Enhanced)
+// ============================================================================
+
+function generateAIInterpretation(
+  messageText: string,
+  extractedTokens: string[],
+  keywordResult: KeywordMatchResult,
+  tokenData: EnrichedTokenData | null,
+  ruleResult: RuleEvaluationResult
+): {
+  summary: string;
+  interpretation: string;
+  decision: string;
+  reasoning: string;
+  confidence: number;
+} {
+  let messageType = 'unknown';
+  let confidence = 0.5;
+  
+  if (extractedTokens.length > 0) {
+    if (keywordResult.hasHighConviction) {
+      messageType = 'high_conviction_call';
+      confidence = 0.9;
+    } else if (keywordResult.totalWeight > 1.0) {
+      messageType = 'token_call';
+      confidence = 0.7;
+    } else {
+      messageType = 'token_mention';
+      confidence = 0.5;
+    }
+  } else if (/gm|gn|lol|haha|thanks/i.test(messageText)) {
+    messageType = 'casual_chat';
+    confidence = 0.3;
+  } else {
+    messageType = 'general_discussion';
+    confidence = 0.3;
+  }
+
+  let summary = '';
+  let interpretation = '';
+
+  switch (messageType) {
+    case 'high_conviction_call':
+      summary = `🦍 High conviction call detected. Keywords: ${keywordResult.matchedKeywords.slice(0, 5).join(', ')}`;
+      interpretation = `Strong buy signal. Token: ${tokenData?.symbol || 'Unknown'}. Price: $${tokenData?.price?.toFixed(8) || 'N/A'}. Platform: ${tokenData?.platform || 'Unknown'}. Bonding: ${tokenData?.bondingCurvePercent?.toFixed(0) || 'N/A'}%`;
+      break;
+    case 'token_call':
+      summary = `Token call with bullish sentiment. Weight: ${keywordResult.totalWeight.toFixed(2)}`;
+      interpretation = `Moderate conviction. Token: ${tokenData?.symbol || 'Unknown'}. Keywords: ${keywordResult.matchedKeywords.slice(0, 3).join(', ')}`;
+      break;
+    case 'token_mention':
+      summary = `Token mentioned without strong signals.`;
+      interpretation = `Low conviction mention. Token: ${tokenData?.symbol || 'Unknown'}.`;
+      break;
+    default:
+      summary = `General channel message.`;
+      interpretation = `No trading signals detected.`;
+  }
+
+  return {
+    summary,
+    interpretation,
+    decision: ruleResult.decision,
+    reasoning: ruleResult.reasoning,
+    confidence
+  };
+}
+
+// ============================================================================
+// EMAIL NOTIFICATIONS
+// ============================================================================
+
 async function sendEmailNotification(
   supabase: any,
   email: string,
   tokenMint: string,
   tokenSymbol: string,
   price: number,
-  apeKeyword: boolean,
-  buyTier: string,
   buyAmount: number,
-  sellMultiplier: number
+  sellMultiplier: number,
+  ruleName: string | null
 ) {
   try {
     const { error } = await supabase.functions.invoke('send-notification', {
       body: {
         type: 'email',
         to: email,
-        subject: `🦍 APE CALL DETECTED: ${tokenSymbol}`,
+        subject: `🦍 Trade Alert: ${tokenSymbol}`,
         title: `New Token Call from Blind Ape Alpha`,
         message: `
 Token: ${tokenSymbol}
 Mint: ${tokenMint}
 Price: $${price?.toFixed(10) || 'Unknown'}
-Ape Keyword: ${apeKeyword ? 'YES 🦍' : 'No'}
-Buy Tier: ${buyTier.toUpperCase()}
 Buy Amount: $${buyAmount}
 Sell Target: ${sellMultiplier}x
+Rule: ${ruleName || 'Simple Mode'}
 
 View on Solscan: https://solscan.io/token/${tokenMint}
 View on DexScreener: https://dexscreener.com/solana/${tokenMint}
         `.trim(),
-        metadata: { tokenMint, tokenSymbol, price, buyTier, buyAmount, sellMultiplier }
+        metadata: { tokenMint, tokenSymbol, price, buyAmount, sellMultiplier }
       }
     });
     
@@ -242,7 +712,10 @@ View on DexScreener: https://dexscreener.com/solana/${tokenMint}
   }
 }
 
-// Scrape messages from public Telegram channel web view with caller info
+// ============================================================================
+// CHANNEL SCRAPING
+// ============================================================================
+
 async function scrapePublicChannel(username: string): Promise<Array<{
   messageId: string;
   text: string;
@@ -307,10 +780,6 @@ async function scrapePublicChannel(username: string): Promise<Array<{
           callerUsername,
           callerDisplayName
         });
-        
-        if (callerDisplayName) {
-          console.log(`[telegram-channel-monitor] Message from caller: ${callerDisplayName} (@${callerUsername})`);
-        }
       }
     }
     
@@ -348,47 +817,9 @@ async function scrapePublicChannel(username: string): Promise<Array<{
   }
 }
 
-// For groups, we need MTProto but since that's complex in edge functions,
-// we'll provide clear feedback when a group can't be scraped
-async function checkGroupAccessibility(
-  channelUsername: string
-): Promise<{ accessible: boolean; isGroup: boolean; message: string }> {
-  console.log(`[telegram-channel-monitor] Checking accessibility for: ${channelUsername}`);
-  
-  try {
-    const url = `https://t.me/s/${channelUsername}`;
-    const response = await fetch(url, {
-      headers: {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
-        'Accept': 'text/html,application/xhtml+xml',
-      }
-    });
-    
-    if (!response.ok) {
-      return { accessible: false, isGroup: false, message: 'Channel/group not found' };
-    }
-    
-    const html = await response.text();
-    
-    // Check for message content
-    const hasMessages = html.includes('tgme_widget_message_wrap');
-    const isGroup = html.includes('members') && !hasMessages;
-    
-    if (hasMessages) {
-      return { accessible: true, isGroup: false, message: 'Public channel - can scrape messages' };
-    } else if (isGroup) {
-      return { 
-        accessible: false, 
-        isGroup: true, 
-        message: 'This is a GROUP - cannot scrape without MTProto. Add bot as member or use MTProto session.' 
-      };
-    } else {
-      return { accessible: false, isGroup: false, message: 'No public messages available' };
-    }
-  } catch (error: any) {
-    return { accessible: false, isGroup: false, message: error.message };
-  }
-}
+// ============================================================================
+// MAIN SERVER
+// ============================================================================
 
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
@@ -408,12 +839,10 @@ serve(async (req) => {
     // Build query for channel configurations
     let query = supabase.from('telegram_channel_config').select('*');
     
-    // If single channel mode, filter to just that one channel
     if (singleChannel && requestChannelId) {
       console.log(`[telegram-channel-monitor] Single channel mode: ${requestChannelId}`);
       query = query.eq('channel_id', requestChannelId);
     } else {
-      // Otherwise, only get active channels
       query = query.eq('is_active', true);
     }
 
@@ -447,27 +876,25 @@ serve(async (req) => {
       const channelUsername = config.channel_username;
       const channelType = config.channel_type || 'channel';
       const isFantasyMode = config.fantasy_mode ?? true;
-      const fantasyBuyAmount = config.fantasy_buy_amount_usd || 100;
+      const tradingMode = config.trading_mode || 'simple';
       
-      console.log(`[telegram-channel-monitor] Processing: ${channelUsername || channelId} (${config.channel_name || 'unnamed'}) - Type: ${channelType} - Fantasy: ${isFantasyMode}`);
+      console.log(`[telegram-channel-monitor] Processing: ${channelUsername || channelId} (${config.channel_name || 'unnamed'}) - Type: ${channelType} - Mode: ${tradingMode} - Fantasy: ${isFantasyMode}`);
 
       try {
         let channelMessages: Array<{ messageId: string; text: string; date: Date; callerUsername?: string; callerDisplayName?: string }> = [];
         let groupWarning: string | null = null;
         
-        // Fetch messages (MTProto for groups, web scraping for channels)
+        // Fetch messages
         if (!channelUsername) {
           groupWarning = 'Missing channel username in config';
         } else if (channelType === 'group') {
-          // MTProto-first for groups
+          // MTProto for groups
           try {
             const { data: mtData, error: mtError } = await supabase.functions.invoke('telegram-mtproto-auth', {
               body: { action: 'fetch_recent_messages', channelUsername, limit: 50 }
             });
 
-            if (mtError) {
-              throw mtError;
-            }
+            if (mtError) throw mtError;
 
             if (mtData?.success && Array.isArray(mtData.messages)) {
               channelMessages = mtData.messages.map((m: any) => ({
@@ -477,8 +904,7 @@ serve(async (req) => {
                 callerUsername: m.callerUsername,
                 callerDisplayName: m.callerDisplayName,
               }));
-
-              console.log(`[telegram-channel-monitor] MTProto fetched ${channelMessages.length} messages for group @${channelUsername}`);
+              console.log(`[telegram-channel-monitor] MTProto fetched ${channelMessages.length} messages`);
             } else {
               groupWarning = mtData?.error || 'MTProto returned no messages';
             }
@@ -486,11 +912,10 @@ serve(async (req) => {
             groupWarning = `MTProto error: ${e?.message || 'unknown error'}`;
           }
 
-          // Fallback: Bot API (only if bot is a member)
+          // Bot API fallback
           if (channelMessages.length === 0) {
             const botToken = Deno.env.get('TELEGRAM_BOT_TOKEN');
             if (botToken) {
-              console.log(`[telegram-channel-monitor] Trying Bot API fallback for group...`);
               const updatesResponse = await fetch(
                 `https://api.telegram.org/bot${botToken}/getUpdates?offset=-100&limit=100`
               );
@@ -517,32 +942,28 @@ serve(async (req) => {
                 });
 
                 if (channelMessages.length > 0) {
-                  console.log(`[telegram-channel-monitor] Bot API found ${channelMessages.length} messages from group`);
                   groupWarning = null;
                 }
               }
             }
           }
         } else {
-          // Regular channel - web scraping
           channelMessages = await scrapePublicChannel(channelUsername);
         }
 
-        // Track raw messages retrieved
         totalRawMessages += channelMessages.length;
-        console.log(`[telegram-channel-monitor] Retrieved ${channelMessages.length} raw messages from @${channelUsername}`);
 
-        // Log warning for groups that couldn't be accessed
         if (groupWarning && channelMessages.length === 0) {
           console.log(`[telegram-channel-monitor] WARNING: ${groupWarning}`);
           results.push({
             channel: config.channel_name || channelUsername || channelId,
             channelType,
+            tradingMode,
             messagesFound: 0,
             success: false,
             warning: groupWarning
           });
-          continue; // Skip to next channel
+          continue;
         }
 
         for (const msg of channelMessages) {
@@ -554,15 +975,14 @@ serve(async (req) => {
           const callerUsername = msg.callerUsername;
           const callerDisplayName = msg.callerDisplayName;
 
-          // Skip if message is too old (configurable, default 24 hours) - UNLESS deepScan mode
+          // Skip if message is too old
           const scanWindowMinutes = config.scan_window_minutes ?? 1440;
           const messageAgeMinutes = (Date.now() - messageDate.getTime()) / 60000;
           if (!deepScan && messageAgeMinutes > scanWindowMinutes) {
-            console.log(`[telegram-channel-monitor] Skipping message ${messageId}: ${messageAgeMinutes.toFixed(0)}min old, exceeds ${scanWindowMinutes}min window`);
             continue;
           }
 
-          // Skip if we already processed this message - UNLESS resetMessageId mode
+          // Skip if already processed
           if (!resetMessageId && config.last_message_id) {
             const lastId = parseInt(config.last_message_id);
             const currentId = parseInt(messageId);
@@ -573,44 +993,50 @@ serve(async (req) => {
 
           // Extract Solana addresses
           const addresses = extractSolanaAddresses(messageText);
-          const hasApeKeyword = containsApeKeyword(messageText);
+          
+          // Detect keywords (for both modes)
+          const keywordResult = tradingMode === 'advanced' 
+            ? await detectKeywords(messageText, supabase)
+            : { 
+                matchedKeywords: containsApeKeyword(messageText) ? ['ape'] : [], 
+                totalWeight: containsApeKeyword(messageText) ? 2.0 : 0, 
+                categories: {}, 
+                hasBearishSignal: false,
+                hasHighConviction: containsApeKeyword(messageText)
+              };
 
-          // Fetch token data for the first address
-          let tokenData: { symbol?: string; price?: number; age?: number; marketCap?: number; name?: string } | null = null;
+          // Skip if bearish signals detected (in advanced mode)
+          if (tradingMode === 'advanced' && keywordResult.hasBearishSignal) {
+            console.log(`[telegram-channel-monitor] Bearish signal detected, skipping: ${keywordResult.matchedKeywords.join(', ')}`);
+            continue;
+          }
+
+          // Enrich first token
+          let tokenData: EnrichedTokenData | null = null;
           const firstToken = addresses[0];
           
           if (firstToken) {
-            let price = await fetchTokenPrice(firstToken);
-            let marketCap: number | null = null;
-            
-            if (price === null) {
-              const dexData = await fetchDexScreenerPrice(firstToken);
-              price = dexData.price;
-              marketCap = dexData.marketCap;
-            }
-
-            const tokenAge = await estimateTokenAge(firstToken);
-            const metadata = await fetchTokenMetadata(firstToken);
-            
-            tokenData = {
-              symbol: metadata?.symbol,
-              name: metadata?.name,
-              price: price || undefined,
-              age: tokenAge || undefined,
-              marketCap: marketCap || undefined
-            };
+            tokenData = await enrichTokenData(firstToken);
           }
+
+          // Evaluate rules
+          const ruleResult = addresses.length > 0 && tokenData
+            ? await evaluateRules(config, tokenData, keywordResult, supabase)
+            : {
+                matchedRule: null,
+                decision: 'no_action' as const,
+                buyAmount: 0,
+                sellTarget: 0,
+                stopLoss: null,
+                stopLossEnabled: false,
+                reasoning: 'No token address found',
+                ruleId: null
+              };
 
           // Generate AI interpretation
-          const aiResult = generateAIInterpretation(messageText, addresses, hasApeKeyword, tokenData);
+          const aiResult = generateAIInterpretation(messageText, addresses, keywordResult, tokenData, ruleResult);
 
-          // Adjust decision for fantasy mode
-          let finalDecision = aiResult.decision;
-          if (isFantasyMode && aiResult.decision === 'buy') {
-            finalDecision = 'fantasy_buy';
-          }
-
-          // Log the interpretation
+          // Log interpretation
           await supabase
             .from('telegram_message_interpretations')
             .insert({
@@ -621,8 +1047,8 @@ serve(async (req) => {
               ai_summary: aiResult.summary,
               ai_interpretation: aiResult.interpretation,
               extracted_tokens: addresses,
-              decision: finalDecision,
-              decision_reasoning: aiResult.reasoning,
+              decision: ruleResult.decision,
+              decision_reasoning: ruleResult.reasoning,
               confidence_score: aiResult.confidence,
               token_mint: firstToken || null,
               token_symbol: tokenData?.symbol || null,
@@ -631,22 +1057,11 @@ serve(async (req) => {
               caller_display_name: callerDisplayName || null
             });
 
-          console.log(`[telegram-channel-monitor] AI: ${aiResult.summary} -> ${finalDecision} (Caller: ${callerDisplayName || callerUsername || 'Unknown'})`);
+          console.log(`[telegram-channel-monitor] AI: ${aiResult.summary} -> ${ruleResult.decision}`);
 
-          // Process each token address
+          // Process each token
           for (const tokenMint of addresses) {
-            // Check for first-time calls
-            const { data: existingGlobal } = await supabase
-              .from('telegram_channel_calls')
-              .select('id, caller_username, caller_display_name, channel_name')
-              .eq('token_mint', tokenMint)
-              .order('created_at', { ascending: true })
-              .limit(1)
-              .single();
-
-            const isFirstCall = !existingGlobal;
-            
-            // Check if already processed in THIS channel
+            // Check for duplicates
             const { data: existingInChannel } = await supabase
               .from('telegram_channel_calls')
               .select('id')
@@ -655,62 +1070,36 @@ serve(async (req) => {
               .single();
 
             if (existingInChannel) {
-              console.log(`[telegram-channel-monitor] Token ${tokenMint} already processed in this channel`);
               continue;
             }
 
-            // Get token-specific data
+            // Check first call
+            const { data: existingGlobal } = await supabase
+              .from('telegram_channel_calls')
+              .select('id')
+              .eq('token_mint', tokenMint)
+              .limit(1)
+              .single();
+
+            const isFirstCall = !existingGlobal;
+
+            // Get token data for this specific token
             let currentTokenData = tokenData;
             if (tokenMint !== firstToken) {
-              let price = await fetchTokenPrice(tokenMint);
-              if (price === null) {
-                const dexData = await fetchDexScreenerPrice(tokenMint);
-                price = dexData.price;
-              }
-              const age = await estimateTokenAge(tokenMint);
-              const meta = await fetchTokenMetadata(tokenMint);
-              currentTokenData = { symbol: meta?.symbol, name: meta?.name, price: price || undefined, age: age || undefined };
+              currentTokenData = await enrichTokenData(tokenMint);
             }
 
-            const price = currentTokenData?.price || null;
-            const tokenAge = currentTokenData?.age || null;
+            // Evaluate rules for this token
+            const currentRuleResult = currentTokenData
+              ? await evaluateRules(config, currentTokenData, keywordResult, supabase)
+              : ruleResult;
 
-            // Apply trading rules
-            let buyTier: string | null = null;
-            let buyAmountUsd: number | null = null;
-            let sellMultiplier: number | null = null;
-            let skipReason: string | null = null;
-
-            const maxTokenAgeMinutes = config.max_mint_age_minutes ?? 10080; // Default 7 days
-            if (tokenAge !== null && tokenAge > maxTokenAgeMinutes) {
-              skipReason = `Token too old: ${tokenAge} minutes (max: ${maxTokenAgeMinutes})`;
-            } else if (price === null) {
-              skipReason = 'Unable to fetch price';
-            } else {
-              const minPriceThreshold = config.min_price_threshold || 0.00002;
-              const maxPriceThreshold = config.max_price_threshold || 0.00004;
-
-              if (hasApeKeyword && price < minPriceThreshold) {
-                buyTier = 'large';
-                buyAmountUsd = config.large_buy_amount_usd || 100;
-                sellMultiplier = config.large_sell_multiplier || 5;
-              } else if (price >= minPriceThreshold && price < maxPriceThreshold) {
-                buyTier = 'standard';
-                buyAmountUsd = config.standard_buy_amount_usd || 50;
-                sellMultiplier = config.standard_sell_multiplier || 3;
-              } else if (price >= maxPriceThreshold) {
-                buyTier = 'standard';
-                buyAmountUsd = config.standard_buy_amount_usd || 50;
-                sellMultiplier = config.standard_sell_multiplier || 2;
-              } else {
-                skipReason = 'Price below threshold without APE keyword';
-              }
-            }
-
-            const status = skipReason ? 'skipped' : (isFantasyMode ? 'fantasy_bought' : 'detected');
+            const status = currentRuleResult.decision === 'skip' || currentRuleResult.decision === 'no_action'
+              ? 'skipped'
+              : (isFantasyMode ? 'fantasy_bought' : 'detected');
 
             // Insert call record
-            const { error: callInsertError } = await supabase
+            await supabase
               .from('telegram_channel_calls')
               .insert({
                 channel_config_id: config.id,
@@ -721,84 +1110,74 @@ serve(async (req) => {
                 token_symbol: currentTokenData?.symbol || null,
                 token_name: currentTokenData?.name || null,
                 raw_message: messageText.substring(0, 1000),
-                contains_ape: hasApeKeyword,
-                price_at_call: price,
-                mint_age_minutes: tokenAge,
-                buy_tier: buyTier,
-                buy_amount_usd: buyAmountUsd,
-                sell_multiplier: sellMultiplier,
+                contains_ape: keywordResult.hasHighConviction,
+                price_at_call: currentTokenData?.price,
+                mint_age_minutes: currentTokenData?.ageMinutes,
+                buy_tier: currentRuleResult.matchedRule?.name || (currentRuleResult.buyAmount > 50 ? 'large' : 'standard'),
+                buy_amount_usd: currentRuleResult.buyAmount || null,
+                sell_multiplier: currentRuleResult.sellTarget || null,
                 status,
-                skip_reason: skipReason,
+                skip_reason: currentRuleResult.decision === 'skip' ? currentRuleResult.reasoning : null,
                 caller_username: callerUsername || null,
                 caller_display_name: callerDisplayName || null,
                 is_first_call: isFirstCall
               });
 
-            if (callInsertError) {
-              console.error(`[telegram-channel-monitor] Failed to insert call for ${tokenMint}:`, callInsertError);
-            }
-
-            // Track caller if first call
+            // Track caller
             if (isFirstCall && (callerUsername || callerDisplayName)) {
+              const callerKey = callerUsername || callerDisplayName?.replace(/\s+/g, '_').toLowerCase();
               const { data: existingCaller } = await supabase
                 .from('telegram_callers')
                 .select('*')
-                .eq('caller_username', callerUsername || callerDisplayName?.replace(/\s+/g, '_').toLowerCase())
+                .eq('caller_username', callerKey)
                 .single();
 
               if (!existingCaller) {
-                await supabase
-                  .from('telegram_callers')
-                  .insert({
-                    caller_username: callerUsername || callerDisplayName?.replace(/\s+/g, '_').toLowerCase(),
-                    caller_display_name: callerDisplayName,
-                    channel_config_id: config.id,
-                    total_calls: 1,
-                    first_calls: 1,
-                    last_active_at: new Date().toISOString()
-                  });
+                await supabase.from('telegram_callers').insert({
+                  caller_username: callerKey,
+                  caller_display_name: callerDisplayName,
+                  channel_config_id: config.id,
+                  total_calls: 1,
+                  first_calls: 1,
+                  last_active_at: new Date().toISOString()
+                });
               } else {
-                await supabase
-                  .from('telegram_callers')
-                  .update({
-                    total_calls: (existingCaller.total_calls || 0) + 1,
-                    first_calls: (existingCaller.first_calls || 0) + 1,
-                    last_active_at: new Date().toISOString()
-                  })
-                  .eq('id', existingCaller.id);
+                await supabase.from('telegram_callers').update({
+                  total_calls: (existingCaller.total_calls || 0) + 1,
+                  first_calls: (existingCaller.first_calls || 0) + 1,
+                  last_active_at: new Date().toISOString()
+                }).eq('id', existingCaller.id);
               }
             }
 
             totalProcessed++;
 
-            // Handle fantasy or real trades
-            if (!skipReason && buyTier && buyAmountUsd) {
-              if (isFantasyMode) {
-                // Create fantasy position
-                const tokenAmount = price ? buyAmountUsd / price : null;
-                const { error: fantasyInsertError } = await supabase
+            // Execute trade or fantasy position
+            if (currentRuleResult.decision === 'buy' || currentRuleResult.decision === 'fantasy_buy') {
+              if (isFantasyMode || currentRuleResult.decision === 'fantasy_buy') {
+                // Fantasy position
+                const tokenAmount = currentTokenData?.price ? currentRuleResult.buyAmount / currentTokenData.price : null;
+                await supabase
                   .from('telegram_fantasy_positions')
                   .insert({
                     channel_config_id: config.id,
                     token_mint: tokenMint,
                     token_symbol: currentTokenData?.symbol || null,
                     token_name: currentTokenData?.name || null,
-                    entry_price_usd: price,
-                    entry_amount_usd: buyAmountUsd,
+                    entry_price_usd: currentTokenData?.price,
+                    entry_amount_usd: currentRuleResult.buyAmount,
                     token_amount: tokenAmount,
-                    current_price_usd: price,
-                    target_sell_multiplier: sellMultiplier,
+                    current_price_usd: currentTokenData?.price,
+                    target_sell_multiplier: currentRuleResult.sellTarget,
                     status: 'open',
                     caller_username: callerUsername,
-                    caller_display_name: callerDisplayName
+                    caller_display_name: callerDisplayName,
+                    stop_loss_pct: currentRuleResult.stopLossEnabled ? currentRuleResult.stopLoss : null,
+                    rule_id: currentRuleResult.ruleId
                   });
 
-                if (fantasyInsertError) {
-                  console.error(`[telegram-channel-monitor] Failed to insert fantasy position for ${tokenMint}:`, fantasyInsertError);
-                } else {
-                  totalFantasyBuys++;
-                }
-                console.log(`[telegram-channel-monitor] Fantasy buy: ${currentTokenData?.symbol || tokenMint} - $${buyAmountUsd} @ $${price?.toFixed(10)}`);
+                totalFantasyBuys++;
+                console.log(`[telegram-channel-monitor] Fantasy: ${currentTokenData?.symbol || tokenMint} - $${currentRuleResult.buyAmount} @ $${currentTokenData?.price?.toFixed(10)} (Rule: ${currentRuleResult.matchedRule?.name || 'Simple'})`);
               } else {
                 // Real trading
                 if (config.flipit_wallet_id) {
@@ -808,8 +1187,9 @@ serve(async (req) => {
                         walletId: config.flipit_wallet_id,
                         action: 'buy',
                         tokenMint,
-                        amountUsd: buyAmountUsd,
-                        targetMultiplier: sellMultiplier
+                        amountUsd: currentRuleResult.buyAmount,
+                        targetMultiplier: currentRuleResult.sellTarget,
+                        stopLossPct: currentRuleResult.stopLossEnabled ? currentRuleResult.stopLoss : null
                       }
                     });
                     totalBuys++;
@@ -818,18 +1198,17 @@ serve(async (req) => {
                   }
                 }
 
-                // Send email notification
+                // Email notification
                 if (config.email_notifications && config.notification_email) {
                   await sendEmailNotification(
                     supabase,
                     config.notification_email,
                     tokenMint,
                     currentTokenData?.symbol || 'UNKNOWN',
-                    price || 0,
-                    hasApeKeyword,
-                    buyTier,
-                    buyAmountUsd,
-                    sellMultiplier || 2
+                    currentTokenData?.price || 0,
+                    currentRuleResult.buyAmount,
+                    currentRuleResult.sellTarget,
+                    currentRuleResult.matchedRule?.name || null
                   );
                 }
               }
@@ -837,7 +1216,7 @@ serve(async (req) => {
           }
         }
 
-        // Update last check and message ID
+        // Update last check
         const maxMessageId = channelMessages.length > 0
           ? Math.max(...channelMessages.map(m => parseInt(m.messageId) || 0))
           : config.last_message_id;
@@ -853,15 +1232,17 @@ serve(async (req) => {
         results.push({
           channel: config.channel_name || channelUsername || channelId,
           channelType,
+          tradingMode,
           messagesFound: channelMessages.length,
           success: true
         });
 
       } catch (channelError: any) {
-        console.error(`[telegram-channel-monitor] Error processing channel ${config.channel_name}:`, channelError);
+        console.error(`[telegram-channel-monitor] Error processing channel:`, channelError);
         results.push({
           channel: config.channel_name || channelUsername || channelId,
           channelType,
+          tradingMode,
           success: false,
           error: channelError.message
         });
@@ -885,8 +1266,8 @@ serve(async (req) => {
       success: false,
       error: error.message
     }), {
-      status: 500,
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      status: 500
     });
   }
 });
