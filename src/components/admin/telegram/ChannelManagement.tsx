@@ -650,6 +650,15 @@ with TelegramClient(StringSession(), api_id, api_hash) as client:
                   <Badge variant={channel.is_active ? 'default' : 'secondary'}>
                     {channel.is_active ? 'Active' : 'Paused'}
                   </Badge>
+                  {/* Delete button - small icon in header */}
+                  <Button
+                    size="icon"
+                    variant="ghost"
+                    onClick={() => deleteChannel(channel.id)}
+                    className="h-6 w-6 text-muted-foreground hover:text-destructive hover:bg-destructive/10"
+                  >
+                    <Trash2 className="h-3 w-3" />
+                  </Button>
                 </div>
               </div>
             </CardHeader>
@@ -764,14 +773,6 @@ with TelegramClient(StringSession(), api_id, api_hash) as client:
                     </DialogContent>
                   </Dialog>
                   
-                  {/* Delete button */}
-                  <Button
-                    size="sm"
-                    variant="destructive"
-                    onClick={() => deleteChannel(channel.id)}
-                  >
-                    <Trash2 className="h-4 w-4" />
-                  </Button>
                   
                   {/* View Logs button */}
                   <Button
