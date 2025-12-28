@@ -8,12 +8,23 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Copy, Plus, Shield, Wallet, AlertTriangle, Key, DollarSign, ChevronDown, ChevronUp, Flame } from "lucide-react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { Keypair } from "@solana/web3.js";
-import bs58 from "bs58";
 import { toast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { WalletTokenManager } from "@/components/blackbox/WalletTokenManager";
 import { useAuth } from "@/hooks/useAuth";
+
+// Dynamic import for heavy Solana dependencies - only loaded when generating wallets
+async function generateSolanaKeypair() {
+  const [{ Keypair }, bs58] = await Promise.all([
+    import("@solana/web3.js"),
+    import("bs58")
+  ]);
+  const keypair = Keypair.generate();
+  return {
+    pubkey: keypair.publicKey.toBase58(),
+    secretKey: bs58.default.encode(keypair.secretKey)
+  };
+}
 
 interface SuperAdminWallet {
   id: string;
@@ -137,10 +148,8 @@ export function SuperAdminWallets() {
     setIsGenerating(true);
 
     try {
-      // Generate new keypair
-      const keypair = Keypair.generate();
-      const pubkey = keypair.publicKey.toBase58();
-      const secretKey = bs58.encode(keypair.secretKey);
+      // Generate new keypair - dynamically loads Solana dependencies
+      const { pubkey, secretKey } = await generateSolanaKeypair();
 
       // Get auth token for edge function
       const { data: { session } } = await supabase.auth.getSession();

@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 
@@ -19,15 +19,26 @@ interface BalanceState {
   lastUpdate: string | null;
 }
 
-export function useRealtimeBalances() {
+// Debounce helper
+function debounce<T extends (...args: any[]) => void>(fn: T, delay: number): T {
+  let timeoutId: ReturnType<typeof setTimeout> | null = null;
+  return ((...args: any[]) => {
+    if (timeoutId) clearTimeout(timeoutId);
+    timeoutId = setTimeout(() => fn(...args), delay);
+  }) as T;
+}
+
+export function useRealtimeBalances(autoLoad = false) {
   const { toast } = useToast();
   const [state, setState] = useState<BalanceState>({
     wallets: [],
     totalBalance: 0,
-    isLoading: true,
+    isLoading: false,
     error: null,
     lastUpdate: null
   });
+  const [isInitialized, setIsInitialized] = useState(false);
+  const subscriptionsRef = useRef<{ unsubscribe: () => void }[]>([]);
 
   const refreshBalances = useCallback(async () => {
     try {
@@ -66,6 +77,8 @@ export function useRealtimeBalances() {
 
   const loadWalletBalances = useCallback(async () => {
     try {
+      setState(prev => ({ ...prev, isLoading: true }));
+      
       // Load from different wallet types (including super_admin_wallets)
       const [poolWallets, blackboxWallets, superAdminWallets] = await Promise.all([
         supabase
@@ -117,6 +130,7 @@ export function useRealtimeBalances() {
         error: null,
         lastUpdate: new Date(lastUpdate).toISOString()
       });
+      setIsInitialized(true);
     } catch (error: any) {
       console.error('Failed to load wallet balances:', error);
       setState(prev => ({
@@ -127,16 +141,27 @@ export function useRealtimeBalances() {
     }
   }, []);
 
-  useEffect(() => {
-    // Initial load
-    loadWalletBalances();
-    
-    // Set up real-time subscriptions
+  // Debounced version of loadWalletBalances to prevent rapid reloads
+  const debouncedLoad = useCallback(
+    debounce(() => {
+      if (isInitialized) {
+        loadWalletBalances();
+      }
+    }, 3000),
+    [loadWalletBalances, isInitialized]
+  );
+
+  // Subscribe to realtime updates - only after initial load
+  const subscribeToUpdates = useCallback(() => {
+    // Cleanup any existing subscriptions
+    subscriptionsRef.current.forEach(sub => sub.unsubscribe());
+    subscriptionsRef.current = [];
+
     const poolSubscription = supabase
       .channel('wallet_pools_balance_changes')
       .on('postgres_changes', 
         { event: '*', schema: 'public', table: 'wallet_pools' },
-        () => loadWalletBalances()
+        debouncedLoad
       )
       .subscribe();
 
@@ -144,19 +169,31 @@ export function useRealtimeBalances() {
       .channel('blackbox_wallets_balance_changes')
       .on('postgres_changes', 
         { event: '*', schema: 'public', table: 'blackbox_wallets' },
-        () => loadWalletBalances()
+        debouncedLoad
       )
       .subscribe();
 
-    // Auto-refresh disabled to prevent constant toast notifications
-    // const autoRefreshInterval = setInterval(refreshBalances, 5 * 60 * 1000);
+    subscriptionsRef.current = [poolSubscription, blackboxSubscription];
+  }, [debouncedLoad]);
+
+  // Only auto-load if explicitly requested
+  useEffect(() => {
+    if (autoLoad && !isInitialized) {
+      loadWalletBalances();
+    }
+  }, [autoLoad, isInitialized, loadWalletBalances]);
+
+  // Subscribe to updates only after initialized
+  useEffect(() => {
+    if (isInitialized) {
+      subscribeToUpdates();
+    }
 
     return () => {
-      poolSubscription.unsubscribe();
-      blackboxSubscription.unsubscribe();
-      // clearInterval(autoRefreshInterval);
+      subscriptionsRef.current.forEach(sub => sub.unsubscribe());
+      subscriptionsRef.current = [];
     };
-  }, []);
+  }, [isInitialized, subscribeToUpdates]);
 
   return {
     wallets: state.wallets,
@@ -164,6 +201,7 @@ export function useRealtimeBalances() {
     isLoading: state.isLoading,
     error: state.error,
     lastUpdate: state.lastUpdate,
+    isInitialized,
     refreshBalances,
     reload: loadWalletBalances
   };

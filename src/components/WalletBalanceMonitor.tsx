@@ -2,7 +2,7 @@ import React from 'react';
 import { useRealtimeBalances } from '@/hooks/useRealtimeBalances';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { RefreshCw, Wallet } from 'lucide-react';
+import { RefreshCw, Wallet, Download } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
 
 export function WalletBalanceMonitor() {
@@ -12,15 +12,47 @@ export function WalletBalanceMonitor() {
     isLoading, 
     error, 
     lastUpdate, 
-    refreshBalances 
-  } = useRealtimeBalances();
+    isInitialized,
+    refreshBalances,
+    reload 
+  } = useRealtimeBalances(false); // Don't auto-load
 
+  // Load data on first click
+  const handleLoadData = async () => {
+    console.log('📊 Loading wallet balances on demand...');
+    await reload();
+  };
 
-  // Manual refresh for testing
+  // Manual refresh for existing data
   const handleManualRefresh = async () => {
     console.log('🔄 Manual refresh triggered...');
     await refreshBalances();
   };
+
+  // Show load button if not initialized
+  if (!isInitialized) {
+    return (
+      <Card>
+        <CardHeader className="flex flex-row items-center justify-between">
+          <CardTitle className="flex items-center gap-2">
+            <Wallet className="h-5 w-5" />
+            Wallet Balances
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="text-center py-8">
+            <p className="text-muted-foreground mb-4">
+              Click to load wallet balance data
+            </p>
+            <Button onClick={handleLoadData} disabled={isLoading}>
+              <Download className={`h-4 w-4 mr-2 ${isLoading ? 'animate-pulse' : ''}`} />
+              {isLoading ? 'Loading...' : 'Load Balances'}
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
+    );
+  }
 
   return (
     <Card>
