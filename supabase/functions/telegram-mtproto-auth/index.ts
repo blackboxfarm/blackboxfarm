@@ -1,6 +1,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { TelegramClient, StringSession } from "https://deno.land/x/grm/mod.ts";
+import { TelegramClient, MemoryStorage } from "jsr:@mtcute/deno";
+import { convertFromTelethonSession } from "jsr:@mtcute/convert";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -9,19 +10,6 @@ const corsHeaders = {
 
 function normalizeUsername(value: string) {
   return value.trim().replace(/^@/, '').toLowerCase();
-}
-
-function safeDateToIso(dateLike: any): string {
-  if (!dateLike) return new Date().toISOString();
-  if (dateLike instanceof Date) return dateLike.toISOString();
-  if (typeof dateLike === 'number') {
-    // If seconds since epoch
-    if (dateLike < 10_000_000_000) return new Date(dateLike * 1000).toISOString();
-    // If ms since epoch
-    return new Date(dateLike).toISOString();
-  }
-  const parsed = new Date(dateLike);
-  return isNaN(parsed.getTime()) ? new Date().toISOString() : parsed.toISOString();
 }
 
 async function fetchRecentMessagesViaMTProto(opts: {
@@ -33,46 +21,52 @@ async function fetchRecentMessagesViaMTProto(opts: {
 }) {
   const { sessionString, apiId, apiHash, channelUsername, limit } = opts;
 
-  const client = new TelegramClient(
-    new StringSession(sessionString),
+  console.log(`[telegram-mtproto-auth] Creating MTProto client for @${channelUsername}, sessionLen=${sessionString.length}`);
+
+  // Convert Telethon session to mtcute format
+  const mtcuteSession = convertFromTelethonSession(sessionString);
+
+  const client = new TelegramClient({
     apiId,
     apiHash,
-    { connectionRetries: 2 }
-  );
+    storage: new MemoryStorage(),
+  });
 
   try {
+    // Import the converted session
+    await client.importSession(mtcuteSession);
     await client.connect();
 
-    const messages: any[] = await client.getMessages(channelUsername, { limit });
+    console.log(`[telegram-mtproto-auth] Connected, fetching history for @${channelUsername}`);
 
-    const mapped = (messages || [])
-      .map((m: any) => {
-        const text = (m?.message ?? m?.text ?? '').toString();
-        const sender = m?.sender;
-        const callerUsername = sender?.username;
-        const callerDisplayName =
-          (sender?.firstName || sender?.lastName)
-            ? `${sender?.firstName || ''} ${sender?.lastName || ''}`.trim()
-            : (sender?.title || sender?.displayName);
+    // Fetch message history
+    const messages = await client.getHistory(channelUsername, { limit });
 
-        return {
-          messageId: String(m?.id ?? m?.messageId ?? ''),
-          text,
-          date: safeDateToIso(m?.date),
-          callerUsername,
-          callerDisplayName,
-        };
-      })
-      .filter((m: any) => m.messageId && m.text);
+    const mapped = messages.map((m: any) => {
+      const text = m.text || '';
+      const sender = m.sender;
+      const callerUsername = sender?.username;
+      const callerDisplayName = sender?.displayName || sender?.firstName 
+        ? `${sender?.firstName || ''} ${sender?.lastName || ''}`.trim()
+        : undefined;
+
+      return {
+        messageId: String(m.id),
+        text,
+        date: m.date ? new Date(m.date * 1000).toISOString() : new Date().toISOString(),
+        callerUsername,
+        callerDisplayName,
+      };
+    }).filter((m: any) => m.text);
+
+    console.log(`[telegram-mtproto-auth] Fetched ${mapped.length} messages from @${channelUsername}`);
 
     return { success: true, messages: mapped };
   } finally {
     try {
-      // grm/gramjs supports disconnect
-      // @ts-ignore
-      await client.disconnect();
+      await client.close();
     } catch {
-      // ignore
+      // ignore close errors
     }
   }
 }
@@ -114,9 +108,10 @@ serve(async (req) => {
         hasSession: !!existingSession,
         phoneNumber: existingSession?.phone_number || phoneNumber,
         lastUsed: existingSession?.last_used_at,
+        sessionFormat: 'telethon',
         message: existingSession
-          ? 'MTProto session active. Groups will use MTProto.'
-          : 'No active MTProto session. Groups will fall back to Bot API (if bot is in group).'
+          ? 'MTProto session active (Telethon format). Groups will use MTProto.'
+          : 'No active MTProto session. Groups will fall back to Bot API.'
       }), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' }
       });
@@ -139,7 +134,7 @@ serve(async (req) => {
       const username = normalizeUsername(channelUsername);
       const msgLimit = Math.max(1, Math.min(200, Number(limit) || 50));
 
-      console.log(`[telegram-mtproto-auth] fetch_recent_messages @${username} limit=${msgLimit} sessionLen=${existingSession.session_string.length}`);
+      console.log(`[telegram-mtproto-auth] fetch_recent_messages @${username} limit=${msgLimit}`);
 
       const res = await fetchRecentMessagesViaMTProto({
         sessionString: existingSession.session_string,
@@ -194,7 +189,7 @@ serve(async (req) => {
             channelUsername: username,
             accessMethod: 'mtproto',
             messageCount: res.messages.length,
-            message: `MTProto OK. Fetched ${res.messages.length} recent messages.`
+            message: `MTProto OK! Fetched ${res.messages.length} messages.`
           }), {
             headers: { ...corsHeaders, 'Content-Type': 'application/json' }
           });
@@ -260,19 +255,19 @@ serve(async (req) => {
         messageCount,
         message: accessMethod === 'web_scraping'
           ? `Found ${messageCount} messages via web scraping`
-          : 'No MTProto session saved, and web view has no messages. Add bot to the group or save an MTProto session.'
+          : 'No MTProto session saved, and web view has no messages. Save an MTProto session first.'
       }), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' }
       });
     }
 
     if (action === 'save_session') {
-      const session = code || (await req.clone().json()).sessionString;
+      const session = code || body.sessionString;
 
       if (!session || typeof session !== 'string' || session.trim().length === 0) {
         return new Response(JSON.stringify({
           success: false,
-          error: 'Session string is required. Provide it as "code" or "sessionString" in the request body.'
+          error: 'Session string is required. Provide it as "code" or "sessionString".'
         }), {
           status: 400,
           headers: { ...corsHeaders, 'Content-Type': 'application/json' }
@@ -280,6 +275,19 @@ serve(async (req) => {
       }
 
       const cleanedSession = session.replace(/\s+/g, '');
+
+      // Validate it's a Telethon session by trying to convert
+      try {
+        convertFromTelethonSession(cleanedSession);
+      } catch (e: any) {
+        return new Response(JSON.stringify({
+          success: false,
+          error: `Invalid Telethon session string: ${e?.message || 'unknown error'}`
+        }), {
+          status: 400,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        });
+      }
 
       await supabase
         .from('telegram_mtproto_session')
@@ -308,7 +316,7 @@ serve(async (req) => {
 
       return new Response(JSON.stringify({
         success: true,
-        message: 'Session saved successfully'
+        message: 'Session saved successfully (Telethon format)'
       }), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' }
       });
@@ -318,9 +326,7 @@ serve(async (req) => {
       return new Response(JSON.stringify({
         success: true,
         instructions: `
-# Generate Telegram Session String Locally
-
-## Option 1: Python (Telethon)
+# Generate Telegram Session String (Telethon)
 
 \`\`\`python
 from telethon.sync import TelegramClient
@@ -333,7 +339,7 @@ with TelegramClient(StringSession(), api_id, api_hash) as client:
     print(client.session.save())
 \`\`\`
 
-Copy the printed session string and paste it into **Save Session**.
+Copy the printed session string and use **Save Session**.
         `.trim(),
         apiId,
         apiHash: apiHash?.substring(0, 4) + '...',
