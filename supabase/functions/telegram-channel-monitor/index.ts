@@ -40,10 +40,8 @@ function generateAIInterpretation(
   reasoning: string;
   confidence: number;
 } {
-  // Summarize the message
   const truncatedMsg = messageText.length > 200 ? messageText.substring(0, 200) + '...' : messageText;
   
-  // Detect message type
   let messageType = 'unknown';
   let confidence = 0.5;
   
@@ -69,7 +67,6 @@ function generateAIInterpretation(
     confidence = 0.3;
   }
 
-  // Generate summary based on type
   let summary = '';
   let interpretation = '';
   let decision: 'buy' | 'fantasy_buy' | 'skip' | 'no_action' = 'no_action';
@@ -101,7 +98,6 @@ function generateAIInterpretation(
       interpretation = `Standard message without clear trading signals.`;
   }
 
-  // Determine decision and reasoning
   if (extractedTokens.length === 0) {
     decision = 'no_action';
     reasoning = 'No token address found in message. Nothing to trade.';
@@ -112,7 +108,7 @@ function generateAIInterpretation(
     decision = 'skip';
     reasoning = `Token is ${tokenData.age} minutes old, exceeds 60-minute freshness threshold.`;
   } else if (hasApeKeyword && tokenData.price < 0.00002) {
-    decision = 'buy'; // Will become fantasy_buy if fantasy_mode is on
+    decision = 'buy';
     reasoning = `High conviction: APE keyword + low price ($${tokenData.price.toFixed(8)} < $0.00002). Triggers large buy tier.`;
     confidence = 0.9;
   } else if (tokenData.price > 0.00004) {
@@ -272,31 +268,24 @@ async function scrapePublicChannel(username: string): Promise<Array<{
     const html = await response.text();
     const messages: Array<{ messageId: string; text: string; date: Date; callerUsername?: string; callerDisplayName?: string }> = [];
     
-    // Parse messages with caller info - look for message blocks
-    // Each message block contains author info and the message text
     const messageBlockPattern = /<div class="tgme_widget_message_wrap[^"]*"[^>]*>[\s\S]*?<div class="tgme_widget_message[^"]*"[^>]*data-post="([^"]+)"[^>]*>([\s\S]*?)<\/div>\s*<\/div>\s*<\/div>/gi;
     
     let match;
     while ((match = messageBlockPattern.exec(html)) !== null) {
       const [fullBlock, postId, messageContent] = match;
       
-      // Extract author name (display name)
       const authorNameMatch = messageContent.match(/<span class="tgme_widget_message_author_name"[^>]*>([^<]+)<\/span>/i);
       const callerDisplayName = authorNameMatch ? authorNameMatch[1].trim() : undefined;
       
-      // Extract author link/username if available
       const authorLinkMatch = messageContent.match(/<a class="tgme_widget_message_owner_name"[^>]*href="https:\/\/t\.me\/([^"\/]+)"[^>]*>/i);
       const callerUsername = authorLinkMatch ? authorLinkMatch[1] : (callerDisplayName ? callerDisplayName.replace(/\s+/g, '_').toLowerCase() : undefined);
       
-      // Extract message text
       const textMatch = messageContent.match(/<div class="tgme_widget_message_text[^"]*"[^>]*>([\s\S]*?)<\/div>/i);
       const rawText = textMatch ? textMatch[1] : '';
       
-      // Extract date
       const dateMatch = messageContent.match(/<time[^>]*datetime="([^"]+)"[^>]*>/i);
       const dateStr = dateMatch ? dateMatch[1] : new Date().toISOString();
       
-      // Clean HTML from text
       const text = rawText
         .replace(/<br\s*\/?>/gi, '\n')
         .replace(/<[^>]+>/g, '')
@@ -323,7 +312,6 @@ async function scrapePublicChannel(username: string): Promise<Array<{
       }
     }
     
-    // Fallback to simpler pattern if no messages found
     if (messages.length === 0) {
       const simplePattern = /<div class="tgme_widget_message[^"]*"[^>]*data-post="([^"]+)"[^>]*>[\s\S]*?<div class="tgme_widget_message_text[^"]*"[^>]*>([\s\S]*?)<\/div>[\s\S]*?<time[^>]*datetime="([^"]+)"[^>]*>/gi;
       
@@ -354,6 +342,114 @@ async function scrapePublicChannel(username: string): Promise<Array<{
     return messages;
   } catch (error) {
     console.error(`[telegram-channel-monitor] Error scraping channel:`, error);
+    return [];
+  }
+}
+
+// Read messages using MTProto (for groups and private channels)
+async function readMessagesViaMTProto(
+  supabase: any,
+  channelUsername: string,
+  channelType: string
+): Promise<Array<{
+  messageId: string;
+  text: string;
+  date: Date;
+  callerUsername?: string;
+  callerDisplayName?: string;
+}>> {
+  console.log(`[telegram-channel-monitor] Reading messages via MTProto for: ${channelUsername} (type: ${channelType})`);
+  
+  try {
+    // Get the active MTProto session
+    const { data: session, error: sessionError } = await supabase
+      .from('telegram_mtproto_session')
+      .select('*')
+      .eq('is_active', true)
+      .single();
+    
+    if (sessionError || !session) {
+      console.log('[telegram-channel-monitor] No active MTProto session found, falling back to web scraping');
+      return [];
+    }
+    
+    const apiId = Deno.env.get('TELEGRAM_API_ID');
+    const apiHash = Deno.env.get('TELEGRAM_API_HASH');
+    
+    if (!apiId || !apiHash) {
+      console.error('[telegram-channel-monitor] Missing TELEGRAM_API_ID or TELEGRAM_API_HASH');
+      return [];
+    }
+    
+    // Import grm library
+    const { TelegramClient, StringSession } = await import("https://deno.land/x/grm@0.6.0/mod.ts");
+    
+    const client = new TelegramClient(
+      new StringSession(session.session_string),
+      parseInt(apiId),
+      apiHash,
+      { connectionRetries: 3 }
+    );
+    
+    await client.connect();
+    
+    // Update last used timestamp
+    await supabase
+      .from('telegram_mtproto_session')
+      .update({ last_used_at: new Date().toISOString() })
+      .eq('id', session.id);
+    
+    // Get messages from the entity
+    const messages: Array<{
+      messageId: string;
+      text: string;
+      date: Date;
+      callerUsername?: string;
+      callerDisplayName?: string;
+    }> = [];
+    
+    try {
+      // Try to get the entity (works for both groups and channels)
+      const entity = await client.getEntity(channelUsername);
+      console.log(`[telegram-channel-monitor] Got entity: ${entity.className} - ${(entity as any).title || (entity as any).username || channelUsername}`);
+      
+      // Get recent messages
+      const result = await client.getMessages(entity, { limit: 50 });
+      
+      for (const msg of result) {
+        if (!msg.text) continue;
+        
+        // Get sender info
+        let callerUsername: string | undefined;
+        let callerDisplayName: string | undefined;
+        
+        if (msg.sender) {
+          const sender = msg.sender as any;
+          callerUsername = sender.username;
+          callerDisplayName = sender.firstName 
+            ? `${sender.firstName} ${sender.lastName || ''}`.trim()
+            : sender.title;
+        }
+        
+        messages.push({
+          messageId: msg.id.toString(),
+          text: msg.text,
+          date: new Date(msg.date * 1000),
+          callerUsername,
+          callerDisplayName
+        });
+      }
+      
+      console.log(`[telegram-channel-monitor] MTProto retrieved ${messages.length} messages from ${channelUsername}`);
+    } catch (entityError: any) {
+      console.error(`[telegram-channel-monitor] Error getting entity/messages:`, entityError.message);
+    }
+    
+    await client.disconnect();
+    return messages;
+    
+  } catch (error: any) {
+    console.error(`[telegram-channel-monitor] MTProto error:`, error.message);
     return [];
   }
 }
@@ -404,19 +500,35 @@ serve(async (req) => {
     for (const config of configs) {
       const channelId = requestChannelId || config.channel_id;
       const channelUsername = config.channel_username;
+      const channelType = config.channel_type || 'channel';
       const isFantasyMode = config.fantasy_mode ?? true;
       const fantasyBuyAmount = config.fantasy_buy_amount_usd || 100;
       
-      console.log(`[telegram-channel-monitor] Processing channel: ${channelUsername || channelId} (${config.channel_name || 'unnamed'}) - Fantasy Mode: ${isFantasyMode}`);
+      console.log(`[telegram-channel-monitor] Processing: ${channelUsername || channelId} (${config.channel_name || 'unnamed'}) - Type: ${channelType} - Fantasy: ${isFantasyMode}`);
 
       try {
         let channelMessages: Array<{ messageId: string; text: string; date: Date; callerUsername?: string; callerDisplayName?: string }> = [];
         
-        // If channel has a public username, scrape from t.me/s/
-        if (channelUsername) {
+        // Determine how to fetch messages based on channel_type
+        if (channelType === 'group') {
+          // Groups MUST use MTProto - web scraping doesn't work for groups
+          console.log(`[telegram-channel-monitor] Channel is a GROUP - using MTProto`);
+          channelMessages = await readMessagesViaMTProto(supabase, channelUsername, channelType);
+          
+          if (channelMessages.length === 0) {
+            console.log(`[telegram-channel-monitor] No messages from MTProto for group ${channelUsername}. Ensure MTProto is authenticated.`);
+          }
+        } else if (channelUsername) {
+          // Try web scraping first for public channels
           channelMessages = await scrapePublicChannel(channelUsername);
+          
+          // If web scraping returns nothing, try MTProto as fallback
+          if (channelMessages.length === 0) {
+            console.log(`[telegram-channel-monitor] Web scraping returned 0 messages, trying MTProto...`);
+            channelMessages = await readMessagesViaMTProto(supabase, channelUsername, channelType);
+          }
         } else {
-          // Fallback to Bot API if no username (requires bot to be in channel)
+          // No username - try Bot API as last resort
           const botToken = Deno.env.get('TELEGRAM_BOT_TOKEN');
           if (botToken) {
             const updatesResponse = await fetch(
@@ -447,7 +559,7 @@ serve(async (req) => {
           }
         }
 
-        console.log(`[telegram-channel-monitor] Found ${channelMessages.length} messages from channel`);
+        console.log(`[telegram-channel-monitor] Found ${channelMessages.length} messages from ${channelUsername || channelId}`);
 
         for (const msg of channelMessages) {
           if (!msg.text) continue;
@@ -458,11 +570,11 @@ serve(async (req) => {
           const callerUsername = msg.callerUsername;
           const callerDisplayName = msg.callerDisplayName;
 
-          // Skip if message is too old (> 15 minutes for 4-min cron)
+          // Skip if message is too old (> 15 minutes)
           const messageAgeMinutes = (Date.now() - messageDate.getTime()) / 60000;
           if (messageAgeMinutes > 15) continue;
 
-          // Skip if we already processed this message (compare as strings for public channels)
+          // Skip if we already processed this message
           if (config.last_message_id) {
             const lastId = parseInt(config.last_message_id);
             const currentId = parseInt(messageId);
@@ -475,7 +587,7 @@ serve(async (req) => {
           const addresses = extractSolanaAddresses(messageText);
           const hasApeKeyword = containsApeKeyword(messageText);
 
-          // Fetch token data for the first address (if any)
+          // Fetch token data for the first address
           let tokenData: { symbol?: string; price?: number; age?: number; marketCap?: number; name?: string } | null = null;
           const firstToken = addresses[0];
           
@@ -510,8 +622,8 @@ serve(async (req) => {
             finalDecision = 'fantasy_buy';
           }
 
-          // Log the interpretation with caller info
-          const { data: interpretationRecord } = await supabase
+          // Log the interpretation
+          await supabase
             .from('telegram_message_interpretations')
             .insert({
               channel_config_id: config.id,
@@ -529,15 +641,13 @@ serve(async (req) => {
               price_at_detection: tokenData?.price || null,
               caller_username: callerUsername || null,
               caller_display_name: callerDisplayName || null
-            })
-            .select()
-            .single();
+            });
 
-          console.log(`[telegram-channel-monitor] AI Interpretation: ${aiResult.summary} -> ${finalDecision} (Caller: ${callerDisplayName || callerUsername || 'Unknown'})`);
+          console.log(`[telegram-channel-monitor] AI: ${aiResult.summary} -> ${finalDecision} (Caller: ${callerDisplayName || callerUsername || 'Unknown'})`);
 
           // Process each token address
           for (const tokenMint of addresses) {
-            // Check if this token has EVER been called before (across ALL channels) - for first-caller tracking
+            // Check for first-time calls
             const { data: existingGlobal } = await supabase
               .from('telegram_channel_calls')
               .select('id, caller_username, caller_display_name, channel_name')
@@ -557,15 +667,11 @@ serve(async (req) => {
               .single();
 
             if (existingInChannel) {
-              console.log(`[telegram-channel-monitor] Token ${tokenMint} already processed in this channel, skipping`);
+              console.log(`[telegram-channel-monitor] Token ${tokenMint} already processed in this channel`);
               continue;
             }
-            
-            if (!isFirstCall) {
-              console.log(`[telegram-channel-monitor] Token ${tokenMint} was first called by ${existingGlobal.caller_display_name || existingGlobal.caller_username} in ${existingGlobal.channel_name}`);
-            }
 
-            // Get token-specific data if different from first token
+            // Get token-specific data
             let currentTokenData = tokenData;
             if (tokenMint !== firstToken) {
               let price = await fetchTokenPrice(tokenMint);
@@ -598,30 +704,33 @@ serve(async (req) => {
               if (hasApeKeyword && price < minPriceThreshold) {
                 buyTier = 'large';
                 buyAmountUsd = config.large_buy_amount_usd || 100;
-                sellMultiplier = config.large_sell_multiplier || 10;
-              } else if (price > maxPriceThreshold) {
+                sellMultiplier = config.large_sell_multiplier || 5;
+              } else if (price >= minPriceThreshold && price < maxPriceThreshold) {
                 buyTier = 'standard';
                 buyAmountUsd = config.standard_buy_amount_usd || 50;
-                sellMultiplier = config.standard_sell_multiplier || 5;
-              } else if (hasApeKeyword) {
+                sellMultiplier = config.standard_sell_multiplier || 3;
+              } else if (price >= maxPriceThreshold) {
                 buyTier = 'standard';
                 buyAmountUsd = config.standard_buy_amount_usd || 50;
-                sellMultiplier = config.large_sell_multiplier || 10;
+                sellMultiplier = config.standard_sell_multiplier || 2;
               } else {
-                skipReason = 'Price in middle range without ape keyword';
+                skipReason = 'Price below threshold without APE keyword';
               }
             }
 
-            // Insert call record with caller info
-            const { data: callRecord, error: insertError } = await supabase
+            const status = skipReason ? 'skipped' : (isFantasyMode ? 'fantasy_bought' : 'detected');
+
+            // Insert call record
+            await supabase
               .from('telegram_channel_calls')
               .insert({
+                channel_config_id: config.id,
                 channel_id: channelId,
                 channel_name: config.channel_name,
                 message_id: messageId,
                 token_mint: tokenMint,
-                token_symbol: currentTokenData?.symbol || 'UNKNOWN',
-                token_name: currentTokenData?.name || 'Unknown',
+                token_symbol: currentTokenData?.symbol || null,
+                token_name: currentTokenData?.name || null,
                 raw_message: messageText.substring(0, 1000),
                 contains_ape: hasApeKeyword,
                 price_at_call: price,
@@ -629,241 +738,157 @@ serve(async (req) => {
                 buy_tier: buyTier,
                 buy_amount_usd: buyAmountUsd,
                 sell_multiplier: sellMultiplier,
-                status: skipReason ? 'skipped' : (isFantasyMode ? 'fantasy_bought' : 'detected'),
+                status,
                 skip_reason: skipReason,
                 caller_username: callerUsername || null,
                 caller_display_name: callerDisplayName || null,
                 is_first_call: isFirstCall
-              })
-              .select()
-              .single();
+              });
 
-            if (insertError) {
-              console.error(`[telegram-channel-monitor] Error inserting call:`, insertError);
-              continue;
-            }
-            
-            // Update or create caller record for first-call tracking
-            if (callerUsername && isFirstCall) {
+            // Track caller if first call
+            if (isFirstCall && (callerUsername || callerDisplayName)) {
               const { data: existingCaller } = await supabase
                 .from('telegram_callers')
                 .select('*')
-                .eq('username', callerUsername)
+                .eq('caller_username', callerUsername || callerDisplayName?.replace(/\s+/g, '_').toLowerCase())
                 .single();
-              
-              if (existingCaller) {
-                // Update existing caller
-                const newChannels = existingCaller.channel_usernames?.includes(channelUsername) 
-                  ? existingCaller.channel_usernames 
-                  : [...(existingCaller.channel_usernames || []), channelUsername].filter(Boolean);
-                
+
+              if (!existingCaller) {
+                await supabase
+                  .from('telegram_callers')
+                  .insert({
+                    caller_username: callerUsername || callerDisplayName?.replace(/\s+/g, '_').toLowerCase(),
+                    caller_display_name: callerDisplayName,
+                    channel_config_id: config.id,
+                    total_calls: 1,
+                    first_calls: 1,
+                    last_active_at: new Date().toISOString()
+                  });
+              } else {
                 await supabase
                   .from('telegram_callers')
                   .update({
                     total_calls: (existingCaller.total_calls || 0) + 1,
-                    channel_usernames: newChannels,
-                    last_call_at: new Date().toISOString(),
-                    updated_at: new Date().toISOString()
+                    first_calls: (existingCaller.first_calls || 0) + 1,
+                    last_active_at: new Date().toISOString()
                   })
                   .eq('id', existingCaller.id);
-                  
-                console.log(`[telegram-channel-monitor] Updated caller ${callerDisplayName || callerUsername}: ${existingCaller.total_calls + 1} total calls`);
-              } else {
-                // Create new caller record
-                await supabase
-                  .from('telegram_callers')
-                  .insert({
-                    username: callerUsername,
-                    display_name: callerDisplayName,
-                    channel_usernames: [channelUsername].filter(Boolean),
-                    total_calls: 1,
-                    last_call_at: new Date().toISOString()
-                  });
-                  
-                console.log(`[telegram-channel-monitor] Created new caller: ${callerDisplayName || callerUsername}`);
               }
             }
 
             totalProcessed++;
 
-            // Handle fantasy mode vs real trading
-            if (buyTier && buyAmountUsd && !skipReason) {
+            // Handle fantasy or real trades
+            if (!skipReason && buyTier && buyAmountUsd) {
               if (isFantasyMode) {
                 // Create fantasy position
-                const entryAmount = fantasyBuyAmount;
-                const tokenAmount = price ? entryAmount / price : 0;
-                
-                const { error: fantasyError } = await supabase
+                const tokenAmount = price ? buyAmountUsd / price : null;
+                await supabase
                   .from('telegram_fantasy_positions')
                   .insert({
                     channel_config_id: config.id,
-                    call_id: callRecord.id,
-                    interpretation_id: interpretationRecord?.id || null,
                     token_mint: tokenMint,
-                    token_symbol: currentTokenData?.symbol || 'UNKNOWN',
-                    token_name: currentTokenData?.name || 'Unknown',
+                    token_symbol: currentTokenData?.symbol || null,
+                    token_name: currentTokenData?.name || null,
                     entry_price_usd: price,
-                    entry_amount_usd: entryAmount,
+                    entry_amount_usd: buyAmountUsd,
                     token_amount: tokenAmount,
                     current_price_usd: price,
-                    unrealized_pnl_usd: 0,
-                    unrealized_pnl_percent: 0,
+                    target_sell_multiplier: sellMultiplier,
                     status: 'open',
-                    caller_username: callerUsername || null,
-                    caller_display_name: callerDisplayName || null,
-                    channel_name: config.channel_name
+                    caller_username: callerUsername,
+                    caller_display_name: callerDisplayName
                   });
 
-                if (!fantasyError) {
-                  totalFantasyBuys++;
-                  console.log(`[telegram-channel-monitor] Fantasy buy: $${entryAmount} of ${currentTokenData?.symbol} at $${price}`);
-                  
-                  await supabase
-                    .from('telegram_channel_calls')
-                    .update({ status: 'fantasy_bought' })
-                    .eq('id', callRecord.id);
-
-                  // Send email notification for fantasy trade
-                  if (config.email_notifications && config.notification_email) {
-                    const emailSent = await sendEmailNotification(
-                      supabase,
-                      config.notification_email,
-                      tokenMint,
-                      currentTokenData?.symbol || 'UNKNOWN',
-                      price!,
-                      hasApeKeyword,
-                      'fantasy',
-                      entryAmount,
-                      null
-                    );
-                    if (emailSent) {
-                      console.log(`[telegram-channel-monitor] Fantasy trade email sent to ${config.notification_email}`);
-                    }
+                totalFantasyBuys++;
+                console.log(`[telegram-channel-monitor] Fantasy buy: ${currentTokenData?.symbol || tokenMint} - $${buyAmountUsd} @ $${price?.toFixed(10)}`);
+              } else {
+                // Real trading
+                if (config.flipit_wallet_id) {
+                  try {
+                    await supabase.functions.invoke('flipit-execute', {
+                      body: {
+                        walletId: config.flipit_wallet_id,
+                        action: 'buy',
+                        tokenMint,
+                        amountUsd: buyAmountUsd,
+                        targetMultiplier: sellMultiplier
+                      }
+                    });
+                    totalBuys++;
+                  } catch (buyError) {
+                    console.error('[telegram-channel-monitor] FlipIt buy error:', buyError);
                   }
                 }
-              } else if (config.flipit_wallet_id) {
-                // Real trading mode
-                console.log(`[telegram-channel-monitor] Executing ${buyTier} buy: $${buyAmountUsd} of ${tokenMint}`);
 
-                try {
-                  // Send email notification first
-                  if (config.email_notifications && config.notification_email) {
-                    const emailSent = await sendEmailNotification(
-                      supabase,
-                      config.notification_email,
-                      tokenMint,
-                      currentTokenData?.symbol || 'UNKNOWN',
-                      price!,
-                      hasApeKeyword,
-                      buyTier,
-                      buyAmountUsd,
-                      sellMultiplier!
-                    );
-
-                    if (emailSent) {
-                      await supabase
-                        .from('telegram_channel_calls')
-                        .update({ email_sent: true, email_sent_at: new Date().toISOString() })
-                        .eq('id', callRecord.id);
-                    }
-                  }
-
-                  // Execute buy via flipit-execute
-                  const { data: buyResult, error: buyError } = await supabase.functions.invoke('flipit-execute', {
-                    body: {
-                      action: 'buy',
-                      tokenMint,
-                      walletId: config.flipit_wallet_id,
-                      amountUsd: buyAmountUsd,
-                      targetMultiplier: sellMultiplier
-                    }
-                  });
-
-                  if (buyError) {
-                    console.error(`[telegram-channel-monitor] Buy error:`, buyError);
-                    await supabase
-                      .from('telegram_channel_calls')
-                      .update({ status: 'failed', skip_reason: buyError.message })
-                      .eq('id', callRecord.id);
-                  } else if (buyResult?.success) {
-                    console.log(`[telegram-channel-monitor] Buy successful:`, buyResult);
-                    await supabase
-                      .from('telegram_channel_calls')
-                      .update({ 
-                        status: 'bought',
-                        position_id: buyResult.positionId,
-                        buy_tx_signature: buyResult.txSignature
-                      })
-                      .eq('id', callRecord.id);
-                    totalBuys++;
-                  } else {
-                    await supabase
-                      .from('telegram_channel_calls')
-                      .update({ status: 'failed', skip_reason: buyResult?.error || 'Unknown buy error' })
-                      .eq('id', callRecord.id);
-                  }
-                } catch (buyErr: any) {
-                  console.error(`[telegram-channel-monitor] Buy exception:`, buyErr);
-                  await supabase
-                    .from('telegram_channel_calls')
-                    .update({ status: 'failed', skip_reason: buyErr.message })
-                    .eq('id', callRecord.id);
+                // Send email notification
+                if (config.email_notifications && config.notification_email) {
+                  await sendEmailNotification(
+                    supabase,
+                    config.notification_email,
+                    tokenMint,
+                    currentTokenData?.symbol || 'UNKNOWN',
+                    price || 0,
+                    hasApeKeyword,
+                    buyTier,
+                    buyAmountUsd,
+                    sellMultiplier || 2
+                  );
                 }
               }
             }
           }
-
-          // Update last processed message ID
-          await supabase
-            .from('telegram_channel_config')
-            .update({ 
-              last_message_id: messageId,
-              last_check_at: new Date().toISOString(),
-              total_calls_detected: (config.total_calls_detected || 0) + 1
-            })
-            .eq('id', config.id);
         }
 
+        // Update last check and message ID
+        const maxMessageId = channelMessages.length > 0
+          ? Math.max(...channelMessages.map(m => parseInt(m.messageId) || 0))
+          : config.last_message_id;
+
+        await supabase
+          .from('telegram_channel_config')
+          .update({
+            last_check_at: new Date().toISOString(),
+            last_message_id: maxMessageId
+          })
+          .eq('id', config.id);
+
         results.push({
-          channelId,
-          channelName: config.channel_name,
-          messagesProcessed: channelMessages.length,
-          fantasyMode: isFantasyMode,
+          channel: config.channel_name || channelUsername || channelId,
+          channelType,
+          messagesFound: channelMessages.length,
           success: true
         });
 
       } catch (channelError: any) {
-        console.error(`[telegram-channel-monitor] Error processing channel ${channelId}:`, channelError);
-        results.push({ channelId, error: channelError.message, processed: 0 });
-      }
-    }
-
-    // Update total buys count
-    if (totalBuys > 0 || totalFantasyBuys > 0) {
-      for (const config of configs) {
-        await supabase
-          .from('telegram_channel_config')
-          .update({ 
-            total_buys_executed: (config.total_buys_executed || 0) + totalBuys
-          })
-          .eq('id', config.id);
+        console.error(`[telegram-channel-monitor] Error processing channel ${config.channel_name}:`, channelError);
+        results.push({
+          channel: config.channel_name || channelUsername || channelId,
+          channelType,
+          success: false,
+          error: channelError.message
+        });
       }
     }
 
     return new Response(JSON.stringify({
       success: true,
-      channels: results,
       processed: totalProcessed,
       buysExecuted: totalBuys,
       fantasyBuysExecuted: totalFantasyBuys,
-      timestamp: new Date().toISOString()
-    }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+      channels: results
+    }), {
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+    });
 
   } catch (error: any) {
     console.error('[telegram-channel-monitor] Error:', error);
     return new Response(JSON.stringify({
       success: false,
       error: error.message
-    }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 500 });
+    }), {
+      status: 500,
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+    });
   }
 });

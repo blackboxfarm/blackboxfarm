@@ -127,6 +127,12 @@ interface SessionStatus {
   phoneNumber: string | null;
 }
 
+interface MTProtoStatus {
+  hasSession: boolean;
+  phoneNumber?: string;
+  lastUsed?: string;
+}
+
 interface FlipItWallet {
   id: string;
   label: string | null;
@@ -135,6 +141,7 @@ interface FlipItWallet {
 
 export default function TelegramChannelMonitor() {
   const [sessionStatus, setSessionStatus] = useState<SessionStatus | null>(null);
+  const [mtprotoStatus, setMtprotoStatus] = useState<MTProtoStatus | null>(null);
   const [configs, setConfigs] = useState<ChannelConfig[]>([]);
   const [calls, setCalls] = useState<ChannelCall[]>([]);
   const [interpretations, setInterpretations] = useState<MessageInterpretation[]>([]);
@@ -145,6 +152,14 @@ export default function TelegramChannelMonitor() {
   const [isTestingBot, setIsTestingBot] = useState(false);
   const [isUpdatingPrices, setIsUpdatingPrices] = useState(false);
   const [activeTab, setActiveTab] = useState('ai-log');
+
+  // MTProto authentication state
+  const [isSendingCode, setIsSendingCode] = useState(false);
+  const [isVerifyingCode, setIsVerifyingCode] = useState(false);
+  const [verificationCode, setVerificationCode] = useState('');
+  const [twoFAPassword, setTwoFAPassword] = useState('');
+  const [showCodeInput, setShowCodeInput] = useState(false);
+  const [needs2FA, setNeeds2FA] = useState(false);
 
   // New config form state
   const [newChannelId, setNewChannelId] = useState('-1002078711289');
@@ -175,6 +190,14 @@ export default function TelegramChannelMonitor() {
       });
       if (sessionData) {
         setSessionStatus(sessionData);
+      }
+
+      // Check MTProto status
+      const { data: mtprotoData } = await supabase.functions.invoke('telegram-mtproto-auth', {
+        body: { action: 'status' }
+      });
+      if (mtprotoData) {
+        setMtprotoStatus(mtprotoData);
       }
 
       // Load configs
@@ -229,6 +252,79 @@ export default function TelegramChannelMonitor() {
       toast.error('Failed to load data');
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  // MTProto Authentication functions
+  const sendMTProtoCode = async () => {
+    setIsSendingCode(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('telegram-mtproto-auth', {
+        body: { action: 'send_code' }
+      });
+      if (error) throw error;
+      if (data?.success) {
+        toast.success(data.message || 'Verification code sent to your phone');
+        setShowCodeInput(true);
+      } else {
+        throw new Error(data?.error || 'Failed to send code');
+      }
+    } catch (error: any) {
+      toast.error(error.message || 'Failed to send verification code');
+    } finally {
+      setIsSendingCode(false);
+    }
+  };
+
+  const verifyMTProtoCode = async () => {
+    if (!verificationCode) {
+      toast.error('Please enter the verification code');
+      return;
+    }
+    setIsVerifyingCode(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('telegram-mtproto-auth', {
+        body: { 
+          action: 'verify_code', 
+          code: verificationCode,
+          password: needs2FA ? twoFAPassword : undefined
+        }
+      });
+      if (error) throw error;
+      
+      if (data?.requires2FA) {
+        setNeeds2FA(true);
+        toast.info('2FA password required');
+      } else if (data?.success) {
+        toast.success(data.message || 'Successfully authenticated!');
+        setShowCodeInput(false);
+        setVerificationCode('');
+        setTwoFAPassword('');
+        setNeeds2FA(false);
+        loadData(); // Refresh to show new status
+      } else {
+        throw new Error(data?.error || 'Verification failed');
+      }
+    } catch (error: any) {
+      toast.error(error.message || 'Failed to verify code');
+    } finally {
+      setIsVerifyingCode(false);
+    }
+  };
+
+  const testMTProtoSession = async () => {
+    try {
+      const { data, error } = await supabase.functions.invoke('telegram-mtproto-auth', {
+        body: { action: 'test' }
+      });
+      if (error) throw error;
+      if (data?.success) {
+        toast.success(`Connected as: ${data.user?.firstName || data.user?.username}`);
+      } else {
+        throw new Error(data?.error || 'Test failed');
+      }
+    } catch (error: any) {
+      toast.error(error.message || 'Failed to test session');
     }
   };
 
@@ -558,6 +654,53 @@ export default function TelegramChannelMonitor() {
           </Button>
         </div>
       </div>
+
+      {/* MTProto Authentication Card */}
+      <Card className={mtprotoStatus?.hasSession ? 'border-green-500/50' : 'border-orange-500/50'}>
+        <CardContent className="pt-6">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm text-muted-foreground">MTProto Session</p>
+              <p className="text-lg font-bold">
+                {mtprotoStatus?.hasSession ? '✅ Authenticated' : '⚠️ Not Connected'}
+              </p>
+              {mtprotoStatus?.phoneNumber && (
+                <p className="text-xs text-muted-foreground">{mtprotoStatus.phoneNumber}</p>
+              )}
+            </div>
+            <div className="flex flex-col gap-2">
+              {!mtprotoStatus?.hasSession && !showCodeInput && (
+                <Button size="sm" onClick={sendMTProtoCode} disabled={isSendingCode}>
+                  {isSendingCode ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Connect'}
+                </Button>
+              )}
+              {mtprotoStatus?.hasSession && (
+                <Button size="sm" variant="outline" onClick={testMTProtoSession}>Test</Button>
+              )}
+            </div>
+          </div>
+          {showCodeInput && (
+            <div className="mt-4 space-y-2">
+              <Input
+                placeholder="Enter verification code"
+                value={verificationCode}
+                onChange={(e) => setVerificationCode(e.target.value)}
+              />
+              {needs2FA && (
+                <Input
+                  type="password"
+                  placeholder="Enter 2FA password"
+                  value={twoFAPassword}
+                  onChange={(e) => setTwoFAPassword(e.target.value)}
+                />
+              )}
+              <Button size="sm" onClick={verifyMTProtoCode} disabled={isVerifyingCode}>
+                {isVerifyingCode ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Verify'}
+              </Button>
+            </div>
+          )}
+        </CardContent>
+      </Card>
 
       {/* Status Cards */}
       <div className="grid grid-cols-1 md:grid-cols-5 gap-4">

@@ -4751,9 +4751,11 @@ export type Database = {
           ape_keyword_enabled: boolean | null
           channel_id: string
           channel_name: string | null
+          channel_type: string | null
           channel_username: string | null
           created_at: string
           email_notifications: boolean | null
+          entity_access_hash: string | null
           fantasy_buy_amount_usd: number | null
           fantasy_mode: boolean | null
           flipit_wallet_id: string | null
@@ -4778,9 +4780,11 @@ export type Database = {
           ape_keyword_enabled?: boolean | null
           channel_id: string
           channel_name?: string | null
+          channel_type?: string | null
           channel_username?: string | null
           created_at?: string
           email_notifications?: boolean | null
+          entity_access_hash?: string | null
           fantasy_buy_amount_usd?: number | null
           fantasy_mode?: boolean | null
           flipit_wallet_id?: string | null
@@ -4805,9 +4809,11 @@ export type Database = {
           ape_keyword_enabled?: boolean | null
           channel_id?: string
           channel_name?: string | null
+          channel_type?: string | null
           channel_username?: string | null
           created_at?: string
           email_notifications?: boolean | null
+          entity_access_hash?: string | null
           fantasy_buy_amount_usd?: number | null
           fantasy_mode?: boolean | null
           flipit_wallet_id?: string | null
@@ -5000,6 +5006,33 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      telegram_mtproto_session: {
+        Row: {
+          created_at: string | null
+          id: string
+          is_active: boolean | null
+          last_used_at: string | null
+          phone_number: string | null
+          session_string: string
+        }
+        Insert: {
+          created_at?: string | null
+          id?: string
+          is_active?: boolean | null
+          last_used_at?: string | null
+          phone_number?: string | null
+          session_string: string
+        }
+        Update: {
+          created_at?: string | null
+          id?: string
+          is_active?: boolean | null
+          last_used_at?: string | null
+          phone_number?: string | null
+          session_string?: string
+        }
+        Relationships: []
       }
       telegram_session: {
         Row: {
