@@ -7,18 +7,21 @@ import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
 import { Badge } from '@/components/ui/badge';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { toast } from 'sonner';
 import { 
   Plus, 
-  Settings, 
   Trash2, 
   Edit,
   MessageCircle,
-  TrendingUp,
   Clock,
   Loader2,
   Play,
-  Pause
+  Pause,
+  Search,
+  ChevronDown,
+  CheckCircle2,
+  XCircle
 } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
 
@@ -47,6 +50,14 @@ export function ChannelManagement() {
   const [loading, setLoading] = useState(true);
   const [showAddDialog, setShowAddDialog] = useState(false);
   const [editingChannel, setEditingChannel] = useState<ChannelConfig | null>(null);
+  const [groupTestResult, setGroupTestResult] = useState<{
+    success: boolean;
+    messageCount?: number;
+    message: string;
+  } | null>(null);
+  const [testingAccess, setTestingAccess] = useState(false);
+  const [sessionString, setSessionString] = useState('');
+  const [savingSession, setSavingSession] = useState(false);
   const [formData, setFormData] = useState({
     channel_name: '',
     channel_username: '',
@@ -186,6 +197,8 @@ export function ChannelManagement() {
       ape_keyword_enabled: true,
       max_mint_age_minutes: 60
     });
+    setGroupTestResult(null);
+    setSessionString('');
   };
 
   const startEdit = (channel: ChannelConfig) => {
@@ -199,6 +212,68 @@ export function ChannelManagement() {
       max_mint_age_minutes: channel.max_mint_age_minutes
     });
     setEditingChannel(channel);
+    setGroupTestResult(null);
+  };
+
+  const testGroupAccess = async (username: string) => {
+    if (!username.trim()) {
+      toast.error('Enter a username first');
+      return;
+    }
+    
+    setTestingAccess(true);
+    setGroupTestResult(null);
+    
+    try {
+      const { data, error } = await supabase.functions.invoke('telegram-mtproto-auth', {
+        body: { 
+          action: 'test_group_access', 
+          channelUsername: username.toLowerCase().replace('@', '') 
+        }
+      });
+
+      if (error) throw error;
+      
+      setGroupTestResult({
+        success: data.accessible,
+        messageCount: data.messageCount,
+        message: data.accessible 
+          ? `Web scraping works! Found ${data.messageCount} messages.`
+          : data.error || 'This group is private or not accessible via web scraping.'
+      });
+    } catch (err) {
+      console.error('Error testing group access:', err);
+      setGroupTestResult({
+        success: false,
+        message: 'Failed to test access. Try again.'
+      });
+    } finally {
+      setTestingAccess(false);
+    }
+  };
+
+  const saveSessionString = async () => {
+    if (!sessionString.trim()) {
+      toast.error('Paste a session string first');
+      return;
+    }
+
+    setSavingSession(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('telegram-mtproto-auth', {
+        body: { action: 'save_session', sessionString }
+      });
+
+      if (error) throw error;
+      
+      toast.success('MTProto session saved!');
+      setSessionString('');
+    } catch (err) {
+      console.error('Error saving session:', err);
+      toast.error('Failed to save session');
+    } finally {
+      setSavingSession(false);
+    }
   };
 
   if (loading) {
@@ -252,12 +327,104 @@ export function ChannelManagement() {
             👥 Group
           </Button>
         </div>
-        {formData.channel_type === 'group' && (
-          <p className="text-xs text-orange-500 mt-2">
-            ⚠️ Groups require your bot to be a member, or MTProto session
-          </p>
-        )}
       </div>
+
+      {/* Group Access Panel */}
+      {formData.channel_type === 'group' && (
+        <Card className="border-orange-500/50 bg-orange-500/5">
+          <CardContent className="p-3 space-y-3">
+            <div className="flex items-start gap-2">
+              <span className="text-lg">⚠️</span>
+              <div>
+                <p className="text-sm font-medium text-orange-500">Group Access Required</p>
+                <p className="text-xs text-muted-foreground">
+                  Telegram groups don't have public feeds like channels. Let's check if we can access this one.
+                </p>
+              </div>
+            </div>
+
+            {/* Test Access Button */}
+            <Button 
+              size="sm" 
+              variant="outline"
+              onClick={() => testGroupAccess(formData.channel_username)}
+              disabled={!formData.channel_username.trim() || testingAccess}
+              className="w-full"
+            >
+              {testingAccess ? (
+                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+              ) : (
+                <Search className="h-4 w-4 mr-2" />
+              )}
+              Test Access to @{formData.channel_username || '...'}
+            </Button>
+
+            {/* Test Result */}
+            {groupTestResult && (
+              <div className={`flex items-start gap-2 p-2 rounded text-sm ${
+                groupTestResult.success 
+                  ? 'bg-green-500/10 text-green-500' 
+                  : 'bg-red-500/10 text-red-400'
+              }`}>
+                {groupTestResult.success ? (
+                  <CheckCircle2 className="h-4 w-4 mt-0.5 flex-shrink-0" />
+                ) : (
+                  <XCircle className="h-4 w-4 mt-0.5 flex-shrink-0" />
+                )}
+                <span className="text-xs">{groupTestResult.message}</span>
+              </div>
+            )}
+
+            {/* MTProto Instructions - only show if test failed */}
+            {groupTestResult && !groupTestResult.success && (
+              <Collapsible>
+                <CollapsibleTrigger className="flex items-center gap-1 text-xs text-blue-400 hover:text-blue-300">
+                  <ChevronDown className="h-3 w-3" />
+                  Need MTProto session? Click for instructions
+                </CollapsibleTrigger>
+                <CollapsibleContent className="mt-2 space-y-2">
+                  <div className="text-xs p-2 bg-muted rounded space-y-1">
+                    <p className="font-medium">Generate session locally:</p>
+                    <ol className="list-decimal list-inside space-y-1 text-muted-foreground">
+                      <li>Install Python + Telethon: <code className="bg-background px-1 rounded">pip install telethon</code></li>
+                      <li>Get API credentials from <a href="https://my.telegram.org" target="_blank" rel="noopener" className="text-blue-400 underline">my.telegram.org</a></li>
+                      <li>Run the script below, enter phone code</li>
+                      <li>Copy the session string and paste below</li>
+                    </ol>
+                    <pre className="mt-2 p-2 bg-background rounded text-[10px] overflow-x-auto">
+{`from telethon.sync import TelegramClient
+from telethon.sessions import StringSession
+
+api_id = YOUR_API_ID
+api_hash = "YOUR_API_HASH"
+
+with TelegramClient(StringSession(), api_id, api_hash) as client:
+    print(client.session.save())`}
+                    </pre>
+                  </div>
+                  <Input 
+                    placeholder="Paste session string here..." 
+                    value={sessionString}
+                    onChange={(e) => setSessionString(e.target.value)}
+                    className="text-xs"
+                  />
+                  <Button 
+                    size="sm" 
+                    onClick={saveSessionString}
+                    disabled={!sessionString.trim() || savingSession}
+                    className="w-full"
+                  >
+                    {savingSession ? (
+                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                    ) : null}
+                    Save Session
+                  </Button>
+                </CollapsibleContent>
+              </Collapsible>
+            )}
+          </CardContent>
+        </Card>
+      )}
       <div className="flex items-center justify-between">
         <div>
           <Label>Fantasy Mode</Label>
