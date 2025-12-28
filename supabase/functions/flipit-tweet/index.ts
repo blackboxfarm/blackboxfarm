@@ -83,27 +83,27 @@ interface TweetRequest {
 
 // Default templates (fallback if DB not available)
 const DEFAULT_TEMPLATES: Record<string, string> = {
-  buy: `🎯 FLIP IT: Just entered ${{TOKEN_SYMBOL}}
+  buy: `🎯 FLIP IT: Just entered \${{TOKEN_SYMBOL}}
 
-💰 Entry: ${{ENTRY_PRICE}}
+💰 Entry: \${{ENTRY_PRICE}}
 🎯 Target: {{TARGET_MULTIPLIER}}x
 📊 Amount: {{AMOUNT_SOL}} SOL
 
 Let's see if this one prints! 🚀
 
 #Solana #{{TOKEN_SYMBOL}} #FlipIt`,
-  sell: `{{PROFIT_EMOJI}} FLIP IT CLOSED: ${{TOKEN_SYMBOL}}
+  sell: `{{PROFIT_EMOJI}} FLIP IT CLOSED: \${{TOKEN_SYMBOL}}
 
-💰 Entry: ${{ENTRY_PRICE}}
-💵 Exit: ${{EXIT_PRICE}}
+💰 Entry: \${{ENTRY_PRICE}}
+💵 Exit: \${{EXIT_PRICE}}
 {{RESULT_EMOJI}} PnL: {{PROFIT_SIGN}}{{PROFIT_PERCENT}}% ({{PROFIT_SIGN}}{{PROFIT_SOL}} SOL)
 
 {{RESULT_MESSAGE}}
 
 #Solana #{{TOKEN_SYMBOL}} #FlipIt`,
-  rebuy: `🔄 FLIP IT REBUY: ${{TOKEN_SYMBOL}}
+  rebuy: `🔄 FLIP IT REBUY: \${{TOKEN_SYMBOL}}
 
-💰 New Entry: ${{ENTRY_PRICE}}
+💰 New Entry: \${{ENTRY_PRICE}}
 🎯 Target: {{TARGET_MULTIPLIER}}x
 📊 Amount: {{AMOUNT_SOL}} SOL
 
