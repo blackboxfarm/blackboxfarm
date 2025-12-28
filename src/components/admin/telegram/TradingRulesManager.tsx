@@ -176,7 +176,7 @@ export function TradingRulesManager() {
         if (error) throw error;
         toast.success('Rule updated');
       } else {
-        const { error } = await supabase.from('trading_rules').insert(ruleData);
+        const { error } = await supabase.from('trading_rules').insert(ruleData as any);
         if (error) throw error;
         toast.success('Rule created');
       }
