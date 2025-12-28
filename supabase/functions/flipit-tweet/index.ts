@@ -69,12 +69,15 @@ function generateOAuthHeader(method: string, url: string): string {
 }
 
 interface TweetRequest {
-  type: 'buy' | 'sell' | 'rebuy';
+  type?: 'buy' | 'sell' | 'rebuy';
+  eventType?: 'buy' | 'sell' | 'rebuy';
   tokenMint?: string;
-  tokenSymbol: string;
+  tokenSymbol?: string;
   tokenName?: string;
   entryPrice?: number;
+  buyPriceUsd?: number;
   exitPrice?: number;
+  sellPriceUsd?: number;
   targetMultiplier?: number;
   profitPercent?: number;
   profitSol?: number;
@@ -257,16 +260,21 @@ Deno.serve(async (req) => {
     
      let body: TweetRequest = await req.json();
      console.log("Tweet request:", JSON.stringify(body));
+     
+     // Normalize: accept either 'type' or 'eventType', and 'entryPrice' or 'buyPriceUsd'
+     const tweetType = body.type || body.eventType || 'buy';
+     const entryPrice = body.entryPrice ?? body.buyPriceUsd;
+     const exitPrice = body.exitPrice ?? body.sellPriceUsd;
     
      // Get template from database
-     const { text: template, enabled } = await getTemplate(supabase, body.type);
+     const { text: template, enabled } = await getTemplate(supabase, tweetType);
      
      if (!enabled) {
-       console.log(`Tweeting disabled for ${body.type}`);
+       console.log(`Tweeting disabled for ${tweetType}`);
        return new Response(JSON.stringify({ 
          success: false, 
          skipped: true,
-         reason: `${body.type} tweets are disabled`
+         reason: `${tweetType} tweets are disabled`
        }), {
          headers: { ...corsHeaders, "Content-Type": "application/json" },
        });
@@ -307,6 +315,11 @@ Deno.serve(async (req) => {
          console.log("Resolved token info:", { tokenMint: body.tokenMint, symbol: body.tokenSymbol });
        }
      }
+     
+     // Merge normalized values back into body for buildTweetText
+     body.type = tweetType;
+     body.entryPrice = entryPrice;
+     body.exitPrice = exitPrice;
      
      const tweetText = buildTweetText(template, body);
      console.log("Generated tweet text:", tweetText);
