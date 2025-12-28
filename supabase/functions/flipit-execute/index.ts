@@ -268,7 +268,7 @@ serve(async (req) => {
         const amountSol = (buyAmountUsd || 10) / solPrice;
 
         // Send buy tweet (fire and forget)
-        sendTweet(supabase, {
+        await sendTweet(supabase, {
           type: 'buy',
           tokenSymbol: metadata?.symbol || 'TOKEN',
           tokenName: metadata?.name,
@@ -387,7 +387,7 @@ serve(async (req) => {
         const profitSol = profit ? profit / solPrice : 0;
 
         // Send sell tweet (fire and forget)
-        sendTweet(supabase, {
+        await sendTweet(supabase, {
           type: 'sell',
           tokenSymbol: position.token_symbol || 'TOKEN',
           tokenName: position.token_name,
