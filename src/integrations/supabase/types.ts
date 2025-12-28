@@ -2377,6 +2377,83 @@ export type Database = {
         }
         Relationships: []
       }
+      flip_limit_orders: {
+        Row: {
+          buy_amount_sol: number
+          buy_price_max_usd: number
+          buy_price_min_usd: number
+          cancelled_at: string | null
+          created_at: string
+          executed_at: string | null
+          executed_position_id: string | null
+          expires_at: string
+          id: string
+          notification_email: string | null
+          priority_fee_mode: string
+          slippage_bps: number
+          status: string
+          target_multiplier: number
+          token_mint: string
+          token_name: string | null
+          token_symbol: string | null
+          updated_at: string
+          user_id: string | null
+          wallet_id: string | null
+        }
+        Insert: {
+          buy_amount_sol: number
+          buy_price_max_usd: number
+          buy_price_min_usd: number
+          cancelled_at?: string | null
+          created_at?: string
+          executed_at?: string | null
+          executed_position_id?: string | null
+          expires_at: string
+          id?: string
+          notification_email?: string | null
+          priority_fee_mode?: string
+          slippage_bps?: number
+          status?: string
+          target_multiplier?: number
+          token_mint: string
+          token_name?: string | null
+          token_symbol?: string | null
+          updated_at?: string
+          user_id?: string | null
+          wallet_id?: string | null
+        }
+        Update: {
+          buy_amount_sol?: number
+          buy_price_max_usd?: number
+          buy_price_min_usd?: number
+          cancelled_at?: string | null
+          created_at?: string
+          executed_at?: string | null
+          executed_position_id?: string | null
+          expires_at?: string
+          id?: string
+          notification_email?: string | null
+          priority_fee_mode?: string
+          slippage_bps?: number
+          status?: string
+          target_multiplier?: number
+          token_mint?: string
+          token_name?: string | null
+          token_symbol?: string | null
+          updated_at?: string
+          user_id?: string | null
+          wallet_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "flip_limit_orders_executed_position_id_fkey"
+            columns: ["executed_position_id"]
+            isOneToOne: false
+            referencedRelation: "flip_positions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       flip_positions: {
         Row: {
           buy_amount_usd: number | null

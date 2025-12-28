@@ -67,6 +67,25 @@ interface SuperAdminWallet {
   wallet_type?: string;
 }
 
+interface LimitOrder {
+  id: string;
+  token_mint: string;
+  token_symbol: string | null;
+  token_name: string | null;
+  buy_price_min_usd: number;
+  buy_price_max_usd: number;
+  buy_amount_sol: number;
+  target_multiplier: number;
+  slippage_bps: number;
+  priority_fee_mode: string;
+  status: string;
+  expires_at: string;
+  executed_at: string | null;
+  cancelled_at: string | null;
+  created_at: string;
+  notification_email: string | null;
+}
+
 interface InputTokenData {
   mint: string;
   symbol: string | null;
@@ -151,6 +170,20 @@ export function FlipItDashboard() {
   const [isEmergencyMonitoring, setIsEmergencyMonitoring] = useState(false);
   const [emergencyEditing, setEmergencyEditing] = useState<Record<string, { enabled: boolean; price: string }>>({});
 
+  // Limit Order mode state
+  const [limitOrderMode, setLimitOrderMode] = useState(false);
+  const [limitPriceMin, setLimitPriceMin] = useState('');
+  const [limitPriceMax, setLimitPriceMax] = useState('');
+  const [limitExpiry, setLimitExpiry] = useState('168'); // 7 days in hours
+  const [limitOrders, setLimitOrders] = useState<LimitOrder[]>([]);
+  const [isSubmittingLimitOrder, setIsSubmittingLimitOrder] = useState(false);
+  const [limitOrderMonitorEnabled, setLimitOrderMonitorEnabled] = useState(true);
+  const [limitOrderCountdown, setLimitOrderCountdown] = useState(15);
+  const limitOrderCountdownRef = useRef(15);
+  const [lastLimitOrderCheck, setLastLimitOrderCheck] = useState<string | null>(null);
+  const [isLimitOrderMonitoring, setIsLimitOrderMonitoring] = useState(false);
+  const [notificationEmail, setNotificationEmail] = useState('wilsondavid@live.ca');
+
   useEffect(() => {
     // RLS is enforced by Supabase using your auth session.
     // "Preview admin" only affects UI gating; it does NOT create an auth session.
@@ -166,6 +199,7 @@ export function FlipItDashboard() {
 
     loadWallets();
     loadPositions();
+    loadLimitOrders();
   }, [isPreviewAdmin, isAuthenticated, authLoading]);
 
   // Real-time subscription to flip_positions changes
@@ -331,6 +365,73 @@ export function FlipItDashboard() {
       clearInterval(id);
     };
   }, [emergencyMonitorEnabled, positions, handleEmergencyCheck]);
+
+  // Limit order monitoring handler
+  const handleLimitOrderCheck = useCallback(async () => {
+    const watchingOrders = limitOrders.filter(o => o.status === 'watching');
+    if (watchingOrders.length === 0 || isLimitOrderMonitoring) return;
+
+    setIsLimitOrderMonitoring(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('flipit-limit-order-monitor');
+
+      if (error) throw error;
+
+      if (data?.checkedAt) {
+        setLastLimitOrderCheck(data.checkedAt);
+      }
+      if (data?.executed?.length > 0) {
+        toast.success(`Limit buy executed for ${data.executed.length} order(s)!`);
+        loadLimitOrders();
+        loadPositions();
+      }
+      if (data?.expiredCount > 0) {
+        loadLimitOrders();
+      }
+    } catch (err) {
+      console.error('Limit order check failed:', err);
+    } finally {
+      setIsLimitOrderMonitoring(false);
+    }
+  }, [limitOrders, isLimitOrderMonitoring]);
+
+  // Limit order monitoring poll (every 15 seconds)
+  useEffect(() => {
+    if (!limitOrderMonitorEnabled) return;
+
+    const hasWatching = limitOrders.some((o) => o.status === 'watching');
+    if (!hasWatching) return;
+
+    setLimitOrderCountdown(15);
+    limitOrderCountdownRef.current = 15;
+
+    const id = setInterval(() => {
+      void handleLimitOrderCheck();
+    }, 15000);
+
+    return () => {
+      clearInterval(id);
+    };
+  }, [limitOrderMonitorEnabled, limitOrders, handleLimitOrderCheck]);
+
+  // Real-time subscription to limit orders
+  useEffect(() => {
+    const channel = supabase
+      .channel('flip-limit-orders-realtime')
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'flip_limit_orders' },
+        (payload) => {
+          console.log('Limit order changed:', payload);
+          loadLimitOrders();
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, []);
 
   useEffect(() => {
     if (selectedWallet) {
@@ -713,6 +814,22 @@ export function FlipItDashboard() {
       fetchCurrentPrices(holdingPositions.map(p => p.token_mint));
     }
   };
+
+  const loadLimitOrders = async () => {
+    const { data, error } = await supabase
+      .from('flip_limit_orders')
+      .select('*')
+      .in('status', ['watching', 'executed'])
+      .order('created_at', { ascending: false })
+      .limit(50);
+
+    if (error) {
+      console.error('Failed to load limit orders:', error);
+      return;
+    }
+
+    setLimitOrders((data || []) as LimitOrder[]);
+  };
   
   const fetchTokenSymbols = async (mints: string[]): Promise<Record<string, { symbol: string; name: string }>> => {
     const result: Record<string, { symbol: string; name: string }> = {};
@@ -880,6 +997,86 @@ export function FlipItDashboard() {
       toast.error(err.message || 'Failed to execute flip');
     } finally {
       setIsFlipping(false);
+    }
+  };
+
+  const handleSubmitLimitOrder = async () => {
+    if (!tokenAddress.trim()) {
+      toast.error('Enter a token address');
+      return;
+    }
+    if (!selectedWallet) {
+      toast.error('Select a source wallet');
+      return;
+    }
+    const parsedAmount = parseFloat(buyAmount);
+    if (isNaN(parsedAmount) || parsedAmount <= 0) {
+      toast.error('Enter a valid buy amount');
+      return;
+    }
+    const minPrice = parseFloat(limitPriceMin);
+    const maxPrice = parseFloat(limitPriceMax);
+    if (isNaN(minPrice) || isNaN(maxPrice) || minPrice <= 0 || maxPrice <= 0) {
+      toast.error('Enter valid price range');
+      return;
+    }
+    if (minPrice > maxPrice) {
+      toast.error('Min price must be less than max price');
+      return;
+    }
+
+    const expiryHours = parseInt(limitExpiry) || 168;
+    const expiresAt = new Date(Date.now() + expiryHours * 60 * 60 * 1000).toISOString();
+    const amountSol = buyAmountMode === 'sol' ? parsedAmount : (solPrice ? parsedAmount / solPrice : parsedAmount);
+
+    setIsSubmittingLimitOrder(true);
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      
+      const { error } = await supabase.from('flip_limit_orders').insert({
+        user_id: user?.id,
+        wallet_id: selectedWallet,
+        token_mint: tokenAddress.trim(),
+        token_symbol: inputToken.symbol,
+        token_name: inputToken.name,
+        buy_price_min_usd: minPrice,
+        buy_price_max_usd: maxPrice,
+        buy_amount_sol: amountSol,
+        target_multiplier: targetMultiplier,
+        slippage_bps: slippageBps,
+        priority_fee_mode: priorityFeeMode,
+        status: 'watching',
+        expires_at: expiresAt,
+        notification_email: notificationEmail || null,
+      });
+
+      if (error) throw error;
+
+      toast.success(`Limit order queued! Will buy when price is $${minPrice} - $${maxPrice}`);
+      setTokenAddress('');
+      setLimitPriceMin('');
+      setLimitPriceMax('');
+      setInputToken({ mint: '', symbol: null, name: null, price: null, image: null, lastFetched: null, source: null });
+      loadLimitOrders();
+    } catch (err: any) {
+      toast.error(err.message || 'Failed to create limit order');
+    } finally {
+      setIsSubmittingLimitOrder(false);
+    }
+  };
+
+  const handleCancelLimitOrder = async (orderId: string) => {
+    try {
+      const { error } = await supabase
+        .from('flip_limit_orders')
+        .update({ status: 'cancelled', cancelled_at: new Date().toISOString() })
+        .eq('id', orderId);
+
+      if (error) throw error;
+      toast.success('Limit order cancelled');
+      loadLimitOrders();
+    } catch (err: any) {
+      toast.error(err.message || 'Failed to cancel order');
     }
   };
 
