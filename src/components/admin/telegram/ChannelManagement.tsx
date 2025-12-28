@@ -96,9 +96,17 @@ export function ChannelManagement() {
     }
 
     try {
+      const { data: userData, error: userError } = await supabase.auth.getUser();
+      if (userError) throw userError;
+      if (!userData?.user) {
+        toast.error('You must be logged in to add a channel');
+        return;
+      }
+
       const { error } = await supabase
         .from('telegram_channel_config')
         .insert({
+          user_id: userData.user.id,
           channel_id: formData.channel_username.toLowerCase(),
           channel_name: formData.channel_name || formData.channel_username,
           channel_username: formData.channel_username.toLowerCase().replace('@', ''),
@@ -107,7 +115,7 @@ export function ChannelManagement() {
           fantasy_mode: formData.fantasy_mode,
           fantasy_buy_amount_usd: formData.fantasy_buy_amount_usd,
           ape_keyword_enabled: formData.ape_keyword_enabled,
-          max_mint_age_minutes: formData.max_mint_age_minutes
+          max_mint_age_minutes: formData.max_mint_age_minutes,
         });
 
       if (error) throw error;
@@ -116,9 +124,9 @@ export function ChannelManagement() {
       setShowAddDialog(false);
       resetForm();
       loadChannels();
-    } catch (err) {
+    } catch (err: any) {
       console.error('Error adding channel:', err);
-      toast.error('Failed to add channel');
+      toast.error(err?.message || 'Failed to add channel');
     }
   };
 
