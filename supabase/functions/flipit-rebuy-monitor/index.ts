@@ -305,7 +305,7 @@ serve(async (req) => {
 
           // Send rebuy tweet (fire and forget)
           const amountSol = rebuyAmountUsd / solPrice;
-          sendTweet(supabase, {
+          await sendTweet(supabase, {
             type: 'rebuy',
             tokenSymbol: position.token_symbol || 'TOKEN',
             tokenName: position.token_name,
