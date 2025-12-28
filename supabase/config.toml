@@ -258,3 +258,6 @@ verify_jwt = false
 
 [functions.flipit-backfill-socials]
 verify_jwt = false
+
+[functions.telegram-mtproto-auth]
+verify_jwt = false
