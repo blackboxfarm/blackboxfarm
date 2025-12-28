@@ -284,23 +284,23 @@ export function ChannelManagement() {
     );
   }
 
-  const ChannelForm = ({ isEdit = false }: { isEdit?: boolean }) => (
+  const renderChannelForm = (isEdit: boolean) => (
     <div className="space-y-4">
       <div>
-        <Label htmlFor="channel_name">Display Name</Label>
+        <Label htmlFor={isEdit ? "edit_channel_name" : "channel_name"}>Display Name</Label>
         <Input
-          id="channel_name"
+          id={isEdit ? "edit_channel_name" : "channel_name"}
           value={formData.channel_name}
-          onChange={(e) => setFormData({ ...formData, channel_name: e.target.value })}
+          onChange={(e) => setFormData(prev => ({ ...prev, channel_name: e.target.value }))}
           placeholder="e.g., Alpha Calls"
         />
       </div>
       <div>
-        <Label htmlFor="channel_username">Channel/Group Username *</Label>
+        <Label htmlFor={isEdit ? "edit_channel_username" : "channel_username"}>Channel/Group Username *</Label>
         <Input
-          id="channel_username"
+          id={isEdit ? "edit_channel_username" : "channel_username"}
           value={formData.channel_username}
-          onChange={(e) => setFormData({ ...formData, channel_username: e.target.value })}
+          onChange={(e) => setFormData(prev => ({ ...prev, channel_username: e.target.value }))}
           placeholder="e.g., alphacalls (without @)"
         />
         <p className="text-xs text-muted-foreground mt-1">
@@ -314,7 +314,7 @@ export function ChannelManagement() {
             type="button"
             size="sm"
             variant={formData.channel_type === 'channel' ? 'default' : 'outline'}
-            onClick={() => setFormData({ ...formData, channel_type: 'channel' })}
+            onClick={() => setFormData(prev => ({ ...prev, channel_type: 'channel' }))}
           >
             📢 Channel
           </Button>
@@ -322,7 +322,7 @@ export function ChannelManagement() {
             type="button"
             size="sm"
             variant={formData.channel_type === 'group' ? 'default' : 'outline'}
-            onClick={() => setFormData({ ...formData, channel_type: 'group' })}
+            onClick={() => setFormData(prev => ({ ...prev, channel_type: 'group' }))}
           >
             👥 Group
           </Button>
@@ -432,16 +432,16 @@ with TelegramClient(StringSession(), api_id, api_hash) as client:
         </div>
         <Switch
           checked={formData.fantasy_mode}
-          onCheckedChange={(checked) => setFormData({ ...formData, fantasy_mode: checked })}
+          onCheckedChange={(checked) => setFormData(prev => ({ ...prev, fantasy_mode: checked }))}
         />
       </div>
       <div>
-        <Label htmlFor="fantasy_buy_amount">Fantasy Buy Amount (USD)</Label>
+        <Label htmlFor={isEdit ? "edit_fantasy_buy_amount" : "fantasy_buy_amount"}>Fantasy Buy Amount (USD)</Label>
         <Input
-          id="fantasy_buy_amount"
+          id={isEdit ? "edit_fantasy_buy_amount" : "fantasy_buy_amount"}
           type="number"
           value={formData.fantasy_buy_amount_usd}
-          onChange={(e) => setFormData({ ...formData, fantasy_buy_amount_usd: Number(e.target.value) })}
+          onChange={(e) => setFormData(prev => ({ ...prev, fantasy_buy_amount_usd: Number(e.target.value) }))}
         />
       </div>
       <div className="flex items-center justify-between">
@@ -451,16 +451,16 @@ with TelegramClient(StringSession(), api_id, api_hash) as client:
         </div>
         <Switch
           checked={formData.ape_keyword_enabled}
-          onCheckedChange={(checked) => setFormData({ ...formData, ape_keyword_enabled: checked })}
+          onCheckedChange={(checked) => setFormData(prev => ({ ...prev, ape_keyword_enabled: checked }))}
         />
       </div>
       <div>
-        <Label htmlFor="max_age">Max Token Age (minutes)</Label>
+        <Label htmlFor={isEdit ? "edit_max_age" : "max_age"}>Max Token Age (minutes)</Label>
         <Input
-          id="max_age"
+          id={isEdit ? "edit_max_age" : "max_age"}
           type="number"
           value={formData.max_mint_age_minutes}
-          onChange={(e) => setFormData({ ...formData, max_mint_age_minutes: Number(e.target.value) })}
+          onChange={(e) => setFormData(prev => ({ ...prev, max_mint_age_minutes: Number(e.target.value) }))}
         />
       </div>
       <Button onClick={isEdit ? updateChannel : addChannel} className="w-full">
@@ -485,7 +485,7 @@ with TelegramClient(StringSession(), api_id, api_hash) as client:
             <DialogHeader>
               <DialogTitle>Add Telegram Channel</DialogTitle>
             </DialogHeader>
-            <ChannelForm />
+            {renderChannelForm(false)}
           </DialogContent>
         </Dialog>
       </div>
@@ -575,7 +575,7 @@ with TelegramClient(StringSession(), api_id, api_hash) as client:
                       <DialogHeader>
                         <DialogTitle>Edit Channel</DialogTitle>
                       </DialogHeader>
-                      <ChannelForm isEdit />
+                      {renderChannelForm(true)}
                     </DialogContent>
                   </Dialog>
                   <Button
