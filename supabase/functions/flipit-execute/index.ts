@@ -279,8 +279,8 @@ serve(async (req) => {
         await sendTweet(supabase, {
           type: 'buy',
           tokenMint: tokenMint,
-          tokenSymbol: metadata?.symbol || 'TOKEN',
-          tokenName: metadata?.name,
+          tokenSymbol: position.token_symbol || metadata?.symbol || 'TOKEN',
+          tokenName: position.token_name || metadata?.name,
           entryPrice: currentPrice,
           targetMultiplier: mult,
           amountSol: amountSol,

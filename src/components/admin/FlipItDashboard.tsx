@@ -187,133 +187,65 @@ export function FlipItDashboard() {
     };
   }, []);
 
-  // Auto-refresh polling with countdown
+  // Auto-refresh polling (every 15 seconds)
   useEffect(() => {
-    if (!autoRefreshEnabled) {
-      setCountdown(15);
-      return;
-    }
+    if (!autoRefreshEnabled) return;
 
-    const activeHoldings = positions.filter(p => p.status === 'holding');
-    if (activeHoldings.length === 0) {
-      setCountdown(15);
-      return;
-    }
+    const hasHoldings = positions.some((p) => p.status === 'holding');
+    if (!hasHoldings) return;
 
-    // Countdown timer
-    const countdownInterval = setInterval(() => {
-      countdownRef.current -= 1;
-      setCountdown(countdownRef.current);
-      
-      if (countdownRef.current <= 0) {
-        countdownRef.current = 15;
-        setCountdown(15);
-        // Trigger price refresh
-        handleAutoRefresh();
-      }
-    }, 1000);
+    // Keep the UI indicator simple (avoid per-second state updates)
+    setCountdown(15);
+    countdownRef.current = 15;
+
+    const id = setInterval(() => {
+      void handleAutoRefresh();
+    }, 15000);
 
     return () => {
-      clearInterval(countdownInterval);
+      clearInterval(id);
     };
-  }, [autoRefreshEnabled, positions]);
-
-  const handleAutoRefresh = useCallback(async () => {
-    const holdingPositions = positions.filter(p => p.status === 'holding');
-    if (holdingPositions.length === 0 || isMonitoring) return;
-
-    setIsMonitoring(true);
-    try {
-      const { data, error } = await supabase.functions.invoke('flipit-price-monitor', {
-        body: { 
-          action: 'check',
-          slippageBps: slippageBps,
-          priorityFeeMode: priorityFeeMode
-        }
-      });
-
-      if (error) throw error;
-
-      if (data?.prices) {
-        setCurrentPrices(data.prices);
-      }
-      if (data?.checkedAt) {
-        setLastAutoCheck(data.checkedAt);
-      }
-      if (data?.executed?.length > 0) {
-        toast.success(`Auto-sold ${data.executed.length} position(s) at target!`);
-        loadPositions();
-      }
-    } catch (err) {
-      console.error('Auto-refresh failed:', err);
-    } finally {
-      setIsMonitoring(false);
-    }
-  }, [positions, slippageBps, priorityFeeMode, isMonitoring]);
+  }, [autoRefreshEnabled, positions, handleAutoRefresh]);
 
   // Rebuy monitoring poll (every 15 seconds)
   useEffect(() => {
-    if (!rebuyMonitorEnabled) {
-      setRebuyCountdown(15);
-      return;
-    }
+    if (!rebuyMonitorEnabled) return;
 
-    // Check if there are any watching rebuy positions
-    const watchingPositions = positions.filter(p => p.rebuy_status === 'watching');
-    if (watchingPositions.length === 0) {
-      setRebuyCountdown(15);
-      return;
-    }
+    const hasWatching = positions.some((p) => p.rebuy_status === 'watching');
+    if (!hasWatching) return;
 
-    // Countdown timer
-    const rebuyInterval = setInterval(() => {
-      rebuyCountdownRef.current -= 1;
-      setRebuyCountdown(rebuyCountdownRef.current);
-      
-      if (rebuyCountdownRef.current <= 0) {
-        rebuyCountdownRef.current = 15;
-        setRebuyCountdown(15);
-        // Trigger rebuy check
-        handleRebuyCheck();
-      }
-    }, 1000);
+    setRebuyCountdown(15);
+    rebuyCountdownRef.current = 15;
+
+    const id = setInterval(() => {
+      void handleRebuyCheck();
+    }, 15000);
 
     return () => {
-      clearInterval(rebuyInterval);
+      clearInterval(id);
     };
-  }, [rebuyMonitorEnabled, positions]);
+  }, [rebuyMonitorEnabled, positions, handleRebuyCheck]);
 
   // Emergency sell monitoring poll (every 5 seconds)
   useEffect(() => {
-    if (!emergencyMonitorEnabled) {
-      setEmergencyCountdown(5);
-      return;
-    }
+    if (!emergencyMonitorEnabled) return;
 
-    // Check if there are any watching emergency sell positions
-    const watchingPositions = positions.filter(p => p.status === 'holding' && p.emergency_sell_status === 'watching');
-    if (watchingPositions.length === 0) {
-      setEmergencyCountdown(5);
-      return;
-    }
+    const hasWatching = positions.some(
+      (p) => p.status === 'holding' && p.emergency_sell_status === 'watching'
+    );
+    if (!hasWatching) return;
 
-    // Countdown timer
-    const emergencyInterval = setInterval(() => {
-      emergencyCountdownRef.current -= 1;
-      setEmergencyCountdown(emergencyCountdownRef.current);
-      
-      if (emergencyCountdownRef.current <= 0) {
-        emergencyCountdownRef.current = 5;
-        setEmergencyCountdown(5);
-        // Trigger emergency check
-        handleEmergencyCheck();
-      }
-    }, 1000);
+    setEmergencyCountdown(5);
+    emergencyCountdownRef.current = 5;
+
+    const id = setInterval(() => {
+      void handleEmergencyCheck();
+    }, 5000);
 
     return () => {
-      clearInterval(emergencyInterval);
+      clearInterval(id);
     };
-  }, [emergencyMonitorEnabled, positions]);
+  }, [emergencyMonitorEnabled, positions, handleEmergencyCheck]);
 
   const handleEmergencyCheck = useCallback(async () => {
     const watchingPositions = positions.filter(p => p.status === 'holding' && p.emergency_sell_status === 'watching');
