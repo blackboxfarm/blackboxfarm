@@ -15,7 +15,9 @@ import {
   Target,
   Wallet,
   BarChart3,
-  Clock
+  Clock,
+  Trash2,
+  ExternalLink
 } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
 
@@ -170,6 +172,26 @@ export function FantasyPortfolioDashboard() {
       toast.error('Failed to sell position');
     }
   };
+
+  const deletePosition = async (positionId: string) => {
+    try {
+      const position = positions.find(p => p.id === positionId);
+      const { error } = await supabase
+        .from('telegram_fantasy_positions')
+        .delete()
+        .eq('id', positionId);
+
+      if (error) throw error;
+      
+      toast.success(`Deleted ${position?.token_symbol || 'position'}`);
+      await loadPositions();
+    } catch (err) {
+      console.error('Error deleting position:', err);
+      toast.error('Failed to delete position');
+    }
+  };
+
+  const getDexScreenerUrl = (mint: string) => `https://dexscreener.com/solana/${mint}`;
 
   if (loading) {
     return (
@@ -329,7 +351,15 @@ export function FantasyPortfolioDashboard() {
                     <TableRow key={pos.id}>
                       <TableCell>
                         <div>
-                          <span className="font-medium">{pos.token_symbol || 'Unknown'}</span>
+                          <a 
+                            href={getDexScreenerUrl(pos.token_mint)} 
+                            target="_blank" 
+                            rel="noopener noreferrer"
+                            className="font-medium text-primary hover:underline inline-flex items-center gap-1"
+                          >
+                            {pos.token_symbol || 'Unknown'}
+                            <ExternalLink className="h-3 w-3" />
+                          </a>
                           <p className="text-xs text-muted-foreground truncate max-w-[120px]">
                             {pos.token_mint?.slice(0, 8)}...
                           </p>
@@ -370,13 +400,23 @@ export function FantasyPortfolioDashboard() {
                         </span>
                       </TableCell>
                       <TableCell>
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          onClick={() => sellPosition(pos.id)}
-                        >
-                          Sell
-                        </Button>
+                        <div className="flex items-center gap-1">
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => sellPosition(pos.id)}
+                          >
+                            Sell
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            className="text-destructive hover:text-destructive"
+                            onClick={() => deletePosition(pos.id)}
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        </div>
                       </TableCell>
                     </TableRow>
                   );
@@ -417,7 +457,15 @@ export function FantasyPortfolioDashboard() {
                   return (
                     <TableRow key={pos.id}>
                       <TableCell>
-                        <span className="font-medium">{pos.token_symbol || 'Unknown'}</span>
+                        <a 
+                          href={getDexScreenerUrl(pos.token_mint)} 
+                          target="_blank" 
+                          rel="noopener noreferrer"
+                          className="font-medium text-primary hover:underline inline-flex items-center gap-1"
+                        >
+                          {pos.token_symbol || 'Unknown'}
+                          <ExternalLink className="h-3 w-3" />
+                        </a>
                       </TableCell>
                       <TableCell>
                         {pos.caller_display_name || pos.caller_username || 'Unknown'}
