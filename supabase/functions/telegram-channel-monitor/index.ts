@@ -698,7 +698,7 @@ serve(async (req) => {
             const status = skipReason ? 'skipped' : (isFantasyMode ? 'fantasy_bought' : 'detected');
 
             // Insert call record
-            await supabase
+            const { error: callInsertError } = await supabase
               .from('telegram_channel_calls')
               .insert({
                 channel_config_id: config.id,
@@ -721,6 +721,10 @@ serve(async (req) => {
                 caller_display_name: callerDisplayName || null,
                 is_first_call: isFirstCall
               });
+
+            if (callInsertError) {
+              console.error(`[telegram-channel-monitor] Failed to insert call for ${tokenMint}:`, callInsertError);
+            }
 
             // Track caller if first call
             if (isFirstCall && (callerUsername || callerDisplayName)) {
@@ -760,7 +764,7 @@ serve(async (req) => {
               if (isFantasyMode) {
                 // Create fantasy position
                 const tokenAmount = price ? buyAmountUsd / price : null;
-                await supabase
+                const { error: fantasyInsertError } = await supabase
                   .from('telegram_fantasy_positions')
                   .insert({
                     channel_config_id: config.id,
@@ -777,7 +781,11 @@ serve(async (req) => {
                     caller_display_name: callerDisplayName
                   });
 
-                totalFantasyBuys++;
+                if (fantasyInsertError) {
+                  console.error(`[telegram-channel-monitor] Failed to insert fantasy position for ${tokenMint}:`, fantasyInsertError);
+                } else {
+                  totalFantasyBuys++;
+                }
                 console.log(`[telegram-channel-monitor] Fantasy buy: ${currentTokenData?.symbol || tokenMint} - $${buyAmountUsd} @ $${price?.toFixed(10)}`);
               } else {
                 // Real trading

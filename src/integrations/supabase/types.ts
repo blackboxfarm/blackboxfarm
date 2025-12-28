@@ -4666,6 +4666,7 @@ export type Database = {
           buy_tx_signature: string | null
           caller_display_name: string | null
           caller_username: string | null
+          channel_config_id: string | null
           channel_id: string
           channel_name: string | null
           contains_ape: boolean | null
@@ -4694,6 +4695,7 @@ export type Database = {
           buy_tx_signature?: string | null
           caller_display_name?: string | null
           caller_username?: string | null
+          channel_config_id?: string | null
           channel_id: string
           channel_name?: string | null
           contains_ape?: boolean | null
@@ -4722,6 +4724,7 @@ export type Database = {
           buy_tx_signature?: string | null
           caller_display_name?: string | null
           caller_username?: string | null
+          channel_config_id?: string | null
           channel_id?: string
           channel_name?: string | null
           contains_ape?: boolean | null
@@ -4744,7 +4747,15 @@ export type Database = {
           token_symbol?: string | null
           updated_at?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "telegram_channel_calls_channel_config_id_fkey"
+            columns: ["channel_config_id"]
+            isOneToOne: false
+            referencedRelation: "telegram_channel_config"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       telegram_channel_config: {
         Row: {
@@ -4854,6 +4865,7 @@ export type Database = {
           sold_at: string | null
           sold_price_usd: number | null
           status: string
+          target_sell_multiplier: number | null
           token_amount: number | null
           token_mint: string
           token_name: string | null
@@ -4880,6 +4892,7 @@ export type Database = {
           sold_at?: string | null
           sold_price_usd?: number | null
           status?: string
+          target_sell_multiplier?: number | null
           token_amount?: number | null
           token_mint: string
           token_name?: string | null
@@ -4906,6 +4919,7 @@ export type Database = {
           sold_at?: string | null
           sold_price_usd?: number | null
           status?: string
+          target_sell_multiplier?: number | null
           token_amount?: number | null
           token_mint?: string
           token_name?: string | null
