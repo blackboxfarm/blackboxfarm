@@ -53,6 +53,11 @@ interface ChannelConfig {
   total_buys_executed: number;
   last_check_at: string | null;
   trading_mode: 'simple' | 'advanced' | null;
+  // FlipIt auto-buy settings
+  flipit_enabled: boolean;
+  flipit_buy_amount_usd: number;
+  flipit_sell_multiplier: number;
+  flipit_max_daily_positions: number;
 }
 
 export function ChannelManagement() {
@@ -216,6 +221,39 @@ export function ChannelManagement() {
     } catch (err) {
       console.error('Error toggling trading mode:', err);
       toast.error('Failed to toggle trading mode');
+    }
+  };
+
+  const toggleFlipitEnabled = async (channel: ChannelConfig) => {
+    try {
+      const newValue = !channel.flipit_enabled;
+      const { error } = await supabase
+        .from('telegram_channel_config')
+        .update({ flipit_enabled: newValue })
+        .eq('id', channel.id);
+
+      if (error) throw error;
+
+      toast.success(`FlipIt auto-buy ${newValue ? 'enabled' : 'disabled'}`);
+      loadChannels();
+    } catch (err) {
+      console.error('Error toggling FlipIt:', err);
+      toast.error('Failed to toggle FlipIt');
+    }
+  };
+
+  const updateFlipitSettings = async (channelId: string, field: string, value: number) => {
+    try {
+      const { error } = await supabase
+        .from('telegram_channel_config')
+        .update({ [field]: value })
+        .eq('id', channelId);
+
+      if (error) throw error;
+      loadChannels();
+    } catch (err) {
+      console.error('Error updating FlipIt settings:', err);
+      toast.error('Failed to update FlipIt settings');
     }
   };
 
@@ -768,6 +806,67 @@ with TelegramClient(StringSession(), api_id, api_hash) as client:
                   ) : (
                     <p className="text-xs text-muted-foreground">
                       Uses basic APE keyword detection with fixed thresholds.
+                    </p>
+                  )}
+                </div>
+
+                {/* FlipIt Auto-Buy Section */}
+                <div className="p-3 bg-muted/30 rounded-lg border border-border/50">
+                  <div className="flex items-center justify-between mb-2">
+                    <div className="flex items-center gap-2">
+                      <span className="text-lg">🚀</span>
+                      <span className="text-sm font-medium">FlipIt Auto-Buy</span>
+                      {channel.flipit_enabled && (
+                        <Badge variant="outline" className="bg-green-500/10 text-green-400 border-green-500/30 text-xs">
+                          Active
+                        </Badge>
+                      )}
+                    </div>
+                    <Switch
+                      checked={channel.flipit_enabled || false}
+                      onCheckedChange={() => toggleFlipitEnabled(channel)}
+                    />
+                  </div>
+                  
+                  {channel.flipit_enabled ? (
+                    <div className="space-y-3">
+                      <p className="text-xs text-muted-foreground">
+                        When rules match, automatically create a FlipIt position + fantasy tracking.
+                      </p>
+                      <div className="grid grid-cols-3 gap-2">
+                        <div>
+                          <Label className="text-xs text-muted-foreground">Buy ($)</Label>
+                          <Input
+                            type="number"
+                            value={channel.flipit_buy_amount_usd || 10}
+                            onChange={(e) => updateFlipitSettings(channel.id, 'flipit_buy_amount_usd', Number(e.target.value))}
+                            className="h-8 text-sm"
+                          />
+                        </div>
+                        <div>
+                          <Label className="text-xs text-muted-foreground">Target (X)</Label>
+                          <Input
+                            type="number"
+                            step="0.1"
+                            value={channel.flipit_sell_multiplier || 2}
+                            onChange={(e) => updateFlipitSettings(channel.id, 'flipit_sell_multiplier', Number(e.target.value))}
+                            className="h-8 text-sm"
+                          />
+                        </div>
+                        <div>
+                          <Label className="text-xs text-muted-foreground">Max/Day</Label>
+                          <Input
+                            type="number"
+                            value={channel.flipit_max_daily_positions || 5}
+                            onChange={(e) => updateFlipitSettings(channel.id, 'flipit_max_daily_positions', Number(e.target.value))}
+                            className="h-8 text-sm"
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  ) : (
+                    <p className="text-xs text-muted-foreground">
+                      Enable to auto-execute real trades via FlipIt when trading rules match.
                     </p>
                   )}
                 </div>

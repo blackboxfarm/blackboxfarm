@@ -205,12 +205,12 @@ serve(async (req) => {
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
     const body = await req.json();
-    const { action, tokenMint, walletId, buyAmountUsd, targetMultiplier, positionId, slippageBps, priorityFeeMode } = body;
+    const { action, tokenMint, walletId, buyAmountUsd, targetMultiplier, positionId, slippageBps, priorityFeeMode, source, sourceChannelId } = body;
 
     // Default slippage 5% (500 bps), configurable
     const effectiveSlippage = slippageBps || 500;
     
-    console.log("FlipIt execute:", { action, tokenMint, walletId, buyAmountUsd, targetMultiplier, positionId, slippageBps: effectiveSlippage, priorityFeeMode });
+    console.log("FlipIt execute:", { action, tokenMint, walletId, buyAmountUsd, targetMultiplier, positionId, slippageBps: effectiveSlippage, priorityFeeMode, source, sourceChannelId });
 
     if (action === "buy") {
       if (!tokenMint || !walletId) {
@@ -250,7 +250,7 @@ serve(async (req) => {
         userId = user?.id || null;
       }
 
-      // Create position record first (with social links)
+      // Create position record first (with social links and source tracking)
       const { data: position, error: posError } = await supabase
         .from("flip_positions")
         .insert({
@@ -267,7 +267,9 @@ serve(async (req) => {
           buy_price_usd: currentPrice,
           target_multiplier: mult,
           target_price_usd: targetPrice,
-          status: "pending_buy"
+          status: "pending_buy",
+          source: source || "manual",
+          source_channel_id: sourceChannelId || null
         })
         .select()
         .single();
