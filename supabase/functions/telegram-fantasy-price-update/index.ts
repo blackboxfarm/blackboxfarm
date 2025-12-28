@@ -6,11 +6,16 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
-// Fetch token prices in batch from Jupiter
-async function fetchTokenPrices(tokenMints: string[]): Promise<Record<string, number>> {
-  const prices: Record<string, number> = {};
+interface TokenData {
+  price: number;
+  symbol: string | null;
+}
+
+// Fetch token prices and symbols in batch from Jupiter + DexScreener
+async function fetchTokenData(tokenMints: string[]): Promise<Record<string, TokenData>> {
+  const tokenData: Record<string, TokenData> = {};
   
-  if (tokenMints.length === 0) return prices;
+  if (tokenMints.length === 0) return tokenData;
   
   try {
     // Jupiter supports batching up to 100 tokens
@@ -25,7 +30,10 @@ async function fetchTokenPrices(tokenMints: string[]): Promise<Record<string, nu
       if (data.data) {
         for (const mint of batch) {
           if (data.data[mint]?.price) {
-            prices[mint] = parseFloat(data.data[mint].price);
+            tokenData[mint] = {
+              price: parseFloat(data.data[mint].price),
+              symbol: null // Jupiter doesn't return symbol in price endpoint
+            };
           }
         }
       }
@@ -34,21 +42,25 @@ async function fetchTokenPrices(tokenMints: string[]): Promise<Record<string, nu
     console.error('[telegram-fantasy-price-update] Error fetching Jupiter prices:', error);
   }
   
-  // Fallback to DexScreener for missing prices
-  const missingMints = tokenMints.filter(m => !prices[m]);
-  for (const mint of missingMints) {
+  // Use DexScreener for missing prices AND to get symbols
+  const mintsNeedingData = tokenMints.filter(m => !tokenData[m] || !tokenData[m].symbol);
+  for (const mint of mintsNeedingData) {
     try {
       const response = await fetch(`https://api.dexscreener.com/latest/dex/tokens/${mint}`);
       const data = await response.json();
-      if (data.pairs?.[0]?.priceUsd) {
-        prices[mint] = parseFloat(data.pairs[0].priceUsd);
+      const pair = data.pairs?.[0];
+      if (pair) {
+        tokenData[mint] = {
+          price: tokenData[mint]?.price || parseFloat(pair.priceUsd || '0'),
+          symbol: pair.baseToken?.symbol || null
+        };
       }
     } catch (error) {
-      console.error(`[telegram-fantasy-price-update] Error fetching DexScreener price for ${mint}:`, error);
+      console.error(`[telegram-fantasy-price-update] Error fetching DexScreener data for ${mint}:`, error);
     }
   }
   
-  return prices;
+  return tokenData;
 }
 
 serve(async (req) => {
@@ -94,45 +106,53 @@ serve(async (req) => {
 
     // Get unique token mints
     const tokenMints = [...new Set(positions.map(p => p.token_mint))];
-    console.log(`[telegram-fantasy-price-update] Fetching prices for ${tokenMints.length} tokens`);
+    console.log(`[telegram-fantasy-price-update] Fetching data for ${tokenMints.length} tokens`);
 
-    // Fetch current prices
-    const prices = await fetchTokenPrices(tokenMints);
-    console.log(`[telegram-fantasy-price-update] Got prices for ${Object.keys(prices).length} tokens`);
+    // Fetch current prices and symbols
+    const tokenData = await fetchTokenData(tokenMints);
+    console.log(`[telegram-fantasy-price-update] Got data for ${Object.keys(tokenData).length} tokens`);
 
     // Update each position
     let updatedCount = 0;
     const updates: any[] = [];
 
     for (const position of positions) {
-      const currentPrice = prices[position.token_mint];
+      const data = tokenData[position.token_mint];
       
-      if (currentPrice !== undefined) {
+      if (data?.price !== undefined) {
         const entryPrice = position.entry_price_usd;
         const entryAmount = position.entry_amount_usd;
         
         // Calculate current value and PnL
         const tokenAmount = position.token_amount || (entryPrice > 0 ? entryAmount / entryPrice : 0);
-        const currentValue = tokenAmount * currentPrice;
+        const currentValue = tokenAmount * data.price;
         const pnlUsd = currentValue - entryAmount;
         const pnlPercent = entryAmount > 0 ? ((currentValue - entryAmount) / entryAmount) * 100 : 0;
 
+        // Build update object - include symbol if we got it and position doesn't have one
+        const updateObj: Record<string, any> = {
+          current_price_usd: data.price,
+          unrealized_pnl_usd: pnlUsd,
+          unrealized_pnl_percent: pnlPercent
+        };
+        
+        // Update symbol if we have one and position is missing it
+        if (data.symbol && !position.token_symbol) {
+          updateObj.token_symbol = data.symbol;
+        }
+
         const { error: updateError } = await supabase
           .from('telegram_fantasy_positions')
-          .update({
-            current_price_usd: currentPrice,
-            unrealized_pnl_usd: pnlUsd,
-            unrealized_pnl_percent: pnlPercent
-          })
+          .update(updateObj)
           .eq('id', position.id);
 
         if (!updateError) {
           updatedCount++;
           updates.push({
             id: position.id,
-            token: position.token_symbol,
+            token: data.symbol || position.token_symbol || position.token_mint.slice(0, 8),
             entryPrice: entryPrice,
-            currentPrice: currentPrice,
+            currentPrice: data.price,
             pnlUsd: pnlUsd.toFixed(2),
             pnlPercent: pnlPercent.toFixed(2)
           });
