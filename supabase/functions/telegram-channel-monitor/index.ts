@@ -399,15 +399,23 @@ serve(async (req) => {
     const supabase = createClient(supabaseUrl, supabaseKey);
 
     const body = await req.json().catch(() => ({}));
-    const { action, channelId: requestChannelId } = body;
+    const { action, channelId: requestChannelId, singleChannel } = body;
 
-    console.log(`[telegram-channel-monitor] Action: ${action || 'scan'}`);
+    console.log(`[telegram-channel-monitor] Action: ${action || 'scan'}, singleChannel: ${singleChannel}, channelId: ${requestChannelId}`);
 
-    // Get active channel configurations
-    const { data: configs, error: configError } = await supabase
-      .from('telegram_channel_config')
-      .select('*')
-      .eq('is_active', true);
+    // Build query for channel configurations
+    let query = supabase.from('telegram_channel_config').select('*');
+    
+    // If single channel mode, filter to just that one channel
+    if (singleChannel && requestChannelId) {
+      console.log(`[telegram-channel-monitor] Single channel mode: ${requestChannelId}`);
+      query = query.eq('channel_id', requestChannelId);
+    } else {
+      // Otherwise, only get active channels
+      query = query.eq('is_active', true);
+    }
+
+    const { data: configs, error: configError } = await query;
 
     if (configError) {
       console.error('[telegram-channel-monitor] Error fetching configs:', configError);
@@ -418,10 +426,10 @@ serve(async (req) => {
     }
 
     if (!configs || configs.length === 0) {
-      console.log('[telegram-channel-monitor] No active channel configurations found');
+      console.log('[telegram-channel-monitor] No channel configurations found');
       return new Response(JSON.stringify({
         success: true,
-        message: 'No active channel configurations',
+        message: singleChannel ? 'Channel not found' : 'No active channel configurations',
         processed: 0
       }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
