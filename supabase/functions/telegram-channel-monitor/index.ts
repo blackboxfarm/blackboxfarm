@@ -1154,63 +1154,115 @@ serve(async (req) => {
 
             // Execute trade or fantasy position
             if (currentRuleResult.decision === 'buy' || currentRuleResult.decision === 'fantasy_buy') {
-              if (isFantasyMode || currentRuleResult.decision === 'fantasy_buy') {
-                // Fantasy position
-                const tokenAmount = currentTokenData?.price ? currentRuleResult.buyAmount / currentTokenData.price : null;
-                await supabase
-                  .from('telegram_fantasy_positions')
-                  .insert({
-                    channel_config_id: config.id,
-                    token_mint: tokenMint,
-                    token_symbol: currentTokenData?.symbol || null,
-                    token_name: currentTokenData?.name || null,
-                    entry_price_usd: currentTokenData?.price,
-                    entry_amount_usd: currentRuleResult.buyAmount,
-                    token_amount: tokenAmount,
-                    current_price_usd: currentTokenData?.price,
-                    target_sell_multiplier: currentRuleResult.sellTarget,
-                    status: 'open',
-                    caller_username: callerUsername,
-                    caller_display_name: callerDisplayName,
-                    stop_loss_pct: currentRuleResult.stopLossEnabled ? currentRuleResult.stopLoss : null,
-                    rule_id: currentRuleResult.ruleId
-                  });
+              const tokenAmount = currentTokenData?.price ? currentRuleResult.buyAmount / currentTokenData.price : null;
+              
+              // Always create fantasy position for tracking (supplement mode)
+              await supabase
+                .from('telegram_fantasy_positions')
+                .insert({
+                  channel_config_id: config.id,
+                  token_mint: tokenMint,
+                  token_symbol: currentTokenData?.symbol || null,
+                  token_name: currentTokenData?.name || null,
+                  entry_price_usd: currentTokenData?.price,
+                  entry_amount_usd: currentRuleResult.buyAmount,
+                  token_amount: tokenAmount,
+                  current_price_usd: currentTokenData?.price,
+                  target_sell_multiplier: currentRuleResult.sellTarget,
+                  status: 'open',
+                  caller_username: callerUsername,
+                  caller_display_name: callerDisplayName,
+                  stop_loss_pct: currentRuleResult.stopLossEnabled ? currentRuleResult.stopLoss : null,
+                  rule_id: currentRuleResult.ruleId
+                });
 
-                totalFantasyBuys++;
-                console.log(`[telegram-channel-monitor] Fantasy: ${currentTokenData?.symbol || tokenMint} - $${currentRuleResult.buyAmount} @ $${currentTokenData?.price?.toFixed(10)} (Rule: ${currentRuleResult.matchedRule?.name || 'Simple'})`);
-              } else {
-                // Real trading
-                if (config.flipit_wallet_id) {
-                  try {
-                    await supabase.functions.invoke('flipit-execute', {
-                      body: {
-                        walletId: config.flipit_wallet_id,
-                        action: 'buy',
-                        tokenMint,
-                        amountUsd: currentRuleResult.buyAmount,
-                        targetMultiplier: currentRuleResult.sellTarget,
-                        stopLossPct: currentRuleResult.stopLossEnabled ? currentRuleResult.stopLoss : null
-                      }
-                    });
-                    totalBuys++;
-                  } catch (buyError) {
-                    console.error('[telegram-channel-monitor] FlipIt buy error:', buyError);
+              totalFantasyBuys++;
+              console.log(`[telegram-channel-monitor] Fantasy: ${currentTokenData?.symbol || tokenMint} - $${currentRuleResult.buyAmount} @ $${currentTokenData?.price?.toFixed(10)} (Rule: ${currentRuleResult.matchedRule?.name || 'Simple'})`);
+
+              // FlipIt auto-buy: trigger when enabled and rules match
+              if (config.flipit_enabled) {
+                const flipitBuyAmount = config.flipit_buy_amount_usd || 10;
+                const flipitSellMultiplier = config.flipit_sell_multiplier || 2;
+                const flipitMaxDaily = config.flipit_max_daily_positions || 5;
+
+                // Check daily position limit
+                const today = new Date();
+                today.setHours(0, 0, 0, 0);
+                
+                const { count: todayPositions } = await supabase
+                  .from('flip_positions')
+                  .select('id', { count: 'exact', head: true })
+                  .eq('source', 'telegram')
+                  .eq('source_channel_id', config.id)
+                  .gte('created_at', today.toISOString());
+
+                if ((todayPositions || 0) < flipitMaxDaily) {
+                  // Find active FlipIt wallet
+                  const { data: flipitWallets } = await supabase
+                    .from('flipit_wallets')
+                    .select('id')
+                    .eq('is_active', true)
+                    .limit(1);
+
+                  const walletId = flipitWallets?.[0]?.id || config.flipit_wallet_id;
+                  
+                  if (walletId) {
+                    try {
+                      console.log(`[telegram-channel-monitor] FlipIt: Triggering auto-buy for ${currentTokenData?.symbol || tokenMint} - $${flipitBuyAmount} @ ${flipitSellMultiplier}x`);
+                      
+                      await supabase.functions.invoke('flipit-execute', {
+                        body: {
+                          walletId,
+                          action: 'buy',
+                          tokenMint,
+                          amountUsd: flipitBuyAmount,
+                          targetMultiplier: flipitSellMultiplier,
+                          source: 'telegram',
+                          sourceChannelId: config.id
+                        }
+                      });
+                      totalBuys++;
+                      console.log(`[telegram-channel-monitor] FlipIt: Buy executed successfully`);
+                    } catch (buyError) {
+                      console.error('[telegram-channel-monitor] FlipIt buy error:', buyError);
+                    }
+                  } else {
+                    console.log('[telegram-channel-monitor] FlipIt: No active wallet found, skipping');
                   }
+                } else {
+                  console.log(`[telegram-channel-monitor] FlipIt: Daily limit reached (${todayPositions}/${flipitMaxDaily})`);
                 }
+              } else if (!isFantasyMode && config.flipit_wallet_id) {
+                // Legacy: Real trading without flipit_enabled flag
+                try {
+                  await supabase.functions.invoke('flipit-execute', {
+                    body: {
+                      walletId: config.flipit_wallet_id,
+                      action: 'buy',
+                      tokenMint,
+                      amountUsd: currentRuleResult.buyAmount,
+                      targetMultiplier: currentRuleResult.sellTarget,
+                      stopLossPct: currentRuleResult.stopLossEnabled ? currentRuleResult.stopLoss : null
+                    }
+                  });
+                  totalBuys++;
+                } catch (buyError) {
+                  console.error('[telegram-channel-monitor] FlipIt buy error:', buyError);
+                }
+              }
 
-                // Email notification
-                if (config.email_notifications && config.notification_email) {
-                  await sendEmailNotification(
-                    supabase,
-                    config.notification_email,
-                    tokenMint,
-                    currentTokenData?.symbol || 'UNKNOWN',
-                    currentTokenData?.price || 0,
-                    currentRuleResult.buyAmount,
-                    currentRuleResult.sellTarget,
-                    currentRuleResult.matchedRule?.name || null
-                  );
-                }
+              // Email notification
+              if (config.email_notifications && config.notification_email) {
+                await sendEmailNotification(
+                  supabase,
+                  config.notification_email,
+                  tokenMint,
+                  currentTokenData?.symbol || 'UNKNOWN',
+                  currentTokenData?.price || 0,
+                  currentRuleResult.buyAmount,
+                  currentRuleResult.sellTarget,
+                  currentRuleResult.matchedRule?.name || null
+                );
               }
             }
           }

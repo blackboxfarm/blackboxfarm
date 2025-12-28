@@ -2482,6 +2482,8 @@ export type Database = {
           sell_executed_at: string | null
           sell_price_usd: number | null
           sell_signature: string | null
+          source: string | null
+          source_channel_id: string | null
           status: string | null
           target_multiplier: number | null
           target_price_usd: number | null
@@ -2523,6 +2525,8 @@ export type Database = {
           sell_executed_at?: string | null
           sell_price_usd?: number | null
           sell_signature?: string | null
+          source?: string | null
+          source_channel_id?: string | null
           status?: string | null
           target_multiplier?: number | null
           target_price_usd?: number | null
@@ -2564,6 +2568,8 @@ export type Database = {
           sell_executed_at?: string | null
           sell_price_usd?: number | null
           sell_signature?: string | null
+          source?: string | null
+          source_channel_id?: string | null
           status?: string | null
           target_multiplier?: number | null
           target_price_usd?: number | null
@@ -2594,6 +2600,33 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      flipit_global_config: {
+        Row: {
+          created_at: string | null
+          default_buy_amount_usd: number | null
+          default_max_daily_positions: number | null
+          default_sell_multiplier: number | null
+          id: string
+          updated_at: string | null
+        }
+        Insert: {
+          created_at?: string | null
+          default_buy_amount_usd?: number | null
+          default_max_daily_positions?: number | null
+          default_sell_multiplier?: number | null
+          id?: string
+          updated_at?: string | null
+        }
+        Update: {
+          created_at?: string | null
+          default_buy_amount_usd?: number | null
+          default_max_daily_positions?: number | null
+          default_sell_multiplier?: number | null
+          id?: string
+          updated_at?: string | null
+        }
+        Relationships: []
       }
       flipit_tweet_templates: {
         Row: {
@@ -4769,6 +4802,10 @@ export type Database = {
           entity_access_hash: string | null
           fantasy_buy_amount_usd: number | null
           fantasy_mode: boolean | null
+          flipit_buy_amount_usd: number | null
+          flipit_enabled: boolean | null
+          flipit_max_daily_positions: number | null
+          flipit_sell_multiplier: number | null
           flipit_wallet_id: string | null
           id: string
           is_active: boolean | null
@@ -4800,6 +4837,10 @@ export type Database = {
           entity_access_hash?: string | null
           fantasy_buy_amount_usd?: number | null
           fantasy_mode?: boolean | null
+          flipit_buy_amount_usd?: number | null
+          flipit_enabled?: boolean | null
+          flipit_max_daily_positions?: number | null
+          flipit_sell_multiplier?: number | null
           flipit_wallet_id?: string | null
           id?: string
           is_active?: boolean | null
@@ -4831,6 +4872,10 @@ export type Database = {
           entity_access_hash?: string | null
           fantasy_buy_amount_usd?: number | null
           fantasy_mode?: boolean | null
+          flipit_buy_amount_usd?: number | null
+          flipit_enabled?: boolean | null
+          flipit_max_daily_positions?: number | null
+          flipit_sell_multiplier?: number | null
           flipit_wallet_id?: string | null
           id?: string
           is_active?: boolean | null
