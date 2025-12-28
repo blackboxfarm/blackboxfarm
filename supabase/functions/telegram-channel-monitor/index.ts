@@ -244,11 +244,13 @@ View on DexScreener: https://dexscreener.com/solana/${tokenMint}
   }
 }
 
-// Scrape messages from public Telegram channel web view
+// Scrape messages from public Telegram channel web view with caller info
 async function scrapePublicChannel(username: string): Promise<Array<{
   messageId: string;
   text: string;
   date: Date;
+  callerUsername?: string;
+  callerDisplayName?: string;
 }>> {
   const url = `https://t.me/s/${username}`;
   console.log(`[telegram-channel-monitor] Scraping public channel: ${url}`);
@@ -268,15 +270,32 @@ async function scrapePublicChannel(username: string): Promise<Array<{
     }
     
     const html = await response.text();
-    const messages: Array<{ messageId: string; text: string; date: Date }> = [];
+    const messages: Array<{ messageId: string; text: string; date: Date; callerUsername?: string; callerDisplayName?: string }> = [];
     
-    // Parse messages using regex (Telegram's public page has a predictable structure)
-    // Each message is in a div with class "tgme_widget_message"
-    const messagePattern = /<div class="tgme_widget_message[^"]*"[^>]*data-post="([^"]+)"[^>]*>[\s\S]*?<div class="tgme_widget_message_text[^"]*"[^>]*>([\s\S]*?)<\/div>[\s\S]*?<time[^>]*datetime="([^"]+)"[^>]*>/gi;
+    // Parse messages with caller info - look for message blocks
+    // Each message block contains author info and the message text
+    const messageBlockPattern = /<div class="tgme_widget_message_wrap[^"]*"[^>]*>[\s\S]*?<div class="tgme_widget_message[^"]*"[^>]*data-post="([^"]+)"[^>]*>([\s\S]*?)<\/div>\s*<\/div>\s*<\/div>/gi;
     
     let match;
-    while ((match = messagePattern.exec(html)) !== null) {
-      const [, postId, rawText, dateStr] = match;
+    while ((match = messageBlockPattern.exec(html)) !== null) {
+      const [fullBlock, postId, messageContent] = match;
+      
+      // Extract author name (display name)
+      const authorNameMatch = messageContent.match(/<span class="tgme_widget_message_author_name"[^>]*>([^<]+)<\/span>/i);
+      const callerDisplayName = authorNameMatch ? authorNameMatch[1].trim() : undefined;
+      
+      // Extract author link/username if available
+      const authorLinkMatch = messageContent.match(/<a class="tgme_widget_message_owner_name"[^>]*href="https:\/\/t\.me\/([^"\/]+)"[^>]*>/i);
+      const callerUsername = authorLinkMatch ? authorLinkMatch[1] : (callerDisplayName ? callerDisplayName.replace(/\s+/g, '_').toLowerCase() : undefined);
+      
+      // Extract message text
+      const textMatch = messageContent.match(/<div class="tgme_widget_message_text[^"]*"[^>]*>([\s\S]*?)<\/div>/i);
+      const rawText = textMatch ? textMatch[1] : '';
+      
+      // Extract date
+      const dateMatch = messageContent.match(/<time[^>]*datetime="([^"]+)"[^>]*>/i);
+      const dateStr = dateMatch ? dateMatch[1] : new Date().toISOString();
+      
       // Clean HTML from text
       const text = rawText
         .replace(/<br\s*\/?>/gi, '\n')
@@ -293,8 +312,41 @@ async function scrapePublicChannel(username: string): Promise<Array<{
         messages.push({
           messageId,
           text,
-          date: new Date(dateStr)
+          date: new Date(dateStr),
+          callerUsername,
+          callerDisplayName
         });
+        
+        if (callerDisplayName) {
+          console.log(`[telegram-channel-monitor] Message from caller: ${callerDisplayName} (@${callerUsername})`);
+        }
+      }
+    }
+    
+    // Fallback to simpler pattern if no messages found
+    if (messages.length === 0) {
+      const simplePattern = /<div class="tgme_widget_message[^"]*"[^>]*data-post="([^"]+)"[^>]*>[\s\S]*?<div class="tgme_widget_message_text[^"]*"[^>]*>([\s\S]*?)<\/div>[\s\S]*?<time[^>]*datetime="([^"]+)"[^>]*>/gi;
+      
+      while ((match = simplePattern.exec(html)) !== null) {
+        const [, postId, rawText, dateStr] = match;
+        const text = rawText
+          .replace(/<br\s*\/?>/gi, '\n')
+          .replace(/<[^>]+>/g, '')
+          .replace(/&amp;/g, '&')
+          .replace(/&lt;/g, '<')
+          .replace(/&gt;/g, '>')
+          .replace(/&quot;/g, '"')
+          .replace(/&#39;/g, "'")
+          .trim();
+        
+        if (text) {
+          const messageId = postId.split('/').pop() || postId;
+          messages.push({
+            messageId,
+            text,
+            date: new Date(dateStr)
+          });
+        }
       }
     }
     
@@ -358,7 +410,7 @@ serve(async (req) => {
       console.log(`[telegram-channel-monitor] Processing channel: ${channelUsername || channelId} (${config.channel_name || 'unnamed'}) - Fantasy Mode: ${isFantasyMode}`);
 
       try {
-        let channelMessages: Array<{ messageId: string; text: string; date: Date }> = [];
+        let channelMessages: Array<{ messageId: string; text: string; date: Date; callerUsername?: string; callerDisplayName?: string }> = [];
         
         // If channel has a public username, scrape from t.me/s/
         if (channelUsername) {
@@ -382,10 +434,13 @@ serve(async (req) => {
               
               channelMessages = filtered.map((update: any) => {
                 const msg = update.channel_post || update.message;
+                const from = msg.from || msg.sender_chat || {};
                 return {
                   messageId: msg.message_id.toString(),
                   text: msg.text || '',
-                  date: new Date(msg.date * 1000)
+                  date: new Date(msg.date * 1000),
+                  callerUsername: from.username,
+                  callerDisplayName: from.first_name ? `${from.first_name} ${from.last_name || ''}`.trim() : from.title
                 };
               });
             }
@@ -400,6 +455,8 @@ serve(async (req) => {
           const messageId = msg.messageId;
           const messageText = msg.text;
           const messageDate = msg.date;
+          const callerUsername = msg.callerUsername;
+          const callerDisplayName = msg.callerDisplayName;
 
           // Skip if message is too old (> 15 minutes for 4-min cron)
           const messageAgeMinutes = (Date.now() - messageDate.getTime()) / 60000;
@@ -453,7 +510,7 @@ serve(async (req) => {
             finalDecision = 'fantasy_buy';
           }
 
-          // Log the interpretation
+          // Log the interpretation with caller info
           const { data: interpretationRecord } = await supabase
             .from('telegram_message_interpretations')
             .insert({
@@ -469,26 +526,43 @@ serve(async (req) => {
               confidence_score: aiResult.confidence,
               token_mint: firstToken || null,
               token_symbol: tokenData?.symbol || null,
-              price_at_detection: tokenData?.price || null
+              price_at_detection: tokenData?.price || null,
+              caller_username: callerUsername || null,
+              caller_display_name: callerDisplayName || null
             })
             .select()
             .single();
 
-          console.log(`[telegram-channel-monitor] AI Interpretation: ${aiResult.summary} -> ${finalDecision}`);
+          console.log(`[telegram-channel-monitor] AI Interpretation: ${aiResult.summary} -> ${finalDecision} (Caller: ${callerDisplayName || callerUsername || 'Unknown'})`);
 
           // Process each token address
           for (const tokenMint of addresses) {
-            // Check if already processed
-            const { data: existing } = await supabase
+            // Check if this token has EVER been called before (across ALL channels) - for first-caller tracking
+            const { data: existingGlobal } = await supabase
+              .from('telegram_channel_calls')
+              .select('id, caller_username, caller_display_name, channel_name')
+              .eq('token_mint', tokenMint)
+              .order('created_at', { ascending: true })
+              .limit(1)
+              .single();
+
+            const isFirstCall = !existingGlobal;
+            
+            // Check if already processed in THIS channel
+            const { data: existingInChannel } = await supabase
               .from('telegram_channel_calls')
               .select('id')
               .eq('channel_id', channelId)
               .eq('token_mint', tokenMint)
               .single();
 
-            if (existing) {
-              console.log(`[telegram-channel-monitor] Token ${tokenMint} already processed, skipping`);
+            if (existingInChannel) {
+              console.log(`[telegram-channel-monitor] Token ${tokenMint} already processed in this channel, skipping`);
               continue;
+            }
+            
+            if (!isFirstCall) {
+              console.log(`[telegram-channel-monitor] Token ${tokenMint} was first called by ${existingGlobal.caller_display_name || existingGlobal.caller_username} in ${existingGlobal.channel_name}`);
             }
 
             // Get token-specific data if different from first token
@@ -538,7 +612,7 @@ serve(async (req) => {
               }
             }
 
-            // Insert call record
+            // Insert call record with caller info
             const { data: callRecord, error: insertError } = await supabase
               .from('telegram_channel_calls')
               .insert({
@@ -556,7 +630,10 @@ serve(async (req) => {
                 buy_amount_usd: buyAmountUsd,
                 sell_multiplier: sellMultiplier,
                 status: skipReason ? 'skipped' : (isFantasyMode ? 'fantasy_bought' : 'detected'),
-                skip_reason: skipReason
+                skip_reason: skipReason,
+                caller_username: callerUsername || null,
+                caller_display_name: callerDisplayName || null,
+                is_first_call: isFirstCall
               })
               .select()
               .single();
@@ -564,6 +641,47 @@ serve(async (req) => {
             if (insertError) {
               console.error(`[telegram-channel-monitor] Error inserting call:`, insertError);
               continue;
+            }
+            
+            // Update or create caller record for first-call tracking
+            if (callerUsername && isFirstCall) {
+              const { data: existingCaller } = await supabase
+                .from('telegram_callers')
+                .select('*')
+                .eq('username', callerUsername)
+                .single();
+              
+              if (existingCaller) {
+                // Update existing caller
+                const newChannels = existingCaller.channel_usernames?.includes(channelUsername) 
+                  ? existingCaller.channel_usernames 
+                  : [...(existingCaller.channel_usernames || []), channelUsername].filter(Boolean);
+                
+                await supabase
+                  .from('telegram_callers')
+                  .update({
+                    total_calls: (existingCaller.total_calls || 0) + 1,
+                    channel_usernames: newChannels,
+                    last_call_at: new Date().toISOString(),
+                    updated_at: new Date().toISOString()
+                  })
+                  .eq('id', existingCaller.id);
+                  
+                console.log(`[telegram-channel-monitor] Updated caller ${callerDisplayName || callerUsername}: ${existingCaller.total_calls + 1} total calls`);
+              } else {
+                // Create new caller record
+                await supabase
+                  .from('telegram_callers')
+                  .insert({
+                    username: callerUsername,
+                    display_name: callerDisplayName,
+                    channel_usernames: [channelUsername].filter(Boolean),
+                    total_calls: 1,
+                    last_call_at: new Date().toISOString()
+                  });
+                  
+                console.log(`[telegram-channel-monitor] Created new caller: ${callerDisplayName || callerUsername}`);
+              }
             }
 
             totalProcessed++;
@@ -590,7 +708,10 @@ serve(async (req) => {
                     current_price_usd: price,
                     unrealized_pnl_usd: 0,
                     unrealized_pnl_percent: 0,
-                    status: 'open'
+                    status: 'open',
+                    caller_username: callerUsername || null,
+                    caller_display_name: callerDisplayName || null,
+                    channel_name: config.channel_name
                   });
 
                 if (!fantasyError) {

@@ -4510,11 +4510,73 @@ export type Database = {
         }
         Relationships: []
       }
+      telegram_callers: {
+        Row: {
+          average_gain_percent: number | null
+          best_call_gain_percent: number | null
+          best_call_token_mint: string | null
+          best_call_token_symbol: string | null
+          channel_usernames: string[] | null
+          created_at: string | null
+          display_name: string | null
+          first_seen_at: string | null
+          id: string
+          last_call_at: string | null
+          successful_calls: number | null
+          total_calls: number | null
+          total_pnl_usd: number | null
+          updated_at: string | null
+          username: string
+          win_rate: number | null
+          worst_call_loss_percent: number | null
+        }
+        Insert: {
+          average_gain_percent?: number | null
+          best_call_gain_percent?: number | null
+          best_call_token_mint?: string | null
+          best_call_token_symbol?: string | null
+          channel_usernames?: string[] | null
+          created_at?: string | null
+          display_name?: string | null
+          first_seen_at?: string | null
+          id?: string
+          last_call_at?: string | null
+          successful_calls?: number | null
+          total_calls?: number | null
+          total_pnl_usd?: number | null
+          updated_at?: string | null
+          username: string
+          win_rate?: number | null
+          worst_call_loss_percent?: number | null
+        }
+        Update: {
+          average_gain_percent?: number | null
+          best_call_gain_percent?: number | null
+          best_call_token_mint?: string | null
+          best_call_token_symbol?: string | null
+          channel_usernames?: string[] | null
+          created_at?: string | null
+          display_name?: string | null
+          first_seen_at?: string | null
+          id?: string
+          last_call_at?: string | null
+          successful_calls?: number | null
+          total_calls?: number | null
+          total_pnl_usd?: number | null
+          updated_at?: string | null
+          username?: string
+          win_rate?: number | null
+          worst_call_loss_percent?: number | null
+        }
+        Relationships: []
+      }
       telegram_channel_calls: {
         Row: {
           buy_amount_usd: number | null
           buy_tier: string | null
           buy_tx_signature: string | null
+          caller_display_name: string | null
+          caller_username: string | null
           channel_id: string
           channel_name: string | null
           contains_ape: boolean | null
@@ -4522,6 +4584,7 @@ export type Database = {
           email_sent: boolean | null
           email_sent_at: string | null
           id: string
+          is_first_call: boolean | null
           market_cap_at_call: number | null
           message_id: number
           mint_age_minutes: number | null
@@ -4540,6 +4603,8 @@ export type Database = {
           buy_amount_usd?: number | null
           buy_tier?: string | null
           buy_tx_signature?: string | null
+          caller_display_name?: string | null
+          caller_username?: string | null
           channel_id: string
           channel_name?: string | null
           contains_ape?: boolean | null
@@ -4547,6 +4612,7 @@ export type Database = {
           email_sent?: boolean | null
           email_sent_at?: string | null
           id?: string
+          is_first_call?: boolean | null
           market_cap_at_call?: number | null
           message_id: number
           mint_age_minutes?: number | null
@@ -4565,6 +4631,8 @@ export type Database = {
           buy_amount_usd?: number | null
           buy_tier?: string | null
           buy_tx_signature?: string | null
+          caller_display_name?: string | null
+          caller_username?: string | null
           channel_id?: string
           channel_name?: string | null
           contains_ape?: boolean | null
@@ -4572,6 +4640,7 @@ export type Database = {
           email_sent?: boolean | null
           email_sent_at?: string | null
           id?: string
+          is_first_call?: boolean | null
           market_cap_at_call?: number | null
           message_id?: number
           mint_age_minutes?: number | null
@@ -4675,7 +4744,10 @@ export type Database = {
       telegram_fantasy_positions: {
         Row: {
           call_id: string | null
+          caller_display_name: string | null
+          caller_username: string | null
           channel_config_id: string | null
+          channel_name: string | null
           created_at: string
           current_price_usd: number | null
           entry_amount_usd: number
@@ -4698,7 +4770,10 @@ export type Database = {
         }
         Insert: {
           call_id?: string | null
+          caller_display_name?: string | null
+          caller_username?: string | null
           channel_config_id?: string | null
+          channel_name?: string | null
           created_at?: string
           current_price_usd?: number | null
           entry_amount_usd?: number
@@ -4721,7 +4796,10 @@ export type Database = {
         }
         Update: {
           call_id?: string | null
+          caller_display_name?: string | null
+          caller_username?: string | null
           channel_config_id?: string | null
+          channel_name?: string | null
           created_at?: string
           current_price_usd?: number | null
           entry_amount_usd?: number
@@ -4770,6 +4848,8 @@ export type Database = {
         Row: {
           ai_interpretation: string
           ai_summary: string
+          caller_display_name: string | null
+          caller_username: string | null
           channel_config_id: string | null
           channel_id: string
           confidence_score: number | null
@@ -4787,6 +4867,8 @@ export type Database = {
         Insert: {
           ai_interpretation: string
           ai_summary: string
+          caller_display_name?: string | null
+          caller_username?: string | null
           channel_config_id?: string | null
           channel_id: string
           confidence_score?: number | null
@@ -4804,6 +4886,8 @@ export type Database = {
         Update: {
           ai_interpretation?: string
           ai_summary?: string
+          caller_display_name?: string | null
+          caller_username?: string | null
           channel_config_id?: string | null
           channel_id?: string
           confidence_score?: number | null
