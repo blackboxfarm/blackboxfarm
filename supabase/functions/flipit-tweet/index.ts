@@ -273,8 +273,32 @@ Deno.serve(async (req) => {
      }
 
      // Resolve token symbol/name if missing
-     const rawSymbol = (body.tokenSymbol || "").trim();
-     const needsLookup = !rawSymbol || rawSymbol === "TOKEN" || rawSymbol === "UNKNOWN";
+     let rawSymbol = (body.tokenSymbol || "").trim();
+     let needsLookup = !rawSymbol || rawSymbol === "TOKEN" || rawSymbol === "UNKNOWN";
+
+     // First: use DB (we already store token_symbol/token_name on the position)
+     if (needsLookup && body.txSignature) {
+       const { data, error } = await supabase
+         .from("flip_positions")
+         .select("token_symbol, token_name")
+         .or(`buy_signature.eq.${body.txSignature},sell_signature.eq.${body.txSignature}`)
+         .order("created_at", { ascending: false })
+         .limit(1)
+         .maybeSingle();
+
+       if (error) {
+         console.warn("DB symbol lookup failed:", error);
+       } else if (data?.token_symbol) {
+         body.tokenSymbol = data.token_symbol;
+         body.tokenName = body.tokenName || data.token_name || undefined;
+         console.log("Resolved token info from DB:", { symbol: body.tokenSymbol });
+       }
+
+       rawSymbol = (body.tokenSymbol || "").trim();
+       needsLookup = !rawSymbol || rawSymbol === "TOKEN" || rawSymbol === "UNKNOWN";
+     }
+
+     // Fallback: external lookup by mint
      if (needsLookup && body.tokenMint) {
        const meta = await fetchTokenInfo(body.tokenMint);
        if (meta?.symbol) {
