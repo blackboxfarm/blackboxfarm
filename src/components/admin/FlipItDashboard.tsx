@@ -10,7 +10,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Switch } from '@/components/ui/switch';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
-import { Flame, RefreshCw, TrendingUp, DollarSign, Wallet, Clock, CheckCircle2, XCircle, Loader2, Plus, Copy, ArrowUpRight, Key, Settings, Zap, Activity, Radio, Pencil, ChevronDown, Coins, Eye, EyeOff, RotateCcw, AlertTriangle, Twitter, Trash2, Globe, Send } from 'lucide-react';
+import { Flame, RefreshCw, TrendingUp, DollarSign, Wallet, Clock, CheckCircle2, XCircle, Loader2, Plus, Copy, ArrowUpRight, Key, Settings, Zap, Activity, Radio, Pencil, ChevronDown, Coins, Eye, EyeOff, RotateCcw, AlertTriangle, Twitter, Trash2, Globe, Send, Rocket, Megaphone, Users, Shield } from 'lucide-react';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { useSolPrice } from '@/hooks/useSolPrice';
 import { FlipItFeeCalculator } from './flipit/FlipItFeeCalculator';
@@ -21,6 +21,20 @@ import TweetTemplateEditor from './TweetTemplateEditor';
 import { usePreviewSuperAdmin } from '@/hooks/usePreviewSuperAdmin';
 import { useAuth } from '@/hooks/useAuth';
 import { useNavigate } from 'react-router-dom';
+
+interface DexPaidStatus {
+  tokenMint: string;
+  activeBoosts: number;
+  hasPaidProfile: boolean;
+  hasActiveAds: boolean;
+  hasCTO: boolean;
+  orders: Array<{
+    type: string;
+    status: string;
+    paymentTimestamp?: number;
+  }>;
+  checkedAt: string;
+}
 
 interface FlipPosition {
   id: string;
@@ -62,6 +76,8 @@ interface FlipPosition {
   emergency_sell_price_usd: number | null;
   emergency_sell_status: string | null;
   emergency_sell_executed_at: string | null;
+  // DEX paid status
+  dex_paid_status: DexPaidStatus | null;
 }
 
 interface SuperAdminWallet {
@@ -779,7 +795,7 @@ export function FlipItDashboard() {
       return;
     }
 
-    let loadedPositions = (data || []) as FlipPosition[];
+    let loadedPositions = (data || []) as unknown as FlipPosition[];
     
     // Collect all unique mints to fetch metadata (for symbols and images)
     const allUniqueMints = [...new Set(loadedPositions.map(p => p.token_mint))];
@@ -834,6 +850,41 @@ export function FlipItDashboard() {
 
     setLimitOrders((data || []) as LimitOrder[]);
   };
+
+  // Check DEX paid status for positions
+  const checkDexPaidStatus = async (tokenMints: string[]) => {
+    if (tokenMints.length === 0) return;
+    
+    try {
+      const { data, error } = await supabase.functions.invoke('dex-paid-checker', {
+        body: { tokenMints, updateDb: true }
+      });
+      
+      if (error) throw error;
+      
+      if (data?.results) {
+        // Update local positions with DEX status
+        setPositions(prev => prev.map(p => {
+          const status = data.results.find((r: DexPaidStatus) => r.tokenMint === p.token_mint);
+          if (status) {
+            return { ...p, dex_paid_status: status };
+          }
+          return p;
+        }));
+      }
+    } catch (err) {
+      console.error('Failed to check DEX paid status:', err);
+    }
+  };
+
+  // Check DEX status when positions load
+  useEffect(() => {
+    const holdingPositions = positions.filter(p => p.status === 'holding' && !p.dex_paid_status);
+    if (holdingPositions.length > 0) {
+      const mints = holdingPositions.map(p => p.token_mint);
+      checkDexPaidStatus(mints);
+    }
+  }, [positions.length]); // Only run when positions count changes
   
   const fetchTokenSymbols = async (mints: string[]): Promise<Record<string, { symbol: string; name: string }>> => {
     const result: Record<string, { symbol: string; name: string }> = {};
@@ -2157,7 +2208,7 @@ export function FlipItDashboard() {
                         </TableCell>
                       <TableCell className="px-2 py-1">
                         <div>
-                          <div className="flex items-center gap-1">
+                          <div className="flex items-center gap-1 flex-wrap">
                             <a
                               href={`https://dexscreener.com/solana/${position.token_mint}`}
                               target="_blank"
@@ -2172,6 +2223,31 @@ export function FlipItDashboard() {
                               <Badge variant="secondary" className="text-[9px] px-1 py-0 gap-0.5">
                                 <RotateCcw className="h-2 w-2" />
                                 REBUY
+                              </Badge>
+                            )}
+                            {/* DEX Paid Status Badges */}
+                            {position.dex_paid_status?.hasPaidProfile && (
+                              <Badge className="text-[9px] px-1 py-0 gap-0.5 bg-green-600 hover:bg-green-700">
+                                <Shield className="h-2 w-2" />
+                                DEX PAID
+                              </Badge>
+                            )}
+                            {position.dex_paid_status?.activeBoosts > 0 && (
+                              <Badge className="text-[9px] px-1 py-0 gap-0.5 bg-orange-500 hover:bg-orange-600">
+                                <Rocket className="h-2 w-2" />
+                                x{position.dex_paid_status.activeBoosts}
+                              </Badge>
+                            )}
+                            {position.dex_paid_status?.hasActiveAds && (
+                              <Badge className="text-[9px] px-1 py-0 gap-0.5 bg-purple-600 hover:bg-purple-700">
+                                <Megaphone className="h-2 w-2" />
+                                ADS
+                              </Badge>
+                            )}
+                            {position.dex_paid_status?.hasCTO && (
+                              <Badge className="text-[9px] px-1 py-0 gap-0.5 bg-blue-600 hover:bg-blue-700">
+                                <Users className="h-2 w-2" />
+                                CTO
                               </Badge>
                             )}
                           </div>
@@ -2727,16 +2803,31 @@ export function FlipItDashboard() {
                             />
                           )}
                           <div>
-                            <a
-                              href={`https://dexscreener.com/solana/${position.token_mint}`}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="font-mono text-xs hover:text-primary cursor-pointer flex items-center gap-1"
-                              title={`View on DexScreener: ${position.token_mint}`}
-                            >
-                              {position.token_symbol || position.token_mint.slice(0, 8) + '...'}
-                              <ArrowUpRight className="h-3 w-3 opacity-50" />
-                            </a>
+                            <div className="flex items-center gap-1 flex-wrap">
+                              <a
+                                href={`https://dexscreener.com/solana/${position.token_mint}`}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="font-mono text-xs hover:text-primary cursor-pointer flex items-center gap-1"
+                                title={`View on DexScreener: ${position.token_mint}`}
+                              >
+                                {position.token_symbol || position.token_mint.slice(0, 8) + '...'}
+                                <ArrowUpRight className="h-3 w-3 opacity-50" />
+                              </a>
+                              {/* DEX Paid Status Badges */}
+                              {position.dex_paid_status?.hasPaidProfile && (
+                                <Badge className="text-[9px] px-1 py-0 gap-0.5 bg-green-600 hover:bg-green-700">
+                                  <Shield className="h-2 w-2" />
+                                  DEX
+                                </Badge>
+                              )}
+                              {position.dex_paid_status?.activeBoosts > 0 && (
+                                <Badge className="text-[9px] px-1 py-0 gap-0.5 bg-orange-500 hover:bg-orange-600">
+                                  <Rocket className="h-2 w-2" />
+                                  x{position.dex_paid_status.activeBoosts}
+                                </Badge>
+                              )}
+                            </div>
                           </div>
                         </div>
                       </TableCell>
