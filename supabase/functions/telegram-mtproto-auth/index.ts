@@ -116,9 +116,21 @@ serve(async (req) => {
 
     if (action === 'save_session') {
       // Allow manual session string input (for users who generate it externally)
-      if (!code) {
-        throw new Error('Session string is required');
+      // Accept either 'code' or 'sessionString' for flexibility
+      const session = code || (await req.clone().json()).sessionString;
+      
+      if (!session || typeof session !== 'string' || session.trim().length === 0) {
+        return new Response(JSON.stringify({
+          success: false,
+          error: 'Session string is required. Provide it as "code" or "sessionString" in the request body.'
+        }), {
+          status: 400,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        });
       }
+
+      // Clean the session string
+      const cleanedSession = session.replace(/\s+/g, '');
 
       // Deactivate any existing sessions
       await supabase
@@ -127,14 +139,25 @@ serve(async (req) => {
         .eq('is_active', true);
 
       // Save new session
-      await supabase
+      const { error: insertError } = await supabase
         .from('telegram_mtproto_session')
         .insert({
-          session_string: code,
+          session_string: cleanedSession,
           phone_number: phoneNumber,
           is_active: true,
           last_used_at: new Date().toISOString()
         });
+
+      if (insertError) {
+        console.error('Error inserting session:', insertError);
+        return new Response(JSON.stringify({
+          success: false,
+          error: `Failed to save session: ${insertError.message}`
+        }), {
+          status: 500,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        });
+      }
 
       return new Response(JSON.stringify({
         success: true,

@@ -234,12 +234,13 @@ export function ChannelManagement() {
 
       if (error) throw error;
       
+      // Use the correct response fields from edge function
       setGroupTestResult({
-        success: data.accessible,
-        messageCount: data.messageCount,
-        message: data.accessible 
+        success: data.success === true,
+        messageCount: data.messageCount || 0,
+        message: data.message || (data.success 
           ? `Web scraping works! Found ${data.messageCount} messages.`
-          : data.error || 'This group is private or not accessible via web scraping.'
+          : 'This group is private or not accessible via web scraping.')
       });
     } catch (err) {
       console.error('Error testing group access:', err);
@@ -258,19 +259,35 @@ export function ChannelManagement() {
       return;
     }
 
+    // Clean the session string (remove whitespace/newlines)
+    const cleanedSession = sessionString.replace(/\s+/g, '');
+
     setSavingSession(true);
     try {
       const { data, error } = await supabase.functions.invoke('telegram-mtproto-auth', {
-        body: { action: 'save_session', sessionString }
+        body: { action: 'save_session', code: cleanedSession }
       });
 
       if (error) throw error;
       
-      toast.success('MTProto session saved!');
+      if (data.success === false) {
+        toast.error(data.error || 'Failed to save session');
+        return;
+      }
+      
+      toast.success('MTProto session saved and active!');
       setSessionString('');
-    } catch (err) {
+      
+      // Verify the session is active
+      const { data: statusData } = await supabase.functions.invoke('telegram-mtproto-auth', {
+        body: { action: 'status' }
+      });
+      if (statusData?.hasSession) {
+        toast.success('Verified: MTProto session is now active');
+      }
+    } catch (err: any) {
       console.error('Error saving session:', err);
-      toast.error('Failed to save session');
+      toast.error(err.message || 'Failed to save session');
     } finally {
       setSavingSession(false);
     }
