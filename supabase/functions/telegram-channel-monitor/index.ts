@@ -452,19 +452,42 @@ serve(async (req) => {
         let channelMessages: Array<{ messageId: string; text: string; date: Date; callerUsername?: string; callerDisplayName?: string }> = [];
         let groupWarning: string | null = null;
         
-        // Check accessibility for groups vs channels
-        if (channelType === 'group' || !channelUsername) {
-          // Check if this is actually a group
-          const accessCheck = await checkGroupAccessibility(channelUsername);
-          
-          if (!accessCheck.accessible) {
-            console.log(`[telegram-channel-monitor] ${accessCheck.message}`);
-            groupWarning = accessCheck.message;
-            
-            // For groups, we can only use Bot API if bot is a member
+        // Fetch messages (MTProto for groups, web scraping for channels)
+        if (!channelUsername) {
+          groupWarning = 'Missing channel username in config';
+        } else if (channelType === 'group') {
+          // MTProto-first for groups
+          try {
+            const { data: mtData, error: mtError } = await supabase.functions.invoke('telegram-mtproto-auth', {
+              body: { action: 'fetch_recent_messages', channelUsername, limit: 50 }
+            });
+
+            if (mtError) {
+              throw mtError;
+            }
+
+            if (mtData?.success && Array.isArray(mtData.messages)) {
+              channelMessages = mtData.messages.map((m: any) => ({
+                messageId: String(m.messageId || m.id),
+                text: m.text || '',
+                date: new Date(m.date),
+                callerUsername: m.callerUsername,
+                callerDisplayName: m.callerDisplayName,
+              }));
+
+              console.log(`[telegram-channel-monitor] MTProto fetched ${channelMessages.length} messages for group @${channelUsername}`);
+            } else {
+              groupWarning = mtData?.error || 'MTProto returned no messages';
+            }
+          } catch (e: any) {
+            groupWarning = `MTProto error: ${e?.message || 'unknown error'}`;
+          }
+
+          // Fallback: Bot API (only if bot is a member)
+          if (channelMessages.length === 0) {
             const botToken = Deno.env.get('TELEGRAM_BOT_TOKEN');
             if (botToken) {
-              console.log(`[telegram-channel-monitor] Trying Bot API for group...`);
+              console.log(`[telegram-channel-monitor] Trying Bot API fallback for group...`);
               const updatesResponse = await fetch(
                 `https://api.telegram.org/bot${botToken}/getUpdates?offset=-100&limit=100`
               );
@@ -477,7 +500,7 @@ serve(async (req) => {
                   const chatUsername = msg.chat?.username?.toLowerCase();
                   return chatUsername === channelUsername?.toLowerCase();
                 }) || [];
-                
+
                 channelMessages = filtered.map((update: any) => {
                   const msg = update.channel_post || update.message;
                   const from = msg.from || msg.sender_chat || {};
@@ -489,19 +512,16 @@ serve(async (req) => {
                     callerDisplayName: from.first_name ? `${from.first_name} ${from.last_name || ''}`.trim() : from.title
                   };
                 });
-                
+
                 if (channelMessages.length > 0) {
                   console.log(`[telegram-channel-monitor] Bot API found ${channelMessages.length} messages from group`);
-                  groupWarning = null; // Clear warning if we got messages
+                  groupWarning = null;
                 }
               }
             }
-          } else {
-            // Accessible via web scraping
-            channelMessages = await scrapePublicChannel(channelUsername);
           }
-        } else if (channelUsername) {
-          // Regular channel - try web scraping
+        } else {
+          // Regular channel - web scraping
           channelMessages = await scrapePublicChannel(channelUsername);
         }
 

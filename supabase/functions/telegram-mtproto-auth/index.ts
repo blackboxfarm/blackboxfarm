@@ -7,9 +7,75 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
-// We'll use a simpler approach: store credentials and use them with an external service
-// Since MTProto libraries have deployment issues in Supabase Edge Functions,
-// we'll implement a polling-based approach using Telegram's web interface
+function normalizeUsername(value: string) {
+  return value.trim().replace(/^@/, '').toLowerCase();
+}
+
+function safeDateToIso(dateLike: any): string {
+  if (!dateLike) return new Date().toISOString();
+  if (dateLike instanceof Date) return dateLike.toISOString();
+  if (typeof dateLike === 'number') {
+    // If seconds since epoch
+    if (dateLike < 10_000_000_000) return new Date(dateLike * 1000).toISOString();
+    // If ms since epoch
+    return new Date(dateLike).toISOString();
+  }
+  const parsed = new Date(dateLike);
+  return isNaN(parsed.getTime()) ? new Date().toISOString() : parsed.toISOString();
+}
+
+async function fetchRecentMessagesViaMTProto(opts: {
+  sessionString: string;
+  apiId: number;
+  apiHash: string;
+  channelUsername: string;
+  limit: number;
+}) {
+  const { sessionString, apiId, apiHash, channelUsername, limit } = opts;
+
+  const client = new TelegramClient(
+    new StringSession(sessionString),
+    apiId,
+    apiHash,
+    { connectionRetries: 2 }
+  );
+
+  try {
+    await client.connect();
+
+    const messages: any[] = await client.getMessages(channelUsername, { limit });
+
+    const mapped = (messages || [])
+      .map((m: any) => {
+        const text = (m?.message ?? m?.text ?? '').toString();
+        const sender = m?.sender;
+        const callerUsername = sender?.username;
+        const callerDisplayName =
+          (sender?.firstName || sender?.lastName)
+            ? `${sender?.firstName || ''} ${sender?.lastName || ''}`.trim()
+            : (sender?.title || sender?.displayName);
+
+        return {
+          messageId: String(m?.id ?? m?.messageId ?? ''),
+          text,
+          date: safeDateToIso(m?.date),
+          callerUsername,
+          callerDisplayName,
+        };
+      })
+      .filter((m: any) => m.messageId && m.text);
+
+    return { success: true, messages: mapped };
+  } finally {
+    try {
+      // grm/gramjs supports disconnect
+      // @ts-ignore
+      await client.disconnect();
+    } catch {
+      // ignore
+    }
+  }
+}
 
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
@@ -17,21 +83,26 @@ serve(async (req) => {
   }
 
   try {
-    const { action, code, password, channelUsername } = await req.json();
-    
-    const apiId = Deno.env.get('TELEGRAM_API_ID');
+    const body = await req.json().catch(() => ({}));
+    const { action, code, channelUsername, limit } = body;
+
+    const apiIdRaw = Deno.env.get('TELEGRAM_API_ID');
     const apiHash = Deno.env.get('TELEGRAM_API_HASH');
     const phoneNumber = Deno.env.get('TELEGRAM_PHONE_NUMBER');
-    
-    if (!apiId || !apiHash) {
+
+    if (!apiIdRaw || !apiHash) {
       throw new Error('Telegram API credentials not configured. Need TELEGRAM_API_ID and TELEGRAM_API_HASH');
+    }
+
+    const apiId = Number(apiIdRaw);
+    if (!Number.isFinite(apiId)) {
+      throw new Error('Invalid TELEGRAM_API_ID');
     }
 
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
     const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
     const supabase = createClient(supabaseUrl, supabaseKey);
 
-    // Check if we already have an active session
     const { data: existingSession } = await supabase
       .from('telegram_mtproto_session')
       .select('*')
@@ -43,27 +114,111 @@ serve(async (req) => {
         hasSession: !!existingSession,
         phoneNumber: existingSession?.phone_number || phoneNumber,
         lastUsed: existingSession?.last_used_at,
-        message: existingSession 
-          ? 'MTProto session active. Groups can be monitored.' 
-          : 'No active session. For groups, we use enhanced web scraping.'
+        message: existingSession
+          ? 'MTProto session active. Groups will use MTProto.'
+          : 'No active MTProto session. Groups will fall back to Bot API (if bot is in group).'
+      }), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+      });
+    }
+
+    if (action === 'fetch_recent_messages') {
+      if (!channelUsername) {
+        throw new Error('Channel username required');
+      }
+      if (!existingSession?.session_string) {
+        return new Response(JSON.stringify({
+          success: false,
+          error: 'No active MTProto session saved'
+        }), {
+          status: 400,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        });
+      }
+
+      const username = normalizeUsername(channelUsername);
+      const msgLimit = Math.max(1, Math.min(200, Number(limit) || 50));
+
+      console.log(`[telegram-mtproto-auth] fetch_recent_messages @${username} limit=${msgLimit} sessionLen=${existingSession.session_string.length}`);
+
+      const res = await fetchRecentMessagesViaMTProto({
+        sessionString: existingSession.session_string,
+        apiId,
+        apiHash,
+        channelUsername: username,
+        limit: msgLimit,
+      });
+
+      await supabase
+        .from('telegram_mtproto_session')
+        .update({ last_used_at: new Date().toISOString() })
+        .eq('id', existingSession.id);
+
+      return new Response(JSON.stringify({
+        success: true,
+        channelUsername: username,
+        messageCount: res.messages.length,
+        messages: res.messages,
       }), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' }
       });
     }
 
     if (action === 'test_group_access') {
-      // Test if we can access a group via enhanced scraping
       if (!channelUsername) {
         throw new Error('Channel username required');
       }
 
-      // Try the web preview endpoint that sometimes works for groups
+      const username = normalizeUsername(channelUsername);
+
+      // MTProto-first if we have a session
+      if (existingSession?.session_string) {
+        try {
+          console.log(`[telegram-mtproto-auth] test_group_access MTProto @${username}`);
+
+          const res = await fetchRecentMessagesViaMTProto({
+            sessionString: existingSession.session_string,
+            apiId,
+            apiHash,
+            channelUsername: username,
+            limit: 10,
+          });
+
+          await supabase
+            .from('telegram_mtproto_session')
+            .update({ last_used_at: new Date().toISOString() })
+            .eq('id', existingSession.id);
+
+          return new Response(JSON.stringify({
+            success: true,
+            channelUsername: username,
+            accessMethod: 'mtproto',
+            messageCount: res.messages.length,
+            message: `MTProto OK. Fetched ${res.messages.length} recent messages.`
+          }), {
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+          });
+        } catch (e: any) {
+          console.error('[telegram-mtproto-auth] MTProto test failed:', e?.message || e);
+          return new Response(JSON.stringify({
+            success: false,
+            channelUsername: username,
+            accessMethod: 'mtproto_error',
+            messageCount: 0,
+            message: `MTProto failed: ${e?.message || 'unknown error'}`
+          }), {
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+          });
+        }
+      }
+
+      // No session: fall back to web scrape test
       const testUrls = [
-        `https://t.me/s/${channelUsername}`,
-        `https://t.me/${channelUsername}`,
+        `https://t.me/s/${username}`,
+        `https://t.me/${username}`,
       ];
 
-      let accessMethod = null;
+      let accessMethod: string | null = null;
       let messageCount = 0;
 
       for (const url of testUrls) {
@@ -74,18 +229,16 @@ serve(async (req) => {
               'Accept': 'text/html,application/xhtml+xml',
             }
           });
-          
+
           if (response.ok) {
             const html = await response.text();
-            
-            // Check if it's a group vs channel
+
             const isGroup = html.includes('tgme_page_extra') && html.includes('members');
             const isChannel = html.includes('tgme_channel_info') || html.includes('tgme_widget_message');
-            
-            // Count messages if any
+
             const messageMatches = html.match(/tgme_widget_message_wrap/g);
             messageCount = messageMatches?.length || 0;
-            
+
             if (messageCount > 0) {
               accessMethod = 'web_scraping';
               break;
@@ -96,30 +249,26 @@ serve(async (req) => {
             }
           }
         } catch (e) {
-          console.error(`Error testing ${url}:`, e);
+          console.error(`[telegram-mtproto-auth] Error testing ${url}:`, e);
         }
       }
 
       return new Response(JSON.stringify({
         success: accessMethod === 'web_scraping',
-        channelUsername,
+        channelUsername: username,
         accessMethod,
         messageCount,
-        message: accessMethod === 'web_scraping' 
+        message: accessMethod === 'web_scraping'
           ? `Found ${messageCount} messages via web scraping`
-          : accessMethod === 'group_detected_no_public_messages'
-            ? 'This is a GROUP - public web view not available. Messages cannot be scraped without MTProto.'
-            : 'Unable to access messages from this channel/group'
+          : 'No MTProto session saved, and web view has no messages. Add bot to the group or save an MTProto session.'
       }), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' }
       });
     }
 
     if (action === 'save_session') {
-      // Allow manual session string input (for users who generate it externally)
-      // Accept either 'code' or 'sessionString' for flexibility
       const session = code || (await req.clone().json()).sessionString;
-      
+
       if (!session || typeof session !== 'string' || session.trim().length === 0) {
         return new Response(JSON.stringify({
           success: false,
@@ -130,16 +279,13 @@ serve(async (req) => {
         });
       }
 
-      // Clean the session string
       const cleanedSession = session.replace(/\s+/g, '');
 
-      // Deactivate any existing sessions
       await supabase
         .from('telegram_mtproto_session')
         .update({ is_active: false })
         .eq('is_active', true);
 
-      // Save new session
       const { error: insertError } = await supabase
         .from('telegram_mtproto_session')
         .insert({
@@ -150,7 +296,7 @@ serve(async (req) => {
         });
 
       if (insertError) {
-        console.error('Error inserting session:', insertError);
+        console.error('[telegram-mtproto-auth] Error inserting session:', insertError);
         return new Response(JSON.stringify({
           success: false,
           error: `Failed to save session: ${insertError.message}`
@@ -169,18 +315,12 @@ serve(async (req) => {
     }
 
     if (action === 'generate_session_instructions') {
-      // Provide instructions for generating a session string locally
       return new Response(JSON.stringify({
         success: true,
         instructions: `
 # Generate Telegram Session String Locally
 
-Since MTProto requires interactive authentication, you'll need to generate a session string on your local machine and then paste it here.
-
-## Option 1: Using Python (Telethon)
-
-1. Install: pip install telethon
-2. Run this script:
+## Option 1: Python (Telethon)
 
 \`\`\`python
 from telethon.sync import TelegramClient
@@ -190,21 +330,10 @@ api_id = ${apiId}
 api_hash = '${apiHash}'
 
 with TelegramClient(StringSession(), api_id, api_hash) as client:
-    print("Session string:")
     print(client.session.save())
 \`\`\`
 
-3. Follow the prompts to enter your phone number and verification code
-4. Copy the printed session string
-
-## Option 2: Using Node.js (telegram package)
-
-1. Install: npm install telegram
-2. Run this script and follow prompts
-3. Copy the session string
-
-## After generating:
-Use the "Save Session" action with the generated session string.
+Copy the printed session string and paste it into **Save Session**.
         `.trim(),
         apiId,
         apiHash: apiHash?.substring(0, 4) + '...',
@@ -216,11 +345,11 @@ Use the "Save Session" action with the generated session string.
 
     throw new Error(`Unknown action: ${action}`);
 
-  } catch (error) {
-    console.error('MTProto auth error:', error);
+  } catch (error: any) {
+    console.error('[telegram-mtproto-auth] Error:', error);
     return new Response(JSON.stringify({
       success: false,
-      error: error.message
+      error: error?.message || String(error)
     }), {
       status: 400,
       headers: { ...corsHeaders, 'Content-Type': 'application/json' }
