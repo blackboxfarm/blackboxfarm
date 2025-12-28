@@ -10,7 +10,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Switch } from '@/components/ui/switch';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
-import { Flame, RefreshCw, TrendingUp, DollarSign, Wallet, Clock, CheckCircle2, XCircle, Loader2, Plus, Copy, ArrowUpRight, Key, Settings, Zap, Activity, Radio, Pencil, ChevronDown, Coins, Eye, EyeOff, RotateCcw, AlertTriangle, Twitter } from 'lucide-react';
+import { Flame, RefreshCw, TrendingUp, DollarSign, Wallet, Clock, CheckCircle2, XCircle, Loader2, Plus, Copy, ArrowUpRight, Key, Settings, Zap, Activity, Radio, Pencil, ChevronDown, Coins, Eye, EyeOff, RotateCcw, AlertTriangle, Twitter, Trash2 } from 'lucide-react';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { useSolPrice } from '@/hooks/useSolPrice';
 import { FlipItFeeCalculator } from './flipit/FlipItFeeCalculator';
@@ -801,6 +801,23 @@ export function FlipItDashboard() {
       });
     } catch (err: any) {
       toast.error(err.message || 'Failed to update stop-loss');
+    }
+  };
+
+  // Delete a flip position from the database
+  const handleDeletePosition = async (positionId: string, tokenSymbol: string | null) => {
+    try {
+      const { error } = await supabase
+        .from('flip_positions')
+        .delete()
+        .eq('id', positionId);
+
+      if (error) throw error;
+
+      toast.success(`Deleted ${tokenSymbol || 'position'}`);
+      loadPositions();
+    } catch (err: any) {
+      toast.error(err.message || 'Failed to delete position');
     }
   };
 
@@ -2512,6 +2529,17 @@ export function FlipItDashboard() {
                               Retry
                             </Button>
                           )}
+                          
+                          {/* Delete button */}
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            className="h-7 w-7 p-0 text-muted-foreground hover:text-destructive"
+                            onClick={() => handleDeletePosition(position.id, position.token_symbol)}
+                            title="Delete entry"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
                         </div>
                       </TableCell>
                     </TableRow>
