@@ -322,6 +322,81 @@ serve(async (req) => {
       });
     }
 
+    if (action === 'send_message') {
+      const { chatUsername, message } = body;
+
+      if (!chatUsername || !message) {
+        return new Response(JSON.stringify({
+          success: false,
+          error: 'chatUsername and message are required'
+        }), {
+          status: 400,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        });
+      }
+
+      if (!existingSession?.session_string) {
+        return new Response(JSON.stringify({
+          success: false,
+          error: 'No active MTProto session. Save a session first using action: save_session'
+        }), {
+          status: 400,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        });
+      }
+
+      const username = normalizeUsername(chatUsername);
+      console.log(`[telegram-mtproto-auth] send_message to @${username}: "${message.substring(0, 50)}..."`);
+
+      const mtcuteSession = convertFromTelethonSession(existingSession.session_string);
+
+      const client = new TelegramClient({
+        apiId,
+        apiHash,
+        storage: new MemoryStorage(),
+      });
+
+      try {
+        await client.importSession(mtcuteSession);
+        await client.connect();
+
+        console.log(`[telegram-mtproto-auth] Connected, sending message to @${username}`);
+
+        const result = await client.sendText(username, message);
+
+        await supabase
+          .from('telegram_mtproto_session')
+          .update({ last_used_at: new Date().toISOString() })
+          .eq('id', existingSession.id);
+
+        console.log(`[telegram-mtproto-auth] Message sent successfully, messageId=${result.id}`);
+
+        return new Response(JSON.stringify({
+          success: true,
+          messageId: result.id,
+          chatUsername: username,
+          message: 'Message sent successfully'
+        }), {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        });
+      } catch (e: any) {
+        console.error(`[telegram-mtproto-auth] Failed to send message:`, e?.message || e);
+        return new Response(JSON.stringify({
+          success: false,
+          error: `Failed to send message: ${e?.message || 'unknown error'}`
+        }), {
+          status: 500,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        });
+      } finally {
+        try {
+          await client.close();
+        } catch {
+          // ignore close errors
+        }
+      }
+    }
+
     if (action === 'generate_session_instructions') {
       return new Response(JSON.stringify({
         success: true,
