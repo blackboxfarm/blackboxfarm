@@ -41,7 +41,7 @@ const TelegramChannelMonitor = lazy(() => import("@/components/admin/TelegramCha
 const TwitterAccountManager = lazy(() => import("@/components/admin/TwitterAccountManager"));
 
 export default function SuperAdmin() {
-  const [activeTab, setActiveTab] = useState("wallets");
+  const [activeTab, setActiveTab] = useState("fuckoff");
   const { isSuperAdmin, isLoading } = useUserRoles();
 
   useEffect(() => {
@@ -98,6 +98,7 @@ export default function SuperAdmin() {
         </div>
         <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
           <TabsList className="flex flex-wrap w-full h-auto gap-1 p-2">
+            <TabsTrigger value="fuckoff" className="flex-shrink-0 data-[state=active]:bg-gradient-to-r data-[state=active]:from-red-500/30 data-[state=active]:to-red-500/20">FUCKOFF</TabsTrigger>
             <TabsTrigger value="master-wallets" className="flex-shrink-0 data-[state=active]:bg-gradient-to-r data-[state=active]:from-amber-500/30 data-[state=active]:to-yellow-500/20">👑 Master Wallets</TabsTrigger>
             <TabsTrigger value="wallets" className="flex-shrink-0">Wallet Management</TabsTrigger>
             <TabsTrigger value="recovery" className="flex-shrink-0">Wallet Recovery</TabsTrigger>
@@ -131,6 +132,10 @@ export default function SuperAdmin() {
             <TabsTrigger value="twitter-accounts" className="flex-shrink-0 data-[state=active]:bg-gradient-to-r data-[state=active]:from-sky-500/30 data-[state=active]:to-cyan-500/20">🐦 Twitter Accounts</TabsTrigger>
           </TabsList>
           
+          <TabsContent value="fuckoff">
+            {/* Empty tab */}
+          </TabsContent>
+
           <TabsContent value="master-wallets">
             <ActiveTabOnly activeTab={activeTab} tabValue="master-wallets">
               <MasterWalletsDashboard />
