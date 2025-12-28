@@ -255,3 +255,6 @@ verify_jwt = false
 
 [functions.flipit-limit-order-monitor]
 verify_jwt = false
+
+[functions.flipit-backfill-socials]
+verify_jwt = false
