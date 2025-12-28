@@ -4785,6 +4785,7 @@ export type Database = {
           standard_sell_multiplier: number | null
           total_buys_executed: number | null
           total_calls_detected: number | null
+          trading_mode: string | null
           updated_at: string
           user_id: string | null
         }
@@ -4815,6 +4816,7 @@ export type Database = {
           standard_sell_multiplier?: number | null
           total_buys_executed?: number | null
           total_calls_detected?: number | null
+          trading_mode?: string | null
           updated_at?: string
           user_id?: string | null
         }
@@ -4845,6 +4847,7 @@ export type Database = {
           standard_sell_multiplier?: number | null
           total_buys_executed?: number | null
           total_calls_detected?: number | null
+          trading_mode?: string | null
           updated_at?: string
           user_id?: string | null
         }
@@ -4865,9 +4868,12 @@ export type Database = {
           interpretation_id: string | null
           realized_pnl_percent: number | null
           realized_pnl_usd: number | null
+          rule_id: string | null
           sold_at: string | null
           sold_price_usd: number | null
           status: string
+          stop_loss_pct: number | null
+          stop_loss_triggered: boolean | null
           target_sell_multiplier: number | null
           token_amount: number | null
           token_mint: string
@@ -4892,9 +4898,12 @@ export type Database = {
           interpretation_id?: string | null
           realized_pnl_percent?: number | null
           realized_pnl_usd?: number | null
+          rule_id?: string | null
           sold_at?: string | null
           sold_price_usd?: number | null
           status?: string
+          stop_loss_pct?: number | null
+          stop_loss_triggered?: boolean | null
           target_sell_multiplier?: number | null
           token_amount?: number | null
           token_mint: string
@@ -4919,9 +4928,12 @@ export type Database = {
           interpretation_id?: string | null
           realized_pnl_percent?: number | null
           realized_pnl_usd?: number | null
+          rule_id?: string | null
           sold_at?: string | null
           sold_price_usd?: number | null
           status?: string
+          stop_loss_pct?: number | null
+          stop_loss_triggered?: boolean | null
           target_sell_multiplier?: number | null
           token_amount?: number | null
           token_mint?: string
@@ -4952,6 +4964,13 @@ export type Database = {
             columns: ["interpretation_id"]
             isOneToOne: false
             referencedRelation: "telegram_message_interpretations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "telegram_fantasy_positions_rule_id_fkey"
+            columns: ["rule_id"]
+            isOneToOne: false
+            referencedRelation: "trading_rules"
             referencedColumns: ["id"]
           },
         ]
@@ -5494,6 +5513,36 @@ export type Database = {
           },
         ]
       }
+      trading_keywords: {
+        Row: {
+          category: string
+          created_at: string | null
+          id: string
+          is_active: boolean | null
+          keyword: string
+          updated_at: string | null
+          weight: number | null
+        }
+        Insert: {
+          category?: string
+          created_at?: string | null
+          id?: string
+          is_active?: boolean | null
+          keyword: string
+          updated_at?: string | null
+          weight?: number | null
+        }
+        Update: {
+          category?: string
+          created_at?: string | null
+          id?: string
+          is_active?: boolean | null
+          keyword?: string
+          updated_at?: string | null
+          weight?: number | null
+        }
+        Relationships: []
+      }
       trading_positions: {
         Row: {
           created_at: string | null
@@ -5546,6 +5595,116 @@ export type Database = {
             columns: ["session_id"]
             isOneToOne: false
             referencedRelation: "trading_sessions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      trading_rules: {
+        Row: {
+          bonding_curve_position: string | null
+          buy_amount_usd: number
+          channel_id: string | null
+          created_at: string | null
+          description: string | null
+          excluded_keywords: string[] | null
+          fallback_to_fantasy: boolean | null
+          id: string
+          is_active: boolean | null
+          max_age_minutes: number | null
+          max_bonding_pct: number | null
+          max_market_cap_usd: number | null
+          max_price_usd: number | null
+          min_age_minutes: number | null
+          min_bonding_pct: number | null
+          min_keyword_weight: number | null
+          min_market_cap_usd: number | null
+          min_price_usd: number | null
+          name: string
+          platforms: string[] | null
+          price_change_5m_max: number | null
+          price_change_5m_min: number | null
+          priority: number | null
+          require_graduated: boolean | null
+          require_on_curve: boolean | null
+          required_keywords: string[] | null
+          sell_target_multiplier: number | null
+          stop_loss_enabled: boolean | null
+          stop_loss_pct: number | null
+          updated_at: string | null
+          user_id: string | null
+        }
+        Insert: {
+          bonding_curve_position?: string | null
+          buy_amount_usd?: number
+          channel_id?: string | null
+          created_at?: string | null
+          description?: string | null
+          excluded_keywords?: string[] | null
+          fallback_to_fantasy?: boolean | null
+          id?: string
+          is_active?: boolean | null
+          max_age_minutes?: number | null
+          max_bonding_pct?: number | null
+          max_market_cap_usd?: number | null
+          max_price_usd?: number | null
+          min_age_minutes?: number | null
+          min_bonding_pct?: number | null
+          min_keyword_weight?: number | null
+          min_market_cap_usd?: number | null
+          min_price_usd?: number | null
+          name: string
+          platforms?: string[] | null
+          price_change_5m_max?: number | null
+          price_change_5m_min?: number | null
+          priority?: number | null
+          require_graduated?: boolean | null
+          require_on_curve?: boolean | null
+          required_keywords?: string[] | null
+          sell_target_multiplier?: number | null
+          stop_loss_enabled?: boolean | null
+          stop_loss_pct?: number | null
+          updated_at?: string | null
+          user_id?: string | null
+        }
+        Update: {
+          bonding_curve_position?: string | null
+          buy_amount_usd?: number
+          channel_id?: string | null
+          created_at?: string | null
+          description?: string | null
+          excluded_keywords?: string[] | null
+          fallback_to_fantasy?: boolean | null
+          id?: string
+          is_active?: boolean | null
+          max_age_minutes?: number | null
+          max_bonding_pct?: number | null
+          max_market_cap_usd?: number | null
+          max_price_usd?: number | null
+          min_age_minutes?: number | null
+          min_bonding_pct?: number | null
+          min_keyword_weight?: number | null
+          min_market_cap_usd?: number | null
+          min_price_usd?: number | null
+          name?: string
+          platforms?: string[] | null
+          price_change_5m_max?: number | null
+          price_change_5m_min?: number | null
+          priority?: number | null
+          require_graduated?: boolean | null
+          require_on_curve?: boolean | null
+          required_keywords?: string[] | null
+          sell_target_multiplier?: number | null
+          stop_loss_enabled?: boolean | null
+          stop_loss_pct?: number | null
+          updated_at?: string | null
+          user_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "trading_rules_channel_id_fkey"
+            columns: ["channel_id"]
+            isOneToOne: false
+            referencedRelation: "telegram_channel_config"
             referencedColumns: ["id"]
           },
         ]
