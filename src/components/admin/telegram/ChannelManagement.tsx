@@ -314,7 +314,7 @@ export function ChannelManagement() {
               Add Channel
             </Button>
           </DialogTrigger>
-          <DialogContent>
+          <DialogContent className="max-h-[85vh] overflow-y-auto">
             <DialogHeader>
               <DialogTitle>Add Telegram Channel</DialogTitle>
             </DialogHeader>
@@ -404,7 +404,7 @@ export function ChannelManagement() {
                         Edit
                       </Button>
                     </DialogTrigger>
-                    <DialogContent>
+                    <DialogContent className="max-h-[85vh] overflow-y-auto">
                       <DialogHeader>
                         <DialogTitle>Edit Channel</DialogTitle>
                       </DialogHeader>
