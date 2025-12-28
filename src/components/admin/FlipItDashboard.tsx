@@ -1624,20 +1624,20 @@ export function FlipItDashboard() {
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Token</TableHead>
-                  <TableHead>Invested</TableHead>
-                  <TableHead>Current Value</TableHead>
-                  <TableHead>Target Value</TableHead>
-                  <TableHead>Progress</TableHead>
-                  <TableHead className="text-center">STOP-LOSS</TableHead>
-                  <TableHead>SL Price</TableHead>
-                  <TableHead className="text-center">REBUY</TableHead>
-                  <TableHead>Rebuy Low</TableHead>
-                  <TableHead>Rebuy High</TableHead>
-                  <TableHead>Rebuy Amt</TableHead>
-                  <TableHead>Rebuy Target</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead>Action</TableHead>
+                  <TableHead className="px-2 py-1">Token</TableHead>
+                  <TableHead className="px-2 py-1">Invested</TableHead>
+                  <TableHead className="px-2 py-1">Current Value</TableHead>
+                  <TableHead className="px-2 py-1">Target Value</TableHead>
+                  <TableHead className="px-2 py-1">Progress</TableHead>
+                  <TableHead className="px-2 py-1 text-center">STOP-LOSS</TableHead>
+                  <TableHead className="px-2 py-1">SL Price</TableHead>
+                  <TableHead className="px-2 py-1 text-center">REBUY</TableHead>
+                  <TableHead className="px-2 py-1">Rebuy Low</TableHead>
+                  <TableHead className="px-2 py-1">Rebuy High</TableHead>
+                  <TableHead className="px-2 py-1">Rebuy Amt</TableHead>
+                  <TableHead className="px-2 py-1">Rebuy Target</TableHead>
+                  <TableHead className="px-2 py-1">Status</TableHead>
+                  <TableHead className="px-2 py-1">Action</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -1671,13 +1671,13 @@ export function FlipItDashboard() {
 
                   return (
                     <TableRow key={position.id}>
-                      <TableCell>
-                        <div className="flex items-center gap-2">
+                      <TableCell className="px-2 py-1">
+                        <div className="flex items-center gap-1">
                           {tokenImages[position.token_mint] && (
                             <img 
                               src={tokenImages[position.token_mint]} 
                               alt={position.token_symbol || 'Token'} 
-                              className="w-8 h-8 rounded-full object-cover flex-shrink-0"
+                              className="w-6 h-6 rounded-full object-cover flex-shrink-0"
                               onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
                             />
                           )}
@@ -1702,66 +1702,66 @@ export function FlipItDashboard() {
                             </div>
                             <button
                               onClick={() => copyToClipboard(position.token_mint, 'Token address')}
-                              className="text-xs text-muted-foreground hover:text-primary flex items-center gap-1 mt-0.5"
+                              className="text-[10px] text-muted-foreground hover:text-primary flex items-center gap-1"
                             >
                               {position.token_mint.slice(0, 6)}...{position.token_mint.slice(-4)}
-                              <Copy className="h-3 w-3 opacity-50" />
+                              <Copy className="h-2 w-2 opacity-50" />
                             </button>
-                            <div className="text-xs text-muted-foreground mt-0.5">
+                            <div className="text-[10px] text-muted-foreground">
                               Entry: ${position.buy_price_usd?.toFixed(8) || '-'}
                             </div>
                           </div>
                         </div>
                       </TableCell>
-                      <TableCell>
-                        <div className="font-medium">${position.buy_amount_usd?.toFixed(2) || '-'}</div>
+                      <TableCell className="px-2 py-1">
+                        <div className="font-medium text-xs">${position.buy_amount_usd?.toFixed(2) || '-'}</div>
                         {effectiveQuantityTokens !== null && (
-                          <div className="text-xs text-muted-foreground">
+                          <div className="text-[10px] text-muted-foreground">
                             {effectiveQuantityTokens.toLocaleString(undefined, { maximumFractionDigits: 2 })} tokens
                           </div>
                         )}
                       </TableCell>
-                      <TableCell>
+                      <TableCell className="px-2 py-1">
                         {currentPrice ? (
                           <div>
                             {currentValue !== null ? (
                               <div>
                                 <span
-                                  className={
+                                  className={`text-xs ${
                                     pnlUsd !== null && pnlUsd >= 0
                                       ? 'text-green-500 font-medium'
                                       : 'text-red-500 font-medium'
-                                  }
+                                  }`}
                                 >
                                   ${currentValue.toFixed(2)}
                                 </span>
                                 {pnlUsd !== null && (
-                                  <div className={`text-xs ${pnlUsd >= 0 ? 'text-green-500' : 'text-red-500'}`}> 
+                                  <div className={`text-[10px] ${pnlUsd >= 0 ? 'text-green-500' : 'text-red-500'}`}> 
                                     {pnlUsd >= 0 ? '+' : ''}${pnlUsd.toFixed(2)} ({pnlPercent?.toFixed(1)}%)
                                   </div>
                                 )}
                               </div>
                             ) : (
-                              <span className="text-muted-foreground">-</span>
+                              <span className="text-muted-foreground text-xs">-</span>
                             )}
-                            <div className="text-xs text-muted-foreground mt-0.5">
+                            <div className="text-[10px] text-muted-foreground">
                               {`Price: $${currentPrice.toFixed(8)}`}
                             </div>
                           </div>
                         ) : (
-                          <span className="text-muted-foreground">-</span>
+                          <span className="text-muted-foreground text-xs">-</span>
                         )}
                       </TableCell>
-                      <TableCell>
+                      <TableCell className="px-2 py-1">
                         <div className="flex items-center gap-1">
                           <div>
-                            <span className="font-medium">${targetValue.toFixed(2)}</span>
-                            <span className="text-muted-foreground ml-1">({position.target_multiplier}x)</span>
-                            <div className="text-green-500 text-xs">
+                            <span className="font-medium text-xs">${targetValue.toFixed(2)}</span>
+                            <span className="text-muted-foreground text-[10px] ml-1">({position.target_multiplier}x)</span>
+                            <div className="text-green-500 text-[10px]">
                               +${targetProfit.toFixed(2)} profit
                             </div>
                             {position.target_price_usd && (
-                              <div className="text-xs text-muted-foreground">
+                              <div className="text-[10px] text-muted-foreground">
                                 Target: ${position.target_price_usd.toFixed(8)}
                               </div>
                             )}
@@ -1769,8 +1769,8 @@ export function FlipItDashboard() {
                           {position.status === 'holding' && position.buy_price_usd && (
                             <Popover>
                               <PopoverTrigger asChild>
-                                <Button variant="ghost" size="icon" className="h-6 w-6">
-                                  <Pencil className="h-3 w-3" />
+                                <Button variant="ghost" size="icon" className="h-5 w-5">
+                                  <Pencil className="h-2.5 w-2.5" />
                                 </Button>
                               </PopoverTrigger>
                               <PopoverContent className="w-56 p-2" align="start">
@@ -1794,15 +1794,15 @@ export function FlipItDashboard() {
                           )}
                         </div>
                       </TableCell>
-                      <TableCell className="w-32">
+                      <TableCell className="px-2 py-1 w-24">
                         <Progress 
                           value={Math.max(0, progress)} 
-                          className={`h-2 ${progress >= 100 ? 'bg-green-500' : progress < 0 ? 'bg-red-500' : ''}`}
+                          className={`h-1.5 ${progress >= 100 ? 'bg-green-500' : progress < 0 ? 'bg-red-500' : ''}`}
                         />
-                        <span className="text-xs text-muted-foreground">{progress.toFixed(0)}%</span>
+                        <span className="text-[10px] text-muted-foreground">{progress.toFixed(0)}%</span>
                       </TableCell>
                       {/* Stop-Loss Toggle */}
-                      <TableCell className="text-center">
+                      <TableCell className="px-2 py-1 text-center">
                         {position.status === 'holding' && (
                           <Switch
                             checked={
@@ -1811,15 +1811,13 @@ export function FlipItDashboard() {
                             }
                             onCheckedChange={(checked) => {
                               if (checked) {
-                                // Enable: default stop-loss at 5% above entry price (105% of entry)
                                 const entryPrice = position.buy_price_usd || 0;
-                                const defaultPrice = entryPrice * 1.05; // 5% above entry
+                                const defaultPrice = entryPrice * 1.05;
                                 setEmergencyEditing(prev => ({
                                   ...prev,
                                   [position.id]: { enabled: true, price: defaultPrice.toFixed(10).replace(/\.?0+$/, '') }
                                 }));
                               } else {
-                                // Disable: save immediately
                                 handleEmergencySellUpdate(position.id, false, null);
                               }
                             }}
@@ -1827,15 +1825,15 @@ export function FlipItDashboard() {
                         )}
                       </TableCell>
                       {/* Stop-Loss Price */}
-                      <TableCell>
+                      <TableCell className="px-2 py-1">
                         {position.status === 'holding' && (
-                          <div className="flex flex-col gap-1">
+                          <div className="flex flex-col gap-0.5">
                             {emergencyEditing[position.id]?.enabled || position.emergency_sell_status === 'watching' ? (
                               <div className="flex items-center gap-1">
-                                <span className="text-xs text-muted-foreground">$</span>
+                                <span className="text-[10px] text-muted-foreground">$</span>
                                 <Input
                                   type="text"
-                                  className="h-7 w-28 text-xs font-mono"
+                                  className="h-6 w-20 text-[10px] font-mono"
                                   placeholder="0.0000001"
                                   value={
                                     emergencyEditing[position.id]?.price ?? 
@@ -1854,7 +1852,7 @@ export function FlipItDashboard() {
                                 <Button
                                   size="sm"
                                   variant="outline"
-                                  className="h-7 px-2"
+                                  className="h-6 px-1.5"
                                   onClick={() => {
                                     const priceVal = parseFloat(emergencyEditing[position.id]?.price || position.emergency_sell_price_usd?.toString() || '0');
                                     if (priceVal > 0) {
@@ -1864,15 +1862,15 @@ export function FlipItDashboard() {
                                     }
                                   }}
                                 >
-                                  <CheckCircle2 className="h-3 w-3" />
+                                  <CheckCircle2 className="h-2.5 w-2.5" />
                                 </Button>
                               </div>
                             ) : (
-                              <span className="text-xs text-muted-foreground">-</span>
+                              <span className="text-[10px] text-muted-foreground">-</span>
                             )}
                             {position.emergency_sell_status === 'watching' && !emergencyEditing[position.id] && (
-                              <Badge variant="destructive" className="text-[10px] w-fit">
-                                <AlertTriangle className="h-2 w-2 mr-1" />
+                              <Badge variant="destructive" className="text-[9px] px-1 py-0 w-fit">
+                                <AlertTriangle className="h-2 w-2 mr-0.5" />
                                 WATCHING
                               </Badge>
                             )}
@@ -1880,8 +1878,8 @@ export function FlipItDashboard() {
                         )}
                       </TableCell>
                       
-                      {/* Rebuy Toggle - Pre-configure for auto-buy after sell */}
-                      <TableCell className="text-center">
+                      {/* Rebuy Toggle */}
+                      <TableCell className="px-2 py-1 text-center">
                         {position.status === 'holding' && (
                           <Switch
                             checked={
@@ -1890,10 +1888,9 @@ export function FlipItDashboard() {
                             }
                             onCheckedChange={(checked) => {
                               if (checked) {
-                                // Enable: default rebuy range at ±10% of entry price, same amount
                                 const entryPrice = position.buy_price_usd || 0;
-                                const defaultPriceHigh = entryPrice * 1.10; // 10% above entry
-                                const defaultPriceLow = entryPrice * 0.90;  // 10% below entry
+                                const defaultPriceHigh = entryPrice * 1.10;
+                                const defaultPriceLow = entryPrice * 0.90;
                                 const defaultAmount = position.buy_amount_usd || 10;
                                 setRebuyEditing(prev => ({
                                   ...prev,
@@ -1907,7 +1904,6 @@ export function FlipItDashboard() {
                                   }
                                 }));
                               } else {
-                                // Disable: save immediately
                                 handleUpdateRebuySettings(position.id, false, null, null, null);
                               }
                             }}
@@ -1915,16 +1911,16 @@ export function FlipItDashboard() {
                         )}
                       </TableCell>
                       
-                      {/* Rebuy Low Price Input */}
-                      <TableCell>
+                      {/* Rebuy Low Price */}
+                      <TableCell className="px-2 py-1">
                         {position.status === 'holding' && (
-                          <div className="flex flex-col gap-1">
+                          <div className="flex flex-col">
                             {(rebuyEditing[position.id]?.enabled || position.rebuy_enabled) ? (
                               <div className="flex items-center gap-1">
-                                <span className="text-xs text-muted-foreground">$</span>
+                                <span className="text-[10px] text-muted-foreground">$</span>
                                 <Input
                                   type="text"
-                                  className="h-7 w-24 text-xs font-mono"
+                                  className="h-6 w-16 text-[10px] font-mono"
                                   placeholder="Low"
                                   value={
                                     rebuyEditing[position.id]?.priceLow ?? 
@@ -1946,7 +1942,7 @@ export function FlipItDashboard() {
                                 />
                               </div>
                             ) : (
-                              <span className="text-xs text-muted-foreground">-</span>
+                              <span className="text-[10px] text-muted-foreground">-</span>
                             )}
                           </div>
                         )}

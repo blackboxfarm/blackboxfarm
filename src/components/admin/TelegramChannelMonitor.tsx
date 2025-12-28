@@ -26,9 +26,12 @@ import {
   TrendingDown,
   Target,
   Wallet,
-  Trash2
+  Trash2,
+  Trophy,
+  Users
 } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
+import { FantasyPortfolioDashboard, CallerLeaderboard, ChannelManagement } from './telegram';
 
 interface ChannelConfig {
   id: string;
@@ -631,8 +634,13 @@ export default function TelegramChannelMonitor() {
         <TabsList className="flex flex-wrap">
           <TabsTrigger value="ai-log">🤖 AI Interpretation Log</TabsTrigger>
           <TabsTrigger value="fantasy">💫 Fantasy Portfolio</TabsTrigger>
+          <TabsTrigger value="callers" className="flex items-center gap-1">
+            <Trophy className="w-3 h-3" /> Caller Leaderboard
+          </TabsTrigger>
           <TabsTrigger value="calls">Recent Calls</TabsTrigger>
-          <TabsTrigger value="channels">Channel Config</TabsTrigger>
+          <TabsTrigger value="channels" className="flex items-center gap-1">
+            <Users className="w-3 h-3" /> Channel Config
+          </TabsTrigger>
           <TabsTrigger value="settings">Trading Rules</TabsTrigger>
         </TabsList>
 
@@ -706,109 +714,14 @@ export default function TelegramChannelMonitor() {
           </Card>
         </TabsContent>
 
-        {/* Fantasy Portfolio */}
+        {/* Fantasy Portfolio - using new component */}
         <TabsContent value="fantasy" className="space-y-4">
-          <div className="flex justify-between items-center">
-            <div>
-              <h3 className="text-lg font-semibold">Fantasy Trading Portfolio</h3>
-              <p className="text-sm text-muted-foreground">Track simulated trades before risking real funds</p>
-            </div>
-            <Button onClick={updateFantasyPrices} disabled={isUpdatingPrices}>
-              {isUpdatingPrices ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <RefreshCw className="w-4 h-4 mr-2" />}
-              Update Prices
-            </Button>
-          </div>
+          <FantasyPortfolioDashboard />
+        </TabsContent>
 
-          {/* Portfolio Summary */}
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-            <Card>
-              <CardContent className="pt-6">
-                <p className="text-sm text-muted-foreground">Total Invested</p>
-                <p className="text-2xl font-bold">${totalInvested.toFixed(2)}</p>
-              </CardContent>
-            </Card>
-            <Card>
-              <CardContent className="pt-6">
-                <p className="text-sm text-muted-foreground">Current Value</p>
-                <p className="text-2xl font-bold">${(totalInvested + totalPnl).toFixed(2)}</p>
-              </CardContent>
-            </Card>
-            <Card>
-              <CardContent className="pt-6">
-                <p className="text-sm text-muted-foreground">Unrealized P&L</p>
-                <p className={`text-2xl font-bold ${totalPnl >= 0 ? 'text-green-500' : 'text-red-500'}`}>
-                  {totalPnl >= 0 ? '+' : ''}{totalPnl.toFixed(2)} ({totalInvested > 0 ? ((totalPnl / totalInvested) * 100).toFixed(1) : 0}%)
-                </p>
-              </CardContent>
-            </Card>
-            <Card>
-              <CardContent className="pt-6">
-                <p className="text-sm text-muted-foreground">Win/Loss</p>
-                <p className="text-2xl font-bold text-green-500">{winningPositions}/{openPositions.length - winningPositions}</p>
-              </CardContent>
-            </Card>
-          </div>
-
-          {/* Positions Table */}
-          <Card>
-            <CardHeader>
-              <CardTitle>Open Positions</CardTitle>
-            </CardHeader>
-            <CardContent>
-              {openPositions.length === 0 ? (
-                <p className="text-muted-foreground text-center py-8">No fantasy positions yet</p>
-              ) : (
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Token</TableHead>
-                      <TableHead>Entry Price</TableHead>
-                      <TableHead>Current Price</TableHead>
-                      <TableHead>Amount</TableHead>
-                      <TableHead>P&L</TableHead>
-                      <TableHead>Actions</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {openPositions.map((pos) => (
-                      <TableRow key={pos.id}>
-                        <TableCell>
-                          <a 
-                            href={`https://dexscreener.com/solana/${pos.token_mint}`}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="font-medium text-primary hover:underline"
-                          >
-                            {pos.token_symbol || 'UNKNOWN'}
-                          </a>
-                        </TableCell>
-                        <TableCell>${pos.entry_price_usd?.toFixed(8)}</TableCell>
-                        <TableCell>${pos.current_price_usd?.toFixed(8) || 'N/A'}</TableCell>
-                        <TableCell>${pos.entry_amount_usd.toFixed(2)}</TableCell>
-                        <TableCell>
-                          <span className={`font-medium ${(pos.unrealized_pnl_usd || 0) >= 0 ? 'text-green-500' : 'text-red-500'}`}>
-                            {(pos.unrealized_pnl_usd || 0) >= 0 ? '+' : ''}${(pos.unrealized_pnl_usd || 0).toFixed(2)}
-                            <span className="text-xs ml-1">
-                              ({(pos.unrealized_pnl_percent || 0).toFixed(1)}%)
-                            </span>
-                          </span>
-                        </TableCell>
-                        <TableCell>
-                          <Button 
-                            variant="outline" 
-                            size="sm"
-                            onClick={() => sellFantasyPosition(pos.id)}
-                          >
-                            Sell
-                          </Button>
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              )}
-            </CardContent>
-          </Card>
+        {/* Caller Leaderboard */}
+        <TabsContent value="callers" className="space-y-4">
+          <CallerLeaderboard />
         </TabsContent>
 
         {/* Recent Calls Tab */}
@@ -893,232 +806,9 @@ export default function TelegramChannelMonitor() {
           </Card>
         </TabsContent>
 
-        {/* Channel Config Tab */}
+        {/* Channel Config Tab - using new component */}
         <TabsContent value="channels" className="space-y-4">
-          <Card>
-            <CardHeader>
-              <CardTitle>Add Channel</CardTitle>
-              <CardDescription>Configure a new Telegram channel to monitor</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="p-3 bg-muted/50 rounded-md text-sm text-muted-foreground mb-2">
-                💡 <strong>Public channels:</strong> Just enter the username (e.g., "blindapee"). No bot needed!
-              </div>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label>Channel Username (for public channels)</Label>
-                  <div className="flex gap-2">
-                    <Input
-                      placeholder="blindapee"
-                      value={newChannelUsername}
-                      onChange={(e) => setNewChannelUsername(e.target.value)}
-                      className="flex-1"
-                    />
-                    <Button 
-                      variant="outline" 
-                      onClick={testChannel} 
-                      disabled={isTestingChannel}
-                    >
-                      {isTestingChannel ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Test'}
-                    </Button>
-                  </div>
-                  <p className="text-xs text-muted-foreground">From t.me/blindapee → enter "blindapee"</p>
-                </div>
-                <div className="space-y-2">
-                  <Label>Channel Name (auto-filled on test)</Label>
-                  <Input
-                    placeholder="Blind Ape Alpha 🦍"
-                    value={newChannelName}
-                    onChange={(e) => setNewChannelName(e.target.value)}
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label>Channel ID (optional, for private channels)</Label>
-                  <Input
-                    placeholder="-1002078711289"
-                    value={newChannelId}
-                    onChange={(e) => setNewChannelId(e.target.value)}
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label>FlipIt Wallet</Label>
-                  <select
-                    className="w-full p-2 border rounded-md bg-background"
-                    value={selectedWalletId}
-                    onChange={(e) => setSelectedWalletId(e.target.value)}
-                  >
-                    <option value="">Select wallet...</option>
-                    {flipitWallets.map((w) => (
-                      <option key={w.id} value={w.id}>
-                        {w.label || w.pubkey.slice(0, 8)}...
-                      </option>
-                    ))}
-                  </select>
-                </div>
-                <div className="space-y-2">
-                  <Label>Notification Email</Label>
-                  <Input
-                    type="email"
-                    placeholder="your@email.com"
-                    value={notificationEmail}
-                    onChange={(e) => setNotificationEmail(e.target.value)}
-                  />
-                </div>
-              </div>
-              <Button onClick={addChannelConfig} disabled={isAddingConfig}>
-                {isAddingConfig && <Loader2 className="w-4 h-4 animate-spin mr-2" />}
-                Add Channel
-              </Button>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader>
-              <CardTitle>Monitored Channels</CardTitle>
-              <CardDescription>
-                Edit channels to add username, email, and wallet settings
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              {/* Warning if any config missing username */}
-              {configs.some(c => !c.channel_username) && (
-                <div className="p-3 mb-4 bg-destructive/10 border border-destructive/30 rounded-md text-sm">
-                  <strong className="text-destructive">⚠️ Cannot scrape chats:</strong> Some channels are missing the <strong>Username</strong> field. 
-                  The scraper needs the public username (e.g., "blindapee") to fetch messages from t.me/s/username. 
-                  Click <strong>Edit</strong> to add it.
-                </div>
-              )}
-              {configs.length === 0 ? (
-                <p className="text-muted-foreground text-center py-8">No channels configured</p>
-              ) : (
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Channel</TableHead>
-                      <TableHead>Username</TableHead>
-                      <TableHead>Email</TableHead>
-                      <TableHead>Mode</TableHead>
-                      <TableHead>Active</TableHead>
-                      <TableHead>Actions</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {configs.map((config) => {
-                      const isEditing = editingConfigId === config.id;
-                      return (
-                        <TableRow key={config.id}>
-                          <TableCell>
-                            <div className="flex flex-col">
-                              <span className="font-medium">{config.channel_name || 'Unnamed'}</span>
-                              <span className="text-xs text-muted-foreground font-mono">{config.channel_id}</span>
-                            </div>
-                          </TableCell>
-                          <TableCell>
-                            {isEditing ? (
-                              <Input
-                                value={editUsername}
-                                onChange={(e) => setEditUsername(e.target.value)}
-                                placeholder="blindapee"
-                                className="w-28"
-                              />
-                            ) : (
-                              <div className="flex items-center gap-1">
-                                {config.channel_username ? (
-                                  <span className="text-sm">@{config.channel_username}</span>
-                                ) : (
-                                  <span className="text-sm text-destructive">⚠️ Not set</span>
-                                )}
-                              </div>
-                            )}
-                          </TableCell>
-                          <TableCell>
-                            {isEditing ? (
-                              <Input
-                                type="email"
-                                value={editEmail}
-                                onChange={(e) => setEditEmail(e.target.value)}
-                                placeholder="email@example.com"
-                                className="w-40"
-                              />
-                            ) : (
-                              <span className="text-sm">
-                                {config.notification_email || <span className="text-muted-foreground">Not set</span>}
-                              </span>
-                            )}
-                          </TableCell>
-                          <TableCell>
-                            <div className="flex items-center gap-2">
-                              <Switch
-                                checked={!config.fantasy_mode}
-                                onCheckedChange={() => toggleFantasyMode(config.id, config.fantasy_mode)}
-                              />
-                              <span className={`text-sm ${config.fantasy_mode ? 'text-purple-500' : 'text-green-500'}`}>
-                                {config.fantasy_mode ? '💫 Fantasy' : '💰 Real'}
-                              </span>
-                            </div>
-                          </TableCell>
-                          <TableCell>
-                            <Switch
-                              checked={config.is_active}
-                              onCheckedChange={() => toggleConfig(config.id, config.is_active)}
-                            />
-                          </TableCell>
-                          <TableCell>
-                            <div className="flex gap-2">
-                              {isEditing ? (
-                                <>
-                                  <Button
-                                    variant="default"
-                                    size="sm"
-                                    onClick={saveEditConfig}
-                                    disabled={isSavingEdit}
-                                  >
-                                    {isSavingEdit ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Save'}
-                                  </Button>
-                                  <Button
-                                    variant="ghost"
-                                    size="sm"
-                                    onClick={() => setEditingConfigId(null)}
-                                  >
-                                    Cancel
-                                  </Button>
-                                </>
-                              ) : (
-                                <>
-                                  <Button
-                                    variant="outline"
-                                    size="sm"
-                                    onClick={() => startEditConfig(config)}
-                                  >
-                                    Edit
-                                  </Button>
-                                  <Button
-                                    variant="outline"
-                                    size="sm"
-                                    onClick={() => testChannelById(config.channel_id, config.channel_username)}
-                                  >
-                                    Test
-                                  </Button>
-                                  <Button
-                                    variant="ghost"
-                                    size="sm"
-                                    className="text-destructive hover:text-destructive"
-                                    onClick={() => deleteConfig(config.id, config.channel_name)}
-                                  >
-                                    <Trash2 className="w-4 h-4" />
-                                  </Button>
-                                </>
-                              )}
-                            </div>
-                          </TableCell>
-                        </TableRow>
-                      );
-                    })}
-                  </TableBody>
-                </Table>
-              )}
-            </CardContent>
-          </Card>
+          <ChannelManagement />
         </TabsContent>
 
         {/* Trading Rules Tab */}
