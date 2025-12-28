@@ -4780,6 +4780,7 @@ export type Database = {
           max_price_threshold: number | null
           min_price_threshold: number | null
           notification_email: string | null
+          scan_window_minutes: number | null
           standard_buy_amount_usd: number | null
           standard_sell_multiplier: number | null
           total_buys_executed: number | null
@@ -4809,6 +4810,7 @@ export type Database = {
           max_price_threshold?: number | null
           min_price_threshold?: number | null
           notification_email?: string | null
+          scan_window_minutes?: number | null
           standard_buy_amount_usd?: number | null
           standard_sell_multiplier?: number | null
           total_buys_executed?: number | null
@@ -4838,6 +4840,7 @@ export type Database = {
           max_price_threshold?: number | null
           min_price_threshold?: number | null
           notification_email?: string | null
+          scan_window_minutes?: number | null
           standard_buy_amount_usd?: number | null
           standard_sell_multiplier?: number | null
           total_buys_executed?: number | null

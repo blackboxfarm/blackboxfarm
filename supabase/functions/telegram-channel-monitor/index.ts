@@ -104,9 +104,11 @@ function generateAIInterpretation(
   } else if (!tokenData?.price) {
     decision = 'skip';
     reasoning = 'Token address found but unable to fetch price data. May be too new or invalid.';
-  } else if (tokenData.age && tokenData.age > 60) {
+  } else if (tokenData.age && tokenData.age > 10080) {
+    // Only skip extremely old tokens (7 days) in the AI interpretation layer
+    // The real token age filtering happens in the trading rules using config.max_mint_age_minutes
     decision = 'skip';
-    reasoning = `Token is ${tokenData.age} minutes old, exceeds 60-minute freshness threshold.`;
+    reasoning = `Token is ${tokenData.age} minutes old, exceeds 7-day maximum threshold.`;
   } else if (hasApeKeyword && tokenData.price < 0.00002) {
     decision = 'buy';
     reasoning = `High conviction: APE keyword + low price ($${tokenData.price.toFixed(8)} < $0.00002). Triggers large buy tier.`;
@@ -547,9 +549,13 @@ serve(async (req) => {
           const callerUsername = msg.callerUsername;
           const callerDisplayName = msg.callerDisplayName;
 
-          // Skip if message is too old (> 15 minutes)
+          // Skip if message is too old (configurable, default 24 hours)
+          const scanWindowMinutes = config.scan_window_minutes ?? 1440;
           const messageAgeMinutes = (Date.now() - messageDate.getTime()) / 60000;
-          if (messageAgeMinutes > 15) continue;
+          if (messageAgeMinutes > scanWindowMinutes) {
+            console.log(`[telegram-channel-monitor] Skipping message ${messageId}: ${messageAgeMinutes.toFixed(0)}min old, exceeds ${scanWindowMinutes}min window`);
+            continue;
+          }
 
           // Skip if we already processed this message
           if (config.last_message_id) {
