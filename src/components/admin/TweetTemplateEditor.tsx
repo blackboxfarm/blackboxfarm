@@ -22,6 +22,8 @@ const PLACEHOLDER_DOCS = {
   buy: [
     { placeholder: "{{TOKEN_SYMBOL}}", description: "Token symbol (e.g., BONK)" },
     { placeholder: "{{TOKEN_NAME}}", description: "Full token name" },
+    { placeholder: "{{TOKEN_CA}}", description: "Token contract address" },
+    { placeholder: "{{TOKEN_X}}", description: "Twitter/X link (empty if none)" },
     { placeholder: "{{ENTRY_PRICE}}", description: "Entry price in USD" },
     { placeholder: "{{TARGET_MULTIPLIER}}", description: "Target multiplier (e.g., 2)" },
     { placeholder: "{{AMOUNT_SOL}}", description: "Amount in SOL" },
@@ -29,6 +31,8 @@ const PLACEHOLDER_DOCS = {
   sell: [
     { placeholder: "{{TOKEN_SYMBOL}}", description: "Token symbol" },
     { placeholder: "{{TOKEN_NAME}}", description: "Full token name" },
+    { placeholder: "{{TOKEN_CA}}", description: "Token contract address" },
+    { placeholder: "{{TOKEN_X}}", description: "Twitter/X link (empty if none)" },
     { placeholder: "{{ENTRY_PRICE}}", description: "Entry price in USD" },
     { placeholder: "{{EXIT_PRICE}}", description: "Exit price in USD" },
     { placeholder: "{{PROFIT_PERCENT}}", description: "Profit percentage" },
@@ -41,6 +45,8 @@ const PLACEHOLDER_DOCS = {
   rebuy: [
     { placeholder: "{{TOKEN_SYMBOL}}", description: "Token symbol" },
     { placeholder: "{{TOKEN_NAME}}", description: "Full token name" },
+    { placeholder: "{{TOKEN_CA}}", description: "Token contract address" },
+    { placeholder: "{{TOKEN_X}}", description: "Twitter/X link (empty if none)" },
     { placeholder: "{{ENTRY_PRICE}}", description: "New entry price in USD" },
     { placeholder: "{{TARGET_MULTIPLIER}}", description: "Target multiplier" },
     { placeholder: "{{AMOUNT_SOL}}", description: "Amount in SOL" },
@@ -128,6 +134,8 @@ const TweetTemplateEditor: React.FC = () => {
     const sampleData: Record<string, string> = {
       "{{TOKEN_SYMBOL}}": "BONK",
       "{{TOKEN_NAME}}": "Bonk",
+      "{{TOKEN_CA}}": "DezXAZ8z7PnrnRJjz3wXBoRgixCa6xjnB7YaB1pPB263",
+      "{{TOKEN_X}}": "https://x.com/bonaboraBONK",
       "{{ENTRY_PRICE}}": "0.00002345",
       "{{EXIT_PRICE}}": "0.00004690",
       "{{TARGET_MULTIPLIER}}": "2",
