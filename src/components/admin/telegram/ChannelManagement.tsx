@@ -27,6 +27,7 @@ interface ChannelConfig {
   channel_id: string;
   channel_name: string | null;
   channel_username: string | null;
+  channel_type: string | null;
   is_active: boolean;
   fantasy_mode: boolean;
   fantasy_buy_amount_usd: number;
@@ -49,6 +50,7 @@ export function ChannelManagement() {
   const [formData, setFormData] = useState({
     channel_name: '',
     channel_username: '',
+    channel_type: 'channel' as 'channel' | 'group',
     fantasy_mode: true,
     fantasy_buy_amount_usd: 100,
     ape_keyword_enabled: true,
@@ -89,6 +91,7 @@ export function ChannelManagement() {
           channel_id: formData.channel_username.toLowerCase(),
           channel_name: formData.channel_name || formData.channel_username,
           channel_username: formData.channel_username.toLowerCase().replace('@', ''),
+          channel_type: formData.channel_type,
           is_active: true,
           fantasy_mode: formData.fantasy_mode,
           fantasy_buy_amount_usd: formData.fantasy_buy_amount_usd,
@@ -177,6 +180,7 @@ export function ChannelManagement() {
     setFormData({
       channel_name: '',
       channel_username: '',
+      channel_type: 'channel',
       fantasy_mode: true,
       fantasy_buy_amount_usd: 100,
       ape_keyword_enabled: true,
@@ -188,6 +192,7 @@ export function ChannelManagement() {
     setFormData({
       channel_name: channel.channel_name || '',
       channel_username: channel.channel_username || '',
+      channel_type: (channel.channel_type as 'channel' | 'group') || 'channel',
       fantasy_mode: channel.fantasy_mode,
       fantasy_buy_amount_usd: channel.fantasy_buy_amount_usd,
       ape_keyword_enabled: channel.ape_keyword_enabled,
@@ -216,7 +221,7 @@ export function ChannelManagement() {
         />
       </div>
       <div>
-        <Label htmlFor="channel_username">Channel Username *</Label>
+        <Label htmlFor="channel_username">Channel/Group Username *</Label>
         <Input
           id="channel_username"
           value={formData.channel_username}
@@ -226,6 +231,32 @@ export function ChannelManagement() {
         <p className="text-xs text-muted-foreground mt-1">
           The username from t.me/username
         </p>
+      </div>
+      <div>
+        <Label>Type</Label>
+        <div className="flex gap-2 mt-2">
+          <Button
+            type="button"
+            size="sm"
+            variant={formData.channel_type === 'channel' ? 'default' : 'outline'}
+            onClick={() => setFormData({ ...formData, channel_type: 'channel' })}
+          >
+            📢 Channel
+          </Button>
+          <Button
+            type="button"
+            size="sm"
+            variant={formData.channel_type === 'group' ? 'default' : 'outline'}
+            onClick={() => setFormData({ ...formData, channel_type: 'group' })}
+          >
+            👥 Group
+          </Button>
+        </div>
+        {formData.channel_type === 'group' && (
+          <p className="text-xs text-orange-500 mt-2">
+            ⚠️ Groups require your bot to be a member, or MTProto session
+          </p>
+        )}
       </div>
       <div className="flex items-center justify-between">
         <div>
