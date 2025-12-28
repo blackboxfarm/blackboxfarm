@@ -401,9 +401,9 @@ serve(async (req) => {
           const messageText = msg.text;
           const messageDate = msg.date;
 
-          // Skip if message is too old (> 1 hour)
+          // Skip if message is too old (> 15 minutes for 4-min cron)
           const messageAgeMinutes = (Date.now() - messageDate.getTime()) / 60000;
-          if (messageAgeMinutes > 60) continue;
+          if (messageAgeMinutes > 15) continue;
 
           // Skip if we already processed this message (compare as strings for public channels)
           if (config.last_message_id) {
