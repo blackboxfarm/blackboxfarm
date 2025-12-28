@@ -2485,12 +2485,16 @@ export type Database = {
           status: string | null
           target_multiplier: number | null
           target_price_usd: number | null
+          telegram_url: string | null
+          token_image: string | null
           token_mint: string
           token_name: string | null
           token_symbol: string | null
+          twitter_url: string | null
           updated_at: string | null
           user_id: string | null
           wallet_id: string | null
+          website_url: string | null
         }
         Insert: {
           buy_amount_usd?: number | null
@@ -2522,12 +2526,16 @@ export type Database = {
           status?: string | null
           target_multiplier?: number | null
           target_price_usd?: number | null
+          telegram_url?: string | null
+          token_image?: string | null
           token_mint: string
           token_name?: string | null
           token_symbol?: string | null
+          twitter_url?: string | null
           updated_at?: string | null
           user_id?: string | null
           wallet_id?: string | null
+          website_url?: string | null
         }
         Update: {
           buy_amount_usd?: number | null
@@ -2559,12 +2567,16 @@ export type Database = {
           status?: string | null
           target_multiplier?: number | null
           target_price_usd?: number | null
+          telegram_url?: string | null
+          token_image?: string | null
           token_mint?: string
           token_name?: string | null
           token_symbol?: string | null
+          twitter_url?: string | null
           updated_at?: string | null
           user_id?: string | null
           wallet_id?: string | null
+          website_url?: string | null
         }
         Relationships: [
           {

@@ -10,7 +10,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Switch } from '@/components/ui/switch';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
-import { Flame, RefreshCw, TrendingUp, DollarSign, Wallet, Clock, CheckCircle2, XCircle, Loader2, Plus, Copy, ArrowUpRight, Key, Settings, Zap, Activity, Radio, Pencil, ChevronDown, Coins, Eye, EyeOff, RotateCcw, AlertTriangle, Twitter, Trash2 } from 'lucide-react';
+import { Flame, RefreshCw, TrendingUp, DollarSign, Wallet, Clock, CheckCircle2, XCircle, Loader2, Plus, Copy, ArrowUpRight, Key, Settings, Zap, Activity, Radio, Pencil, ChevronDown, Coins, Eye, EyeOff, RotateCcw, AlertTriangle, Twitter, Trash2, Globe, Send } from 'lucide-react';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { useSolPrice } from '@/hooks/useSolPrice';
 import { FlipItFeeCalculator } from './flipit/FlipItFeeCalculator';
@@ -27,6 +27,10 @@ interface FlipPosition {
   token_mint: string;
   token_symbol: string | null;
   token_name: string | null;
+  token_image: string | null;
+  twitter_url: string | null;
+  website_url: string | null;
+  telegram_url: string | null;
   buy_amount_usd: number;
   buy_price_usd: number | null;
   quantity_tokens: number | null;
@@ -2043,6 +2047,7 @@ export function FlipItDashboard() {
             <Table>
               <TableHeader>
                 <TableRow>
+                  <TableHead className="px-2 py-1 w-12">Socials</TableHead>
                   <TableHead className="px-2 py-1">Token</TableHead>
                   <TableHead className="px-2 py-1">Invested</TableHead>
                   <TableHead className="px-2 py-1">Current Value</TableHead>
@@ -2088,47 +2093,97 @@ export function FlipItDashboard() {
                   const parentRebuyPosition = positions.find(p => p.rebuy_position_id === position.id);
                   const isFromRebuy = !!parentRebuyPosition;
 
-                  return (
-                    <TableRow key={position.id}>
-                      <TableCell className="px-2 py-1">
-                        <div className="flex items-center gap-1">
-                          {tokenImages[position.token_mint] && (
-                            <img 
-                              src={tokenImages[position.token_mint]} 
-                              alt={position.token_symbol || 'Token'} 
-                              className="w-6 h-6 rounded-full object-cover flex-shrink-0"
-                              onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
-                            />
-                          )}
-                          <div>
-                            <div className="flex items-center gap-1">
-                              <a
-                                href={`https://dexscreener.com/solana/${position.token_mint}`}
-                                target="_blank"
+                    return (
+                      <TableRow key={position.id}>
+                        {/* Socials Column - Stacked Icons */}
+                        <TableCell className="px-2 py-1">
+                          <div className="flex flex-col items-center gap-0.5">
+                            {/* Token Image */}
+                            {(position.token_image || tokenImages[position.token_mint]) ? (
+                              <img 
+                                src={position.token_image || tokenImages[position.token_mint]} 
+                                alt={position.token_symbol || 'Token'} 
+                                className="w-5 h-5 rounded-full object-cover"
+                                onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
+                              />
+                            ) : (
+                              <div className="w-5 h-5 rounded-full bg-muted flex items-center justify-center">
+                                <Coins className="h-3 w-3 text-muted-foreground/50" />
+                              </div>
+                            )}
+                            {/* Twitter/X Icon */}
+                            {position.twitter_url ? (
+                              <a 
+                                href={position.twitter_url} 
+                                target="_blank" 
                                 rel="noopener noreferrer"
-                                className="font-mono text-xs hover:text-primary cursor-pointer flex items-center gap-1"
-                                title={`View on DexScreener: ${position.token_mint}`}
+                                className="text-primary hover:text-primary/80 transition-colors"
+                                title="View on X/Twitter"
                               >
-                                {position.token_symbol || position.token_mint.slice(0, 8) + '...'}
-                                <ArrowUpRight className="h-3 w-3 opacity-50" />
+                                <Twitter className="h-3 w-3" />
                               </a>
-                              {isFromRebuy && (
-                                <Badge variant="secondary" className="text-[9px] px-1 py-0 gap-0.5">
-                                  <RotateCcw className="h-2 w-2" />
-                                  REBUY
-                                </Badge>
-                              )}
-                            </div>
-                            <button
-                              onClick={() => copyToClipboard(position.token_mint, 'Token address')}
-                              className="text-[10px] text-muted-foreground hover:text-primary flex items-center gap-1"
+                            ) : (
+                              <Twitter className="h-3 w-3 text-muted-foreground/30" />
+                            )}
+                            {/* Website Icon */}
+                            {position.website_url ? (
+                              <a 
+                                href={position.website_url} 
+                                target="_blank" 
+                                rel="noopener noreferrer"
+                                className="text-primary hover:text-primary/80 transition-colors"
+                                title="Visit Website"
+                              >
+                                <Globe className="h-3 w-3" />
+                              </a>
+                            ) : (
+                              <Globe className="h-3 w-3 text-muted-foreground/30" />
+                            )}
+                            {/* Telegram Icon */}
+                            {position.telegram_url ? (
+                              <a 
+                                href={position.telegram_url} 
+                                target="_blank" 
+                                rel="noopener noreferrer"
+                                className="text-primary hover:text-primary/80 transition-colors"
+                                title="Join Telegram"
+                              >
+                                <Send className="h-3 w-3" />
+                              </a>
+                            ) : (
+                              <Send className="h-3 w-3 text-muted-foreground/30" />
+                            )}
+                          </div>
+                        </TableCell>
+                      <TableCell className="px-2 py-1">
+                        <div>
+                          <div className="flex items-center gap-1">
+                            <a
+                              href={`https://dexscreener.com/solana/${position.token_mint}`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="font-mono text-xs hover:text-primary cursor-pointer flex items-center gap-1"
+                              title={`View on DexScreener: ${position.token_mint}`}
                             >
-                              {position.token_mint.slice(0, 6)}...{position.token_mint.slice(-4)}
-                              <Copy className="h-2 w-2 opacity-50" />
-                            </button>
-                            <div className="text-[10px] text-muted-foreground">
-                              Entry: ${position.buy_price_usd?.toFixed(8) || '-'}
-                            </div>
+                              {position.token_symbol || position.token_mint.slice(0, 8) + '...'}
+                              <ArrowUpRight className="h-3 w-3 opacity-50" />
+                            </a>
+                            {isFromRebuy && (
+                              <Badge variant="secondary" className="text-[9px] px-1 py-0 gap-0.5">
+                                <RotateCcw className="h-2 w-2" />
+                                REBUY
+                              </Badge>
+                            )}
+                          </div>
+                          <button
+                            onClick={() => copyToClipboard(position.token_mint, 'Token address')}
+                            className="text-[10px] text-muted-foreground hover:text-primary flex items-center gap-1"
+                          >
+                            {position.token_mint.slice(0, 6)}...{position.token_mint.slice(-4)}
+                            <Copy className="h-2 w-2 opacity-50" />
+                          </button>
+                          <div className="text-[10px] text-muted-foreground">
+                            Entry: ${position.buy_price_usd?.toFixed(8) || '-'}
                           </div>
                         </div>
                       </TableCell>

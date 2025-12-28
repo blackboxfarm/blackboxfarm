@@ -87,6 +87,50 @@ async function fetchMetaplexMetadata(mintAddress: string, rpcUrl: string) {
   return null;
 }
 
+// Extract social links from DexScreener pair data
+function extractSocialLinks(dexData: any): { twitter?: string; website?: string; telegram?: string } {
+  const socials: { twitter?: string; website?: string; telegram?: string } = {};
+  
+  if (!dexData?.pairs?.[0]?.info) return socials;
+  
+  const pair = dexData.pairs[0];
+  const info = pair.info;
+  
+  // Extract from socials array (DexScreener format)
+  if (Array.isArray(info.socials)) {
+    for (const social of info.socials) {
+      const url = social.url || social;
+      if (!url) continue;
+      
+      if (url.includes('twitter.com') || url.includes('x.com')) {
+        socials.twitter = url;
+      } else if (url.includes('t.me') || url.includes('telegram')) {
+        socials.telegram = url;
+      }
+    }
+  }
+  
+  // Extract from websites array
+  if (Array.isArray(info.websites)) {
+    for (const site of info.websites) {
+      const url = site.url || site;
+      if (!url) continue;
+      
+      // Skip pump.fun/bonk.fun/etc launchpad sites, we want the actual project website
+      if (url.includes('pump.fun') || url.includes('bonk.fun') || url.includes('bags.fm') || url.includes('raydium.io')) {
+        continue;
+      }
+      
+      // First non-launchpad website wins
+      if (!socials.website) {
+        socials.website = url;
+      }
+    }
+  }
+  
+  return socials;
+}
+
 // Launchpad detection
 function detectLaunchpad(mintAddress: string, dexData: any): { name: string; detected: boolean; confidence: string } {
   let launchpad = { name: 'unknown', detected: false, confidence: 'none' };
@@ -154,6 +198,10 @@ interface TokenMetadata {
   description?: string;
   uri?: string;
   isPumpFun?: boolean;
+  // Social links
+  twitter?: string;
+  website?: string;
+  telegram?: string;
 }
 
 
@@ -321,6 +369,13 @@ serve(async (req) => {
     const launchpad = detectLaunchpad(tokenMint, dexData);
     metadata.isPumpFun = launchpad.name === 'pump.fun' && launchpad.detected;
     console.log('Launchpad detection:', launchpad);
+
+    // Step 2.5: Extract social links from DexScreener
+    const socialLinks = extractSocialLinks(dexData);
+    metadata.twitter = socialLinks.twitter;
+    metadata.website = socialLinks.website;
+    metadata.telegram = socialLinks.telegram;
+    console.log('Social links extracted:', socialLinks);
 
     // Step 3: Resolve Raydium pools
     pools = resolveRaydiumPools(dexData);
