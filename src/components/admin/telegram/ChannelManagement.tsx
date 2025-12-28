@@ -21,7 +21,8 @@ import {
   Search,
   ChevronDown,
   CheckCircle2,
-  XCircle
+  XCircle,
+  RefreshCw
 } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
 
@@ -67,6 +68,15 @@ export function ChannelManagement() {
     ape_keyword_enabled: true,
     max_mint_age_minutes: 60
   });
+  
+  // Per-channel scan/test state
+  const [scanningChannelId, setScanningChannelId] = useState<string | null>(null);
+  const [testingChannelId, setTestingChannelId] = useState<string | null>(null);
+  const [channelTestResults, setChannelTestResults] = useState<Record<string, {
+    success: boolean;
+    message: string;
+    messageCount?: number;
+  }>>({});
 
   useEffect(() => {
     loadChannels();
@@ -301,6 +311,77 @@ export function ChannelManagement() {
     }
   };
 
+  // Scan a single channel
+  const scanSingleChannel = async (channel: ChannelConfig) => {
+    setScanningChannelId(channel.id);
+    try {
+      const { data, error } = await supabase.functions.invoke('telegram-channel-monitor', {
+        body: { 
+          action: 'scan',
+          singleChannel: true,
+          channelId: channel.channel_id
+        }
+      });
+      
+      if (error) throw error;
+      
+      const processed = data?.processed || 0;
+      const buys = data?.fantasyBuysExecuted || data?.buysExecuted || 0;
+      
+      toast.success(`Scanned @${channel.channel_username}: ${processed} tokens, ${buys} buys`);
+      loadChannels();
+    } catch (error: any) {
+      console.error('Error scanning channel:', error);
+      toast.error(`Scan failed: ${error.message}`);
+    } finally {
+      setScanningChannelId(null);
+    }
+  };
+
+  // Test a single channel's accessibility
+  const testSingleChannel = async (channel: ChannelConfig) => {
+    setTestingChannelId(channel.id);
+    try {
+      const { data, error } = await supabase.functions.invoke('telegram-mtproto-auth', {
+        body: { 
+          action: 'test_group_access', 
+          channelUsername: channel.channel_username 
+        }
+      });
+      
+      if (error) throw error;
+      
+      setChannelTestResults(prev => ({
+        ...prev,
+        [channel.id]: {
+          success: data.success,
+          message: data.message || (data.success 
+            ? `Accessible! Found ${data.messageCount || 0} messages` 
+            : 'Not accessible via web scraping'),
+          messageCount: data.messageCount
+        }
+      }));
+      
+      if (data.success) {
+        toast.success(`✅ @${channel.channel_username}: ${data.messageCount || 0} messages found`);
+      } else {
+        toast.warning(`⚠️ @${channel.channel_username}: ${data.message}`);
+      }
+    } catch (error: any) {
+      console.error('Error testing channel:', error);
+      toast.error(`Test failed: ${error.message}`);
+      setChannelTestResults(prev => ({
+        ...prev,
+        [channel.id]: {
+          success: false,
+          message: error.message
+        }
+      }));
+    } finally {
+      setTestingChannelId(null);
+    }
+  };
+
   if (loading) {
     return (
       <div className="flex items-center justify-center p-8">
@@ -528,6 +609,10 @@ with TelegramClient(StringSession(), api_id, api_hash) as client:
                   </CardTitle>
                 </div>
                 <div className="flex items-center gap-2">
+                  {/* Channel Type Badge */}
+                  <Badge variant="outline" className="text-xs">
+                    {channel.channel_type === 'group' ? '👥 Group' : '📢 Channel'}
+                  </Badge>
                   {channel.fantasy_mode ? (
                     <Badge variant="outline" className="bg-purple-500/10 text-purple-500 border-purple-500/30">
                       Fantasy
@@ -571,7 +656,55 @@ with TelegramClient(StringSession(), api_id, api_hash) as client:
                   </div>
                 )}
 
-                <div className="flex items-center gap-2 pt-2">
+                {/* Per-channel test result */}
+                {channelTestResults[channel.id] && (
+                  <div className={`p-2 rounded text-xs flex items-center gap-2 ${
+                    channelTestResults[channel.id].success 
+                      ? 'bg-green-500/10 text-green-400' 
+                      : 'bg-orange-500/10 text-orange-400'
+                  }`}>
+                    {channelTestResults[channel.id].success ? (
+                      <CheckCircle2 className="h-4 w-4 flex-shrink-0" />
+                    ) : (
+                      <XCircle className="h-4 w-4 flex-shrink-0" />
+                    )}
+                    <span>{channelTestResults[channel.id].message}</span>
+                  </div>
+                )}
+
+                {/* Action buttons - 2 rows */}
+                <div className="flex flex-wrap items-center gap-2 pt-2">
+                  {/* Scan & Test buttons */}
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => scanSingleChannel(channel)}
+                    disabled={scanningChannelId === channel.id}
+                    className="border-blue-500/30 text-blue-400 hover:bg-blue-500/10"
+                  >
+                    {scanningChannelId === channel.id ? (
+                      <Loader2 className="h-4 w-4 mr-1 animate-spin" />
+                    ) : (
+                      <RefreshCw className="h-4 w-4 mr-1" />
+                    )}
+                    Scan
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => testSingleChannel(channel)}
+                    disabled={testingChannelId === channel.id}
+                    className="border-green-500/30 text-green-400 hover:bg-green-500/10"
+                  >
+                    {testingChannelId === channel.id ? (
+                      <Loader2 className="h-4 w-4 mr-1 animate-spin" />
+                    ) : (
+                      <Search className="h-4 w-4 mr-1" />
+                    )}
+                    Test
+                  </Button>
+                  
+                  {/* Pause/Activate */}
                   <Button
                     size="sm"
                     variant="outline"
@@ -589,6 +722,8 @@ with TelegramClient(StringSession(), api_id, api_hash) as client:
                       </>
                     )}
                   </Button>
+                  
+                  {/* Edit button */}
                   <Dialog open={editingChannel?.id === channel.id} onOpenChange={(open) => !open && setEditingChannel(null)}>
                     <DialogTrigger asChild>
                       <Button size="sm" variant="outline" onClick={() => startEdit(channel)}>
@@ -603,6 +738,8 @@ with TelegramClient(StringSession(), api_id, api_hash) as client:
                       {renderChannelForm(true)}
                     </DialogContent>
                   </Dialog>
+                  
+                  {/* Delete button */}
                   <Button
                     size="sm"
                     variant="destructive"
