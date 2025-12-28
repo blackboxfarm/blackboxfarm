@@ -84,7 +84,14 @@ async function fetchSolPrice(): Promise<number> {
   return 200; // Default fallback
 }
 
-async function fetchTokenMetadata(tokenMint: string): Promise<{ symbol: string; name: string } | null> {
+async function fetchTokenMetadata(tokenMint: string): Promise<{ 
+  symbol: string; 
+  name: string;
+  image?: string;
+  twitter?: string;
+  website?: string;
+  telegram?: string;
+} | null> {
   // Primary: Jupiter token endpoint
   try {
     const res = await fetch(`https://tokens.jup.ag/token/${tokenMint}`);
@@ -100,14 +107,54 @@ async function fetchTokenMetadata(tokenMint: string): Promise<{ symbol: string; 
     console.error("Jupiter token endpoint failed:", e);
   }
 
-  // Fallback: DexScreener
+  // Fallback: DexScreener (includes social links)
   try {
     const dexRes = await fetch(`https://api.dexscreener.com/latest/dex/tokens/${tokenMint}`);
     if (dexRes.ok) {
       const dexData = await dexRes.json();
       const pair = dexData?.pairs?.[0];
       if (pair?.baseToken?.symbol) {
-        return { symbol: pair.baseToken.symbol, name: pair.baseToken.name || pair.baseToken.symbol };
+        const result: { 
+          symbol: string; 
+          name: string;
+          image?: string;
+          twitter?: string;
+          website?: string;
+          telegram?: string;
+        } = { 
+          symbol: pair.baseToken.symbol, 
+          name: pair.baseToken.name || pair.baseToken.symbol 
+        };
+        
+        // Extract image
+        if (pair.info?.imageUrl) {
+          result.image = pair.info.imageUrl;
+        }
+        
+        // Extract social links
+        if (pair.info?.socials && Array.isArray(pair.info.socials)) {
+          for (const social of pair.info.socials) {
+            const url = social.url || social;
+            if (url?.includes('twitter.com') || url?.includes('x.com')) {
+              result.twitter = url;
+            } else if (url?.includes('t.me') || url?.includes('telegram')) {
+              result.telegram = url;
+            }
+          }
+        }
+        
+        // Extract website (skip launchpad sites)
+        if (pair.info?.websites && Array.isArray(pair.info.websites)) {
+          for (const site of pair.info.websites) {
+            const url = site.url || site;
+            if (url && !url.includes('pump.fun') && !url.includes('bonk.fun') && !url.includes('bags.fm') && !url.includes('raydium.io')) {
+              result.website = url;
+              break;
+            }
+          }
+        }
+        
+        return result;
       }
     }
   } catch (e) {
@@ -203,7 +250,7 @@ serve(async (req) => {
         userId = user?.id || null;
       }
 
-      // Create position record first
+      // Create position record first (with social links)
       const { data: position, error: posError } = await supabase
         .from("flip_positions")
         .insert({
@@ -212,6 +259,10 @@ serve(async (req) => {
           token_mint: tokenMint,
           token_symbol: metadata?.symbol || null,
           token_name: metadata?.name || null,
+          token_image: metadata?.image || null,
+          twitter_url: metadata?.twitter || null,
+          website_url: metadata?.website || null,
+          telegram_url: metadata?.telegram || null,
           buy_amount_usd: buyAmountUsd || 10,
           buy_price_usd: currentPrice,
           target_multiplier: mult,
