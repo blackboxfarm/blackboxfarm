@@ -261,3 +261,6 @@ verify_jwt = false
 
 [functions.telegram-mtproto-auth]
 verify_jwt = false
+
+[functions.dex-paid-checker]
+verify_jwt = false
