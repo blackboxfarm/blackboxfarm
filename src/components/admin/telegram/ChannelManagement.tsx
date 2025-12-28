@@ -32,6 +32,7 @@ import { formatDistanceToNow } from 'date-fns';
 import { ChannelScanLogs } from './ChannelScanLogs';
 import { TradingRulesManager } from './TradingRulesManager';
 import { TradingKeywordsManager } from './TradingKeywordsManager';
+import { useSolPrice } from '@/hooks/useSolPrice';
 
 interface ChannelConfig {
   id: string;
@@ -56,6 +57,7 @@ interface ChannelConfig {
   // FlipIt auto-buy settings
   flipit_enabled: boolean;
   flipit_buy_amount_usd: number;
+  flipit_buy_amount_sol?: number | null;
   flipit_sell_multiplier: number;
   flipit_max_daily_positions: number;
 }
@@ -83,6 +85,9 @@ export function ChannelManagement() {
     max_mint_age_minutes: 60,
     scan_window_minutes: 1440
   });
+  
+  // SOL price for USD conversion
+  const { price: solPrice } = useSolPrice();
   
   // Per-channel scan/test state
   const [scanningChannelId, setScanningChannelId] = useState<string | null>(null);
@@ -835,13 +840,23 @@ with TelegramClient(StringSession(), api_id, api_hash) as client:
                       </p>
                       <div className="grid grid-cols-3 gap-2">
                         <div>
-                          <Label className="text-xs text-muted-foreground">Buy ($)</Label>
+                          <Label className="text-xs text-muted-foreground">Buy (SOL)</Label>
                           <Input
                             type="number"
-                            value={channel.flipit_buy_amount_usd || 10}
-                            onChange={(e) => updateFlipitSettings(channel.id, 'flipit_buy_amount_usd', Number(e.target.value))}
+                            step="0.01"
+                            value={channel.flipit_buy_amount_sol ?? (channel.flipit_buy_amount_usd ? (channel.flipit_buy_amount_usd / solPrice).toFixed(2) : 0.1)}
+                            onChange={(e) => {
+                              const solAmount = Number(e.target.value);
+                              const usdAmount = solAmount * solPrice;
+                              // Update both SOL and USD values
+                              updateFlipitSettings(channel.id, 'flipit_buy_amount_sol', solAmount);
+                              updateFlipitSettings(channel.id, 'flipit_buy_amount_usd', usdAmount);
+                            }}
                             className="h-8 text-sm"
                           />
+                          <p className="text-xs text-muted-foreground mt-1">
+                            ≈ ${((channel.flipit_buy_amount_sol ?? (channel.flipit_buy_amount_usd ? channel.flipit_buy_amount_usd / solPrice : 0.1)) * solPrice).toFixed(2)} USD
+                          </p>
                         </div>
                         <div>
                           <Label className="text-xs text-muted-foreground">Target (X)</Label>

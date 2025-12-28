@@ -4802,6 +4802,7 @@ export type Database = {
           entity_access_hash: string | null
           fantasy_buy_amount_usd: number | null
           fantasy_mode: boolean | null
+          flipit_buy_amount_sol: number | null
           flipit_buy_amount_usd: number | null
           flipit_enabled: boolean | null
           flipit_max_daily_positions: number | null
@@ -4837,6 +4838,7 @@ export type Database = {
           entity_access_hash?: string | null
           fantasy_buy_amount_usd?: number | null
           fantasy_mode?: boolean | null
+          flipit_buy_amount_sol?: number | null
           flipit_buy_amount_usd?: number | null
           flipit_enabled?: boolean | null
           flipit_max_daily_positions?: number | null
@@ -4872,6 +4874,7 @@ export type Database = {
           entity_access_hash?: string | null
           fantasy_buy_amount_usd?: number | null
           fantasy_mode?: boolean | null
+          flipit_buy_amount_sol?: number | null
           flipit_buy_amount_usd?: number | null
           flipit_enabled?: boolean | null
           flipit_max_daily_positions?: number | null
