@@ -681,8 +681,9 @@ serve(async (req) => {
             let sellMultiplier: number | null = null;
             let skipReason: string | null = null;
 
-            if (tokenAge !== null && tokenAge > (config.max_mint_age_minutes || 60)) {
-              skipReason = `Token too old: ${tokenAge} minutes`;
+            const maxTokenAgeMinutes = config.max_mint_age_minutes ?? 10080; // Default 7 days
+            if (tokenAge !== null && tokenAge > maxTokenAgeMinutes) {
+              skipReason = `Token too old: ${tokenAge} minutes (max: ${maxTokenAgeMinutes})`;
             } else if (price === null) {
               skipReason = 'Unable to fetch price';
             } else {
