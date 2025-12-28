@@ -70,6 +70,7 @@ function generateOAuthHeader(method: string, url: string): string {
 
 interface TweetRequest {
   type: 'buy' | 'sell' | 'rebuy';
+  tokenMint?: string;
   tokenSymbol: string;
   tokenName?: string;
   entryPrice?: number;
@@ -132,10 +133,45 @@ async function getTemplate(supabase: any, templateType: string): Promise<{ text:
   }
 }
 
+function sanitizeSymbol(input: string | undefined): string {
+  const s = (input || "").trim();
+  // Keep it hashtag-friendly and predictable
+  return s.replace(/[^A-Za-z0-9_]/g, "").slice(0, 16);
+}
+
+async function fetchTokenInfo(tokenMint: string): Promise<{ symbol: string; name?: string } | null> {
+  // Primary: Jupiter token endpoint
+  try {
+    const res = await fetch(`https://tokens.jup.ag/token/${tokenMint}`);
+    if (res.ok) {
+      const data = await res.json();
+      if (data?.symbol) return { symbol: String(data.symbol), name: String(data.name || data.symbol) };
+    }
+  } catch (e) {
+    console.error("Jupiter token lookup failed:", e);
+  }
+
+  // Fallback: DexScreener
+  try {
+    const res = await fetch(`https://api.dexscreener.com/latest/dex/tokens/${tokenMint}`);
+    if (res.ok) {
+      const data = await res.json();
+      const pair = data?.pairs?.[0];
+      if (pair?.baseToken?.symbol) {
+        return { symbol: pair.baseToken.symbol, name: pair.baseToken.name || pair.baseToken.symbol };
+      }
+    }
+  } catch (e) {
+    console.error("DexScreener token lookup failed:", e);
+  }
+
+  return null;
+}
+
 function buildTweetText(template: string, data: TweetRequest): string {
   const { type, tokenSymbol, tokenName, entryPrice, exitPrice, targetMultiplier, profitPercent, profitSol, amountSol } = data;
   
-  const symbol = tokenSymbol || 'TOKEN';
+  const symbol = sanitizeSymbol(tokenSymbol) || 'TOKEN';
   const profitSign = (profitPercent || 0) >= 0 ? '+' : '';
   const profitEmoji = (profitPercent || 0) >= 0 ? '🟢' : '🔴';
   
@@ -219,25 +255,37 @@ Deno.serve(async (req) => {
     const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
     
-    const body: TweetRequest = await req.json();
-    console.log("Tweet request:", JSON.stringify(body));
+     let body: TweetRequest = await req.json();
+     console.log("Tweet request:", JSON.stringify(body));
     
-    // Get template from database
-    const { text: template, enabled } = await getTemplate(supabase, body.type);
-    
-    if (!enabled) {
-      console.log(`Tweeting disabled for ${body.type}`);
-      return new Response(JSON.stringify({ 
-        success: false, 
-        skipped: true,
-        reason: `${body.type} tweets are disabled`
-      }), {
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
-    
-    const tweetText = buildTweetText(template, body);
-    console.log("Generated tweet text:", tweetText);
+     // Get template from database
+     const { text: template, enabled } = await getTemplate(supabase, body.type);
+     
+     if (!enabled) {
+       console.log(`Tweeting disabled for ${body.type}`);
+       return new Response(JSON.stringify({ 
+         success: false, 
+         skipped: true,
+         reason: `${body.type} tweets are disabled`
+       }), {
+         headers: { ...corsHeaders, "Content-Type": "application/json" },
+       });
+     }
+
+     // Resolve token symbol/name if missing
+     const rawSymbol = (body.tokenSymbol || "").trim();
+     const needsLookup = !rawSymbol || rawSymbol === "TOKEN" || rawSymbol === "UNKNOWN";
+     if (needsLookup && body.tokenMint) {
+       const meta = await fetchTokenInfo(body.tokenMint);
+       if (meta?.symbol) {
+         body.tokenSymbol = meta.symbol;
+         body.tokenName = body.tokenName || meta.name;
+         console.log("Resolved token info:", { tokenMint: body.tokenMint, symbol: body.tokenSymbol });
+       }
+     }
+     
+     const tweetText = buildTweetText(template, body);
+     console.log("Generated tweet text:", tweetText);
     
     const result = await sendTweet(tweetText);
     

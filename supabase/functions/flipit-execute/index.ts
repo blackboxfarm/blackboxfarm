@@ -85,33 +85,41 @@ async function fetchSolPrice(): Promise<number> {
 }
 
 async function fetchTokenMetadata(tokenMint: string): Promise<{ symbol: string; name: string } | null> {
+  // Primary: Jupiter token endpoint
   try {
-    // Try Jupiter token list
-    const res = await fetch(`https://token.jup.ag/strict?mint=${tokenMint}`);
+    const res = await fetch(`https://tokens.jup.ag/token/${tokenMint}`);
     if (res.ok) {
       const data = await res.json();
       if (data?.symbol) {
-        return { symbol: data.symbol, name: data.name || data.symbol };
+        return { symbol: String(data.symbol), name: String(data.name || data.symbol) };
       }
+    } else {
+      console.log("Jupiter token endpoint non-200:", res.status);
     }
-    
-    // Fallback to DexScreener
+  } catch (e) {
+    console.error("Jupiter token endpoint failed:", e);
+  }
+
+  // Fallback: DexScreener
+  try {
     const dexRes = await fetch(`https://api.dexscreener.com/latest/dex/tokens/${tokenMint}`);
     if (dexRes.ok) {
       const dexData = await dexRes.json();
       const pair = dexData?.pairs?.[0];
-      if (pair?.baseToken) {
-        return { symbol: pair.baseToken.symbol, name: pair.baseToken.name };
+      if (pair?.baseToken?.symbol) {
+        return { symbol: pair.baseToken.symbol, name: pair.baseToken.name || pair.baseToken.symbol };
       }
     }
   } catch (e) {
-    console.error("Token metadata fetch failed:", e);
+    console.error("DexScreener metadata fetch failed:", e);
   }
+
   return null;
 }
 
 async function sendTweet(supabase: any, tweetData: {
   type: 'buy' | 'sell' | 'rebuy';
+  tokenMint?: string;
   tokenSymbol: string;
   tokenName?: string;
   entryPrice?: number;
@@ -270,6 +278,7 @@ serve(async (req) => {
         // Send buy tweet (fire and forget)
         await sendTweet(supabase, {
           type: 'buy',
+          tokenMint: tokenMint,
           tokenSymbol: metadata?.symbol || 'TOKEN',
           tokenName: metadata?.name,
           entryPrice: currentPrice,
@@ -389,6 +398,7 @@ serve(async (req) => {
         // Send sell tweet (fire and forget)
         await sendTweet(supabase, {
           type: 'sell',
+          tokenMint: position.token_mint,
           tokenSymbol: position.token_symbol || 'TOKEN',
           tokenName: position.token_name,
           entryPrice: position.buy_price_usd,
