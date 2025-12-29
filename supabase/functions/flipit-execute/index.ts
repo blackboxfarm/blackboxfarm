@@ -164,6 +164,181 @@ async function fetchTokenMetadata(tokenMint: string): Promise<{
   return null;
 }
 
+// Lookup creator wallet and create/update developer profile
+async function trackDeveloper(supabase: any, tokenMint: string, positionId: string, metadata: any) {
+  try {
+    console.log("Looking up creator for token:", tokenMint);
+    
+    // Call solscan-creator-lookup to get the creator wallet
+    const { data: creatorData, error: creatorError } = await supabase.functions.invoke("solscan-creator-lookup", {
+      body: { tokenMint }
+    });
+    
+    if (creatorError || !creatorData?.creatorWallet) {
+      console.log("Could not find creator wallet:", creatorError?.message || "No creator returned");
+      return null;
+    }
+    
+    const creatorWallet = creatorData.creatorWallet;
+    console.log("Found creator wallet:", creatorWallet);
+    
+    // Check if developer profile already exists
+    const { data: existingProfile } = await supabase
+      .from("developer_profiles")
+      .select("id, display_name, total_tokens_created")
+      .eq("master_wallet_address", creatorWallet)
+      .maybeSingle();
+    
+    let developerId: string;
+    
+    if (existingProfile) {
+      developerId = existingProfile.id;
+      console.log("Developer profile already exists:", developerId);
+      
+      // Update token count
+      await supabase
+        .from("developer_profiles")
+        .update({ 
+          total_tokens_created: (existingProfile.total_tokens_created || 0) + 1,
+          updated_at: new Date().toISOString()
+        })
+        .eq("id", developerId);
+    } else {
+      // Create new developer profile
+      console.log("Creating new developer profile for:", creatorWallet);
+      
+      // Extract Twitter handle from metadata if available
+      let twitterHandle: string | null = null;
+      if (metadata?.twitter) {
+        const match = metadata.twitter.match(/(?:twitter\.com|x\.com)\/([^\/\?]+)/);
+        if (match) {
+          twitterHandle = match[1];
+        }
+      }
+      
+      const { data: newProfile, error: profileError } = await supabase
+        .from("developer_profiles")
+        .insert({
+          master_wallet_address: creatorWallet,
+          display_name: twitterHandle || `Dev-${creatorWallet.slice(0, 8)}`,
+          twitter_handle: twitterHandle,
+          total_tokens_created: 1,
+          reputation_score: 50, // Neutral starting score
+          trust_level: "neutral",
+          source: "flipit",
+          is_active: true
+        })
+        .select("id")
+        .single();
+      
+      if (profileError) {
+        console.error("Failed to create developer profile:", profileError);
+        return null;
+      }
+      
+      developerId = newProfile.id;
+      console.log("Created developer profile:", developerId);
+    }
+    
+    // Create developer wallet entry if it doesn't exist
+    const { data: existingWallet } = await supabase
+      .from("developer_wallets")
+      .select("id")
+      .eq("wallet_address", creatorWallet)
+      .maybeSingle();
+    
+    if (!existingWallet) {
+      await supabase
+        .from("developer_wallets")
+        .insert({
+          developer_id: developerId,
+          wallet_address: creatorWallet,
+          wallet_type: "creator",
+          is_primary: true
+        });
+    }
+    
+    // Create developer token entry
+    const { error: tokenError } = await supabase
+      .from("developer_tokens")
+      .insert({
+        developer_id: developerId,
+        token_mint: tokenMint,
+        token_name: metadata?.name || null,
+        token_symbol: metadata?.symbol || null,
+        outcome: "pending",
+        flipit_position_id: positionId,
+        created_at: new Date().toISOString()
+      });
+    
+    if (tokenError) {
+      console.error("Failed to create developer token:", tokenError);
+    } else {
+      console.log("Created developer token entry for:", tokenMint);
+    }
+    
+    return { developerId, creatorWallet };
+  } catch (e) {
+    console.error("Error tracking developer:", e);
+    return null;
+  }
+}
+
+// Track trade outcome and update developer reputation
+async function trackTradeOutcome(supabase: any, position: any) {
+  try {
+    if (!position.token_mint) return;
+    
+    // Find the developer token entry for this position
+    const { data: devToken } = await supabase
+      .from("developer_tokens")
+      .select("id, developer_id")
+      .eq("flipit_position_id", position.id)
+      .maybeSingle();
+    
+    if (!devToken) {
+      console.log("No developer token found for position:", position.id);
+      return;
+    }
+    
+    // Calculate outcome based on profit
+    const profitPercent = position.buy_price_usd && position.sell_price_usd
+      ? ((position.sell_price_usd / position.buy_price_usd) - 1) * 100
+      : 0;
+    
+    let outcome: string;
+    if (profitPercent >= 0) {
+      outcome = "success";
+    } else if (profitPercent <= -90) {
+      outcome = "rug_pull";
+    } else if (profitPercent <= -50) {
+      outcome = "slow_drain";
+    } else {
+      outcome = "failed";
+    }
+    
+    console.log(`Trade outcome for position ${position.id}: ${outcome} (${profitPercent.toFixed(1)}%)`);
+    
+    // Update developer token with outcome
+    await supabase
+      .from("developer_tokens")
+      .update({ 
+        outcome,
+        performance_score: profitPercent > 0 ? Math.min(100, profitPercent) : Math.max(0, 50 + profitPercent)
+      })
+      .eq("id", devToken.id);
+    
+    // Trigger reputation recalculation
+    await supabase.functions.invoke("developer-reputation-calculator", {
+      body: { developerId: devToken.developer_id }
+    });
+    
+    console.log("Developer reputation updated for:", devToken.developer_id);
+  } catch (e) {
+    console.error("Error tracking trade outcome:", e);
+  }
+}
+
 async function sendTweet(supabase: any, tweetData: {
   type: 'buy' | 'sell' | 'rebuy';
   tokenMint?: string;
@@ -340,6 +515,11 @@ serve(async (req) => {
           txSignature: signature,
         });
 
+        // Track developer (fire and forget - don't block the response)
+        trackDeveloper(supabase, tokenMint, position.id, metadata).catch(e => 
+          console.error("Developer tracking failed:", e)
+        );
+
         return ok({
           success: true,
           positionId: position.id,
@@ -460,6 +640,12 @@ serve(async (req) => {
           profitSol: profitSol,
           txSignature: signature,
         });
+
+        // Track trade outcome for developer reputation (fire and forget)
+        trackTradeOutcome(supabase, {
+          ...position,
+          sell_price_usd: sellPrice
+        }).catch(e => console.error("Trade outcome tracking failed:", e));
 
         return ok({
           success: true,
