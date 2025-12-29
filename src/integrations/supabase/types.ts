@@ -5094,6 +5094,45 @@ export type Database = {
           },
         ]
       }
+      telegram_message_targets: {
+        Row: {
+          chat_id: string | null
+          chat_username: string | null
+          created_at: string
+          id: string
+          label: string
+          last_used_at: string | null
+          resolved_name: string | null
+          target_type: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          chat_id?: string | null
+          chat_username?: string | null
+          created_at?: string
+          id?: string
+          label: string
+          last_used_at?: string | null
+          resolved_name?: string | null
+          target_type: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          chat_id?: string | null
+          chat_username?: string | null
+          created_at?: string
+          id?: string
+          label?: string
+          last_used_at?: string | null
+          resolved_name?: string | null
+          target_type?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       telegram_mtproto_session: {
         Row: {
           created_at: string | null

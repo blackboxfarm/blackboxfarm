@@ -413,6 +413,134 @@ serve(async (req) => {
       }
     }
 
+    if (action === 'resolve_chat') {
+      const { chatUsername, chatId } = body;
+      
+      if (!chatUsername && !chatId) {
+        return new Response(JSON.stringify({
+          success: false,
+          error: 'chatUsername or chatId is required'
+        }), {
+          status: 400,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        });
+      }
+
+      if (!existingSession?.session_string) {
+        return new Response(JSON.stringify({
+          success: false,
+          error: 'No active MTProto session. Save a session first.'
+        }), {
+          status: 400,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        });
+      }
+
+      const mtcuteSession = convertFromTelethonSession(existingSession.session_string);
+
+      const client = new TelegramClient({
+        apiId,
+        apiHash,
+        storage: new MemoryStorage(),
+      });
+
+      try {
+        await client.importSession(mtcuteSession);
+        await client.connect();
+
+        let peer: string | number;
+        if (chatId) {
+          peer = parseInt(String(chatId), 10);
+          console.log(`[telegram-mtproto-auth] resolve_chat by ID: ${peer}`);
+        } else {
+          peer = normalizeUsername(String(chatUsername));
+          console.log(`[telegram-mtproto-auth] resolve_chat by username: @${peer}`);
+        }
+
+        // Try to get chat/channel info
+        const entity = await client.resolvePeer(peer);
+        let chatInfo: any = null;
+
+        if (entity && entity._ !== 'inputPeerEmpty') {
+          // Try to get full chat info
+          try {
+            if ('channelId' in entity) {
+              const channelInfo = await client.call({
+                _: 'channels.getChannels',
+                id: [{ _: 'inputChannel', channelId: entity.channelId, accessHash: (entity as any).accessHash }]
+              }) as any;
+              if (channelInfo?.chats?.[0]) {
+                const ch = channelInfo.chats[0];
+                chatInfo = {
+                  id: ch.id,
+                  title: ch.title,
+                  username: ch.username,
+                  type: ch._ || 'channel'
+                };
+              }
+            } else if ('chatId' in entity) {
+              const chatsInfo = await client.call({
+                _: 'messages.getChats',
+                id: [entity.chatId]
+              }) as any;
+              if (chatsInfo?.chats?.[0]) {
+                const ch = chatsInfo.chats[0];
+                chatInfo = {
+                  id: ch.id,
+                  title: ch.title,
+                  type: ch._ || 'chat'
+                };
+              }
+            } else if ('userId' in entity) {
+              const usersInfo = await client.call({
+                _: 'users.getUsers',
+                id: [{ _: 'inputUser', userId: entity.userId, accessHash: (entity as any).accessHash }]
+              }) as any;
+              if (usersInfo?.[0]) {
+                const u = usersInfo[0];
+                chatInfo = {
+                  id: u.id,
+                  name: `${u.firstName || ''} ${u.lastName || ''}`.trim() || u.username,
+                  username: u.username,
+                  type: 'user'
+                };
+              }
+            }
+          } catch (e: any) {
+            console.log(`[telegram-mtproto-auth] Could not get full info, using basic:`, e?.message);
+          }
+        }
+
+        await supabase
+          .from('telegram_mtproto_session')
+          .update({ last_used_at: new Date().toISOString() })
+          .eq('id', existingSession.id);
+
+        return new Response(JSON.stringify({
+          success: !!chatInfo,
+          chatInfo,
+          message: chatInfo ? 'Chat resolved successfully' : 'Could not resolve chat'
+        }), {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        });
+      } catch (e: any) {
+        console.error(`[telegram-mtproto-auth] Failed to resolve chat:`, e?.message || e);
+        return new Response(JSON.stringify({
+          success: false,
+          error: `Failed to resolve chat: ${e?.message || 'unknown error'}`
+        }), {
+          status: 500,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        });
+      } finally {
+        try {
+          await client.close();
+        } catch {
+          // ignore close errors
+        }
+      }
+    }
+
     if (action === 'generate_session_instructions') {
       return new Response(JSON.stringify({
         success: true,
