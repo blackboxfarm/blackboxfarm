@@ -26,6 +26,10 @@ interface FantasyPosition {
   peak_price_usd: number | null;
   peak_price_at: string | null;
   peak_multiplier: number | null;
+  sold_price_usd: number | null;
+  trail_tracking_enabled: boolean | null;
+  trail_peak_price_usd: number | null;
+  trail_low_price_usd: number | null;
 }
 
 // Fetch token prices and symbols in batch from Jupiter + DexScreener
@@ -99,6 +103,13 @@ serve(async (req) => {
       .eq('status', 'open')
       .eq('is_active', true);
 
+    // Also fetch sold positions that have trail tracking enabled
+    const { data: soldPositions, error: soldFetchError } = await supabase
+      .from('telegram_fantasy_positions')
+      .select('*')
+      .eq('status', 'sold')
+      .eq('trail_tracking_enabled', true);
+
     if (fetchError) {
       console.error('[telegram-fantasy-price-monitor] Error fetching positions:', fetchError);
       return new Response(JSON.stringify({
@@ -107,19 +118,27 @@ serve(async (req) => {
       }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 500 });
     }
 
-    if (!positions || positions.length === 0) {
+    const allOpenPositions = positions || [];
+    const allSoldPositions = soldPositions || [];
+    
+    if (allOpenPositions.length === 0 && allSoldPositions.length === 0) {
       return new Response(JSON.stringify({
         success: true,
-        message: 'No active open fantasy positions',
+        message: 'No positions to monitor',
         updated: 0,
-        autoSold: 0
+        autoSold: 0,
+        trailsUpdated: 0
       }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
 
-    console.log(`[telegram-fantasy-price-monitor] Found ${positions.length} active open positions`);
+    console.log(`[telegram-fantasy-price-monitor] Found ${allOpenPositions.length} active open positions, ${allSoldPositions.length} sold positions with trail tracking`);
 
-    // Get unique token mints
-    const tokenMints = [...new Set(positions.map(p => p.token_mint))];
+    // Get unique token mints from both open and sold positions
+    const allMints = [
+      ...allOpenPositions.map(p => p.token_mint),
+      ...allSoldPositions.map(p => p.token_mint)
+    ];
+    const tokenMints = [...new Set(allMints)];
     
     // Fetch current prices and symbols
     const tokenData = await fetchTokenData(tokenMints);
@@ -128,10 +147,13 @@ serve(async (req) => {
     // Track results
     let updatedCount = 0;
     let autoSoldCount = 0;
+    let trailsUpdated = 0;
     const autoSells: any[] = [];
     const updates: any[] = [];
+    const trailUpdates: any[] = [];
 
-    for (const position of positions as FantasyPosition[]) {
+    // Process open positions
+    for (const position of allOpenPositions as FantasyPosition[]) {
       const data = tokenData[position.token_mint];
       
       if (!data?.price) {
@@ -260,15 +282,66 @@ serve(async (req) => {
       }
     }
 
-    console.log(`[telegram-fantasy-price-monitor] Updated ${updatedCount} positions, auto-sold ${autoSoldCount}`);
+    // Process sold positions for trail tracking
+    for (const position of allSoldPositions as FantasyPosition[]) {
+      const data = tokenData[position.token_mint];
+      
+      if (!data?.price) continue;
+      
+      const soldPrice = position.sold_price_usd || position.entry_price_usd;
+      const trailMultiplier = soldPrice > 0 ? data.price / soldPrice : 0;
+      
+      const trailUpdateObj: Record<string, any> = {
+        trail_current_price_usd: data.price,
+        trail_last_updated_at: new Date().toISOString()
+      };
+      
+      // Track peak after sale
+      const currentTrailPeak = position.trail_peak_price_usd || soldPrice;
+      if (data.price > currentTrailPeak) {
+        trailUpdateObj.trail_peak_price_usd = data.price;
+        trailUpdateObj.trail_peak_multiplier = trailMultiplier;
+        trailUpdateObj.trail_peak_at = new Date().toISOString();
+        console.log(`[telegram-fantasy-price-monitor] New trail peak for ${position.token_symbol || position.token_mint}: ${data.price} (${trailMultiplier.toFixed(2)}x since sell)`);
+      }
+      
+      // Track low after sale
+      const currentTrailLow = position.trail_low_price_usd || data.price;
+      if (data.price < currentTrailLow) {
+        trailUpdateObj.trail_low_price_usd = data.price;
+        trailUpdateObj.trail_low_at = new Date().toISOString();
+      }
+      
+      const { error: trailError } = await supabase
+        .from('telegram_fantasy_positions')
+        .update(trailUpdateObj)
+        .eq('id', position.id);
+      
+      if (!trailError) {
+        trailsUpdated++;
+        trailUpdates.push({
+          id: position.id,
+          token: position.token_symbol || position.token_mint.slice(0, 8),
+          currentPrice: data.price,
+          soldPrice: soldPrice,
+          trailMultiplier: trailMultiplier.toFixed(2),
+          trailPeak: Math.max(data.price, currentTrailPeak).toFixed(8)
+        });
+      }
+    }
+
+    console.log(`[telegram-fantasy-price-monitor] Updated ${updatedCount} open positions, auto-sold ${autoSoldCount}, trails updated ${trailsUpdated}`);
 
     return new Response(JSON.stringify({
       success: true,
       updated: updatedCount,
       autoSold: autoSoldCount,
-      totalPositions: positions.length,
+      trailsUpdated: trailsUpdated,
+      totalOpenPositions: allOpenPositions.length,
+      totalSoldPositions: allSoldPositions.length,
       updates,
       autoSells,
+      trailUpdates,
       timestamp: new Date().toISOString()
     }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
 
