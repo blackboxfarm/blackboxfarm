@@ -452,7 +452,19 @@ export function AirdropManager() {
       const { Connection, Keypair, PublicKey, SystemProgram, Transaction, LAMPORTS_PER_SOL } = await import("@solana/web3.js");
       const bs58 = await import("bs58");
 
-      const secretKey = bs58.default.decode(decryptData.decryptedData);
+      // Parse the secret key - handle both JSON array and base58 formats
+      const decryptedKey = decryptData.decryptedData;
+      let secretKey: Uint8Array;
+      
+      if (decryptedKey.trim().startsWith("[")) {
+        // JSON array format (solana-cli style)
+        const arr = JSON.parse(decryptedKey);
+        secretKey = new Uint8Array(arr);
+      } else {
+        // Base58 format
+        secretKey = bs58.default.decode(decryptedKey);
+      }
+      
       const keypair = Keypair.fromSecretKey(secretKey);
       
       const rpcUrl = import.meta.env.VITE_HELIUS_RPC_URL || "https://api.mainnet-beta.solana.com";
