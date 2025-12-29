@@ -65,24 +65,40 @@ serve(async (req) => {
 
     console.log(`[backfill-fantasy] Found ${calls.length} call records to check`);
 
-    // Get existing fantasy positions by call_id
-    const callIds = calls.map(c => c.id);
+    // GLOBAL DEDUPE: Get all existing fantasy positions by token_mint (not call_id)
+    // We only want ONE fantasy position per token globally - first call wins
+    const uniqueTokenMints = [...new Set(calls.map(c => c.token_mint))];
     const { data: existingPositions } = await supabase
       .from('telegram_fantasy_positions')
-      .select('call_id')
-      .in('call_id', callIds);
+      .select('token_mint, channel_name, created_at')
+      .in('token_mint', uniqueTokenMints);
 
-    const existingCallIds = new Set((existingPositions || []).map(p => p.call_id));
+    const existingTokenMints = new Set((existingPositions || []).map(p => p.token_mint));
 
-    // Filter to only calls without fantasy positions
-    const callsToBackfill = calls.filter(c => !existingCallIds.has(c.id));
+    // Filter to only calls without fantasy positions for that token
+    // AND dedupe within the batch: only the earliest call per token wins
+    const callsByToken: Record<string, typeof calls[0]> = {};
+    for (const call of calls) {
+      // Skip if token already has a fantasy position
+      if (existingTokenMints.has(call.token_mint)) {
+        console.log(`[backfill-fantasy] Token ${call.token_symbol || call.token_mint} already has position, skipping`);
+        continue;
+      }
+      // Keep only the earliest call per token
+      const existing = callsByToken[call.token_mint];
+      if (!existing || new Date(call.created_at) < new Date(existing.created_at)) {
+        callsByToken[call.token_mint] = call;
+      }
+    }
 
-    console.log(`[backfill-fantasy] ${callsToBackfill.length} calls need fantasy positions`);
+    const callsToBackfill = Object.values(callsByToken);
+
+    console.log(`[backfill-fantasy] ${callsToBackfill.length} unique tokens need fantasy positions`);
 
     if (callsToBackfill.length === 0) {
       return new Response(JSON.stringify({
         success: true,
-        message: 'All calls already have fantasy positions',
+        message: 'All tokens already have fantasy positions (first call wins)',
         created: 0,
         checked: calls.length
       }), {
