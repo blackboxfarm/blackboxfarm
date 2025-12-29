@@ -23,6 +23,9 @@ interface FantasyPosition {
   stop_loss_enabled: boolean | null;
   is_active: boolean;
   status: string;
+  peak_price_usd: number | null;
+  peak_price_at: string | null;
+  peak_multiplier: number | null;
 }
 
 // Fetch token prices and symbols in batch from Jupiter + DexScreener
@@ -216,7 +219,7 @@ serve(async (req) => {
         continue;
       }
 
-      // Regular update - just update prices
+      // Regular update - update prices AND track peaks
       const updateObj: Record<string, any> = {
         current_price_usd: data.price,
         unrealized_pnl_usd: pnlUsd,
@@ -225,6 +228,15 @@ serve(async (req) => {
       
       if (data.symbol && !position.token_symbol) {
         updateObj.token_symbol = data.symbol;
+      }
+
+      // Track peak price - update if current price is higher than recorded peak
+      const currentPeakPrice = position.peak_price_usd || 0;
+      if (data.price > currentPeakPrice) {
+        updateObj.peak_price_usd = data.price;
+        updateObj.peak_price_at = new Date().toISOString();
+        updateObj.peak_multiplier = currentMultiplier;
+        console.log(`[telegram-fantasy-price-monitor] New peak for ${position.token_symbol || position.token_mint}: ${data.price} (${currentMultiplier.toFixed(2)}x)`);
       }
 
       const { error: updateError } = await supabase
@@ -242,7 +254,8 @@ serve(async (req) => {
           targetMultiplier: targetMultiplier,
           progressToTarget: ((currentMultiplier / targetMultiplier) * 100).toFixed(1),
           pnlUsd: pnlUsd.toFixed(2),
-          pnlPercent: pnlPercent.toFixed(2)
+          pnlPercent: pnlPercent.toFixed(2),
+          peakMultiplier: Math.max(currentMultiplier, position.peak_multiplier || 0).toFixed(2)
         });
       }
     }

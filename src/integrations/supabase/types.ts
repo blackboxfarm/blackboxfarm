@@ -4925,6 +4925,9 @@ export type Database = {
           id: string
           interpretation_id: string | null
           is_active: boolean | null
+          peak_multiplier: number | null
+          peak_price_at: string | null
+          peak_price_usd: number | null
           realized_pnl_percent: number | null
           realized_pnl_usd: number | null
           rule_id: string | null
@@ -4958,6 +4961,9 @@ export type Database = {
           id?: string
           interpretation_id?: string | null
           is_active?: boolean | null
+          peak_multiplier?: number | null
+          peak_price_at?: string | null
+          peak_price_usd?: number | null
           realized_pnl_percent?: number | null
           realized_pnl_usd?: number | null
           rule_id?: string | null
@@ -4991,6 +4997,9 @@ export type Database = {
           id?: string
           interpretation_id?: string | null
           is_active?: boolean | null
+          peak_multiplier?: number | null
+          peak_price_at?: string | null
+          peak_price_usd?: number | null
           realized_pnl_percent?: number | null
           realized_pnl_usd?: number | null
           rule_id?: string | null

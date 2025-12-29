@@ -270,3 +270,9 @@ verify_jwt = false
 
 [functions.telegram-fantasy-price-monitor]
 verify_jwt = false
+
+[functions.telegram-fantasy-peak-backfill]
+verify_jwt = false
+
+[functions.telegram-fantasy-price-update]
+verify_jwt = false
