@@ -5259,6 +5259,7 @@ export type Database = {
           sell_target_multiplier: number
           stop_loss_enabled: boolean
           stop_loss_pct: number | null
+          telegram_target_id: string | null
           updated_at: string
         }
         Insert: {
@@ -5278,6 +5279,7 @@ export type Database = {
           sell_target_multiplier?: number
           stop_loss_enabled?: boolean
           stop_loss_pct?: number | null
+          telegram_target_id?: string | null
           updated_at?: string
         }
         Update: {
@@ -5297,9 +5299,18 @@ export type Database = {
           sell_target_multiplier?: number
           stop_loss_enabled?: boolean
           stop_loss_pct?: number | null
+          telegram_target_id?: string | null
           updated_at?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "telegram_trading_tiers_telegram_target_id_fkey"
+            columns: ["telegram_target_id"]
+            isOneToOne: false
+            referencedRelation: "telegram_message_targets"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       token_lifecycle: {
         Row: {
