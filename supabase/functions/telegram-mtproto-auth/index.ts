@@ -323,12 +323,15 @@ serve(async (req) => {
     }
 
     if (action === 'send_message') {
-      const { chatUsername, message } = body;
+      const { chatUsername, chatId, message } = body;
+      
+      // Support both username (public groups) and chatId (private groups)
+      const targetChat = chatId || chatUsername;
 
-      if (!chatUsername || !message) {
+      if (!targetChat || !message) {
         return new Response(JSON.stringify({
           success: false,
-          error: 'chatUsername and message are required'
+          error: 'chatUsername or chatId, and message are required'
         }), {
           status: 400,
           headers: { ...corsHeaders, 'Content-Type': 'application/json' }
@@ -345,8 +348,21 @@ serve(async (req) => {
         });
       }
 
-      const username = normalizeUsername(chatUsername);
-      console.log(`[telegram-mtproto-auth] send_message to @${username}: "${message.substring(0, 50)}..."`);
+      // Determine if it's a numeric chat ID or username
+      let peer: string | number;
+      let peerDisplay: string;
+      
+      if (chatId || /^-?\d+$/.test(String(targetChat))) {
+        // It's a numeric chat ID (private groups use negative IDs like -1001234567890)
+        peer = parseInt(String(targetChat), 10);
+        peerDisplay = `chat ID ${peer}`;
+        console.log(`[telegram-mtproto-auth] send_message to ${peerDisplay}: "${message.substring(0, 50)}..."`);
+      } else {
+        // It's a username
+        peer = normalizeUsername(String(targetChat));
+        peerDisplay = `@${peer}`;
+        console.log(`[telegram-mtproto-auth] send_message to ${peerDisplay}: "${message.substring(0, 50)}..."`);
+      }
 
       const mtcuteSession = convertFromTelethonSession(existingSession.session_string);
 
@@ -360,9 +376,9 @@ serve(async (req) => {
         await client.importSession(mtcuteSession);
         await client.connect();
 
-        console.log(`[telegram-mtproto-auth] Connected, sending message to @${username}`);
+        console.log(`[telegram-mtproto-auth] Connected, sending message to ${peerDisplay}`);
 
-        const result = await client.sendText(username, message);
+        const result = await client.sendText(peer, message);
 
         await supabase
           .from('telegram_mtproto_session')
@@ -374,7 +390,7 @@ serve(async (req) => {
         return new Response(JSON.stringify({
           success: true,
           messageId: result.id,
-          chatUsername: username,
+          chatTarget: peerDisplay,
           message: 'Message sent successfully'
         }), {
           headers: { ...corsHeaders, 'Content-Type': 'application/json' }
