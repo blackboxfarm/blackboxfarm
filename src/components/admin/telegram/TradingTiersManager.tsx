@@ -317,7 +317,7 @@ export function TradingTiersManager() {
 
         {/* Tier Dialog */}
         <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-          <DialogContent className="max-w-lg">
+          <DialogContent className="max-w-lg max-h-[85vh] overflow-y-auto">
             <DialogHeader>
               <DialogTitle>{editingTier ? 'Edit Tier' : 'Create Tier'}</DialogTitle>
             </DialogHeader>
