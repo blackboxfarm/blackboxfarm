@@ -10,7 +10,7 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
-import { Plus, Copy, Trash2, ChevronDown, ChevronRight, Lock, Unlock, Play, History, Edit, Archive, RotateCcw, RefreshCw, ExternalLink, DollarSign, Loader2 } from "lucide-react";
+import { Plus, Copy, Trash2, ChevronDown, ChevronRight, Lock, Unlock, Play, History, Edit, Archive, RotateCcw, RefreshCw, ExternalLink, DollarSign, Loader2, Send } from "lucide-react";
 import { format } from "date-fns";
 import type { Json } from "@/integrations/supabase/types";
 
@@ -120,6 +120,12 @@ export function AirdropManager() {
   const [tokenPrices, setTokenPrices] = useState<Record<string, TokenPrice>>({});
   const [sellPercentages, setSellPercentages] = useState<Record<string, number>>({});
   const DEFAULT_SELL_PERCENTAGE = 100;
+
+  // Withdraw dialog state
+  const [withdrawDialogOpen, setWithdrawDialogOpen] = useState(false);
+  const [withdrawWallet, setWithdrawWallet] = useState<AirdropWallet | null>(null);
+  const [withdrawAddress, setWithdrawAddress] = useState("");
+  const [withdrawing, setWithdrawing] = useState(false);
 
   const loadWallets = useCallback(async () => {
     const { data, error } = await supabase
@@ -399,6 +405,92 @@ export function AirdropManager() {
       toast.error(error.message || "Failed to sell token");
     } finally {
       setSellState(null);
+    }
+  };
+
+  const openWithdrawDialog = (wallet: AirdropWallet) => {
+    setWithdrawWallet(wallet);
+    setWithdrawAddress("");
+    setWithdrawDialogOpen(true);
+  };
+
+  const withdrawSol = async () => {
+    if (!withdrawWallet) return;
+    
+    const destAddress = withdrawAddress.trim();
+    if (!destAddress || destAddress.length < 32 || destAddress.length > 44) {
+      toast.error("Please enter a valid Solana address");
+      return;
+    }
+
+    setWithdrawing(true);
+    try {
+      // Get the wallet's encrypted secret
+      const { data: walletData, error: walletError } = await supabase
+        .from("airdrop_wallets")
+        .select("secret_key_encrypted")
+        .eq("id", withdrawWallet.id)
+        .single();
+
+      if (walletError || !walletData?.secret_key_encrypted) {
+        throw new Error("Failed to get wallet secret");
+      }
+
+      // Decrypt the secret key
+      const { data: decryptData, error: decryptError } = await supabase.functions.invoke("encrypt-data", {
+        body: { 
+          action: "decrypt",
+          ciphertext: walletData.secret_key_encrypted
+        }
+      });
+
+      if (decryptError || !decryptData?.plaintext) {
+        throw new Error("Failed to decrypt wallet key");
+      }
+
+      // Use dynamic import for Solana
+      const { Connection, Keypair, PublicKey, SystemProgram, Transaction, LAMPORTS_PER_SOL } = await import("@solana/web3.js");
+      const bs58 = await import("bs58");
+
+      const secretKey = bs58.default.decode(decryptData.plaintext);
+      const keypair = Keypair.fromSecretKey(secretKey);
+      
+      const rpcUrl = import.meta.env.VITE_HELIUS_RPC_URL || "https://api.mainnet-beta.solana.com";
+      const connection = new Connection(rpcUrl, "confirmed");
+
+      const balance = await connection.getBalance(keypair.publicKey);
+      const feeBuffer = 5000; // 0.000005 SOL for tx fee
+      const sendAmount = balance - feeBuffer;
+
+      if (sendAmount <= 0) {
+        throw new Error("Insufficient balance for withdrawal");
+      }
+
+      const destination = new PublicKey(destAddress);
+      const transaction = new Transaction().add(
+        SystemProgram.transfer({
+          fromPubkey: keypair.publicKey,
+          toPubkey: destination,
+          lamports: sendAmount
+        })
+      );
+
+      const signature = await connection.sendTransaction(transaction, [keypair]);
+      await connection.confirmTransaction(signature, "confirmed");
+
+      toast.success(`Withdrew ${(sendAmount / LAMPORTS_PER_SOL).toFixed(4)} SOL! Tx: ${signature.slice(0, 8)}...`);
+      
+      // Update local balance
+      setWallets(prev => prev.map(w => 
+        w.id === withdrawWallet.id ? { ...w, sol_balance: feeBuffer / LAMPORTS_PER_SOL } : w
+      ));
+      
+      setWithdrawDialogOpen(false);
+    } catch (error: any) {
+      console.error("Withdraw error:", error);
+      toast.error(error.message || "Failed to withdraw SOL");
+    } finally {
+      setWithdrawing(false);
     }
   };
 
@@ -760,6 +852,19 @@ export function AirdropManager() {
                         title="Refresh balance"
                       >
                         <RefreshCw className={`h-4 w-4 ${refreshingWallet === wallet.id ? "animate-spin" : ""}`} />
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-8 w-8"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          openWithdrawDialog(wallet);
+                        }}
+                        disabled={(wallet.sol_balance || 0) < 0.001}
+                        title="Withdraw SOL"
+                      >
+                        <Send className="h-4 w-4" />
                       </Button>
                     </div>
                     {wallet.is_archived ? (
@@ -1238,6 +1343,44 @@ export function AirdropManager() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* Withdraw SOL Dialog */}
+      <Dialog open={withdrawDialogOpen} onOpenChange={setWithdrawDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Withdraw SOL</DialogTitle>
+            <DialogDescription>
+              Send all SOL from {withdrawWallet?.nickname || "this wallet"} ({(withdrawWallet?.sol_balance || 0).toFixed(4)} SOL) to another address.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label>Destination Address</Label>
+              <Input
+                value={withdrawAddress}
+                onChange={(e) => setWithdrawAddress(e.target.value)}
+                placeholder="Enter Solana wallet address..."
+                className="font-mono"
+              />
+            </div>
+            <p className="text-xs text-muted-foreground">
+              A small amount (~0.000005 SOL) will be reserved for transaction fees.
+            </p>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setWithdrawDialogOpen(false)}>
+              Cancel
+            </Button>
+            <Button 
+              onClick={withdrawSol} 
+              disabled={withdrawing || !withdrawAddress.trim()}
+            >
+              {withdrawing ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Send className="h-4 w-4 mr-2" />}
+              Withdraw
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
