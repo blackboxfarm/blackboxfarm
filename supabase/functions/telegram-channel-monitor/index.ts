@@ -1231,7 +1231,9 @@ serve(async (req) => {
 
             // Execute trade or fantasy position
             if (currentRuleResult.decision === 'buy' || currentRuleResult.decision === 'fantasy_buy') {
-              const tokenAmount = currentTokenData?.price ? currentRuleResult.buyAmount / currentTokenData.price : null;
+              // Use enriched price, or fallback to a small placeholder if price fetch failed
+              const entryPrice = currentTokenData?.price || 0.00001; // Fallback price for failed fetches
+              const tokenAmount = entryPrice > 0 ? currentRuleResult.buyAmount / entryPrice : null;
               
               // Fallback caller: if caller is "Phanes" (bot), use channel name instead
               const isPhanesCaller = callerDisplayName?.toLowerCase() === 'phanes' || 
@@ -1241,28 +1243,35 @@ serve(async (req) => {
               const effectiveCallerDisplayName = isPhanesCaller ? (config.channel_name || channelUsername || callerDisplayName) : callerDisplayName;
               
               // Always create fantasy position for tracking (supplement mode)
-              await supabase
+              const { error: fantasyInsertError } = await supabase
                 .from('telegram_fantasy_positions')
                 .insert({
                   channel_config_id: config.id,
                   token_mint: tokenMint,
                   token_symbol: currentTokenData?.symbol || null,
                   token_name: currentTokenData?.name || null,
-                  entry_price_usd: currentTokenData?.price,
+                  entry_price_usd: entryPrice,
                   entry_amount_usd: currentRuleResult.buyAmount,
                   token_amount: tokenAmount,
-                  current_price_usd: currentTokenData?.price,
+                  current_price_usd: entryPrice,
                   target_sell_multiplier: currentRuleResult.sellTarget,
                   status: 'open',
                   caller_username: effectiveCallerUsername,
                   caller_display_name: effectiveCallerDisplayName,
                   channel_name: config.channel_name || channelUsername,
                   stop_loss_pct: currentRuleResult.stopLossEnabled ? currentRuleResult.stopLoss : null,
-                  rule_id: currentRuleResult.ruleId
+                  rule_id: currentRuleResult.ruleId,
+                  is_active: true,
+                  stop_loss_enabled: currentRuleResult.stopLossEnabled || false,
+                  trail_tracking_enabled: true
                 });
 
-              totalFantasyBuys++;
-              console.log(`[telegram-channel-monitor] Fantasy: ${currentTokenData?.symbol || tokenMint} - $${currentRuleResult.buyAmount} @ $${currentTokenData?.price?.toFixed(10)} (Rule: ${currentRuleResult.matchedRule?.name || 'Simple'})`);
+              if (fantasyInsertError) {
+                console.error(`[telegram-channel-monitor] Fantasy position insert FAILED for ${tokenMint}:`, fantasyInsertError);
+              } else {
+                totalFantasyBuys++;
+                console.log(`[telegram-channel-monitor] Fantasy INSERTED: ${currentTokenData?.symbol || tokenMint} - $${currentRuleResult.buyAmount} @ $${entryPrice.toFixed(10)} (Rule: ${currentRuleResult.matchedRule?.name || 'Simple'})`);
+              }
 
               // FlipIt auto-buy: trigger when enabled and rules match
               if (config.flipit_enabled) {
