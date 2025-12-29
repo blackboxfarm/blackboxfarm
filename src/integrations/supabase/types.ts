@@ -4942,6 +4942,14 @@ export type Database = {
           token_mint: string
           token_name: string | null
           token_symbol: string | null
+          trail_current_price_usd: number | null
+          trail_last_updated_at: string | null
+          trail_low_at: string | null
+          trail_low_price_usd: number | null
+          trail_peak_at: string | null
+          trail_peak_multiplier: number | null
+          trail_peak_price_usd: number | null
+          trail_tracking_enabled: boolean | null
           unrealized_pnl_percent: number | null
           unrealized_pnl_usd: number | null
           updated_at: string
@@ -4978,6 +4986,14 @@ export type Database = {
           token_mint: string
           token_name?: string | null
           token_symbol?: string | null
+          trail_current_price_usd?: number | null
+          trail_last_updated_at?: string | null
+          trail_low_at?: string | null
+          trail_low_price_usd?: number | null
+          trail_peak_at?: string | null
+          trail_peak_multiplier?: number | null
+          trail_peak_price_usd?: number | null
+          trail_tracking_enabled?: boolean | null
           unrealized_pnl_percent?: number | null
           unrealized_pnl_usd?: number | null
           updated_at?: string
@@ -5014,6 +5030,14 @@ export type Database = {
           token_mint?: string
           token_name?: string | null
           token_symbol?: string | null
+          trail_current_price_usd?: number | null
+          trail_last_updated_at?: string | null
+          trail_low_at?: string | null
+          trail_low_price_usd?: number | null
+          trail_peak_at?: string | null
+          trail_peak_multiplier?: number | null
+          trail_peak_price_usd?: number | null
+          trail_tracking_enabled?: boolean | null
           unrealized_pnl_percent?: number | null
           unrealized_pnl_usd?: number | null
           updated_at?: string

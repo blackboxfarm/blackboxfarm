@@ -1156,6 +1156,13 @@ serve(async (req) => {
             if (currentRuleResult.decision === 'buy' || currentRuleResult.decision === 'fantasy_buy') {
               const tokenAmount = currentTokenData?.price ? currentRuleResult.buyAmount / currentTokenData.price : null;
               
+              // Fallback caller: if caller is "Phanes" (bot), use channel name instead
+              const isPhanesCaller = callerDisplayName?.toLowerCase() === 'phanes' || 
+                                     callerUsername?.toLowerCase() === 'phanes' ||
+                                     callerDisplayName?.toLowerCase()?.includes('phanes');
+              const effectiveCallerUsername = isPhanesCaller ? (config.channel_name || channelUsername || callerUsername) : callerUsername;
+              const effectiveCallerDisplayName = isPhanesCaller ? (config.channel_name || channelUsername || callerDisplayName) : callerDisplayName;
+              
               // Always create fantasy position for tracking (supplement mode)
               await supabase
                 .from('telegram_fantasy_positions')
@@ -1170,8 +1177,9 @@ serve(async (req) => {
                   current_price_usd: currentTokenData?.price,
                   target_sell_multiplier: currentRuleResult.sellTarget,
                   status: 'open',
-                  caller_username: callerUsername,
-                  caller_display_name: callerDisplayName,
+                  caller_username: effectiveCallerUsername,
+                  caller_display_name: effectiveCallerDisplayName,
+                  channel_name: config.channel_name || channelUsername,
                   stop_loss_pct: currentRuleResult.stopLossEnabled ? currentRuleResult.stopLoss : null,
                   rule_id: currentRuleResult.ruleId
                 });

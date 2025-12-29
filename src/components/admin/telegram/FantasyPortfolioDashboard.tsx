@@ -51,6 +51,7 @@ interface FantasyPosition {
   channel_name: string | null;
   created_at: string;
   sold_at: string | null;
+  sold_price_usd: number | null;
   is_active: boolean | null;
   target_sell_multiplier: number | null;
   stop_loss_pct: number | null;
@@ -59,6 +60,15 @@ interface FantasyPosition {
   peak_price_usd: number | null;
   peak_price_at: string | null;
   peak_multiplier: number | null;
+  // Trail tracking fields
+  trail_tracking_enabled: boolean | null;
+  trail_current_price_usd: number | null;
+  trail_peak_price_usd: number | null;
+  trail_peak_multiplier: number | null;
+  trail_peak_at: string | null;
+  trail_low_price_usd: number | null;
+  trail_low_at: string | null;
+  trail_last_updated_at: string | null;
 }
 
 interface PortfolioStats {
@@ -722,7 +732,7 @@ export function FantasyPortfolioDashboard() {
                       </TableCell>
                       <TableCell>
                         <span className="text-sm">
-                          {pos.caller_display_name || pos.caller_username || 'Unknown'}
+                          {pos.caller_display_name || pos.caller_username || pos.channel_name || 'Unknown'}
                         </span>
                       </TableCell>
                       <TableCell>
@@ -854,6 +864,7 @@ export function FantasyPortfolioDashboard() {
                   <TableHead>Sold At</TableHead>
                   <TableHead>Multiplier</TableHead>
                   <TableHead>P&L</TableHead>
+                  <TableHead>Trail 📈</TableHead>
                   <TableHead>Sold Date</TableHead>
                 </TableRow>
               </TableHeader>
@@ -862,6 +873,11 @@ export function FantasyPortfolioDashboard() {
                   const pnl = pos.realized_pnl_usd || 0;
                   const pnlPercent = pos.realized_pnl_percent || 0;
                   const multiplier = pnlPercent > 0 ? (1 + pnlPercent / 100) : 1;
+                  const trailMultiplier = pos.trail_peak_multiplier || 0;
+                  const soldPrice = pos.sold_price_usd || pos.current_price_usd || 0;
+                  const currentTrailPrice = pos.trail_current_price_usd || 0;
+                  const trailChange = soldPrice > 0 ? ((currentTrailPrice - soldPrice) / soldPrice) * 100 : 0;
+                  
                   return (
                     <TableRow key={pos.id} className="bg-amber-500/5">
                       <TableCell>
@@ -880,14 +896,14 @@ export function FantasyPortfolioDashboard() {
                       </TableCell>
                       <TableCell>
                         <span className="text-sm">
-                          {pos.caller_display_name || pos.caller_username || 'Unknown'}
+                          {pos.caller_display_name || pos.caller_username || pos.channel_name || 'Unknown'}
                         </span>
                       </TableCell>
                       <TableCell>
                         <span className="text-sm">${pos.entry_price_usd?.toFixed(8) || '0'}</span>
                       </TableCell>
                       <TableCell>
-                        <span className="text-sm">${pos.current_price_usd?.toFixed(8) || 'N/A'}</span>
+                        <span className="text-sm">${soldPrice?.toFixed(8) || 'N/A'}</span>
                       </TableCell>
                       <TableCell>
                         <Badge className="bg-amber-500 text-white">
@@ -899,6 +915,22 @@ export function FantasyPortfolioDashboard() {
                           <span className="font-bold">+${pnl.toFixed(2)}</span>
                           <p className="text-xs">+{pnlPercent.toFixed(1)}%</p>
                         </div>
+                      </TableCell>
+                      <TableCell>
+                        {pos.trail_tracking_enabled !== false && pos.trail_current_price_usd ? (
+                          <div className={trailChange >= 0 ? 'text-green-500' : 'text-red-500'}>
+                            <span className="text-xs font-medium">
+                              {trailChange >= 0 ? '+' : ''}{trailChange.toFixed(0)}%
+                            </span>
+                            {trailMultiplier > 0 && (
+                              <p className="text-xs text-muted-foreground">
+                                Peak: {trailMultiplier.toFixed(2)}x
+                              </p>
+                            )}
+                          </div>
+                        ) : (
+                          <span className="text-xs text-muted-foreground">-</span>
+                        )}
                       </TableCell>
                       <TableCell>
                         {pos.sold_at && (
