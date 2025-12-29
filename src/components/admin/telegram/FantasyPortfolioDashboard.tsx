@@ -74,6 +74,8 @@ interface PortfolioStats {
   worstTrade: { symbol: string; pnl: number } | null;
   nearTargetCount: number;
   missedOpportunities: number;
+  trophyWins: number;
+  trophyPnl: number;
 }
 
 const SELL_MULTIPLIERS = [
@@ -167,6 +169,11 @@ export function FantasyPortfolioDashboard() {
     const closed = positions.filter(p => p.status === 'closed' || p.status === 'sold');
     const active = open.filter(p => p.is_active !== false); // null treated as active
     
+    // Trophy wins: auto-sold with profit
+    const trophyWinsArr = closed.filter(p => p.auto_sell_triggered && (p.realized_pnl_usd || 0) > 0);
+    const trophyWins = trophyWinsArr.length;
+    const trophyPnl = trophyWinsArr.reduce((sum, p) => sum + (p.realized_pnl_usd || 0), 0);
+    
     const totalInvested = positions.reduce((sum, p) => sum + (p.entry_amount_usd || 0), 0);
     const totalUnrealized = open.reduce((sum, p) => sum + (p.unrealized_pnl_usd || 0), 0);
     const totalRealized = closed.reduce((sum, p) => sum + (p.realized_pnl_usd || 0), 0);
@@ -215,7 +222,9 @@ export function FantasyPortfolioDashboard() {
       bestTrade,
       worstTrade,
       nearTargetCount,
-      missedOpportunities
+      missedOpportunities,
+      trophyWins,
+      trophyPnl
     });
   };
 
@@ -405,7 +414,15 @@ export function FantasyPortfolioDashboard() {
   }
 
   const openPositions = positions.filter(p => p.status === 'open');
-  const closedPositions = positions.filter(p => p.status === 'sold' || p.status === 'closed');
+  const allClosedPositions = positions.filter(p => p.status === 'sold' || p.status === 'closed');
+  
+  // Separate trophy wins (auto-sold at target) from other closed positions
+  const trophyPositions = allClosedPositions.filter(p => 
+    p.auto_sell_triggered && (p.realized_pnl_usd || 0) > 0
+  );
+  const otherClosedPositions = allClosedPositions.filter(p => 
+    !p.auto_sell_triggered || (p.realized_pnl_usd || 0) <= 0
+  );
   
   // Filter open positions based on active/inactive filter (null treated as active)
   const filteredOpenPositions = openPositions.filter(p => {
@@ -417,7 +434,18 @@ export function FantasyPortfolioDashboard() {
   return (
     <div className="space-y-6">
       {/* Stats Cards */}
-      <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-4">
+      <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-8 gap-4">
+        {/* Trophy Wins Card */}
+        <Card className={stats?.trophyWins ? 'border-amber-500/50 bg-gradient-to-br from-amber-500/10 to-yellow-500/5' : ''}>
+          <CardContent className="p-4">
+            <div className="flex items-center gap-2">
+              <Trophy className="h-4 w-4 text-amber-500" />
+              <span className="text-sm text-muted-foreground">Trophy Wins</span>
+            </div>
+            <p className="text-2xl font-bold text-amber-500">{stats?.trophyWins || 0}</p>
+            <p className="text-xs text-green-500">+${stats?.trophyPnl?.toFixed(2) || '0.00'}</p>
+          </CardContent>
+        </Card>
         <Card>
           <CardContent className="p-4">
             <div className="flex items-center gap-2">
@@ -800,18 +828,104 @@ export function FantasyPortfolioDashboard() {
         </CardContent>
       </Card>
 
-      {/* Closed Positions */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <BarChart3 className="h-5 w-5" />
-            Trade History ({closedPositions.length})
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          {closedPositions.length === 0 ? (
-            <p className="text-muted-foreground text-center py-8">No closed trades yet</p>
-          ) : (
+      {/* Trophy Case - Successful Auto-Sells */}
+      {trophyPositions.length > 0 && (
+        <Card className="border-amber-500/30 bg-gradient-to-r from-amber-500/5 to-yellow-500/5">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 text-amber-500">
+              <Trophy className="h-5 w-5" />
+              Trophy Case ({trophyPositions.length})
+              <Badge variant="secondary" className="ml-2 bg-amber-500/20 text-amber-500">
+                Not Monitored
+              </Badge>
+            </CardTitle>
+            <p className="text-sm text-muted-foreground">
+              Positions that hit their target and were auto-sold
+            </p>
+          </CardHeader>
+          <CardContent>
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>🏆</TableHead>
+                  <TableHead>Token</TableHead>
+                  <TableHead>Caller</TableHead>
+                  <TableHead>Entry</TableHead>
+                  <TableHead>Sold At</TableHead>
+                  <TableHead>Multiplier</TableHead>
+                  <TableHead>P&L</TableHead>
+                  <TableHead>Sold Date</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {trophyPositions.map((pos) => {
+                  const pnl = pos.realized_pnl_usd || 0;
+                  const pnlPercent = pos.realized_pnl_percent || 0;
+                  const multiplier = pnlPercent > 0 ? (1 + pnlPercent / 100) : 1;
+                  return (
+                    <TableRow key={pos.id} className="bg-amber-500/5">
+                      <TableCell>
+                        <Trophy className="h-5 w-5 text-amber-500" />
+                      </TableCell>
+                      <TableCell>
+                        <a 
+                          href={getDexScreenerUrl(pos.token_mint)} 
+                          target="_blank" 
+                          rel="noopener noreferrer"
+                          className="font-medium text-amber-500 hover:underline inline-flex items-center gap-1"
+                        >
+                          {pos.token_symbol || 'Unknown'}
+                          <ExternalLink className="h-3 w-3" />
+                        </a>
+                      </TableCell>
+                      <TableCell>
+                        <span className="text-sm">
+                          {pos.caller_display_name || pos.caller_username || 'Unknown'}
+                        </span>
+                      </TableCell>
+                      <TableCell>
+                        <span className="text-sm">${pos.entry_price_usd?.toFixed(8) || '0'}</span>
+                      </TableCell>
+                      <TableCell>
+                        <span className="text-sm">${pos.current_price_usd?.toFixed(8) || 'N/A'}</span>
+                      </TableCell>
+                      <TableCell>
+                        <Badge className="bg-amber-500 text-white">
+                          {multiplier.toFixed(2)}x
+                        </Badge>
+                      </TableCell>
+                      <TableCell>
+                        <div className="text-green-500">
+                          <span className="font-bold">+${pnl.toFixed(2)}</span>
+                          <p className="text-xs">+{pnlPercent.toFixed(1)}%</p>
+                        </div>
+                      </TableCell>
+                      <TableCell>
+                        {pos.sold_at && (
+                          <span className="text-sm text-muted-foreground">
+                            {formatDistanceToNow(new Date(pos.sold_at), { addSuffix: true })}
+                          </span>
+                        )}
+                      </TableCell>
+                    </TableRow>
+                  );
+                })}
+              </TableBody>
+            </Table>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Other Closed Positions (Manual sells, stop-losses) */}
+      {otherClosedPositions.length > 0 && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <BarChart3 className="h-5 w-5" />
+              Other Closed Trades ({otherClosedPositions.length})
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
             <Table>
               <TableHeader>
                 <TableRow>
@@ -825,7 +939,7 @@ export function FantasyPortfolioDashboard() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {closedPositions.map((pos) => {
+                {otherClosedPositions.map((pos) => {
                   const pnl = pos.realized_pnl_usd || 0;
                   const pnlPercent = pos.realized_pnl_percent || 0;
                   return (
@@ -850,7 +964,7 @@ export function FantasyPortfolioDashboard() {
                         <span className="text-sm">${pos.entry_price_usd?.toFixed(8) || '0'}</span>
                       </TableCell>
                       <TableCell>
-                        <span className="text-sm">${pos.realized_pnl_usd !== null ? (pos.entry_price_usd + (pos.realized_pnl_usd / (pos.token_amount || 1))).toFixed(8) : 'N/A'}</span>
+                        <span className="text-sm">${pos.current_price_usd?.toFixed(8) || 'N/A'}</span>
                       </TableCell>
                       <TableCell>
                         <div className={pnl >= 0 ? 'text-green-500' : 'text-red-500'}>
@@ -871,9 +985,9 @@ export function FantasyPortfolioDashboard() {
                       </TableCell>
                       <TableCell>
                         {pos.auto_sell_triggered ? (
-                          <Badge variant="secondary" className="text-xs">
-                            <Zap className="h-3 w-3 mr-1" />
-                            Auto
+                          <Badge variant="secondary" className="text-xs bg-red-500/20 text-red-500">
+                            <AlertTriangle className="h-3 w-3 mr-1" />
+                            Stop Loss
                           </Badge>
                         ) : (
                           <Badge variant="outline" className="text-xs">Manual</Badge>
@@ -884,9 +998,9 @@ export function FantasyPortfolioDashboard() {
                 })}
               </TableBody>
             </Table>
-          )}
-        </CardContent>
-      </Card>
+          </CardContent>
+        </Card>
+      )}
     </div>
   );
 }
