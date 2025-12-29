@@ -108,6 +108,7 @@ export function FantasyPortfolioDashboard() {
   const [loading, setLoading] = useState(true);
   const [updatingPrices, setUpdatingPrices] = useState(false);
   const [backfillingPeaks, setBackfillingPeaks] = useState(false);
+  const [backfillingCalls, setBackfillingCalls] = useState(false);
   const [autoRefresh, setAutoRefresh] = useState(false);
   const [filter, setFilter] = useState<'all' | 'active' | 'inactive'>('active');
   const [lastUpdate, setLastUpdate] = useState<Date | null>(null);
@@ -378,7 +379,12 @@ export function FantasyPortfolioDashboard() {
     if (!pos.current_price_usd || !pos.entry_price_usd) return 0;
     const multiplier = pos.current_price_usd / pos.entry_price_usd;
     const target = pos.target_sell_multiplier || 2;
-    return Math.min((multiplier / target) * 100, 100);
+    // Progress: 0% at 1x (entry), 100% at target
+    // If losing (multiplier < 1), show 0%
+    if (multiplier < 1) return 0;
+    // Progress from 1x to target
+    const progress = ((multiplier - 1) / (target - 1)) * 100;
+    return Math.min(Math.max(progress, 0), 100);
   };
 
   const getCurrentMultiplier = (pos: FantasyPosition) => {
@@ -407,6 +413,34 @@ export function FantasyPortfolioDashboard() {
       toast.error('Failed to backfill peaks');
     } finally {
       setBackfillingPeaks(false);
+    }
+  };
+
+  const backfillFromCalls = async () => {
+    try {
+      setBackfillingCalls(true);
+      toast.info('Creating fantasy positions from existing call records...');
+      
+      const { data, error } = await supabase.functions.invoke('backfill-fantasy-from-calls', {
+        body: { limit: 200 }
+      });
+      
+      if (error) throw error;
+      
+      if (data?.created > 0) {
+        toast.success(`Created ${data.created} fantasy positions!`, {
+          description: data.tokens
+        });
+      } else {
+        toast.info('All calls already have fantasy positions');
+      }
+      
+      await loadPositions();
+    } catch (err) {
+      console.error('Error backfilling from calls:', err);
+      toast.error('Failed to backfill from calls');
+    } finally {
+      setBackfillingCalls(false);
     }
   };
 
@@ -672,6 +706,21 @@ export function FantasyPortfolioDashboard() {
                 <Trophy className="h-4 w-4 mr-2" />
               )}
               Backfill Peaks
+            </Button>
+
+            <Button
+              onClick={backfillFromCalls}
+              disabled={backfillingCalls}
+              size="sm"
+              variant="outline"
+              className="text-cyan-500"
+            >
+              {backfillingCalls ? (
+                <Loader2 className="h-4 w-4 animate-spin mr-2" />
+              ) : (
+                <Zap className="h-4 w-4 mr-2" />
+              )}
+              Backfill Calls
             </Button>
           </div>
         </CardHeader>
