@@ -264,3 +264,6 @@ verify_jwt = false
 
 [functions.dex-paid-checker]
 verify_jwt = false
+
+[functions.backfill-developer-profiles]
+verify_jwt = false
