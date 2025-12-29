@@ -425,97 +425,21 @@ export function AirdropManager() {
 
     setWithdrawing(true);
     try {
-      // Get the wallet's encrypted secret
-      const { data: walletData, error: walletError } = await supabase
-        .from("airdrop_wallets")
-        .select("secret_key_encrypted")
-        .eq("id", withdrawWallet.id)
-        .single();
+      const { data, error } = await supabase.functions.invoke("airdrop-wallet-withdrawal", {
+        body: {
+          walletId: withdrawWallet.id,
+          destinationAddress: destAddress,
+        },
+      });
 
-      if (walletError || !walletData?.secret_key_encrypted) {
-        throw new Error("Failed to get wallet secret");
-      }
+      if (error) throw error;
+      if (data?.error) throw new Error(data.error);
 
-      // Resolve stored secret (may be AES-encrypted, base64-wrapped, or plaintext base58/JSON)
-      let secretMaterial: string = walletData.secret_key_encrypted;
-
-      // Only call the decrypt function for AES payloads; calling it on plaintext base58 produces garbage.
-      // (Most existing airdrop wallets were stored as plaintext base58 due to legacy encryption response shape.)
-      if (secretMaterial.startsWith("AES:")) {
-        const { data: decryptData, error: decryptError } = await supabase.functions.invoke("encrypt-data", {
-          body: {
-            action: "decrypt",
-            data: secretMaterial,
-          },
-        });
-
-        if (decryptError || !decryptData?.decryptedData) {
-          throw new Error("Failed to decrypt wallet key");
-        }
-        secretMaterial = decryptData.decryptedData;
-      }
-
-      // Use dynamic import for Solana
-      const { Connection, Keypair, PublicKey, SystemProgram, Transaction, LAMPORTS_PER_SOL } = await import("@solana/web3.js");
-      const bs58 = await import("bs58");
-
-      // Parse the secret key - handle JSON array and base58 (with base64 fallback)
-      const parseSecretKey = (raw: string): Uint8Array => {
-        const v = raw.trim();
-        if (v.startsWith("[")) {
-          const arr = JSON.parse(v);
-          if (!Array.isArray(arr)) throw new Error("Invalid secret key JSON");
-          return new Uint8Array(arr);
-        }
-
-        try {
-          return bs58.default.decode(v);
-        } catch {
-          // If the stored value is base64-wrapped plaintext base58, decode and try again.
-          try {
-            const decoded = atob(v).trim();
-            if (decoded.startsWith("[")) {
-              const arr = JSON.parse(decoded);
-              if (!Array.isArray(arr)) throw new Error("Invalid secret key JSON");
-              return new Uint8Array(arr);
-            }
-            return bs58.default.decode(decoded);
-          } catch {
-            throw new Error("Invalid secret key format (expected base58 or JSON array)");
-          }
-        }
-      };
-
-      const keypair = Keypair.fromSecretKey(parseSecretKey(secretMaterial));
-      
-      const rpcUrl = import.meta.env.VITE_HELIUS_RPC_URL || "https://api.mainnet-beta.solana.com";
-      const connection = new Connection(rpcUrl, "confirmed");
-
-      const balance = await connection.getBalance(keypair.publicKey);
-      const feeBuffer = 5000; // 0.000005 SOL for tx fee
-      const sendAmount = balance - feeBuffer;
-
-      if (sendAmount <= 0) {
-        throw new Error("Insufficient balance for withdrawal");
-      }
-
-      const destination = new PublicKey(destAddress);
-      const transaction = new Transaction().add(
-        SystemProgram.transfer({
-          fromPubkey: keypair.publicKey,
-          toPubkey: destination,
-          lamports: sendAmount
-        })
-      );
-
-      const signature = await connection.sendTransaction(transaction, [keypair]);
-      await connection.confirmTransaction(signature, "confirmed");
-
-      toast.success(`Withdrew ${(sendAmount / LAMPORTS_PER_SOL).toFixed(4)} SOL! Tx: ${signature.slice(0, 8)}...`);
+      toast.success(`Withdrew ${data.amountSol.toFixed(4)} SOL! Tx: ${data.signature.slice(0, 8)}...`);
       
       // Update local balance
       setWallets(prev => prev.map(w => 
-        w.id === withdrawWallet.id ? { ...w, sol_balance: feeBuffer / LAMPORTS_PER_SOL } : w
+        w.id === withdrawWallet.id ? { ...w, sol_balance: 0.000005 } : w
       ));
       
       setWithdrawDialogOpen(false);
