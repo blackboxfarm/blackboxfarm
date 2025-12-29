@@ -1183,7 +1183,7 @@ serve(async (req) => {
 
           // Process each token
           for (const tokenMint of addresses) {
-            // Check for duplicates
+            // Check for duplicate call records (but don't skip fantasy position creation)
             const { data: existingInChannel } = await supabase
               .from('telegram_channel_calls')
               .select('id')
@@ -1191,9 +1191,14 @@ serve(async (req) => {
               .eq('token_mint', tokenMint)
               .single();
 
-            if (existingInChannel) {
-              continue;
-            }
+            // Check if fantasy position already exists for this token+channel
+            const { data: existingFantasyPosition } = await supabase
+              .from('telegram_fantasy_positions')
+              .select('id')
+              .eq('channel_config_id', config.id)
+              .eq('token_mint', tokenMint)
+              .eq('status', 'open')
+              .single();
 
             // Check first call
             const { data: existingGlobal } = await supabase
@@ -1220,30 +1225,34 @@ serve(async (req) => {
               ? 'skipped'
               : (isFantasyMode ? 'fantasy_bought' : 'detected');
 
-            // Insert call record
-            await supabase
-              .from('telegram_channel_calls')
-              .insert({
-                channel_config_id: config.id,
-                channel_id: channelId,
-                channel_name: config.channel_name,
-                message_id: messageId,
-                token_mint: tokenMint,
-                token_symbol: currentTokenData?.symbol || null,
-                token_name: currentTokenData?.name || null,
-                raw_message: messageText.substring(0, 1000),
-                contains_ape: keywordResult.hasHighConviction,
-                price_at_call: currentTokenData?.price,
-                mint_age_minutes: currentTokenData?.ageMinutes,
-                buy_tier: currentRuleResult.matchedRule?.name || (currentRuleResult.buyAmount > 50 ? 'large' : 'standard'),
-                buy_amount_usd: currentRuleResult.buyAmount || null,
-                sell_multiplier: currentRuleResult.sellTarget || null,
-                status,
-                skip_reason: currentRuleResult.decision === 'skip' ? currentRuleResult.reasoning : null,
-                caller_username: callerUsername || null,
-                caller_display_name: callerDisplayName || null,
-                is_first_call: isFirstCall
-              });
+            // Insert call record ONLY if not duplicate
+            if (!existingInChannel) {
+              await supabase
+                .from('telegram_channel_calls')
+                .insert({
+                  channel_config_id: config.id,
+                  channel_id: channelId,
+                  channel_name: config.channel_name,
+                  message_id: messageId,
+                  token_mint: tokenMint,
+                  token_symbol: currentTokenData?.symbol || null,
+                  token_name: currentTokenData?.name || null,
+                  raw_message: messageText.substring(0, 1000),
+                  contains_ape: keywordResult.hasHighConviction,
+                  price_at_call: currentTokenData?.price,
+                  mint_age_minutes: currentTokenData?.ageMinutes,
+                  buy_tier: currentRuleResult.matchedRule?.name || (currentRuleResult.buyAmount > 50 ? 'large' : 'standard'),
+                  buy_amount_usd: currentRuleResult.buyAmount || null,
+                  sell_multiplier: currentRuleResult.sellTarget || null,
+                  status,
+                  skip_reason: currentRuleResult.decision === 'skip' ? currentRuleResult.reasoning : null,
+                  caller_username: callerUsername || null,
+                  caller_display_name: callerDisplayName || null,
+                  is_first_call: isFirstCall
+                });
+            } else {
+              console.log(`[telegram-channel-monitor] Call record exists for ${tokenMint}, checking fantasy position...`);
+            }
 
             // Track caller
             if (isFirstCall && (callerUsername || callerDisplayName)) {
@@ -1276,46 +1285,51 @@ serve(async (req) => {
 
             // Execute trade or fantasy position
             if (currentRuleResult.decision === 'buy' || currentRuleResult.decision === 'fantasy_buy') {
-              // Use enriched price, or fallback to a small placeholder if price fetch failed
-              const entryPrice = currentTokenData?.price || 0.00001; // Fallback price for failed fetches
-              const tokenAmount = entryPrice > 0 ? currentRuleResult.buyAmount / entryPrice : null;
-              
-              // Fallback caller: if caller is "Phanes" (bot), use channel name instead
-              const isPhanesCaller = callerDisplayName?.toLowerCase() === 'phanes' || 
-                                     callerUsername?.toLowerCase() === 'phanes' ||
-                                     callerDisplayName?.toLowerCase()?.includes('phanes');
-              const effectiveCallerUsername = isPhanesCaller ? (config.channel_name || channelUsername || callerUsername) : callerUsername;
-              const effectiveCallerDisplayName = isPhanesCaller ? (config.channel_name || channelUsername || callerDisplayName) : callerDisplayName;
-              
-              // Always create fantasy position for tracking (supplement mode)
-              const { error: fantasyInsertError } = await supabase
-                .from('telegram_fantasy_positions')
-                .insert({
-                  channel_config_id: config.id,
-                  token_mint: tokenMint,
-                  token_symbol: currentTokenData?.symbol || null,
-                  token_name: currentTokenData?.name || null,
-                  entry_price_usd: entryPrice,
-                  entry_amount_usd: currentRuleResult.buyAmount,
-                  token_amount: tokenAmount,
-                  current_price_usd: entryPrice,
-                  target_sell_multiplier: currentRuleResult.sellTarget,
-                  status: 'open',
-                  caller_username: effectiveCallerUsername,
-                  caller_display_name: effectiveCallerDisplayName,
-                  channel_name: config.channel_name || channelUsername,
-                  stop_loss_pct: currentRuleResult.stopLossEnabled ? currentRuleResult.stopLoss : null,
-                  rule_id: currentRuleResult.ruleId,
-                  is_active: true,
-                  stop_loss_enabled: currentRuleResult.stopLossEnabled || false,
-                  trail_tracking_enabled: true
-                });
-
-              if (fantasyInsertError) {
-                console.error(`[telegram-channel-monitor] Fantasy position insert FAILED for ${tokenMint}:`, fantasyInsertError);
+              // Skip if fantasy position already exists for this token in this channel
+              if (existingFantasyPosition) {
+                console.log(`[telegram-channel-monitor] Fantasy position already exists for ${tokenMint} in ${config.channel_name}, skipping`);
               } else {
-                totalFantasyBuys++;
-                console.log(`[telegram-channel-monitor] Fantasy INSERTED: ${currentTokenData?.symbol || tokenMint} - $${currentRuleResult.buyAmount} @ $${entryPrice.toFixed(10)} (Rule: ${currentRuleResult.matchedRule?.name || 'Simple'})`);
+                // Use enriched price, or fallback to a small placeholder if price fetch failed
+                const entryPrice = currentTokenData?.price || 0.00001; // Fallback price for failed fetches
+                const tokenAmount = entryPrice > 0 ? currentRuleResult.buyAmount / entryPrice : null;
+                
+                // Fallback caller: if caller is "Phanes" (bot), use channel name instead
+                const isPhanesCaller = callerDisplayName?.toLowerCase() === 'phanes' || 
+                                       callerUsername?.toLowerCase() === 'phanes' ||
+                                       callerDisplayName?.toLowerCase()?.includes('phanes');
+                const effectiveCallerUsername = isPhanesCaller ? (config.channel_name || channelUsername || callerUsername) : callerUsername;
+                const effectiveCallerDisplayName = isPhanesCaller ? (config.channel_name || channelUsername || callerDisplayName) : callerDisplayName;
+                
+                // Create fantasy position for tracking
+                const { error: fantasyInsertError } = await supabase
+                  .from('telegram_fantasy_positions')
+                  .insert({
+                    channel_config_id: config.id,
+                    token_mint: tokenMint,
+                    token_symbol: currentTokenData?.symbol || null,
+                    token_name: currentTokenData?.name || null,
+                    entry_price_usd: entryPrice,
+                    entry_amount_usd: currentRuleResult.buyAmount,
+                    token_amount: tokenAmount,
+                    current_price_usd: entryPrice,
+                    target_sell_multiplier: currentRuleResult.sellTarget,
+                    status: 'open',
+                    caller_username: effectiveCallerUsername,
+                    caller_display_name: effectiveCallerDisplayName,
+                    channel_name: config.channel_name || channelUsername,
+                    stop_loss_pct: currentRuleResult.stopLossEnabled ? currentRuleResult.stopLoss : null,
+                    rule_id: currentRuleResult.ruleId,
+                    is_active: true,
+                    stop_loss_enabled: currentRuleResult.stopLossEnabled || false,
+                    trail_tracking_enabled: true
+                  });
+
+                if (fantasyInsertError) {
+                  console.error(`[telegram-channel-monitor] Fantasy position insert FAILED for ${tokenMint}:`, fantasyInsertError);
+                } else {
+                  totalFantasyBuys++;
+                  console.log(`[telegram-channel-monitor] Fantasy INSERTED: ${currentTokenData?.symbol || tokenMint} - $${currentRuleResult.buyAmount} @ $${entryPrice.toFixed(10)} (Rule: ${currentRuleResult.matchedRule?.name || 'Simple'})`);
+                }
               }
 
               // FlipIt auto-buy: trigger when enabled and rules match
