@@ -344,6 +344,8 @@ async function sendTweet(supabase: any, tweetData: {
   tokenMint?: string;
   tokenSymbol: string;
   tokenName?: string;
+  twitterUrl?: string;
+  positionId?: string;
   entryPrice?: number;
   exitPrice?: number;
   targetMultiplier?: number;
@@ -509,6 +511,8 @@ serve(async (req) => {
           tokenMint: tokenMint,
           tokenSymbol: position.token_symbol || metadata?.symbol || 'TOKEN',
           tokenName: position.token_name || metadata?.name,
+          twitterUrl: position.twitter_url || metadata?.twitter || '',
+          positionId: position.id,
           entryPrice: currentPrice,
           targetMultiplier: mult,
           amountSol: amountSol,
@@ -634,6 +638,8 @@ serve(async (req) => {
           tokenMint: position.token_mint,
           tokenSymbol: position.token_symbol || 'TOKEN',
           tokenName: position.token_name,
+          twitterUrl: position.twitter_url || '',
+          positionId: positionId,
           entryPrice: position.buy_price_usd,
           exitPrice: sellPrice,
           profitPercent: profitPercent,

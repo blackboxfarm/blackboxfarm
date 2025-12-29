@@ -87,8 +87,11 @@ async function fetchSolPrice(): Promise<number> {
 
 async function sendTweet(supabase: any, tweetData: {
   type: 'buy' | 'sell' | 'rebuy' | 'limit_buy';
+  tokenMint?: string;
   tokenSymbol: string;
   tokenName?: string;
+  twitterUrl?: string;
+  positionId?: string;
   entryPrice?: number;
   targetMultiplier?: number;
   amountSol?: number;
@@ -274,8 +277,10 @@ Your limit order has been successfully executed and a new position has been crea
           // Send tweet (fire and forget)
           await sendTweet(supabase, {
             type: 'limit_buy',
+            tokenMint: order.token_mint,
             tokenSymbol: order.token_symbol || 'TOKEN',
             tokenName: order.token_name,
+            twitterUrl: order.twitter_url || '',
             entryPrice: currentPrice,
             targetMultiplier: target_multiplier,
             amountSol: buy_amount_sol,
