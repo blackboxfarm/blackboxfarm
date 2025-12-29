@@ -966,6 +966,9 @@ serve(async (req) => {
           continue;
         }
 
+        // Usernames to ignore (owner's messages)
+        const IGNORED_USERNAMES = ['system_reset'];
+        
         for (const msg of channelMessages) {
           if (!msg.text) continue;
 
@@ -974,6 +977,12 @@ serve(async (req) => {
           const messageDate = msg.date;
           const callerUsername = msg.callerUsername;
           const callerDisplayName = msg.callerDisplayName;
+
+          // Skip messages from ignored usernames
+          if (callerUsername && IGNORED_USERNAMES.includes(callerUsername.toLowerCase())) {
+            console.log(`[telegram-channel-monitor] Skipping message from ignored user: @${callerUsername}`);
+            continue;
+          }
 
           // Skip if message is too old
           const scanWindowMinutes = config.scan_window_minutes ?? 1440;
