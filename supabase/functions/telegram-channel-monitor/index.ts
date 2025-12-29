@@ -186,18 +186,49 @@ async function detectKeywords(
 // TOKEN ENRICHMENT
 // ============================================================================
 
-async function fetchTokenPrice(tokenMint: string): Promise<number | null> {
-  try {
-    const response = await fetch(`https://api.jup.ag/price/v2?ids=${tokenMint}`);
-    const data = await response.json();
-    if (data.data?.[tokenMint]?.price) {
-      return parseFloat(data.data[tokenMint].price);
+async function fetchWithRetry(url: string, maxRetries = 3, delayMs = 500): Promise<Response | null> {
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    try {
+      const response = await fetch(url);
+      if (response.ok) return response;
+      console.warn(`[telegram-channel-monitor] Fetch attempt ${attempt}/${maxRetries} failed: ${response.status}`);
+    } catch (error: any) {
+      const isDNS = error?.message?.includes('dns') || error?.message?.includes('lookup');
+      console.warn(`[telegram-channel-monitor] Fetch attempt ${attempt}/${maxRetries} error${isDNS ? ' (DNS)' : ''}: ${error?.message?.slice(0, 100)}`);
+      if (attempt < maxRetries) {
+        await new Promise(r => setTimeout(r, delayMs * attempt)); // Exponential backoff
+      }
     }
-    return null;
-  } catch (error) {
-    console.error(`[telegram-channel-monitor] Error fetching Jupiter price:`, error);
-    return null;
   }
+  return null;
+}
+
+async function fetchTokenPrice(tokenMint: string): Promise<number | null> {
+  // Try Jupiter first with retry
+  const jupResponse = await fetchWithRetry(`https://api.jup.ag/price/v2?ids=${tokenMint}`);
+  if (jupResponse) {
+    try {
+      const data = await jupResponse.json();
+      if (data.data?.[tokenMint]?.price) {
+        return parseFloat(data.data[tokenMint].price);
+      }
+    } catch {}
+  }
+  
+  // Fallback to DexScreener with retry
+  const dexResponse = await fetchWithRetry(`https://api.dexscreener.com/latest/dex/tokens/${tokenMint}`);
+  if (dexResponse) {
+    try {
+      const data = await dexResponse.json();
+      if (data.pairs?.[0]?.priceUsd) {
+        console.log(`[telegram-channel-monitor] Price from DexScreener fallback: ${data.pairs[0].priceUsd}`);
+        return parseFloat(data.pairs[0].priceUsd);
+      }
+    } catch {}
+  }
+  
+  console.error(`[telegram-channel-monitor] All price fetch attempts failed for ${tokenMint}`);
+  return null;
 }
 
 async function fetchDexScreenerData(tokenMint: string): Promise<{
@@ -207,39 +238,53 @@ async function fetchDexScreenerData(tokenMint: string): Promise<{
   priceChange5m: number | null;
   dexId: string | null;
 }> {
-  try {
-    const response = await fetch(`https://api.dexscreener.com/latest/dex/tokens/${tokenMint}`);
-    const data = await response.json();
-    if (data.pairs?.[0]) {
-      const pair = data.pairs[0];
-      return {
-        price: parseFloat(pair.priceUsd) || null,
-        marketCap: pair.marketCap || null,
-        pairCreatedAt: pair.pairCreatedAt || null,
-        priceChange5m: pair.priceChange?.m5 || null,
-        dexId: pair.dexId || null
-      };
-    }
-    return { price: null, marketCap: null, pairCreatedAt: null, priceChange5m: null, dexId: null };
-  } catch (error) {
-    console.error(`[telegram-channel-monitor] Error fetching DexScreener data:`, error);
-    return { price: null, marketCap: null, pairCreatedAt: null, priceChange5m: null, dexId: null };
+  const response = await fetchWithRetry(`https://api.dexscreener.com/latest/dex/tokens/${tokenMint}`);
+  if (response) {
+    try {
+      const data = await response.json();
+      if (data.pairs?.[0]) {
+        const pair = data.pairs[0];
+        return {
+          price: parseFloat(pair.priceUsd) || null,
+          marketCap: pair.marketCap || null,
+          pairCreatedAt: pair.pairCreatedAt || null,
+          priceChange5m: pair.priceChange?.m5 || null,
+          dexId: pair.dexId || null
+        };
+      }
+    } catch {}
   }
+  return { price: null, marketCap: null, pairCreatedAt: null, priceChange5m: null, dexId: null };
 }
 
 async function fetchTokenMetadata(tokenMint: string): Promise<{ symbol: string; name: string } | null> {
-  try {
-    const response = await fetch(`https://tokens.jup.ag/token/${tokenMint}`);
-    if (!response.ok) return null;
-    const data = await response.json();
-    return {
-      symbol: data.symbol || 'UNKNOWN',
-      name: data.name || 'Unknown Token'
-    };
-  } catch (error) {
-    console.error(`[telegram-channel-monitor] Error fetching token metadata:`, error);
-    return null;
+  // Try Jupiter with retry
+  const jupResponse = await fetchWithRetry(`https://tokens.jup.ag/token/${tokenMint}`, 2, 300);
+  if (jupResponse) {
+    try {
+      const data = await jupResponse.json();
+      if (data.symbol) {
+        return { symbol: data.symbol, name: data.name || 'Unknown Token' };
+      }
+    } catch {}
   }
+  
+  // Fallback to DexScreener for metadata
+  const dexResponse = await fetchWithRetry(`https://api.dexscreener.com/latest/dex/tokens/${tokenMint}`, 2, 300);
+  if (dexResponse) {
+    try {
+      const data = await dexResponse.json();
+      if (data.pairs?.[0]?.baseToken?.symbol) {
+        console.log(`[telegram-channel-monitor] Metadata from DexScreener fallback: ${data.pairs[0].baseToken.symbol}`);
+        return {
+          symbol: data.pairs[0].baseToken.symbol,
+          name: data.pairs[0].baseToken.name || 'Unknown Token'
+        };
+      }
+    } catch {}
+  }
+  
+  return null;
 }
 
 async function checkPumpFunBondingCurve(tokenMint: string): Promise<{
