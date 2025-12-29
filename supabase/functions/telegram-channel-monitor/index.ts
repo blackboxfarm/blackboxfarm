@@ -1300,25 +1300,20 @@ serve(async (req) => {
 
             // Execute trade or fantasy position
             if (currentRuleResult.decision === 'buy' || currentRuleResult.decision === 'fantasy_buy') {
-              // Dedupe fantasy positions by call_id (so re-scans of the same message don't create duplicates)
-              let alreadyHasPositionForThisCall = false;
+              // GLOBAL DEDUPE: Only 1 fantasy position per token_mint ever (first call wins)
+              const { data: existingTokenPos, error: existingTokenPosError } = await supabase
+                .from('telegram_fantasy_positions')
+                .select('id, channel_name, caller_display_name, created_at')
+                .eq('token_mint', tokenMint)
+                .limit(1)
+                .maybeSingle();
 
-              if (callId) {
-                const { data: existingPos, error: existingPosError } = await supabase
-                  .from('telegram_fantasy_positions')
-                  .select('id')
-                  .eq('call_id', callId)
-                  .maybeSingle();
-
-                if (existingPosError) {
-                  console.warn(`[telegram-channel-monitor] Error checking existing fantasy position for call ${callId}:`, existingPosError);
-                }
-
-                alreadyHasPositionForThisCall = !!existingPos;
+              if (existingTokenPosError) {
+                console.warn(`[telegram-channel-monitor] Error checking existing fantasy position for token ${tokenMint}:`, existingTokenPosError);
               }
 
-              if (alreadyHasPositionForThisCall) {
-                console.log(`[telegram-channel-monitor] Fantasy position already exists for call_id=${callId} (${tokenMint}), skipping`);
+              if (existingTokenPos) {
+                console.log(`[telegram-channel-monitor] Fantasy position ALREADY EXISTS for token ${tokenMint} (first called by ${existingTokenPos.channel_name} via ${existingTokenPos.caller_display_name} at ${existingTokenPos.created_at}), skipping duplicate`);
               } else {
                 const entryPrice = currentTokenData?.price || 0.00001;
                 const tokenAmount = entryPrice > 0 ? currentRuleResult.buyAmount / entryPrice : null;
