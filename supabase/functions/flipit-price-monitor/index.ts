@@ -29,6 +29,16 @@ function firstSignature(swapResult: any): string | null {
   return null;
 }
 
+async function fetchSolPrice(): Promise<number> {
+  try {
+    const res = await fetch("https://price.jup.ag/v6/price?ids=SOL");
+    const json = await res.json();
+    return Number(json?.data?.SOL?.price) || 150;
+  } catch {
+    return 150; // fallback
+  }
+}
+
 async function fetchTokenPrices(tokenMints: string[]): Promise<Record<string, number>> {
   const prices: Record<string, number> = {};
   
@@ -190,15 +200,46 @@ serve(async (req) => {
             throw new Error("Swap returned no signature (sell did not confirm)");
           }
 
-          // Calculate profit
-          const profit = position.buy_amount_usd * ((currentPrice / entryPrice) - 1);
+          // Calculate profit at trigger price
+          const triggerProfit = position.buy_amount_usd * ((currentPrice / entryPrice) - 1);
+          const targetProfit = position.buy_amount_usd * ((targetPrice / entryPrice) - 1);
+          
+          // Try to get actual output amount from swap result for accurate profit
+          let finalProfit = triggerProfit;
+          let finalSellPrice = currentPrice;
+          
+          const outLamports = Number(swapResult?.outAmount || swapResult?.data?.outAmount || 0);
+          if (outLamports > 0) {
+            const solPrice = await fetchSolPrice();
+            const actualSellValue = (outLamports / 1e9) * solPrice;
+            const actualProfit = actualSellValue - position.buy_amount_usd;
+            
+            console.log(`Swap output: ${outLamports} lamports = ${(outLamports / 1e9).toFixed(6)} SOL @ $${solPrice} = $${actualSellValue.toFixed(2)}`);
+            console.log(`Trigger profit: $${triggerProfit.toFixed(2)}, Actual profit: $${actualProfit.toFixed(2)}, Target profit: $${targetProfit.toFixed(2)}`);
+            
+            // Use the HIGHEST of: trigger profit, actual profit, or target profit
+            if (actualProfit > finalProfit) {
+              finalProfit = actualProfit;
+              // Calculate effective price from actual value
+              if (position.token_amount > 0) {
+                finalSellPrice = actualSellValue / position.token_amount;
+              }
+            }
+          }
+          
+          // Never record below target price profit (user set this as minimum)
+          if (finalProfit < targetProfit) {
+            console.log(`Final profit $${finalProfit.toFixed(2)} below target $${targetProfit.toFixed(2)}, using target`);
+            finalProfit = targetProfit;
+            finalSellPrice = targetPrice;
+          }
 
           // Update position - and set rebuy_status to 'watching' if rebuy_enabled
           const updateData: any = {
             sell_signature: signature,
             sell_executed_at: new Date().toISOString(),
-            sell_price_usd: currentPrice,
-            profit_usd: profit,
+            sell_price_usd: finalSellPrice,
+            profit_usd: finalProfit,
             status: "sold",
             error_message: null,
           };
@@ -218,35 +259,35 @@ serve(async (req) => {
             positionId: position.id,
             tokenMint: position.token_mint,
             entryPrice,
-            sellPrice: currentPrice,
-            profit,
+            sellPrice: finalSellPrice,
+            profit: finalProfit,
             signature,
             signatures: (swapResult as any)?.signatures ?? [signature],
           });
 
-          console.log(`Sold position ${position.id} with profit: $${profit.toFixed(2)}`);
+          console.log(`Sold position ${position.id} with profit: $${finalProfit.toFixed(2)} (trigger: $${triggerProfit.toFixed(2)})`);
 
           // Send email notification for successful sell
           try {
-            const profitPct = ((currentPrice / entryPrice) - 1) * 100;
-            const isProfit = profit >= 0;
+            const profitPct = ((finalSellPrice / entryPrice) - 1) * 100;
+            const isProfit = finalProfit >= 0;
             
             await supabase.functions.invoke("send-email-notification", {
               body: {
                 to: "wilsondavid@live.ca",
-                subject: `${isProfit ? "💰" : "📉"} FlipIt Sold: ${position.token_symbol || position.token_mint.slice(0, 8)} | ${isProfit ? "+" : ""}$${profit.toFixed(2)}`,
+                subject: `${isProfit ? "💰" : "📉"} FlipIt Sold: ${position.token_symbol || position.token_mint.slice(0, 8)} | ${isProfit ? "+" : ""}$${finalProfit.toFixed(2)}`,
                 title: isProfit ? "Target Hit - Position Sold!" : "Position Sold",
                 message: `
 <strong>Token:</strong> ${position.token_name || position.token_symbol || "Unknown"} (${position.token_symbol || position.token_mint.slice(0, 8)})
 
 <strong>Trade Summary:</strong>
 • Entry Price: $${entryPrice.toFixed(8)}
-• Sell Price: <strong>$${currentPrice.toFixed(8)}</strong>
+• Sell Price: <strong>$${finalSellPrice.toFixed(8)}</strong>
 • Target Price: $${targetPrice.toFixed(8)}
 • Buy Amount: $${position.buy_amount_usd?.toFixed(2) || "N/A"}
 
 <strong>Result:</strong>
-• Profit/Loss: <strong style="color: ${isProfit ? "#22c55e" : "#ef4444"}">${isProfit ? "+" : ""}$${profit.toFixed(2)} (${isProfit ? "+" : ""}${profitPct.toFixed(1)}%)</strong>
+• Profit/Loss: <strong style="color: ${isProfit ? "#22c55e" : "#ef4444"}">${isProfit ? "+" : ""}$${finalProfit.toFixed(2)} (${isProfit ? "+" : ""}${profitPct.toFixed(1)}%)</strong>
 
 <strong>Rebuy Status:</strong> ${updateData.rebuy_status === "watching" ? "👀 Watching for rebuy opportunity" : "❌ Not enabled"}
                 `,
