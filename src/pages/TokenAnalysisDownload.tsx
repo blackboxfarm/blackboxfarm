@@ -1,4 +1,5 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
+import { useSearchParams } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Download, Loader2, FileText, FileSpreadsheet, Database, Search, AlertTriangle, Wallet, GitBranch, ArrowRight, ExternalLink, Eye, Target, Shield, TrendingUp, Zap, Calculator, PieChart } from "lucide-react";
@@ -13,6 +14,7 @@ import { useAuth } from "@/hooks/useAuth";
 
 const TokenAnalysisDownload = () => {
   const { user } = useAuth();
+  const [searchParams] = useSearchParams();
   const [loading, setLoading] = useState(false);
   const [heliusLoading, setHeliusLoading] = useState(false);
   const [walletTraceLoading, setWalletTraceLoading] = useState(false);
@@ -33,6 +35,14 @@ const TokenAnalysisDownload = () => {
   const [moneyFlowLoading, setMoneyFlowLoading] = useState(false);
   const [walletToTrace, setWalletToTrace] = useState("6rDqAoNhfVhhLynpidBWkSqEzPRkpgzFsMFhmnaCahX8");
   const [tokenToTrace, setTokenToTrace] = useState("");
+
+  // Pre-fill token from URL parameter
+  useEffect(() => {
+    const urlToken = searchParams.get('token');
+    if (urlToken) {
+      setTokenToTrace(urlToken);
+    }
+  }, [searchParams]);
   const [showDustWallets, setShowDustWallets] = useState(false);
   const [bondingCurveData, setBondingCurveData] = useState<any>(null);
   const [bondingLoading, setBondingLoading] = useState(false);

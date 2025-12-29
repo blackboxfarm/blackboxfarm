@@ -27,7 +27,8 @@ import {
   Zap,
   AlertTriangle,
   Eye,
-  EyeOff
+  EyeOff,
+  GitBranch
 } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
 
@@ -867,6 +868,15 @@ export function FantasyPortfolioDashboard() {
                       </TableCell>
                       <TableCell>
                         <div className="flex items-center gap-1">
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            onClick={() => window.open(`/token-analysis?token=${pos.token_mint}`, '_blank')}
+                            title="Trace Creator"
+                            className="h-7"
+                          >
+                            <GitBranch className="h-3 w-3" />
+                          </Button>
                           <Button
                             size="sm"
                             variant="outline"
