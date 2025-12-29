@@ -1861,6 +1861,7 @@ export type Database = {
           reputation_score: number | null
           rug_pull_count: number | null
           slow_drain_count: number | null
+          source: string | null
           successful_tokens: number | null
           tags: string[] | null
           telegram_handle: string | null
@@ -1894,6 +1895,7 @@ export type Database = {
           reputation_score?: number | null
           rug_pull_count?: number | null
           slow_drain_count?: number | null
+          source?: string | null
           successful_tokens?: number | null
           tags?: string[] | null
           telegram_handle?: string | null
@@ -1927,6 +1929,7 @@ export type Database = {
           reputation_score?: number | null
           rug_pull_count?: number | null
           slow_drain_count?: number | null
+          source?: string | null
           successful_tokens?: number | null
           tags?: string[] | null
           telegram_handle?: string | null
@@ -1949,6 +1952,7 @@ export type Database = {
           current_market_cap_usd: number | null
           death_date: string | null
           developer_id: string
+          flipit_position_id: string | null
           freeze_authority_revoked: boolean | null
           funding_wallet: string | null
           holder_count: number | null
@@ -1976,6 +1980,7 @@ export type Database = {
           current_market_cap_usd?: number | null
           death_date?: string | null
           developer_id: string
+          flipit_position_id?: string | null
           freeze_authority_revoked?: boolean | null
           funding_wallet?: string | null
           holder_count?: number | null
@@ -2003,6 +2008,7 @@ export type Database = {
           current_market_cap_usd?: number | null
           death_date?: string | null
           developer_id?: string
+          flipit_position_id?: string | null
           freeze_authority_revoked?: boolean | null
           funding_wallet?: string | null
           holder_count?: number | null
