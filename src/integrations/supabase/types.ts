@@ -4912,6 +4912,7 @@ export type Database = {
       }
       telegram_fantasy_positions: {
         Row: {
+          auto_sell_triggered: boolean | null
           call_id: string | null
           caller_display_name: string | null
           caller_username: string | null
@@ -4923,12 +4924,14 @@ export type Database = {
           entry_price_usd: number
           id: string
           interpretation_id: string | null
+          is_active: boolean | null
           realized_pnl_percent: number | null
           realized_pnl_usd: number | null
           rule_id: string | null
           sold_at: string | null
           sold_price_usd: number | null
           status: string
+          stop_loss_enabled: boolean | null
           stop_loss_pct: number | null
           stop_loss_triggered: boolean | null
           target_sell_multiplier: number | null
@@ -4942,6 +4945,7 @@ export type Database = {
           user_id: string | null
         }
         Insert: {
+          auto_sell_triggered?: boolean | null
           call_id?: string | null
           caller_display_name?: string | null
           caller_username?: string | null
@@ -4953,12 +4957,14 @@ export type Database = {
           entry_price_usd: number
           id?: string
           interpretation_id?: string | null
+          is_active?: boolean | null
           realized_pnl_percent?: number | null
           realized_pnl_usd?: number | null
           rule_id?: string | null
           sold_at?: string | null
           sold_price_usd?: number | null
           status?: string
+          stop_loss_enabled?: boolean | null
           stop_loss_pct?: number | null
           stop_loss_triggered?: boolean | null
           target_sell_multiplier?: number | null
@@ -4972,6 +4978,7 @@ export type Database = {
           user_id?: string | null
         }
         Update: {
+          auto_sell_triggered?: boolean | null
           call_id?: string | null
           caller_display_name?: string | null
           caller_username?: string | null
@@ -4983,12 +4990,14 @@ export type Database = {
           entry_price_usd?: number
           id?: string
           interpretation_id?: string | null
+          is_active?: boolean | null
           realized_pnl_percent?: number | null
           realized_pnl_usd?: number | null
           rule_id?: string | null
           sold_at?: string | null
           sold_price_usd?: number | null
           status?: string
+          stop_loss_enabled?: boolean | null
           stop_loss_pct?: number | null
           stop_loss_triggered?: boolean | null
           target_sell_multiplier?: number | null
