@@ -8,6 +8,7 @@ import { Switch } from '@/components/ui/switch';
 import { Badge } from '@/components/ui/badge';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { toast } from 'sonner';
 import { 
   Plus, 
@@ -26,13 +27,22 @@ import {
   RefreshCw,
   FileText,
   Settings2,
-  Sparkles
+  Sparkles,
+  MessageSquare
 } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
 import { ChannelScanLogs } from './ChannelScanLogs';
 import { TradingRulesManager } from './TradingRulesManager';
 import { TradingKeywordsManager } from './TradingKeywordsManager';
 import { useSolPrice } from '@/hooks/useSolPrice';
+
+interface TelegramTarget {
+  id: string;
+  label: string;
+  target_type: string;
+  chat_username: string | null;
+  chat_id: string | null;
+}
 
 interface ChannelConfig {
   id: string;
@@ -64,6 +74,7 @@ interface ChannelConfig {
 
 export function ChannelManagement() {
   const [channels, setChannels] = useState<ChannelConfig[]>([]);
+  const [telegramTargets, setTelegramTargets] = useState<TelegramTarget[]>([]);
   const [loading, setLoading] = useState(true);
   const [showAddDialog, setShowAddDialog] = useState(false);
   const [editingChannel, setEditingChannel] = useState<ChannelConfig | null>(null);
@@ -83,7 +94,8 @@ export function ChannelManagement() {
     fantasy_buy_amount_usd: 100,
     ape_keyword_enabled: true,
     max_mint_age_minutes: 60,
-    scan_window_minutes: 1440
+    scan_window_minutes: 1440,
+    selected_target_id: '' // For selecting from existing targets
   });
   
   // SOL price for USD conversion
@@ -103,7 +115,22 @@ export function ChannelManagement() {
 
   useEffect(() => {
     loadChannels();
+    loadTelegramTargets();
   }, []);
+
+  const loadTelegramTargets = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('telegram_message_targets')
+        .select('id, label, target_type, chat_username, chat_id')
+        .order('label', { ascending: true });
+
+      if (error) throw error;
+      setTelegramTargets(data || []);
+    } catch (err) {
+      console.error('Error loading telegram targets:', err);
+    }
+  };
 
   const loadChannels = async () => {
     try {
@@ -290,13 +317,19 @@ export function ChannelManagement() {
       fantasy_buy_amount_usd: 100,
       ape_keyword_enabled: true,
       max_mint_age_minutes: 60,
-      scan_window_minutes: 1440
+      scan_window_minutes: 1440,
+      selected_target_id: ''
     });
     setGroupTestResult(null);
     setSessionString('');
   };
 
   const startEdit = (channel: ChannelConfig) => {
+    // Find matching target by username
+    const matchingTarget = telegramTargets.find(t => 
+      t.chat_username?.toLowerCase() === channel.channel_username?.toLowerCase()
+    );
+    
     setFormData({
       channel_name: channel.channel_name || '',
       channel_username: channel.channel_username || '',
@@ -305,7 +338,8 @@ export function ChannelManagement() {
       fantasy_buy_amount_usd: channel.fantasy_buy_amount_usd,
       ape_keyword_enabled: channel.ape_keyword_enabled,
       max_mint_age_minutes: channel.max_mint_age_minutes,
-      scan_window_minutes: channel.scan_window_minutes || 1440
+      scan_window_minutes: channel.scan_window_minutes || 1440,
+      selected_target_id: matchingTarget?.id || ''
     });
     setEditingChannel(channel);
     setGroupTestResult(null);
@@ -480,16 +514,78 @@ export function ChannelManagement() {
         />
       </div>
       <div>
-        <Label htmlFor={isEdit ? "edit_channel_username" : "channel_username"}>Channel/Group Username *</Label>
-        <Input
-          id={isEdit ? "edit_channel_username" : "channel_username"}
-          value={formData.channel_username}
-          onChange={(e) => setFormData(prev => ({ ...prev, channel_username: e.target.value }))}
-          placeholder="e.g., alphacalls (without @)"
-        />
-        <p className="text-xs text-muted-foreground mt-1">
-          The username from t.me/username
-        </p>
+        <Label>Channel/Group *</Label>
+        {telegramTargets.length > 0 ? (
+          <>
+            <Select
+              value={formData.selected_target_id || 'manual'}
+              onValueChange={(value) => {
+                if (value === 'manual') {
+                  setFormData(prev => ({ ...prev, selected_target_id: '', channel_username: '' }));
+                } else {
+                  const target = telegramTargets.find(t => t.id === value);
+                  if (target) {
+                    setFormData(prev => ({
+                      ...prev,
+                      selected_target_id: value,
+                      channel_username: target.chat_username || '',
+                      channel_name: prev.channel_name || target.label,
+                      channel_type: target.target_type === 'channel' ? 'channel' : 'group'
+                    }));
+                  }
+                }
+              }}
+            >
+              <SelectTrigger>
+                <SelectValue placeholder="Select from saved targets..." />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="manual">
+                  <span className="flex items-center gap-2 text-muted-foreground">
+                    ✏️ Enter manually...
+                  </span>
+                </SelectItem>
+                {telegramTargets.map((target) => (
+                  <SelectItem key={target.id} value={target.id}>
+                    <span className="flex items-center gap-2">
+                      <MessageSquare className="h-3 w-3" />
+                      {target.label}
+                      <span className="text-muted-foreground text-xs">
+                        (@{target.chat_username})
+                      </span>
+                    </span>
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <p className="text-xs text-muted-foreground mt-1">
+              Select from your saved messaging targets, or enter manually
+            </p>
+          </>
+        ) : (
+          <>
+            <Input
+              id={isEdit ? "edit_channel_username" : "channel_username"}
+              value={formData.channel_username}
+              onChange={(e) => setFormData(prev => ({ ...prev, channel_username: e.target.value }))}
+              placeholder="e.g., alphacalls (without @)"
+            />
+            <p className="text-xs text-muted-foreground mt-1">
+              The username from t.me/username
+            </p>
+          </>
+        )}
+        
+        {/* Show manual input if "manual" is selected or if a target is selected but user wants to override */}
+        {formData.selected_target_id === '' && telegramTargets.length > 0 && (
+          <div className="mt-2">
+            <Input
+              value={formData.channel_username}
+              onChange={(e) => setFormData(prev => ({ ...prev, channel_username: e.target.value }))}
+              placeholder="e.g., alphacalls (without @)"
+            />
+          </div>
+        )}
       </div>
       <div>
         <Label>Type</Label>
