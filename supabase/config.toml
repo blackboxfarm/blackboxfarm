@@ -267,3 +267,6 @@ verify_jwt = false
 
 [functions.backfill-developer-profiles]
 verify_jwt = false
+
+[functions.telegram-fantasy-price-monitor]
+verify_jwt = false
