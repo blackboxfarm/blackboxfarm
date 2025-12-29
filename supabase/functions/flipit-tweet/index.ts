@@ -74,6 +74,7 @@ interface TweetRequest {
   tokenMint?: string;
   tokenSymbol?: string;
   tokenName?: string;
+  twitterUrl?: string;
   entryPrice?: number;
   buyPriceUsd?: number;
   exitPrice?: number;
@@ -83,6 +84,7 @@ interface TweetRequest {
   profitSol?: number;
   amountSol?: number;
   txSignature?: string;
+  positionId?: string;
 }
 
 // Default templates (fallback if DB not available)
@@ -172,7 +174,7 @@ async function fetchTokenInfo(tokenMint: string): Promise<{ symbol: string; name
 }
 
 function buildTweetText(template: string, data: TweetRequest): string {
-  const { type, tokenSymbol, tokenName, entryPrice, exitPrice, targetMultiplier, profitPercent, profitSol, amountSol } = data;
+  const { type, tokenSymbol, tokenName, tokenMint, twitterUrl, entryPrice, exitPrice, targetMultiplier, profitPercent, profitSol, amountSol } = data;
   
   const symbol = sanitizeSymbol(tokenSymbol) || 'TOKEN';
   const profitSign = (profitPercent || 0) >= 0 ? '+' : '';
@@ -200,6 +202,8 @@ function buildTweetText(template: string, data: TweetRequest): string {
   const replacements: Record<string, string> = {
     '{{TOKEN_SYMBOL}}': symbol,
     '{{TOKEN_NAME}}': tokenName || symbol,
+    '{{TOKEN_CA}}': tokenMint || '',
+    '{{TOKEN_X}}': twitterUrl || '',
     '{{ENTRY_PRICE}}': entryPrice?.toFixed(8) || 'N/A',
     '{{EXIT_PRICE}}': exitPrice?.toFixed(8) || 'N/A',
     '{{TARGET_MULTIPLIER}}': String(targetMultiplier || 2),
@@ -284,11 +288,11 @@ Deno.serve(async (req) => {
      let rawSymbol = (body.tokenSymbol || "").trim();
      let needsLookup = !rawSymbol || rawSymbol === "TOKEN" || rawSymbol === "UNKNOWN";
 
-     // First: use DB (we already store token_symbol/token_name on the position)
+     // First: use DB (we already store token_symbol/token_name/twitter_url on the position)
      if (needsLookup && body.txSignature) {
        const { data, error } = await supabase
          .from("flip_positions")
-         .select("token_symbol, token_name")
+         .select("token_symbol, token_name, twitter_url, token_mint")
          .or(`buy_signature.eq.${body.txSignature},sell_signature.eq.${body.txSignature}`)
          .order("created_at", { ascending: false })
          .limit(1)
@@ -296,14 +300,33 @@ Deno.serve(async (req) => {
 
        if (error) {
          console.warn("DB symbol lookup failed:", error);
-       } else if (data?.token_symbol) {
-         body.tokenSymbol = data.token_symbol;
-         body.tokenName = body.tokenName || data.token_name || undefined;
-         console.log("Resolved token info from DB:", { symbol: body.tokenSymbol });
+       } else if (data) {
+         if (data.token_symbol) body.tokenSymbol = data.token_symbol;
+         if (data.token_name) body.tokenName = body.tokenName || data.token_name;
+         if (data.twitter_url) body.twitterUrl = data.twitter_url;
+         if (data.token_mint) body.tokenMint = body.tokenMint || data.token_mint;
+         console.log("Resolved token info from DB:", { symbol: body.tokenSymbol, twitterUrl: body.twitterUrl, tokenMint: body.tokenMint });
        }
 
        rawSymbol = (body.tokenSymbol || "").trim();
        needsLookup = !rawSymbol || rawSymbol === "TOKEN" || rawSymbol === "UNKNOWN";
+     }
+     
+     // Also try to fetch position data by positionId if provided
+     if (body.positionId && (!body.twitterUrl || !body.tokenMint)) {
+       const { data: posData } = await supabase
+         .from("flip_positions")
+         .select("token_symbol, token_name, twitter_url, token_mint")
+         .eq("id", body.positionId)
+         .single();
+       
+       if (posData) {
+         if (!body.tokenSymbol && posData.token_symbol) body.tokenSymbol = posData.token_symbol;
+         if (!body.tokenName && posData.token_name) body.tokenName = posData.token_name;
+         if (!body.twitterUrl && posData.twitter_url) body.twitterUrl = posData.twitter_url;
+         if (!body.tokenMint && posData.token_mint) body.tokenMint = posData.token_mint;
+         console.log("Resolved token info from positionId:", { twitterUrl: body.twitterUrl, tokenMint: body.tokenMint });
+       }
      }
 
      // Fallback: external lookup by mint

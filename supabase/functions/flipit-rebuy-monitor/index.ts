@@ -87,8 +87,11 @@ async function fetchSolPrice(): Promise<number> {
 
 async function sendTweet(supabase: any, tweetData: {
   type: 'buy' | 'sell' | 'rebuy';
+  tokenMint?: string;
   tokenSymbol: string;
   tokenName?: string;
+  twitterUrl?: string;
+  positionId?: string;
   entryPrice?: number;
   exitPrice?: number;
   targetMultiplier?: number;
@@ -307,8 +310,11 @@ serve(async (req) => {
           const amountSol = rebuyAmountUsd / solPrice;
           await sendTweet(supabase, {
             type: 'rebuy',
+            tokenMint: position.token_mint,
             tokenSymbol: position.token_symbol || 'TOKEN',
             tokenName: position.token_name,
+            twitterUrl: position.twitter_url || '',
+            positionId: position.id,
             entryPrice: currentPrice,
             targetMultiplier: positionRebuyMultiplier,
             amountSol: amountSol,
