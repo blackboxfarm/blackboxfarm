@@ -2104,6 +2104,7 @@ export function FlipItDashboard() {
                   <TableHead className="px-2 py-1">Current Value</TableHead>
                   <TableHead className="px-2 py-1">Target Value</TableHead>
                   <TableHead className="px-2 py-1">Progress</TableHead>
+                  <TableHead className="px-2 py-1">Action</TableHead>
                   <TableHead className="px-2 py-1 text-center">STOP-LOSS</TableHead>
                   <TableHead className="px-2 py-1">SL Price</TableHead>
                   <TableHead className="px-2 py-1 text-center">REBUY</TableHead>
@@ -2112,7 +2113,6 @@ export function FlipItDashboard() {
                   <TableHead className="px-2 py-1">Rebuy Amt</TableHead>
                   <TableHead className="px-2 py-1">Rebuy Target</TableHead>
                   <TableHead className="px-2 py-1">Status</TableHead>
-                  <TableHead className="px-2 py-1">Action</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -2350,6 +2350,23 @@ export function FlipItDashboard() {
                           className={`h-1.5 ${progress >= 100 ? 'bg-green-500' : progress < 0 ? 'bg-red-500' : ''}`}
                         />
                         <span className="text-[10px] text-muted-foreground">{progress.toFixed(0)}%</span>
+                      </TableCell>
+                      {/* Sell Now Action - between Progress and Stop-Loss */}
+                      <TableCell className="px-2 py-1">
+                        {position.status === 'holding' && (
+                          <Button
+                            size="sm"
+                            variant="destructive"
+                            onClick={() => {
+                              const ticker = position.token_symbol || position.token_mint.slice(0, 8);
+                              if (window.confirm(`Sell ${ticker} now?\n\nThis will immediately sell your entire position.`)) {
+                                handleForceSell(position.id);
+                              }
+                            }}
+                          >
+                            Sell Now
+                          </Button>
+                        )}
                       </TableCell>
                       {/* Stop-Loss Toggle */}
                       <TableCell className="px-2 py-1 text-center">
@@ -2692,17 +2709,6 @@ export function FlipItDashboard() {
                       </TableCell>
                       
                       <TableCell>{getStatusBadge(position.status)}</TableCell>
-                      <TableCell>
-                        {position.status === 'holding' && (
-                          <Button
-                            size="sm"
-                            variant="destructive"
-                            onClick={() => handleForceSell(position.id)}
-                          >
-                            Sell Now
-                          </Button>
-                        )}
-                      </TableCell>
                     </TableRow>
                   );
                 })}
