@@ -47,7 +47,8 @@ async function fetchDexScreenerOrders(tokenMint: string): Promise<DexScreenerOrd
     }
     
     const data = await response.json();
-    return Array.isArray(data) ? data : [];
+    // API returns { orders: [...], boosts: [...] } - extract orders array
+    return data?.orders || (Array.isArray(data) ? data : []);
   } catch (error) {
     console.error(`Error fetching DexScreener orders for ${tokenMint}:`, error);
     return [];
