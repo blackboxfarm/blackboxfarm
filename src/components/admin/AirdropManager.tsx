@@ -440,11 +440,11 @@ export function AirdropManager() {
       const { data: decryptData, error: decryptError } = await supabase.functions.invoke("encrypt-data", {
         body: { 
           action: "decrypt",
-          ciphertext: walletData.secret_key_encrypted
+          data: walletData.secret_key_encrypted
         }
       });
 
-      if (decryptError || !decryptData?.plaintext) {
+      if (decryptError || !decryptData?.decryptedData) {
         throw new Error("Failed to decrypt wallet key");
       }
 
@@ -452,7 +452,7 @@ export function AirdropManager() {
       const { Connection, Keypair, PublicKey, SystemProgram, Transaction, LAMPORTS_PER_SOL } = await import("@solana/web3.js");
       const bs58 = await import("bs58");
 
-      const secretKey = bs58.default.decode(decryptData.plaintext);
+      const secretKey = bs58.default.decode(decryptData.decryptedData);
       const keypair = Keypair.fromSecretKey(secretKey);
       
       const rpcUrl = import.meta.env.VITE_HELIUS_RPC_URL || "https://api.mainnet-beta.solana.com";
