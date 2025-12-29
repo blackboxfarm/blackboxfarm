@@ -48,12 +48,32 @@ const DEFAULT_TIER: Partial<TradingTier> = {
   icon: null,
 };
 
+// Format number to decimal string without scientific notation
+const formatDecimalValue = (value: number | null | undefined): string => {
+  if (value === null || value === undefined) return '';
+  // Convert to fixed decimal with enough precision, then trim trailing zeros
+  return value.toFixed(10).replace(/\.?0+$/, '');
+};
+
+// Parse decimal string to number, handling empty strings
+const parseDecimalValue = (value: string): number | null => {
+  if (!value || value.trim() === '') return null;
+  const parsed = parseFloat(value);
+  return isNaN(parsed) ? null : parsed;
+};
+
 export function TradingTiersManager() {
   const [tiers, setTiers] = useState<TradingTier[]>([]);
   const [loading, setLoading] = useState(true);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingTier, setEditingTier] = useState<TradingTier | null>(null);
   const [formData, setFormData] = useState<Partial<TradingTier>>(DEFAULT_TIER);
+  
+  // Local string state for price inputs to avoid scientific notation
+  const [priceInputs, setPriceInputs] = useState({
+    min_price: '',
+    max_price: '',
+  });
 
   useEffect(() => {
     loadTiers();
@@ -80,12 +100,17 @@ export function TradingTiersManager() {
   const openAddDialog = () => {
     setEditingTier(null);
     setFormData(DEFAULT_TIER);
+    setPriceInputs({ min_price: '', max_price: '' });
     setIsDialogOpen(true);
   };
 
   const openEditDialog = (tier: TradingTier) => {
     setEditingTier(tier);
     setFormData(tier);
+    setPriceInputs({
+      min_price: formatDecimalValue(tier.min_price_usd),
+      max_price: formatDecimalValue(tier.max_price_usd),
+    });
     setIsDialogOpen(true);
   };
 
@@ -102,8 +127,8 @@ export function TradingTiersManager() {
         priority: formData.priority || 10,
         is_active: formData.is_active ?? true,
         requires_ape_keyword: formData.requires_ape_keyword ?? false,
-        min_price_usd: formData.min_price_usd || null,
-        max_price_usd: formData.max_price_usd || null,
+        min_price_usd: parseDecimalValue(priceInputs.min_price),
+        max_price_usd: parseDecimalValue(priceInputs.max_price),
         min_market_cap_usd: formData.min_market_cap_usd || null,
         max_market_cap_usd: formData.max_market_cap_usd || null,
         buy_amount_usd: formData.buy_amount_usd || 50,
@@ -379,20 +404,20 @@ export function TradingTiersManager() {
                   <div className="space-y-1">
                     <Label className="text-xs text-muted-foreground">Min Price</Label>
                     <Input
-                      type="number"
-                      step="0.00000001"
-                      value={formData.min_price_usd || ''}
-                      onChange={(e) => setFormData({ ...formData, min_price_usd: e.target.value ? parseFloat(e.target.value) : null })}
+                      type="text"
+                      inputMode="decimal"
+                      value={priceInputs.min_price}
+                      onChange={(e) => setPriceInputs({ ...priceInputs, min_price: e.target.value })}
                       placeholder="e.g., 0.00002"
                     />
                   </div>
                   <div className="space-y-1">
                     <Label className="text-xs text-muted-foreground">Max Price</Label>
                     <Input
-                      type="number"
-                      step="0.00000001"
-                      value={formData.max_price_usd || ''}
-                      onChange={(e) => setFormData({ ...formData, max_price_usd: e.target.value ? parseFloat(e.target.value) : null })}
+                      type="text"
+                      inputMode="decimal"
+                      value={priceInputs.max_price}
+                      onChange={(e) => setPriceInputs({ ...priceInputs, max_price: e.target.value })}
                       placeholder="e.g., 0.00004"
                     />
                   </div>
