@@ -21,7 +21,12 @@ async function fetchRecentMessagesViaMTProto(opts: {
 }) {
   const { sessionString, apiId, apiHash, channelUsername, limit } = opts;
 
-  console.log(`[telegram-mtproto-auth] Creating MTProto client for @${channelUsername}, sessionLen=${sessionString.length}`);
+  // Determine if it's a numeric chat ID or username
+  const isNumericId = /^-?\d+$/.test(channelUsername);
+  const peer: string | number = isNumericId ? parseInt(channelUsername, 10) : channelUsername;
+  const peerDisplay = isNumericId ? `chat ID ${peer}` : `@${channelUsername}`;
+
+  console.log(`[telegram-mtproto-auth] Creating MTProto client for ${peerDisplay}, sessionLen=${sessionString.length}`);
 
   // Convert Telethon session to mtcute format
   const mtcuteSession = convertFromTelethonSession(sessionString);
@@ -37,10 +42,10 @@ async function fetchRecentMessagesViaMTProto(opts: {
     await client.importSession(mtcuteSession);
     await client.connect();
 
-    console.log(`[telegram-mtproto-auth] Connected, fetching history for @${channelUsername}`);
+    console.log(`[telegram-mtproto-auth] Connected, fetching history for ${peerDisplay}`);
 
-    // Fetch message history
-    const messages = await client.getHistory(channelUsername, { limit });
+    // Fetch message history - use numeric ID for private groups, username for public
+    const messages = await client.getHistory(peer, { limit });
 
     const mapped = messages.map((m: any) => {
       const text = m.text || '';
@@ -59,7 +64,7 @@ async function fetchRecentMessagesViaMTProto(opts: {
       };
     }).filter((m: any) => m.text);
 
-    console.log(`[telegram-mtproto-auth] Fetched ${mapped.length} messages from @${channelUsername}`);
+    console.log(`[telegram-mtproto-auth] Fetched ${mapped.length} messages from ${peerDisplay}`);
 
     return { success: true, messages: mapped };
   } finally {
