@@ -32,7 +32,7 @@ import {
   Send
 } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
-import { FantasyPortfolioDashboard, CallerLeaderboard, ChannelManagement, TelegramTargetManager } from './telegram';
+import { FantasyPortfolioDashboard, CallerLeaderboard, ChannelManagement, TelegramTargetManager, TradingTiersManager } from './telegram';
 import type { TelegramTarget } from './telegram';
 
 interface ChannelConfig {
@@ -1054,15 +1054,15 @@ export default function TelegramChannelMonitor() {
 
         {/* Trading Rules Tab */}
         <TabsContent value="settings" className="space-y-4">
+          {/* Trading Tiers Manager */}
+          <TradingTiersManager />
+          
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
                 <Settings className="w-5 h-5" />
-                Trading Rules
+                How Tiers Work
               </CardTitle>
-              <CardDescription>
-                Configure automatic buy rules based on token signals
-              </CardDescription>
             </CardHeader>
             <CardContent className="space-y-6">
               <div className="p-4 bg-purple-500/10 border border-purple-500/30 rounded-lg">
@@ -1071,43 +1071,9 @@ export default function TelegramChannelMonitor() {
                   <h4 className="font-semibold text-purple-500">Fantasy Mode (Default)</h4>
                 </div>
                 <p className="text-sm text-muted-foreground">
-                  In Fantasy Mode, the system simulates trades with $100 per position instead of using real funds.
+                  In Fantasy Mode, the system simulates trades based on the tiers configured above.
                   This lets you test the strategy before risking capital.
                 </p>
-              </div>
-
-              <div className="p-4 bg-muted rounded-lg space-y-4">
-                <h4 className="font-semibold">Large Buy Tier (🦍 APE)</h4>
-                <p className="text-sm text-muted-foreground">
-                  Triggers when: "ape" keyword detected AND price &lt; $0.00002
-                </p>
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <Label>Buy Amount</Label>
-                    <p className="text-2xl font-bold text-green-500">$100</p>
-                  </div>
-                  <div>
-                    <Label>Sell Target</Label>
-                    <p className="text-2xl font-bold text-primary">10x</p>
-                  </div>
-                </div>
-              </div>
-
-              <div className="p-4 bg-muted rounded-lg space-y-4">
-                <h4 className="font-semibold">Standard Buy Tier</h4>
-                <p className="text-sm text-muted-foreground">
-                  Triggers when: price &gt; $0.00004 (regardless of ape keyword)
-                </p>
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <Label>Buy Amount</Label>
-                    <p className="text-2xl font-bold text-green-500">$50</p>
-                  </div>
-                  <div>
-                    <Label>Sell Target</Label>
-                    <p className="text-2xl font-bold text-primary">5x</p>
-                  </div>
-                </div>
               </div>
 
               <div className="p-4 border rounded-lg space-y-4">

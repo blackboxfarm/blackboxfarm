@@ -51,6 +51,24 @@ interface TradingRule {
   fallback_to_fantasy: boolean;
 }
 
+interface TradingTier {
+  id: string;
+  name: string;
+  description: string | null;
+  priority: number;
+  is_active: boolean;
+  requires_ape_keyword: boolean;
+  min_price_usd: number | null;
+  max_price_usd: number | null;
+  min_market_cap_usd: number | null;
+  max_market_cap_usd: number | null;
+  buy_amount_usd: number;
+  sell_target_multiplier: number;
+  stop_loss_pct: number | null;
+  stop_loss_enabled: boolean;
+  icon: string | null;
+}
+
 interface KeywordMatchResult {
   matchedKeywords: string[];
   totalWeight: number;
@@ -325,7 +343,7 @@ async function evaluateRules(
 
   // ========== SIMPLE MODE ==========
   if (tradingMode === 'simple') {
-    return evaluateSimpleMode(config, tokenData, keywordResult.hasHighConviction || containsApeKeyword('ape'), isFantasyMode);
+    return await evaluateSimpleMode(config, tokenData, keywordResult.hasHighConviction || containsApeKeyword('ape'), isFantasyMode, supabase);
   }
 
   // ========== ADVANCED MODE ==========
@@ -340,13 +358,13 @@ async function evaluateRules(
   if (error) {
     console.error('[telegram-channel-monitor] Error fetching rules:', error);
     // Fallback to simple mode on error
-    return evaluateSimpleMode(config, tokenData, keywordResult.hasHighConviction, isFantasyMode);
+    return await evaluateSimpleMode(config, tokenData, keywordResult.hasHighConviction, isFantasyMode, supabase);
   }
 
   // If no rules, check fallback behavior
   if (!rules || rules.length === 0) {
     console.log('[telegram-channel-monitor] No rules found, falling back to simple mode');
-    return evaluateSimpleMode(config, tokenData, keywordResult.hasHighConviction, isFantasyMode);
+    return await evaluateSimpleMode(config, tokenData, keywordResult.hasHighConviction, isFantasyMode, supabase);
   }
 
   // Evaluate rules by priority
@@ -508,13 +526,15 @@ function evaluateSingleRule(
   return { matches: true, reason: 'All conditions met' };
 }
 
-function evaluateSimpleMode(
+async function evaluateSimpleMode(
   config: any,
   tokenData: EnrichedTokenData,
   hasApeKeyword: boolean,
-  isFantasyMode: boolean
-): RuleEvaluationResult {
+  isFantasyMode: boolean,
+  supabase: any
+): Promise<RuleEvaluationResult> {
   const price = tokenData.price;
+  const marketCap = tokenData.marketCap;
   const tokenAge = tokenData.ageMinutes;
 
   // Check token age
@@ -545,9 +565,68 @@ function evaluateSimpleMode(
     };
   }
 
+  // Fetch trading tiers from database
+  const { data: tiers, error: tiersError } = await supabase
+    .from('telegram_trading_tiers')
+    .select('*')
+    .eq('is_active', true)
+    .order('priority', { ascending: true });
+
+  if (tiersError) {
+    console.error('[telegram-channel-monitor] Error fetching trading tiers:', tiersError);
+  }
+
+  const decision = isFantasyMode ? 'fantasy_buy' : 'buy';
+
+  // Evaluate tiers in priority order
+  if (tiers && tiers.length > 0) {
+    for (const tier of tiers as TradingTier[]) {
+      // Check APE keyword requirement
+      if (tier.requires_ape_keyword && !hasApeKeyword) {
+        console.log(`[telegram-channel-monitor] Tier "${tier.name}" skipped: requires APE keyword`);
+        continue;
+      }
+
+      // Check price range
+      if (tier.min_price_usd !== null && price < tier.min_price_usd) {
+        console.log(`[telegram-channel-monitor] Tier "${tier.name}" skipped: price $${price} below min $${tier.min_price_usd}`);
+        continue;
+      }
+      if (tier.max_price_usd !== null && price > tier.max_price_usd) {
+        console.log(`[telegram-channel-monitor] Tier "${tier.name}" skipped: price $${price} above max $${tier.max_price_usd}`);
+        continue;
+      }
+
+      // Check market cap range
+      if (marketCap !== null) {
+        if (tier.min_market_cap_usd !== null && marketCap < tier.min_market_cap_usd) {
+          console.log(`[telegram-channel-monitor] Tier "${tier.name}" skipped: MC $${marketCap} below min`);
+          continue;
+        }
+        if (tier.max_market_cap_usd !== null && marketCap > tier.max_market_cap_usd) {
+          console.log(`[telegram-channel-monitor] Tier "${tier.name}" skipped: MC $${marketCap} above max`);
+          continue;
+        }
+      }
+
+      // Tier matches!
+      console.log(`[telegram-channel-monitor] Matched tier: "${tier.name}" (${tier.icon || '📊'}) - Buy: $${tier.buy_amount_usd}, Target: ${tier.sell_target_multiplier}x`);
+      return {
+        matchedRule: null,
+        decision,
+        buyAmount: tier.buy_amount_usd,
+        sellTarget: tier.sell_target_multiplier,
+        stopLoss: tier.stop_loss_pct,
+        stopLossEnabled: tier.stop_loss_enabled,
+        reasoning: `${tier.icon || '📊'} ${tier.name}: ${tier.description || 'Tier matched'}`,
+        ruleId: tier.id
+      };
+    }
+  }
+
+  // Fallback to config defaults if no tiers match
   const minPriceThreshold = config.min_price_threshold || 0.00002;
   const maxPriceThreshold = config.max_price_threshold || 0.00004;
-  const decision = isFantasyMode ? 'fantasy_buy' : 'buy';
 
   if (hasApeKeyword && price < minPriceThreshold) {
     return {
@@ -557,10 +636,10 @@ function evaluateSimpleMode(
       sellTarget: config.large_sell_multiplier || 5,
       stopLoss: null,
       stopLossEnabled: false,
-      reasoning: `APE keyword + low price ($${price.toFixed(8)} < $${minPriceThreshold}). Large buy tier.`,
+      reasoning: `APE keyword + low price ($${price.toFixed(8)} < $${minPriceThreshold}). Large buy tier (fallback).`,
       ruleId: null
     };
-  } else if (price >= minPriceThreshold && price < maxPriceThreshold) {
+  } else if (price >= minPriceThreshold) {
     return {
       matchedRule: null,
       decision,
@@ -568,18 +647,7 @@ function evaluateSimpleMode(
       sellTarget: config.standard_sell_multiplier || 3,
       stopLoss: null,
       stopLossEnabled: false,
-      reasoning: `Standard price range. Standard buy tier.`,
-      ruleId: null
-    };
-  } else if (price >= maxPriceThreshold) {
-    return {
-      matchedRule: null,
-      decision,
-      buyAmount: config.standard_buy_amount_usd || 50,
-      sellTarget: config.standard_sell_multiplier || 2,
-      stopLoss: null,
-      stopLossEnabled: false,
-      reasoning: `Price above threshold. Standard buy tier.`,
+      reasoning: `Standard price range. Standard buy tier (fallback).`,
       ruleId: null
     };
   }
@@ -591,7 +659,7 @@ function evaluateSimpleMode(
     sellTarget: 0,
     stopLoss: null,
     stopLossEnabled: false,
-    reasoning: `Price in middle range without APE keyword. Insufficient conviction.`,
+    reasoning: `No matching tier found for price $${price.toFixed(8)}`,
     ruleId: null
   };
 }
