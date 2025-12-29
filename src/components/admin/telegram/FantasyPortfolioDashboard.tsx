@@ -56,6 +56,9 @@ interface FantasyPosition {
   stop_loss_pct: number | null;
   stop_loss_enabled: boolean | null;
   auto_sell_triggered: boolean | null;
+  peak_price_usd: number | null;
+  peak_price_at: string | null;
+  peak_multiplier: number | null;
 }
 
 interface PortfolioStats {
@@ -70,6 +73,7 @@ interface PortfolioStats {
   bestTrade: { symbol: string; pnl: number } | null;
   worstTrade: { symbol: string; pnl: number } | null;
   nearTargetCount: number;
+  missedOpportunities: number;
 }
 
 const SELL_MULTIPLIERS = [
@@ -91,6 +95,7 @@ export function FantasyPortfolioDashboard() {
   const [stats, setStats] = useState<PortfolioStats | null>(null);
   const [loading, setLoading] = useState(true);
   const [updatingPrices, setUpdatingPrices] = useState(false);
+  const [backfillingPeaks, setBackfillingPeaks] = useState(false);
   const [autoRefresh, setAutoRefresh] = useState(false);
   const [filter, setFilter] = useState<'all' | 'active' | 'inactive'>('active');
   const [lastUpdate, setLastUpdate] = useState<Date | null>(null);
@@ -191,6 +196,13 @@ export function FantasyPortfolioDashboard() {
       return (multiplier / target) >= 0.8;
     }).length;
 
+    // Count missed opportunities - positions where peak exceeded target
+    const missedOpportunities = open.filter(p => {
+      const peakMult = p.peak_multiplier || 0;
+      const targetMult = p.target_sell_multiplier || 2;
+      return peakMult >= targetMult;
+    }).length;
+
     setStats({
       totalPositions: positions.length,
       openPositions: open.length,
@@ -202,7 +214,8 @@ export function FantasyPortfolioDashboard() {
       winRate,
       bestTrade,
       worstTrade,
-      nearTargetCount
+      nearTargetCount,
+      missedOpportunities
     });
   };
 
@@ -354,6 +367,35 @@ export function FantasyPortfolioDashboard() {
     return pos.current_price_usd / pos.entry_price_usd;
   };
 
+  const backfillPeaks = async () => {
+    try {
+      setBackfillingPeaks(true);
+      toast.info('Backfilling historical peaks...');
+      
+      const { data, error } = await supabase.functions.invoke('telegram-fantasy-peak-backfill');
+      
+      if (error) throw error;
+      
+      if (data?.missedOpportunities > 0) {
+        toast.success(`Found ${data.missedOpportunities} missed opportunities! 🏆`);
+      } else {
+        toast.success(`Processed ${data?.updated || 0} positions`);
+      }
+      
+      await loadPositions();
+    } catch (err) {
+      console.error('Error backfilling peaks:', err);
+      toast.error('Failed to backfill peaks');
+    } finally {
+      setBackfillingPeaks(false);
+    }
+  };
+
+  const formatPeakDate = (dateStr: string | null) => {
+    if (!dateStr) return '';
+    return formatDistanceToNow(new Date(dateStr), { addSuffix: true });
+  };
+
   if (loading) {
     return (
       <div className="flex items-center justify-center p-8">
@@ -447,6 +489,17 @@ export function FantasyPortfolioDashboard() {
               <span className="text-sm text-muted-foreground">Near Target</span>
             </div>
             <p className="text-2xl font-bold text-yellow-500">{stats?.nearTargetCount || 0}</p>
+          </CardContent>
+        </Card>
+
+        <Card className={stats?.missedOpportunities ? 'border-amber-500/50 bg-amber-500/5' : ''}>
+          <CardContent className="p-4">
+            <div className="flex items-center gap-2">
+              <Trophy className="h-4 w-4 text-amber-500" />
+              <span className="text-sm text-muted-foreground">Missed Sells</span>
+            </div>
+            <p className="text-2xl font-bold text-amber-500">{stats?.missedOpportunities || 0}</p>
+            <p className="text-xs text-muted-foreground">Already hit target</p>
           </CardContent>
         </Card>
       </div>
@@ -567,6 +620,21 @@ export function FantasyPortfolioDashboard() {
             >
               Deactivate All
             </Button>
+
+            <Button
+              onClick={backfillPeaks}
+              disabled={backfillingPeaks}
+              size="sm"
+              variant="outline"
+              className="text-amber-500"
+            >
+              {backfillingPeaks ? (
+                <Loader2 className="h-4 w-4 animate-spin mr-2" />
+              ) : (
+                <Trophy className="h-4 w-4 mr-2" />
+              )}
+              Backfill Peaks
+            </Button>
           </div>
         </CardHeader>
         <CardContent>
@@ -585,6 +653,7 @@ export function FantasyPortfolioDashboard() {
                   <TableHead>Caller</TableHead>
                   <TableHead>Entry</TableHead>
                   <TableHead>Current</TableHead>
+                  <TableHead>Peak 🏆</TableHead>
                   <TableHead>Target</TableHead>
                   <TableHead className="w-32">Progress</TableHead>
                   <TableHead>P&L</TableHead>
@@ -641,6 +710,23 @@ export function FantasyPortfolioDashboard() {
                             {currentMult > 0 ? `${currentMult.toFixed(2)}x` : '-'}
                           </p>
                         </div>
+                      </TableCell>
+                      <TableCell>
+                        {pos.peak_multiplier ? (
+                          <div className={pos.peak_multiplier >= (pos.target_sell_multiplier || 2) ? 'text-amber-500' : 'text-muted-foreground'}>
+                            <div className="flex items-center gap-1">
+                              {pos.peak_multiplier >= (pos.target_sell_multiplier || 2) && (
+                                <Trophy className="h-3 w-3" />
+                              )}
+                              <span className="font-medium text-xs">{pos.peak_multiplier.toFixed(2)}x</span>
+                            </div>
+                            <p className="text-xs">
+                              {formatPeakDate(pos.peak_price_at)}
+                            </p>
+                          </div>
+                        ) : (
+                          <span className="text-xs text-muted-foreground">-</span>
+                        )}
                       </TableCell>
                       <TableCell>
                         <Select
