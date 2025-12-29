@@ -436,36 +436,57 @@ export function AirdropManager() {
         throw new Error("Failed to get wallet secret");
       }
 
-      // Decrypt the secret key
-      const { data: decryptData, error: decryptError } = await supabase.functions.invoke("encrypt-data", {
-        body: { 
-          action: "decrypt",
-          data: walletData.secret_key_encrypted
-        }
-      });
+      // Resolve stored secret (may be AES-encrypted, base64-wrapped, or plaintext base58/JSON)
+      let secretMaterial: string = walletData.secret_key_encrypted;
 
-      if (decryptError || !decryptData?.decryptedData) {
-        throw new Error("Failed to decrypt wallet key");
+      // Only call the decrypt function for AES payloads; calling it on plaintext base58 produces garbage.
+      // (Most existing airdrop wallets were stored as plaintext base58 due to legacy encryption response shape.)
+      if (secretMaterial.startsWith("AES:")) {
+        const { data: decryptData, error: decryptError } = await supabase.functions.invoke("encrypt-data", {
+          body: {
+            action: "decrypt",
+            data: secretMaterial,
+          },
+        });
+
+        if (decryptError || !decryptData?.decryptedData) {
+          throw new Error("Failed to decrypt wallet key");
+        }
+        secretMaterial = decryptData.decryptedData;
       }
 
       // Use dynamic import for Solana
       const { Connection, Keypair, PublicKey, SystemProgram, Transaction, LAMPORTS_PER_SOL } = await import("@solana/web3.js");
       const bs58 = await import("bs58");
 
-      // Parse the secret key - handle both JSON array and base58 formats
-      const decryptedKey = decryptData.decryptedData;
-      let secretKey: Uint8Array;
-      
-      if (decryptedKey.trim().startsWith("[")) {
-        // JSON array format (solana-cli style)
-        const arr = JSON.parse(decryptedKey);
-        secretKey = new Uint8Array(arr);
-      } else {
-        // Base58 format
-        secretKey = bs58.default.decode(decryptedKey);
-      }
-      
-      const keypair = Keypair.fromSecretKey(secretKey);
+      // Parse the secret key - handle JSON array and base58 (with base64 fallback)
+      const parseSecretKey = (raw: string): Uint8Array => {
+        const v = raw.trim();
+        if (v.startsWith("[")) {
+          const arr = JSON.parse(v);
+          if (!Array.isArray(arr)) throw new Error("Invalid secret key JSON");
+          return new Uint8Array(arr);
+        }
+
+        try {
+          return bs58.default.decode(v);
+        } catch {
+          // If the stored value is base64-wrapped plaintext base58, decode and try again.
+          try {
+            const decoded = atob(v).trim();
+            if (decoded.startsWith("[")) {
+              const arr = JSON.parse(decoded);
+              if (!Array.isArray(arr)) throw new Error("Invalid secret key JSON");
+              return new Uint8Array(arr);
+            }
+            return bs58.default.decode(decoded);
+          } catch {
+            throw new Error("Invalid secret key format (expected base58 or JSON array)");
+          }
+        }
+      };
+
+      const keypair = Keypair.fromSecretKey(parseSecretKey(secretMaterial));
       
       const rpcUrl = import.meta.env.VITE_HELIUS_RPC_URL || "https://api.mainnet-beta.solana.com";
       const connection = new Connection(rpcUrl, "confirmed");
