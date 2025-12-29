@@ -8,8 +8,17 @@ import { Switch } from '@/components/ui/switch';
 import { Badge } from '@/components/ui/badge';
 import { Textarea } from '@/components/ui/textarea';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { toast } from 'sonner';
-import { Plus, Pencil, Trash2, RefreshCw, ChevronUp, ChevronDown, Layers } from 'lucide-react';
+import { Plus, Pencil, Trash2, RefreshCw, ChevronUp, ChevronDown, Layers, MessageSquare } from 'lucide-react';
+
+interface TelegramTarget {
+  id: string;
+  label: string;
+  target_type: string;
+  chat_username: string | null;
+  chat_id: string | null;
+}
 
 interface TradingTier {
   id: string;
@@ -27,6 +36,7 @@ interface TradingTier {
   stop_loss_pct: number | null;
   stop_loss_enabled: boolean;
   icon: string | null;
+  telegram_target_id: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -46,6 +56,7 @@ const DEFAULT_TIER: Partial<TradingTier> = {
   stop_loss_pct: null,
   stop_loss_enabled: false,
   icon: null,
+  telegram_target_id: null,
 };
 
 // Format number to decimal string without scientific notation
@@ -64,6 +75,7 @@ const parseDecimalValue = (value: string): number | null => {
 
 export function TradingTiersManager() {
   const [tiers, setTiers] = useState<TradingTier[]>([]);
+  const [telegramTargets, setTelegramTargets] = useState<TelegramTarget[]>([]);
   const [loading, setLoading] = useState(true);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingTier, setEditingTier] = useState<TradingTier | null>(null);
@@ -77,6 +89,7 @@ export function TradingTiersManager() {
 
   useEffect(() => {
     loadTiers();
+    loadTelegramTargets();
   }, []);
 
   const loadTiers = async () => {
@@ -95,6 +108,26 @@ export function TradingTiersManager() {
     } finally {
       setLoading(false);
     }
+  };
+
+  const loadTelegramTargets = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('telegram_message_targets')
+        .select('id, label, target_type, chat_username, chat_id')
+        .order('label', { ascending: true });
+
+      if (error) throw error;
+      setTelegramTargets(data || []);
+    } catch (err) {
+      console.error('Error loading telegram targets:', err);
+    }
+  };
+
+  const getTargetLabel = (targetId: string | null) => {
+    if (!targetId) return null;
+    const target = telegramTargets.find(t => t.id === targetId);
+    return target?.label || null;
   };
 
   const openAddDialog = () => {
@@ -136,6 +169,7 @@ export function TradingTiersManager() {
         stop_loss_pct: formData.stop_loss_pct || null,
         stop_loss_enabled: formData.stop_loss_enabled ?? false,
         icon: formData.icon || null,
+        telegram_target_id: formData.telegram_target_id || null,
       };
 
       if (editingTier) {
@@ -300,6 +334,12 @@ export function TradingTiersManager() {
                               📈 MC: ${tier.min_market_cap_usd?.toLocaleString() || '0'} - ${tier.max_market_cap_usd?.toLocaleString() || '∞'}
                             </Badge>
                           )}
+                          {tier.telegram_target_id && getTargetLabel(tier.telegram_target_id) && (
+                            <Badge variant="outline" className="text-xs">
+                              <MessageSquare className="h-3 w-3 mr-1" />
+                              {getTargetLabel(tier.telegram_target_id)}
+                            </Badge>
+                          )}
                         </div>
                         
                         <div className="flex items-center gap-6 text-sm">
@@ -366,6 +406,36 @@ export function TradingTiersManager() {
                     onChange={(e) => setFormData({ ...formData, priority: parseInt(e.target.value) || 10 })}
                   />
                 </div>
+              </div>
+
+              {/* Telegram Target */}
+              <div className="space-y-2">
+                <Label>Telegram Target (Channel/Group)</Label>
+                <Select
+                  value={formData.telegram_target_id || 'none'}
+                  onValueChange={(value) => setFormData({ ...formData, telegram_target_id: value === 'none' ? null : value })}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select a target..." />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">No target selected</SelectItem>
+                    {telegramTargets.map((target) => (
+                      <SelectItem key={target.id} value={target.id}>
+                        <span className="flex items-center gap-2">
+                          <MessageSquare className="h-3 w-3" />
+                          {target.label}
+                          <span className="text-muted-foreground text-xs">
+                            ({target.target_type === 'channel' ? '@' + target.chat_username : 'Group'})
+                          </span>
+                        </span>
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <p className="text-xs text-muted-foreground">
+                  Manage targets in the "Send Telegram Message" section
+                </p>
               </div>
 
               <div className="grid grid-cols-2 gap-4">
