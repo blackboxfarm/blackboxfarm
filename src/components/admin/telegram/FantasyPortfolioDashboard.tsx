@@ -737,7 +737,7 @@ export function FantasyPortfolioDashboard() {
                 <TableRow>
                   <TableHead className="w-12">Active</TableHead>
                   <TableHead>Token</TableHead>
-                  <TableHead>Caller</TableHead>
+                  <TableHead>Channel</TableHead>
                   <TableHead>Entry</TableHead>
                   <TableHead>Current</TableHead>
                   <TableHead>Peak 🏆</TableHead>
@@ -780,9 +780,16 @@ export function FantasyPortfolioDashboard() {
                         </div>
                       </TableCell>
                       <TableCell>
-                        <span className="text-sm">
-                          {pos.caller_display_name || pos.caller_username || pos.channel_name || 'Unknown'}
-                        </span>
+                        <div>
+                          <span className="text-sm font-medium">
+                            {pos.channel_name || 'Unknown Channel'}
+                          </span>
+                          {pos.caller_display_name && pos.caller_display_name !== pos.channel_name && (
+                            <p className="text-xs text-muted-foreground truncate max-w-[120px]">
+                              via {pos.caller_display_name}
+                            </p>
+                          )}
+                        </div>
                       </TableCell>
                       <TableCell>
                         <div>
@@ -908,7 +915,7 @@ export function FantasyPortfolioDashboard() {
                 <TableRow>
                   <TableHead>🏆</TableHead>
                   <TableHead>Token</TableHead>
-                  <TableHead>Caller</TableHead>
+                  <TableHead>Channel</TableHead>
                   <TableHead>Entry</TableHead>
                   <TableHead>Sold At</TableHead>
                   <TableHead>Multiplier</TableHead>
@@ -944,9 +951,16 @@ export function FantasyPortfolioDashboard() {
                         </a>
                       </TableCell>
                       <TableCell>
-                        <span className="text-sm">
-                          {pos.caller_display_name || pos.caller_username || pos.channel_name || 'Unknown'}
-                        </span>
+                        <div>
+                          <span className="text-sm font-medium">
+                            {pos.channel_name || 'Unknown Channel'}
+                          </span>
+                          {pos.caller_display_name && pos.caller_display_name !== pos.channel_name && (
+                            <p className="text-xs text-muted-foreground truncate max-w-[120px]">
+                              via {pos.caller_display_name}
+                            </p>
+                          )}
+                        </div>
                       </TableCell>
                       <TableCell>
                         <span className="text-sm">${pos.entry_price_usd?.toFixed(8) || '0'}</span>
@@ -1011,7 +1025,7 @@ export function FantasyPortfolioDashboard() {
               <TableHeader>
                 <TableRow>
                   <TableHead>Token</TableHead>
-                  <TableHead>Caller</TableHead>
+                  <TableHead>Channel</TableHead>
                   <TableHead>Entry</TableHead>
                   <TableHead>Exit</TableHead>
                   <TableHead>P&L</TableHead>
@@ -1037,9 +1051,16 @@ export function FantasyPortfolioDashboard() {
                         </a>
                       </TableCell>
                       <TableCell>
-                        <span className="text-sm">
-                          {pos.caller_display_name || pos.caller_username || 'Unknown'}
-                        </span>
+                        <div>
+                          <span className="text-sm font-medium">
+                            {pos.channel_name || 'Unknown Channel'}
+                          </span>
+                          {pos.caller_display_name && pos.caller_display_name !== pos.channel_name && (
+                            <p className="text-xs text-muted-foreground truncate max-w-[120px]">
+                              via {pos.caller_display_name}
+                            </p>
+                          )}
+                        </div>
                       </TableCell>
                       <TableCell>
                         <span className="text-sm">${pos.entry_price_usd?.toFixed(8) || '0'}</span>
