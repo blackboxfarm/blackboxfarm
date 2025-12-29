@@ -150,8 +150,17 @@ export function ChannelManagement() {
   };
 
   const addChannel = async () => {
-    if (!formData.channel_username.trim()) {
-      toast.error('Channel username is required');
+    // Get the selected target if one was chosen
+    const selectedTarget = formData.selected_target_id 
+      ? telegramTargets.find(t => t.id === formData.selected_target_id)
+      : null;
+    
+    // Use target's chat_username or chat_id, or the manual entry
+    const channelIdentifier = selectedTarget?.chat_username || selectedTarget?.chat_id || formData.channel_username;
+    const channelName = formData.channel_name || selectedTarget?.label || channelIdentifier;
+    
+    if (!channelIdentifier?.trim()) {
+      toast.error('Please select a target or enter a channel username');
       return;
     }
 
@@ -167,9 +176,9 @@ export function ChannelManagement() {
         .from('telegram_channel_config')
         .insert({
           user_id: userData.user.id,
-          channel_id: formData.channel_username.toLowerCase(),
-          channel_name: formData.channel_name || formData.channel_username,
-          channel_username: formData.channel_username.toLowerCase().replace('@', ''),
+          channel_id: channelIdentifier.toLowerCase().replace('@', ''),
+          channel_name: channelName,
+          channel_username: (selectedTarget?.chat_username || formData.channel_username || channelIdentifier).toLowerCase().replace('@', ''),
           channel_type: formData.channel_type,
           is_active: true,
           fantasy_mode: formData.fantasy_mode,
