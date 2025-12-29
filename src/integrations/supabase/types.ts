@@ -5241,6 +5241,66 @@ export type Database = {
         }
         Relationships: []
       }
+      telegram_trading_tiers: {
+        Row: {
+          buy_amount_usd: number
+          created_at: string
+          description: string | null
+          icon: string | null
+          id: string
+          is_active: boolean
+          max_market_cap_usd: number | null
+          max_price_usd: number | null
+          min_market_cap_usd: number | null
+          min_price_usd: number | null
+          name: string
+          priority: number
+          requires_ape_keyword: boolean
+          sell_target_multiplier: number
+          stop_loss_enabled: boolean
+          stop_loss_pct: number | null
+          updated_at: string
+        }
+        Insert: {
+          buy_amount_usd?: number
+          created_at?: string
+          description?: string | null
+          icon?: string | null
+          id?: string
+          is_active?: boolean
+          max_market_cap_usd?: number | null
+          max_price_usd?: number | null
+          min_market_cap_usd?: number | null
+          min_price_usd?: number | null
+          name: string
+          priority?: number
+          requires_ape_keyword?: boolean
+          sell_target_multiplier?: number
+          stop_loss_enabled?: boolean
+          stop_loss_pct?: number | null
+          updated_at?: string
+        }
+        Update: {
+          buy_amount_usd?: number
+          created_at?: string
+          description?: string | null
+          icon?: string | null
+          id?: string
+          is_active?: boolean
+          max_market_cap_usd?: number | null
+          max_price_usd?: number | null
+          min_market_cap_usd?: number | null
+          min_price_usd?: number | null
+          name?: string
+          priority?: number
+          requires_ape_keyword?: boolean
+          sell_target_multiplier?: number
+          stop_loss_enabled?: boolean
+          stop_loss_pct?: number | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
       token_lifecycle: {
         Row: {
           active_boosts: number | null
