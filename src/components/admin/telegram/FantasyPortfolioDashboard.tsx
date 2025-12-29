@@ -51,7 +51,7 @@ interface FantasyPosition {
   channel_name: string | null;
   created_at: string;
   sold_at: string | null;
-  is_active: boolean;
+  is_active: boolean | null;
   target_sell_multiplier: number | null;
   stop_loss_pct: number | null;
   stop_loss_enabled: boolean | null;
@@ -160,7 +160,7 @@ export function FantasyPortfolioDashboard() {
   const calculateStats = (positions: FantasyPosition[]) => {
     const open = positions.filter(p => p.status === 'open');
     const closed = positions.filter(p => p.status === 'closed' || p.status === 'sold');
-    const active = open.filter(p => p.is_active);
+    const active = open.filter(p => p.is_active !== false); // null treated as active
     
     const totalInvested = positions.reduce((sum, p) => sum + (p.entry_amount_usd || 0), 0);
     const totalUnrealized = open.reduce((sum, p) => sum + (p.unrealized_pnl_usd || 0), 0);
@@ -365,10 +365,10 @@ export function FantasyPortfolioDashboard() {
   const openPositions = positions.filter(p => p.status === 'open');
   const closedPositions = positions.filter(p => p.status === 'sold' || p.status === 'closed');
   
-  // Filter open positions based on active/inactive filter
+  // Filter open positions based on active/inactive filter (null treated as active)
   const filteredOpenPositions = openPositions.filter(p => {
-    if (filter === 'active') return p.is_active;
-    if (filter === 'inactive') return !p.is_active;
+    if (filter === 'active') return p.is_active !== false;
+    if (filter === 'inactive') return p.is_active === false;
     return true;
   });
 
@@ -599,14 +599,14 @@ export function FantasyPortfolioDashboard() {
                   const progress = getProgressToTarget(pos);
                   const currentMult = getCurrentMultiplier(pos);
                   
-                  return (
-                    <TableRow key={pos.id} className={!pos.is_active ? 'opacity-60' : ''}>
-                      <TableCell>
-                        <Checkbox
-                          checked={pos.is_active}
-                          onCheckedChange={(checked) => toggleActive(pos.id, !!checked)}
-                        />
-                      </TableCell>
+                    return (
+                      <TableRow key={pos.id} className={pos.is_active === false ? 'opacity-60' : ''}>
+                        <TableCell>
+                          <Checkbox
+                            checked={pos.is_active !== false}
+                            onCheckedChange={(checked) => toggleActive(pos.id, !!checked)}
+                          />
+                        </TableCell>
                       <TableCell>
                         <div>
                           <a 
