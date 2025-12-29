@@ -28,7 +28,8 @@ import {
   Wallet,
   Trash2,
   Trophy,
-  Users
+  Users,
+  Send
 } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
 import { FantasyPortfolioDashboard, CallerLeaderboard, ChannelManagement } from './telegram';
@@ -160,6 +161,11 @@ export default function TelegramChannelMonitor() {
   const [twoFAPassword, setTwoFAPassword] = useState('');
   const [showCodeInput, setShowCodeInput] = useState(false);
   const [needs2FA, setNeeds2FA] = useState(false);
+
+  // Send message state
+  const [sendChatUsername, setSendChatUsername] = useState('');
+  const [sendMessage, setSendMessage] = useState('');
+  const [isSendingMessage, setIsSendingMessage] = useState(false);
 
   // New config form state
   const [newChannelId, setNewChannelId] = useState('-1002078711289');
@@ -325,6 +331,34 @@ export default function TelegramChannelMonitor() {
       }
     } catch (error: any) {
       toast.error(error.message || 'Failed to test session');
+    }
+  };
+
+  const sendTelegramMessage = async () => {
+    if (!sendChatUsername || !sendMessage) {
+      toast.error('Chat username and message are required');
+      return;
+    }
+    setIsSendingMessage(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('telegram-mtproto-auth', {
+        body: { 
+          action: 'send_message',
+          chatUsername: sendChatUsername,
+          message: sendMessage
+        }
+      });
+      if (error) throw error;
+      if (data?.success) {
+        toast.success(`Message sent to @${data.chatUsername}`);
+        setSendMessage(''); // Clear message after success
+      } else {
+        throw new Error(data?.error || 'Failed to send message');
+      }
+    } catch (error: any) {
+      toast.error(error.message || 'Failed to send message');
+    } finally {
+      setIsSendingMessage(false);
     }
   };
 
@@ -701,6 +735,47 @@ export default function TelegramChannelMonitor() {
           )}
         </CardContent>
       </Card>
+
+      {/* Send Message Card */}
+      {mtprotoStatus?.hasSession && (
+        <Card className="border-blue-500/50">
+          <CardHeader className="pb-3">
+            <CardTitle className="text-lg flex items-center gap-2">
+              <MessageCircle className="w-5 h-5" />
+              Send Telegram Message
+            </CardTitle>
+            <CardDescription>
+              Send a message to any group/channel using your MTProto session
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div className="space-y-2">
+                <Label>Chat Username</Label>
+                <Input
+                  placeholder="@GroupUsername or GroupUsername"
+                  value={sendChatUsername}
+                  onChange={(e) => setSendChatUsername(e.target.value)}
+                />
+              </div>
+              <div className="space-y-2 md:col-span-2">
+                <Label>Message (e.g., token mint address)</Label>
+                <div className="flex gap-2">
+                  <Input
+                    placeholder="Enter message or token mint address"
+                    value={sendMessage}
+                    onChange={(e) => setSendMessage(e.target.value)}
+                    className="flex-1"
+                  />
+                  <Button onClick={sendTelegramMessage} disabled={isSendingMessage}>
+                    {isSendingMessage ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Send'}
+                  </Button>
+                </div>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Status Cards */}
       <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
