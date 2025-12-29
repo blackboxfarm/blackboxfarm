@@ -1113,8 +1113,8 @@ serve(async (req) => {
             }
           }
 
-          // Extract Solana addresses
-          const addresses = extractSolanaAddresses(messageText);
+          // Extract Solana addresses (dedupe within the same message)
+          const addresses = Array.from(new Set(extractSolanaAddresses(messageText)));
           
           // Detect keywords (for both modes)
           const keywordResult = tradingMode === 'advanced' 
@@ -1159,7 +1159,7 @@ serve(async (req) => {
           const aiResult = generateAIInterpretation(messageText, addresses, keywordResult, tokenData, ruleResult);
 
           // Log interpretation
-          await supabase
+          const { data: interpretationRow, error: interpretationError } = await supabase
             .from('telegram_message_interpretations')
             .insert({
               channel_config_id: config.id,
@@ -1177,36 +1177,44 @@ serve(async (req) => {
               price_at_detection: tokenData?.price || null,
               caller_username: callerUsername || null,
               caller_display_name: callerDisplayName || null
-            });
+            })
+            .select('id')
+            .single();
+
+          if (interpretationError) {
+            console.error('[telegram-channel-monitor] Failed to insert telegram_message_interpretations:', interpretationError);
+          }
+
+          const interpretationId = interpretationRow?.id ?? null;
 
           console.log(`[telegram-channel-monitor] AI: ${aiResult.summary} -> ${ruleResult.decision}`);
 
           // Process each token
           for (const tokenMint of addresses) {
-            // Check for duplicate call records (but don't skip fantasy position creation)
-            const { data: existingInChannel } = await supabase
+            // Dedupe call records by message_id+token (NOT just token) so repeats across messages still get added
+            const { data: existingCall, error: existingCallError } = await supabase
               .from('telegram_channel_calls')
               .select('id')
               .eq('channel_id', channelId)
+              .eq('message_id', messageId)
               .eq('token_mint', tokenMint)
-              .single();
+              .maybeSingle();
 
-            // Check if fantasy position already exists for this token+channel
-            const { data: existingFantasyPosition } = await supabase
-              .from('telegram_fantasy_positions')
-              .select('id')
-              .eq('channel_config_id', config.id)
-              .eq('token_mint', tokenMint)
-              .eq('status', 'open')
-              .single();
+            if (existingCallError) {
+              console.warn(`[telegram-channel-monitor] Error checking existing call for ${tokenMint}:`, existingCallError);
+            }
 
             // Check first call
-            const { data: existingGlobal } = await supabase
+            const { data: existingGlobal, error: existingGlobalError } = await supabase
               .from('telegram_channel_calls')
               .select('id')
               .eq('token_mint', tokenMint)
               .limit(1)
-              .single();
+              .maybeSingle();
+
+            if (existingGlobalError) {
+              console.warn(`[telegram-channel-monitor] Error checking global first-call for ${tokenMint}:`, existingGlobalError);
+            }
 
             const isFirstCall = !existingGlobal;
 
@@ -1225,9 +1233,10 @@ serve(async (req) => {
               ? 'skipped'
               : (isFantasyMode ? 'fantasy_bought' : 'detected');
 
-            // Insert call record ONLY if not duplicate
-            if (!existingInChannel) {
-              await supabase
+            // Insert call record if we don't already have one for THIS message
+            let callId: string | null = existingCall?.id ?? null;
+            if (!callId) {
+              const { data: insertedCall, error: insertCallError } = await supabase
                 .from('telegram_channel_calls')
                 .insert({
                   channel_config_id: config.id,
@@ -1249,9 +1258,15 @@ serve(async (req) => {
                   caller_username: callerUsername || null,
                   caller_display_name: callerDisplayName || null,
                   is_first_call: isFirstCall
-                });
-            } else {
-              console.log(`[telegram-channel-monitor] Call record exists for ${tokenMint}, checking fantasy position...`);
+                })
+                .select('id')
+                .single();
+
+              if (insertCallError) {
+                console.error(`[telegram-channel-monitor] Call insert FAILED for ${tokenMint}:`, insertCallError);
+              } else {
+                callId = insertedCall?.id ?? null;
+              }
             }
 
             // Track caller
@@ -1261,7 +1276,7 @@ serve(async (req) => {
                 .from('telegram_callers')
                 .select('*')
                 .eq('caller_username', callerKey)
-                .single();
+                .maybeSingle();
 
               if (!existingCaller) {
                 await supabase.from('telegram_callers').insert({
@@ -1285,25 +1300,47 @@ serve(async (req) => {
 
             // Execute trade or fantasy position
             if (currentRuleResult.decision === 'buy' || currentRuleResult.decision === 'fantasy_buy') {
-              // Skip if fantasy position already exists for this token in this channel
-              if (existingFantasyPosition) {
-                console.log(`[telegram-channel-monitor] Fantasy position already exists for ${tokenMint} in ${config.channel_name}, skipping`);
+              // Dedupe fantasy positions by call_id (so re-scans of the same message don't create duplicates)
+              let alreadyHasPositionForThisCall = false;
+
+              if (callId) {
+                const { data: existingPos, error: existingPosError } = await supabase
+                  .from('telegram_fantasy_positions')
+                  .select('id')
+                  .eq('call_id', callId)
+                  .maybeSingle();
+
+                if (existingPosError) {
+                  console.warn(`[telegram-channel-monitor] Error checking existing fantasy position for call ${callId}:`, existingPosError);
+                }
+
+                alreadyHasPositionForThisCall = !!existingPos;
+              }
+
+              if (alreadyHasPositionForThisCall) {
+                console.log(`[telegram-channel-monitor] Fantasy position already exists for call_id=${callId} (${tokenMint}), skipping`);
               } else {
-                // Use enriched price, or fallback to a small placeholder if price fetch failed
-                const entryPrice = currentTokenData?.price || 0.00001; // Fallback price for failed fetches
+                const entryPrice = currentTokenData?.price || 0.00001;
                 const tokenAmount = entryPrice > 0 ? currentRuleResult.buyAmount / entryPrice : null;
-                
+
                 // Fallback caller: if caller is "Phanes" (bot), use channel name instead
-                const isPhanesCaller = callerDisplayName?.toLowerCase() === 'phanes' || 
-                                       callerUsername?.toLowerCase() === 'phanes' ||
-                                       callerDisplayName?.toLowerCase()?.includes('phanes');
-                const effectiveCallerUsername = isPhanesCaller ? (config.channel_name || channelUsername || callerUsername) : callerUsername;
-                const effectiveCallerDisplayName = isPhanesCaller ? (config.channel_name || channelUsername || callerDisplayName) : callerDisplayName;
-                
-                // Create fantasy position for tracking
+                const isPhanesCaller = callerDisplayName?.toLowerCase() === 'phanes' ||
+                  callerUsername?.toLowerCase() === 'phanes' ||
+                  callerDisplayName?.toLowerCase()?.includes('phanes');
+
+                const effectiveCallerUsername = isPhanesCaller
+                  ? (config.channel_name || channelUsername || callerUsername)
+                  : callerUsername;
+
+                const effectiveCallerDisplayName = isPhanesCaller
+                  ? (config.channel_name || channelUsername || callerDisplayName)
+                  : callerDisplayName;
+
                 const { error: fantasyInsertError } = await supabase
                   .from('telegram_fantasy_positions')
                   .insert({
+                    call_id: callId,
+                    interpretation_id: interpretationId,
                     channel_config_id: config.id,
                     token_mint: tokenMint,
                     token_symbol: currentTokenData?.symbol || null,
@@ -1318,7 +1355,6 @@ serve(async (req) => {
                     caller_display_name: effectiveCallerDisplayName,
                     channel_name: config.channel_name || channelUsername,
                     stop_loss_pct: currentRuleResult.stopLossEnabled ? currentRuleResult.stopLoss : null,
-                    rule_id: currentRuleResult.ruleId,
                     is_active: true,
                     stop_loss_enabled: currentRuleResult.stopLossEnabled || false,
                     trail_tracking_enabled: true
@@ -1328,11 +1364,12 @@ serve(async (req) => {
                   console.error(`[telegram-channel-monitor] Fantasy position insert FAILED for ${tokenMint}:`, fantasyInsertError);
                 } else {
                   totalFantasyBuys++;
-                  console.log(`[telegram-channel-monitor] Fantasy INSERTED: ${currentTokenData?.symbol || tokenMint} - $${currentRuleResult.buyAmount} @ $${entryPrice.toFixed(10)} (Rule: ${currentRuleResult.matchedRule?.name || 'Simple'})`);
+                  console.log(`[telegram-channel-monitor] Fantasy INSERTED: ${currentTokenData?.symbol || tokenMint} - $${currentRuleResult.buyAmount} @ $${entryPrice.toFixed(10)} (Mode: ${tradingMode})`);
                 }
               }
+            }
 
-              // FlipIt auto-buy: trigger when enabled and rules match
+            // FlipIt auto-buy: trigger when enabled and rules match
               if (config.flipit_enabled) {
                 const flipitBuyAmount = config.flipit_buy_amount_usd || 10;
                 const flipitSellMultiplier = config.flipit_sell_multiplier || 2;
