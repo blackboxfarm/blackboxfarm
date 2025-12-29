@@ -163,7 +163,8 @@ export default function TelegramChannelMonitor() {
   const [needs2FA, setNeeds2FA] = useState(false);
 
   // Send message state
-  const [sendChatUsername, setSendChatUsername] = useState('');
+  const [sendChatId, setSendChatId] = useState(''); // For private groups (numeric ID)
+  const [sendChatUsername, setSendChatUsername] = useState(''); // For public groups (username)
   const [sendMessage, setSendMessage] = useState('');
   const [isSendingMessage, setIsSendingMessage] = useState(false);
 
@@ -335,8 +336,8 @@ export default function TelegramChannelMonitor() {
   };
 
   const sendTelegramMessage = async () => {
-    if (!sendChatUsername || !sendMessage) {
-      toast.error('Chat username and message are required');
+    if ((!sendChatUsername && !sendChatId) || !sendMessage) {
+      toast.error('Chat username or ID, and message are required');
       return;
     }
     setIsSendingMessage(true);
@@ -344,13 +345,14 @@ export default function TelegramChannelMonitor() {
       const { data, error } = await supabase.functions.invoke('telegram-mtproto-auth', {
         body: { 
           action: 'send_message',
-          chatUsername: sendChatUsername,
+          chatUsername: sendChatUsername || undefined,
+          chatId: sendChatId || undefined,
           message: sendMessage
         }
       });
       if (error) throw error;
       if (data?.success) {
-        toast.success(`Message sent to @${data.chatUsername}`);
+        toast.success(`Message sent to ${data.chatTarget}`);
         setSendMessage(''); // Clear message after success
       } else {
         throw new Error(data?.error || 'Failed to send message');
@@ -745,17 +747,33 @@ export default function TelegramChannelMonitor() {
               Send Telegram Message
             </CardTitle>
             <CardDescription>
-              Send a message to any group/channel using your MTProto session
+              Send a message to public groups (username) or private groups (chat ID)
             </CardDescription>
           </CardHeader>
           <CardContent>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
               <div className="space-y-2">
-                <Label>Chat Username</Label>
+                <Label>Public Group Username</Label>
                 <Input
-                  placeholder="@GroupUsername or GroupUsername"
+                  placeholder="@GroupUsername"
                   value={sendChatUsername}
-                  onChange={(e) => setSendChatUsername(e.target.value)}
+                  onChange={(e) => {
+                    setSendChatUsername(e.target.value);
+                    if (e.target.value) setSendChatId(''); // Clear ID if username is set
+                  }}
+                  disabled={!!sendChatId}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>Private Group Chat ID</Label>
+                <Input
+                  placeholder="-1001234567890"
+                  value={sendChatId}
+                  onChange={(e) => {
+                    setSendChatId(e.target.value);
+                    if (e.target.value) setSendChatUsername(''); // Clear username if ID is set
+                  }}
+                  disabled={!!sendChatUsername}
                 />
               </div>
               <div className="space-y-2 md:col-span-2">
@@ -767,12 +785,15 @@ export default function TelegramChannelMonitor() {
                     onChange={(e) => setSendMessage(e.target.value)}
                     className="flex-1"
                   />
-                  <Button onClick={sendTelegramMessage} disabled={isSendingMessage}>
-                    {isSendingMessage ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Send'}
+                  <Button onClick={sendTelegramMessage} disabled={isSendingMessage || (!sendChatUsername && !sendChatId)}>
+                    {isSendingMessage ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
                   </Button>
                 </div>
               </div>
             </div>
+            <p className="text-xs text-muted-foreground mt-3">
+              💡 To get private group ID: Add @userinfobot to the group and it will show the chat ID (starts with -100)
+            </p>
           </CardContent>
         </Card>
       )}
