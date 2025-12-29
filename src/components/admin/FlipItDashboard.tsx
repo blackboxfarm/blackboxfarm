@@ -198,10 +198,11 @@ export function FlipItDashboard() {
   const [limitOrders, setLimitOrders] = useState<LimitOrder[]>([]);
   const [isSubmittingLimitOrder, setIsSubmittingLimitOrder] = useState(false);
   const [limitOrderMonitorEnabled, setLimitOrderMonitorEnabled] = useState(true);
-  const [limitOrderCountdown, setLimitOrderCountdown] = useState(15);
-  const limitOrderCountdownRef = useRef(15);
+  const [limitOrderCountdown, setLimitOrderCountdown] = useState(2);
+  const limitOrderCountdownRef = useRef(2);
   const [lastLimitOrderCheck, setLastLimitOrderCheck] = useState<string | null>(null);
   const [isLimitOrderMonitoring, setIsLimitOrderMonitoring] = useState(false);
+  const [isExecutingLimitOrder, setIsExecutingLimitOrder] = useState<string | null>(null);
   const [notificationEmail, setNotificationEmail] = useState('wilsondavid@live.ca');
 
   useEffect(() => {
@@ -415,19 +416,19 @@ export function FlipItDashboard() {
     }
   }, [limitOrders, isLimitOrderMonitoring]);
 
-  // Limit order monitoring poll (every 15 seconds)
+  // Limit order monitoring poll (every 2 seconds for fast dips)
   useEffect(() => {
     if (!limitOrderMonitorEnabled) return;
 
     const hasWatching = limitOrders.some((o) => o.status === 'watching');
     if (!hasWatching) return;
 
-    setLimitOrderCountdown(15);
-    limitOrderCountdownRef.current = 15;
+    setLimitOrderCountdown(2);
+    limitOrderCountdownRef.current = 2;
 
     const id = setInterval(() => {
       void handleLimitOrderCheck();
-    }, 15000);
+    }, 2000);
 
     return () => {
       clearInterval(id);
@@ -1132,6 +1133,43 @@ export function FlipItDashboard() {
       loadLimitOrders();
     } catch (err: any) {
       toast.error(err.message || 'Failed to cancel order');
+    }
+  };
+
+  const handleBuyNowLimitOrder = async (order: LimitOrder) => {
+    setIsExecutingLimitOrder(order.id);
+    try {
+      // Execute with 20% slippage for fast dips
+      const { data, error } = await supabase.functions.invoke('flipit-execute', {
+        body: {
+          tokenMint: order.token_mint,
+          buyAmountSol: order.buy_amount_sol,
+          targetMultiplier: order.target_multiplier,
+          slippageBps: 2000, // 20% slippage for fast dips
+          priorityFeeMode: 'turbo',
+          walletId: selectedWallet,
+        }
+      });
+
+      if (error) throw error;
+
+      if (data?.success) {
+        // Cancel the limit order since we executed it manually
+        await supabase
+          .from('flip_limit_orders')
+          .update({ status: 'executed', executed_at: new Date().toISOString() })
+          .eq('id', order.id);
+
+        toast.success(`🚀 BUY NOW executed for ${order.token_symbol || 'token'}!`);
+        loadLimitOrders();
+        loadPositions();
+      } else {
+        throw new Error(data?.error || 'Failed to execute buy');
+      }
+    } catch (err: any) {
+      toast.error(err.message || 'Failed to execute buy now');
+    } finally {
+      setIsExecutingLimitOrder(null);
     }
   };
 
@@ -2034,14 +2072,30 @@ export function FlipItDashboard() {
                       </div>
                     </TableCell>
                     <TableCell>
-                      <Button
-                        size="sm"
-                        variant="destructive"
-                        onClick={() => handleCancelLimitOrder(order.id)}
-                      >
-                        <XCircle className="h-4 w-4 mr-1" />
-                        Cancel
-                      </Button>
+                      <div className="flex items-center gap-2">
+                        <Button
+                          size="sm"
+                          onClick={() => handleBuyNowLimitOrder(order)}
+                          disabled={isExecutingLimitOrder === order.id || !selectedWallet}
+                          className="bg-gradient-to-r from-green-500 to-emerald-500 hover:from-green-600 hover:to-emerald-600"
+                        >
+                          {isExecutingLimitOrder === order.id ? (
+                            <Loader2 className="h-4 w-4 mr-1 animate-spin" />
+                          ) : (
+                            <Rocket className="h-4 w-4 mr-1" />
+                          )}
+                          BUY NOW
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="destructive"
+                          onClick={() => handleCancelLimitOrder(order.id)}
+                          disabled={isExecutingLimitOrder === order.id}
+                        >
+                          <XCircle className="h-4 w-4 mr-1" />
+                          Cancel
+                        </Button>
+                      </div>
                     </TableCell>
                   </TableRow>
                 ))}
