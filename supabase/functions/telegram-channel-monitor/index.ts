@@ -1506,21 +1506,35 @@ serve(async (req) => {
                 .gte('created_at', today.toISOString());
 
               if ((todayPositions || 0) < flipitMaxDaily) {
-                // GLOBAL DEDUPE: Only 1 real position per token_mint ever (first call wins)
-                const { data: existingFlipPosition, error: flipPosCheckError } = await supabase
-                  .from('flip_positions')
-                  .select('id, token_symbol, created_at, source')
-                  .eq('token_mint', tokenMint)
-                  .limit(1)
-                  .maybeSingle();
-
-                if (flipPosCheckError) {
-                  console.warn(`[telegram-channel-monitor] Error checking existing FlipIt position for ${tokenMint}:`, flipPosCheckError);
-                }
-
-                if (existingFlipPosition) {
-                  console.log(`[telegram-channel-monitor] FlipIt: Position ALREADY EXISTS for ${tokenMint} (${existingFlipPosition.token_symbol}) created at ${existingFlipPosition.created_at} from ${existingFlipPosition.source}, skipping duplicate buy`);
+                // CRITICAL: Only buy on FIRST CALL - if this token was mentioned before in ANY channel, skip
+                if (!isFirstCall) {
+                  console.log(`[telegram-channel-monitor] FlipIt: SKIPPING ${currentTokenData?.symbol || tokenMint} - NOT FIRST CALL (token was already mentioned before in a previous message)`);
+                  // Update call record to reflect skip
+                  if (callId) {
+                    await supabase
+                      .from('telegram_channel_calls')
+                      .update({ 
+                        status: 'skipped', 
+                        skip_reason: 'Not first call - token already mentioned previously' 
+                      })
+                      .eq('id', callId);
+                  }
                 } else {
+                  // GLOBAL DEDUPE: Only 1 real position per token_mint ever (first call wins)
+                  const { data: existingFlipPosition, error: flipPosCheckError } = await supabase
+                    .from('flip_positions')
+                    .select('id, token_symbol, created_at, source')
+                    .eq('token_mint', tokenMint)
+                    .limit(1)
+                    .maybeSingle();
+
+                  if (flipPosCheckError) {
+                    console.warn(`[telegram-channel-monitor] Error checking existing FlipIt position for ${tokenMint}:`, flipPosCheckError);
+                  }
+
+                  if (existingFlipPosition) {
+                    console.log(`[telegram-channel-monitor] FlipIt: Position ALREADY EXISTS for ${tokenMint} (${existingFlipPosition.token_symbol}) created at ${existingFlipPosition.created_at} from ${existingFlipPosition.source}, skipping duplicate buy`);
+                  } else {
                   // Find active FlipIt wallet
                   const { data: flipitWallets } = await supabase
                     .from('flipit_wallets')
@@ -1553,41 +1567,57 @@ serve(async (req) => {
                   } else {
                     console.log('[telegram-channel-monitor] FlipIt: No active wallet found, skipping');
                   }
+                  }
                 }
               } else {
                 console.log(`[telegram-channel-monitor] FlipIt: Daily limit reached (${todayPositions}/${flipitMaxDaily})`);
               }
             } else if (!isFantasyMode && config.flipit_wallet_id) {
               // Legacy: Real trading without flipit_enabled flag
-              // GLOBAL DEDUPE: Only 1 real position per token_mint ever (first call wins)
-              const { data: existingLegacyPosition, error: legacyPosCheckError } = await supabase
-                .from('flip_positions')
-                .select('id, token_symbol, created_at, source')
-                .eq('token_mint', tokenMint)
-                .limit(1)
-                .maybeSingle();
-
-              if (legacyPosCheckError) {
-                console.warn(`[telegram-channel-monitor] Error checking existing legacy FlipIt position for ${tokenMint}:`, legacyPosCheckError);
-              }
-
-              if (existingLegacyPosition) {
-                console.log(`[telegram-channel-monitor] Legacy FlipIt: Position ALREADY EXISTS for ${tokenMint} (${existingLegacyPosition.token_symbol}) created at ${existingLegacyPosition.created_at} from ${existingLegacyPosition.source}, skipping duplicate buy`);
+              // CRITICAL: Only buy on FIRST CALL - if this token was mentioned before in ANY channel, skip
+              if (!isFirstCall) {
+                console.log(`[telegram-channel-monitor] Legacy FlipIt: SKIPPING ${currentTokenData?.symbol || tokenMint} - NOT FIRST CALL (token was already mentioned before in a previous message)`);
+                // Update call record to reflect skip
+                if (callId) {
+                  await supabase
+                    .from('telegram_channel_calls')
+                    .update({ 
+                      status: 'skipped', 
+                      skip_reason: 'Not first call - token already mentioned previously' 
+                    })
+                    .eq('id', callId);
+                }
               } else {
-                try {
-                  await supabase.functions.invoke('flipit-execute', {
-                    body: {
-                      walletId: config.flipit_wallet_id,
-                      action: 'buy',
-                      tokenMint,
-                      amountUsd: currentRuleResult.buyAmount,
-                      targetMultiplier: currentRuleResult.sellTarget,
-                      stopLossPct: currentRuleResult.stopLossEnabled ? currentRuleResult.stopLoss : null
-                    }
-                  });
-                  totalBuys++;
-                } catch (buyError) {
-                  console.error('[telegram-channel-monitor] FlipIt buy error:', buyError);
+                // GLOBAL DEDUPE: Only 1 real position per token_mint ever (first call wins)
+                const { data: existingLegacyPosition, error: legacyPosCheckError } = await supabase
+                  .from('flip_positions')
+                  .select('id, token_symbol, created_at, source')
+                  .eq('token_mint', tokenMint)
+                  .limit(1)
+                  .maybeSingle();
+
+                if (legacyPosCheckError) {
+                  console.warn(`[telegram-channel-monitor] Error checking existing legacy FlipIt position for ${tokenMint}:`, legacyPosCheckError);
+                }
+
+                if (existingLegacyPosition) {
+                  console.log(`[telegram-channel-monitor] Legacy FlipIt: Position ALREADY EXISTS for ${tokenMint} (${existingLegacyPosition.token_symbol}) created at ${existingLegacyPosition.created_at} from ${existingLegacyPosition.source}, skipping duplicate buy`);
+                } else {
+                  try {
+                    await supabase.functions.invoke('flipit-execute', {
+                      body: {
+                        walletId: config.flipit_wallet_id,
+                        action: 'buy',
+                        tokenMint,
+                        amountUsd: currentRuleResult.buyAmount,
+                        targetMultiplier: currentRuleResult.sellTarget,
+                        stopLossPct: currentRuleResult.stopLossEnabled ? currentRuleResult.stopLoss : null
+                      }
+                    });
+                    totalBuys++;
+                  } catch (buyError) {
+                    console.error('[telegram-channel-monitor] FlipIt buy error:', buyError);
+                  }
                 }
               }
             }
