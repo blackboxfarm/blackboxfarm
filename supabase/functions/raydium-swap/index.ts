@@ -994,7 +994,7 @@ serve(async (req) => {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        computeUnitPriceMicroLamports,
+        computeUnitPriceMicroLamports: String(computeUnitPriceMicroLamports),
         swapResponse,
         txVersion,
         wallet: owner.publicKey.toBase58(),
@@ -1031,20 +1031,20 @@ serve(async (req) => {
         const computeRes2 = await fetch(computeUrl2);
         if (computeRes2.ok) {
           const swapResponse2 = await computeRes2.json();
-          const txRes2 = await fetch(`${SWAP_HOST}/transaction/swap-base-in`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              computeUnitPriceMicroLamports,
-              swapResponse: swapResponse2,
-              txVersion: "LEGACY",
-              wallet: owner.publicKey.toBase58(),
-              wrapSol: Boolean((wrapSol || usedFallbackToSOL) && isInputSol),
-              unwrapSol: Boolean(unwrapSol && isOutputSol),
-              inputAccount,
-              outputAccount,
-            }),
-          });
+            const txRes2 = await fetch(`${SWAP_HOST}/transaction/swap-base-in`, {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                computeUnitPriceMicroLamports: String(computeUnitPriceMicroLamports),
+                swapResponse: swapResponse2,
+                txVersion: "LEGACY",
+                wallet: owner.publicKey.toBase58(),
+                wrapSol: Boolean((wrapSol || usedFallbackToSOL) && isInputSol),
+                unwrapSol: Boolean(unwrapSol && isOutputSol),
+                inputAccount,
+                outputAccount,
+              }),
+            });
           if (txRes2.ok) {
             const txJson2 = await txRes2.json();
             if (txJson2 && txJson2.success === false && txJson2.msg) {
@@ -1088,7 +1088,10 @@ serve(async (req) => {
           txList = j.txs.map((b64) => ({ transaction: b64 }));
           signVersion = String(txVersion).toUpperCase() === "LEGACY" ? "LEGACY" : "V0";
         } else {
-          return bad(`No transactions returned from Raydium${lastBuilderErrorMessage ? `: ${lastBuilderErrorMessage}` : ""}; Jupiter fallback: ${j.error}`, 502);
+          return softError(
+            "SWAP_FAILED",
+            `No transactions returned from Raydium${lastBuilderErrorMessage ? `: ${lastBuilderErrorMessage}` : ""}; Jupiter fallback: ${j.error}`
+          );
         }
       }
     }
