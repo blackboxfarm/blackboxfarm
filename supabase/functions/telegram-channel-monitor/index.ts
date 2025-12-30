@@ -1698,13 +1698,19 @@ serve(async (req) => {
           ? Math.max(...channelMessages.map(m => parseInt(m.messageId) || 0))
           : config.last_message_id;
 
-        await supabase
+        console.log(`[telegram-channel-monitor] Updating last_message_id: ${config.last_message_id} -> ${maxMessageId} for ${config.channel_name}`);
+
+        const { error: updateError } = await supabase
           .from('telegram_channel_config')
           .update({
             last_check_at: new Date().toISOString(),
             last_message_id: maxMessageId
           })
           .eq('id', config.id);
+        
+        if (updateError) {
+          console.error(`[telegram-channel-monitor] Failed to update last_message_id:`, updateError);
+        }
 
         results.push({
           channel: config.channel_name || channelUsername || channelId,
