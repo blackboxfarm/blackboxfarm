@@ -1822,14 +1822,15 @@ serve(async (req) => {
                       }
                       
                       if (liquidityCheckPassed) {
-                        // Find active FlipIt wallet
+                        // Find active FlipIt wallet from super_admin_wallets
                         const { data: flipitWallets } = await supabase
-                          .from('flipit_wallets')
+                          .from('super_admin_wallets')
                           .select('id')
+                          .eq('wallet_type', 'flipit')
                           .eq('is_active', true)
                           .limit(1);
 
-                        const walletId = flipitWallets?.[0]?.id || config.flipit_wallet_id;
+                        const walletId = config.flipit_wallet_id || flipitWallets?.[0]?.id;
                         
                         if (walletId) {
                           try {
