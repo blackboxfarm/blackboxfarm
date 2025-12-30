@@ -1129,6 +1129,7 @@ serve(async (req) => {
 
         // Usernames to ignore (owner's messages)
         const IGNORED_USERNAMES = ['system_reset'];
+        let totalSkipped = 0;
         
         for (const msg of channelMessages) {
           if (!msg.text) continue;
