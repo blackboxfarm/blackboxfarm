@@ -94,6 +94,9 @@ verify_jwt = false
 [functions.developer-reputation]
 verify_jwt = false
 
+[functions.developer-enrichment]
+verify_jwt = false
+
 [functions.alert-high-risk-token]
 verify_jwt = false
 
