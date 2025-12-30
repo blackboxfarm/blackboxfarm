@@ -28,9 +28,15 @@ import {
   AlertTriangle,
   Eye,
   EyeOff,
-  GitBranch
+  GitBranch,
+  Shield,
+  Ban,
+  CheckCircle,
+  Filter,
+  Twitter
 } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 
 interface FantasyPosition {
   id: string;
@@ -70,6 +76,16 @@ interface FantasyPosition {
   trail_low_price_usd: number | null;
   trail_low_at: string | null;
   trail_last_updated_at: string | null;
+  // Developer tracking fields
+  developer_id: string | null;
+  developer_risk_level: string | null;
+  developer_reputation_score: number | null;
+  developer_warning: string | null;
+  developer_twitter_handle: string | null;
+  developer_total_tokens: number | null;
+  developer_rug_count: number | null;
+  adjusted_by_dev_risk: boolean | null;
+  original_sell_multiplier: number | null;
 }
 
 interface PortfolioStats {
@@ -112,8 +128,75 @@ export function FantasyPortfolioDashboard() {
   const [backfillingCalls, setBackfillingCalls] = useState(false);
   const [autoRefresh, setAutoRefresh] = useState(false);
   const [filter, setFilter] = useState<'all' | 'active' | 'inactive'>('active');
+  const [channelFilter, setChannelFilter] = useState<string>('all');
   const [lastUpdate, setLastUpdate] = useState<Date | null>(null);
   const intervalRef = useRef<NodeJS.Timeout | null>(null);
+
+  // Get unique channel names for filter
+  const uniqueChannels = Array.from(new Set(positions.map(p => p.channel_name).filter(Boolean))) as string[];
+
+  // Developer risk badge component
+  const DevRiskBadge = ({ pos }: { pos: FantasyPosition }) => {
+    if (!pos.developer_risk_level) return null;
+
+    const getRiskStyles = (level: string) => {
+      switch (level) {
+        case 'critical':
+          return { icon: Ban, color: 'text-red-500 bg-red-500/10 border-red-500/30', label: 'BLACKLISTED' };
+        case 'high':
+          return { icon: AlertTriangle, color: 'text-orange-500 bg-orange-500/10 border-orange-500/30', label: 'High Risk' };
+        case 'medium':
+          return { icon: Shield, color: 'text-yellow-500 bg-yellow-500/10 border-yellow-500/30', label: 'Med Risk' };
+        case 'low':
+          return { icon: CheckCircle, color: 'text-green-500 bg-green-500/10 border-green-500/30', label: 'Low Risk' };
+        case 'verified':
+          return { icon: CheckCircle, color: 'text-blue-500 bg-blue-500/10 border-blue-500/30', label: 'Verified' };
+        default:
+          return { icon: Shield, color: 'text-muted-foreground bg-muted/10 border-muted/30', label: 'Unknown' };
+      }
+    };
+
+    const styles = getRiskStyles(pos.developer_risk_level);
+    const Icon = styles.icon;
+
+    return (
+      <TooltipProvider>
+        <Tooltip>
+          <TooltipTrigger>
+            <Badge variant="outline" className={`gap-1 text-xs ${styles.color}`}>
+              <Icon className="h-3 w-3" />
+              {styles.label}
+            </Badge>
+          </TooltipTrigger>
+          <TooltipContent className="max-w-xs">
+            <div className="space-y-1">
+              {pos.developer_warning && (
+                <p className="text-destructive font-medium">{pos.developer_warning}</p>
+              )}
+              <p className="text-xs">Score: {pos.developer_reputation_score || '?'}/100</p>
+              {pos.developer_total_tokens && (
+                <p className="text-xs">Tokens: {pos.developer_total_tokens}</p>
+              )}
+              {pos.developer_rug_count && pos.developer_rug_count > 0 && (
+                <p className="text-xs text-destructive">⚠️ Rugs: {pos.developer_rug_count}</p>
+              )}
+              {pos.developer_twitter_handle && (
+                <p className="text-xs flex items-center gap-1">
+                  <Twitter className="h-3 w-3" />
+                  @{pos.developer_twitter_handle}
+                </p>
+              )}
+              {pos.adjusted_by_dev_risk && pos.original_sell_multiplier && (
+                <p className="text-xs text-amber-500">
+                  Target adjusted: {pos.original_sell_multiplier}x → {pos.target_sell_multiplier}x
+                </p>
+              )}
+            </div>
+          </TooltipContent>
+        </Tooltip>
+      </TooltipProvider>
+    );
+  };
 
   useEffect(() => {
     loadPositions();
@@ -469,10 +552,13 @@ export function FantasyPortfolioDashboard() {
     !p.auto_sell_triggered || (p.realized_pnl_usd || 0) <= 0
   );
   
-  // Filter open positions based on active/inactive filter (null treated as active)
+  // Filter open positions based on active/inactive filter AND channel filter
   const filteredOpenPositions = openPositions.filter(p => {
-    if (filter === 'active') return p.is_active !== false;
-    if (filter === 'inactive') return p.is_active === false;
+    // Active/Inactive filter
+    if (filter === 'active' && p.is_active === false) return false;
+    if (filter === 'inactive' && p.is_active !== false) return false;
+    // Channel filter
+    if (channelFilter !== 'all' && p.channel_name !== channelFilter) return false;
     return true;
   });
 
@@ -612,7 +698,7 @@ export function FantasyPortfolioDashboard() {
       {/* Open Positions */}
       <Card>
         <CardHeader className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-          <div className="flex items-center gap-4">
+          <div className="flex items-center gap-4 flex-wrap">
             <CardTitle className="flex items-center gap-2">
               <Target className="h-5 w-5" />
               Open Positions ({filteredOpenPositions.length})
@@ -631,6 +717,22 @@ export function FantasyPortfolioDashboard() {
                 <TabsTrigger value="all" className="text-xs">All</TabsTrigger>
               </TabsList>
             </Tabs>
+
+            {/* Channel Filter */}
+            <Select value={channelFilter} onValueChange={setChannelFilter}>
+              <SelectTrigger className="h-8 w-48">
+                <Filter className="h-3 w-3 mr-1" />
+                <SelectValue placeholder="All Channels" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Channels</SelectItem>
+                {uniqueChannels.map(channel => (
+                  <SelectItem key={channel} value={channel}>
+                    {channel}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
 
           <div className="flex items-center gap-3">
@@ -765,16 +867,19 @@ export function FantasyPortfolioDashboard() {
                           />
                         </TableCell>
                       <TableCell>
-                        <div>
-                          <a 
-                            href={getDexScreenerUrl(pos.token_mint)} 
-                            target="_blank" 
-                            rel="noopener noreferrer"
-                            className="font-medium text-primary hover:underline inline-flex items-center gap-1"
-                          >
-                            {pos.token_symbol || 'Unknown'}
-                            <ExternalLink className="h-3 w-3" />
-                          </a>
+                        <div className="space-y-1">
+                          <div className="flex items-center gap-2">
+                            <a 
+                              href={getDexScreenerUrl(pos.token_mint)} 
+                              target="_blank" 
+                              rel="noopener noreferrer"
+                              className="font-medium text-primary hover:underline inline-flex items-center gap-1"
+                            >
+                              {pos.token_symbol || 'Unknown'}
+                              <ExternalLink className="h-3 w-3" />
+                            </a>
+                            <DevRiskBadge pos={pos} />
+                          </div>
                           <p className="text-xs text-muted-foreground truncate max-w-[100px]">
                             {pos.token_mint?.slice(0, 6)}...
                           </p>

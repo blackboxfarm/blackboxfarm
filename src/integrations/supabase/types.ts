@@ -1843,8 +1843,11 @@ export type Database = {
       developer_profiles: {
         Row: {
           average_token_lifespan_days: number | null
+          avg_hold_time_hours: number | null
           avg_time_in_rankings_hours: number | null
           avg_token_rank_achieved: number | null
+          blacklist_reason: string | null
+          bundled_wallet_count: number | null
           created_at: string | null
           discord_handle: string | null
           display_name: string | null
@@ -1858,6 +1861,7 @@ export type Database = {
           master_wallet_address: string
           metadata: Json | null
           notes: string | null
+          quick_dump_count: number | null
           reputation_score: number | null
           rug_pull_count: number | null
           slow_drain_count: number | null
@@ -1873,12 +1877,16 @@ export type Database = {
           trust_level: string | null
           twitter_handle: string | null
           updated_at: string | null
+          wash_trading_detected: boolean | null
           website_url: string | null
         }
         Insert: {
           average_token_lifespan_days?: number | null
+          avg_hold_time_hours?: number | null
           avg_time_in_rankings_hours?: number | null
           avg_token_rank_achieved?: number | null
+          blacklist_reason?: string | null
+          bundled_wallet_count?: number | null
           created_at?: string | null
           discord_handle?: string | null
           display_name?: string | null
@@ -1892,6 +1900,7 @@ export type Database = {
           master_wallet_address: string
           metadata?: Json | null
           notes?: string | null
+          quick_dump_count?: number | null
           reputation_score?: number | null
           rug_pull_count?: number | null
           slow_drain_count?: number | null
@@ -1907,12 +1916,16 @@ export type Database = {
           trust_level?: string | null
           twitter_handle?: string | null
           updated_at?: string | null
+          wash_trading_detected?: boolean | null
           website_url?: string | null
         }
         Update: {
           average_token_lifespan_days?: number | null
+          avg_hold_time_hours?: number | null
           avg_time_in_rankings_hours?: number | null
           avg_token_rank_achieved?: number | null
+          blacklist_reason?: string | null
+          bundled_wallet_count?: number | null
           created_at?: string | null
           discord_handle?: string | null
           display_name?: string | null
@@ -1926,6 +1939,7 @@ export type Database = {
           master_wallet_address?: string
           metadata?: Json | null
           notes?: string | null
+          quick_dump_count?: number | null
           reputation_score?: number | null
           rug_pull_count?: number | null
           slow_drain_count?: number | null
@@ -1941,6 +1955,7 @@ export type Database = {
           trust_level?: string | null
           twitter_handle?: string | null
           updated_at?: string | null
+          wash_trading_detected?: boolean | null
           website_url?: string | null
         }
         Relationships: []
@@ -4912,6 +4927,7 @@ export type Database = {
       }
       telegram_fantasy_positions: {
         Row: {
+          adjusted_by_dev_risk: boolean | null
           auto_sell_triggered: boolean | null
           call_id: string | null
           caller_display_name: string | null
@@ -4920,11 +4936,19 @@ export type Database = {
           channel_name: string | null
           created_at: string
           current_price_usd: number | null
+          developer_id: string | null
+          developer_reputation_score: number | null
+          developer_risk_level: string | null
+          developer_rug_count: number | null
+          developer_total_tokens: number | null
+          developer_twitter_handle: string | null
+          developer_warning: string | null
           entry_amount_usd: number
           entry_price_usd: number
           id: string
           interpretation_id: string | null
           is_active: boolean | null
+          original_sell_multiplier: number | null
           peak_multiplier: number | null
           peak_price_at: string | null
           peak_price_usd: number | null
@@ -4956,6 +4980,7 @@ export type Database = {
           user_id: string | null
         }
         Insert: {
+          adjusted_by_dev_risk?: boolean | null
           auto_sell_triggered?: boolean | null
           call_id?: string | null
           caller_display_name?: string | null
@@ -4964,11 +4989,19 @@ export type Database = {
           channel_name?: string | null
           created_at?: string
           current_price_usd?: number | null
+          developer_id?: string | null
+          developer_reputation_score?: number | null
+          developer_risk_level?: string | null
+          developer_rug_count?: number | null
+          developer_total_tokens?: number | null
+          developer_twitter_handle?: string | null
+          developer_warning?: string | null
           entry_amount_usd?: number
           entry_price_usd: number
           id?: string
           interpretation_id?: string | null
           is_active?: boolean | null
+          original_sell_multiplier?: number | null
           peak_multiplier?: number | null
           peak_price_at?: string | null
           peak_price_usd?: number | null
@@ -5000,6 +5033,7 @@ export type Database = {
           user_id?: string | null
         }
         Update: {
+          adjusted_by_dev_risk?: boolean | null
           auto_sell_triggered?: boolean | null
           call_id?: string | null
           caller_display_name?: string | null
@@ -5008,11 +5042,19 @@ export type Database = {
           channel_name?: string | null
           created_at?: string
           current_price_usd?: number | null
+          developer_id?: string | null
+          developer_reputation_score?: number | null
+          developer_risk_level?: string | null
+          developer_rug_count?: number | null
+          developer_total_tokens?: number | null
+          developer_twitter_handle?: string | null
+          developer_warning?: string | null
           entry_amount_usd?: number
           entry_price_usd?: number
           id?: string
           interpretation_id?: string | null
           is_active?: boolean | null
+          original_sell_multiplier?: number | null
           peak_multiplier?: number | null
           peak_price_at?: string | null
           peak_price_usd?: number | null
@@ -5056,6 +5098,20 @@ export type Database = {
             columns: ["channel_config_id"]
             isOneToOne: false
             referencedRelation: "telegram_channel_config"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "telegram_fantasy_positions_developer_id_fkey"
+            columns: ["developer_id"]
+            isOneToOne: false
+            referencedRelation: "developer_genealogy"
+            referencedColumns: ["developer_id"]
+          },
+          {
+            foreignKeyName: "telegram_fantasy_positions_developer_id_fkey"
+            columns: ["developer_id"]
+            isOneToOne: false
+            referencedRelation: "developer_profiles"
             referencedColumns: ["id"]
           },
           {
