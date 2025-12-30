@@ -282,3 +282,6 @@ verify_jwt = false
 
 [functions.backfill-fantasy-from-calls]
 verify_jwt = false
+
+[functions.rugcheck-backfill]
+verify_jwt = false

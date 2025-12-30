@@ -133,6 +133,7 @@ export function FantasyPortfolioDashboard() {
   const [updatingPrices, setUpdatingPrices] = useState(false);
   const [backfillingPeaks, setBackfillingPeaks] = useState(false);
   const [backfillingCalls, setBackfillingCalls] = useState(false);
+  const [backfillingRugcheck, setBackfillingRugcheck] = useState(false);
   const [autoRefresh, setAutoRefresh] = useState(false);
   const [filter, setFilter] = useState<'all' | 'active' | 'inactive'>('active');
   const [channelFilter, setChannelFilter] = useState<string>('all');
@@ -602,6 +603,38 @@ export function FantasyPortfolioDashboard() {
     }
   };
 
+  const backfillRugcheck = async () => {
+    try {
+      setBackfillingRugcheck(true);
+      toast.info('Running RugCheck analysis on existing positions (rate-limited)...');
+      
+      const { data, error } = await supabase.functions.invoke('rugcheck-backfill', {
+        body: { limit: 100, includeProcessed: false, dryRun: false }
+      });
+      
+      if (error) throw error;
+      
+      const summary = data?.summary || {};
+      const badCalls = data?.badCalls || [];
+      
+      if (badCalls.length > 0) {
+        toast.warning(`⚠️ ${summary.wouldHaveSkipped} positions would have been SKIPPED by RugCheck`, {
+          description: badCalls.slice(0, 3).map((c: any) => `${c.token}: ${c.skipReason}`).join(', '),
+          duration: 10000
+        });
+      } else {
+        toast.success(`✓ Analyzed ${summary.totalProcessed} positions - all passed RugCheck!`);
+      }
+      
+      await loadPositions();
+    } catch (err) {
+      console.error('Error backfilling rugcheck:', err);
+      toast.error('Failed to run RugCheck backfill');
+    } finally {
+      setBackfillingRugcheck(false);
+    }
+  };
+
   const formatPeakDate = (dateStr: string | null) => {
     if (!dateStr) return '';
     return formatDistanceToNow(new Date(dateStr), { addSuffix: true });
@@ -898,6 +931,21 @@ export function FantasyPortfolioDashboard() {
                 <Zap className="h-4 w-4 mr-2" />
               )}
               Backfill Calls
+            </Button>
+
+            <Button
+              onClick={backfillRugcheck}
+              disabled={backfillingRugcheck}
+              size="sm"
+              variant="outline"
+              className="text-purple-500"
+            >
+              {backfillingRugcheck ? (
+                <Loader2 className="h-4 w-4 animate-spin mr-2" />
+              ) : (
+                <Shield className="h-4 w-4 mr-2" />
+              )}
+              RugCheck Backfill
             </Button>
           </div>
         </CardHeader>
