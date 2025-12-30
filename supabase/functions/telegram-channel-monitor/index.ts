@@ -1506,57 +1506,89 @@ serve(async (req) => {
                 .gte('created_at', today.toISOString());
 
               if ((todayPositions || 0) < flipitMaxDaily) {
-                // Find active FlipIt wallet
-                const { data: flipitWallets } = await supabase
-                  .from('flipit_wallets')
-                  .select('id')
-                  .eq('is_active', true)
-                  .limit(1);
+                // GLOBAL DEDUPE: Only 1 real position per token_mint ever (first call wins)
+                const { data: existingFlipPosition, error: flipPosCheckError } = await supabase
+                  .from('flip_positions')
+                  .select('id, token_symbol, created_at, source')
+                  .eq('token_mint', tokenMint)
+                  .limit(1)
+                  .maybeSingle();
 
-                const walletId = flipitWallets?.[0]?.id || config.flipit_wallet_id;
-                
-                if (walletId) {
-                  try {
-                    console.log(`[telegram-channel-monitor] FlipIt: Triggering auto-buy for ${currentTokenData?.symbol || tokenMint} - $${flipitBuyAmount} @ ${flipitSellMultiplier}x`);
-                    
-                    await supabase.functions.invoke('flipit-execute', {
-                      body: {
-                        walletId,
-                        action: 'buy',
-                        tokenMint,
-                        amountUsd: flipitBuyAmount,
-                        targetMultiplier: flipitSellMultiplier,
-                        source: 'telegram',
-                        sourceChannelId: config.id
-                      }
-                    });
-                    totalBuys++;
-                    console.log(`[telegram-channel-monitor] FlipIt: Buy executed successfully`);
-                  } catch (buyError) {
-                    console.error('[telegram-channel-monitor] FlipIt buy error:', buyError);
-                  }
+                if (flipPosCheckError) {
+                  console.warn(`[telegram-channel-monitor] Error checking existing FlipIt position for ${tokenMint}:`, flipPosCheckError);
+                }
+
+                if (existingFlipPosition) {
+                  console.log(`[telegram-channel-monitor] FlipIt: Position ALREADY EXISTS for ${tokenMint} (${existingFlipPosition.token_symbol}) created at ${existingFlipPosition.created_at} from ${existingFlipPosition.source}, skipping duplicate buy`);
                 } else {
-                  console.log('[telegram-channel-monitor] FlipIt: No active wallet found, skipping');
+                  // Find active FlipIt wallet
+                  const { data: flipitWallets } = await supabase
+                    .from('flipit_wallets')
+                    .select('id')
+                    .eq('is_active', true)
+                    .limit(1);
+
+                  const walletId = flipitWallets?.[0]?.id || config.flipit_wallet_id;
+                  
+                  if (walletId) {
+                    try {
+                      console.log(`[telegram-channel-monitor] FlipIt: Triggering auto-buy for ${currentTokenData?.symbol || tokenMint} - $${flipitBuyAmount} @ ${flipitSellMultiplier}x`);
+                      
+                      await supabase.functions.invoke('flipit-execute', {
+                        body: {
+                          walletId,
+                          action: 'buy',
+                          tokenMint,
+                          amountUsd: flipitBuyAmount,
+                          targetMultiplier: flipitSellMultiplier,
+                          source: 'telegram',
+                          sourceChannelId: config.id
+                        }
+                      });
+                      totalBuys++;
+                      console.log(`[telegram-channel-monitor] FlipIt: Buy executed successfully`);
+                    } catch (buyError) {
+                      console.error('[telegram-channel-monitor] FlipIt buy error:', buyError);
+                    }
+                  } else {
+                    console.log('[telegram-channel-monitor] FlipIt: No active wallet found, skipping');
+                  }
                 }
               } else {
                 console.log(`[telegram-channel-monitor] FlipIt: Daily limit reached (${todayPositions}/${flipitMaxDaily})`);
               }
             } else if (!isFantasyMode && config.flipit_wallet_id) {
               // Legacy: Real trading without flipit_enabled flag
-              try {
-                await supabase.functions.invoke('flipit-execute', {
-                  body: {
-                    walletId: config.flipit_wallet_id,
-                    action: 'buy',
-                    tokenMint,
-                    amountUsd: currentRuleResult.buyAmount,
-                    targetMultiplier: currentRuleResult.sellTarget,
-                    stopLossPct: currentRuleResult.stopLossEnabled ? currentRuleResult.stopLoss : null
-                  }
-                });
-                totalBuys++;
-              } catch (buyError) {
-                console.error('[telegram-channel-monitor] FlipIt buy error:', buyError);
+              // GLOBAL DEDUPE: Only 1 real position per token_mint ever (first call wins)
+              const { data: existingLegacyPosition, error: legacyPosCheckError } = await supabase
+                .from('flip_positions')
+                .select('id, token_symbol, created_at, source')
+                .eq('token_mint', tokenMint)
+                .limit(1)
+                .maybeSingle();
+
+              if (legacyPosCheckError) {
+                console.warn(`[telegram-channel-monitor] Error checking existing legacy FlipIt position for ${tokenMint}:`, legacyPosCheckError);
+              }
+
+              if (existingLegacyPosition) {
+                console.log(`[telegram-channel-monitor] Legacy FlipIt: Position ALREADY EXISTS for ${tokenMint} (${existingLegacyPosition.token_symbol}) created at ${existingLegacyPosition.created_at} from ${existingLegacyPosition.source}, skipping duplicate buy`);
+              } else {
+                try {
+                  await supabase.functions.invoke('flipit-execute', {
+                    body: {
+                      walletId: config.flipit_wallet_id,
+                      action: 'buy',
+                      tokenMint,
+                      amountUsd: currentRuleResult.buyAmount,
+                      targetMultiplier: currentRuleResult.sellTarget,
+                      stopLossPct: currentRuleResult.stopLossEnabled ? currentRuleResult.stopLoss : null
+                    }
+                  });
+                  totalBuys++;
+                } catch (buyError) {
+                  console.error('[telegram-channel-monitor] FlipIt buy error:', buyError);
+                }
               }
             }
 
