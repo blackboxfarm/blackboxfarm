@@ -10,7 +10,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Switch } from '@/components/ui/switch';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
-import { Flame, RefreshCw, TrendingUp, DollarSign, Wallet, Clock, CheckCircle2, XCircle, Loader2, Plus, Copy, ArrowUpRight, Key, Settings, Zap, Activity, Radio, Pencil, ChevronDown, Coins, Eye, EyeOff, RotateCcw, AlertTriangle, Twitter, Trash2, Globe, Send, Rocket, Megaphone, Users, Shield } from 'lucide-react';
+import { Flame, RefreshCw, TrendingUp, DollarSign, Wallet, Clock, CheckCircle2, XCircle, Loader2, Plus, Copy, ArrowUpRight, Key, Settings, Zap, Activity, Radio, Pencil, ChevronDown, Coins, Eye, EyeOff, RotateCcw, AlertTriangle, Twitter, Trash2, Globe, Send, Rocket, Megaphone, Users, Shield, ClipboardPaste } from 'lucide-react';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { useSolPrice } from '@/hooks/useSolPrice';
 import { FlipItFeeCalculator } from './flipit/FlipItFeeCalculator';
@@ -1048,6 +1048,7 @@ export function FlipItDashboard() {
           source: null
         });
         loadPositions();
+        refreshWalletBalance(); // Auto-refresh wallet balance after buy
       }
     } catch (err: any) {
       toast.error(err.message || 'Failed to execute flip');
@@ -1765,6 +1766,25 @@ export function FlipItDashboard() {
               <Label className="flex items-center justify-between flex-wrap gap-2">
                 <span className="flex items-center gap-2">
                   Token Address
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="h-5 px-2 text-xs"
+                    onClick={async () => {
+                      try {
+                        const text = await navigator.clipboard.readText();
+                        if (text) {
+                          setTokenAddress(text.trim());
+                          toast.success('Pasted from clipboard');
+                        }
+                      } catch (err) {
+                        toast.error('Failed to read clipboard');
+                      }
+                    }}
+                  >
+                    <ClipboardPaste className="h-3 w-3 mr-1" />
+                    Paste
+                  </Button>
                   {inputToken.symbol && (
                     <span className="font-bold text-primary">
                       {inputToken.symbol}{inputToken.name ? ` (${inputToken.name})` : ''}
