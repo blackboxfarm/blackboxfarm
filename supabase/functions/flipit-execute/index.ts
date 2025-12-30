@@ -440,7 +440,7 @@ serve(async (req) => {
           twitter_url: metadata?.twitter || null,
           website_url: metadata?.website || null,
           telegram_url: metadata?.telegram || null,
-          buy_amount_usd: buyAmountUsd || 10,
+          buy_amount_usd: buyAmountUsd || 4,
           buy_price_usd: currentPrice,
           target_multiplier: mult,
           target_price_usd: targetPrice,
