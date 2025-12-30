@@ -124,6 +124,32 @@ function containsApeKeyword(text: string): boolean {
   return apePattern.test(text);
 }
 
+// Fetch current SOL price for FlipIt buy amount conversion
+async function fetchSolPriceForConversion(): Promise<number> {
+  try {
+    const response = await fetch('https://api.jup.ag/price/v2?ids=So11111111111111111111111111111111111111112');
+    if (response.ok) {
+      const data = await response.json();
+      const price = data?.data?.['So11111111111111111111111111111111111111112']?.price;
+      if (price && typeof price === 'number') {
+        return price;
+      }
+    }
+    // Fallback to DexScreener
+    const dexResponse = await fetch('https://api.dexscreener.com/latest/dex/tokens/So11111111111111111111111111111111111111112');
+    if (dexResponse.ok) {
+      const dexData = await dexResponse.json();
+      if (dexData.pairs?.[0]?.priceUsd) {
+        return parseFloat(dexData.pairs[0].priceUsd);
+      }
+    }
+  } catch (error) {
+    console.warn('[telegram-channel-monitor] Failed to fetch SOL price for conversion:', error);
+  }
+  // Ultimate fallback
+  return 130;
+}
+
 // ============================================================================
 // KEYWORD DETECTION ENGINE (Advanced Mode)
 // ============================================================================
@@ -1322,13 +1348,29 @@ serve(async (req) => {
 
             // Execute trade or fantasy position
             if (currentRuleResult.decision === 'buy' || currentRuleResult.decision === 'fantasy_buy') {
-              // GLOBAL DEDUPE: Only 1 fantasy position per token_mint ever (first call wins)
-              const { data: existingTokenPos, error: existingTokenPosError } = await supabase
-                .from('telegram_fantasy_positions')
-                .select('id, channel_name, caller_display_name, created_at')
-                .eq('token_mint', tokenMint)
-                .limit(1)
-                .maybeSingle();
+              // CRITICAL: Only create fantasy position on FIRST CALL
+              if (!isFirstCall) {
+                console.log(`[telegram-channel-monitor] Fantasy: SKIPPING ${currentTokenData?.symbol || tokenMint} - NOT FIRST CALL (token was already mentioned before)`);
+                // Update call record to reflect skip
+                if (callId) {
+                  await supabase
+                    .from('telegram_channel_calls')
+                    .update({ 
+                      status: 'skipped', 
+                      skip_reason: 'Not first call - token already mentioned previously (fantasy)' 
+                    })
+                    .eq('id', callId);
+                }
+                totalSkipped++;
+                // Skip to FlipIt check (it has its own first-call guard)
+              } else {
+                // GLOBAL DEDUPE: Only 1 fantasy position per token_mint ever (first call wins)
+                const { data: existingTokenPos, error: existingTokenPosError } = await supabase
+                  .from('telegram_fantasy_positions')
+                  .select('id, channel_name, caller_display_name, created_at')
+                  .eq('token_mint', tokenMint)
+                  .limit(1)
+                  .maybeSingle();
 
               if (existingTokenPosError) {
                 console.warn(`[telegram-channel-monitor] Error checking existing fantasy position for token ${tokenMint}:`, existingTokenPosError);
@@ -1486,11 +1528,24 @@ serve(async (req) => {
                   }
                 }
               }
+              }
             }
 
             // FlipIt auto-buy: trigger when enabled and rules match
             if (config.flipit_enabled) {
-              const flipitBuyAmount = config.flipit_buy_amount_usd || 10;
+              // Priority: SOL amount (converted to USD) > USD amount > fallback $10
+              let flipitBuyAmount = 10; // fallback
+              if (config.flipit_buy_amount_sol && config.flipit_buy_amount_sol > 0) {
+                // Convert SOL to USD using live price
+                const solPriceForFlipIt = await fetchSolPriceForConversion();
+                flipitBuyAmount = config.flipit_buy_amount_sol * solPriceForFlipIt;
+                console.log(`[telegram-channel-monitor] FlipIt buy amount: ${config.flipit_buy_amount_sol} SOL = $${flipitBuyAmount.toFixed(2)} USD (SOL @ $${solPriceForFlipIt})`);
+              } else if (config.flipit_buy_amount_usd && config.flipit_buy_amount_usd > 0) {
+                flipitBuyAmount = config.flipit_buy_amount_usd;
+                console.log(`[telegram-channel-monitor] FlipIt buy amount: $${flipitBuyAmount} USD (from USD config)`);
+              } else {
+                console.log(`[telegram-channel-monitor] FlipIt buy amount: $${flipitBuyAmount} USD (default fallback)`);
+              }
               const flipitSellMultiplier = config.flipit_sell_multiplier || 2;
               const flipitMaxDaily = config.flipit_max_daily_positions || 5;
 
