@@ -1638,7 +1638,7 @@ serve(async (req) => {
                           walletId,
                           action: 'buy',
                           tokenMint,
-                          amountUsd: flipitBuyAmount,
+                          buyAmountUsd: flipitBuyAmount,
                           targetMultiplier: flipitSellMultiplier,
                           source: 'telegram',
                           sourceChannelId: config.id
@@ -1694,7 +1694,7 @@ serve(async (req) => {
                         walletId: config.flipit_wallet_id,
                         action: 'buy',
                         tokenMint,
-                        amountUsd: currentRuleResult.buyAmount,
+                        buyAmountUsd: currentRuleResult.buyAmount,
                         targetMultiplier: currentRuleResult.sellTarget,
                         stopLossPct: currentRuleResult.stopLossEnabled ? currentRuleResult.stopLoss : null
                       }
