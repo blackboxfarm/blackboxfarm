@@ -40,6 +40,42 @@ const RISK_CONFIG = {
   }
 };
 
+// RugCheck configuration
+const RUGCHECK_CONFIG = {
+  // Skip if normalised score > 50 (risky)
+  maxNormalisedScore: 50,
+  
+  // Auto-skip if these risks detected
+  criticalRisks: [
+    'Freeze Authority still enabled',
+    'Mint Authority still enabled',
+    'Copycat token',
+    'Top 10 holders own',
+  ],
+  
+  // Reduce sell target if these detected
+  warningRisks: [
+    'Low amount of LP Providers',
+    'High holder concentration', 
+    'Low Liquidity',
+    'Single holder owns',
+  ],
+  
+  // If LP locked < 80%, reduce hold time
+  minLpLockedPct: 80
+};
+
+interface RugCheckResult {
+  passed: boolean;
+  score: number;
+  normalised: number;
+  lpLockedPct: number | null;
+  risks: any[];
+  skipReason: string | null;
+  adjustSellMultiplier: boolean;
+  rugged: boolean;
+}
+
 interface DeveloperEnrichmentResult {
   found: boolean;
   developerId: string | null;
@@ -57,6 +93,13 @@ interface DeveloperEnrichmentResult {
   quickDumpCount: number;
   creatorWallet: string | null;
   skipReason: string | null;
+  // RugCheck fields
+  rugcheckPassed: boolean;
+  rugcheckScore: number;
+  rugcheckNormalised: number;
+  rugcheckRisks: any[];
+  rugcheckLpLockedPct: number | null;
+  rugcheckSkipReason: string | null;
 }
 
 serve(async (req) => {
@@ -81,9 +124,46 @@ serve(async (req) => {
 
     console.log(`[developer-enrichment] Starting enrichment for token: ${tokenMint}`);
 
-    // Step 1: Find the token creator wallet
-    const creatorWallet = await findTokenCreator(tokenMint);
-    
+    // Run RugCheck and developer enrichment in parallel
+    const [rugcheckResult, creatorWallet] = await Promise.all([
+      checkRugcheck(tokenMint),
+      findTokenCreator(tokenMint)
+    ]);
+
+    console.log(`[developer-enrichment] RugCheck result: passed=${rugcheckResult.passed}, score=${rugcheckResult.normalised}, risks=${rugcheckResult.risks.length}`);
+
+    // If RugCheck fails with critical risk, we can skip developer lookup
+    if (!rugcheckResult.passed && rugcheckResult.skipReason) {
+      console.log(`[developer-enrichment] RugCheck FAILED: ${rugcheckResult.skipReason}`);
+      return new Response(
+        JSON.stringify({
+          found: false,
+          developerId: null,
+          riskLevel: 'critical',
+          reputationScore: 0,
+          warning: rugcheckResult.skipReason,
+          canTrade: false,
+          adjustedSellMultiplier: 1.15,
+          twitterHandle: null,
+          totalTokens: 0,
+          rugCount: 0,
+          slowDrainCount: 0,
+          bundledWalletCount: 0,
+          washTradingDetected: false,
+          quickDumpCount: 0,
+          creatorWallet: null,
+          skipReason: rugcheckResult.skipReason,
+          rugcheckPassed: false,
+          rugcheckScore: rugcheckResult.score,
+          rugcheckNormalised: rugcheckResult.normalised,
+          rugcheckRisks: rugcheckResult.risks,
+          rugcheckLpLockedPct: rugcheckResult.lpLockedPct,
+          rugcheckSkipReason: rugcheckResult.skipReason
+        } as DeveloperEnrichmentResult),
+        { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
     if (!creatorWallet) {
       console.log(`[developer-enrichment] Could not find creator for token ${tokenMint}`);
       return new Response(
@@ -93,8 +173,8 @@ serve(async (req) => {
           riskLevel: 'unknown',
           reputationScore: 50,
           warning: null,
-          canTrade: true,
-          adjustedSellMultiplier: null,
+          canTrade: rugcheckResult.passed,
+          adjustedSellMultiplier: rugcheckResult.adjustSellMultiplier ? 1.3 : null,
           twitterHandle: null,
           totalTokens: 0,
           rugCount: 0,
@@ -103,7 +183,13 @@ serve(async (req) => {
           washTradingDetected: false,
           quickDumpCount: 0,
           creatorWallet: null,
-          skipReason: null
+          skipReason: rugcheckResult.skipReason,
+          rugcheckPassed: rugcheckResult.passed,
+          rugcheckScore: rugcheckResult.score,
+          rugcheckNormalised: rugcheckResult.normalised,
+          rugcheckRisks: rugcheckResult.risks,
+          rugcheckLpLockedPct: rugcheckResult.lpLockedPct,
+          rugcheckSkipReason: rugcheckResult.skipReason
         } as DeveloperEnrichmentResult),
         { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
@@ -111,19 +197,17 @@ serve(async (req) => {
 
     console.log(`[developer-enrichment] Found creator wallet: ${creatorWallet}`);
 
-    // Step 2: Try to extract Twitter from token metadata
+    // Try to extract Twitter from token metadata
     const twitterHandle = await extractTwitterFromToken(tokenMint);
     console.log(`[developer-enrichment] Twitter handle from metadata: ${twitterHandle || 'not found'}`);
 
-    // Step 3: Find or create developer profile
+    // Find or create developer profile
     let developerProfile = await findDeveloperByWallet(supabase, creatorWallet);
     
     if (!developerProfile) {
-      // Create new developer profile
       console.log(`[developer-enrichment] Creating new developer profile for ${creatorWallet}`);
       developerProfile = await createDeveloperProfile(supabase, creatorWallet, twitterHandle);
     } else if (twitterHandle && !developerProfile.twitter_handle) {
-      // Update existing profile with Twitter if we found one
       await supabase
         .from('developer_profiles')
         .update({ twitter_handle: twitterHandle })
@@ -131,27 +215,31 @@ serve(async (req) => {
       developerProfile.twitter_handle = twitterHandle;
     }
 
-    // Step 4: Calculate risk level
+    // Calculate developer risk level
     const riskAssessment = calculateRiskLevel(developerProfile);
     
-    // Step 5: Determine if we should adjust sell multiplier
-    const riskConfig = RISK_CONFIG[riskAssessment.level as keyof typeof RISK_CONFIG] || RISK_CONFIG.unknown;
+    // Combine developer risk with RugCheck risk
+    const combinedRisk = combineRiskAssessments(riskAssessment, rugcheckResult);
+    
+    // Determine final sell multiplier
+    const riskConfig = RISK_CONFIG[combinedRisk.level as keyof typeof RISK_CONFIG] || RISK_CONFIG.unknown;
     let adjustedSellMultiplier: number | null = null;
     
     if (riskConfig.sellMultiplier && defaultSellMultiplier) {
-      // Use the lower of the two (more conservative)
       adjustedSellMultiplier = Math.min(riskConfig.sellMultiplier, defaultSellMultiplier);
     } else if (riskConfig.sellMultiplier) {
       adjustedSellMultiplier = riskConfig.sellMultiplier;
+    } else if (rugcheckResult.adjustSellMultiplier) {
+      adjustedSellMultiplier = 1.3; // Reduce target if LP concerns
     }
 
     const result: DeveloperEnrichmentResult = {
       found: true,
       developerId: developerProfile.id,
-      riskLevel: riskAssessment.level,
+      riskLevel: combinedRisk.level,
       reputationScore: developerProfile.reputation_score || 50,
-      warning: riskAssessment.warning,
-      canTrade: riskConfig.canTrade,
+      warning: combinedRisk.warning,
+      canTrade: combinedRisk.canTrade,
       adjustedSellMultiplier,
       twitterHandle: developerProfile.twitter_handle || twitterHandle,
       totalTokens: developerProfile.total_tokens_created || 0,
@@ -161,10 +249,16 @@ serve(async (req) => {
       washTradingDetected: developerProfile.wash_trading_detected || false,
       quickDumpCount: developerProfile.quick_dump_count || 0,
       creatorWallet,
-      skipReason: riskConfig.canTrade ? null : riskConfig.skipReason
+      skipReason: combinedRisk.canTrade ? null : combinedRisk.skipReason,
+      rugcheckPassed: rugcheckResult.passed,
+      rugcheckScore: rugcheckResult.score,
+      rugcheckNormalised: rugcheckResult.normalised,
+      rugcheckRisks: rugcheckResult.risks,
+      rugcheckLpLockedPct: rugcheckResult.lpLockedPct,
+      rugcheckSkipReason: rugcheckResult.skipReason
     };
 
-    console.log(`[developer-enrichment] Result: risk=${result.riskLevel}, canTrade=${result.canTrade}, adjustedMultiplier=${result.adjustedSellMultiplier}`);
+    console.log(`[developer-enrichment] Result: risk=${result.riskLevel}, canTrade=${result.canTrade}, rugcheck=${rugcheckResult.normalised}/100`);
 
     return new Response(
       JSON.stringify(result),
@@ -180,7 +274,206 @@ serve(async (req) => {
   }
 });
 
-// Find token creator using Helius API
+// ============================================================================
+// RUGCHECK API INTEGRATION
+// ============================================================================
+
+async function checkRugcheck(tokenMint: string): Promise<RugCheckResult> {
+  try {
+    console.log(`[developer-enrichment] Calling RugCheck API for ${tokenMint}`);
+    
+    const response = await fetch(
+      `https://api.rugcheck.xyz/v1/tokens/${tokenMint}/report/summary`,
+      {
+        headers: {
+          'Accept': 'application/json',
+          'User-Agent': 'BlindApeAlpha/1.0'
+        }
+      }
+    );
+
+    if (!response.ok) {
+      console.warn(`[developer-enrichment] RugCheck API returned ${response.status}, proceeding with caution`);
+      return {
+        passed: true,
+        score: 0,
+        normalised: 0,
+        lpLockedPct: null,
+        risks: [],
+        skipReason: null,
+        adjustSellMultiplier: false,
+        rugged: false
+      };
+    }
+
+    const data = await response.json();
+    console.log(`[developer-enrichment] RugCheck response: score=${data.score}, normalised=${data.score_normalised}, rugged=${data.rugged}`);
+
+    // Check if already rugged
+    if (data.rugged) {
+      return {
+        passed: false,
+        score: data.score || 0,
+        normalised: data.score_normalised || 100,
+        lpLockedPct: data.lpLockedPct || null,
+        risks: data.risks || [],
+        skipReason: 'Token has already been rugged',
+        adjustSellMultiplier: false,
+        rugged: true
+      };
+    }
+
+    // Check for critical risks
+    const risks = data.risks || [];
+    for (const risk of risks) {
+      const riskName = risk.name || risk.description || '';
+      for (const critical of RUGCHECK_CONFIG.criticalRisks) {
+        if (riskName.toLowerCase().includes(critical.toLowerCase())) {
+          console.log(`[developer-enrichment] Critical risk detected: ${riskName}`);
+          return {
+            passed: false,
+            score: data.score || 0,
+            normalised: data.score_normalised || 0,
+            lpLockedPct: data.lpLockedPct || null,
+            risks,
+            skipReason: `RugCheck: ${riskName}`,
+            adjustSellMultiplier: false,
+            rugged: false
+          };
+        }
+      }
+    }
+
+    // Check normalised score threshold
+    const normalisedScore = data.score_normalised || 0;
+    if (normalisedScore > RUGCHECK_CONFIG.maxNormalisedScore) {
+      return {
+        passed: false,
+        score: data.score || 0,
+        normalised: normalisedScore,
+        lpLockedPct: data.lpLockedPct || null,
+        risks,
+        skipReason: `RugCheck score too high: ${normalisedScore}/100`,
+        adjustSellMultiplier: false,
+        rugged: false
+      };
+    }
+
+    // Check for warning risks that should reduce sell target
+    let hasWarningRisk = false;
+    for (const risk of risks) {
+      const riskName = risk.name || risk.description || '';
+      for (const warning of RUGCHECK_CONFIG.warningRisks) {
+        if (riskName.toLowerCase().includes(warning.toLowerCase())) {
+          hasWarningRisk = true;
+          break;
+        }
+      }
+    }
+
+    // Check LP locked percentage
+    const lpLockedPct = data.lpLockedPct || null;
+    const adjustForLp = lpLockedPct !== null && lpLockedPct < RUGCHECK_CONFIG.minLpLockedPct;
+
+    return {
+      passed: true,
+      score: data.score || 0,
+      normalised: normalisedScore,
+      lpLockedPct,
+      risks,
+      skipReason: null,
+      adjustSellMultiplier: hasWarningRisk || adjustForLp,
+      rugged: false
+    };
+
+  } catch (error) {
+    console.error('[developer-enrichment] RugCheck API error:', error);
+    // Fail open - allow trade but log the error
+    return {
+      passed: true,
+      score: 0,
+      normalised: 0,
+      lpLockedPct: null,
+      risks: [],
+      skipReason: null,
+      adjustSellMultiplier: false,
+      rugged: false
+    };
+  }
+}
+
+// ============================================================================
+// COMBINED RISK ASSESSMENT
+// ============================================================================
+
+function combineRiskAssessments(
+  devRisk: { level: string; warning: string | null },
+  rugcheck: RugCheckResult
+): { level: string; warning: string | null; canTrade: boolean; skipReason: string | null } {
+  // RugCheck failure overrides developer risk
+  if (!rugcheck.passed) {
+    return {
+      level: 'critical',
+      warning: rugcheck.skipReason,
+      canTrade: false,
+      skipReason: rugcheck.skipReason
+    };
+  }
+
+  // Developer blacklist blocks trading
+  if (devRisk.level === 'critical') {
+    return {
+      level: 'critical',
+      warning: devRisk.warning,
+      canTrade: false,
+      skipReason: devRisk.warning || 'Developer is blacklisted'
+    };
+  }
+
+  // High RugCheck score + developer risk = escalate
+  if (rugcheck.normalised > 30 && devRisk.level === 'high') {
+    return {
+      level: 'critical',
+      warning: `High dev risk + elevated RugCheck (${rugcheck.normalised}/100)`,
+      canTrade: false,
+      skipReason: 'Combined risk too high'
+    };
+  }
+
+  // Developer high risk with RugCheck warnings
+  if (devRisk.level === 'high' && rugcheck.adjustSellMultiplier) {
+    return {
+      level: 'high',
+      warning: devRisk.warning || 'High risk developer with token concerns',
+      canTrade: true,
+      skipReason: null
+    };
+  }
+
+  // RugCheck warnings elevate low/unknown to medium
+  if (rugcheck.adjustSellMultiplier && (devRisk.level === 'low' || devRisk.level === 'unknown')) {
+    return {
+      level: 'medium',
+      warning: 'Token has LP or concentration concerns',
+      canTrade: true,
+      skipReason: null
+    };
+  }
+
+  // Otherwise use developer risk
+  const riskConfig = RISK_CONFIG[devRisk.level as keyof typeof RISK_CONFIG] || RISK_CONFIG.unknown;
+  return {
+    level: devRisk.level,
+    warning: devRisk.warning,
+    canTrade: riskConfig.canTrade,
+    skipReason: riskConfig.canTrade ? null : riskConfig.skipReason
+  };
+}
+
+// ============================================================================
+// DEVELOPER LOOKUP FUNCTIONS
+// ============================================================================
+
 async function findTokenCreator(tokenMint: string): Promise<string | null> {
   const heliusKey = Deno.env.get('HELIUS_API_KEY');
   if (!heliusKey) {
@@ -189,7 +482,6 @@ async function findTokenCreator(tokenMint: string): Promise<string | null> {
   }
 
   try {
-    // Get token metadata from Helius
     const response = await fetch(`https://api.helius.xyz/v0/token-metadata?api-key=${heliusKey}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -223,7 +515,6 @@ async function findTokenCreator(tokenMint: string): Promise<string | null> {
   }
 }
 
-// Extract Twitter handle from token metadata
 async function extractTwitterFromToken(tokenMint: string): Promise<string | null> {
   try {
     // Try Jupiter first
@@ -255,18 +546,15 @@ async function extractTwitterFromToken(tokenMint: string): Promise<string | null
   }
 }
 
-// Clean Twitter handle from URL or @mention
 function cleanTwitterHandle(input: string): string | null {
   if (!input) return null;
   
-  // Remove URL parts
   let handle = input
     .replace(/https?:\/\/(www\.)?(twitter|x)\.com\//gi, '')
-    .replace(/\?.*$/, '') // Remove query params
-    .replace(/\/$/, '') // Remove trailing slash
-    .replace(/^@/, ''); // Remove @ prefix
+    .replace(/\?.*$/, '')
+    .replace(/\/$/, '')
+    .replace(/^@/, '');
   
-  // Validate - should be alphanumeric with underscores
   if (/^[a-zA-Z0-9_]{1,15}$/.test(handle)) {
     return handle;
   }
@@ -274,9 +562,7 @@ function cleanTwitterHandle(input: string): string | null {
   return null;
 }
 
-// Find developer by wallet address
 async function findDeveloperByWallet(supabase: any, walletAddress: string): Promise<any> {
-  // Check master wallet
   const { data: profile } = await supabase
     .from('developer_profiles')
     .select('*')
@@ -285,7 +571,6 @@ async function findDeveloperByWallet(supabase: any, walletAddress: string): Prom
 
   if (profile) return profile;
 
-  // Check developer_wallets table
   const { data: wallet } = await supabase
     .from('developer_wallets')
     .select('developer_id')
@@ -304,14 +589,13 @@ async function findDeveloperByWallet(supabase: any, walletAddress: string): Prom
   return null;
 }
 
-// Create new developer profile
 async function createDeveloperProfile(supabase: any, walletAddress: string, twitterHandle: string | null): Promise<any> {
   const { data, error } = await supabase
     .from('developer_profiles')
     .insert({
       master_wallet_address: walletAddress,
       twitter_handle: twitterHandle,
-      reputation_score: 50, // Neutral starting score
+      reputation_score: 50,
       trust_level: 'neutral',
       total_tokens_created: 1,
       source: 'fantasy_enrichment'
@@ -324,7 +608,6 @@ async function createDeveloperProfile(supabase: any, walletAddress: string, twit
     throw error;
   }
 
-  // Also create wallet entry
   await supabase
     .from('developer_wallets')
     .insert({
@@ -337,9 +620,7 @@ async function createDeveloperProfile(supabase: any, walletAddress: string, twit
   return data;
 }
 
-// Calculate risk level based on developer profile
 function calculateRiskLevel(profile: any): { level: string; warning: string | null } {
-  // Critical: Blacklisted
   if (profile.trust_level === 'blacklisted') {
     return {
       level: 'critical',
@@ -347,7 +628,6 @@ function calculateRiskLevel(profile: any): { level: string; warning: string | nu
     };
   }
 
-  // High risk indicators
   const rugCount = profile.rug_pull_count || 0;
   const slowDrainCount = profile.slow_drain_count || 0;
   const bundledWallets = profile.bundled_wallet_count || 0;
@@ -355,7 +635,6 @@ function calculateRiskLevel(profile: any): { level: string; warning: string | nu
   const quickDumps = profile.quick_dump_count || 0;
   const reputationScore = profile.reputation_score || 50;
 
-  // Any rugs = at least high risk
   if (rugCount > 0) {
     if (rugCount >= 2) {
       return {
@@ -369,7 +648,6 @@ function calculateRiskLevel(profile: any): { level: string; warning: string | nu
     };
   }
 
-  // Slow drains are concerning
   if (slowDrainCount >= 2) {
     return {
       level: 'high',
@@ -377,7 +655,6 @@ function calculateRiskLevel(profile: any): { level: string; warning: string | nu
     };
   }
 
-  // Bundled wallets + wash trading = manipulation
   if (bundledWallets >= 3 && washTrading) {
     return {
       level: 'high',
@@ -385,7 +662,6 @@ function calculateRiskLevel(profile: any): { level: string; warning: string | nu
     };
   }
 
-  // Multiple quick dumps
   if (quickDumps >= 3) {
     return {
       level: 'high',
@@ -393,7 +669,6 @@ function calculateRiskLevel(profile: any): { level: string; warning: string | nu
     };
   }
 
-  // Medium risk indicators
   if (slowDrainCount === 1 || bundledWallets >= 2 || quickDumps >= 2) {
     return {
       level: 'medium',
@@ -401,7 +676,6 @@ function calculateRiskLevel(profile: any): { level: string; warning: string | nu
     };
   }
 
-  // Low reputation score
   if (reputationScore < 30) {
     return {
       level: 'high',
@@ -416,7 +690,6 @@ function calculateRiskLevel(profile: any): { level: string; warning: string | nu
     };
   }
 
-  // Verified/trusted developers
   if (profile.trust_level === 'trusted' || profile.kyc_verified) {
     return {
       level: 'verified',
@@ -424,7 +697,6 @@ function calculateRiskLevel(profile: any): { level: string; warning: string | nu
     };
   }
 
-  // Good reputation
   if (reputationScore >= 70) {
     return {
       level: 'low',
@@ -432,7 +704,6 @@ function calculateRiskLevel(profile: any): { level: string; warning: string | nu
     };
   }
 
-  // Default to unknown for new developers
   if (!profile.total_tokens_created || profile.total_tokens_created <= 1) {
     return {
       level: 'unknown',
