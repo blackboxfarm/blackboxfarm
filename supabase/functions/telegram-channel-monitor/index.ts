@@ -89,6 +89,7 @@ interface EnrichedTokenData {
   bondingCurvePosition: 'early' | 'mid' | 'late' | 'graduated' | null;
   hasGraduated: boolean;
   priceChange5m: number | null;
+  isMayhemMode: boolean;
 }
 
 interface RuleEvaluationResult {
@@ -287,16 +288,23 @@ async function fetchTokenMetadata(tokenMint: string): Promise<{ symbol: string; 
   return null;
 }
 
+// Mayhem Mode Program ID - tokens launched with AI trading agent
+const MAYHEM_MODE_PROGRAM_ID = 'MAyhSmzXzV1pTf7LsNkrNwkWKTo4ougAJ1PPg47MD4e';
+// Normal pump.fun supply is 1 billion (1e15 with 6 decimals), Mayhem is 2 billion
+const NORMAL_PUMPFUN_SUPPLY = 1000000000000000;
+const MAYHEM_PUMPFUN_SUPPLY = 2000000000000000;
+
 async function checkPumpFunBondingCurve(tokenMint: string): Promise<{
   isOnCurve: boolean;
   bondingPercent: number | null;
   hasGraduated: boolean;
+  isMayhemMode: boolean;
 }> {
   try {
     // Check pump.fun API for bonding curve status
     const response = await fetch(`https://frontend-api.pump.fun/coins/${tokenMint}`);
     if (!response.ok) {
-      return { isOnCurve: false, bondingPercent: null, hasGraduated: false };
+      return { isOnCurve: false, bondingPercent: null, hasGraduated: false, isMayhemMode: false };
     }
     const data = await response.json();
     
@@ -305,6 +313,18 @@ async function checkPumpFunBondingCurve(tokenMint: string): Promise<{
     const virtualSolReserves = data.virtual_sol_reserves || 0;
     const realSolReserves = data.real_sol_reserves || 0;
     const complete = data.complete || false;
+    const totalSupply = data.total_supply || 0;
+    const program = data.program || null;
+    
+    // Detect Mayhem Mode:
+    // 1. Check if program field matches Mayhem Mode program ID
+    // 2. Check if total_supply is 2 billion (double the normal 1 billion)
+    const isMayhemMode = program === MAYHEM_MODE_PROGRAM_ID || 
+                         totalSupply >= MAYHEM_PUMPFUN_SUPPLY;
+    
+    if (isMayhemMode) {
+      console.log(`[telegram-channel-monitor] MAYHEM MODE DETECTED for ${tokenMint} (supply: ${totalSupply}, program: ${program})`);
+    }
     
     // Calculate bonding curve progress (roughly 0-100%)
     const bondingPercent = complete ? 100 : Math.min(100, (realSolReserves / 85) * 100);
@@ -312,11 +332,12 @@ async function checkPumpFunBondingCurve(tokenMint: string): Promise<{
     return {
       isOnCurve: !complete,
       bondingPercent: bondingPercent,
-      hasGraduated: complete
+      hasGraduated: complete,
+      isMayhemMode
     };
   } catch (error) {
     console.error(`[telegram-channel-monitor] Error checking pump.fun bonding curve:`, error);
-    return { isOnCurve: false, bondingPercent: null, hasGraduated: false };
+    return { isOnCurve: false, bondingPercent: null, hasGraduated: false, isMayhemMode: false };
   }
 }
 
@@ -367,7 +388,8 @@ async function enrichTokenData(tokenMint: string): Promise<EnrichedTokenData> {
     bondingCurvePercent: bondingCurve.bondingPercent,
     bondingCurvePosition: bondingPosition,
     hasGraduated: bondingCurve.hasGraduated,
-    priceChange5m: dexData.priceChange5m
+    priceChange5m: dexData.priceChange5m,
+    isMayhemMode: bondingCurve.isMayhemMode
   };
 }
 
@@ -1315,6 +1337,24 @@ serve(async (req) => {
               if (existingTokenPos) {
                 console.log(`[telegram-channel-monitor] Fantasy position ALREADY EXISTS for token ${tokenMint} (first called by ${existingTokenPos.channel_name} via ${existingTokenPos.caller_display_name} at ${existingTokenPos.created_at}), skipping duplicate`);
               } else {
+                // ============== PRE-FILTER: MAYHEM MODE CHECK ==============
+                // Skip tokens launched in pump.fun Mayhem Mode (AI trading agent)
+                if (currentTokenData?.isMayhemMode) {
+                  console.log(`[telegram-channel-monitor] SKIPPING ${tokenMint} - MAYHEM MODE token (AI trading agent active)`);
+                  
+                  // Update the call record to show it was skipped
+                  await supabase
+                    .from('telegram_calls')
+                    .update({ 
+                      status: 'skipped', 
+                      skip_reason: 'Mayhem Mode token - AI trading agent active, high manipulation risk' 
+                    })
+                    .eq('id', callId);
+                  
+                  totalSkipped++;
+                  continue; // Skip to next token
+                }
+                
                 // ============== DEVELOPER ENRICHMENT + RUGCHECK ==============
                 let developerData: any = null;
                 let skipPosition = false;
