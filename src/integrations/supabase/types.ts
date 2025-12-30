@@ -4954,7 +4954,13 @@ export type Database = {
           peak_price_usd: number | null
           realized_pnl_percent: number | null
           realized_pnl_usd: number | null
+          rugcheck_checked_at: string | null
+          rugcheck_normalised: number | null
+          rugcheck_passed: boolean | null
+          rugcheck_risks: Json | null
+          rugcheck_score: number | null
           rule_id: string | null
+          skip_reason: string | null
           sold_at: string | null
           sold_price_usd: number | null
           status: string
@@ -5007,7 +5013,13 @@ export type Database = {
           peak_price_usd?: number | null
           realized_pnl_percent?: number | null
           realized_pnl_usd?: number | null
+          rugcheck_checked_at?: string | null
+          rugcheck_normalised?: number | null
+          rugcheck_passed?: boolean | null
+          rugcheck_risks?: Json | null
+          rugcheck_score?: number | null
           rule_id?: string | null
+          skip_reason?: string | null
           sold_at?: string | null
           sold_price_usd?: number | null
           status?: string
@@ -5060,7 +5072,13 @@ export type Database = {
           peak_price_usd?: number | null
           realized_pnl_percent?: number | null
           realized_pnl_usd?: number | null
+          rugcheck_checked_at?: string | null
+          rugcheck_normalised?: number | null
+          rugcheck_passed?: boolean | null
+          rugcheck_risks?: Json | null
+          rugcheck_score?: number | null
           rule_id?: string | null
+          skip_reason?: string | null
           sold_at?: string | null
           sold_price_usd?: number | null
           status?: string

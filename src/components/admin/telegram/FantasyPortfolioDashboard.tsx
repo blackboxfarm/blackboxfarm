@@ -86,6 +86,13 @@ interface FantasyPosition {
   developer_rug_count: number | null;
   adjusted_by_dev_risk: boolean | null;
   original_sell_multiplier: number | null;
+  // RugCheck fields
+  rugcheck_score: number | null;
+  rugcheck_normalised: number | null;
+  rugcheck_risks: any[] | null;
+  rugcheck_passed: boolean | null;
+  rugcheck_checked_at: string | null;
+  skip_reason: string | null;
 }
 
 interface PortfolioStats {
@@ -189,6 +196,73 @@ export function FantasyPortfolioDashboard() {
               {pos.adjusted_by_dev_risk && pos.original_sell_multiplier && (
                 <p className="text-xs text-amber-500">
                   Target adjusted: {pos.original_sell_multiplier}x → {pos.target_sell_multiplier}x
+                </p>
+              )}
+            </div>
+          </TooltipContent>
+        </Tooltip>
+      </TooltipProvider>
+    );
+  };
+
+  // RugCheck badge component
+  const RugCheckBadge = ({ pos }: { pos: FantasyPosition }) => {
+    if (pos.rugcheck_normalised === null && pos.rugcheck_normalised === undefined) return null;
+
+    const score = pos.rugcheck_normalised ?? 0;
+    const passed = pos.rugcheck_passed ?? true;
+    
+    const getScoreStyles = () => {
+      if (!passed) {
+        return { color: 'text-red-500 bg-red-500/10 border-red-500/30', label: 'FAIL' };
+      }
+      if (score <= 20) {
+        return { color: 'text-green-500 bg-green-500/10 border-green-500/30', label: `${score}` };
+      }
+      if (score <= 35) {
+        return { color: 'text-emerald-500 bg-emerald-500/10 border-emerald-500/30', label: `${score}` };
+      }
+      if (score <= 50) {
+        return { color: 'text-yellow-500 bg-yellow-500/10 border-yellow-500/30', label: `${score}` };
+      }
+      return { color: 'text-orange-500 bg-orange-500/10 border-orange-500/30', label: `${score}` };
+    };
+
+    const styles = getScoreStyles();
+    const risks = pos.rugcheck_risks || [];
+    const topRisks = risks.slice(0, 3);
+
+    return (
+      <TooltipProvider>
+        <Tooltip>
+          <TooltipTrigger>
+            <Badge variant="outline" className={`gap-1 text-xs ${styles.color}`}>
+              <Shield className="h-3 w-3" />
+              RC:{styles.label}
+            </Badge>
+          </TooltipTrigger>
+          <TooltipContent className="max-w-sm">
+            <div className="space-y-1">
+              <p className="font-medium">RugCheck Score: {score}/100</p>
+              <p className="text-xs text-muted-foreground">
+                {score <= 20 ? 'Very Safe' : score <= 35 ? 'Safe' : score <= 50 ? 'Moderate Risk' : 'Higher Risk'}
+              </p>
+              {topRisks.length > 0 && (
+                <div className="pt-1 border-t border-border/50">
+                  <p className="text-xs font-medium mb-1">Detected Risks:</p>
+                  {topRisks.map((risk: any, i: number) => (
+                    <p key={i} className="text-xs text-amber-500">
+                      • {risk.name || risk.description || 'Unknown risk'}
+                    </p>
+                  ))}
+                  {risks.length > 3 && (
+                    <p className="text-xs text-muted-foreground">+{risks.length - 3} more</p>
+                  )}
+                </div>
+              )}
+              {pos.rugcheck_checked_at && (
+                <p className="text-xs text-muted-foreground pt-1">
+                  Checked: {formatDistanceToNow(new Date(pos.rugcheck_checked_at), { addSuffix: true })}
                 </p>
               )}
             </div>
@@ -875,10 +949,11 @@ export function FantasyPortfolioDashboard() {
                               rel="noopener noreferrer"
                               className="font-medium text-primary hover:underline inline-flex items-center gap-1"
                             >
-                              {pos.token_symbol || 'Unknown'}
+                            {pos.token_symbol || 'Unknown'}
                               <ExternalLink className="h-3 w-3" />
                             </a>
                             <DevRiskBadge pos={pos} />
+                            <RugCheckBadge pos={pos} />
                           </div>
                           <p className="text-xs text-muted-foreground truncate max-w-[100px]">
                             {pos.token_mint?.slice(0, 6)}...

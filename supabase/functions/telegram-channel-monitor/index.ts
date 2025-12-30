@@ -1315,25 +1315,78 @@ serve(async (req) => {
               if (existingTokenPos) {
                 console.log(`[telegram-channel-monitor] Fantasy position ALREADY EXISTS for token ${tokenMint} (first called by ${existingTokenPos.channel_name} via ${existingTokenPos.caller_display_name} at ${existingTokenPos.created_at}), skipping duplicate`);
               } else {
-                const entryPrice = currentTokenData?.price || 0.00001;
-                const tokenAmount = entryPrice > 0 ? currentRuleResult.buyAmount / entryPrice : null;
+                // ============== DEVELOPER ENRICHMENT + RUGCHECK ==============
+                let developerData: any = null;
+                let skipPosition = false;
+                let skipReason: string | null = null;
+                let finalSellMultiplier = currentRuleResult.sellTarget;
+                
+                try {
+                  console.log(`[telegram-channel-monitor] Calling developer-enrichment for ${tokenMint}`);
+                  const { data: enrichmentResult, error: enrichmentError } = await supabase.functions.invoke('developer-enrichment', {
+                    body: { 
+                      tokenMint, 
+                      defaultSellMultiplier: currentRuleResult.sellTarget 
+                    }
+                  });
+                  
+                  if (enrichmentError) {
+                    console.warn(`[telegram-channel-monitor] Developer enrichment failed:`, enrichmentError);
+                  } else {
+                    developerData = enrichmentResult;
+                    console.log(`[telegram-channel-monitor] Enrichment result: canTrade=${developerData?.canTrade}, risk=${developerData?.riskLevel}, rugcheck=${developerData?.rugcheckNormalised}/100`);
+                    
+                    // Check if we should skip this position
+                    if (developerData && !developerData.canTrade) {
+                      skipPosition = true;
+                      skipReason = developerData.skipReason || developerData.rugcheckSkipReason || 'Risk assessment failed';
+                      console.log(`[telegram-channel-monitor] SKIPPING position due to: ${skipReason}`);
+                    }
+                    
+                    // Adjust sell multiplier if risk assessment suggests it
+                    if (developerData?.adjustedSellMultiplier) {
+                      finalSellMultiplier = developerData.adjustedSellMultiplier;
+                      console.log(`[telegram-channel-monitor] Adjusted sell multiplier: ${currentRuleResult.sellTarget} -> ${finalSellMultiplier}`);
+                    }
+                  }
+                } catch (enrichmentErr) {
+                  console.warn(`[telegram-channel-monitor] Developer enrichment exception:`, enrichmentErr);
+                  // Continue without enrichment data
+                }
+                
+                if (skipPosition) {
+                  // Log the skip but don't create position
+                  console.log(`[telegram-channel-monitor] Position SKIPPED for ${currentTokenData?.symbol || tokenMint}: ${skipReason}`);
+                  
+                  // Update call record with skip reason
+                  if (callId) {
+                    await supabase
+                      .from('telegram_channel_calls')
+                      .update({ 
+                        status: 'skipped', 
+                        skip_reason: skipReason 
+                      })
+                      .eq('id', callId);
+                  }
+                } else {
+                  const entryPrice = currentTokenData?.price || 0.00001;
+                  const tokenAmount = entryPrice > 0 ? currentRuleResult.buyAmount / entryPrice : null;
 
-                // Fallback caller: if caller is "Phanes" (bot), use channel name instead
-                const isPhanesCaller = callerDisplayName?.toLowerCase() === 'phanes' ||
-                  callerUsername?.toLowerCase() === 'phanes' ||
-                  callerDisplayName?.toLowerCase()?.includes('phanes');
+                  // Fallback caller: if caller is "Phanes" (bot), use channel name instead
+                  const isPhanesCaller = callerDisplayName?.toLowerCase() === 'phanes' ||
+                    callerUsername?.toLowerCase() === 'phanes' ||
+                    callerDisplayName?.toLowerCase()?.includes('phanes');
 
-                const effectiveCallerUsername = isPhanesCaller
-                  ? (config.channel_name || channelUsername || callerUsername)
-                  : callerUsername;
+                  const effectiveCallerUsername = isPhanesCaller
+                    ? (config.channel_name || channelUsername || callerUsername)
+                    : callerUsername;
 
-                const effectiveCallerDisplayName = isPhanesCaller
-                  ? (config.channel_name || channelUsername || callerDisplayName)
-                  : callerDisplayName;
+                  const effectiveCallerDisplayName = isPhanesCaller
+                    ? (config.channel_name || channelUsername || callerDisplayName)
+                    : callerDisplayName;
 
-                const { error: fantasyInsertError } = await supabase
-                  .from('telegram_fantasy_positions')
-                  .insert({
+                  // Build position data with developer enrichment
+                  const positionData: any = {
                     call_id: callId,
                     interpretation_id: interpretationId,
                     channel_config_id: config.id,
@@ -1344,7 +1397,7 @@ serve(async (req) => {
                     entry_amount_usd: currentRuleResult.buyAmount,
                     token_amount: tokenAmount,
                     current_price_usd: entryPrice,
-                    target_sell_multiplier: currentRuleResult.sellTarget,
+                    target_sell_multiplier: finalSellMultiplier,
                     status: 'open',
                     caller_username: effectiveCallerUsername,
                     caller_display_name: effectiveCallerDisplayName,
@@ -1353,13 +1406,44 @@ serve(async (req) => {
                     is_active: true,
                     stop_loss_enabled: currentRuleResult.stopLossEnabled || false,
                     trail_tracking_enabled: true
-                  });
+                  };
 
-                if (fantasyInsertError) {
-                  console.error(`[telegram-channel-monitor] Fantasy position insert FAILED for ${tokenMint}:`, fantasyInsertError);
-                } else {
-                  totalFantasyBuys++;
-                  console.log(`[telegram-channel-monitor] Fantasy INSERTED: ${currentTokenData?.symbol || tokenMint} - $${currentRuleResult.buyAmount} @ $${entryPrice.toFixed(10)} (Mode: ${tradingMode})`);
+                  // Add developer enrichment data if available
+                  if (developerData) {
+                    positionData.developer_id = developerData.developerId;
+                    positionData.developer_risk_level = developerData.riskLevel;
+                    positionData.developer_reputation_score = developerData.reputationScore;
+                    positionData.developer_warning = developerData.warning;
+                    positionData.developer_twitter_handle = developerData.twitterHandle;
+                    positionData.developer_total_tokens = developerData.totalTokens;
+                    positionData.developer_rug_count = developerData.rugCount;
+                    
+                    // RugCheck data
+                    positionData.rugcheck_score = developerData.rugcheckScore || null;
+                    positionData.rugcheck_normalised = developerData.rugcheckNormalised || null;
+                    positionData.rugcheck_risks = developerData.rugcheckRisks || null;
+                    positionData.rugcheck_passed = developerData.rugcheckPassed ?? null;
+                    positionData.rugcheck_checked_at = new Date().toISOString();
+                    
+                    // Track if we adjusted based on risk
+                    if (developerData.adjustedSellMultiplier && developerData.adjustedSellMultiplier !== currentRuleResult.sellTarget) {
+                      positionData.adjusted_by_dev_risk = true;
+                      positionData.original_sell_multiplier = currentRuleResult.sellTarget;
+                    }
+                  }
+
+                  const { error: fantasyInsertError } = await supabase
+                    .from('telegram_fantasy_positions')
+                    .insert(positionData);
+
+                  if (fantasyInsertError) {
+                    console.error(`[telegram-channel-monitor] Fantasy position insert FAILED for ${tokenMint}:`, fantasyInsertError);
+                  } else {
+                    totalFantasyBuys++;
+                    const riskBadge = developerData?.riskLevel ? ` [${developerData.riskLevel.toUpperCase()}]` : '';
+                    const rugcheckBadge = developerData?.rugcheckNormalised !== undefined ? ` RC:${developerData.rugcheckNormalised}/100` : '';
+                    console.log(`[telegram-channel-monitor] Fantasy INSERTED: ${currentTokenData?.symbol || tokenMint} - $${currentRuleResult.buyAmount} @ $${entryPrice.toFixed(10)} (${tradingMode})${riskBadge}${rugcheckBadge}`);
+                  }
                 }
               }
             }
