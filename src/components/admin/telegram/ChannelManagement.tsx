@@ -28,7 +28,8 @@ import {
   FileText,
   Settings2,
   Sparkles,
-  MessageSquare
+  MessageSquare,
+  AlertTriangle
 } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
 import { ChannelScanLogs } from './ChannelScanLogs';
@@ -70,11 +71,20 @@ interface ChannelConfig {
   flipit_buy_amount_sol?: number | null;
   flipit_sell_multiplier: number;
   flipit_max_daily_positions: number;
+  flipit_wallet_id: string | null;
+}
+
+interface FlipItWallet {
+  id: string;
+  label: string;
+  pubkey: string;
+  is_active: boolean;
 }
 
 export function ChannelManagement() {
   const [channels, setChannels] = useState<ChannelConfig[]>([]);
   const [telegramTargets, setTelegramTargets] = useState<TelegramTarget[]>([]);
+  const [flipitWallets, setFlipitWallets] = useState<FlipItWallet[]>([]);
   const [loading, setLoading] = useState(true);
   const [showAddDialog, setShowAddDialog] = useState(false);
   const [editingChannel, setEditingChannel] = useState<ChannelConfig | null>(null);
@@ -116,7 +126,24 @@ export function ChannelManagement() {
   useEffect(() => {
     loadChannels();
     loadTelegramTargets();
+    loadFlipitWallets();
   }, []);
+
+  const loadFlipitWallets = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('super_admin_wallets')
+        .select('id, label, pubkey, is_active')
+        .eq('wallet_type', 'flipit')
+        .eq('is_active', true)
+        .order('label', { ascending: true });
+
+      if (error) throw error;
+      setFlipitWallets((data || []) as FlipItWallet[]);
+    } catch (err) {
+      console.error('Error loading FlipIt wallets:', err);
+    }
+  };
 
   const loadTelegramTargets = async () => {
     try {
@@ -283,7 +310,7 @@ export function ChannelManagement() {
     }
   };
 
-  const updateFlipitSettings = async (channelId: string, field: string, value: number) => {
+  const updateFlipitSettings = async (channelId: string, field: string, value: number | string | null) => {
     try {
       const { error } = await supabase
         .from('telegram_channel_config')
@@ -292,6 +319,9 @@ export function ChannelManagement() {
 
       if (error) throw error;
       loadChannels();
+      if (field === 'flipit_wallet_id') {
+        toast.success('Wallet assigned');
+      }
     } catch (err) {
       console.error('Error updating FlipIt settings:', err);
       toast.error('Failed to update FlipIt settings');
@@ -943,6 +973,36 @@ with TelegramClient(StringSession(), api_id, api_hash) as client:
                       <p className="text-xs text-muted-foreground">
                         When rules match, automatically create a FlipIt position + fantasy tracking.
                       </p>
+                      {/* Wallet Selector */}
+                      <div className="mb-3">
+                        <Label className="text-xs text-muted-foreground">Trading Wallet</Label>
+                        <Select
+                          value={channel.flipit_wallet_id || ''}
+                          onValueChange={(value) => updateFlipitSettings(channel.id, 'flipit_wallet_id', value || null)}
+                        >
+                          <SelectTrigger className={`h-8 text-sm ${!channel.flipit_wallet_id ? 'border-orange-500/50 bg-orange-500/10' : ''}`}>
+                            <SelectValue placeholder="Select wallet..." />
+                          </SelectTrigger>
+                          <SelectContent className="bg-popover border border-border">
+                            {flipitWallets.length === 0 ? (
+                              <SelectItem value="" disabled>No FlipIt wallets available</SelectItem>
+                            ) : (
+                              flipitWallets.map((wallet) => (
+                                <SelectItem key={wallet.id} value={wallet.id}>
+                                  {wallet.label} ({wallet.pubkey.slice(0, 4)}...{wallet.pubkey.slice(-4)})
+                                </SelectItem>
+                              ))
+                            )}
+                          </SelectContent>
+                        </Select>
+                        {!channel.flipit_wallet_id && (
+                          <p className="text-xs text-orange-400 mt-1 flex items-center gap-1">
+                            <AlertTriangle className="h-3 w-3" />
+                            No wallet assigned - auto-buys won't execute
+                          </p>
+                        )}
+                      </div>
+
                       <div className="grid grid-cols-3 gap-2">
                         <div>
                           <Label className="text-xs text-muted-foreground">Buy (SOL)</Label>
