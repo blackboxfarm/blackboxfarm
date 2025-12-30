@@ -1127,9 +1127,37 @@ serve(async (req) => {
           continue;
         }
 
+        // FIRST SCAN INITIALIZATION: If no last_message_id, set it to max and skip all messages
+        if (!config.last_message_id && channelMessages.length > 0) {
+          const maxId = Math.max(...channelMessages.map(m => parseInt(m.messageId) || 0));
+          console.log(`[telegram-channel-monitor] FIRST SCAN for ${config.channel_name} - initializing last_message_id to ${maxId}, skipping all ${channelMessages.length} existing messages (NO BUYS)`);
+          
+          const { error: initError } = await supabase
+            .from('telegram_channel_config')
+            .update({ last_message_id: maxId.toString() })
+            .eq('id', config.id);
+          
+          if (initError) {
+            console.error(`[telegram-channel-monitor] Failed to initialize last_message_id:`, initError);
+          }
+          
+          results.push({
+            channel: config.channel_name || channelUsername || channelId,
+            channelType,
+            tradingMode,
+            messagesFound: channelMessages.length,
+            success: true,
+            warning: `First scan - initialized tracking to msg ${maxId}, no buys made`
+          });
+          continue; // Skip to next channel - do NOT process any messages on first scan
+        }
+
         // Usernames to ignore (owner's messages)
         const IGNORED_USERNAMES = ['system_reset'];
         let totalSkipped = 0;
+        
+        // STRICT MESSAGE AGE: Only process messages less than 10 minutes old
+        const MAX_MESSAGE_AGE_MINUTES = 10;
         
         for (const msg of channelMessages) {
           if (!msg.text) continue;
@@ -1140,20 +1168,21 @@ serve(async (req) => {
           const callerUsername = msg.callerUsername;
           const callerDisplayName = msg.callerDisplayName;
 
+          // STRICT FRESHNESS CHECK: Skip any message older than 10 minutes
+          const messageAgeMinutes = (Date.now() - messageDate.getTime()) / 60000;
+          if (messageAgeMinutes > MAX_MESSAGE_AGE_MINUTES) {
+            console.log(`[telegram-channel-monitor] Skipping OLD message (${messageAgeMinutes.toFixed(1)} min old, max ${MAX_MESSAGE_AGE_MINUTES}): msg_id=${messageId}`);
+            totalSkipped++;
+            continue;
+          }
+
           // Skip messages from ignored usernames
           if (callerUsername && IGNORED_USERNAMES.includes(callerUsername.toLowerCase())) {
             console.log(`[telegram-channel-monitor] Skipping message from ignored user: @${callerUsername}`);
             continue;
           }
 
-          // Skip if message is too old
-          const scanWindowMinutes = config.scan_window_minutes ?? 1440;
-          const messageAgeMinutes = (Date.now() - messageDate.getTime()) / 60000;
-          if (!deepScan && messageAgeMinutes > scanWindowMinutes) {
-            continue;
-          }
-
-          // Skip if already processed
+          // Skip if already processed (by message ID)
           if (!resetMessageId && config.last_message_id) {
             const lastId = parseInt(config.last_message_id);
             const currentId = parseInt(messageId);
