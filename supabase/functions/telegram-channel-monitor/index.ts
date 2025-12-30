@@ -77,6 +77,9 @@ interface KeywordMatchResult {
   hasHighConviction: boolean;
 }
 
+// Approved launchpads for bonding curve trading
+const APPROVED_BONDING_CURVE_LAUNCHPADS = ['pump.fun', 'bonk.fun', 'bags.fm'];
+
 interface EnrichedTokenData {
   symbol: string | null;
   name: string | null;
@@ -84,12 +87,16 @@ interface EnrichedTokenData {
   marketCap: number | null;
   ageMinutes: number | null;
   platform: string | null;
+  launchpad: string | null; // Detected launchpad (pump.fun, bonk.fun, bags.fm, etc.)
   isOnBondingCurve: boolean;
   bondingCurvePercent: number | null;
   bondingCurvePosition: 'early' | 'mid' | 'late' | 'graduated' | null;
   hasGraduated: boolean;
   priceChange5m: number | null;
   isMayhemMode: boolean;
+  isApprovedLaunchpad: boolean; // True if launchpad is in APPROVED_BONDING_CURVE_LAUNCHPADS
+  liquidityLocked: boolean | null; // null = unknown, true = locked, false = not locked
+  liquidityLockPercent: number | null;
 }
 
 interface RuleEvaluationResult {
@@ -264,6 +271,8 @@ async function fetchDexScreenerData(tokenMint: string): Promise<{
   pairCreatedAt: number | null;
   priceChange5m: number | null;
   dexId: string | null;
+  detectedLaunchpad: string | null;
+  hasLiquidity: boolean;
 }> {
   const response = await fetchWithRetry(`https://api.dexscreener.com/latest/dex/tokens/${tokenMint}`);
   if (response) {
@@ -271,17 +280,49 @@ async function fetchDexScreenerData(tokenMint: string): Promise<{
       const data = await response.json();
       if (data.pairs?.[0]) {
         const pair = data.pairs[0];
+        const dexId = pair.dexId?.toLowerCase() || null;
+        
+        // Detect launchpad from DexScreener dexId or URL patterns
+        let detectedLaunchpad: string | null = null;
+        if (dexId) {
+          if (dexId.includes('pump') || dexId === 'pumpfun') {
+            detectedLaunchpad = 'pump.fun';
+          } else if (dexId.includes('bonk') || dexId === 'letsbonk' || dexId === 'bonkfun') {
+            detectedLaunchpad = 'bonk.fun';
+          } else if (dexId.includes('bags') || dexId === 'bagsfm') {
+            detectedLaunchpad = 'bags.fm';
+          } else if (dexId.includes('raydium')) {
+            detectedLaunchpad = 'raydium';
+          } else if (dexId.includes('moonshot')) {
+            detectedLaunchpad = 'moonshot';
+          } else if (dexId.includes('meteora')) {
+            detectedLaunchpad = 'meteora';
+          } else {
+            detectedLaunchpad = dexId;
+          }
+        }
+        
+        // Also check URL for launchpad hints
+        const url = pair.url?.toLowerCase() || '';
+        if (!detectedLaunchpad || detectedLaunchpad === dexId) {
+          if (url.includes('pump.fun')) detectedLaunchpad = 'pump.fun';
+          else if (url.includes('bonk.fun') || url.includes('letsbonk')) detectedLaunchpad = 'bonk.fun';
+          else if (url.includes('bags.fm')) detectedLaunchpad = 'bags.fm';
+        }
+        
         return {
           price: parseFloat(pair.priceUsd) || null,
           marketCap: pair.marketCap || null,
           pairCreatedAt: pair.pairCreatedAt || null,
           priceChange5m: pair.priceChange?.m5 || null,
-          dexId: pair.dexId || null
+          dexId: pair.dexId || null,
+          detectedLaunchpad,
+          hasLiquidity: (pair.liquidity?.usd || 0) > 0
         };
       }
     } catch {}
   }
-  return { price: null, marketCap: null, pairCreatedAt: null, priceChange5m: null, dexId: null };
+  return { price: null, marketCap: null, pairCreatedAt: null, priceChange5m: null, dexId: null, detectedLaunchpad: null, hasLiquidity: false };
 }
 
 async function fetchTokenMetadata(tokenMint: string): Promise<{ symbol: string; name: string } | null> {
@@ -367,6 +408,75 @@ async function checkPumpFunBondingCurve(tokenMint: string): Promise<{
   }
 }
 
+// Check bonding curve status for non-pump.fun launchpads (bonk.fun, bags.fm)
+// These use on-chain detection via DexScreener dexId since they don't have public APIs
+async function checkAlternateLaunchpadBondingCurve(
+  tokenMint: string,
+  launchpad: string | null,
+  hasLiquidity: boolean
+): Promise<{
+  isOnCurve: boolean;
+  bondingPercent: number | null;
+  hasGraduated: boolean;
+}> {
+  // For bonk.fun and bags.fm, tokens are on bonding curve until they graduate to Raydium
+  // If DexScreener shows Raydium liquidity, they've graduated
+  // If they only show on their native launchpad, they're still on curve
+  
+  if (!launchpad) {
+    return { isOnCurve: false, bondingPercent: null, hasGraduated: false };
+  }
+  
+  // Check if this is bonk.fun or bags.fm
+  if (launchpad === 'bonk.fun' || launchpad === 'bags.fm') {
+    // If there's significant liquidity on Raydium, it has graduated
+    // Otherwise it's still on the bonding curve
+    // We can't get exact bonding curve % without their specific APIs
+    // but we can determine if it's graduated
+    
+    // For now, assume if detected on their launchpad without Raydium,
+    // it's still on bonding curve
+    // The hasLiquidity from DexScreener will help determine graduation
+    
+    console.log(`[telegram-channel-monitor] ${launchpad} token ${tokenMint} - hasLiquidity: ${hasLiquidity}`);
+    
+    // If no significant liquidity yet, likely still on bonding curve
+    // This is a heuristic - bonk.fun/bags.fm tokens graduate to Raydium/Meteora
+    return {
+      isOnCurve: !hasLiquidity, // Still on curve if no external liquidity
+      bondingPercent: hasLiquidity ? 100 : 50, // Estimate 50% if on curve, 100% if graduated
+      hasGraduated: hasLiquidity
+    };
+  }
+  
+  return { isOnCurve: false, bondingPercent: null, hasGraduated: true };
+}
+
+// Quick liquidity lock check (lightweight version for pre-buy validation)
+async function checkLiquidityLockQuick(tokenMint: string, supabase: any): Promise<{
+  isLocked: boolean | null;
+  lockPercent: number | null;
+}> {
+  try {
+    const { data, error } = await supabase.functions.invoke('liquidity-lock-checker', {
+      body: { tokenMint }
+    });
+    
+    if (error) {
+      console.warn(`[telegram-channel-monitor] Liquidity lock check failed:`, error);
+      return { isLocked: null, lockPercent: null };
+    }
+    
+    return {
+      isLocked: data?.isLocked ?? null,
+      lockPercent: data?.lockPercentage ?? null
+    };
+  } catch (e) {
+    console.warn(`[telegram-channel-monitor] Liquidity lock check exception:`, e);
+    return { isLocked: null, lockPercent: null };
+  }
+}
+
 function determinePlatform(dexId: string | null): string {
   if (!dexId) return 'unknown';
   const lower = dexId.toLowerCase();
@@ -384,9 +494,9 @@ function getBondingCurvePosition(percent: number | null): 'early' | 'mid' | 'lat
   return 'late';
 }
 
-async function enrichTokenData(tokenMint: string): Promise<EnrichedTokenData> {
+async function enrichTokenData(tokenMint: string, supabase?: any): Promise<EnrichedTokenData> {
   // Fetch all data in parallel
-  const [jupiterPrice, dexData, metadata, bondingCurve] = await Promise.all([
+  const [jupiterPrice, dexData, metadata, pumpBondingCurve] = await Promise.all([
     fetchTokenPrice(tokenMint),
     fetchDexScreenerData(tokenMint),
     fetchTokenMetadata(tokenMint),
@@ -399,9 +509,38 @@ async function enrichTokenData(tokenMint: string): Promise<EnrichedTokenData> {
     ? Math.floor((Date.now() - dexData.pairCreatedAt) / 60000)
     : null;
 
+  // Determine launchpad - prefer DexScreener detection
+  const launchpad = dexData.detectedLaunchpad || (pumpBondingCurve.isOnCurve || pumpBondingCurve.hasGraduated ? 'pump.fun' : null);
+  
+  // For non-pump.fun launchpads, check their bonding curve status
+  let bondingCurve = pumpBondingCurve;
+  if (launchpad && launchpad !== 'pump.fun' && !pumpBondingCurve.isOnCurve && !pumpBondingCurve.hasGraduated) {
+    const altBondingCurve = await checkAlternateLaunchpadBondingCurve(tokenMint, launchpad, dexData.hasLiquidity);
+    bondingCurve = {
+      ...bondingCurve,
+      isOnCurve: altBondingCurve.isOnCurve,
+      bondingPercent: altBondingCurve.bondingPercent,
+      hasGraduated: altBondingCurve.hasGraduated
+    };
+  }
+
   const bondingPosition = bondingCurve.hasGraduated 
     ? 'graduated' as const
     : getBondingCurvePosition(bondingCurve.bondingPercent);
+
+  // Check if this is an approved launchpad for bonding curve trading
+  const isApprovedLaunchpad = launchpad ? APPROVED_BONDING_CURVE_LAUNCHPADS.includes(launchpad) : false;
+
+  // For graduated tokens (not on bonding curve), check liquidity lock if supabase client provided
+  let liquidityLocked: boolean | null = null;
+  let liquidityLockPercent: number | null = null;
+  
+  if (!bondingCurve.isOnCurve && bondingCurve.hasGraduated && supabase) {
+    // Only check liquidity for graduated tokens (on DEX)
+    const lockCheck = await checkLiquidityLockQuick(tokenMint, supabase);
+    liquidityLocked = lockCheck.isLocked;
+    liquidityLockPercent = lockCheck.lockPercent;
+  }
 
   return {
     symbol: metadata?.symbol || null,
@@ -410,12 +549,16 @@ async function enrichTokenData(tokenMint: string): Promise<EnrichedTokenData> {
     marketCap: dexData.marketCap,
     ageMinutes,
     platform,
+    launchpad,
     isOnBondingCurve: bondingCurve.isOnCurve,
     bondingCurvePercent: bondingCurve.bondingPercent,
     bondingCurvePosition: bondingPosition,
     hasGraduated: bondingCurve.hasGraduated,
     priceChange5m: dexData.priceChange5m,
-    isMayhemMode: bondingCurve.isMayhemMode
+    isMayhemMode: bondingCurve.isMayhemMode,
+    isApprovedLaunchpad,
+    liquidityLocked,
+    liquidityLockPercent
   };
 }
 
@@ -1216,7 +1359,7 @@ serve(async (req) => {
           const firstToken = addresses[0];
           
           if (firstToken) {
-            tokenData = await enrichTokenData(firstToken);
+            tokenData = await enrichTokenData(firstToken, supabase);
           }
 
           // Evaluate rules
@@ -1299,7 +1442,7 @@ serve(async (req) => {
             // Get token data for this specific token
             let currentTokenData = tokenData;
             if (tokenMint !== firstToken) {
-              currentTokenData = await enrichTokenData(tokenMint);
+              currentTokenData = await enrichTokenData(tokenMint, supabase);
             }
 
             // Evaluate rules for this token
@@ -1427,7 +1570,25 @@ serve(async (req) => {
                   continue; // Skip to next token
                 }
                 
-                // ============== DEVELOPER ENRICHMENT + RUGCHECK ==============
+                // ============== PRE-FILTER: LAUNCHPAD ALLOWLIST CHECK ==============
+                // For tokens on bonding curve, only allow approved launchpads (pump.fun, bonk.fun, bags.fm)
+                if (currentTokenData?.isOnBondingCurve && !currentTokenData?.isApprovedLaunchpad) {
+                  const launchpadName = currentTokenData?.launchpad || 'unknown';
+                  console.log(`[telegram-channel-monitor] SKIPPING ${tokenMint} - Unapproved launchpad on bonding curve: ${launchpadName}`);
+                  
+                  await supabase
+                    .from('telegram_channel_calls')
+                    .update({ 
+                      status: 'skipped', 
+                      skip_reason: `Unapproved launchpad on bonding curve: ${launchpadName}. Only pump.fun, bonk.fun, bags.fm allowed.`
+                    })
+                    .eq('id', callId);
+                  
+                  totalSkipped++;
+                  continue; // Skip to next token
+                }
+                
+
                 let developerData: any = null;
                 let skipPosition = false;
                 let skipReason: string | null = null;
@@ -1620,38 +1781,83 @@ serve(async (req) => {
                   if (existingFlipPosition) {
                     console.log(`[telegram-channel-monitor] FlipIt: Position ALREADY EXISTS for ${tokenMint} (${existingFlipPosition.token_symbol}) created at ${existingFlipPosition.created_at} from ${existingFlipPosition.source}, skipping duplicate buy`);
                   } else {
-                  // Find active FlipIt wallet
-                  const { data: flipitWallets } = await supabase
-                    .from('flipit_wallets')
-                    .select('id')
-                    .eq('is_active', true)
-                    .limit(1);
-
-                  const walletId = flipitWallets?.[0]?.id || config.flipit_wallet_id;
-                  
-                  if (walletId) {
-                    try {
-                      console.log(`[telegram-channel-monitor] FlipIt: Triggering auto-buy for ${currentTokenData?.symbol || tokenMint} - $${flipitBuyAmount} @ ${flipitSellMultiplier}x`);
-                      
-                      await supabase.functions.invoke('flipit-execute', {
-                        body: {
-                          walletId,
-                          action: 'buy',
-                          tokenMint,
-                          buyAmountUsd: flipitBuyAmount,
-                          targetMultiplier: flipitSellMultiplier,
-                          source: 'telegram',
-                          sourceChannelId: config.id
+                    // ============== PRE-BUY CHECKS FOR REAL MONEY ==============
+                    
+                    // Check 1: Launchpad allowlist (for tokens on bonding curve)
+                    if (currentTokenData?.isOnBondingCurve && !currentTokenData?.isApprovedLaunchpad) {
+                      const launchpadName = currentTokenData?.launchpad || 'unknown';
+                      console.log(`[telegram-channel-monitor] FlipIt: SKIPPING ${tokenMint} - Unapproved launchpad: ${launchpadName}`);
+                      if (callId) {
+                        await supabase
+                          .from('telegram_channel_calls')
+                          .update({ 
+                            status: 'skipped', 
+                            skip_reason: `FlipIt blocked: Unapproved launchpad on bonding curve: ${launchpadName}` 
+                          })
+                          .eq('id', callId);
+                      }
+                    } else {
+                      // Check 2: Liquidity lock for graduated tokens (only real money buys)
+                      let liquidityCheckPassed = true;
+                      if (currentTokenData?.hasGraduated && !currentTokenData?.isOnBondingCurve) {
+                        // Token has graduated - check liquidity lock
+                        if (currentTokenData?.liquidityLocked === false) {
+                          console.log(`[telegram-channel-monitor] FlipIt: SKIPPING ${tokenMint} - Liquidity NOT LOCKED`);
+                          liquidityCheckPassed = false;
+                          if (callId) {
+                            await supabase
+                              .from('telegram_channel_calls')
+                              .update({ 
+                                status: 'skipped', 
+                                skip_reason: 'FlipIt blocked: Graduated token with unlocked liquidity - rug risk' 
+                              })
+                              .eq('id', callId);
+                          }
+                        } else if (currentTokenData?.liquidityLocked === null) {
+                          // Unknown liquidity status - log warning but allow (can't confirm either way)
+                          console.log(`[telegram-channel-monitor] FlipIt: WARNING - Liquidity lock status unknown for ${tokenMint}, proceeding with caution`);
+                        } else {
+                          console.log(`[telegram-channel-monitor] FlipIt: Liquidity check PASSED for ${tokenMint} (${currentTokenData?.liquidityLockPercent || 'unknown'}% locked)`);
                         }
-                      });
-                      totalBuys++;
-                      console.log(`[telegram-channel-monitor] FlipIt: Buy executed successfully`);
-                    } catch (buyError) {
-                      console.error('[telegram-channel-monitor] FlipIt buy error:', buyError);
+                      }
+                      
+                      if (liquidityCheckPassed) {
+                        // Find active FlipIt wallet
+                        const { data: flipitWallets } = await supabase
+                          .from('flipit_wallets')
+                          .select('id')
+                          .eq('is_active', true)
+                          .limit(1);
+
+                        const walletId = flipitWallets?.[0]?.id || config.flipit_wallet_id;
+                        
+                        if (walletId) {
+                          try {
+                            const launchpadInfo = currentTokenData?.launchpad ? ` [${currentTokenData.launchpad}]` : '';
+                            const curveInfo = currentTokenData?.isOnBondingCurve ? ` (${currentTokenData.bondingCurvePercent?.toFixed(0) || '?'}% curve)` : ' (graduated)';
+                            console.log(`[telegram-channel-monitor] FlipIt: Triggering auto-buy for ${currentTokenData?.symbol || tokenMint}${launchpadInfo}${curveInfo} - $${flipitBuyAmount} @ ${flipitSellMultiplier}x`);
+                            
+                            await supabase.functions.invoke('flipit-execute', {
+                              body: {
+                                walletId,
+                                action: 'buy',
+                                tokenMint,
+                                buyAmountUsd: flipitBuyAmount,
+                                targetMultiplier: flipitSellMultiplier,
+                                source: 'telegram',
+                                sourceChannelId: config.id
+                              }
+                            });
+                            totalBuys++;
+                            console.log(`[telegram-channel-monitor] FlipIt: Buy executed successfully`);
+                          } catch (buyError) {
+                            console.error('[telegram-channel-monitor] FlipIt buy error:', buyError);
+                          }
+                        } else {
+                          console.log('[telegram-channel-monitor] FlipIt: No active wallet found, skipping');
+                        }
+                      }
                     }
-                  } else {
-                    console.log('[telegram-channel-monitor] FlipIt: No active wallet found, skipping');
-                  }
                   }
                 }
               } else {
@@ -1688,20 +1894,27 @@ serve(async (req) => {
                 if (existingLegacyPosition) {
                   console.log(`[telegram-channel-monitor] Legacy FlipIt: Position ALREADY EXISTS for ${tokenMint} (${existingLegacyPosition.token_symbol}) created at ${existingLegacyPosition.created_at} from ${existingLegacyPosition.source}, skipping duplicate buy`);
                 } else {
-                  try {
-                    await supabase.functions.invoke('flipit-execute', {
-                      body: {
-                        walletId: config.flipit_wallet_id,
-                        action: 'buy',
-                        tokenMint,
-                        buyAmountUsd: currentRuleResult.buyAmount,
-                        targetMultiplier: currentRuleResult.sellTarget,
-                        stopLossPct: currentRuleResult.stopLossEnabled ? currentRuleResult.stopLoss : null
-                      }
-                    });
-                    totalBuys++;
-                  } catch (buyError) {
-                    console.error('[telegram-channel-monitor] FlipIt buy error:', buyError);
+                  // Launchpad and liquidity checks for legacy path
+                  if (currentTokenData?.isOnBondingCurve && !currentTokenData?.isApprovedLaunchpad) {
+                    console.log(`[telegram-channel-monitor] Legacy FlipIt: SKIPPING - Unapproved launchpad: ${currentTokenData?.launchpad}`);
+                  } else if (currentTokenData?.hasGraduated && currentTokenData?.liquidityLocked === false) {
+                    console.log(`[telegram-channel-monitor] Legacy FlipIt: SKIPPING - Liquidity NOT LOCKED`);
+                  } else {
+                    try {
+                      await supabase.functions.invoke('flipit-execute', {
+                        body: {
+                          walletId: config.flipit_wallet_id,
+                          action: 'buy',
+                          tokenMint,
+                          buyAmountUsd: currentRuleResult.buyAmount,
+                          targetMultiplier: currentRuleResult.sellTarget,
+                          stopLossPct: currentRuleResult.stopLossEnabled ? currentRuleResult.stopLoss : null
+                        }
+                      });
+                      totalBuys++;
+                    } catch (buyError) {
+                      console.error('[telegram-channel-monitor] FlipIt buy error:', buyError);
+                    }
                   }
                 }
               }
