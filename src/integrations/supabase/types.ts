@@ -4902,7 +4902,10 @@ export type Database = {
           max_price_threshold: number | null
           min_price_threshold: number | null
           notification_email: string | null
+          scalp_buy_amount_sol: number | null
           scalp_buy_amount_usd: number | null
+          scalp_buy_priority_fee: string | null
+          scalp_buy_slippage_bps: number | null
           scalp_caller_timeout_seconds: number | null
           scalp_max_age_minutes: number | null
           scalp_max_bonding_pct: number | null
@@ -4910,6 +4913,8 @@ export type Database = {
           scalp_min_callers: number | null
           scalp_mode_enabled: boolean | null
           scalp_moon_bag_pct: number | null
+          scalp_sell_priority_fee: string | null
+          scalp_sell_slippage_bps: number | null
           scalp_stop_loss_pct: number | null
           scalp_take_profit_pct: number | null
           scan_window_minutes: number | null
@@ -4948,7 +4953,10 @@ export type Database = {
           max_price_threshold?: number | null
           min_price_threshold?: number | null
           notification_email?: string | null
+          scalp_buy_amount_sol?: number | null
           scalp_buy_amount_usd?: number | null
+          scalp_buy_priority_fee?: string | null
+          scalp_buy_slippage_bps?: number | null
           scalp_caller_timeout_seconds?: number | null
           scalp_max_age_minutes?: number | null
           scalp_max_bonding_pct?: number | null
@@ -4956,6 +4964,8 @@ export type Database = {
           scalp_min_callers?: number | null
           scalp_mode_enabled?: boolean | null
           scalp_moon_bag_pct?: number | null
+          scalp_sell_priority_fee?: string | null
+          scalp_sell_slippage_bps?: number | null
           scalp_stop_loss_pct?: number | null
           scalp_take_profit_pct?: number | null
           scan_window_minutes?: number | null
@@ -4994,7 +5004,10 @@ export type Database = {
           max_price_threshold?: number | null
           min_price_threshold?: number | null
           notification_email?: string | null
+          scalp_buy_amount_sol?: number | null
           scalp_buy_amount_usd?: number | null
+          scalp_buy_priority_fee?: string | null
+          scalp_buy_slippage_bps?: number | null
           scalp_caller_timeout_seconds?: number | null
           scalp_max_age_minutes?: number | null
           scalp_max_bonding_pct?: number | null
@@ -5002,6 +5015,8 @@ export type Database = {
           scalp_min_callers?: number | null
           scalp_mode_enabled?: boolean | null
           scalp_moon_bag_pct?: number | null
+          scalp_sell_priority_fee?: string | null
+          scalp_sell_slippage_bps?: number | null
           scalp_stop_loss_pct?: number | null
           scalp_take_profit_pct?: number | null
           scan_window_minutes?: number | null
