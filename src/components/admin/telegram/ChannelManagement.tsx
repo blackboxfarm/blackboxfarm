@@ -77,6 +77,7 @@ interface ChannelConfig {
   // Scalp Mode settings
   scalp_mode_enabled?: boolean;
   scalp_buy_amount_usd?: number;
+  scalp_buy_amount_sol?: number | null;
   scalp_min_bonding_pct?: number;
   scalp_max_bonding_pct?: number;
   scalp_max_age_minutes?: number;
@@ -85,6 +86,11 @@ interface ChannelConfig {
   scalp_take_profit_pct?: number;
   scalp_moon_bag_pct?: number;
   scalp_stop_loss_pct?: number;
+  // Scalp slippage & priority fee settings
+  scalp_buy_slippage_bps?: number;
+  scalp_sell_slippage_bps?: number;
+  scalp_buy_priority_fee?: string;
+  scalp_sell_priority_fee?: string;
 }
 
 interface FlipItWallet {
@@ -1118,8 +1124,28 @@ with TelegramClient(StringSession(), api_id, api_hash) as client:
                   {channel.scalp_mode_enabled ? (
                     <div className="space-y-3">
                       <p className="text-xs text-muted-foreground">
-                        Low-risk scalp trades: sell 90% at +{channel.scalp_take_profit_pct || 50}%, keep 10% moon bag.
+                        Low-risk scalp trades: sell {100 - (channel.scalp_moon_bag_pct || 10)}% at +{channel.scalp_take_profit_pct || 50}%, keep {channel.scalp_moon_bag_pct || 10}% moon bag.
                       </p>
+                      
+                      {/* Buy Amount in SOL with USD conversion */}
+                      <div>
+                        <Label className="text-xs text-muted-foreground">Buy Amount (SOL)</Label>
+                        <Input
+                          type="number"
+                          step="0.01"
+                          value={channel.scalp_buy_amount_sol ?? (channel.scalp_buy_amount_usd ? (channel.scalp_buy_amount_usd / solPrice).toFixed(3) : 0.05)}
+                          onChange={(e) => {
+                            const solAmount = Number(e.target.value);
+                            const usdAmount = solAmount * solPrice;
+                            updateScalpSettings(channel.id, 'scalp_buy_amount_sol', solAmount);
+                            updateScalpSettings(channel.id, 'scalp_buy_amount_usd', usdAmount);
+                          }}
+                          className="h-8 text-sm"
+                        />
+                        <p className="text-xs text-muted-foreground mt-1">
+                          ≈ ${((channel.scalp_buy_amount_sol ?? (channel.scalp_buy_amount_usd ? channel.scalp_buy_amount_usd / solPrice : 0.05)) * solPrice).toFixed(2)} USD
+                        </p>
+                      </div>
                       
                       {/* Exit Strategy Row */}
                       <div className="grid grid-cols-3 gap-2">
@@ -1152,6 +1178,86 @@ with TelegramClient(StringSession(), api_id, api_hash) as client:
                             onChange={(e) => updateScalpSettings(channel.id, 'scalp_stop_loss_pct', Number(e.target.value))}
                             className="h-8 text-sm"
                           />
+                        </div>
+                      </div>
+
+                      {/* Slippage Settings */}
+                      <div className="grid grid-cols-2 gap-2">
+                        <div>
+                          <Label className="text-xs text-muted-foreground">Buy Slippage</Label>
+                          <Select
+                            value={String(channel.scalp_buy_slippage_bps || 1000)}
+                            onValueChange={(v) => updateScalpSettings(channel.id, 'scalp_buy_slippage_bps', Number(v))}
+                          >
+                            <SelectTrigger className="h-8 text-sm">
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent className="bg-popover border border-border">
+                              <SelectItem value="500">5% (Low)</SelectItem>
+                              <SelectItem value="1000">10% (Standard)</SelectItem>
+                              <SelectItem value="1500">15% (High)</SelectItem>
+                              <SelectItem value="2000">20% (Very High)</SelectItem>
+                              <SelectItem value="2500">25% (Extreme)</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
+                        <div>
+                          <Label className="text-xs text-muted-foreground">Sell Slippage</Label>
+                          <Select
+                            value={String(channel.scalp_sell_slippage_bps || 1500)}
+                            onValueChange={(v) => updateScalpSettings(channel.id, 'scalp_sell_slippage_bps', Number(v))}
+                          >
+                            <SelectTrigger className="h-8 text-sm">
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent className="bg-popover border border-border">
+                              <SelectItem value="500">5% (Low)</SelectItem>
+                              <SelectItem value="1000">10% (Standard)</SelectItem>
+                              <SelectItem value="1500">15% (High)</SelectItem>
+                              <SelectItem value="2000">20% (Very High)</SelectItem>
+                              <SelectItem value="2500">25% (Extreme)</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
+                      </div>
+
+                      {/* Priority Fee (Gas) Settings with USD */}
+                      <div className="grid grid-cols-2 gap-2">
+                        <div>
+                          <Label className="text-xs text-muted-foreground">Buy Gas Fee</Label>
+                          <Select
+                            value={channel.scalp_buy_priority_fee || 'medium'}
+                            onValueChange={(v) => updateScalpSettings(channel.id, 'scalp_buy_priority_fee', v)}
+                          >
+                            <SelectTrigger className="h-8 text-sm">
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent className="bg-popover border border-border">
+                              <SelectItem value="low">Low - 0.0001 SOL (${(0.0001 * solPrice).toFixed(2)})</SelectItem>
+                              <SelectItem value="medium">Med - 0.0005 SOL (${(0.0005 * solPrice).toFixed(2)})</SelectItem>
+                              <SelectItem value="high">High - 0.001 SOL (${(0.001 * solPrice).toFixed(2)})</SelectItem>
+                              <SelectItem value="turbo">Turbo - 0.0075 SOL (${(0.0075 * solPrice).toFixed(2)})</SelectItem>
+                              <SelectItem value="ultra">Ultra - 0.009 SOL (${(0.009 * solPrice).toFixed(2)})</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
+                        <div>
+                          <Label className="text-xs text-muted-foreground">Sell Gas Fee</Label>
+                          <Select
+                            value={channel.scalp_sell_priority_fee || 'high'}
+                            onValueChange={(v) => updateScalpSettings(channel.id, 'scalp_sell_priority_fee', v)}
+                          >
+                            <SelectTrigger className="h-8 text-sm">
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent className="bg-popover border border-border">
+                              <SelectItem value="low">Low - 0.0001 SOL (${(0.0001 * solPrice).toFixed(2)})</SelectItem>
+                              <SelectItem value="medium">Med - 0.0005 SOL (${(0.0005 * solPrice).toFixed(2)})</SelectItem>
+                              <SelectItem value="high">High - 0.001 SOL (${(0.001 * solPrice).toFixed(2)})</SelectItem>
+                              <SelectItem value="turbo">Turbo - 0.0075 SOL (${(0.0075 * solPrice).toFixed(2)})</SelectItem>
+                              <SelectItem value="ultra">Ultra - 0.009 SOL (${(0.009 * solPrice).toFixed(2)})</SelectItem>
+                            </SelectContent>
+                          </Select>
                         </div>
                       </div>
 

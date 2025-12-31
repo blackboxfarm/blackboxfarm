@@ -1904,6 +1904,9 @@ serve(async (req) => {
                         buyRequest.scalpTakeProfitPct = config.scalp_take_profit_pct || 50;
                         buyRequest.scalpMoonBagPct = config.scalp_moon_bag_pct || 10;
                         buyRequest.scalpStopLossPct = config.scalp_stop_loss_pct || 35;
+                        // Pass slippage and priority fee from channel config
+                        buyRequest.slippageBps = config.scalp_buy_slippage_bps || 1000;
+                        buyRequest.priorityFeeMode = config.scalp_buy_priority_fee || 'medium';
                       }
 
                       const { data: buyData, error: buyErr } = await supabase.functions.invoke('flipit-execute', {

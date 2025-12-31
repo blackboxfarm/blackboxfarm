@@ -232,6 +232,24 @@ serve(async (req) => {
         const moonBagPct = position.moon_bag_percent || 10;
         const stopLossPct = position.scalp_stop_loss_pct || 35;
 
+        // Fetch channel-specific sell slippage and priority fee for scalp positions
+        let scalpSellSlippage = effectiveSlippage;
+        let scalpSellPriority = priorityFeeMode || 'high';
+        
+        if (position.source_channel_id) {
+          const { data: channelConfig } = await supabase
+            .from('telegram_channel_config')
+            .select('scalp_sell_slippage_bps, scalp_sell_priority_fee')
+            .eq('id', position.source_channel_id)
+            .single();
+          
+          if (channelConfig) {
+            scalpSellSlippage = channelConfig.scalp_sell_slippage_bps || 1500;
+            scalpSellPriority = channelConfig.scalp_sell_priority_fee || 'high';
+            console.log(`Scalp position using channel sell settings: slippage=${scalpSellSlippage}bps, priority=${scalpSellPriority}`);
+          }
+        }
+
         console.log(`Scalp position ${position.id}: stage=${scalp_stage}, TP=${takeProfitPct}%, SL=${stopLossPct}%, change=${priceChangePercent.toFixed(1)}%`);
 
         // Emergency exit: Stop loss hit
@@ -243,8 +261,8 @@ serve(async (req) => {
               body: {
                 action: "sell",
                 positionId: position.id,
-                slippageBps: effectiveSlippage,
-                priorityFeeMode: priorityFeeMode || "medium",
+                slippageBps: scalpSellSlippage,
+                priorityFeeMode: scalpSellPriority,
               }
             });
 
@@ -274,8 +292,8 @@ serve(async (req) => {
                 positionId: position.id,
                 sellPercent: 100 - moonBagPct, // Sell 90%, keep 10% moon bag
                 reason: "scalp_tp1",
-                slippageBps: effectiveSlippage,
-                priorityFeeMode: priorityFeeMode || "medium",
+                slippageBps: scalpSellSlippage,
+                priorityFeeMode: scalpSellPriority,
               }
             });
 
@@ -321,8 +339,8 @@ serve(async (req) => {
                 positionId: position.id,
                 sellPercent: 50, // Sell half of remaining moon bag
                 reason: "scalp_ladder_100",
-                slippageBps: effectiveSlippage,
-                priorityFeeMode: priorityFeeMode || "medium",
+                slippageBps: scalpSellSlippage,
+                priorityFeeMode: scalpSellPriority,
               }
             });
 
@@ -352,8 +370,8 @@ serve(async (req) => {
                 positionId: position.id,
                 sellPercent: 100, // Sell all remaining
                 reason: "scalp_ladder_300",
-                slippageBps: effectiveSlippage,
-                priorityFeeMode: priorityFeeMode || "medium",
+                slippageBps: scalpSellSlippage,
+                priorityFeeMode: scalpSellPriority,
               }
             });
 
