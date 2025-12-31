@@ -264,10 +264,27 @@ export function FlipItDashboard() {
       if (data?.checkedAt) {
         setLastAutoCheck(data.checkedAt);
       }
+      
+      // Auto-refresh wallet balance on every price check
+      if (selectedWallet) {
+        const wallet = wallets.find(w => w.id === selectedWallet);
+        if (wallet) {
+          try {
+            const { data: balanceData, error: balErr } = await supabase.functions.invoke('get-wallet-balance', {
+              body: { walletAddress: wallet.pubkey }
+            });
+            if (!balErr && !balanceData.error) {
+              setWalletBalance(balanceData.balance);
+            }
+          } catch (balanceErr) {
+            console.error('Balance refresh during price check failed:', balanceErr);
+          }
+        }
+      }
     } catch (err) {
       console.error('Auto-refresh failed:', err);
     }
-  }, [positions, slippageBps, priorityFeeMode]);
+  }, [positions, slippageBps, priorityFeeMode, selectedWallet, wallets]);
 
   const handleRebuyCheck = useCallback(async () => {
     const watchingPositions = positions.filter(p => p.rebuy_status === 'watching');
@@ -1164,6 +1181,7 @@ export function FlipItDashboard() {
         toast.success(`🚀 BUY NOW executed for ${order.token_symbol || 'token'}!`);
         loadLimitOrders();
         loadPositions();
+        refreshWalletBalance(); // Auto-refresh wallet balance after buy
       } else {
         throw new Error(data?.error || 'Failed to execute buy');
       }
@@ -1202,8 +1220,10 @@ export function FlipItDashboard() {
       if (data?.executed?.length > 0) {
         toast.success(`Sold ${data.executed.length} position(s) at target!`);
         loadPositions();
+        refreshWalletBalance(); // Auto-refresh wallet balance after sales
       } else {
         toast.success('Prices refreshed');
+        refreshWalletBalance(); // Also refresh balance on price check
       }
     } catch (err: any) {
       toast.error(err.message || 'Failed to refresh prices');
@@ -1230,6 +1250,7 @@ export function FlipItDashboard() {
       } else {
         toast.success('Sold!');
         loadPositions();
+        refreshWalletBalance(); // Auto-refresh wallet balance after sell
       }
     } catch (err: any) {
       toast.error(err.message || 'Failed to sell');
