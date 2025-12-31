@@ -76,7 +76,7 @@ async function fetchBondingCurveData(tokenMints: string[]): Promise<Record<strin
       if (!info?.data) continue;
 
       const data = info.data;
-      // BondingCurveAccount layout (per pumpfun-rs docs):
+      // BondingCurveAccount layout:
       // 0..8   discriminator (u64)
       // 8..16  virtual_token_reserves (u64)
       // 16..24 virtual_sol_reserves (u64)
@@ -87,19 +87,21 @@ async function fetchBondingCurveData(tokenMints: string[]): Promise<Record<strin
       if (data.length < 49) continue;
 
       const view = new DataView(data.buffer, data.byteOffset, data.byteLength);
-      const realSolReservesLamports = view.getBigUint64(32, true);
+      const realTokenReserves = view.getBigUint64(24, true);
       const complete = data[48] === 1;
 
       // Skip graduated tokens
       if (complete) continue;
 
-      const realSolReserves = Number(realSolReservesLamports) / 1e9;
-      // Pump.fun bonding curve graduates at ~85 SOL
-      const targetSol = 85;
-      const progress = Math.min(Math.max((realSolReserves / targetSol) * 100, 0), 100);
+      // Pump.fun starts with ~793,100,000 tokens available for sale
+      // Progress = tokens sold / initial tokens = (initial - remaining) / initial
+      const INITIAL_REAL_TOKEN_RESERVES = 793_100_000_000_000n; // 793.1M with 6 decimals
+      const tokensSold = INITIAL_REAL_TOKEN_RESERVES - realTokenReserves;
+      const progress = Math.min(Math.max(Number(tokensSold * 100n / INITIAL_REAL_TOKEN_RESERVES), 0), 100);
 
       curveData[mintStr] = progress;
-      console.log(`Bonding curve for ${mintStr}: ${progress.toFixed(1)}% (${realSolReserves.toFixed(2)} SOL)`);
+      const tokensSoldM = Number(INITIAL_REAL_TOKEN_RESERVES - realTokenReserves) / 1e12;
+      console.log(`Bonding curve for ${mintStr}: ${progress.toFixed(1)}% (${tokensSoldM.toFixed(1)}M tokens sold)`);
     } catch (e) {
       // Not a pump.fun token or invalid - skip silently
     }
