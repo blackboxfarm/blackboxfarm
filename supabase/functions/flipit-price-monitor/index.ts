@@ -203,6 +203,7 @@ serve(async (req) => {
     console.log("Fetched bonding curve data:", bondingCurveData);
 
     const executed: any[] = [];
+    const solPrice = await fetchSolPrice();
 
     // Check each position for target hit
     for (const position of positions) {
@@ -219,9 +220,165 @@ serve(async (req) => {
         continue;
       }
 
-      console.log(`Position ${position.id}: entry=${entryPrice}, current=${currentPrice}, target=${targetPrice}`);
+      const priceChangePercent = ((currentPrice / entryPrice) - 1) * 100;
+      console.log(`Position ${position.id}: entry=${entryPrice}, current=${currentPrice}, target=${targetPrice}, change=${priceChangePercent.toFixed(1)}%`);
 
-      // Check if target hit
+      // ============================================
+      // SCALP MODE EXIT LOGIC
+      // ============================================
+      if (position.is_scalp_position) {
+        const scalp_stage = position.scalp_stage || 'initial';
+        const takeProfitPct = position.scalp_take_profit_pct || 50;
+        const moonBagPct = position.moon_bag_percent || 10;
+        const stopLossPct = position.scalp_stop_loss_pct || 35;
+
+        console.log(`Scalp position ${position.id}: stage=${scalp_stage}, TP=${takeProfitPct}%, SL=${stopLossPct}%, change=${priceChangePercent.toFixed(1)}%`);
+
+        // Emergency exit: Stop loss hit
+        if (priceChangePercent <= -stopLossPct && scalp_stage === 'initial') {
+          console.log(`STOP LOSS HIT for ${position.token_mint}! Selling 100%`);
+          
+          try {
+            const { data: sellResult, error: sellError } = await supabase.functions.invoke("flipit-execute", {
+              body: {
+                action: "sell",
+                positionId: position.id,
+                slippageBps: effectiveSlippage,
+                priorityFeeMode: priorityFeeMode || "medium",
+              }
+            });
+
+            if (!sellError && sellResult?.success) {
+              executed.push({
+                positionId: position.id,
+                action: 'emergency_stop_loss',
+                tokenMint: position.token_mint,
+                priceChangePercent,
+                signature: sellResult.signature,
+              });
+            }
+          } catch (e) {
+            console.error(`Stop loss sell failed for ${position.id}:`, e);
+          }
+          continue;
+        }
+
+        // Primary Take Profit: Sell 90% at +TP%
+        if (priceChangePercent >= takeProfitPct && scalp_stage === 'initial') {
+          console.log(`SCALP TP1 HIT for ${position.token_mint}! Selling ${100 - moonBagPct}%`);
+          
+          try {
+            const { data: partialResult, error: partialError } = await supabase.functions.invoke("flipit-execute", {
+              body: {
+                action: "partial_sell",
+                positionId: position.id,
+                sellPercent: 100 - moonBagPct, // Sell 90%, keep 10% moon bag
+                reason: "scalp_tp1",
+                slippageBps: effectiveSlippage,
+                priorityFeeMode: priorityFeeMode || "medium",
+              }
+            });
+
+            if (!partialError && partialResult?.success) {
+              executed.push({
+                positionId: position.id,
+                action: 'scalp_tp1',
+                tokenMint: position.token_mint,
+                priceChangePercent,
+                soldPercent: 100 - moonBagPct,
+                signature: partialResult.signature,
+              });
+
+              // Send notification
+              try {
+                await supabase.functions.invoke("send-email-notification", {
+                  body: {
+                    to: "wilsondavid@live.ca",
+                    subject: `🎯 Scalp TP Hit: ${position.token_symbol || position.token_mint.slice(0, 8)} +${priceChangePercent.toFixed(0)}%`,
+                    title: "Scalp Take Profit Hit!",
+                    message: `Sold ${100 - moonBagPct}% at +${priceChangePercent.toFixed(1)}%, keeping ${moonBagPct}% moon bag.`,
+                    type: "success"
+                  }
+                });
+              } catch (e) {
+                console.error("Email notification failed:", e);
+              }
+            }
+          } catch (e) {
+            console.error(`Scalp TP1 sell failed for ${position.id}:`, e);
+          }
+          continue;
+        }
+
+        // Moon bag ladder: At +100%, sell 50% of remaining
+        if (priceChangePercent >= 100 && scalp_stage === 'tp1_hit') {
+          console.log(`SCALP LADDER 100% for ${position.token_mint}! Selling 50% of moon bag`);
+          
+          try {
+            const { data: ladderResult, error: ladderError } = await supabase.functions.invoke("flipit-execute", {
+              body: {
+                action: "partial_sell",
+                positionId: position.id,
+                sellPercent: 50, // Sell half of remaining moon bag
+                reason: "scalp_ladder_100",
+                slippageBps: effectiveSlippage,
+                priorityFeeMode: priorityFeeMode || "medium",
+              }
+            });
+
+            if (!ladderError && ladderResult?.success) {
+              executed.push({
+                positionId: position.id,
+                action: 'scalp_ladder_100',
+                tokenMint: position.token_mint,
+                priceChangePercent,
+                signature: ladderResult.signature,
+              });
+            }
+          } catch (e) {
+            console.error(`Scalp ladder 100 failed for ${position.id}:`, e);
+          }
+          continue;
+        }
+
+        // Moon bag ladder: At +300%, sell all remaining
+        if (priceChangePercent >= 300 && (scalp_stage === 'ladder_100' || scalp_stage === 'tp1_hit')) {
+          console.log(`SCALP LADDER 300% for ${position.token_mint}! Selling all remaining`);
+          
+          try {
+            const { data: finalResult, error: finalError } = await supabase.functions.invoke("flipit-execute", {
+              body: {
+                action: "partial_sell",
+                positionId: position.id,
+                sellPercent: 100, // Sell all remaining
+                reason: "scalp_ladder_300",
+                slippageBps: effectiveSlippage,
+                priorityFeeMode: priorityFeeMode || "medium",
+              }
+            });
+
+            if (!finalError && finalResult?.success) {
+              executed.push({
+                positionId: position.id,
+                action: 'scalp_ladder_300',
+                tokenMint: position.token_mint,
+                priceChangePercent,
+                signature: finalResult.signature,
+              });
+            }
+          } catch (e) {
+            console.error(`Scalp ladder 300 failed for ${position.id}:`, e);
+          }
+          continue;
+        }
+
+        // Scalp positions handled - skip regular target logic
+        continue;
+      }
+
+      // ============================================
+      // REGULAR (NON-SCALP) TARGET LOGIC
+      // ============================================
       if (currentPrice >= targetPrice) {
         console.log(`TARGET HIT for ${position.token_mint}! Executing sell...`);
 
@@ -285,7 +442,6 @@ serve(async (req) => {
           
           const outLamports = Number(swapResult?.outAmount || swapResult?.data?.outAmount || 0);
           if (outLamports > 0) {
-            const solPrice = await fetchSolPrice();
             const actualSellValue = (outLamports / 1e9) * solPrice;
             const actualProfit = actualSellValue - position.buy_amount_usd;
             
