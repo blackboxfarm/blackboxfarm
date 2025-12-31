@@ -398,7 +398,7 @@ serve(async (req) => {
       console.log("Looking up wallet:", walletId);
       const { data: wallet, error: walletError } = await supabase
         .from("super_admin_wallets")
-        .select("id, pubkey, secret_key_encrypted, sol_balance")
+        .select("id, pubkey, secret_key_encrypted")
         .eq("id", walletId)
         .single();
 
@@ -422,10 +422,9 @@ serve(async (req) => {
       const gasFeeBuffer = 0.01; // 0.01 SOL buffer for gas fees
       const requiredSol = buyAmountSol + gasFeeBuffer;
       
-      // Get fresh balance from RPC if we don't have a recent one
-      let walletBalance = wallet.sol_balance || 0;
+      // Always fetch fresh balance from RPC
+      let walletBalance = 0;
       
-      // Always fetch fresh balance for critical buy operations
       try {
         console.log("Fetching fresh wallet balance for:", wallet.pubkey);
         const rpcUrl = Deno.env.get("HELIUS_API_KEY") 
@@ -447,15 +446,10 @@ serve(async (req) => {
         if (balanceData?.result?.value !== undefined) {
           walletBalance = balanceData.result.value / 1e9; // Convert lamports to SOL
           console.log("Fresh wallet balance:", walletBalance, "SOL");
-          
-          // Update cached balance in DB
-          await supabase
-            .from("super_admin_wallets")
-            .update({ sol_balance: walletBalance, updated_at: new Date().toISOString() })
-            .eq("id", walletId);
         }
       } catch (balanceErr) {
-        console.error("Failed to fetch fresh balance, using cached:", balanceErr);
+        console.error("Failed to fetch fresh balance:", balanceErr);
+        return bad("Failed to fetch wallet balance");
       }
       
       // Check if we have enough funds
