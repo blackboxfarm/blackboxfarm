@@ -1385,7 +1385,8 @@ export function FlipItDashboard() {
     const currentPrice = currentPrices[position.token_mint] || position.buy_price_usd;
     const targetPrice = position.buy_price_usd * position.target_multiplier;
     const progress = ((currentPrice - position.buy_price_usd) / (targetPrice - position.buy_price_usd)) * 100;
-    return Math.min(Math.max(progress, -50), 100);
+    // Clamp: 0% minimum (no negative progress), 100% max
+    return Math.min(Math.max(progress, 0), 100);
   };
 
   const activePositions = positions.filter(p => ['pending_buy', 'holding', 'pending_sell'].includes(p.status));
@@ -2441,10 +2442,12 @@ export function FlipItDashboard() {
                       </TableCell>
                       <TableCell className="px-2 py-1 w-24">
                         <Progress 
-                          value={Math.max(0, progress)} 
-                          className={`h-1.5 ${progress >= 100 ? 'bg-green-500' : progress < 0 ? 'bg-red-500' : ''}`}
+                          value={progress} 
+                          className={`h-1.5 ${progress >= 100 ? 'bg-green-500' : progress === 0 && pnlPercent !== null && pnlPercent < 0 ? 'bg-red-500' : ''}`}
                         />
-                        <span className="text-[10px] text-muted-foreground">{progress.toFixed(0)}%</span>
+                        <span className={`text-[10px] ${progress === 0 && pnlPercent !== null && pnlPercent < 0 ? 'text-red-500' : 'text-muted-foreground'}`}>
+                          {progress.toFixed(0)}%
+                        </span>
                       </TableCell>
                       {/* Sell Now Action - between Progress and Stop-Loss */}
                       <TableCell className="px-2 py-1">
