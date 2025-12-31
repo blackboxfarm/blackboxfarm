@@ -285,3 +285,6 @@ verify_jwt = false
 
 [functions.rugcheck-backfill]
 verify_jwt = false
+
+[functions.flipit-cleanup-phantom-positions]
+verify_jwt = false
