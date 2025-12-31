@@ -397,13 +397,65 @@ serve(async (req) => {
       // Get wallet details
       const { data: wallet, error: walletError } = await supabase
         .from("super_admin_wallets")
-        .select("id, pubkey, secret_key_encrypted")
+        .select("id, pubkey, secret_key_encrypted, sol_balance")
         .eq("id", walletId)
         .single();
 
       if (walletError || !wallet) {
         return bad("Wallet not found");
       }
+
+      // ============================================
+      // CRITICAL: CHECK BALANCE BEFORE ANYTHING ELSE
+      // ============================================
+      const solPrice = await fetchSolPrice();
+      const buyAmountSol = (buyAmountUsd || 4) / solPrice;
+      const gasFeeBuffer = 0.01; // 0.01 SOL buffer for gas fees
+      const requiredSol = buyAmountSol + gasFeeBuffer;
+      
+      // Get fresh balance from RPC if we don't have a recent one
+      let walletBalance = wallet.sol_balance || 0;
+      
+      // Always fetch fresh balance for critical buy operations
+      try {
+        console.log("Fetching fresh wallet balance for:", wallet.pubkey);
+        const rpcUrl = Deno.env.get("HELIUS_API_KEY") 
+          ? `https://mainnet.helius-rpc.com/?api-key=${Deno.env.get("HELIUS_API_KEY")}`
+          : "https://api.mainnet-beta.solana.com";
+        
+        const balanceRes = await fetch(rpcUrl, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            jsonrpc: "2.0",
+            id: 1,
+            method: "getBalance",
+            params: [wallet.pubkey]
+          })
+        });
+        
+        const balanceData = await balanceRes.json();
+        if (balanceData?.result?.value !== undefined) {
+          walletBalance = balanceData.result.value / 1e9; // Convert lamports to SOL
+          console.log("Fresh wallet balance:", walletBalance, "SOL");
+          
+          // Update cached balance in DB
+          await supabase
+            .from("super_admin_wallets")
+            .update({ sol_balance: walletBalance, updated_at: new Date().toISOString() })
+            .eq("id", walletId);
+        }
+      } catch (balanceErr) {
+        console.error("Failed to fetch fresh balance, using cached:", balanceErr);
+      }
+      
+      // Check if we have enough funds
+      if (walletBalance < requiredSol) {
+        console.error(`INSUFFICIENT FUNDS: Wallet has ${walletBalance.toFixed(4)} SOL, need ${requiredSol.toFixed(4)} SOL (${buyAmountSol.toFixed(4)} buy + ${gasFeeBuffer} gas)`);
+        return bad(`Insufficient funds: wallet has ${walletBalance.toFixed(4)} SOL, need ${requiredSol.toFixed(4)} SOL`);
+      }
+      
+      console.log(`Balance check passed: ${walletBalance.toFixed(4)} SOL >= ${requiredSol.toFixed(4)} SOL required`);
 
       // Fetch current token price
       const currentPrice = await fetchTokenPrice(tokenMint);
@@ -427,7 +479,7 @@ serve(async (req) => {
         userId = user?.id || null;
       }
 
-      // Create position record first (with social links and source tracking)
+      // NOW create position record (only after balance check passes)
       const { data: position, error: posError } = await supabase
         .from("flip_positions")
         .insert({
