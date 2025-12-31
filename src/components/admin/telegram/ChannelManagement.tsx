@@ -985,7 +985,7 @@ with TelegramClient(StringSession(), api_id, api_hash) as client:
                           </SelectTrigger>
                           <SelectContent className="bg-popover border border-border">
                             {flipitWallets.length === 0 ? (
-                              <SelectItem value="" disabled>No FlipIt wallets available</SelectItem>
+                              <div className="py-2 px-3 text-sm text-muted-foreground">No FlipIt wallets available</div>
                             ) : (
                               flipitWallets.map((wallet) => (
                                 <SelectItem key={wallet.id} value={wallet.id}>
