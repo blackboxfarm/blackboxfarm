@@ -39,6 +39,7 @@ const AdvertiserManagement = lazy(() => import("@/components/admin/AdvertiserMan
 const FlipItDashboard = lazy(() => import("@/components/admin/FlipItDashboard").then(m => ({ default: m.FlipItDashboard })));
 const TelegramChannelMonitor = lazy(() => import("@/components/admin/TelegramChannelMonitor"));
 const TwitterAccountManager = lazy(() => import("@/components/admin/TwitterAccountManager"));
+const TokenCandidatesDashboard = lazy(() => import("@/components/admin/TokenCandidatesDashboard").then(m => ({ default: m.TokenCandidatesDashboard })));
 
 export default function SuperAdmin() {
   const [activeTab, setActiveTab] = useState("fuckoff");
@@ -130,6 +131,7 @@ export default function SuperAdmin() {
             <TabsTrigger value="flipit" className="flex-shrink-0 data-[state=active]:bg-gradient-to-r data-[state=active]:from-orange-500/30 data-[state=active]:to-red-500/20">🔥 FlipIt</TabsTrigger>
             <TabsTrigger value="telegram" className="flex-shrink-0 data-[state=active]:bg-gradient-to-r data-[state=active]:from-sky-500/30 data-[state=active]:to-blue-500/20">📡 Telegram Monitor</TabsTrigger>
             <TabsTrigger value="twitter-accounts" className="flex-shrink-0 data-[state=active]:bg-gradient-to-r data-[state=active]:from-sky-500/30 data-[state=active]:to-cyan-500/20">🐦 Twitter Accounts</TabsTrigger>
+            <TabsTrigger value="pumpfun-monitor" className="flex-shrink-0 data-[state=active]:bg-gradient-to-r data-[state=active]:from-green-500/30 data-[state=active]:to-emerald-500/20">🚀 Pump.fun Monitor</TabsTrigger>
           </TabsList>
           
           <TabsContent value="fuckoff">
@@ -322,6 +324,12 @@ export default function SuperAdmin() {
           <TabsContent value="twitter-accounts">
             <ActiveTabOnly activeTab={activeTab} tabValue="twitter-accounts">
               <TwitterAccountManager />
+            </ActiveTabOnly>
+          </TabsContent>
+
+          <TabsContent value="pumpfun-monitor">
+            <ActiveTabOnly activeTab={activeTab} tabValue="pumpfun-monitor">
+              <TokenCandidatesDashboard />
             </ActiveTabOnly>
           </TabsContent>
         </Tabs>

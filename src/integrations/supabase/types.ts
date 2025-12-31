@@ -4166,6 +4166,140 @@ export type Database = {
         }
         Relationships: []
       }
+      pumpfun_buy_candidates: {
+        Row: {
+          auto_buy_enabled: boolean | null
+          bonding_curve_pct: number | null
+          bundle_score: number | null
+          created_at: string
+          creator_wallet: string | null
+          detected_at: string
+          holder_count: number | null
+          id: string
+          is_bundled: boolean | null
+          market_cap_usd: number | null
+          metadata: Json | null
+          position_id: string | null
+          rejection_reason: string | null
+          scalp_approved: boolean | null
+          scalp_validation_result: Json | null
+          status: string
+          token_mint: string
+          token_name: string | null
+          token_symbol: string | null
+          transaction_count: number | null
+          updated_at: string
+          volume_sol_5m: number | null
+          volume_usd_5m: number | null
+        }
+        Insert: {
+          auto_buy_enabled?: boolean | null
+          bonding_curve_pct?: number | null
+          bundle_score?: number | null
+          created_at?: string
+          creator_wallet?: string | null
+          detected_at?: string
+          holder_count?: number | null
+          id?: string
+          is_bundled?: boolean | null
+          market_cap_usd?: number | null
+          metadata?: Json | null
+          position_id?: string | null
+          rejection_reason?: string | null
+          scalp_approved?: boolean | null
+          scalp_validation_result?: Json | null
+          status?: string
+          token_mint: string
+          token_name?: string | null
+          token_symbol?: string | null
+          transaction_count?: number | null
+          updated_at?: string
+          volume_sol_5m?: number | null
+          volume_usd_5m?: number | null
+        }
+        Update: {
+          auto_buy_enabled?: boolean | null
+          bonding_curve_pct?: number | null
+          bundle_score?: number | null
+          created_at?: string
+          creator_wallet?: string | null
+          detected_at?: string
+          holder_count?: number | null
+          id?: string
+          is_bundled?: boolean | null
+          market_cap_usd?: number | null
+          metadata?: Json | null
+          position_id?: string | null
+          rejection_reason?: string | null
+          scalp_approved?: boolean | null
+          scalp_validation_result?: Json | null
+          status?: string
+          token_mint?: string
+          token_name?: string | null
+          token_symbol?: string | null
+          transaction_count?: number | null
+          updated_at?: string
+          volume_sol_5m?: number | null
+          volume_usd_5m?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "pumpfun_buy_candidates_position_id_fkey"
+            columns: ["position_id"]
+            isOneToOne: false
+            referencedRelation: "flip_positions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      pumpfun_monitor_config: {
+        Row: {
+          auto_scalp_enabled: boolean
+          candidates_found_count: number | null
+          created_at: string
+          id: string
+          is_enabled: boolean
+          last_poll_at: string | null
+          max_bundle_score: number
+          max_token_age_minutes: number
+          min_transactions: number
+          min_volume_sol_5m: number
+          scalp_test_mode: boolean
+          tokens_processed_count: number | null
+          updated_at: string
+        }
+        Insert: {
+          auto_scalp_enabled?: boolean
+          candidates_found_count?: number | null
+          created_at?: string
+          id?: string
+          is_enabled?: boolean
+          last_poll_at?: string | null
+          max_bundle_score?: number
+          max_token_age_minutes?: number
+          min_transactions?: number
+          min_volume_sol_5m?: number
+          scalp_test_mode?: boolean
+          tokens_processed_count?: number | null
+          updated_at?: string
+        }
+        Update: {
+          auto_scalp_enabled?: boolean
+          candidates_found_count?: number | null
+          created_at?: string
+          id?: string
+          is_enabled?: boolean
+          last_poll_at?: string | null
+          max_bundle_score?: number
+          max_token_age_minutes?: number
+          min_transactions?: number
+          min_volume_sol_5m?: number
+          scalp_test_mode?: boolean
+          tokens_processed_count?: number | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
       rate_limits: {
         Row: {
           action_type: string
