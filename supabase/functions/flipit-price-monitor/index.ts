@@ -39,6 +39,34 @@ async function fetchSolPrice(): Promise<number> {
   }
 }
 
+interface TokenPriceData {
+  price: number;
+  bondingCurvePercent?: number; // 0-100, only for pump.fun tokens still on curve
+}
+
+async function fetchBondingCurveData(tokenMints: string[]): Promise<Record<string, number>> {
+  const curveData: Record<string, number> = {};
+  
+  // Fetch bonding curve progress from pump.fun API
+  for (const mint of tokenMints) {
+    try {
+      const res = await fetch(`https://frontend-api.pump.fun/coins/${mint}`);
+      if (res.ok) {
+        const data = await res.json();
+        // pump.fun returns bonding_curve_progress as a decimal (0-1)
+        if (data?.bonding_curve && data?.bonding_curve_progress !== undefined) {
+          const progress = Number(data.bonding_curve_progress) * 100;
+          curveData[mint] = Math.min(Math.max(progress, 0), 100);
+        }
+      }
+    } catch (e) {
+      // Token might not be a pump.fun token, skip silently
+    }
+  }
+  
+  return curveData;
+}
+
 async function fetchTokenPrices(tokenMints: string[]): Promise<Record<string, number>> {
   const prices: Record<string, number> = {};
   
@@ -115,7 +143,7 @@ serve(async (req) => {
     }
 
     if (!positions || positions.length === 0) {
-      return ok({ message: "No active positions to monitor", prices: {}, executed: [] });
+      return ok({ message: "No active positions to monitor", prices: {}, bondingCurveData: {}, executed: [] });
     }
 
     console.log(`Monitoring ${positions.length} active positions`);
@@ -123,9 +151,13 @@ serve(async (req) => {
     // Get unique token mints
     const tokenMints = [...new Set(positions.map(p => p.token_mint))];
 
-    // Fetch all prices
-    const prices = await fetchTokenPrices(tokenMints);
+    // Fetch all prices and bonding curve data in parallel
+    const [prices, bondingCurveData] = await Promise.all([
+      fetchTokenPrices(tokenMints),
+      fetchBondingCurveData(tokenMints)
+    ]);
     console.log("Fetched prices:", prices);
+    console.log("Fetched bonding curve data:", bondingCurveData);
 
     const executed: any[] = [];
 
@@ -323,6 +355,7 @@ serve(async (req) => {
     return ok({
       message: `Monitored ${positions.length} positions`,
       prices,
+      bondingCurveData,
       executed,
       checkedAt: new Date().toISOString()
     });
