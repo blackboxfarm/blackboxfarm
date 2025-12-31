@@ -231,6 +231,7 @@ serve(async (req) => {
         const takeProfitPct = position.scalp_take_profit_pct || 50;
         const moonBagPct = position.moon_bag_percent || 10;
         const stopLossPct = position.scalp_stop_loss_pct || 35;
+        const isTestPosition = position.is_test_position === true;
 
         // Fetch channel-specific sell slippage and priority fee for scalp positions
         let scalpSellSlippage = effectiveSlippage;
@@ -250,7 +251,174 @@ serve(async (req) => {
           }
         }
 
-        console.log(`Scalp position ${position.id}: stage=${scalp_stage}, TP=${takeProfitPct}%, SL=${stopLossPct}%, change=${priceChangePercent.toFixed(1)}%`);
+        console.log(`Scalp position ${position.id}: stage=${scalp_stage}, TP=${takeProfitPct}%, SL=${stopLossPct}%, change=${priceChangePercent.toFixed(1)}%${isTestPosition ? ' [TEST]' : ''}`);
+
+        // ============================================
+        // TEST POSITION EXIT LOGIC (SIMULATED)
+        // ============================================
+        if (isTestPosition) {
+          // Stop loss simulation
+          if (priceChangePercent <= -stopLossPct && scalp_stage === 'initial') {
+            console.log(`[TEST MODE] STOP LOSS HIT for ${position.token_mint}! Simulating 100% sell`);
+            
+            const soldQuantity = position.quantity_tokens || 0;
+            const simulatedValue = soldQuantity * currentPrice;
+            const simulatedProfit = simulatedValue - position.buy_amount_usd;
+            
+            await supabase
+              .from('flip_positions')
+              .update({
+                sell_price_usd: currentPrice,
+                sell_executed_at: new Date().toISOString(),
+                sell_signature: 'SIMULATED_SL_' + Date.now(),
+                profit_usd: simulatedProfit,
+                status: 'sold',
+                scalp_stage: 'stop_loss',
+                error_message: null,
+              })
+              .eq('id', position.id);
+            
+            executed.push({
+              positionId: position.id,
+              action: 'test_stop_loss',
+              tokenMint: position.token_mint,
+              priceChangePercent,
+              simulatedProfit,
+              signature: 'SIMULATED',
+            });
+            continue;
+          }
+
+          // Take profit simulation
+          if (priceChangePercent >= takeProfitPct && scalp_stage === 'initial') {
+            console.log(`[TEST MODE] TP1 HIT for ${position.token_mint}! Simulating ${100 - moonBagPct}% sell`);
+            
+            const soldPercent = 100 - moonBagPct;
+            const soldQuantity = (position.quantity_tokens || 0) * (soldPercent / 100);
+            const remainingQuantity = (position.quantity_tokens || 0) * (moonBagPct / 100);
+            const simulatedValue = soldQuantity * currentPrice;
+            const costBasis = position.buy_amount_usd * (soldPercent / 100);
+            const partialProfit = simulatedValue - costBasis;
+            
+            await supabase
+              .from('flip_positions')
+              .update({
+                scalp_stage: 'tp1_hit',
+                quantity_tokens: remainingQuantity,
+                moon_bag_quantity_tokens: remainingQuantity,
+                profit_usd: partialProfit,
+                partial_sells: [{
+                  percent: soldPercent,
+                  price: currentPrice,
+                  signature: 'SIMULATED_TP1',
+                  timestamp: new Date().toISOString(),
+                  reason: 'scalp_tp1',
+                  profit: partialProfit,
+                }],
+              })
+              .eq('id', position.id);
+            
+            executed.push({
+              positionId: position.id,
+              action: 'test_scalp_tp1',
+              tokenMint: position.token_mint,
+              priceChangePercent,
+              soldPercent,
+              simulatedProfit: partialProfit,
+              signature: 'SIMULATED',
+            });
+            continue;
+          }
+
+          // Moon bag ladder at +100%
+          if (priceChangePercent >= 100 && scalp_stage === 'tp1_hit') {
+            console.log(`[TEST MODE] LADDER 100% for ${position.token_mint}! Simulating 50% moon bag sell`);
+            
+            const currentMoonBag = position.moon_bag_quantity_tokens || position.quantity_tokens || 0;
+            const soldQuantity = currentMoonBag * 0.5;
+            const remainingQuantity = currentMoonBag * 0.5;
+            const simulatedValue = soldQuantity * currentPrice;
+            
+            const existingPartialSells = Array.isArray(position.partial_sells) ? position.partial_sells : [];
+            
+            await supabase
+              .from('flip_positions')
+              .update({
+                scalp_stage: 'ladder_100',
+                quantity_tokens: remainingQuantity,
+                moon_bag_quantity_tokens: remainingQuantity,
+                partial_sells: [...existingPartialSells, {
+                  percent: 50,
+                  price: currentPrice,
+                  signature: 'SIMULATED_LADDER100',
+                  timestamp: new Date().toISOString(),
+                  reason: 'scalp_ladder_100',
+                }],
+              })
+              .eq('id', position.id);
+            
+            executed.push({
+              positionId: position.id,
+              action: 'test_scalp_ladder_100',
+              tokenMint: position.token_mint,
+              priceChangePercent,
+              signature: 'SIMULATED',
+            });
+            continue;
+          }
+
+          // Moon bag ladder at +300% - sell all remaining
+          if (priceChangePercent >= 300 && (scalp_stage === 'ladder_100' || scalp_stage === 'tp1_hit')) {
+            console.log(`[TEST MODE] LADDER 300% for ${position.token_mint}! Simulating final sell`);
+            
+            const remainingQuantity = position.moon_bag_quantity_tokens || position.quantity_tokens || 0;
+            const finalValue = remainingQuantity * currentPrice;
+            const existingPartialSells = Array.isArray(position.partial_sells) ? position.partial_sells : [];
+            const existingProfit = position.profit_usd || 0;
+            
+            // Calculate total profit including this final sale
+            const finalSaleProfit = finalValue - (position.buy_amount_usd * (moonBagPct / 100));
+            const totalProfit = existingProfit + finalSaleProfit;
+            
+            await supabase
+              .from('flip_positions')
+              .update({
+                scalp_stage: 'completed',
+                status: 'sold',
+                quantity_tokens: 0,
+                moon_bag_quantity_tokens: 0,
+                sell_price_usd: currentPrice,
+                sell_executed_at: new Date().toISOString(),
+                sell_signature: 'SIMULATED_LADDER300_' + Date.now(),
+                profit_usd: totalProfit,
+                partial_sells: [...existingPartialSells, {
+                  percent: 100,
+                  price: currentPrice,
+                  signature: 'SIMULATED_LADDER300',
+                  timestamp: new Date().toISOString(),
+                  reason: 'scalp_ladder_300',
+                }],
+              })
+              .eq('id', position.id);
+            
+            executed.push({
+              positionId: position.id,
+              action: 'test_scalp_ladder_300',
+              tokenMint: position.token_mint,
+              priceChangePercent,
+              totalProfit,
+              signature: 'SIMULATED',
+            });
+            continue;
+          }
+
+          // No exit trigger hit for test position - skip to next
+          continue;
+        }
+
+        // ============================================
+        // REAL POSITION EXIT LOGIC (below is original)
+        // ============================================
 
         // Emergency exit: Stop loss hit
         if (priceChangePercent <= -stopLossPct && scalp_stage === 'initial') {

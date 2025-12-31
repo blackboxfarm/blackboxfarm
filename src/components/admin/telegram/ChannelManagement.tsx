@@ -31,7 +31,8 @@ import {
   MessageSquare,
   AlertTriangle,
   Target,
-  Percent
+  Percent,
+  FlaskConical
 } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
 import { ChannelScanLogs } from './ChannelScanLogs';
@@ -76,6 +77,7 @@ interface ChannelConfig {
   flipit_wallet_id: string | null;
   // Scalp Mode settings
   scalp_mode_enabled?: boolean;
+  scalp_test_mode?: boolean;
   scalp_buy_amount_usd?: number;
   scalp_buy_amount_sol?: number | null;
   scalp_min_bonding_pct?: number;
@@ -365,7 +367,7 @@ export function ChannelManagement() {
     }
   };
 
-  const updateScalpSettings = async (channelId: string, field: string, value: number | string | null) => {
+  const updateScalpSettings = async (channelId: string, field: string, value: number | string | boolean | null) => {
     try {
       const { error } = await supabase
         .from('telegram_channel_config')
@@ -1123,6 +1125,29 @@ with TelegramClient(StringSession(), api_id, api_hash) as client:
                   
                   {channel.scalp_mode_enabled ? (
                     <div className="space-y-3">
+                      {/* Test Mode Toggle */}
+                      <div className={`flex items-center justify-between p-2 rounded border ${
+                        channel.scalp_test_mode !== false 
+                          ? 'bg-purple-500/10 border-purple-500/30' 
+                          : 'bg-red-500/10 border-red-500/30'
+                      }`}>
+                        <div className="flex items-center gap-2">
+                          <FlaskConical className={`h-4 w-4 ${channel.scalp_test_mode !== false ? 'text-purple-500' : 'text-red-500'}`} />
+                          <div>
+                            <span className="text-sm font-medium">Test Mode</span>
+                            <p className="text-xs text-muted-foreground">
+                              {channel.scalp_test_mode !== false 
+                                ? 'Simulate trades without real transactions' 
+                                : '⚠️ LIVE MODE - Real SOL will be spent!'}
+                            </p>
+                          </div>
+                        </div>
+                        <Switch 
+                          checked={channel.scalp_test_mode !== false}
+                          onCheckedChange={(checked) => updateScalpSettings(channel.id, 'scalp_test_mode', checked)}
+                        />
+                      </div>
+
                       <p className="text-xs text-muted-foreground">
                         Low-risk scalp trades: sell {100 - (channel.scalp_moon_bag_pct || 10)}% at +{channel.scalp_take_profit_pct || 50}%, keep {channel.scalp_moon_bag_pct || 10}% moon bag.
                       </p>

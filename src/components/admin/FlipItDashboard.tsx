@@ -10,7 +10,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Switch } from '@/components/ui/switch';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
-import { Flame, RefreshCw, TrendingUp, DollarSign, Wallet, Clock, CheckCircle2, XCircle, Loader2, Plus, Copy, ArrowUpRight, Key, Settings, Zap, Activity, Radio, Pencil, ChevronDown, Coins, Eye, EyeOff, RotateCcw, AlertTriangle, Twitter, Trash2, Globe, Send, Rocket, Megaphone, Users, Shield, ClipboardPaste } from 'lucide-react';
+import { Flame, RefreshCw, TrendingUp, DollarSign, Wallet, Clock, CheckCircle2, XCircle, Loader2, Plus, Copy, ArrowUpRight, Key, Settings, Zap, Activity, Radio, Pencil, ChevronDown, Coins, Eye, EyeOff, RotateCcw, AlertTriangle, Twitter, Trash2, Globe, Send, Rocket, Megaphone, Users, Shield, ClipboardPaste, FlaskConical } from 'lucide-react';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { useSolPrice } from '@/hooks/useSolPrice';
 import { FlipItFeeCalculator } from './flipit/FlipItFeeCalculator';
@@ -61,6 +61,8 @@ interface FlipPosition {
   error_message: string | null;
   created_at: string;
   wallet_id: string | null;
+  // Test position flag
+  is_test_position: boolean | null;
   // Rebuy fields
   rebuy_enabled: boolean | null;
   rebuy_price_usd: number | null;
@@ -2833,7 +2835,17 @@ export function FlipItDashboard() {
                         )}
                       </TableCell>
                       
-                      <TableCell>{getStatusBadge(position.status)}</TableCell>
+                      <TableCell>
+                        <div className="flex flex-col gap-1">
+                          {position.is_test_position && (
+                            <Badge variant="outline" className="bg-purple-500/10 text-purple-500 border-purple-500/30 text-[9px] px-1 py-0 gap-0.5">
+                              <FlaskConical className="h-2.5 w-2.5" />
+                              TEST
+                            </Badge>
+                          )}
+                          {getStatusBadge(position.status)}
+                        </div>
+                      </TableCell>
                     </TableRow>
                   );
                 })}
@@ -2973,6 +2985,12 @@ export function FlipItDashboard() {
                       </TableCell>
                       <TableCell>
                         <div className="flex flex-col gap-1">
+                          {position.is_test_position && (
+                            <Badge variant="outline" className="bg-purple-500/10 text-purple-500 border-purple-500/30 text-[9px] px-1 py-0 gap-0.5">
+                              <FlaskConical className="h-2.5 w-2.5" />
+                              TEST
+                            </Badge>
+                          )}
                           {getStatusBadge(position.status)}
                           {position.rebuy_status && getRebuyStatusBadge(position.rebuy_status)}
                           {isExecuted && position.rebuy_position_id && (

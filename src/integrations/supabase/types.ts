@@ -2490,6 +2490,7 @@ export type Database = {
           error_message: string | null
           id: string
           is_scalp_position: boolean | null
+          is_test_position: boolean | null
           moon_bag_enabled: boolean | null
           moon_bag_percent: number | null
           moon_bag_quantity_tokens: number | null
@@ -2541,6 +2542,7 @@ export type Database = {
           error_message?: string | null
           id?: string
           is_scalp_position?: boolean | null
+          is_test_position?: boolean | null
           moon_bag_enabled?: boolean | null
           moon_bag_percent?: number | null
           moon_bag_quantity_tokens?: number | null
@@ -2592,6 +2594,7 @@ export type Database = {
           error_message?: string | null
           id?: string
           is_scalp_position?: boolean | null
+          is_test_position?: boolean | null
           moon_bag_enabled?: boolean | null
           moon_bag_percent?: number | null
           moon_bag_quantity_tokens?: number | null
@@ -4917,6 +4920,7 @@ export type Database = {
           scalp_sell_slippage_bps: number | null
           scalp_stop_loss_pct: number | null
           scalp_take_profit_pct: number | null
+          scalp_test_mode: boolean | null
           scan_window_minutes: number | null
           standard_buy_amount_usd: number | null
           standard_sell_multiplier: number | null
@@ -4968,6 +4972,7 @@ export type Database = {
           scalp_sell_slippage_bps?: number | null
           scalp_stop_loss_pct?: number | null
           scalp_take_profit_pct?: number | null
+          scalp_test_mode?: boolean | null
           scan_window_minutes?: number | null
           standard_buy_amount_usd?: number | null
           standard_sell_multiplier?: number | null
@@ -5019,6 +5024,7 @@ export type Database = {
           scalp_sell_slippage_bps?: number | null
           scalp_stop_loss_pct?: number | null
           scalp_take_profit_pct?: number | null
+          scalp_test_mode?: boolean | null
           scan_window_minutes?: number | null
           standard_buy_amount_usd?: number | null
           standard_sell_multiplier?: number | null

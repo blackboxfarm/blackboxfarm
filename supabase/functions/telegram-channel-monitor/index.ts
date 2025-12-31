@@ -1885,57 +1885,129 @@ serve(async (req) => {
                         ? ` (${currentTokenData.bondingCurvePercent?.toFixed(0) || '?'}% curve)`
                         : ' (graduated)';
 
-                      console.log(`[telegram-channel-monitor] FlipIt: Triggering auto-buy for ${currentTokenData?.symbol || tokenMint}${launchpadInfo}${curveInfo} - $${flipitBuyAmount} @ ${flipitSellMultiplier}x${config.scalp_mode_enabled ? ' [SCALP]' : ''}`);
+                      // Check if Scalp Mode is in TEST mode (default to true for safety)
+                      const isTestMode = config.scalp_mode_enabled && (config.scalp_test_mode !== false);
 
-                      // Build buy request - include scalp settings if scalp mode approved
-                      const buyRequest: any = {
-                        walletId,
-                        action: 'buy',
-                        tokenMint,
-                        buyAmountUsd: flipitBuyAmount,
-                        targetMultiplier: flipitSellMultiplier,
-                        source: 'telegram',
-                        sourceChannelId: config.id
-                      };
+                      if (isTestMode && config.scalp_mode_enabled && scalpModeApproved) {
+                        // ============== TEST MODE: SIMULATE BUY ==============
+                        console.log(`[telegram-channel-monitor] SCALP TEST MODE: Simulating buy for ${currentTokenData?.symbol || tokenMint}${launchpadInfo}${curveInfo} - $${flipitBuyAmount}`);
 
-                      // Add scalp mode flags if enabled and approved
-                      if (config.scalp_mode_enabled && scalpModeApproved) {
-                        buyRequest.isScalpPosition = true;
-                        buyRequest.scalpTakeProfitPct = config.scalp_take_profit_pct || 50;
-                        buyRequest.scalpMoonBagPct = config.scalp_moon_bag_pct || 10;
-                        buyRequest.scalpStopLossPct = config.scalp_stop_loss_pct || 35;
-                        // Pass slippage and priority fee from channel config
-                        buyRequest.slippageBps = config.scalp_buy_slippage_bps || 1000;
-                        buyRequest.priorityFeeMode = config.scalp_buy_priority_fee || 'medium';
-                      }
+                        const currentPrice = currentTokenData?.priceUsd || 0;
+                        const estimatedTokens = currentPrice > 0 ? flipitBuyAmount / currentPrice : 0;
+                        const takeProfitPct = config.scalp_take_profit_pct || 50;
+                        const targetPrice = currentPrice * (1 + takeProfitPct / 100);
 
-                      const { data: buyData, error: buyErr } = await supabase.functions.invoke('flipit-execute', {
-                        body: buyRequest
-                      });
+                        // Insert simulated position directly into flip_positions
+                        const { data: testPosition, error: insertError } = await supabase
+                          .from('flip_positions')
+                          .insert({
+                            wallet_id: walletId,
+                            token_mint: tokenMint,
+                            token_symbol: currentTokenData?.symbol || null,
+                            token_name: currentTokenData?.name || null,
+                            token_image: currentTokenData?.imageUri || null,
+                            buy_amount_usd: flipitBuyAmount,
+                            buy_price_usd: currentPrice,
+                            quantity_tokens: estimatedTokens,
+                            target_multiplier: 1 + takeProfitPct / 100,
+                            target_price_usd: targetPrice,
+                            status: 'holding',
+                            source: 'telegram_scalp_test',
+                            source_channel_id: config.id,
+                            is_scalp_position: true,
+                            is_test_position: true,
+                            moon_bag_enabled: true,
+                            moon_bag_percent: config.scalp_moon_bag_pct || 10,
+                            scalp_stage: 'initial',
+                            scalp_take_profit_pct: takeProfitPct,
+                            scalp_moon_bag_pct: config.scalp_moon_bag_pct || 10,
+                            scalp_stop_loss_pct: config.scalp_stop_loss_pct || 35,
+                            original_quantity_tokens: estimatedTokens,
+                            buy_executed_at: new Date().toISOString(),
+                            buy_signature: 'SIMULATED_' + Date.now(),
+                          })
+                          .select()
+                          .single();
 
-                      if (buyErr || buyData?.error) {
-                        const msg = buyErr?.message || buyData?.error || 'Unknown FlipIt buy failure';
-                        console.error('[telegram-channel-monitor] FlipIt buy FAILED:', msg);
-                        if (callId) {
-                          await supabase
-                            .from('telegram_channel_calls')
-                            .update({
-                              status: 'failed',
-                              skip_reason: `FlipIt buy failed: ${msg}`
-                            })
-                            .eq('id', callId);
+                        if (insertError) {
+                          console.error('[telegram-channel-monitor] SCALP TEST MODE: Failed to create test position:', insertError);
+                          if (callId) {
+                            await supabase
+                              .from('telegram_channel_calls')
+                              .update({
+                                status: 'failed',
+                                skip_reason: `Test position creation failed: ${insertError.message}`
+                              })
+                              .eq('id', callId);
+                          }
+                        } else {
+                          totalBuys++;
+                          console.log(`[telegram-channel-monitor] SCALP TEST MODE: Created test position ${testPosition.id} for ${currentTokenData?.symbol || tokenMint} @ $${currentPrice.toFixed(10)}`);
+                          if (callId) {
+                            await supabase
+                              .from('telegram_channel_calls')
+                              .update({
+                                status: 'test_bought',
+                                flipit_position_id: testPosition.id,
+                                skip_reason: null
+                              })
+                              .eq('id', callId);
+                          }
                         }
                       } else {
-                        totalBuys++;
-                        console.log('[telegram-channel-monitor] FlipIt: Buy executed successfully', buyData?.signature ? `sig=${String(buyData.signature).slice(0, 10)}...` : '');
-                        if (callId) {
-                          await supabase
-                            .from('telegram_channel_calls')
-                            .update({
-                              status: 'executed',
-                              skip_reason: null
-                            })
-                            .eq('id', callId);
+                        // ============== LIVE MODE: REAL BUY ==============
+                        console.log(`[telegram-channel-monitor] FlipIt: Triggering auto-buy for ${currentTokenData?.symbol || tokenMint}${launchpadInfo}${curveInfo} - $${flipitBuyAmount} @ ${flipitSellMultiplier}x${config.scalp_mode_enabled ? ' [SCALP]' : ''}`);
+
+                        // Build buy request - include scalp settings if scalp mode approved
+                        const buyRequest: any = {
+                          walletId,
+                          action: 'buy',
+                          tokenMint,
+                          buyAmountUsd: flipitBuyAmount,
+                          targetMultiplier: flipitSellMultiplier,
+                          source: 'telegram',
+                          sourceChannelId: config.id
+                        };
+
+                        // Add scalp mode flags if enabled and approved
+                        if (config.scalp_mode_enabled && scalpModeApproved) {
+                          buyRequest.isScalpPosition = true;
+                          buyRequest.scalpTakeProfitPct = config.scalp_take_profit_pct || 50;
+                          buyRequest.scalpMoonBagPct = config.scalp_moon_bag_pct || 10;
+                          buyRequest.scalpStopLossPct = config.scalp_stop_loss_pct || 35;
+                          // Pass slippage and priority fee from channel config
+                          buyRequest.slippageBps = config.scalp_buy_slippage_bps || 1000;
+                          buyRequest.priorityFeeMode = config.scalp_buy_priority_fee || 'medium';
+                        }
+
+                        const { data: buyData, error: buyErr } = await supabase.functions.invoke('flipit-execute', {
+                          body: buyRequest
+                        });
+
+                        if (buyErr || buyData?.error) {
+                          const msg = buyErr?.message || buyData?.error || 'Unknown FlipIt buy failure';
+                          console.error('[telegram-channel-monitor] FlipIt buy FAILED:', msg);
+                          if (callId) {
+                            await supabase
+                              .from('telegram_channel_calls')
+                              .update({
+                                status: 'failed',
+                                skip_reason: `FlipIt buy failed: ${msg}`
+                              })
+                              .eq('id', callId);
+                          }
+                        } else {
+                          totalBuys++;
+                          console.log('[telegram-channel-monitor] FlipIt: Buy executed successfully', buyData?.signature ? `sig=${String(buyData.signature).slice(0, 10)}...` : '');
+                          if (callId) {
+                            await supabase
+                              .from('telegram_channel_calls')
+                              .update({
+                                status: 'executed',
+                                skip_reason: null
+                              })
+                              .eq('id', callId);
+                          }
                         }
                       }
                     } else {
