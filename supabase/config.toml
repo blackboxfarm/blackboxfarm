@@ -291,3 +291,6 @@ verify_jwt = false
 
 [functions.token-momentum-analyzer]
 verify_jwt = false
+
+[functions.scalp-mode-validator]
+verify_jwt = false
