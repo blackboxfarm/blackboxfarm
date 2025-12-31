@@ -1722,8 +1722,75 @@ serve(async (req) => {
               }
             }
 
+            // ============================================
+            // SCALP MODE: Pre-buy validation when enabled
+            // ============================================
+            let scalpModeApproved = false;
+            let scalpValidationResult: any = null;
+            
+            if (config.scalp_mode_enabled) {
+              console.log(`[telegram-channel-monitor] Scalp Mode: Validating ${tokenMint}`);
+              
+              try {
+                const { data: scalpResult, error: scalpError } = await supabase.functions.invoke('scalp-mode-validator', {
+                  body: {
+                    tokenMint,
+                    channelId: config.channel_id,
+                    messageText: msg.text || '',
+                    config: {
+                      scalp_min_bonding_pct: config.scalp_min_bonding_pct || 20,
+                      scalp_max_bonding_pct: config.scalp_max_bonding_pct || 65,
+                      scalp_max_age_minutes: config.scalp_max_age_minutes || 45,
+                      scalp_min_callers: config.scalp_min_callers || 1,
+                      scalp_caller_timeout_seconds: config.scalp_caller_timeout_seconds || 180,
+                      scalp_buy_amount_usd: config.scalp_buy_amount_usd || 10,
+                    }
+                  }
+                });
+
+                if (scalpError) {
+                  console.error('[telegram-channel-monitor] Scalp validator error:', scalpError);
+                } else {
+                  scalpValidationResult = scalpResult;
+                  scalpModeApproved = scalpResult?.approved === true;
+                  
+                  console.log(`[telegram-channel-monitor] Scalp Mode: ${scalpResult?.recommendation || 'UNKNOWN'} (approved=${scalpModeApproved}, confidence=${scalpResult?.confidence_score || 0}%)`);
+                  
+                  if (scalpResult?.hard_reject) {
+                    console.log(`[telegram-channel-monitor] Scalp Mode: HARD REJECT - ${scalpResult.hard_reject_reason}`);
+                  }
+
+                  // Update call record with scalp validation result
+                  if (callId) {
+                    await supabase
+                      .from('telegram_channel_calls')
+                      .update({
+                        scalp_validation_result: scalpResult,
+                        scalp_approved: scalpModeApproved,
+                      })
+                      .eq('id', callId);
+                  }
+                }
+              } catch (scalpErr) {
+                console.error('[telegram-channel-monitor] Scalp validator exception:', scalpErr);
+              }
+            }
+
             // FlipIt auto-buy: trigger when enabled and rules match
             if (config.flipit_enabled) {
+              // If Scalp Mode is enabled but not approved, skip FlipIt buy
+              if (config.scalp_mode_enabled && !scalpModeApproved) {
+                console.log(`[telegram-channel-monitor] FlipIt: SKIPPING due to Scalp Mode rejection (${scalpValidationResult?.recommendation || 'no result'})`);
+                if (callId) {
+                  await supabase
+                    .from('telegram_channel_calls')
+                    .update({
+                      status: 'skipped',
+                      skip_reason: `Scalp Mode: ${scalpValidationResult?.recommendation || 'validation failed'} - ${scalpValidationResult?.hard_reject_reason || 'did not pass pre-buy checks'}`
+                    })
+                    .eq('id', callId);
+                }
+              } else {
               // Priority: SOL amount (converted to USD) > USD amount > fallback $10
               let flipitBuyAmount = 10; // fallback
               if (config.flipit_buy_amount_sol && config.flipit_buy_amount_sol > 0) {
@@ -1818,18 +1885,29 @@ serve(async (req) => {
                         ? ` (${currentTokenData.bondingCurvePercent?.toFixed(0) || '?'}% curve)`
                         : ' (graduated)';
 
-                      console.log(`[telegram-channel-monitor] FlipIt: Triggering auto-buy for ${currentTokenData?.symbol || tokenMint}${launchpadInfo}${curveInfo} - $${flipitBuyAmount} @ ${flipitSellMultiplier}x`);
+                      console.log(`[telegram-channel-monitor] FlipIt: Triggering auto-buy for ${currentTokenData?.symbol || tokenMint}${launchpadInfo}${curveInfo} - $${flipitBuyAmount} @ ${flipitSellMultiplier}x${config.scalp_mode_enabled ? ' [SCALP]' : ''}`);
+
+                      // Build buy request - include scalp settings if scalp mode approved
+                      const buyRequest: any = {
+                        walletId,
+                        action: 'buy',
+                        tokenMint,
+                        buyAmountUsd: flipitBuyAmount,
+                        targetMultiplier: flipitSellMultiplier,
+                        source: 'telegram',
+                        sourceChannelId: config.id
+                      };
+
+                      // Add scalp mode flags if enabled and approved
+                      if (config.scalp_mode_enabled && scalpModeApproved) {
+                        buyRequest.isScalpPosition = true;
+                        buyRequest.scalpTakeProfitPct = config.scalp_take_profit_pct || 50;
+                        buyRequest.scalpMoonBagPct = config.scalp_moon_bag_pct || 10;
+                        buyRequest.scalpStopLossPct = config.scalp_stop_loss_pct || 35;
+                      }
 
                       const { data: buyData, error: buyErr } = await supabase.functions.invoke('flipit-execute', {
-                        body: {
-                          walletId,
-                          action: 'buy',
-                          tokenMint,
-                          buyAmountUsd: flipitBuyAmount,
-                          targetMultiplier: flipitSellMultiplier,
-                          source: 'telegram',
-                          sourceChannelId: config.id
-                        }
+                        body: buyRequest
                       });
 
                       if (buyErr || buyData?.error) {
@@ -1874,6 +1952,7 @@ serve(async (req) => {
               } else {
                 console.log(`[telegram-channel-monitor] FlipIt: Daily limit reached (${todayPositions}/${flipitMaxDaily})`);
               }
+              } // Close the scalp mode else block
             } else if (!isFantasyMode && config.flipit_wallet_id) {
               // Legacy: Real trading without flipit_enabled flag
               // CRITICAL: Only buy on FIRST CALL - if this token was mentioned before in ANY channel, skip

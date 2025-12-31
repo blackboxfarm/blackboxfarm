@@ -382,12 +382,12 @@ serve(async (req) => {
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
     const body = await req.json();
-    const { action, tokenMint, walletId, buyAmountUsd, targetMultiplier, positionId, slippageBps, priorityFeeMode, source, sourceChannelId } = body;
+    const { action, tokenMint, walletId, buyAmountUsd, targetMultiplier, positionId, slippageBps, priorityFeeMode, source, sourceChannelId, isScalpPosition, scalpTakeProfitPct, scalpMoonBagPct, scalpStopLossPct } = body;
 
     // Default slippage 5% (500 bps), configurable
     const effectiveSlippage = slippageBps || 500;
     
-    console.log("FlipIt execute:", { action, tokenMint, walletId, buyAmountUsd, targetMultiplier, positionId, slippageBps: effectiveSlippage, priorityFeeMode, source, sourceChannelId });
+    console.log("FlipIt execute:", { action, tokenMint, walletId, buyAmountUsd, targetMultiplier, positionId, slippageBps: effectiveSlippage, priorityFeeMode, source, sourceChannelId, isScalpPosition });
 
     if (action === "buy") {
       if (!tokenMint || !walletId) {
@@ -483,26 +483,39 @@ serve(async (req) => {
       }
 
       // NOW create position record (only after balance check passes)
+      const positionData: any = {
+        user_id: userId,
+        wallet_id: walletId,
+        token_mint: tokenMint,
+        token_symbol: metadata?.symbol || null,
+        token_name: metadata?.name || null,
+        token_image: metadata?.image || null,
+        twitter_url: metadata?.twitter || null,
+        website_url: metadata?.website || null,
+        telegram_url: metadata?.telegram || null,
+        buy_amount_usd: buyAmountUsd || 4,
+        buy_price_usd: currentPrice,
+        target_multiplier: mult,
+        target_price_usd: targetPrice,
+        status: "pending_buy",
+        source: source || "manual",
+        source_channel_id: sourceChannelId || null
+      };
+
+      // Add scalp mode fields if this is a scalp position
+      if (isScalpPosition) {
+        positionData.is_scalp_position = true;
+        positionData.moon_bag_enabled = true;
+        positionData.moon_bag_percent = scalpMoonBagPct || 10;
+        positionData.scalp_take_profit_pct = scalpTakeProfitPct || 50;
+        positionData.scalp_stop_loss_pct = scalpStopLossPct || 35;
+        positionData.scalp_stage = 'initial';
+        console.log("Creating SCALP position with TP:", scalpTakeProfitPct, "%, Moon Bag:", scalpMoonBagPct, "%");
+      }
+
       const { data: position, error: posError } = await supabase
         .from("flip_positions")
-        .insert({
-          user_id: userId,
-          wallet_id: walletId,
-          token_mint: tokenMint,
-          token_symbol: metadata?.symbol || null,
-          token_name: metadata?.name || null,
-          token_image: metadata?.image || null,
-          twitter_url: metadata?.twitter || null,
-          website_url: metadata?.website || null,
-          telegram_url: metadata?.telegram || null,
-          buy_amount_usd: buyAmountUsd || 4,
-          buy_price_usd: currentPrice,
-          target_multiplier: mult,
-          target_price_usd: targetPrice,
-          status: "pending_buy",
-          source: source || "manual",
-          source_channel_id: sourceChannelId || null
-        })
+        .insert(positionData)
         .select()
         .single();
 
@@ -764,7 +777,155 @@ serve(async (req) => {
       }
     }
 
-    return bad("Invalid action. Use 'buy' or 'sell'");
+    // ============================================
+    // PARTIAL SELL ACTION (for Scalp Mode moon bags)
+    // ============================================
+    if (action === "partial_sell") {
+      const { sellPercent, reason } = body;
+      
+      if (!positionId) {
+        return bad("Missing positionId");
+      }
+      if (!sellPercent || sellPercent <= 0 || sellPercent > 100) {
+        return bad("Invalid sellPercent (must be 1-100)");
+      }
+
+      console.log(`Partial sell ${sellPercent}% of position ${positionId}, reason: ${reason}`);
+
+      // Get position
+      const { data: position, error: posErr } = await supabase
+        .from("flip_positions")
+        .select("*, super_admin_wallets!flip_positions_wallet_id_fkey(secret_key_encrypted)")
+        .eq("id", positionId)
+        .single();
+
+      if (posErr || !position) {
+        return bad("Position not found");
+      }
+
+      if (position.status !== "holding") {
+        return bad("Position is not in holding status");
+      }
+
+      // Calculate token amount to sell
+      const currentTokens = position.moon_bag_quantity_tokens || position.original_quantity_tokens || position.quantity_tokens || 0;
+      if (currentTokens <= 0) {
+        return bad("No tokens available to sell");
+      }
+
+      const tokensToSell = Math.floor(currentTokens * (sellPercent / 100));
+      if (tokensToSell <= 0) {
+        return bad("Calculated token amount too small");
+      }
+
+      console.log(`Selling ${tokensToSell} tokens (${sellPercent}% of ${currentTokens})`);
+
+      try {
+        // Execute partial sell via raydium-swap
+        const { data: swapResult, error: swapError } = await supabase.functions.invoke("raydium-swap", {
+          body: {
+            side: "sell",
+            tokenMint: position.token_mint,
+            sellAmount: tokensToSell, // Specific amount, not sellAll
+            slippageBps: effectiveSlippage,
+            priorityFeeMode: priorityFeeMode || "medium",
+            walletId: position.wallet_id,
+          },
+        });
+
+        if (swapError) {
+          throw new Error(swapError.message);
+        }
+
+        if (swapResult?.error_code || swapResult?.error) {
+          throw new Error(swapResult?.error || swapResult?.error_code);
+        }
+
+        const signature = firstSignature(swapResult);
+        if (!signature) {
+          throw new Error("Swap returned no signature");
+        }
+
+        // Get current price
+        const currentPrice = await fetchTokenPrice(position.token_mint) || position.buy_price_usd;
+        const solPrice = await fetchSolPrice();
+        
+        // Calculate this partial sell's value
+        const outLamports = Number(swapResult?.outAmount || swapResult?.data?.outAmount || 0);
+        const soldValueUsd = outLamports > 0 
+          ? (outLamports / 1e9) * solPrice 
+          : (tokensToSell * currentPrice);
+
+        // Update partial_sells array
+        const existingPartialSells = position.partial_sells || [];
+        const newPartialSell = {
+          percent: sellPercent,
+          tokens_sold: tokensToSell,
+          price_usd: currentPrice,
+          value_usd: soldValueUsd,
+          signature,
+          reason: reason || 'manual',
+          timestamp: new Date().toISOString(),
+        };
+
+        // Calculate remaining tokens
+        const remainingTokens = currentTokens - tokensToSell;
+
+        // Determine new scalp stage
+        let newScalpStage = position.scalp_stage || 'initial';
+        if (reason === 'scalp_tp1') {
+          newScalpStage = 'tp1_hit';
+        } else if (reason === 'scalp_ladder_100') {
+          newScalpStage = 'ladder_100';
+        } else if (reason === 'scalp_ladder_300') {
+          newScalpStage = 'ladder_300';
+        } else if (reason === 'emergency_exit' || remainingTokens <= 0) {
+          newScalpStage = 'closed';
+        }
+
+        // Update position
+        const updateData: any = {
+          partial_sells: [...existingPartialSells, newPartialSell],
+          moon_bag_quantity_tokens: remainingTokens,
+          scalp_stage: newScalpStage,
+        };
+
+        // If no tokens remaining, mark as sold
+        if (remainingTokens <= 0) {
+          updateData.status = 'sold';
+          updateData.sell_executed_at = new Date().toISOString();
+          updateData.sell_price_usd = currentPrice;
+          
+          // Calculate total profit from all partial sells
+          const allSells = [...existingPartialSells, newPartialSell];
+          const totalSoldValue = allSells.reduce((sum, s) => sum + (s.value_usd || 0), 0);
+          updateData.profit_usd = totalSoldValue - position.buy_amount_usd;
+        }
+
+        await supabase
+          .from("flip_positions")
+          .update(updateData)
+          .eq("id", positionId);
+
+        console.log(`Partial sell complete: ${tokensToSell} tokens sold, ${remainingTokens} remaining, stage: ${newScalpStage}`);
+
+        return ok({
+          success: true,
+          signature,
+          tokensSold: tokensToSell,
+          tokensRemaining: remainingTokens,
+          soldValueUsd,
+          scalp_stage: newScalpStage,
+          reason,
+        });
+
+      } catch (sellErr: any) {
+        console.error("Partial sell error:", sellErr);
+        return bad("Partial sell failed: " + sellErr.message);
+      }
+    }
+
+    return bad("Invalid action. Use 'buy', 'sell', or 'partial_sell'");
 
   } catch (err: any) {
     console.error("FlipIt execute error:", err);
