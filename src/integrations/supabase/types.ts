@@ -4793,6 +4793,7 @@ export type Database = {
           created_at: string
           email_sent: boolean | null
           email_sent_at: string | null
+          flipit_position_id: string | null
           id: string
           is_first_call: boolean | null
           market_cap_at_call: number | null
@@ -4801,6 +4802,8 @@ export type Database = {
           position_id: string | null
           price_at_call: number | null
           raw_message: string | null
+          scalp_approved: boolean | null
+          scalp_validation_result: Json | null
           sell_multiplier: number | null
           skip_reason: string | null
           status: string | null
@@ -4822,6 +4825,7 @@ export type Database = {
           created_at?: string
           email_sent?: boolean | null
           email_sent_at?: string | null
+          flipit_position_id?: string | null
           id?: string
           is_first_call?: boolean | null
           market_cap_at_call?: number | null
@@ -4830,6 +4834,8 @@ export type Database = {
           position_id?: string | null
           price_at_call?: number | null
           raw_message?: string | null
+          scalp_approved?: boolean | null
+          scalp_validation_result?: Json | null
           sell_multiplier?: number | null
           skip_reason?: string | null
           status?: string | null
@@ -4851,6 +4857,7 @@ export type Database = {
           created_at?: string
           email_sent?: boolean | null
           email_sent_at?: string | null
+          flipit_position_id?: string | null
           id?: string
           is_first_call?: boolean | null
           market_cap_at_call?: number | null
@@ -4859,6 +4866,8 @@ export type Database = {
           position_id?: string | null
           price_at_call?: number | null
           raw_message?: string | null
+          scalp_approved?: boolean | null
+          scalp_validation_result?: Json | null
           sell_multiplier?: number | null
           skip_reason?: string | null
           status?: string | null
@@ -4873,6 +4882,13 @@ export type Database = {
             columns: ["channel_config_id"]
             isOneToOne: false
             referencedRelation: "telegram_channel_config"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "telegram_channel_calls_flipit_position_id_fkey"
+            columns: ["flipit_position_id"]
+            isOneToOne: false
+            referencedRelation: "flip_positions"
             referencedColumns: ["id"]
           },
         ]
