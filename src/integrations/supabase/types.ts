@@ -2489,6 +2489,12 @@ export type Database = {
           emergency_sell_status: string | null
           error_message: string | null
           id: string
+          is_scalp_position: boolean | null
+          moon_bag_enabled: boolean | null
+          moon_bag_percent: number | null
+          moon_bag_quantity_tokens: number | null
+          original_quantity_tokens: number | null
+          partial_sells: Json | null
           profit_usd: number | null
           quantity_tokens: number | null
           rebuy_amount_usd: number | null
@@ -2501,6 +2507,7 @@ export type Database = {
           rebuy_price_usd: number | null
           rebuy_status: string | null
           rebuy_target_multiplier: number | null
+          scalp_stage: string | null
           sell_executed_at: string | null
           sell_price_usd: number | null
           sell_signature: string | null
@@ -2533,6 +2540,12 @@ export type Database = {
           emergency_sell_status?: string | null
           error_message?: string | null
           id?: string
+          is_scalp_position?: boolean | null
+          moon_bag_enabled?: boolean | null
+          moon_bag_percent?: number | null
+          moon_bag_quantity_tokens?: number | null
+          original_quantity_tokens?: number | null
+          partial_sells?: Json | null
           profit_usd?: number | null
           quantity_tokens?: number | null
           rebuy_amount_usd?: number | null
@@ -2545,6 +2558,7 @@ export type Database = {
           rebuy_price_usd?: number | null
           rebuy_status?: string | null
           rebuy_target_multiplier?: number | null
+          scalp_stage?: string | null
           sell_executed_at?: string | null
           sell_price_usd?: number | null
           sell_signature?: string | null
@@ -2577,6 +2591,12 @@ export type Database = {
           emergency_sell_status?: string | null
           error_message?: string | null
           id?: string
+          is_scalp_position?: boolean | null
+          moon_bag_enabled?: boolean | null
+          moon_bag_percent?: number | null
+          moon_bag_quantity_tokens?: number | null
+          original_quantity_tokens?: number | null
+          partial_sells?: Json | null
           profit_usd?: number | null
           quantity_tokens?: number | null
           rebuy_amount_usd?: number | null
@@ -2589,6 +2609,7 @@ export type Database = {
           rebuy_price_usd?: number | null
           rebuy_status?: string | null
           rebuy_target_multiplier?: number | null
+          scalp_stage?: string | null
           sell_executed_at?: string | null
           sell_price_usd?: number | null
           sell_signature?: string | null
@@ -4297,6 +4318,45 @@ export type Database = {
           },
         ]
       }
+      scalp_signal_tracker: {
+        Row: {
+          bonding_curve_pct: number | null
+          caller_username: string | null
+          channel_id: string
+          channel_name: string | null
+          created_at: string | null
+          detected_at: string | null
+          id: string
+          message_text: string | null
+          price_usd: number | null
+          token_mint: string
+        }
+        Insert: {
+          bonding_curve_pct?: number | null
+          caller_username?: string | null
+          channel_id: string
+          channel_name?: string | null
+          created_at?: string | null
+          detected_at?: string | null
+          id?: string
+          message_text?: string | null
+          price_usd?: number | null
+          token_mint: string
+        }
+        Update: {
+          bonding_curve_pct?: number | null
+          caller_username?: string | null
+          channel_id?: string
+          channel_name?: string | null
+          created_at?: string | null
+          detected_at?: string | null
+          id?: string
+          message_text?: string | null
+          price_usd?: number | null
+          token_mint?: string
+        }
+        Relationships: []
+      }
       scraped_tokens: {
         Row: {
           created_at: string
@@ -4842,6 +4902,16 @@ export type Database = {
           max_price_threshold: number | null
           min_price_threshold: number | null
           notification_email: string | null
+          scalp_buy_amount_usd: number | null
+          scalp_caller_timeout_seconds: number | null
+          scalp_max_age_minutes: number | null
+          scalp_max_bonding_pct: number | null
+          scalp_min_bonding_pct: number | null
+          scalp_min_callers: number | null
+          scalp_mode_enabled: boolean | null
+          scalp_moon_bag_pct: number | null
+          scalp_stop_loss_pct: number | null
+          scalp_take_profit_pct: number | null
           scan_window_minutes: number | null
           standard_buy_amount_usd: number | null
           standard_sell_multiplier: number | null
@@ -4878,6 +4948,16 @@ export type Database = {
           max_price_threshold?: number | null
           min_price_threshold?: number | null
           notification_email?: string | null
+          scalp_buy_amount_usd?: number | null
+          scalp_caller_timeout_seconds?: number | null
+          scalp_max_age_minutes?: number | null
+          scalp_max_bonding_pct?: number | null
+          scalp_min_bonding_pct?: number | null
+          scalp_min_callers?: number | null
+          scalp_mode_enabled?: boolean | null
+          scalp_moon_bag_pct?: number | null
+          scalp_stop_loss_pct?: number | null
+          scalp_take_profit_pct?: number | null
           scan_window_minutes?: number | null
           standard_buy_amount_usd?: number | null
           standard_sell_multiplier?: number | null
@@ -4914,6 +4994,16 @@ export type Database = {
           max_price_threshold?: number | null
           min_price_threshold?: number | null
           notification_email?: string | null
+          scalp_buy_amount_usd?: number | null
+          scalp_caller_timeout_seconds?: number | null
+          scalp_max_age_minutes?: number | null
+          scalp_max_bonding_pct?: number | null
+          scalp_min_bonding_pct?: number | null
+          scalp_min_callers?: number | null
+          scalp_mode_enabled?: boolean | null
+          scalp_moon_bag_pct?: number | null
+          scalp_stop_loss_pct?: number | null
+          scalp_take_profit_pct?: number | null
           scan_window_minutes?: number | null
           standard_buy_amount_usd?: number | null
           standard_sell_multiplier?: number | null

@@ -29,7 +29,9 @@ import {
   Settings2,
   Sparkles,
   MessageSquare,
-  AlertTriangle
+  AlertTriangle,
+  Target,
+  Percent
 } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
 import { ChannelScanLogs } from './ChannelScanLogs';
@@ -72,6 +74,17 @@ interface ChannelConfig {
   flipit_sell_multiplier: number;
   flipit_max_daily_positions: number;
   flipit_wallet_id: string | null;
+  // Scalp Mode settings
+  scalp_mode_enabled?: boolean;
+  scalp_buy_amount_usd?: number;
+  scalp_min_bonding_pct?: number;
+  scalp_max_bonding_pct?: number;
+  scalp_max_age_minutes?: number;
+  scalp_min_callers?: number;
+  scalp_caller_timeout_seconds?: number;
+  scalp_take_profit_pct?: number;
+  scalp_moon_bag_pct?: number;
+  scalp_stop_loss_pct?: number;
 }
 
 interface FlipItWallet {
@@ -325,6 +338,39 @@ export function ChannelManagement() {
     } catch (err) {
       console.error('Error updating FlipIt settings:', err);
       toast.error('Failed to update FlipIt settings');
+    }
+  };
+
+  const toggleScalpMode = async (channel: ChannelConfig) => {
+    try {
+      const newValue = !channel.scalp_mode_enabled;
+      const { error } = await supabase
+        .from('telegram_channel_config')
+        .update({ scalp_mode_enabled: newValue })
+        .eq('id', channel.id);
+
+      if (error) throw error;
+
+      toast.success(`Scalp Mode ${newValue ? 'enabled' : 'disabled'}`);
+      loadChannels();
+    } catch (err) {
+      console.error('Error toggling Scalp Mode:', err);
+      toast.error('Failed to toggle Scalp Mode');
+    }
+  };
+
+  const updateScalpSettings = async (channelId: string, field: string, value: number | string | null) => {
+    try {
+      const { error } = await supabase
+        .from('telegram_channel_config')
+        .update({ [field]: value })
+        .eq('id', channelId);
+
+      if (error) throw error;
+      loadChannels();
+    } catch (err) {
+      console.error('Error updating Scalp settings:', err);
+      toast.error('Failed to update Scalp settings');
     }
   };
 
@@ -1047,6 +1093,122 @@ with TelegramClient(StringSession(), api_id, api_hash) as client:
                   ) : (
                     <p className="text-xs text-muted-foreground">
                       Enable to auto-execute real trades via FlipIt when trading rules match.
+                    </p>
+                  )}
+                </div>
+
+                {/* Scalp Mode Section */}
+                <div className="p-3 bg-muted/30 rounded-lg border border-border/50">
+                  <div className="flex items-center justify-between mb-2">
+                    <div className="flex items-center gap-2">
+                      <Target className="h-4 w-4 text-amber-500" />
+                      <span className="text-sm font-medium">Scalp Mode</span>
+                      {channel.scalp_mode_enabled && (
+                        <Badge variant="outline" className="bg-amber-500/10 text-amber-400 border-amber-500/30 text-xs">
+                          Active
+                        </Badge>
+                      )}
+                    </div>
+                    <Switch
+                      checked={channel.scalp_mode_enabled || false}
+                      onCheckedChange={() => toggleScalpMode(channel)}
+                    />
+                  </div>
+                  
+                  {channel.scalp_mode_enabled ? (
+                    <div className="space-y-3">
+                      <p className="text-xs text-muted-foreground">
+                        Low-risk scalp trades: sell 90% at +{channel.scalp_take_profit_pct || 50}%, keep 10% moon bag.
+                      </p>
+                      
+                      {/* Exit Strategy Row */}
+                      <div className="grid grid-cols-3 gap-2">
+                        <div>
+                          <Label className="text-xs text-muted-foreground">Take Profit %</Label>
+                          <Input
+                            type="number"
+                            step="5"
+                            value={channel.scalp_take_profit_pct || 50}
+                            onChange={(e) => updateScalpSettings(channel.id, 'scalp_take_profit_pct', Number(e.target.value))}
+                            className="h-8 text-sm"
+                          />
+                        </div>
+                        <div>
+                          <Label className="text-xs text-muted-foreground">Moon Bag %</Label>
+                          <Input
+                            type="number"
+                            step="5"
+                            value={channel.scalp_moon_bag_pct || 10}
+                            onChange={(e) => updateScalpSettings(channel.id, 'scalp_moon_bag_pct', Number(e.target.value))}
+                            className="h-8 text-sm"
+                          />
+                        </div>
+                        <div>
+                          <Label className="text-xs text-muted-foreground">Stop Loss %</Label>
+                          <Input
+                            type="number"
+                            step="5"
+                            value={channel.scalp_stop_loss_pct || 35}
+                            onChange={(e) => updateScalpSettings(channel.id, 'scalp_stop_loss_pct', Number(e.target.value))}
+                            className="h-8 text-sm"
+                          />
+                        </div>
+                      </div>
+
+                      {/* Bonding Curve Filters */}
+                      <div className="grid grid-cols-2 gap-2">
+                        <div>
+                          <Label className="text-xs text-muted-foreground flex items-center gap-1">
+                            <Percent className="h-3 w-3" /> Min Bonding
+                          </Label>
+                          <Input
+                            type="number"
+                            value={channel.scalp_min_bonding_pct || 20}
+                            onChange={(e) => updateScalpSettings(channel.id, 'scalp_min_bonding_pct', Number(e.target.value))}
+                            className="h-8 text-sm"
+                          />
+                        </div>
+                        <div>
+                          <Label className="text-xs text-muted-foreground flex items-center gap-1">
+                            <Percent className="h-3 w-3" /> Max Bonding
+                          </Label>
+                          <Input
+                            type="number"
+                            value={channel.scalp_max_bonding_pct || 65}
+                            onChange={(e) => updateScalpSettings(channel.id, 'scalp_max_bonding_pct', Number(e.target.value))}
+                            className="h-8 text-sm"
+                          />
+                        </div>
+                      </div>
+
+                      {/* Age & Signal Filters */}
+                      <div className="grid grid-cols-2 gap-2">
+                        <div>
+                          <Label className="text-xs text-muted-foreground">Max Age (mins)</Label>
+                          <Input
+                            type="number"
+                            value={channel.scalp_max_age_minutes || 45}
+                            onChange={(e) => updateScalpSettings(channel.id, 'scalp_max_age_minutes', Number(e.target.value))}
+                            className="h-8 text-sm"
+                          />
+                        </div>
+                        <div>
+                          <Label className="text-xs text-muted-foreground">Min Callers</Label>
+                          <Input
+                            type="number"
+                            value={channel.scalp_min_callers || 1}
+                            onChange={(e) => updateScalpSettings(channel.id, 'scalp_min_callers', Number(e.target.value))}
+                            className="h-8 text-sm"
+                          />
+                          <p className="text-[10px] text-muted-foreground mt-0.5">
+                            Require 2+ for multi-source validation
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                  ) : (
+                    <p className="text-xs text-muted-foreground">
+                      Enable for structured scalp trades with pre-buy validation and moon bag exits.
                     </p>
                   )}
                 </div>
