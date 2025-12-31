@@ -294,3 +294,6 @@ verify_jwt = false
 
 [functions.scalp-mode-validator]
 verify_jwt = false
+
+[functions.scalp-realtime-monitor]
+verify_jwt = false
