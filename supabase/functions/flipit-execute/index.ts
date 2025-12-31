@@ -395,15 +395,24 @@ serve(async (req) => {
       }
 
       // Get wallet details
+      console.log("Looking up wallet:", walletId);
       const { data: wallet, error: walletError } = await supabase
         .from("super_admin_wallets")
         .select("id, pubkey, secret_key_encrypted, sol_balance")
         .eq("id", walletId)
         .single();
 
-      if (walletError || !wallet) {
-        return bad("Wallet not found");
+      if (walletError) {
+        console.error("Wallet lookup error:", walletError);
+        return bad(`Wallet not found: ${walletError.message}`);
       }
+      
+      if (!wallet) {
+        console.error("Wallet not found in DB for ID:", walletId);
+        return bad("Wallet not found in database");
+      }
+      
+      console.log("Found wallet:", wallet.pubkey);
 
       // ============================================
       // CRITICAL: CHECK BALANCE BEFORE ANYTHING ELSE

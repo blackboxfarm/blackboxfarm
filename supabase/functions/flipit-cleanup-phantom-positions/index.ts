@@ -120,27 +120,43 @@ serve(async (req) => {
         console.log(`Wallet ${pubkey} has ${actualHoldings.size} tokens on-chain`);
         console.log("On-chain tokens:", Array.from(actualHoldings.keys()));
 
-        // Check each position
+        // IMPORTANT: User can have multiple positions for the same token
+        // We should NOT mark positions as phantom if there's ANY balance for that token
+        // Group positions by token_mint to compare aggregate positions vs on-chain balance
+        const positionsByToken = new Map<string, typeof positions>();
         for (const pos of positions) {
-          const actualBalance = actualHoldings.get(pos.token_mint) || 0;
+          if (!positionsByToken.has(pos.token_mint)) {
+            positionsByToken.set(pos.token_mint, []);
+          }
+          positionsByToken.get(pos.token_mint)!.push(pos);
+        }
+
+        // Check each token's positions
+        for (const [tokenMint, tokenPositions] of positionsByToken) {
+          const actualBalance = actualHoldings.get(tokenMint) || 0;
           const hasOnChain = actualBalance > 0;
           
-          results.push({
-            positionId: pos.id,
-            tokenMint: pos.token_mint,
-            tokenSymbol: pos.token_symbol,
-            buySignature: pos.buy_signature,
-            hasOnChainBalance: hasOnChain,
-            actualBalance,
-            isPhantom: !hasOnChain,
-            createdAt: pos.created_at,
-          });
+          // If there's NO on-chain balance for this token, ALL positions for it are phantom
+          // If there IS balance, none of them are phantom (user may have accumulated multiple buys)
+          for (const pos of tokenPositions) {
+            results.push({
+              positionId: pos.id,
+              tokenMint: pos.token_mint,
+              tokenSymbol: pos.token_symbol,
+              buySignature: pos.buy_signature,
+              hasOnChainBalance: hasOnChain,
+              actualBalance,
+              isPhantom: !hasOnChain,
+              totalPositionsForToken: tokenPositions.length,
+              createdAt: pos.created_at,
+            });
 
-          if (!hasOnChain) {
-            phantomPositions.push(pos.id);
-            console.log(`PHANTOM: ${pos.token_symbol} (${pos.token_mint}) - no on-chain balance`);
-          } else {
-            console.log(`VALID: ${pos.token_symbol} (${pos.token_mint}) - balance: ${actualBalance}`);
+            if (!hasOnChain) {
+              phantomPositions.push(pos.id);
+              console.log(`PHANTOM: ${pos.token_symbol} (${tokenMint}) - no on-chain balance at all`);
+            } else {
+              console.log(`VALID: ${pos.token_symbol} (${tokenMint}) - balance: ${actualBalance} (${tokenPositions.length} positions)`);
+            }
           }
         }
       } catch (err: any) {
