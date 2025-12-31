@@ -14,6 +14,7 @@ import { Flame, RefreshCw, TrendingUp, DollarSign, Wallet, Clock, CheckCircle2, 
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { useSolPrice } from '@/hooks/useSolPrice';
 import { FlipItFeeCalculator } from './flipit/FlipItFeeCalculator';
+import { MomentumIndicator } from './flipit/MomentumIndicator';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { WalletTokenManager } from '@/components/blackbox/WalletTokenManager';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
@@ -1880,9 +1881,12 @@ export function FlipItDashboard() {
                   )}
                 </p>
               )}
+              
+              {/* Momentum Indicator */}
+              {tokenAddress.trim().length >= 32 && (
+                <MomentumIndicator tokenMint={tokenAddress.trim()} />
+              )}
             </div>
-
-            {/* Amount */}
             <div className="space-y-2">
               <Label className="flex items-center gap-1">
                 {buyAmountMode === 'usd' ? <DollarSign className="h-4 w-4" /> : <Wallet className="h-4 w-4" />}
