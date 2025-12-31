@@ -32,7 +32,8 @@ import {
   AlertTriangle,
   Target,
   Percent,
-  FlaskConical
+  FlaskConical,
+  Wallet
 } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
 import { ChannelScanLogs } from './ChannelScanLogs';
@@ -1146,6 +1147,34 @@ with TelegramClient(StringSession(), api_id, api_hash) as client:
                           checked={channel.scalp_test_mode !== false}
                           onCheckedChange={(checked) => updateScalpSettings(channel.id, 'scalp_test_mode', checked)}
                         />
+                      </div>
+
+                      {/* Trading Wallet Selector */}
+                      <div>
+                        <Label className="text-xs text-muted-foreground flex items-center gap-1">
+                          <Wallet className="h-3 w-3" /> Trading Wallet
+                        </Label>
+                        <Select
+                          value={channel.flipit_wallet_id || ''}
+                          onValueChange={(value) => updateFlipitSettings(channel.id, 'flipit_wallet_id', value || null)}
+                        >
+                          <SelectTrigger className={`h-8 text-sm ${!channel.flipit_wallet_id ? 'border-orange-500/50 bg-orange-500/10' : ''}`}>
+                            <SelectValue placeholder="Select wallet..." />
+                          </SelectTrigger>
+                          <SelectContent className="bg-popover border border-border">
+                            {flipitWallets.map((wallet) => (
+                              <SelectItem key={wallet.id} value={wallet.id}>
+                                {wallet.label} ({wallet.pubkey.slice(0, 4)}...{wallet.pubkey.slice(-4)})
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        {!channel.flipit_wallet_id && (
+                          <p className="text-xs text-orange-400 mt-1 flex items-center gap-1">
+                            <AlertTriangle className="h-3 w-3" />
+                            Required for live trading
+                          </p>
+                        )}
                       </div>
 
                       <p className="text-xs text-muted-foreground">
