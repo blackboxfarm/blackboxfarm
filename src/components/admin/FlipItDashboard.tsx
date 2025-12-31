@@ -132,6 +132,7 @@ export function FlipItDashboard() {
   const [isFlipping, setIsFlipping] = useState(false);
   const [isMonitoring, setIsMonitoring] = useState(false);
   const [currentPrices, setCurrentPrices] = useState<Record<string, number>>({});
+  const [bondingCurveData, setBondingCurveData] = useState<Record<string, number>>({});
   const [tokenImages, setTokenImages] = useState<Record<string, string>>({});
   const [isGeneratingWallet, setIsGeneratingWallet] = useState(false);
   const [isWithdrawing, setIsWithdrawing] = useState(false);
@@ -261,6 +262,9 @@ export function FlipItDashboard() {
       if (data?.prices) {
         setCurrentPrices(data.prices);
       }
+      if (data?.bondingCurveData) {
+        setBondingCurveData(prev => ({ ...prev, ...data.bondingCurveData }));
+      }
       if (data?.checkedAt) {
         setLastAutoCheck(data.checkedAt);
       }
@@ -331,6 +335,9 @@ export function FlipItDashboard() {
       }
       if (data?.prices) {
         setCurrentPrices(prev => ({ ...prev, ...data.prices }));
+      }
+      if (data?.bondingCurveData) {
+        setBondingCurveData(prev => ({ ...prev, ...data.bondingCurveData }));
       }
       if (data?.executed?.length > 0) {
         toast.error(`🚨 EMERGENCY SELL: ${data.executed.length} position(s) sold at stop-loss!`, {
@@ -956,6 +963,9 @@ export function FlipItDashboard() {
       if (data?.prices) {
         setCurrentPrices(data.prices);
       }
+      if (data?.bondingCurveData) {
+        setBondingCurveData(prev => ({ ...prev, ...data.bondingCurveData }));
+      }
       if (data?.checkedAt) {
         setLastAutoCheck(data.checkedAt);
       }
@@ -1213,6 +1223,9 @@ export function FlipItDashboard() {
 
       if (data?.prices) {
         setCurrentPrices(data.prices);
+      }
+      if (data?.bondingCurveData) {
+        setBondingCurveData(prev => ({ ...prev, ...data.bondingCurveData }));
       }
       if (data?.checkedAt) {
         setLastAutoCheck(data.checkedAt);
@@ -2390,8 +2403,18 @@ export function FlipItDashboard() {
                             ) : (
                               <span className="text-muted-foreground text-xs">-</span>
                             )}
-                            <div className="text-[10px] text-muted-foreground">
-                              {`Price: $${currentPrice.toFixed(8)}`}
+                            <div className="flex items-center gap-1">
+                              <span className="text-[10px] text-muted-foreground">
+                                {`Price: $${currentPrice.toFixed(8)}`}
+                              </span>
+                              {bondingCurveData[position.token_mint] !== undefined && (
+                                <span 
+                                  className="inline-flex items-center justify-center w-8 h-4 text-[9px] font-bold text-orange-400 bg-orange-500/20 border border-orange-500/40 rounded-full"
+                                  title={`${bondingCurveData[position.token_mint].toFixed(0)}% on bonding curve`}
+                                >
+                                  {bondingCurveData[position.token_mint].toFixed(0)}%
+                                </span>
+                              )}
                             </div>
                           </div>
                         ) : (
