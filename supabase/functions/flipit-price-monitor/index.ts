@@ -48,80 +48,63 @@ interface TokenPriceData {
 async function fetchBondingCurveData(tokenMints: string[]): Promise<Record<string, number>> {
   const curveData: Record<string, number> = {};
   const heliusApiKey = Deno.env.get("HELIUS_API_KEY");
-  
+
   if (!heliusApiKey) {
     console.log("No Helius API key, skipping bonding curve fetch");
     return curveData;
   }
-  
-  // Pump.fun program ID and bonding curve constants
-  const PUMP_PROGRAM_ID = "6EF8rrecthR5Dkzon8Nwu78hRvfCKubJ14M5uBEwF6P";
-  const BONDING_CURVE_SEED = "bonding-curve";
-  
-  for (const mint of tokenMints) {
+
+  // Pump.fun program ID
+  const PUMP_PROGRAM_ID = new PublicKey("6EF8rrecthR5Dkzon8Nwu78hRvfCKubJ14M5uBEwF6P");
+  const seed = new TextEncoder().encode("bonding-curve");
+
+  const connection = new Connection(
+    `https://mainnet.helius-rpc.com/?api-key=${heliusApiKey}`,
+    "confirmed"
+  );
+
+  for (const mintStr of tokenMints) {
     try {
-      // Derive the bonding curve PDA
-      const rpcUrl = `https://mainnet.helius-rpc.com/?api-key=${heliusApiKey}`;
-      
-      // First, check if this is a pump.fun token by looking for the bonding curve account
-      // We'll use getAccountInfo on the derived PDA
-      const pdaRes = await fetch(rpcUrl, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          jsonrpc: "2.0",
-          id: 1,
-          method: "getProgramAccounts",
-          params: [
-            PUMP_PROGRAM_ID,
-            {
-              encoding: "base64",
-              filters: [
-                { dataSize: 323 }, // Bonding curve account size
-                { memcmp: { offset: 8, bytes: mint } } // Token mint at offset 8
-              ]
-            }
-          ]
-        })
-      });
-      
-      if (pdaRes.ok) {
-        const pdaData = await pdaRes.json();
-        if (pdaData?.result && pdaData.result.length > 0) {
-          const accountData = pdaData.result[0]?.account?.data?.[0];
-          if (accountData) {
-            // Decode base64 account data
-            const buffer = Uint8Array.from(atob(accountData), c => c.charCodeAt(0));
-            
-            // Bonding curve layout (simplified):
-            // 8 bytes discriminator
-            // 32 bytes mint
-            // 8 bytes virtual_token_reserves
-            // 8 bytes virtual_sol_reserves
-            // 8 bytes real_token_reserves
-            // 8 bytes real_sol_reserves
-            // The progress is calculated as: real_sol_reserves / 85 SOL target
-            
-            const view = new DataView(buffer.buffer);
-            // real_sol_reserves is at offset 8 + 32 + 8 + 8 + 8 = 64
-            const realSolReserves = Number(view.getBigUint64(64, true)) / 1e9; // Convert lamports to SOL
-            
-            // Pump.fun bonding curve graduates at ~85 SOL
-            const targetSol = 85;
-            const progress = Math.min((realSolReserves / targetSol) * 100, 100);
-            
-            if (progress < 100) {
-              curveData[mint] = progress;
-              console.log(`Bonding curve for ${mint}: ${progress.toFixed(1)}% (${realSolReserves.toFixed(2)} SOL)`);
-            }
-          }
-        }
-      }
+      const mint = new PublicKey(mintStr);
+      // Derive bonding curve PDA: seeds = ["bonding-curve", mint]
+      const [bondingCurvePda] = PublicKey.findProgramAddressSync(
+        [seed, mint.toBuffer()],
+        PUMP_PROGRAM_ID
+      );
+
+      const info = await connection.getAccountInfo(bondingCurvePda);
+      if (!info?.data) continue;
+
+      const data = info.data;
+      // BondingCurveAccount layout (per pumpfun-rs docs):
+      // 0..8   discriminator (u64)
+      // 8..16  virtual_token_reserves (u64)
+      // 16..24 virtual_sol_reserves (u64)
+      // 24..32 real_token_reserves (u64)
+      // 32..40 real_sol_reserves (u64)
+      // 40..48 token_total_supply (u64)
+      // 48     complete (bool)
+      if (data.length < 49) continue;
+
+      const view = new DataView(data.buffer, data.byteOffset, data.byteLength);
+      const realSolReservesLamports = view.getBigUint64(32, true);
+      const complete = data[48] === 1;
+
+      // Skip graduated tokens
+      if (complete) continue;
+
+      const realSolReserves = Number(realSolReservesLamports) / 1e9;
+      // Pump.fun bonding curve graduates at ~85 SOL
+      const targetSol = 85;
+      const progress = Math.min(Math.max((realSolReserves / targetSol) * 100, 0), 100);
+
+      curveData[mintStr] = progress;
+      console.log(`Bonding curve for ${mintStr}: ${progress.toFixed(1)}% (${realSolReserves.toFixed(2)} SOL)`);
     } catch (e) {
-      console.log(`Error fetching bonding curve for ${mint}:`, e);
+      // Not a pump.fun token or invalid - skip silently
     }
   }
-  
+
   return curveData;
 }
 
