@@ -401,13 +401,15 @@ serve(async (req) => {
     return new Response(null, { headers: corsHeaders });
   }
   
+  const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
+  const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+  const supabase = createClient(supabaseUrl, supabaseKey);
+  
   try {
-    const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
-    const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
     const heliusApiKey = Deno.env.get('HELIUS_API_KEY');
-    const supabase = createClient(supabaseUrl, supabaseKey);
     
-    const { tokenMint, maxSellers = 50, traceDepth = 3 }: InvestigationRequest = await req.json();
+    const body = await req.json();
+    const { tokenMint, maxSellers = 30, traceDepth = 2 }: InvestigationRequest = body;
     
     if (!tokenMint) {
       return new Response(
@@ -417,6 +419,7 @@ serve(async (req) => {
     }
     
     console.log(`Starting rug investigation for ${tokenMint}`);
+    console.log(`HELIUS_API_KEY configured: ${!!heliusApiKey}`);
     
     // Create investigation record
     const { data: investigation, error: insertError } = await supabase
@@ -432,29 +435,36 @@ serve(async (req) => {
       console.error('Error creating investigation:', insertError);
     }
     
-    // Step 1: Get token info
-    console.log('Fetching token info...');
-    const tokenInfo = await getTokenInfo(tokenMint);
+    const investigationId = investigation?.id;
     
-    if (!tokenInfo) {
-      const errorResult = {
-        error: 'Could not fetch token info',
-        tokenMint,
-        status: 'failed',
-      };
-      
-      if (investigation) {
+    // Helper to update status on failure
+    const failInvestigation = async (errorMessage: string) => {
+      console.error('Investigation failed:', errorMessage);
+      if (investigationId) {
         await supabase
           .from('rug_investigations')
-          .update({
-            status: 'failed',
-            error_message: 'Could not fetch token info',
-          })
-          .eq('id', investigation.id);
+          .update({ status: 'failed', error_message: errorMessage })
+          .eq('id', investigationId);
       }
-      
+    };
+    
+    // Step 1: Get token info
+    console.log('Fetching token info...');
+    let tokenInfo;
+    try {
+      tokenInfo = await getTokenInfo(tokenMint);
+    } catch (error) {
+      await failInvestigation(`Failed to fetch token info: ${error.message}`);
       return new Response(
-        JSON.stringify(errorResult),
+        JSON.stringify({ error: 'Failed to fetch token info', details: error.message }),
+        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+    
+    if (!tokenInfo) {
+      await failInvestigation('Could not fetch token info - token may not exist');
+      return new Response(
+        JSON.stringify({ error: 'Could not fetch token info', tokenMint, status: 'failed' }),
         { status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
@@ -475,8 +485,13 @@ serve(async (req) => {
     
     if (heliusApiKey) {
       console.log('Fetching transaction history from Helius...');
-      transactions = await getTokenTransactions(tokenMint, heliusApiKey);
-      console.log(`Found ${transactions.length} transactions`);
+      try {
+        transactions = await getTokenTransactions(tokenMint, heliusApiKey);
+        console.log(`Found ${transactions.length} transactions`);
+      } catch (error) {
+        console.error('Error fetching transactions:', error);
+        transactions = [];
+      }
       
       // Analyze sellers
       const sellerMap = new Map<string, SellerInfo>();
@@ -517,23 +532,30 @@ serve(async (req) => {
       
       console.log(`Identified ${sellerAnalysis.length} sellers`);
       
-      // Step 4: Trace wallet funding for top sellers
+      // Step 4: Trace wallet funding for top sellers (limit to 10 to avoid timeout)
       console.log('Tracing wallet funding sources...');
-      for (const seller of sellerAnalysis.slice(0, 20)) {
-        const trace = await traceWalletFunding(seller.wallet, heliusApiKey, traceDepth);
-        walletTraces.push(trace);
-        
-        if (trace.isCexFunded) {
-          cexTracesFound++;
+      const sellersToTrace = sellerAnalysis.slice(0, 10);
+      for (const seller of sellersToTrace) {
+        try {
+          const trace = await traceWalletFunding(seller.wallet, heliusApiKey, traceDepth);
+          walletTraces.push(trace);
+          
+          if (trace.isCexFunded) {
+            cexTracesFound++;
+          }
+          
+          await delay(150); // Rate limiting
+        } catch (error) {
+          console.error(`Error tracing wallet ${seller.wallet}:`, error);
         }
-        
-        await delay(100); // Rate limiting
       }
       
       // Step 5: Detect bundles
       console.log('Detecting wallet bundles...');
       bundles = detectBundles(walletTraces);
       console.log(`Detected ${bundles.length} bundles`);
+    } else {
+      console.warn('HELIUS_API_KEY not configured - skipping transaction analysis');
     }
     
     // Calculate risk score
@@ -595,29 +617,33 @@ serve(async (req) => {
     };
     
     // Update investigation record
-    if (investigation) {
-      await supabase
-        .from('rug_investigations')
-        .update({
-          token_name: tokenInfo.name,
-          token_symbol: tokenInfo.symbol,
-          price_at_investigation: tokenInfo.priceUsd,
-          liquidity_usd: tokenInfo.liquidity,
-          market_cap_usd: tokenInfo.marketCap,
-          price_drop_percent: priceDropPercent,
-          total_sellers: sellerAnalysis.length,
-          total_sold_usd: 0, // Would need price data per sale
-          top_seller_wallets: sellerAnalysis.slice(0, 20),
-          bundles_detected: bundles.length,
-          bundle_details: bundles,
-          cex_traces_found: cexTracesFound,
-          cex_trace_details: walletTraces.filter(t => t.isCexFunded),
-          rug_risk_score: riskAssessment.score,
-          risk_factors: riskAssessment.factors,
-          full_report: report,
-          status: 'completed',
-        })
-        .eq('id', investigation.id);
+    if (investigationId) {
+      try {
+        await supabase
+          .from('rug_investigations')
+          .update({
+            token_name: tokenInfo.name,
+            token_symbol: tokenInfo.symbol,
+            price_at_investigation: tokenInfo.priceUsd,
+            liquidity_usd: tokenInfo.liquidity,
+            market_cap_usd: tokenInfo.marketCap,
+            price_drop_percent: priceDropPercent,
+            total_sellers: sellerAnalysis.length,
+            total_sold_usd: 0,
+            top_seller_wallets: sellerAnalysis.slice(0, 20),
+            bundles_detected: bundles.length,
+            bundle_details: bundles,
+            cex_traces_found: cexTracesFound,
+            cex_trace_details: walletTraces.filter(t => t.isCexFunded),
+            rug_risk_score: riskAssessment.score,
+            risk_factors: riskAssessment.factors,
+            full_report: report,
+            status: 'completed',
+          })
+          .eq('id', investigationId);
+      } catch (error) {
+        console.error('Error updating investigation:', error);
+      }
     }
     
     console.log('Investigation complete');
@@ -629,8 +655,17 @@ serve(async (req) => {
     
   } catch (error) {
     console.error('Investigation error:', error);
+    
+    // Try to update investigation status to failed
+    try {
+      await supabase
+        .from('rug_investigations')
+        .update({ status: 'failed', error_message: String(error.message || error) })
+        .eq('status', 'in_progress');
+    } catch {}
+    
     return new Response(
-      JSON.stringify({ error: error.message }),
+      JSON.stringify({ error: error.message || 'Investigation failed' }),
       { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
   }
