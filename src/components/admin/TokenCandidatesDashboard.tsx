@@ -7,12 +7,12 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { ScrollArea } from '@/components/ui/scroll-area';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { 
   RefreshCw, 
   Play, 
-  Pause, 
   CheckCircle, 
   XCircle, 
   TrendingUp,
@@ -20,8 +20,8 @@ import {
   AlertTriangle,
   Clock,
   Zap,
-  Eye,
-  ExternalLink
+  ExternalLink,
+  FileText
 } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
 
@@ -43,6 +43,23 @@ interface Candidate {
   scalp_approved: boolean;
   status: string;
   rejection_reason: string;
+  metadata: any;
+}
+
+interface DiscoveryLog {
+  id: string;
+  token_mint: string;
+  token_symbol: string;
+  token_name: string;
+  decision: 'accepted' | 'rejected' | 'error';
+  rejection_reason: string | null;
+  volume_sol: number;
+  volume_usd: number;
+  tx_count: number;
+  bundle_score: number | null;
+  holder_count: number | null;
+  age_minutes: number | null;
+  created_at: string;
   metadata: any;
 }
 
@@ -70,11 +87,13 @@ interface Stats {
 
 export function TokenCandidatesDashboard() {
   const [candidates, setCandidates] = useState<Candidate[]>([]);
+  const [discoveryLogs, setDiscoveryLogs] = useState<DiscoveryLog[]>([]);
   const [config, setConfig] = useState<MonitorConfig | null>(null);
   const [stats, setStats] = useState<Stats | null>(null);
   const [loading, setLoading] = useState(true);
   const [polling, setPolling] = useState(false);
   const [activeTab, setActiveTab] = useState('all');
+  const [mainTab, setMainTab] = useState<'candidates' | 'logs'>('candidates');
   const [configEdits, setConfigEdits] = useState<Partial<MonitorConfig>>({});
 
   // Fetch candidates
@@ -103,6 +122,22 @@ export function TokenCandidatesDashboard() {
     } catch (error) {
       console.error('Error fetching candidates:', error);
       toast.error('Failed to fetch candidates');
+    }
+  }, []);
+
+  // Fetch discovery logs
+  const fetchDiscoveryLogs = useCallback(async () => {
+    try {
+      const { data, error } = await supabase
+        .from('pumpfun_discovery_logs')
+        .select('*')
+        .order('created_at', { ascending: false })
+        .limit(200);
+
+      if (error) throw error;
+      setDiscoveryLogs((data || []) as DiscoveryLog[]);
+    } catch (error) {
+      console.error('Error fetching discovery logs:', error);
     }
   }, []);
 
@@ -145,7 +180,7 @@ export function TokenCandidatesDashboard() {
   useEffect(() => {
     const load = async () => {
       setLoading(true);
-      await Promise.all([fetchCandidates(), fetchConfigAndStats()]);
+      await Promise.all([fetchCandidates(), fetchConfigAndStats(), fetchDiscoveryLogs()]);
       setLoading(false);
     };
     load();
@@ -157,12 +192,15 @@ export function TokenCandidatesDashboard() {
         fetchCandidates();
         fetchConfigAndStats();
       })
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'pumpfun_discovery_logs' }, () => {
+        fetchDiscoveryLogs();
+      })
       .subscribe();
 
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [fetchCandidates, fetchConfigAndStats]);
+  }, [fetchCandidates, fetchConfigAndStats, fetchDiscoveryLogs]);
 
   // Manual poll trigger
   const triggerPoll = async () => {
@@ -174,9 +212,11 @@ export function TokenCandidatesDashboard() {
 
       if (error) throw error;
 
-      toast.success(`Poll complete! Found ${data.results?.candidatesAdded || 0} new candidates`);
-      await fetchCandidates();
-      await fetchConfigAndStats();
+      const results = data.results;
+      toast.success(
+        `Scanned ${results?.tokensScanned || 0} tokens: ${results?.candidatesAdded || 0} added, ${results?.skippedLowVolume || 0} low vol, ${results?.skippedOld || 0} old`
+      );
+      await Promise.all([fetchCandidates(), fetchConfigAndStats(), fetchDiscoveryLogs()]);
     } catch (error) {
       console.error('Poll error:', error);
       toast.error('Failed to poll for tokens');
@@ -441,116 +481,239 @@ export function TokenCandidatesDashboard() {
         </CardContent>
       </Card>
 
-      {/* Candidates Table */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Token Candidates</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <Tabs value={activeTab} onValueChange={setActiveTab}>
-            <TabsList>
-              <TabsTrigger value="all">All ({candidates.length})</TabsTrigger>
-              <TabsTrigger value="pending">Pending ({candidates.filter(c => c.status === 'pending').length})</TabsTrigger>
-              <TabsTrigger value="approved">Approved ({candidates.filter(c => c.status === 'approved').length})</TabsTrigger>
-              <TabsTrigger value="rejected">Rejected ({candidates.filter(c => c.status === 'rejected').length})</TabsTrigger>
-            </TabsList>
-            
-            <TabsContent value={activeTab} className="mt-4">
-              <div className="rounded-md border">
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Token</TableHead>
-                      <TableHead>Volume (SOL)</TableHead>
-                      <TableHead>Holders</TableHead>
-                      <TableHead>Txs</TableHead>
-                      <TableHead>Bundle Score</TableHead>
-                      <TableHead>Status</TableHead>
-                      <TableHead>Detected</TableHead>
-                      <TableHead>Actions</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {filteredCandidates.length === 0 ? (
+      {/* Main Tabs: Candidates vs Discovery Logs */}
+      <Tabs value={mainTab} onValueChange={(v) => setMainTab(v as 'candidates' | 'logs')}>
+        <TabsList className="mb-4">
+          <TabsTrigger value="candidates" className="flex items-center gap-2">
+            <Activity className="h-4 w-4" />
+            Candidates ({candidates.length})
+          </TabsTrigger>
+          <TabsTrigger value="logs" className="flex items-center gap-2">
+            <FileText className="h-4 w-4" />
+            Discovery Logs ({discoveryLogs.length})
+          </TabsTrigger>
+        </TabsList>
+
+        {/* Candidates Tab */}
+        <TabsContent value="candidates">
+          <Card>
+            <CardHeader>
+              <CardTitle>Token Candidates</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <Tabs value={activeTab} onValueChange={setActiveTab}>
+                <TabsList>
+                  <TabsTrigger value="all">All ({candidates.length})</TabsTrigger>
+                  <TabsTrigger value="pending">Pending ({candidates.filter(c => c.status === 'pending').length})</TabsTrigger>
+                  <TabsTrigger value="approved">Approved ({candidates.filter(c => c.status === 'approved').length})</TabsTrigger>
+                  <TabsTrigger value="rejected">Rejected ({candidates.filter(c => c.status === 'rejected').length})</TabsTrigger>
+                </TabsList>
+                
+                <TabsContent value={activeTab} className="mt-4">
+                  <div className="rounded-md border">
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>Token</TableHead>
+                          <TableHead>Volume (SOL)</TableHead>
+                          <TableHead>Holders</TableHead>
+                          <TableHead>Txs</TableHead>
+                          <TableHead>Bundle Score</TableHead>
+                          <TableHead>Status</TableHead>
+                          <TableHead>Detected</TableHead>
+                          <TableHead>Actions</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {filteredCandidates.length === 0 ? (
+                          <TableRow>
+                            <TableCell colSpan={8} className="text-center text-muted-foreground py-8">
+                              No candidates found
+                            </TableCell>
+                          </TableRow>
+                        ) : (
+                          filteredCandidates.map((candidate) => (
+                            <TableRow key={candidate.id}>
+                              <TableCell>
+                                <div className="flex flex-col">
+                                  <span className="font-medium">{candidate.token_symbol || 'Unknown'}</span>
+                                  <span className="text-xs text-muted-foreground truncate max-w-[120px]">
+                                    {candidate.token_mint?.slice(0, 8)}...
+                                  </span>
+                                </div>
+                              </TableCell>
+                              <TableCell>
+                                <span className={candidate.volume_sol_5m >= 5 ? 'text-green-500 font-medium' : ''}>
+                                  {candidate.volume_sol_5m?.toFixed(2)}
+                                </span>
+                              </TableCell>
+                              <TableCell>{candidate.holder_count}</TableCell>
+                              <TableCell>{candidate.transaction_count}</TableCell>
+                              <TableCell>
+                                <div className="flex items-center gap-2">
+                                  <span className={candidate.bundle_score >= 50 ? 'text-red-500' : candidate.bundle_score >= 30 ? 'text-yellow-500' : 'text-green-500'}>
+                                    {candidate.bundle_score}
+                                  </span>
+                                  {candidate.is_bundled && (
+                                    <AlertTriangle className="h-3 w-3 text-red-500" />
+                                  )}
+                                </div>
+                              </TableCell>
+                              <TableCell>{getStatusBadge(candidate.status, candidate.scalp_approved)}</TableCell>
+                              <TableCell className="text-xs text-muted-foreground">
+                                {formatDistanceToNow(new Date(candidate.detected_at), { addSuffix: true })}
+                              </TableCell>
+                              <TableCell>
+                                <div className="flex items-center gap-1">
+                                  <Button
+                                    variant="ghost"
+                                    size="icon"
+                                    className="h-7 w-7"
+                                    onClick={() => window.open(`https://pump.fun/${candidate.token_mint}`, '_blank')}
+                                  >
+                                    <ExternalLink className="h-3 w-3" />
+                                  </Button>
+                                  {candidate.status === 'pending' && (
+                                    <>
+                                      <Button
+                                        variant="ghost"
+                                        size="icon"
+                                        className="h-7 w-7 text-green-500 hover:text-green-600"
+                                        onClick={() => approveCandidate(candidate.id)}
+                                      >
+                                        <CheckCircle className="h-4 w-4" />
+                                      </Button>
+                                      <Button
+                                        variant="ghost"
+                                        size="icon"
+                                        className="h-7 w-7 text-red-500 hover:text-red-600"
+                                        onClick={() => rejectCandidate(candidate.id)}
+                                      >
+                                        <XCircle className="h-4 w-4" />
+                                      </Button>
+                                    </>
+                                  )}
+                                </div>
+                              </TableCell>
+                            </TableRow>
+                          ))
+                        )}
+                      </TableBody>
+                    </Table>
+                  </div>
+                </TabsContent>
+              </Tabs>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        {/* Discovery Logs Tab */}
+        <TabsContent value="logs">
+          <Card>
+            <CardHeader>
+              <div className="flex items-center justify-between">
+                <div>
+                  <CardTitle className="flex items-center gap-2">
+                    <FileText className="h-5 w-5" />
+                    Discovery Logs
+                  </CardTitle>
+                  <CardDescription>
+                    All scanned tokens and filtering decisions
+                  </CardDescription>
+                </div>
+                <Button variant="outline" size="sm" onClick={fetchDiscoveryLogs}>
+                  <RefreshCw className="h-4 w-4 mr-2" />
+                  Refresh
+                </Button>
+              </div>
+            </CardHeader>
+            <CardContent>
+              <ScrollArea className="h-[500px]">
+                <div className="rounded-md border">
+                  <Table>
+                    <TableHeader>
                       <TableRow>
-                        <TableCell colSpan={8} className="text-center text-muted-foreground py-8">
-                          No candidates found
-                        </TableCell>
+                        <TableHead>Token</TableHead>
+                        <TableHead>Decision</TableHead>
+                        <TableHead>Reason</TableHead>
+                        <TableHead>Volume</TableHead>
+                        <TableHead>Txs</TableHead>
+                        <TableHead>Age</TableHead>
+                        <TableHead>Bundle</TableHead>
+                        <TableHead>Time</TableHead>
                       </TableRow>
-                    ) : (
-                      filteredCandidates.map((candidate) => (
-                        <TableRow key={candidate.id}>
-                          <TableCell>
-                            <div className="flex flex-col">
-                              <span className="font-medium">{candidate.token_symbol || 'Unknown'}</span>
-                              <span className="text-xs text-muted-foreground truncate max-w-[120px]">
-                                {candidate.token_mint?.slice(0, 8)}...
-                              </span>
-                            </div>
-                          </TableCell>
-                          <TableCell>
-                            <span className={candidate.volume_sol_5m >= 5 ? 'text-green-500 font-medium' : ''}>
-                              {candidate.volume_sol_5m?.toFixed(2)}
-                            </span>
-                          </TableCell>
-                          <TableCell>{candidate.holder_count}</TableCell>
-                          <TableCell>{candidate.transaction_count}</TableCell>
-                          <TableCell>
-                            <div className="flex items-center gap-2">
-                              <span className={candidate.bundle_score >= 50 ? 'text-red-500' : candidate.bundle_score >= 30 ? 'text-yellow-500' : 'text-green-500'}>
-                                {candidate.bundle_score}
-                              </span>
-                              {candidate.is_bundled && (
-                                <AlertTriangle className="h-3 w-3 text-red-500" />
-                              )}
-                            </div>
-                          </TableCell>
-                          <TableCell>{getStatusBadge(candidate.status, candidate.scalp_approved)}</TableCell>
-                          <TableCell className="text-xs text-muted-foreground">
-                            {formatDistanceToNow(new Date(candidate.detected_at), { addSuffix: true })}
-                          </TableCell>
-                          <TableCell>
-                            <div className="flex items-center gap-1">
-                              <Button
-                                variant="ghost"
-                                size="icon"
-                                className="h-7 w-7"
-                                onClick={() => window.open(`https://pump.fun/${candidate.token_mint}`, '_blank')}
-                              >
-                                <ExternalLink className="h-3 w-3" />
-                              </Button>
-                              {candidate.status === 'pending' && (
-                                <>
-                                  <Button
-                                    variant="ghost"
-                                    size="icon"
-                                    className="h-7 w-7 text-green-500 hover:text-green-600"
-                                    onClick={() => approveCandidate(candidate.id)}
-                                  >
-                                    <CheckCircle className="h-4 w-4" />
-                                  </Button>
-                                  <Button
-                                    variant="ghost"
-                                    size="icon"
-                                    className="h-7 w-7 text-red-500 hover:text-red-600"
-                                    onClick={() => rejectCandidate(candidate.id)}
-                                  >
-                                    <XCircle className="h-4 w-4" />
-                                  </Button>
-                                </>
-                              )}
-                            </div>
+                    </TableHeader>
+                    <TableBody>
+                      {discoveryLogs.length === 0 ? (
+                        <TableRow>
+                          <TableCell colSpan={8} className="text-center text-muted-foreground py-8">
+                            No discovery logs yet. Click "Poll Now" to scan for tokens.
                           </TableCell>
                         </TableRow>
-                      ))
-                    )}
-                  </TableBody>
-                </Table>
-              </div>
-            </TabsContent>
-          </Tabs>
-        </CardContent>
-      </Card>
+                      ) : (
+                        discoveryLogs.map((log) => (
+                          <TableRow key={log.id} className={log.decision === 'accepted' ? 'bg-green-500/5' : log.decision === 'error' ? 'bg-red-500/5' : ''}>
+                            <TableCell>
+                              <div className="flex flex-col">
+                                <span className="font-medium">{log.token_symbol || 'Unknown'}</span>
+                                <span className="text-xs text-muted-foreground truncate max-w-[100px]">
+                                  {log.token_mint?.slice(0, 8)}...
+                                </span>
+                              </div>
+                            </TableCell>
+                            <TableCell>
+                              {log.decision === 'accepted' ? (
+                                <Badge variant="outline" className="bg-green-500/10 text-green-500 border-green-500/30">
+                                  <CheckCircle className="h-3 w-3 mr-1" />
+                                  Accepted
+                                </Badge>
+                              ) : log.decision === 'error' ? (
+                                <Badge variant="outline" className="bg-red-500/10 text-red-500 border-red-500/30">
+                                  <AlertTriangle className="h-3 w-3 mr-1" />
+                                  Error
+                                </Badge>
+                              ) : (
+                                <Badge variant="outline" className="bg-yellow-500/10 text-yellow-500 border-yellow-500/30">
+                                  <XCircle className="h-3 w-3 mr-1" />
+                                  Rejected
+                                </Badge>
+                              )}
+                            </TableCell>
+                            <TableCell>
+                              <span className="text-xs text-muted-foreground">
+                                {log.rejection_reason?.replace(/_/g, ' ') || '-'}
+                              </span>
+                            </TableCell>
+                            <TableCell>
+                              <span className={Number(log.volume_sol) >= 0.1 ? 'text-green-500' : 'text-muted-foreground'}>
+                                {Number(log.volume_sol).toFixed(3)} SOL
+                              </span>
+                            </TableCell>
+                            <TableCell>{log.tx_count || 0}</TableCell>
+                            <TableCell>
+                              {log.age_minutes ? `${Math.round(log.age_minutes)}m` : '-'}
+                            </TableCell>
+                            <TableCell>
+                              {log.bundle_score !== null ? (
+                                <span className={log.bundle_score >= 50 ? 'text-red-500' : log.bundle_score >= 30 ? 'text-yellow-500' : 'text-green-500'}>
+                                  {log.bundle_score}
+                                </span>
+                              ) : '-'}
+                            </TableCell>
+                            <TableCell className="text-xs text-muted-foreground">
+                              {formatDistanceToNow(new Date(log.created_at), { addSuffix: true })}
+                            </TableCell>
+                          </TableRow>
+                        ))
+                      )}
+                    </TableBody>
+                  </Table>
+                </div>
+              </ScrollArea>
+            </CardContent>
+          </Card>
+        </TabsContent>
+      </Tabs>
     </div>
   );
 }

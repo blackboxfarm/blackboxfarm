@@ -54,11 +54,50 @@ const jsonResponse = (data: unknown, status = 200) =>
 const errorResponse = (message: string, status = 400) =>
   jsonResponse({ success: false, error: message }, status);
 
+// Log a discovery decision to the database
+async function logDiscovery(
+  supabase: any,
+  token: TokenData,
+  decision: 'accepted' | 'rejected' | 'error',
+  rejectionReason?: string,
+  metadata?: any
+) {
+  try {
+    const pool = token.pools?.[0];
+    const txCount = (token.buys || 0) + (token.sells || 0) + (pool?.txns?.h24 || 0);
+    const createdAt = token.events?.createdAt;
+    const ageMinutes = createdAt ? (Date.now() - createdAt * 1000) / 60000 : null;
+
+    await supabase.from('pumpfun_discovery_logs').insert({
+      token_mint: token.token?.mint,
+      token_symbol: token.token?.symbol,
+      token_name: token.token?.name,
+      decision,
+      rejection_reason: rejectionReason,
+      volume_sol: metadata?.volumeSol || 0,
+      volume_usd: pool?.volume?.h24 || 0,
+      tx_count: txCount,
+      bundle_score: metadata?.bundleScore,
+      holder_count: token.holders,
+      age_minutes: ageMinutes,
+      metadata: {
+        ...metadata,
+        creator: token.creator,
+        price_usd: pool?.price?.usd,
+        liquidity_usd: pool?.liquidity?.usd,
+      },
+    });
+  } catch (error) {
+    console.error('Failed to log discovery:', error);
+  }
+}
+
 // Fetch latest tokens from Solana Tracker API
-async function fetchLatestPumpfunTokens(limit = 20): Promise<TokenData[]> {
+async function fetchLatestPumpfunTokens(limit = 50): Promise<TokenData[]> {
   const apiKey = Deno.env.get('SOLANA_TRACKER_API_KEY');
   
   try {
+    // Fetch more tokens to have better filtering
     const response = await fetch(
       `https://data.solanatracker.io/tokens/latest?market=pumpfun&limit=${limit}`,
       {
@@ -82,48 +121,10 @@ async function fetchLatestPumpfunTokens(limit = 20): Promise<TokenData[]> {
   }
 }
 
-// Fetch detailed token info including volume - with retry and rate limit handling
-async function fetchTokenDetails(mint: string, retries = 2): Promise<any> {
-  const apiKey = Deno.env.get('SOLANA_TRACKER_API_KEY');
-  
-  for (let attempt = 0; attempt <= retries; attempt++) {
-    try {
-      const response = await fetch(
-        `https://data.solanatracker.io/tokens/${mint}`,
-        {
-          headers: {
-            'x-api-key': apiKey || '',
-            'Accept': 'application/json',
-          },
-        }
-      );
-
-      if (response.status === 429) {
-        console.warn(`⏳ Rate limited on token details for ${mint.slice(0, 8)}, waiting...`);
-        await new Promise(r => setTimeout(r, 1000 * (attempt + 1)));
-        continue;
-      }
-
-      if (!response.ok) {
-        console.warn(`❌ Token details API error for ${mint.slice(0, 8)}: ${response.status}`);
-        return null;
-      }
-
-      return await response.json();
-    } catch (error) {
-      console.error(`Error fetching details for ${mint.slice(0, 8)}:`, error);
-      if (attempt < retries) {
-        await new Promise(r => setTimeout(r, 500));
-      }
-    }
-  }
-  return null;
-}
-
-// Simple bundle analysis - check first buyers
+// Simple bundle analysis using only holder data from token list response
+// This avoids extra API calls - we only check holders for promising tokens
 async function analyzeTokenRisk(mint: string): Promise<{ bundleScore: number; isBundled: boolean; details: any }> {
   try {
-    // Use the first-buyers-utils logic to analyze
     const apiKey = Deno.env.get('SOLANA_TRACKER_API_KEY');
     
     const response = await fetch(
@@ -142,7 +143,6 @@ async function analyzeTokenRisk(mint: string): Promise<{ bundleScore: number; is
     }
 
     if (!response.ok) {
-      console.warn(`❌ Holders API error for ${mint.slice(0, 8)}: ${response.status}`);
       return { bundleScore: 40, isBundled: false, details: { error: `HTTP ${response.status}` } };
     }
 
@@ -196,7 +196,7 @@ async function checkDeveloperReputation(supabase: any, creatorWallet: string): P
     const { data } = await supabase
       .from('developer_profiles')
       .select('integrity_score, total_tokens_created, successful_tokens')
-      .eq('wallet_address', creatorWallet)
+      .eq('master_wallet_address', creatorWallet)
       .single();
 
     if (!data) {
@@ -219,7 +219,7 @@ async function checkDeveloperReputation(supabase: any, creatorWallet: string): P
   }
 }
 
-// Main polling function
+// Main polling function - FAST version that skips extra API calls
 async function pollForNewTokens(supabase: any, config: MonitorConfig) {
   console.log('📡 Starting pump.fun new token poll...');
 
@@ -232,9 +232,23 @@ async function pollForNewTokens(supabase: any, config: MonitorConfig) {
 
   const existingMints = new Set((recentCandidates || []).map((c: any) => c.token_mint));
 
-  // Fetch latest tokens
-  const tokens = await fetchLatestPumpfunTokens(20);
+  // Fetch latest tokens - the initial API response includes most data we need!
+  const tokens = await fetchLatestPumpfunTokens(50);
   console.log(`📊 Fetched ${tokens.length} tokens from Solana Tracker`);
+
+  if (tokens.length === 0) {
+    console.log('❌ No tokens fetched - API may be down');
+    return {
+      tokensScanned: 0,
+      skippedExisting: 0,
+      skippedLowVolume: 0,
+      skippedOld: 0,
+      skippedHighRisk: 0,
+      candidatesAdded: 0,
+      scalpApproved: 0,
+      errors: 0,
+    };
+  }
 
   const results = {
     tokensScanned: tokens.length,
@@ -248,7 +262,10 @@ async function pollForNewTokens(supabase: any, config: MonitorConfig) {
   };
 
   const solPrice = await getSolPrice(supabase);
+  const promisingTokens: Array<{ token: TokenData; volumeSol: number; volumeUsd: number; txCount: number }> = [];
 
+  // PHASE 1: Quick filter using data we already have (NO extra API calls)
+  console.log('🔍 Phase 1: Quick filtering...');
   for (const tokenData of tokens) {
     try {
       const mint = tokenData.token?.mint;
@@ -257,147 +274,177 @@ async function pollForNewTokens(supabase: any, config: MonitorConfig) {
       // Skip if already processed
       if (existingMints.has(mint)) {
         results.skippedExisting++;
+        await logDiscovery(supabase, tokenData, 'rejected', 'existing', { volumeSol: 0 });
         continue;
       }
 
-      // Add small delay between tokens to avoid rate limits
-      await new Promise(r => setTimeout(r, 300));
-
-      // Get detailed token info - use tokenData as fallback
-      const details = await fetchTokenDetails(mint);
-      if (!details) {
-        // Use the data we already have from the initial fetch
-        console.log(`ℹ️ Using initial data for ${mint.slice(0, 8)} (details fetch failed)`);
-      }
-
-      // Check token age - use fallback from tokenData if details unavailable
-      const createdAt = details?.events?.createdAt || tokenData.events?.createdAt;
+      // Check token age using data from initial response
+      const createdAt = tokenData.events?.createdAt;
       if (createdAt) {
         const ageMinutes = (Date.now() - createdAt * 1000) / 60000;
         if (ageMinutes > config.max_token_age_minutes) {
           results.skippedOld++;
+          console.log(`⏰ ${tokenData.token?.symbol || mint.slice(0, 8)}: Too old (${ageMinutes.toFixed(0)} min)`);
+          await logDiscovery(supabase, tokenData, 'rejected', 'too_old', { volumeSol: 0, ageMinutes });
           continue;
         }
       }
 
-      // Calculate volume in SOL - use best available data
-      const pool = details?.pools?.[0] || tokenData.pools?.[0];
+      // Calculate volume in SOL using data from initial response
+      const pool = tokenData.pools?.[0];
       const volumeUsd = pool?.volume?.h24 || 0;
       const volumeSol = solPrice > 0 ? volumeUsd / solPrice : 0;
-      const txCount = (details?.buys || tokenData.buys || 0) + (details?.sells || tokenData.sells || 0) + (pool?.txns?.h24 || 0);
+      const txCount = (tokenData.buys || 0) + (tokenData.sells || 0) + (pool?.txns?.h24 || 0);
 
-      // Volume surge filter
+      // Volume filter
       if (volumeSol < config.min_volume_sol_5m) {
         results.skippedLowVolume++;
+        console.log(`📉 ${tokenData.token?.symbol || mint.slice(0, 8)}: Low volume (${volumeSol.toFixed(3)} SOL)`);
+        await logDiscovery(supabase, tokenData, 'rejected', 'low_volume', { volumeSol, txCount });
         continue;
       }
 
+      // Transaction filter
       if (txCount < config.min_transactions) {
         results.skippedLowVolume++;
+        console.log(`📉 ${tokenData.token?.symbol || mint.slice(0, 8)}: Low txs (${txCount})`);
+        await logDiscovery(supabase, tokenData, 'rejected', 'low_transactions', { volumeSol, txCount });
         continue;
       }
 
-      console.log(`🔍 Analyzing ${details.token?.symbol || mint.slice(0, 8)}... (Volume: ${volumeSol.toFixed(2)} SOL, Txs: ${txCount})`);
-
-      // Risk analysis
-      const riskAnalysis = await analyzeTokenRisk(mint);
-      
-      if (riskAnalysis.bundleScore > config.max_bundle_score) {
-        results.skippedHighRisk++;
-        console.log(`⚠️ Skipping ${mint.slice(0, 8)} - high bundle score: ${riskAnalysis.bundleScore}`);
-        continue;
-      }
-
-      // Check developer reputation
-      const creatorWallet = details.creator || tokenData.creator;
-      if (creatorWallet) {
-        const devCheck = await checkDeveloperReputation(supabase, creatorWallet);
-        if (devCheck.isScam) {
-          results.skippedHighRisk++;
-          console.log(`⚠️ Skipping ${mint.slice(0, 8)} - known scam dev`);
-          continue;
-        }
-      }
-
-      // Calculate bonding curve percentage if available
-      const marketCapUsd = pool?.price?.usd ? pool.price.usd * 1_000_000_000 : null;
-      const bondingCurvePct = marketCapUsd ? Math.min(100, (marketCapUsd / 69000) * 100) : null;
-
-      // Insert as candidate - use fallbacks from tokenData
-      const candidateData = {
-        token_mint: mint,
-        token_name: details?.token?.name || tokenData.token?.name,
-        token_symbol: details?.token?.symbol || tokenData.token?.symbol,
-        creator_wallet: creatorWallet,
-        volume_sol_5m: volumeSol,
-        volume_usd_5m: volumeUsd,
-        bonding_curve_pct: bondingCurvePct,
-        market_cap_usd: marketCapUsd,
-        holder_count: details?.holders || tokenData.holders || riskAnalysis.details.holderCount || 0,
-        transaction_count: txCount,
-        bundle_score: riskAnalysis.bundleScore,
-        is_bundled: riskAnalysis.isBundled,
-        status: 'pending',
-        auto_buy_enabled: config.auto_scalp_enabled,
-        metadata: {
-          image: details?.token?.image || tokenData.token?.image,
-          description: details?.token?.description || tokenData.token?.description,
-          riskDetails: riskAnalysis.details,
-          pool: pool,
-        },
-      };
-
-      const { error: insertError } = await supabase
-        .from('pumpfun_buy_candidates')
-        .insert(candidateData);
-
-      if (insertError) {
-        if (insertError.code === '23505') {
-          // Duplicate - already exists
-          results.skippedExisting++;
-        } else {
-          console.error(`Error inserting candidate:`, insertError);
-          results.errors++;
-        }
-        continue;
-      }
-
-      results.candidatesAdded++;
-      console.log(`✅ Added candidate: ${candidateData.token_symbol} (${mint.slice(0, 8)}...)`);
-
-      // Auto-scalp integration if enabled
-      if (config.auto_scalp_enabled) {
-        try {
-          const scalpResult = await runScalpValidation(supabase, mint, candidateData, config.scalp_test_mode);
-          
-          // Update candidate with scalp result
-          await supabase
-            .from('pumpfun_buy_candidates')
-            .update({
-              scalp_validation_result: scalpResult,
-              scalp_approved: scalpResult.recommendation === 'BUY',
-              status: scalpResult.recommendation === 'BUY' ? 'approved' : 'rejected',
-              rejection_reason: scalpResult.recommendation !== 'BUY' ? scalpResult.hard_rejects?.join(', ') : null,
-            })
-            .eq('token_mint', mint);
-
-          if (scalpResult.recommendation === 'BUY') {
-            results.scalpApproved++;
-            console.log(`🚀 Scalp approved: ${candidateData.token_symbol}`);
-          }
-        } catch (scalpError) {
-          console.error('Scalp validation error:', scalpError);
-        }
-      }
-
-      // Delay is now at the start of the loop
+      // This token passed quick filters - add to promising list
+      console.log(`✅ ${tokenData.token?.symbol || mint.slice(0, 8)}: Passed quick filters (Vol: ${volumeSol.toFixed(2)} SOL, Txs: ${txCount})`);
+      promisingTokens.push({ token: tokenData, volumeSol, volumeUsd, txCount });
     } catch (error) {
-      console.error('Error processing token:', error);
+      console.error('Error in quick filter:', error);
       results.errors++;
     }
   }
 
-  // Update monitor stats - fetch current values first, then increment
+  console.log(`🎯 Phase 1 complete: ${promisingTokens.length} promising tokens from ${tokens.length} scanned`);
+
+  // PHASE 2: Deep analysis only for promising tokens (with API calls)
+  if (promisingTokens.length > 0) {
+    console.log('🔬 Phase 2: Deep analysis...');
+    
+    for (const { token: tokenData, volumeSol, volumeUsd, txCount } of promisingTokens) {
+      const mint = tokenData.token?.mint!;
+      
+      try {
+        // Small delay between API calls
+        await new Promise(r => setTimeout(r, 500));
+
+        // Risk analysis (requires API call)
+        const riskAnalysis = await analyzeTokenRisk(mint);
+        
+        if (riskAnalysis.bundleScore > config.max_bundle_score) {
+          results.skippedHighRisk++;
+          console.log(`⚠️ ${tokenData.token?.symbol || mint.slice(0, 8)}: High bundle score (${riskAnalysis.bundleScore})`);
+          await logDiscovery(supabase, tokenData, 'rejected', 'high_bundle_score', { 
+            volumeSol, 
+            bundleScore: riskAnalysis.bundleScore,
+            ...riskAnalysis.details 
+          });
+          continue;
+        }
+
+        // Check developer reputation (local DB query, fast)
+        const creatorWallet = tokenData.creator;
+        if (creatorWallet) {
+          const devCheck = await checkDeveloperReputation(supabase, creatorWallet);
+          if (devCheck.isScam) {
+            results.skippedHighRisk++;
+            console.log(`⚠️ ${tokenData.token?.symbol || mint.slice(0, 8)}: Scam dev flagged`);
+            await logDiscovery(supabase, tokenData, 'rejected', 'scam_developer', { volumeSol, integrityScore: devCheck.integrityScore });
+            continue;
+          }
+        }
+
+        // Calculate bonding curve percentage if available
+        const pool = tokenData.pools?.[0];
+        const marketCapUsd = pool?.price?.usd ? pool.price.usd * 1_000_000_000 : null;
+        const bondingCurvePct = marketCapUsd ? Math.min(100, (marketCapUsd / 69000) * 100) : null;
+
+        // Insert as candidate
+        const candidateData = {
+          token_mint: mint,
+          token_name: tokenData.token?.name,
+          token_symbol: tokenData.token?.symbol,
+          creator_wallet: creatorWallet,
+          volume_sol_5m: volumeSol,
+          volume_usd_5m: volumeUsd,
+          bonding_curve_pct: bondingCurvePct,
+          market_cap_usd: marketCapUsd,
+          holder_count: tokenData.holders || riskAnalysis.details.holderCount || 0,
+          transaction_count: txCount,
+          bundle_score: riskAnalysis.bundleScore,
+          is_bundled: riskAnalysis.isBundled,
+          status: 'pending',
+          auto_buy_enabled: config.auto_scalp_enabled,
+          metadata: {
+            image: tokenData.token?.image,
+            description: tokenData.token?.description,
+            riskDetails: riskAnalysis.details,
+            pool: pool,
+          },
+        };
+
+        const { error: insertError } = await supabase
+          .from('pumpfun_buy_candidates')
+          .insert(candidateData);
+
+        if (insertError) {
+          if (insertError.code === '23505') {
+            results.skippedExisting++;
+            await logDiscovery(supabase, tokenData, 'rejected', 'duplicate', { volumeSol });
+          } else {
+            console.error(`Error inserting candidate:`, insertError);
+            results.errors++;
+            await logDiscovery(supabase, tokenData, 'error', 'insert_failed', { error: insertError.message });
+          }
+          continue;
+        }
+
+        results.candidatesAdded++;
+        console.log(`🚀 Added candidate: ${candidateData.token_symbol} (${mint.slice(0, 8)}...)`);
+        await logDiscovery(supabase, tokenData, 'accepted', undefined, { 
+          volumeSol, 
+          bundleScore: riskAnalysis.bundleScore,
+          holderCount: candidateData.holder_count 
+        });
+
+        // Auto-scalp integration if enabled
+        if (config.auto_scalp_enabled) {
+          try {
+            const scalpResult = await runScalpValidation(supabase, mint, candidateData, config.scalp_test_mode);
+            
+            await supabase
+              .from('pumpfun_buy_candidates')
+              .update({
+                scalp_validation_result: scalpResult,
+                scalp_approved: scalpResult.recommendation === 'BUY',
+                status: scalpResult.recommendation === 'BUY' ? 'approved' : 'rejected',
+                rejection_reason: scalpResult.recommendation !== 'BUY' ? scalpResult.hard_rejects?.join(', ') : null,
+              })
+              .eq('token_mint', mint);
+
+            if (scalpResult.recommendation === 'BUY') {
+              results.scalpApproved++;
+              console.log(`🎯 Scalp approved: ${candidateData.token_symbol}`);
+            }
+          } catch (scalpError) {
+            console.error('Scalp validation error:', scalpError);
+          }
+        }
+      } catch (error) {
+        console.error('Error processing token:', error);
+        results.errors++;
+        await logDiscovery(supabase, tokenData, 'error', 'processing_failed', { error: String(error) });
+      }
+    }
+  }
+
+  // Update monitor stats
   const { data: currentConfig } = await supabase
     .from('pumpfun_monitor_config')
     .select('id, tokens_processed_count, candidates_found_count')
@@ -429,7 +476,7 @@ async function getSolPrice(supabase: any): Promise<number> {
       .limit(1)
       .single();
     
-    return data?.price_usd || 200; // Default fallback
+    return data?.price_usd || 200;
   } catch {
     return 200;
   }
@@ -443,7 +490,6 @@ async function runScalpValidation(
   testMode: boolean
 ): Promise<any> {
   try {
-    // Call the scalp-mode-validator function
     const { data, error } = await supabase.functions.invoke('scalp-mode-validator', {
       body: {
         tokenMint,
@@ -492,6 +538,21 @@ async function getCandidates(supabase: any, status?: string, limit = 50) {
   return data;
 }
 
+// Get discovery logs
+async function getDiscoveryLogs(supabase: any, limit = 100) {
+  const { data, error } = await supabase
+    .from('pumpfun_discovery_logs')
+    .select('*')
+    .order('created_at', { ascending: false })
+    .limit(limit);
+  
+  if (error) {
+    throw error;
+  }
+
+  return data;
+}
+
 // Get monitor config
 async function getConfig(supabase: any): Promise<MonitorConfig> {
   const { data, error } = await supabase
@@ -502,9 +563,9 @@ async function getConfig(supabase: any): Promise<MonitorConfig> {
 
   if (error || !data) {
     return {
-      min_volume_sol_5m: 1.0,
-      min_transactions: 10,
-      max_token_age_minutes: 10,
+      min_volume_sol_5m: 0.1, // Lower default for testing
+      min_transactions: 5,
+      max_token_age_minutes: 30,
       max_bundle_score: 70,
       auto_scalp_enabled: false,
       scalp_test_mode: true,
@@ -546,7 +607,6 @@ async function approveCandidate(supabase: any, candidateId: string, testMode: bo
     throw new Error('Candidate not found');
   }
 
-  // Run scalp validation
   const scalpResult = await runScalpValidation(supabase, candidate.token_mint, candidate, testMode);
 
   const { error: updateError } = await supabase
@@ -642,6 +702,12 @@ serve(async (req) => {
         const limit = parseInt(url.searchParams.get('limit') || '50');
         const candidates = await getCandidates(supabase, status, limit);
         return jsonResponse({ success: true, candidates });
+      }
+
+      case 'discovery_logs': {
+        const limit = parseInt(url.searchParams.get('limit') || '100');
+        const logs = await getDiscoveryLogs(supabase, limit);
+        return jsonResponse({ success: true, logs });
       }
 
       case 'config': {

@@ -4252,6 +4252,57 @@ export type Database = {
           },
         ]
       }
+      pumpfun_discovery_logs: {
+        Row: {
+          age_minutes: number | null
+          bundle_score: number | null
+          created_at: string
+          decision: string
+          holder_count: number | null
+          id: string
+          metadata: Json | null
+          rejection_reason: string | null
+          token_mint: string
+          token_name: string | null
+          token_symbol: string | null
+          tx_count: number | null
+          volume_sol: number | null
+          volume_usd: number | null
+        }
+        Insert: {
+          age_minutes?: number | null
+          bundle_score?: number | null
+          created_at?: string
+          decision: string
+          holder_count?: number | null
+          id?: string
+          metadata?: Json | null
+          rejection_reason?: string | null
+          token_mint: string
+          token_name?: string | null
+          token_symbol?: string | null
+          tx_count?: number | null
+          volume_sol?: number | null
+          volume_usd?: number | null
+        }
+        Update: {
+          age_minutes?: number | null
+          bundle_score?: number | null
+          created_at?: string
+          decision?: string
+          holder_count?: number | null
+          id?: string
+          metadata?: Json | null
+          rejection_reason?: string | null
+          token_mint?: string
+          token_name?: string | null
+          token_symbol?: string | null
+          tx_count?: number | null
+          volume_sol?: number | null
+          volume_usd?: number | null
+        }
+        Relationships: []
+      }
       pumpfun_monitor_config: {
         Row: {
           auto_scalp_enabled: boolean
