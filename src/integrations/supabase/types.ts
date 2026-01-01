@@ -4255,6 +4255,8 @@ export type Database = {
       pumpfun_discovery_logs: {
         Row: {
           acceptance_reasoning: Json | null
+          actual_outcome: string | null
+          actual_roi_pct: number | null
           age_minutes: number | null
           bonding_curve_pct: number | null
           bundle_score: number | null
@@ -4269,13 +4271,17 @@ export type Database = {
           holder_count: number | null
           id: string
           liquidity_usd: number | null
+          manual_review_at: string | null
+          manual_review_notes: string | null
           market_cap_usd: number | null
           metadata: Json | null
           passed_filters: string[] | null
           price_usd: number | null
           rejection_reason: string | null
+          reviewed_by: string | null
           score_breakdown: Json | null
           sells_count: number | null
+          should_have_bought: boolean | null
           similar_holdings_count: number | null
           token_mint: string
           token_name: string | null
@@ -4288,6 +4294,8 @@ export type Database = {
         }
         Insert: {
           acceptance_reasoning?: Json | null
+          actual_outcome?: string | null
+          actual_roi_pct?: number | null
           age_minutes?: number | null
           bonding_curve_pct?: number | null
           bundle_score?: number | null
@@ -4302,13 +4310,17 @@ export type Database = {
           holder_count?: number | null
           id?: string
           liquidity_usd?: number | null
+          manual_review_at?: string | null
+          manual_review_notes?: string | null
           market_cap_usd?: number | null
           metadata?: Json | null
           passed_filters?: string[] | null
           price_usd?: number | null
           rejection_reason?: string | null
+          reviewed_by?: string | null
           score_breakdown?: Json | null
           sells_count?: number | null
+          should_have_bought?: boolean | null
           similar_holdings_count?: number | null
           token_mint: string
           token_name?: string | null
@@ -4321,6 +4333,8 @@ export type Database = {
         }
         Update: {
           acceptance_reasoning?: Json | null
+          actual_outcome?: string | null
+          actual_roi_pct?: number | null
           age_minutes?: number | null
           bonding_curve_pct?: number | null
           bundle_score?: number | null
@@ -4335,13 +4349,17 @@ export type Database = {
           holder_count?: number | null
           id?: string
           liquidity_usd?: number | null
+          manual_review_at?: string | null
+          manual_review_notes?: string | null
           market_cap_usd?: number | null
           metadata?: Json | null
           passed_filters?: string[] | null
           price_usd?: number | null
           rejection_reason?: string | null
+          reviewed_by?: string | null
           score_breakdown?: Json | null
           sells_count?: number | null
+          should_have_bought?: boolean | null
           similar_holdings_count?: number | null
           token_mint?: string
           token_name?: string | null

@@ -6,6 +6,7 @@ import { Switch } from '@/components/ui/switch';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Textarea } from '@/components/ui/textarea';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { supabase } from '@/integrations/supabase/client';
@@ -21,7 +22,11 @@ import {
   Clock,
   Zap,
   ExternalLink,
-  FileText
+  FileText,
+  ThumbsUp,
+  ThumbsDown,
+  MessageSquare,
+  Star
 } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
 
@@ -78,6 +83,13 @@ interface DiscoveryLog {
   acceptance_reasoning: { reasons?: string[]; summary?: string } | null;
   score_breakdown: Record<string, number | null> | null;
   config_snapshot: Record<string, any> | null;
+  // Manual review columns
+  should_have_bought: boolean | null;
+  manual_review_notes: string | null;
+  manual_review_at: string | null;
+  actual_outcome: 'pumped' | 'dumped' | 'sideways' | 'unknown' | null;
+  actual_roi_pct: number | null;
+  reviewed_by: string | null;
 }
 
 interface MonitorConfig {
@@ -111,6 +123,7 @@ export function TokenCandidatesDashboard() {
   const [polling, setPolling] = useState(false);
   const [activeTab, setActiveTab] = useState('all');
   const [mainTab, setMainTab] = useState<'candidates' | 'logs'>('candidates');
+  const [logsFilter, setLogsFilter] = useState<'all' | 'rejected' | 'accepted' | 'reviewed' | 'should_have_bought'>('all');
   const [configEdits, setConfigEdits] = useState<Partial<MonitorConfig>>({});
 
   // Fetch candidates
@@ -322,9 +335,52 @@ export function TokenCandidatesDashboard() {
     }
   };
 
+  // Manual review - mark log as "should have bought"
+  const markShouldHaveBought = async (logId: string, shouldHaveBought: boolean, notes?: string, outcome?: string) => {
+    try {
+      const { error } = await supabase
+        .from('pumpfun_discovery_logs')
+        .update({
+          should_have_bought: shouldHaveBought,
+          manual_review_notes: notes || null,
+          actual_outcome: outcome || null,
+          manual_review_at: new Date().toISOString(),
+        })
+        .eq('id', logId);
+
+      if (error) throw error;
+
+      toast.success(shouldHaveBought ? 'Marked as missed opportunity' : 'Review saved');
+      await fetchDiscoveryLogs();
+    } catch (error) {
+      console.error('Review error:', error);
+      toast.error('Failed to save review');
+    }
+  };
+
   const filteredCandidates = activeTab === 'all' 
     ? candidates 
     : candidates.filter(c => c.status === activeTab);
+
+  // Filter discovery logs
+  const filteredLogs = discoveryLogs.filter(log => {
+    if (logsFilter === 'all') return true;
+    if (logsFilter === 'rejected') return log.decision === 'rejected';
+    if (logsFilter === 'accepted') return log.decision === 'accepted';
+    if (logsFilter === 'reviewed') return log.manual_review_at !== null;
+    if (logsFilter === 'should_have_bought') return log.should_have_bought === true;
+    return true;
+  });
+
+  // Stats for discovery logs
+  const logStats = {
+    total: discoveryLogs.length,
+    accepted: discoveryLogs.filter(l => l.decision === 'accepted').length,
+    rejected: discoveryLogs.filter(l => l.decision === 'rejected').length,
+    reviewed: discoveryLogs.filter(l => l.manual_review_at !== null).length,
+    shouldHaveBought: discoveryLogs.filter(l => l.should_have_bought === true).length,
+  };
+
 
   if (loading) {
     return (
@@ -635,7 +691,7 @@ export function TokenCandidatesDashboard() {
                     Discovery Logs - Learning & Backtesting
                   </CardTitle>
                   <CardDescription>
-                    Detailed reasoning for all token decisions. Use to train and improve detection.
+                    Detailed reasoning for all token decisions. Mark rejected tokens as "should've bought" for learning.
                   </CardDescription>
                 </div>
                 <Button variant="outline" size="sm" onClick={fetchDiscoveryLogs}>
@@ -645,19 +701,67 @@ export function TokenCandidatesDashboard() {
               </div>
             </CardHeader>
             <CardContent>
+              {/* Filter Tabs and Stats */}
+              <div className="flex flex-wrap items-center gap-4 mb-4">
+                <div className="flex flex-wrap gap-2">
+                  <Button 
+                    variant={logsFilter === 'all' ? 'default' : 'outline'} 
+                    size="sm"
+                    onClick={() => setLogsFilter('all')}
+                  >
+                    All ({logStats.total})
+                  </Button>
+                  <Button 
+                    variant={logsFilter === 'rejected' ? 'default' : 'outline'} 
+                    size="sm"
+                    onClick={() => setLogsFilter('rejected')}
+                  >
+                    Rejected ({logStats.rejected})
+                  </Button>
+                  <Button 
+                    variant={logsFilter === 'accepted' ? 'default' : 'outline'} 
+                    size="sm"
+                    onClick={() => setLogsFilter('accepted')}
+                  >
+                    Accepted ({logStats.accepted})
+                  </Button>
+                  <Button 
+                    variant={logsFilter === 'reviewed' ? 'default' : 'outline'} 
+                    size="sm"
+                    onClick={() => setLogsFilter('reviewed')}
+                  >
+                    <Star className="h-3 w-3 mr-1" />
+                    Reviewed ({logStats.reviewed})
+                  </Button>
+                  <Button 
+                    variant={logsFilter === 'should_have_bought' ? 'default' : 'outline'} 
+                    size="sm"
+                    onClick={() => setLogsFilter('should_have_bought')}
+                    className={logsFilter === 'should_have_bought' ? '' : 'text-orange-500 border-orange-500/30 hover:bg-orange-500/10'}
+                  >
+                    <ThumbsUp className="h-3 w-3 mr-1" />
+                    Should've Bought ({logStats.shouldHaveBought})
+                  </Button>
+                </div>
+              </div>
+
               <ScrollArea className="h-[600px]">
                 <div className="space-y-3">
-                  {discoveryLogs.length === 0 ? (
+                  {filteredLogs.length === 0 ? (
                     <div className="text-center text-muted-foreground py-8 border rounded-md">
-                      No discovery logs yet. Click "Poll Now" to scan for tokens.
+                      {logsFilter === 'all' 
+                        ? 'No discovery logs yet. Click "Poll Now" to scan for tokens.'
+                        : `No logs match the "${logsFilter}" filter.`}
                     </div>
                   ) : (
-                    discoveryLogs.map((log) => (
+                    filteredLogs.map((log) => (
                       <div 
                         key={log.id} 
                         className={`border rounded-lg p-4 space-y-3 ${
+                          log.should_have_bought === true ? 'bg-orange-500/10 border-orange-500/40 ring-1 ring-orange-500/30' :
                           log.decision === 'accepted' ? 'bg-green-500/5 border-green-500/30' : 
                           log.decision === 'error' ? 'bg-red-500/5 border-red-500/30' : 
+                          log.manual_review_at ? 'bg-purple-500/5 border-purple-500/30' :
                           'bg-muted/30'
                         }`}
                       >
@@ -824,6 +928,95 @@ export function TokenCandidatesDashboard() {
                             </pre>
                           </details>
                         )}
+
+                        {/* Manual Review Section */}
+                        <div className={`rounded p-3 border ${
+                          log.should_have_bought === true ? 'bg-orange-500/10 border-orange-500/30' :
+                          log.manual_review_at ? 'bg-purple-500/10 border-purple-500/30' :
+                          'bg-muted/20 border-border'
+                        }`}>
+                          <div className="flex items-center justify-between gap-4">
+                            <div className="flex items-center gap-2">
+                              <span className="text-xs font-medium text-muted-foreground">Learning Review:</span>
+                              {log.should_have_bought === true && (
+                                <Badge variant="outline" className="bg-orange-500/20 text-orange-600 border-orange-500/40">
+                                  <ThumbsUp className="h-3 w-3 mr-1" />
+                                  SHOULD'VE BOUGHT
+                                </Badge>
+                              )}
+                              {log.should_have_bought === false && log.manual_review_at && (
+                                <Badge variant="outline" className="bg-muted text-muted-foreground">
+                                  <ThumbsDown className="h-3 w-3 mr-1" />
+                                  Correctly Skipped
+                                </Badge>
+                              )}
+                              {log.actual_outcome && (
+                                <Badge 
+                                  variant="outline" 
+                                  className={
+                                    log.actual_outcome === 'pumped' ? 'bg-green-500/20 text-green-600 border-green-500/40' :
+                                    log.actual_outcome === 'dumped' ? 'bg-red-500/20 text-red-600 border-red-500/40' :
+                                    'bg-muted text-muted-foreground'
+                                  }
+                                >
+                                  {log.actual_outcome.charAt(0).toUpperCase() + log.actual_outcome.slice(1)}
+                                  {log.actual_roi_pct !== null && ` (${log.actual_roi_pct > 0 ? '+' : ''}${log.actual_roi_pct}%)`}
+                                </Badge>
+                              )}
+                            </div>
+                            
+                            {/* Action Buttons */}
+                            <div className="flex items-center gap-2">
+                              {log.decision === 'rejected' && !log.should_have_bought && (
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  className="text-orange-500 border-orange-500/30 hover:bg-orange-500/10"
+                                  onClick={() => markShouldHaveBought(log.id, true)}
+                                >
+                                  <ThumbsUp className="h-3 w-3 mr-1" />
+                                  Should've Bought
+                                </Button>
+                              )}
+                              {log.should_have_bought === true && (
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  className="text-muted-foreground"
+                                  onClick={() => markShouldHaveBought(log.id, false)}
+                                >
+                                  <XCircle className="h-3 w-3 mr-1" />
+                                  Undo
+                                </Button>
+                              )}
+                              {!log.manual_review_at && log.decision !== 'rejected' && (
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  className="text-muted-foreground"
+                                  onClick={() => markShouldHaveBought(log.id, false, 'Confirmed correct decision')}
+                                >
+                                  <CheckCircle className="h-3 w-3 mr-1" />
+                                  Confirm OK
+                                </Button>
+                              )}
+                            </div>
+                          </div>
+                          
+                          {/* Review Notes */}
+                          {log.manual_review_notes && (
+                            <div className="mt-2 text-xs text-muted-foreground flex items-start gap-1">
+                              <MessageSquare className="h-3 w-3 mt-0.5 flex-shrink-0" />
+                              <span>{log.manual_review_notes}</span>
+                            </div>
+                          )}
+                          
+                          {log.manual_review_at && (
+                            <div className="mt-1 text-xs text-muted-foreground/60">
+                              Reviewed {formatDistanceToNow(new Date(log.manual_review_at), { addSuffix: true })}
+                            </div>
+                          )}
+                        </div>
                       </div>
                     ))
                   )}
