@@ -6,9 +6,9 @@ import { Switch } from '@/components/ui/switch';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Textarea } from '@/components/ui/textarea';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { ScrollArea } from '@/components/ui/scroll-area';
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { 
@@ -17,6 +17,7 @@ import {
   CheckCircle, 
   XCircle, 
   TrendingUp,
+  TrendingDown,
   Activity,
   AlertTriangle,
   Clock,
@@ -25,18 +26,47 @@ import {
   FileText,
   ThumbsUp,
   ThumbsDown,
-  MessageSquare,
-  Star,
-  Skull,
-  DollarSign,
-  Globe,
-  Target,
-  Rocket,
-  Timer,
   Copy,
-  ChevronDown
+  ChevronDown,
+  ChevronRight,
+  Eye,
+  Skull,
+  Rocket,
+  Plus,
+  Minus
 } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
+
+// Watchlist item from pumpfun_watchlist table
+interface WatchlistItem {
+  id: string;
+  token_mint: string;
+  token_symbol: string;
+  token_name: string;
+  first_seen_at: string;
+  last_checked_at: string;
+  status: 'watching' | 'qualified' | 'dead' | 'bombed' | 'removed';
+  check_count: number;
+  holder_count: number;
+  holder_count_prev: number | null;
+  volume_sol: number;
+  volume_sol_prev: number | null;
+  price_usd: number | null;
+  price_usd_prev: number | null;
+  price_ath_usd: number | null;
+  holder_count_peak: number | null;
+  tx_count: number;
+  market_cap_usd: number | null;
+  liquidity_usd: number | null;
+  bundle_score: number | null;
+  social_score: number | null;
+  creator_wallet: string | null;
+  qualification_reason: string | null;
+  removal_reason: string | null;
+  qualified_at: string | null;
+  removed_at: string | null;
+  metadata: any;
+}
 
 interface Candidate {
   id: string;
@@ -74,49 +104,10 @@ interface DiscoveryLog {
   age_minutes: number | null;
   created_at: string;
   metadata: any;
-  // New detailed columns for learning
   price_usd: number | null;
   market_cap_usd: number | null;
-  liquidity_usd: number | null;
-  bonding_curve_pct: number | null;
-  top5_holder_pct: number | null;
-  top10_holder_pct: number | null;
-  buys_count: number | null;
-  sells_count: number | null;
-  buy_sell_ratio: number | null;
-  creator_wallet: string | null;
-  creator_integrity_score: number | null;
-  passed_filters: string[] | null;
-  failed_filters: string[] | null;
-  acceptance_reasoning: { reasons?: string[]; summary?: string } | null;
-  score_breakdown: Record<string, number | null> | null;
-  config_snapshot: Record<string, any> | null;
-  // Manual review columns
   should_have_bought: boolean | null;
-  manual_review_notes: string | null;
   manual_review_at: string | null;
-  actual_outcome: 'pumped' | 'dumped' | 'sideways' | 'unknown' | null;
-  actual_roi_pct: number | null;
-  reviewed_by: string | null;
-  // Enhanced quality scoring columns
-  is_mayhem_mode: boolean | null;
-  social_score: number | null;
-  twitter_score: number | null;
-  website_score: number | null;
-  telegram_score: number | null;
-  social_details: any | null;
-  dex_paid_early: boolean | null;
-  dex_paid_details: any | null;
-  price_tier: 'ultra_low' | 'low' | 'medium' | 'high' | null;
-  wallet_quality_score: number | null;
-  first_buyers_analysis: any | null;
-  // Token classification fields
-  token_type: 'quick_pump' | 'project' | 'unknown' | null;
-  entry_window: 'optimal' | 'acceptable' | 'late' | 'missed' | null;
-  current_multiplier: number | null;
-  recommended_action: 'enter_quick' | 'enter_hold' | 'watch' | 'skip' | null;
-  strategy_details: any | null;
-  classification_reasoning: string[] | null;
 }
 
 interface MonitorConfig {
@@ -130,81 +121,91 @@ interface MonitorConfig {
   last_poll_at: string;
   tokens_processed_count: number;
   candidates_found_count: number;
+  // New watchlist config fields
+  min_watch_time_minutes?: number;
+  max_watch_time_minutes?: number;
+  qualification_holder_count?: number;
+  qualification_volume_sol?: number;
+  dead_holder_threshold?: number;
+  dead_volume_threshold_sol?: number;
 }
 
-interface Stats {
-  totalCandidates: number;
-  pendingCandidates: number;
-  approvedCandidates: number;
-  candidatesLastHour: number;
-  lastPollAt: string;
-  config: MonitorConfig;
+interface PollSummary {
+  tokensScanned: number;
+  watchlistSize: number;
+  newlyAdded: number;
+  newlyQualified: number;
+  removedDead: number;
+  removedBombed: number;
+  stillWatching: number;
+  updated: number;
+  qualifiedTokens: Array<{ mint: string; symbol: string; reason: string }>;
+  removedTokens: Array<{ mint: string; symbol: string; reason: string }>;
+  durationMs?: number;
+  pollRunId?: string;
 }
 
 export function TokenCandidatesDashboard() {
+  const [watchlist, setWatchlist] = useState<WatchlistItem[]>([]);
   const [candidates, setCandidates] = useState<Candidate[]>([]);
   const [discoveryLogs, setDiscoveryLogs] = useState<DiscoveryLog[]>([]);
   const [config, setConfig] = useState<MonitorConfig | null>(null);
-  const [stats, setStats] = useState<Stats | null>(null);
   const [loading, setLoading] = useState(true);
   const [polling, setPolling] = useState(false);
-  const [activeTab, setActiveTab] = useState('all');
-  const [mainTab, setMainTab] = useState<'candidates' | 'logs'>('candidates');
-  const [logsFilter, setLogsFilter] = useState<'all' | 'rejected' | 'accepted' | 'reviewed' | 'should_have_bought' | 'this_poll'>('all');
+  const [mainTab, setMainTab] = useState<'watchlist' | 'candidates' | 'logs'>('watchlist');
+  const [watchlistFilter, setWatchlistFilter] = useState<'all' | 'watching' | 'qualified' | 'dead'>('all');
+  const [candidateFilter, setCandidateFilter] = useState<'all' | 'pending' | 'approved' | 'rejected'>('all');
+  const [logsFilter, setLogsFilter] = useState<'all' | 'rejected' | 'accepted'>('all');
   const [configEdits, setConfigEdits] = useState<Partial<MonitorConfig>>({});
-  const [lastPollSummary, setLastPollSummary] = useState<{
-    tokensScanned: number;
-    candidatesAdded: number;
-    skippedExisting: number;
-    skippedLowVolume: number;
-    skippedOld: number;
-    skippedHighRisk: number;
-    skippedMayhemMode: number;
-    skippedEarlyDexPaid: number;
-    errors: number;
-    pollRunId?: string;
-    durationMs?: number;
-  } | null>(null);
+  const [lastPollSummary, setLastPollSummary] = useState<PollSummary | null>(null);
+  const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set());
   const [logsPage, setLogsPage] = useState(0);
   const [totalLogsCount, setTotalLogsCount] = useState(0);
-  const LOGS_PER_PAGE = 50;
+  const LOGS_PER_PAGE = 100;
 
-  // Fetch candidates - FIXED: Direct query, no accidental polling
+  // Fetch watchlist
+  const fetchWatchlist = useCallback(async () => {
+    try {
+      const { data, error } = await supabase
+        .from('pumpfun_watchlist')
+        .select('*')
+        .order('last_checked_at', { ascending: false })
+        .limit(500);
+
+      if (error) throw error;
+      setWatchlist((data || []) as WatchlistItem[]);
+    } catch (error) {
+      console.error('Error fetching watchlist:', error);
+    }
+  }, []);
+
+  // Fetch candidates
   const fetchCandidates = useCallback(async () => {
     try {
-      const { data: candidatesData } = await supabase
+      const { data } = await supabase
         .from('pumpfun_buy_candidates')
         .select('*')
         .order('detected_at', { ascending: false })
         .limit(100);
 
-      setCandidates(candidatesData || []);
+      setCandidates(data || []);
     } catch (error) {
       console.error('Error fetching candidates:', error);
-      toast.error('Failed to fetch candidates');
     }
   }, []);
 
   // Fetch discovery logs with pagination
-  const fetchDiscoveryLogs = useCallback(async (pollRunId?: string) => {
+  const fetchDiscoveryLogs = useCallback(async () => {
     try {
-      // Get total count
       const { count } = await supabase
         .from('pumpfun_discovery_logs')
         .select('id', { count: 'exact', head: true });
       setTotalLogsCount(count || 0);
 
-      // Build query with optional poll_run_id filter
-      let query = supabase
+      const { data, error } = await supabase
         .from('pumpfun_discovery_logs')
-        .select('*')
-        .order('created_at', { ascending: false });
-
-      if (pollRunId) {
-        query = query.eq('poll_run_id', pollRunId);
-      }
-
-      const { data, error } = await query
+        .select('id, token_mint, token_symbol, token_name, decision, rejection_reason, volume_sol, volume_usd, tx_count, bundle_score, holder_count, age_minutes, created_at, price_usd, market_cap_usd, should_have_bought, manual_review_at, metadata')
+        .order('created_at', { ascending: false })
         .range(logsPage * LOGS_PER_PAGE, (logsPage + 1) * LOGS_PER_PAGE - 1);
 
       if (error) throw error;
@@ -214,36 +215,19 @@ export function TokenCandidatesDashboard() {
     }
   }, [logsPage]);
 
-  // Fetch config and stats
-  const fetchConfigAndStats = useCallback(async () => {
+  // Fetch config
+  const fetchConfig = useCallback(async () => {
     try {
-      const { data: configData } = await supabase
+      const { data } = await supabase
         .from('pumpfun_monitor_config')
         .select('*')
         .limit(1)
         .single();
 
-      if (configData) {
-        setConfig(configData);
-        setConfigEdits(configData);
+      if (data) {
+        setConfig(data);
+        setConfigEdits(data);
       }
-
-      // Get stats
-      const [total, pending, approved, hourly] = await Promise.all([
-        supabase.from('pumpfun_buy_candidates').select('id', { count: 'exact', head: true }),
-        supabase.from('pumpfun_buy_candidates').select('id', { count: 'exact', head: true }).eq('status', 'pending'),
-        supabase.from('pumpfun_buy_candidates').select('id', { count: 'exact', head: true }).eq('scalp_approved', true),
-        supabase.from('pumpfun_buy_candidates').select('id', { count: 'exact', head: true }).gte('detected_at', new Date(Date.now() - 3600000).toISOString()),
-      ]);
-
-      setStats({
-        totalCandidates: total.count || 0,
-        pendingCandidates: pending.count || 0,
-        approvedCandidates: approved.count || 0,
-        candidatesLastHour: hourly.count || 0,
-        lastPollAt: configData?.last_poll_at,
-        config: configData,
-      });
     } catch (error) {
       console.error('Error fetching config:', error);
     }
@@ -253,29 +237,28 @@ export function TokenCandidatesDashboard() {
   useEffect(() => {
     const load = async () => {
       setLoading(true);
-      await Promise.all([fetchCandidates(), fetchConfigAndStats(), fetchDiscoveryLogs()]);
+      await Promise.all([fetchWatchlist(), fetchCandidates(), fetchConfig(), fetchDiscoveryLogs()]);
       setLoading(false);
     };
     load();
 
-    // Set up realtime subscription
+    // Realtime subscription
     const channel = supabase
-      .channel('pumpfun-candidates')
+      .channel('pumpfun-monitor')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'pumpfun_watchlist' }, () => {
+        fetchWatchlist();
+      })
       .on('postgres_changes', { event: '*', schema: 'public', table: 'pumpfun_buy_candidates' }, () => {
         fetchCandidates();
-        fetchConfigAndStats();
-      })
-      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'pumpfun_discovery_logs' }, () => {
-        fetchDiscoveryLogs();
       })
       .subscribe();
 
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [fetchCandidates, fetchConfigAndStats, fetchDiscoveryLogs]);
+  }, [fetchWatchlist, fetchCandidates, fetchConfig, fetchDiscoveryLogs]);
 
-  // Manual poll trigger with persistent results
+  // Poll trigger with new watchlist model
   const triggerPoll = async () => {
     setPolling(true);
     const startTime = Date.now();
@@ -289,176 +272,121 @@ export function TokenCandidatesDashboard() {
       const results = data?.results || {};
       const durationMs = Date.now() - startTime;
       
-      // Store persistent summary
       setLastPollSummary({
         tokensScanned: results.tokensScanned || 0,
-        candidatesAdded: results.candidatesAdded || 0,
-        skippedExisting: results.skippedExisting || 0,
-        skippedLowVolume: results.skippedLowVolume || 0,
-        skippedOld: results.skippedOld || 0,
-        skippedHighRisk: results.skippedHighRisk || 0,
-        skippedMayhemMode: results.skippedMayhemMode || 0,
-        skippedEarlyDexPaid: results.skippedEarlyDexPaid || 0,
-        errors: results.errors || 0,
-        pollRunId: data?.pollRunId,
+        watchlistSize: results.watchlistSize || 0,
+        newlyAdded: results.newlyAdded || 0,
+        newlyQualified: results.newlyQualified || 0,
+        removedDead: results.removedDead || 0,
+        removedBombed: results.removedBombed || 0,
+        stillWatching: results.stillWatching || 0,
+        updated: results.updated || 0,
+        qualifiedTokens: results.qualifiedTokens || [],
+        removedTokens: results.removedTokens || [],
         durationMs,
+        pollRunId: data?.pollRunId,
       });
 
+      const totalRemoved = (results.removedDead || 0) + (results.removedBombed || 0);
       toast.success(
-        `Poll complete in ${(durationMs / 1000).toFixed(1)}s: ${results.tokensScanned || 0} scanned, ${results.candidatesAdded || 0} added`,
-        { duration: 15000 }
+        `Poll: +${results.newlyAdded || 0} watching, +${results.newlyQualified || 0} qualified, -${totalRemoved} removed`,
+        { duration: 10000 }
       );
       
-      await Promise.all([fetchCandidates(), fetchConfigAndStats()]);
-      // Fetch logs for this specific poll run
-      if (data?.pollRunId) {
-        setLogsFilter('this_poll');
-        await fetchDiscoveryLogs(data.pollRunId);
-      } else {
-        await fetchDiscoveryLogs();
-      }
+      await Promise.all([fetchWatchlist(), fetchCandidates(), fetchConfig()]);
     } catch (error) {
       console.error('Poll error:', error);
-      toast.error('Failed to poll for tokens', { duration: 15000 });
+      toast.error('Failed to poll');
     } finally {
       setPolling(false);
     }
   };
 
-  // Copy to clipboard helper
+  // Copy helper
   const copyToClipboard = (text: string) => {
     navigator.clipboard.writeText(text);
-    toast.success('Copied to clipboard');
+    toast.success('Copied');
   };
 
-  // Update config
+  // Save config
   const saveConfig = async () => {
     try {
       const { error } = await supabase
         .from('pumpfun_monitor_config')
-        .update({
-          ...configEdits,
-          updated_at: new Date().toISOString(),
-        })
+        .update({ ...configEdits, updated_at: new Date().toISOString() })
         .not('id', 'is', null);
 
       if (error) throw error;
-
-      toast.success('Configuration saved');
-      await fetchConfigAndStats();
+      toast.success('Config saved');
+      await fetchConfig();
     } catch (error) {
-      console.error('Config save error:', error);
-      toast.error('Failed to save configuration');
+      toast.error('Failed to save config');
     }
   };
 
-  // Approve candidate
-  const approveCandidate = async (candidateId: string) => {
-    try {
-      const { error } = await supabase
-        .from('pumpfun_buy_candidates')
-        .update({
-          status: 'approved',
-          scalp_approved: true,
-          updated_at: new Date().toISOString(),
-        })
-        .eq('id', candidateId);
-
-      if (error) throw error;
-
-      toast.success('Candidate approved');
-      await fetchCandidates();
-    } catch (error) {
-      toast.error('Failed to approve candidate');
-    }
+  // Toggle row expansion
+  const toggleExpand = (id: string) => {
+    setExpandedRows(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
   };
 
-  // Reject candidate
-  const rejectCandidate = async (candidateId: string) => {
-    try {
-      const { error } = await supabase
-        .from('pumpfun_buy_candidates')
-        .update({
-          status: 'rejected',
-          rejection_reason: 'Manually rejected',
-          updated_at: new Date().toISOString(),
-        })
-        .eq('id', candidateId);
-
-      if (error) throw error;
-
-      toast.success('Candidate rejected');
-      await fetchCandidates();
-    } catch (error) {
-      toast.error('Failed to reject candidate');
+  // Delta display helper
+  const DeltaDisplay = ({ current, prev, suffix = '' }: { current: number; prev: number | null; suffix?: string }) => {
+    if (prev === null || prev === undefined) {
+      return <span>{current?.toFixed?.(current < 10 ? 2 : 0) ?? current}{suffix}</span>;
     }
+    const delta = current - prev;
+    if (delta === 0) return <span>{current?.toFixed?.(current < 10 ? 2 : 0) ?? current}{suffix}</span>;
+    return (
+      <span className="flex items-center gap-1">
+        {current?.toFixed?.(current < 10 ? 2 : 0) ?? current}{suffix}
+        <span className={delta > 0 ? 'text-green-500 text-xs' : 'text-red-500 text-xs'}>
+          ({delta > 0 ? '+' : ''}{delta?.toFixed?.(delta < 10 && delta > -10 ? 2 : 0) ?? delta})
+        </span>
+      </span>
+    );
   };
 
-  const getStatusBadge = (status: string, scalpApproved?: boolean) => {
+  // Status badge for watchlist
+  const getWatchlistStatusBadge = (status: string) => {
     switch (status) {
-      case 'pending':
-        return <Badge variant="outline" className="bg-yellow-500/10 text-yellow-500 border-yellow-500/30">Pending</Badge>;
-      case 'approved':
-        return <Badge variant="outline" className="bg-green-500/10 text-green-500 border-green-500/30">Approved</Badge>;
-      case 'rejected':
-        return <Badge variant="outline" className="bg-red-500/10 text-red-500 border-red-500/30">Rejected</Badge>;
-      case 'bought':
-        return <Badge variant="outline" className="bg-blue-500/10 text-blue-500 border-blue-500/30">Bought</Badge>;
-      case 'expired':
-        return <Badge variant="secondary">Expired</Badge>;
+      case 'watching':
+        return <Badge variant="outline" className="bg-blue-500/10 text-blue-500 border-blue-500/30 text-xs">Watching</Badge>;
+      case 'qualified':
+        return <Badge variant="outline" className="bg-green-500/10 text-green-500 border-green-500/30 text-xs">Qualified</Badge>;
+      case 'dead':
+        return <Badge variant="outline" className="bg-muted text-muted-foreground text-xs">Dead</Badge>;
+      case 'bombed':
+        return <Badge variant="outline" className="bg-red-500/10 text-red-500 border-red-500/30 text-xs">Bombed</Badge>;
       default:
-        return <Badge variant="secondary">{status}</Badge>;
+        return <Badge variant="secondary" className="text-xs">{status}</Badge>;
     }
   };
 
-  // Manual review - mark log as "should have bought"
-  const markShouldHaveBought = async (logId: string, shouldHaveBought: boolean, notes?: string, outcome?: string) => {
-    try {
-      const { error } = await supabase
-        .from('pumpfun_discovery_logs')
-        .update({
-          should_have_bought: shouldHaveBought,
-          manual_review_notes: notes || null,
-          actual_outcome: outcome || null,
-          manual_review_at: new Date().toISOString(),
-        })
-        .eq('id', logId);
+  // Filtered data
+  const filteredWatchlist = watchlistFilter === 'all' 
+    ? watchlist 
+    : watchlist.filter(w => w.status === watchlistFilter);
 
-      if (error) throw error;
+  const filteredCandidates = candidateFilter === 'all'
+    ? candidates
+    : candidates.filter(c => c.status === candidateFilter);
 
-      toast.success(shouldHaveBought ? 'Marked as missed opportunity' : 'Review saved');
-      await fetchDiscoveryLogs();
-    } catch (error) {
-      console.error('Review error:', error);
-      toast.error('Failed to save review');
-    }
+  const filteredLogs = logsFilter === 'all'
+    ? discoveryLogs
+    : discoveryLogs.filter(l => l.decision === logsFilter);
+
+  // Watchlist stats
+  const watchlistStats = {
+    total: watchlist.length,
+    watching: watchlist.filter(w => w.status === 'watching').length,
+    qualified: watchlist.filter(w => w.status === 'qualified').length,
+    dead: watchlist.filter(w => w.status === 'dead' || w.status === 'bombed').length,
   };
-
-  const filteredCandidates = activeTab === 'all' 
-    ? candidates 
-    : candidates.filter(c => c.status === activeTab);
-
-  // Filter discovery logs
-  const filteredLogs = discoveryLogs.filter(log => {
-    if (logsFilter === 'all') return true;
-    if (logsFilter === 'rejected') return log.decision === 'rejected';
-    if (logsFilter === 'accepted') return log.decision === 'accepted';
-    if (logsFilter === 'reviewed') return log.manual_review_at !== null;
-    if (logsFilter === 'should_have_bought') return log.should_have_bought === true;
-    return true;
-  });
-
-  // Stats for discovery logs
-  const logStats = {
-    total: discoveryLogs.length,
-    accepted: discoveryLogs.filter(l => l.decision === 'accepted').length,
-    rejected: discoveryLogs.filter(l => l.decision === 'rejected').length,
-    reviewed: discoveryLogs.filter(l => l.manual_review_at !== null).length,
-    shouldHaveBought: discoveryLogs.filter(l => l.should_have_bought === true).length,
-    mayhemMode: discoveryLogs.filter(l => l.is_mayhem_mode === true).length,
-    dexPaidEarly: discoveryLogs.filter(l => l.dex_paid_early === true).length,
-  };
-
 
   if (loading) {
     return (
@@ -469,839 +397,498 @@ export function TokenCandidatesDashboard() {
   }
 
   return (
-    <div className="space-y-6">
-      {/* Header with Stats */}
-      <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
-        <Card>
-          <CardContent className="pt-4">
-            <div className="flex items-center gap-2">
-              <Activity className="h-4 w-4 text-muted-foreground" />
-              <span className="text-sm text-muted-foreground">Total Candidates</span>
-            </div>
-            <p className="text-2xl font-bold mt-1">{stats?.totalCandidates || 0}</p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="pt-4">
-            <div className="flex items-center gap-2">
-              <Clock className="h-4 w-4 text-yellow-500" />
-              <span className="text-sm text-muted-foreground">Pending</span>
-            </div>
-            <p className="text-2xl font-bold mt-1 text-yellow-500">{stats?.pendingCandidates || 0}</p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="pt-4">
-            <div className="flex items-center gap-2">
-              <CheckCircle className="h-4 w-4 text-green-500" />
-              <span className="text-sm text-muted-foreground">Scalp Approved</span>
-            </div>
-            <p className="text-2xl font-bold mt-1 text-green-500">{stats?.approvedCandidates || 0}</p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="pt-4">
-            <div className="flex items-center gap-2">
-              <TrendingUp className="h-4 w-4 text-blue-500" />
-              <span className="text-sm text-muted-foreground">Last Hour</span>
-            </div>
-            <p className="text-2xl font-bold mt-1 text-blue-500">{stats?.candidatesLastHour || 0}</p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="pt-4">
-            <div className="flex items-center gap-2">
-              <Zap className="h-4 w-4 text-orange-500" />
-              <span className="text-sm text-muted-foreground">Last Poll</span>
-            </div>
-            <p className="text-sm font-medium mt-1">
-              {stats?.lastPollAt 
-                ? formatDistanceToNow(new Date(stats.lastPollAt), { addSuffix: true })
-                : 'Never'}
-            </p>
-          </CardContent>
-        </Card>
+    <div className="space-y-4">
+      {/* Compact Stats Row */}
+      <div className="flex flex-wrap items-center gap-4 text-sm">
+        <div className="flex items-center gap-2">
+          <Eye className="h-4 w-4 text-blue-500" />
+          <span className="text-muted-foreground">Watching:</span>
+          <span className="font-bold">{watchlistStats.watching}</span>
+        </div>
+        <div className="flex items-center gap-2">
+          <CheckCircle className="h-4 w-4 text-green-500" />
+          <span className="text-muted-foreground">Qualified:</span>
+          <span className="font-bold text-green-500">{watchlistStats.qualified}</span>
+        </div>
+        <div className="flex items-center gap-2">
+          <Skull className="h-4 w-4 text-muted-foreground" />
+          <span className="text-muted-foreground">Dead:</span>
+          <span className="font-bold">{watchlistStats.dead}</span>
+        </div>
+        <div className="flex items-center gap-2">
+          <Activity className="h-4 w-4 text-orange-500" />
+          <span className="text-muted-foreground">Candidates:</span>
+          <span className="font-bold">{candidates.length}</span>
+        </div>
+        <div className="ml-auto flex items-center gap-2">
+          <span className="text-xs text-muted-foreground">
+            Last poll: {config?.last_poll_at ? formatDistanceToNow(new Date(config.last_poll_at), { addSuffix: true }) : 'Never'}
+          </span>
+          <Button variant="outline" size="sm" onClick={triggerPoll} disabled={polling}>
+            {polling ? <RefreshCw className="h-4 w-4 animate-spin" /> : <Play className="h-4 w-4" />}
+            <span className="ml-1">Poll</span>
+          </Button>
+          <Button variant="ghost" size="sm" onClick={() => { fetchWatchlist(); fetchCandidates(); }}>
+            <RefreshCw className="h-4 w-4" />
+          </Button>
+        </div>
       </div>
 
-      {/* Configuration Card */}
-      <Card>
-        <CardHeader>
-          <div className="flex items-center justify-between">
-            <div>
-              <CardTitle className="flex items-center gap-2">
-                <Zap className="h-5 w-5 text-orange-500" />
-                Pump.fun Token Monitor
-              </CardTitle>
-              <CardDescription>
-                Monitors new pump.fun tokens and filters by volume surge
-              </CardDescription>
-            </div>
-            <div className="flex items-center gap-2">
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={triggerPoll}
-                disabled={polling}
-              >
-                {polling ? (
-                  <RefreshCw className="h-4 w-4 animate-spin mr-2" />
-                ) : (
-                  <Play className="h-4 w-4 mr-2" />
-                )}
-                Poll Now
-              </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => {
-                  fetchCandidates();
-                  fetchConfigAndStats();
-                }}
-              >
-                <RefreshCw className="h-4 w-4" />
-              </Button>
-            </div>
-          </div>
-          
-          {/* Last Poll Summary Panel */}
-          {lastPollSummary && (
-            <div className="mt-4 bg-muted/30 border rounded-lg p-4">
-              <div className="flex items-center justify-between mb-3">
-                <h4 className="font-medium flex items-center gap-2">
-                  <CheckCircle className="h-4 w-4 text-green-500" />
-                  Last Poll Results
-                </h4>
-                <span className="text-sm text-muted-foreground">
-                  {lastPollSummary.durationMs ? `${(lastPollSummary.durationMs / 1000).toFixed(1)}s` : ''}
-                </span>
+      {/* Poll Results Summary - Delta Focused */}
+      {lastPollSummary && (
+        <Card className="bg-muted/30">
+          <CardContent className="py-3">
+            <div className="flex flex-wrap items-center gap-4 text-sm">
+              <span className="font-medium">Last Poll ({(lastPollSummary.durationMs! / 1000).toFixed(1)}s):</span>
+              <div className="flex items-center gap-1">
+                <Plus className="h-3 w-3 text-blue-500" />
+                <span>{lastPollSummary.newlyAdded} watching</span>
               </div>
-              <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-3 text-sm">
-                <div className="bg-background rounded p-2">
-                  <div className="text-xs text-muted-foreground">Scanned</div>
-                  <div className="font-bold text-lg">{lastPollSummary.tokensScanned}</div>
-                </div>
-                <div className="bg-background rounded p-2">
-                  <div className="text-xs text-muted-foreground">Candidates Added</div>
-                  <div className="font-bold text-lg text-green-500">{lastPollSummary.candidatesAdded}</div>
-                </div>
-                <div className="bg-background rounded p-2">
-                  <div className="text-xs text-muted-foreground">Skipped (Existing)</div>
-                  <div className="font-medium">{lastPollSummary.skippedExisting}</div>
-                </div>
-                <div className="bg-background rounded p-2">
-                  <div className="text-xs text-muted-foreground">Low Volume</div>
-                  <div className="font-medium">{lastPollSummary.skippedLowVolume}</div>
-                </div>
-                <div className="bg-background rounded p-2">
-                  <div className="text-xs text-muted-foreground">Too Old</div>
-                  <div className="font-medium">{lastPollSummary.skippedOld}</div>
-                </div>
-                <div className="bg-background rounded p-2">
-                  <div className="text-xs text-muted-foreground">High Risk</div>
-                  <div className="font-medium text-red-500">{lastPollSummary.skippedHighRisk}</div>
-                </div>
-                <div className="bg-background rounded p-2">
-                  <div className="text-xs text-muted-foreground">Mayhem Mode</div>
-                  <div className="font-medium text-orange-500">{lastPollSummary.skippedMayhemMode}</div>
-                </div>
-                <div className="bg-background rounded p-2">
-                  <div className="text-xs text-muted-foreground">Early DEX Paid</div>
-                  <div className="font-medium">{lastPollSummary.skippedEarlyDexPaid}</div>
-                </div>
-                {lastPollSummary.errors > 0 && (
-                  <div className="bg-red-500/10 rounded p-2">
-                    <div className="text-xs text-red-500">Errors</div>
-                    <div className="font-medium text-red-500">{lastPollSummary.errors}</div>
-                  </div>
+              <div className="flex items-center gap-1">
+                <Rocket className="h-3 w-3 text-green-500" />
+                <span className="text-green-500">{lastPollSummary.newlyQualified} qualified</span>
+              </div>
+              <div className="flex items-center gap-1">
+                <Minus className="h-3 w-3 text-red-500" />
+                <span className="text-red-500">{lastPollSummary.removedDead + lastPollSummary.removedBombed} removed</span>
+              </div>
+              <span className="text-muted-foreground">| {lastPollSummary.updated} updated | {lastPollSummary.stillWatching} still watching</span>
+            </div>
+            {/* Show qualified/removed token lists if any */}
+            {lastPollSummary.qualifiedTokens.length > 0 && (
+              <div className="mt-2 flex flex-wrap gap-2">
+                <span className="text-xs text-green-500">Qualified:</span>
+                {lastPollSummary.qualifiedTokens.map((t, i) => (
+                  <Badge key={i} variant="outline" className="bg-green-500/10 text-green-500 border-green-500/30 text-xs">
+                    {t.symbol || t.mint.slice(0, 6)}
+                  </Badge>
+                ))}
+              </div>
+            )}
+            {lastPollSummary.removedTokens.length > 0 && (
+              <div className="mt-1 flex flex-wrap gap-2">
+                <span className="text-xs text-red-500">Removed:</span>
+                {lastPollSummary.removedTokens.slice(0, 10).map((t, i) => (
+                  <Badge key={i} variant="outline" className="bg-red-500/10 text-red-500 border-red-500/30 text-xs">
+                    {t.symbol || t.mint.slice(0, 6)} ({t.reason})
+                  </Badge>
+                ))}
+                {lastPollSummary.removedTokens.length > 10 && (
+                  <span className="text-xs text-muted-foreground">+{lastPollSummary.removedTokens.length - 10} more</span>
                 )}
               </div>
-              {lastPollSummary.pollRunId && (
-                <div className="mt-3 flex items-center gap-2">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => {
-                      setMainTab('logs');
-                      setLogsFilter('this_poll');
-                      fetchDiscoveryLogs(lastPollSummary.pollRunId);
-                    }}
-                  >
-                    <FileText className="h-3 w-3 mr-1" />
-                    View This Poll's Logs
-                  </Button>
-                  <span className="text-xs text-muted-foreground">
-                    ID: {lastPollSummary.pollRunId.slice(0, 8)}...
-                  </span>
-                </div>
-              )}
-            </div>
-          )}
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4">
-            <div className="space-y-2">
-              <Label className="text-xs">Min Volume (SOL)</Label>
-              <Input
-                type="number"
-                step="0.1"
-                value={configEdits.min_volume_sol_5m ?? ''}
-                onChange={(e) => setConfigEdits(prev => ({ ...prev, min_volume_sol_5m: parseFloat(e.target.value) }))}
-              />
-            </div>
-            <div className="space-y-2">
-              <Label className="text-xs">Min Transactions</Label>
-              <Input
-                type="number"
-                value={configEdits.min_transactions ?? ''}
-                onChange={(e) => setConfigEdits(prev => ({ ...prev, min_transactions: parseInt(e.target.value) }))}
-              />
-            </div>
-            <div className="space-y-2">
-              <Label className="text-xs">Max Age (min)</Label>
-              <Input
-                type="number"
-                value={configEdits.max_token_age_minutes ?? ''}
-                onChange={(e) => setConfigEdits(prev => ({ ...prev, max_token_age_minutes: parseInt(e.target.value) }))}
-              />
-            </div>
-            <div className="space-y-2">
-              <Label className="text-xs">Max Bundle Score</Label>
-              <Input
-                type="number"
-                max={100}
-                value={configEdits.max_bundle_score ?? ''}
-                onChange={(e) => setConfigEdits(prev => ({ ...prev, max_bundle_score: parseInt(e.target.value) }))}
-              />
-            </div>
-            <div className="space-y-2">
-              <Label className="text-xs">Auto Scalp</Label>
-              <div className="flex items-center gap-2 pt-2">
-                <Switch
-                  checked={configEdits.auto_scalp_enabled ?? false}
-                  onCheckedChange={(checked) => setConfigEdits(prev => ({ ...prev, auto_scalp_enabled: checked }))}
-                />
-                <span className="text-xs text-muted-foreground">
-                  {configEdits.auto_scalp_enabled ? 'Enabled' : 'Disabled'}
-                </span>
-              </div>
-            </div>
-            <div className="space-y-2">
-              <Label className="text-xs">Monitor Enabled</Label>
-              <div className="flex items-center gap-2 pt-2">
-                <Switch
-                  checked={configEdits.is_enabled ?? true}
-                  onCheckedChange={(checked) => setConfigEdits(prev => ({ ...prev, is_enabled: checked }))}
-                />
-                <span className="text-xs text-muted-foreground">
-                  {configEdits.is_enabled ? 'Active' : 'Paused'}
-                </span>
-              </div>
-            </div>
-          </div>
-          <div className="flex justify-end">
-            <Button onClick={saveConfig} size="sm">
-              Save Configuration
-            </Button>
-          </div>
-        </CardContent>
-      </Card>
+            )}
+          </CardContent>
+        </Card>
+      )}
 
-      {/* Main Tabs: Candidates vs Discovery Logs */}
-      <Tabs value={mainTab} onValueChange={(v) => setMainTab(v as 'candidates' | 'logs')}>
-        <TabsList className="mb-4">
-          <TabsTrigger value="candidates" className="flex items-center gap-2">
-            <Activity className="h-4 w-4" />
+      {/* Config Panel - Compact */}
+      <Collapsible>
+        <CollapsibleTrigger asChild>
+          <Button variant="ghost" size="sm" className="w-full justify-between">
+            <span className="flex items-center gap-2">
+              <Zap className="h-4 w-4 text-orange-500" />
+              Configuration
+            </span>
+            <ChevronDown className="h-4 w-4" />
+          </Button>
+        </CollapsibleTrigger>
+        <CollapsibleContent>
+          <Card className="mt-2">
+            <CardContent className="pt-4">
+              <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-3">
+                <div className="space-y-1">
+                  <Label className="text-xs">Min Vol (SOL)</Label>
+                  <Input type="number" step="0.1" value={configEdits.min_volume_sol_5m ?? ''} 
+                    onChange={(e) => setConfigEdits(prev => ({ ...prev, min_volume_sol_5m: parseFloat(e.target.value) }))} />
+                </div>
+                <div className="space-y-1">
+                  <Label className="text-xs">Min Txs</Label>
+                  <Input type="number" value={configEdits.min_transactions ?? ''} 
+                    onChange={(e) => setConfigEdits(prev => ({ ...prev, min_transactions: parseInt(e.target.value) }))} />
+                </div>
+                <div className="space-y-1">
+                  <Label className="text-xs">Min Watch (min)</Label>
+                  <Input type="number" value={configEdits.min_watch_time_minutes ?? 5} 
+                    onChange={(e) => setConfigEdits(prev => ({ ...prev, min_watch_time_minutes: parseInt(e.target.value) }))} />
+                </div>
+                <div className="space-y-1">
+                  <Label className="text-xs">Max Watch (min)</Label>
+                  <Input type="number" value={configEdits.max_watch_time_minutes ?? 60} 
+                    onChange={(e) => setConfigEdits(prev => ({ ...prev, max_watch_time_minutes: parseInt(e.target.value) }))} />
+                </div>
+                <div className="space-y-1">
+                  <Label className="text-xs">Qual. Holders</Label>
+                  <Input type="number" value={configEdits.qualification_holder_count ?? 10} 
+                    onChange={(e) => setConfigEdits(prev => ({ ...prev, qualification_holder_count: parseInt(e.target.value) }))} />
+                </div>
+                <div className="space-y-1">
+                  <Label className="text-xs">Qual. Vol (SOL)</Label>
+                  <Input type="number" step="0.1" value={configEdits.qualification_volume_sol ?? 1} 
+                    onChange={(e) => setConfigEdits(prev => ({ ...prev, qualification_volume_sol: parseFloat(e.target.value) }))} />
+                </div>
+              </div>
+              <div className="flex items-center justify-between mt-3">
+                <div className="flex items-center gap-4">
+                  <div className="flex items-center gap-2">
+                    <Switch checked={configEdits.auto_scalp_enabled ?? false}
+                      onCheckedChange={(checked) => setConfigEdits(prev => ({ ...prev, auto_scalp_enabled: checked }))} />
+                    <span className="text-xs">Auto Scalp</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Switch checked={configEdits.is_enabled ?? true}
+                      onCheckedChange={(checked) => setConfigEdits(prev => ({ ...prev, is_enabled: checked }))} />
+                    <span className="text-xs">Enabled</span>
+                  </div>
+                </div>
+                <Button onClick={saveConfig} size="sm">Save</Button>
+              </div>
+            </CardContent>
+          </Card>
+        </CollapsibleContent>
+      </Collapsible>
+
+      {/* Main Tabs */}
+      <Tabs value={mainTab} onValueChange={(v) => setMainTab(v as 'watchlist' | 'candidates' | 'logs')}>
+        <TabsList>
+          <TabsTrigger value="watchlist" className="flex items-center gap-1">
+            <Eye className="h-3 w-3" />
+            Watchlist ({watchlistStats.total})
+          </TabsTrigger>
+          <TabsTrigger value="candidates" className="flex items-center gap-1">
+            <Rocket className="h-3 w-3" />
             Candidates ({candidates.length})
           </TabsTrigger>
-          <TabsTrigger value="logs" className="flex items-center gap-2">
-            <FileText className="h-4 w-4" />
-            Discovery Logs ({discoveryLogs.length})
+          <TabsTrigger value="logs" className="flex items-center gap-1">
+            <FileText className="h-3 w-3" />
+            Logs ({totalLogsCount})
           </TabsTrigger>
         </TabsList>
 
-        {/* Candidates Tab */}
-        <TabsContent value="candidates">
+        {/* Watchlist Tab - Compact Table */}
+        <TabsContent value="watchlist" className="mt-4">
           <Card>
-            <CardHeader>
-              <CardTitle>Token Candidates</CardTitle>
+            <CardHeader className="py-3">
+              <div className="flex items-center justify-between">
+                <CardTitle className="text-base">Token Watchlist</CardTitle>
+                <div className="flex gap-1">
+                  {(['all', 'watching', 'qualified', 'dead'] as const).map((f) => (
+                    <Button key={f} variant={watchlistFilter === f ? 'default' : 'ghost'} size="sm"
+                      onClick={() => setWatchlistFilter(f)}>
+                      {f === 'all' ? 'All' : f.charAt(0).toUpperCase() + f.slice(1)}
+                      {f !== 'all' && ` (${f === 'dead' ? watchlistStats.dead : watchlist.filter(w => w.status === f).length})`}
+                    </Button>
+                  ))}
+                </div>
+              </div>
             </CardHeader>
-            <CardContent>
-              <Tabs value={activeTab} onValueChange={setActiveTab}>
-                <TabsList>
-                  <TabsTrigger value="all">All ({candidates.length})</TabsTrigger>
-                  <TabsTrigger value="pending">Pending ({candidates.filter(c => c.status === 'pending').length})</TabsTrigger>
-                  <TabsTrigger value="approved">Approved ({candidates.filter(c => c.status === 'approved').length})</TabsTrigger>
-                  <TabsTrigger value="rejected">Rejected ({candidates.filter(c => c.status === 'rejected').length})</TabsTrigger>
-                </TabsList>
-                
-                <TabsContent value={activeTab} className="mt-4">
-                  <div className="rounded-md border">
-                    <Table>
-                      <TableHeader>
-                        <TableRow>
-                          <TableHead>Token</TableHead>
-                          <TableHead>Volume (SOL)</TableHead>
-                          <TableHead>Holders</TableHead>
-                          <TableHead>Txs</TableHead>
-                          <TableHead>Bundle Score</TableHead>
-                          <TableHead>Status</TableHead>
-                          <TableHead>Detected</TableHead>
-                          <TableHead>Actions</TableHead>
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        {filteredCandidates.length === 0 ? (
-                          <TableRow>
-                            <TableCell colSpan={8} className="text-center text-muted-foreground py-8">
-                              No candidates found
+            <CardContent className="p-0">
+              <div className="border rounded-md">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead compact className="w-8"></TableHead>
+                      <TableHead compact>Symbol</TableHead>
+                      <TableHead compact>Mint</TableHead>
+                      <TableHead compact>Holders</TableHead>
+                      <TableHead compact>Vol (SOL)</TableHead>
+                      <TableHead compact>Price</TableHead>
+                      <TableHead compact>ATH</TableHead>
+                      <TableHead compact>Age</TableHead>
+                      <TableHead compact>Checks</TableHead>
+                      <TableHead compact>Status</TableHead>
+                      <TableHead compact>Actions</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {filteredWatchlist.length === 0 ? (
+                      <TableRow>
+                        <TableCell colSpan={11} className="text-center text-muted-foreground py-8">
+                          No tokens in watchlist
+                        </TableCell>
+                      </TableRow>
+                    ) : (
+                      filteredWatchlist.map((item) => (
+                        <React.Fragment key={item.id}>
+                          <TableRow className="hover:bg-muted/30">
+                            <TableCell compact>
+                              <Button variant="ghost" size="icon" className="h-5 w-5" onClick={() => toggleExpand(item.id)}>
+                                {expandedRows.has(item.id) ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}
+                              </Button>
+                            </TableCell>
+                            <TableCell compact className="font-medium">{item.token_symbol || '???'}</TableCell>
+                            <TableCell compact>
+                              <div className="flex items-center gap-1">
+                                <a href={`https://pump.fun/${item.token_mint}`} target="_blank" rel="noopener noreferrer"
+                                  className="text-primary hover:underline font-mono text-xs">
+                                  {item.token_mint?.slice(0, 6)}...
+                                </a>
+                                <Button variant="ghost" size="icon" className="h-4 w-4" onClick={() => copyToClipboard(item.token_mint)}>
+                                  <Copy className="h-2.5 w-2.5" />
+                                </Button>
+                              </div>
+                            </TableCell>
+                            <TableCell compact>
+                              <DeltaDisplay current={item.holder_count} prev={item.holder_count_prev} />
+                            </TableCell>
+                            <TableCell compact>
+                              <DeltaDisplay current={Number(item.volume_sol)} prev={item.volume_sol_prev ? Number(item.volume_sol_prev) : null} />
+                            </TableCell>
+                            <TableCell compact className="text-xs">
+                              {item.price_usd ? `$${Number(item.price_usd).toExponential(2)}` : '-'}
+                            </TableCell>
+                            <TableCell compact className="text-xs text-green-500">
+                              {item.price_ath_usd ? `$${Number(item.price_ath_usd).toExponential(2)}` : '-'}
+                            </TableCell>
+                            <TableCell compact className="text-xs text-muted-foreground">
+                              {formatDistanceToNow(new Date(item.first_seen_at), { addSuffix: false })}
+                            </TableCell>
+                            <TableCell compact className="text-xs">{item.check_count}</TableCell>
+                            <TableCell compact>{getWatchlistStatusBadge(item.status)}</TableCell>
+                            <TableCell compact>
+                              <div className="flex items-center gap-1">
+                                <Button variant="ghost" size="icon" className="h-5 w-5"
+                                  onClick={() => window.open(`https://pump.fun/${item.token_mint}`, '_blank')}>
+                                  <ExternalLink className="h-3 w-3" />
+                                </Button>
+                                <Button variant="ghost" size="icon" className="h-5 w-5"
+                                  onClick={() => window.open(`https://dexscreener.com/solana/${item.token_mint}`, '_blank')}>
+                                  <TrendingUp className="h-3 w-3" />
+                                </Button>
+                              </div>
                             </TableCell>
                           </TableRow>
-                        ) : (
-                          filteredCandidates.map((candidate) => (
-                            <TableRow key={candidate.id}>
-                            <TableCell>
-                                <div className="flex flex-col gap-1">
-                                  <span className="font-medium">{candidate.token_symbol || 'Unknown'}</span>
-                                  <div className="flex items-center gap-1">
-                                    <a 
-                                      href={`https://pump.fun/${candidate.token_mint}`}
-                                      target="_blank"
-                                      rel="noopener noreferrer"
-                                      className="text-xs text-primary hover:underline truncate max-w-[100px]"
-                                    >
-                                      {candidate.token_mint?.slice(0, 8)}...
-                                    </a>
-                                    <Button
-                                      variant="ghost"
-                                      size="icon"
-                                      className="h-5 w-5"
-                                      onClick={() => copyToClipboard(candidate.token_mint)}
-                                    >
-                                      <Copy className="h-3 w-3" />
-                                    </Button>
-                                  </div>
-                                </div>
-                              </TableCell>
-                              <TableCell>
-                                <span className={candidate.volume_sol_5m >= 5 ? 'text-green-500 font-medium' : ''}>
-                                  {candidate.volume_sol_5m?.toFixed(2)}
-                                </span>
-                              </TableCell>
-                              <TableCell>{candidate.holder_count}</TableCell>
-                              <TableCell>{candidate.transaction_count}</TableCell>
-                              <TableCell>
-                                <div className="flex items-center gap-2">
-                                  <span className={candidate.bundle_score >= 50 ? 'text-red-500' : candidate.bundle_score >= 30 ? 'text-yellow-500' : 'text-green-500'}>
-                                    {candidate.bundle_score}
-                                  </span>
-                                  {candidate.is_bundled && (
-                                    <AlertTriangle className="h-3 w-3 text-red-500" />
-                                  )}
-                                </div>
-                              </TableCell>
-                              <TableCell>{getStatusBadge(candidate.status, candidate.scalp_approved)}</TableCell>
-                              <TableCell className="text-xs text-muted-foreground">
-                                {formatDistanceToNow(new Date(candidate.detected_at), { addSuffix: true })}
-                              </TableCell>
-                              <TableCell>
-                                <div className="flex items-center gap-1">
-                                  <Button
-                                    variant="ghost"
-                                    size="icon"
-                                    className="h-7 w-7"
-                                    onClick={() => window.open(`https://pump.fun/${candidate.token_mint}`, '_blank')}
-                                  >
-                                    <ExternalLink className="h-3 w-3" />
-                                  </Button>
-                                  {candidate.status === 'pending' && (
-                                    <>
-                                      <Button
-                                        variant="ghost"
-                                        size="icon"
-                                        className="h-7 w-7 text-green-500 hover:text-green-600"
-                                        onClick={() => approveCandidate(candidate.id)}
-                                      >
-                                        <CheckCircle className="h-4 w-4" />
-                                      </Button>
-                                      <Button
-                                        variant="ghost"
-                                        size="icon"
-                                        className="h-7 w-7 text-red-500 hover:text-red-600"
-                                        onClick={() => rejectCandidate(candidate.id)}
-                                      >
-                                        <XCircle className="h-4 w-4" />
-                                      </Button>
-                                    </>
-                                  )}
+                          {/* Expanded Row */}
+                          {expandedRows.has(item.id) && (
+                            <TableRow className="bg-muted/20">
+                              <TableCell colSpan={11} className="py-3">
+                                <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-xs">
+                                  <div><span className="text-muted-foreground">Name:</span> {item.token_name}</div>
+                                  <div><span className="text-muted-foreground">Market Cap:</span> {item.market_cap_usd ? `$${Number(item.market_cap_usd).toLocaleString()}` : '-'}</div>
+                                  <div><span className="text-muted-foreground">Liquidity:</span> {item.liquidity_usd ? `$${Number(item.liquidity_usd).toLocaleString()}` : '-'}</div>
+                                  <div><span className="text-muted-foreground">Bundle Score:</span> <span className={item.bundle_score && item.bundle_score >= 50 ? 'text-red-500' : ''}>{item.bundle_score ?? '-'}</span></div>
+                                  <div><span className="text-muted-foreground">Peak Holders:</span> {item.holder_count_peak ?? '-'}</div>
+                                  <div><span className="text-muted-foreground">TXs:</span> {item.tx_count}</div>
+                                  <div><span className="text-muted-foreground">Creator:</span> <span className="font-mono">{item.creator_wallet?.slice(0, 8)}...</span></div>
+                                  {item.qualification_reason && <div className="col-span-2 text-green-500"><span className="text-muted-foreground">Qualified:</span> {item.qualification_reason}</div>}
+                                  {item.removal_reason && <div className="col-span-2 text-red-500"><span className="text-muted-foreground">Removed:</span> {item.removal_reason}</div>}
                                 </div>
                               </TableCell>
                             </TableRow>
-                          ))
-                        )}
-                      </TableBody>
-                    </Table>
-                  </div>
-                </TabsContent>
-              </Tabs>
+                          )}
+                        </React.Fragment>
+                      ))
+                    )}
+                  </TableBody>
+                </Table>
+              </div>
             </CardContent>
           </Card>
         </TabsContent>
 
-        {/* Discovery Logs Tab */}
-        <TabsContent value="logs">
+        {/* Candidates Tab - Compact */}
+        <TabsContent value="candidates" className="mt-4">
           <Card>
-            <CardHeader>
+            <CardHeader className="py-3">
               <div className="flex items-center justify-between">
-                <div>
-                  <CardTitle className="flex items-center gap-2">
-                    <FileText className="h-5 w-5" />
-                    Discovery Logs - Learning & Backtesting
-                  </CardTitle>
-                  <CardDescription>
-                    Detailed reasoning for all token decisions. Mark rejected tokens as "should've bought" for learning.
-                  </CardDescription>
+                <CardTitle className="text-base">Qualified Candidates</CardTitle>
+                <div className="flex gap-1">
+                  {(['all', 'pending', 'approved', 'rejected'] as const).map((f) => (
+                    <Button key={f} variant={candidateFilter === f ? 'default' : 'ghost'} size="sm"
+                      onClick={() => setCandidateFilter(f)}>
+                      {f.charAt(0).toUpperCase() + f.slice(1)}
+                    </Button>
+                  ))}
                 </div>
-                <Button variant="outline" size="sm" onClick={() => fetchDiscoveryLogs()}>
-                  <RefreshCw className="h-4 w-4 mr-2" />
-                  Refresh
-                </Button>
               </div>
             </CardHeader>
-            <CardContent>
-              {/* Filter Tabs and Stats */}
-              <div className="flex flex-wrap items-center gap-4 mb-4">
-                <div className="flex flex-wrap gap-2">
-                  <Button 
-                    variant={logsFilter === 'all' ? 'default' : 'outline'} 
-                    size="sm"
-                    onClick={() => setLogsFilter('all')}
-                  >
-                    All ({logStats.total})
-                  </Button>
-                  <Button 
-                    variant={logsFilter === 'rejected' ? 'default' : 'outline'} 
-                    size="sm"
-                    onClick={() => setLogsFilter('rejected')}
-                  >
-                    Rejected ({logStats.rejected})
-                  </Button>
-                  <Button 
-                    variant={logsFilter === 'accepted' ? 'default' : 'outline'} 
-                    size="sm"
-                    onClick={() => setLogsFilter('accepted')}
-                  >
-                    Accepted ({logStats.accepted})
-                  </Button>
-                  <Button 
-                    variant={logsFilter === 'reviewed' ? 'default' : 'outline'} 
-                    size="sm"
-                    onClick={() => setLogsFilter('reviewed')}
-                  >
-                    <Star className="h-3 w-3 mr-1" />
-                    Reviewed ({logStats.reviewed})
-                  </Button>
-                  <Button 
-                    variant={logsFilter === 'should_have_bought' ? 'default' : 'outline'} 
-                    size="sm"
-                    onClick={() => setLogsFilter('should_have_bought')}
-                    className={logsFilter === 'should_have_bought' ? '' : 'text-orange-500 border-orange-500/30 hover:bg-orange-500/10'}
-                  >
-                    <ThumbsUp className="h-3 w-3 mr-1" />
-                    Should've Bought ({logStats.shouldHaveBought})
-                  </Button>
-                  {lastPollSummary?.pollRunId && (
-                    <Button 
-                      variant={logsFilter === 'this_poll' ? 'default' : 'outline'} 
-                      size="sm"
-                      onClick={() => {
-                        setLogsFilter('this_poll');
-                        fetchDiscoveryLogs(lastPollSummary.pollRunId);
-                      }}
-                      className={logsFilter === 'this_poll' ? '' : 'text-blue-500 border-blue-500/30 hover:bg-blue-500/10'}
-                    >
-                      <Zap className="h-3 w-3 mr-1" />
-                      This Poll
+            <CardContent className="p-0">
+              <div className="border rounded-md">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead compact>Symbol</TableHead>
+                      <TableHead compact>Mint</TableHead>
+                      <TableHead compact>Vol (SOL)</TableHead>
+                      <TableHead compact>Holders</TableHead>
+                      <TableHead compact>Txs</TableHead>
+                      <TableHead compact>Bundle</TableHead>
+                      <TableHead compact>Status</TableHead>
+                      <TableHead compact>Age</TableHead>
+                      <TableHead compact>Actions</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {filteredCandidates.length === 0 ? (
+                      <TableRow>
+                        <TableCell colSpan={9} className="text-center text-muted-foreground py-8">
+                          No candidates
+                        </TableCell>
+                      </TableRow>
+                    ) : (
+                      filteredCandidates.map((c) => (
+                        <TableRow key={c.id}>
+                          <TableCell compact className="font-medium">{c.token_symbol || '???'}</TableCell>
+                          <TableCell compact>
+                            <div className="flex items-center gap-1">
+                              <a href={`https://pump.fun/${c.token_mint}`} target="_blank" rel="noopener noreferrer"
+                                className="text-primary hover:underline font-mono text-xs">
+                                {c.token_mint?.slice(0, 6)}...
+                              </a>
+                              <Button variant="ghost" size="icon" className="h-4 w-4" onClick={() => copyToClipboard(c.token_mint)}>
+                                <Copy className="h-2.5 w-2.5" />
+                              </Button>
+                            </div>
+                          </TableCell>
+                          <TableCell compact className={c.volume_sol_5m >= 5 ? 'text-green-500 font-medium' : ''}>
+                            {c.volume_sol_5m?.toFixed(2)}
+                          </TableCell>
+                          <TableCell compact>{c.holder_count}</TableCell>
+                          <TableCell compact>{c.transaction_count}</TableCell>
+                          <TableCell compact>
+                            <span className={c.bundle_score >= 50 ? 'text-red-500' : c.bundle_score >= 30 ? 'text-yellow-500' : 'text-green-500'}>
+                              {c.bundle_score}
+                            </span>
+                            {c.is_bundled && <AlertTriangle className="h-3 w-3 text-red-500 inline ml-1" />}
+                          </TableCell>
+                          <TableCell compact>
+                            <Badge variant="outline" className={
+                              c.status === 'pending' ? 'bg-yellow-500/10 text-yellow-500 border-yellow-500/30' :
+                              c.status === 'approved' ? 'bg-green-500/10 text-green-500 border-green-500/30' :
+                              c.status === 'rejected' ? 'bg-red-500/10 text-red-500 border-red-500/30' :
+                              ''
+                            }>{c.status}</Badge>
+                          </TableCell>
+                          <TableCell compact className="text-xs text-muted-foreground">
+                            {formatDistanceToNow(new Date(c.detected_at), { addSuffix: false })}
+                          </TableCell>
+                          <TableCell compact>
+                            <div className="flex items-center gap-1">
+                              <Button variant="ghost" size="icon" className="h-5 w-5"
+                                onClick={() => window.open(`https://pump.fun/${c.token_mint}`, '_blank')}>
+                                <ExternalLink className="h-3 w-3" />
+                              </Button>
+                              {c.status === 'pending' && (
+                                <>
+                                  <Button variant="ghost" size="icon" className="h-5 w-5 text-green-500">
+                                    <CheckCircle className="h-3 w-3" />
+                                  </Button>
+                                  <Button variant="ghost" size="icon" className="h-5 w-5 text-red-500">
+                                    <XCircle className="h-3 w-3" />
+                                  </Button>
+                                </>
+                              )}
+                            </div>
+                          </TableCell>
+                        </TableRow>
+                      ))
+                    )}
+                  </TableBody>
+                </Table>
+              </div>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        {/* Logs Tab - Compact */}
+        <TabsContent value="logs" className="mt-4">
+          <Card>
+            <CardHeader className="py-3">
+              <div className="flex items-center justify-between">
+                <CardTitle className="text-base">Discovery Logs</CardTitle>
+                <div className="flex gap-1">
+                  {(['all', 'accepted', 'rejected'] as const).map((f) => (
+                    <Button key={f} variant={logsFilter === f ? 'default' : 'ghost'} size="sm"
+                      onClick={() => setLogsFilter(f)}>
+                      {f.charAt(0).toUpperCase() + f.slice(1)}
                     </Button>
-                  )}
-                </div>
-                <div className="text-sm text-muted-foreground">
-                  Showing {filteredLogs.length} of {totalLogsCount.toLocaleString()} total logs
+                  ))}
+                  <Button variant="ghost" size="sm" onClick={() => fetchDiscoveryLogs()}>
+                    <RefreshCw className="h-3 w-3" />
+                  </Button>
                 </div>
               </div>
-
-              <ScrollArea className="h-[600px]">
-                <div className="space-y-3">
-                  {filteredLogs.length === 0 ? (
-                    <div className="text-center text-muted-foreground py-8 border rounded-md">
-                      {logsFilter === 'all' 
-                        ? 'No discovery logs yet. Click "Poll Now" to scan for tokens.'
-                        : `No logs match the "${logsFilter}" filter.`}
-                    </div>
-                  ) : (
-                    filteredLogs.map((log) => (
-                      <div 
-                        key={log.id} 
-                        className={`border rounded-lg p-4 space-y-3 ${
-                          log.should_have_bought === true ? 'bg-orange-500/10 border-orange-500/40 ring-1 ring-orange-500/30' :
-                          log.decision === 'accepted' ? 'bg-green-500/5 border-green-500/30' : 
-                          log.decision === 'error' ? 'bg-red-500/5 border-red-500/30' : 
-                          log.manual_review_at ? 'bg-purple-500/5 border-purple-500/30' :
-                          'bg-muted/30'
-                        }`}
-                      >
-                        {/* Header Row */}
-                        <div className="flex items-center justify-between">
-                          <div className="flex items-center gap-3">
-                            <div>
-                              <div className="flex items-center gap-2">
-                                <span className="font-bold text-lg">{log.token_symbol || 'Unknown'}</span>
-                                {log.decision === 'accepted' ? (
-                                  <Badge variant="outline" className="bg-green-500/10 text-green-500 border-green-500/30">
-                                    <CheckCircle className="h-3 w-3 mr-1" />
-                                    ACCEPTED
-                                  </Badge>
-                                ) : log.decision === 'error' ? (
-                                  <Badge variant="outline" className="bg-red-500/10 text-red-500 border-red-500/30">
-                                    <AlertTriangle className="h-3 w-3 mr-1" />
-                                    ERROR
-                                  </Badge>
-                                ) : (
-                                  <Badge variant="outline" className="bg-yellow-500/10 text-yellow-500 border-yellow-500/30">
-                                    <XCircle className="h-3 w-3 mr-1" />
-                                    {log.rejection_reason?.replace(/_/g, ' ').toUpperCase() || 'REJECTED'}
-                                  </Badge>
-                                )}
-                                {/* Enhanced Quality Badges */}
-                                {log.is_mayhem_mode && (
-                                  <Badge variant="outline" className="bg-red-600/20 text-red-400 border-red-600/50">
-                                    <Skull className="h-3 w-3 mr-1" />
-                                    MAYHEM
-                                  </Badge>
-                                )}
-                                {log.dex_paid_early && (
-                                  <Badge variant="outline" className="bg-orange-500/20 text-orange-400 border-orange-500/40">
-                                    <DollarSign className="h-3 w-3 mr-1" />
-                                    EARLY DEX PAID
-                                  </Badge>
-                                )}
-                                {log.social_score !== null && (
-                                  <Badge variant="outline" className={
-                                    log.social_score >= 60 ? 'bg-green-500/10 text-green-500 border-green-500/30' :
-                                    log.social_score >= 30 ? 'bg-yellow-500/10 text-yellow-500 border-yellow-500/30' :
-                                    'bg-red-500/10 text-red-500 border-red-500/30'
-                                  }>
-                                    <Globe className="h-3 w-3 mr-1" />
-                                    Social: {log.social_score}
-                                  </Badge>
-                                )}
-                                {log.price_tier && (
-                                  <Badge variant="secondary" className="text-xs">
-                                    {log.price_tier.replace('_', ' ')}
-                                  </Badge>
-                                )}
-                                {/* Token Classification Badges */}
-                                {log.token_type && (
-                                  <Badge variant="outline" className={
-                                    log.token_type === 'quick_pump' ? 'bg-orange-500/20 text-orange-400 border-orange-500/40' :
-                                    log.token_type === 'project' ? 'bg-green-500/20 text-green-400 border-green-500/40' :
-                                    'bg-gray-500/20 text-gray-400 border-gray-500/40'
-                                  }>
-                                    <Rocket className="h-3 w-3 mr-1" />
-                                    {log.token_type.replace('_', ' ')}
-                                  </Badge>
-                                )}
-                                {log.entry_window && (
-                                  <Badge variant="outline" className={
-                                    log.entry_window === 'optimal' ? 'bg-green-500/20 text-green-400 border-green-500/40' :
-                                    log.entry_window === 'acceptable' ? 'bg-yellow-500/20 text-yellow-400 border-yellow-500/40' :
-                                    log.entry_window === 'late' ? 'bg-orange-500/20 text-orange-400 border-orange-500/40' :
-                                    'bg-red-500/20 text-red-400 border-red-500/40'
-                                  }>
-                                    <Timer className="h-3 w-3 mr-1" />
-                                    {log.entry_window}
-                                  </Badge>
-                                )}
-                                {log.recommended_action && (
-                                  <Badge variant="outline" className={
-                                    log.recommended_action === 'enter_quick' ? 'bg-purple-500/20 text-purple-400 border-purple-500/40' :
-                                    log.recommended_action === 'enter_hold' ? 'bg-blue-500/20 text-blue-400 border-blue-500/40' :
-                                    log.recommended_action === 'watch' ? 'bg-yellow-500/20 text-yellow-400 border-yellow-500/40' :
-                                    'bg-gray-500/20 text-gray-400 border-gray-500/40'
-                                  }>
-                                    <Target className="h-3 w-3 mr-1" />
-                                    {log.recommended_action.replace('_', ' ')}
-                                  </Badge>
-                                )}
-                              </div>
-                              <div className="text-xs text-muted-foreground flex items-center gap-2 flex-wrap">
-                                <a 
-                                  href={`https://pump.fun/${log.token_mint}`}
-                                  target="_blank"
-                                  rel="noopener noreferrer"
-                                  className="text-primary hover:underline font-mono"
-                                >
-                                  {log.token_mint?.slice(0, 16)}...
-                                </a>
-                                <Button
-                                  variant="ghost"
-                                  size="icon"
-                                  className="h-5 w-5"
-                                  onClick={() => copyToClipboard(log.token_mint)}
-                                  title="Copy mint address"
-                                >
-                                  <Copy className="h-3 w-3" />
-                                </Button>
-                                <span>•</span>
-                                <span>{formatDistanceToNow(new Date(log.created_at), { addSuffix: true })}</span>
-                                <a
-                                  href={`https://dexscreener.com/solana/${log.token_mint}`}
-                                  target="_blank"
-                                  rel="noopener noreferrer"
-                                  className="hover:text-primary"
-                                  title="DexScreener"
-                                >
-                                  <ExternalLink className="h-3 w-3" />
-                                </a>
-                              </div>
+            </CardHeader>
+            <CardContent className="p-0">
+              <ScrollArea className="h-[500px]">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead compact>Symbol</TableHead>
+                      <TableHead compact>Mint</TableHead>
+                      <TableHead compact>Decision</TableHead>
+                      <TableHead compact>Reason</TableHead>
+                      <TableHead compact>Vol</TableHead>
+                      <TableHead compact>Holders</TableHead>
+                      <TableHead compact>Txs</TableHead>
+                      <TableHead compact>Age</TableHead>
+                      <TableHead compact>Links</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {filteredLogs.length === 0 ? (
+                      <TableRow>
+                        <TableCell colSpan={9} className="text-center text-muted-foreground py-8">
+                          No logs
+                        </TableCell>
+                      </TableRow>
+                    ) : (
+                      filteredLogs.map((log) => (
+                        <TableRow key={log.id} className={log.should_have_bought ? 'bg-orange-500/5' : ''}>
+                          <TableCell compact className="font-medium">
+                            {log.token_symbol || '???'}
+                            {log.should_have_bought && <ThumbsUp className="h-3 w-3 text-orange-500 inline ml-1" />}
+                          </TableCell>
+                          <TableCell compact>
+                            <div className="flex items-center gap-1">
+                              <a href={`https://pump.fun/${log.token_mint}`} target="_blank" rel="noopener noreferrer"
+                                className="text-primary hover:underline font-mono text-xs">
+                                {log.token_mint?.slice(0, 6)}...
+                              </a>
+                              <Button variant="ghost" size="icon" className="h-4 w-4" onClick={() => copyToClipboard(log.token_mint)}>
+                                <Copy className="h-2.5 w-2.5" />
+                              </Button>
                             </div>
-                          </div>
-                        </div>
-
-                        {/* Key Metrics Grid */}
-                        <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-3 text-sm">
-                          <div className="bg-background/50 rounded p-2">
-                            <div className="text-xs text-muted-foreground">Volume</div>
-                            <div className={Number(log.volume_sol) >= 0.1 ? 'text-green-500 font-medium' : 'text-muted-foreground'}>
-                              {Number(log.volume_sol).toFixed(3)} SOL
+                          </TableCell>
+                          <TableCell compact>
+                            <Badge variant="outline" className={
+                              log.decision === 'accepted' ? 'bg-green-500/10 text-green-500 border-green-500/30' :
+                              log.decision === 'rejected' ? 'bg-red-500/10 text-red-500 border-red-500/30' :
+                              'bg-muted'
+                            }>{log.decision}</Badge>
+                          </TableCell>
+                          <TableCell compact className="text-xs text-muted-foreground max-w-[150px] truncate" title={log.rejection_reason || ''}>
+                            {log.rejection_reason || '-'}
+                          </TableCell>
+                          <TableCell compact className="text-xs">{Number(log.volume_sol).toFixed(2)}</TableCell>
+                          <TableCell compact className="text-xs">{log.holder_count ?? '-'}</TableCell>
+                          <TableCell compact className="text-xs">{log.tx_count}</TableCell>
+                          <TableCell compact className="text-xs text-muted-foreground">
+                            {formatDistanceToNow(new Date(log.created_at), { addSuffix: false })}
+                          </TableCell>
+                          <TableCell compact>
+                            <div className="flex items-center gap-1">
+                              <Button variant="ghost" size="icon" className="h-5 w-5"
+                                onClick={() => window.open(`https://pump.fun/${log.token_mint}`, '_blank')}>
+                                <ExternalLink className="h-3 w-3" />
+                              </Button>
+                              <Button variant="ghost" size="icon" className="h-5 w-5"
+                                onClick={() => window.open(`https://dexscreener.com/solana/${log.token_mint}`, '_blank')}>
+                                <TrendingUp className="h-3 w-3" />
+                              </Button>
                             </div>
-                          </div>
-                          <div className="bg-background/50 rounded p-2">
-                            <div className="text-xs text-muted-foreground">Transactions</div>
-                            <div className="font-medium">{log.tx_count || 0}</div>
-                          </div>
-                          <div className="bg-background/50 rounded p-2">
-                            <div className="text-xs text-muted-foreground">Bundle Score</div>
-                            <div className={`font-medium ${
-                              log.bundle_score !== null ? (
-                                log.bundle_score >= 50 ? 'text-red-500' : 
-                                log.bundle_score >= 30 ? 'text-yellow-500' : 'text-green-500'
-                              ) : ''
-                            }`}>
-                              {log.bundle_score !== null ? log.bundle_score : '-'}
-                            </div>
-                          </div>
-                          <div className="bg-background/50 rounded p-2">
-                            <div className="text-xs text-muted-foreground">Age</div>
-                            <div className="font-medium">{log.age_minutes ? `${Math.round(log.age_minutes)}m` : '-'}</div>
-                          </div>
-                          <div className="bg-background/50 rounded p-2">
-                            <div className="text-xs text-muted-foreground">Holders</div>
-                            <div className="font-medium">{log.holder_count || '-'}</div>
-                          </div>
-                          <div className="bg-background/50 rounded p-2">
-                            <div className="text-xs text-muted-foreground">Buy/Sell</div>
-                            <div className={`font-medium ${
-                              log.buy_sell_ratio !== null ? (
-                                log.buy_sell_ratio >= 2 ? 'text-green-500' : 
-                                log.buy_sell_ratio >= 1 ? 'text-yellow-500' : 'text-red-500'
-                              ) : ''
-                            }`}>
-                              {log.buys_count || 0}/{log.sells_count || 0}
-                              {log.buy_sell_ratio !== null && ` (${Number(log.buy_sell_ratio).toFixed(1)}x)`}
-                            </div>
-                          </div>
-                        </div>
-
-                        {/* Extended Metrics */}
-                        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm">
-                          <div className="bg-background/50 rounded p-2">
-                            <div className="text-xs text-muted-foreground">Market Cap</div>
-                            <div className="font-medium">
-                              {log.market_cap_usd ? `$${Number(log.market_cap_usd).toLocaleString(undefined, { maximumFractionDigits: 0 })}` : '-'}
-                            </div>
-                          </div>
-                          <div className="bg-background/50 rounded p-2">
-                            <div className="text-xs text-muted-foreground">Liquidity</div>
-                            <div className="font-medium">
-                              {log.liquidity_usd ? `$${Number(log.liquidity_usd).toLocaleString(undefined, { maximumFractionDigits: 0 })}` : '-'}
-                            </div>
-                          </div>
-                          <div className="bg-background/50 rounded p-2">
-                            <div className="text-xs text-muted-foreground">Top 5 Holdings</div>
-                            <div className={`font-medium ${
-                              log.top5_holder_pct !== null ? (
-                                log.top5_holder_pct >= 60 ? 'text-red-500' : 
-                                log.top5_holder_pct >= 40 ? 'text-yellow-500' : 'text-green-500'
-                              ) : ''
-                            }`}>
-                              {log.top5_holder_pct !== null ? `${Number(log.top5_holder_pct).toFixed(1)}%` : '-'}
-                            </div>
-                          </div>
-                          <div className="bg-background/50 rounded p-2">
-                            <div className="text-xs text-muted-foreground">Top 10 Holdings</div>
-                            <div className={`font-medium ${
-                              log.top10_holder_pct !== null ? (
-                                log.top10_holder_pct >= 80 ? 'text-red-500' : 
-                                log.top10_holder_pct >= 60 ? 'text-yellow-500' : 'text-green-500'
-                              ) : ''
-                            }`}>
-                              {log.top10_holder_pct !== null ? `${Number(log.top10_holder_pct).toFixed(1)}%` : '-'}
-                            </div>
-                          </div>
-                        </div>
-
-                        {/* Filters Passed/Failed */}
-                        <div className="flex flex-wrap gap-2">
-                          {log.passed_filters?.map((filter, i) => (
-                            <Badge key={`pass-${i}`} variant="outline" className="bg-green-500/10 text-green-600 border-green-500/30 text-xs">
-                              ✓ {filter}
-                            </Badge>
-                          ))}
-                          {log.failed_filters?.map((filter, i) => (
-                            <Badge key={`fail-${i}`} variant="outline" className="bg-red-500/10 text-red-500 border-red-500/30 text-xs">
-                              ✗ {filter}
-                            </Badge>
-                          ))}
-                        </div>
-
-                        {/* Acceptance Reasoning (for accepted tokens) */}
-                        {log.decision === 'accepted' && log.acceptance_reasoning && (
-                          <div className="bg-green-500/10 rounded p-3 border border-green-500/20">
-                            <div className="text-xs font-medium text-green-600 mb-2">Why this token was accepted:</div>
-                            <div className="text-sm text-green-700 dark:text-green-400">
-                              {log.acceptance_reasoning.summary}
-                            </div>
-                            {log.acceptance_reasoning.reasons && log.acceptance_reasoning.reasons.length > 0 && (
-                              <ul className="mt-2 text-xs text-green-600 dark:text-green-500 space-y-1">
-                                {log.acceptance_reasoning.reasons.map((reason, i) => (
-                                  <li key={i}>• {reason}</li>
-                                ))}
-                              </ul>
-                            )}
-                          </div>
-                        )}
-
-                        {/* Config Snapshot (collapsible) */}
-                        {log.config_snapshot && (
-                          <details className="text-xs text-muted-foreground">
-                            <summary className="cursor-pointer hover:text-foreground">Config at scan time</summary>
-                            <pre className="mt-1 p-2 bg-muted/50 rounded text-xs overflow-x-auto">
-                              {JSON.stringify(log.config_snapshot, null, 2)}
-                            </pre>
-                          </details>
-                        )}
-
-                        {/* Manual Review Section */}
-                        <div className={`rounded p-3 border ${
-                          log.should_have_bought === true ? 'bg-orange-500/10 border-orange-500/30' :
-                          log.manual_review_at ? 'bg-purple-500/10 border-purple-500/30' :
-                          'bg-muted/20 border-border'
-                        }`}>
-                          <div className="flex items-center justify-between gap-4">
-                            <div className="flex items-center gap-2">
-                              <span className="text-xs font-medium text-muted-foreground">Learning Review:</span>
-                              {log.should_have_bought === true && (
-                                <Badge variant="outline" className="bg-orange-500/20 text-orange-600 border-orange-500/40">
-                                  <ThumbsUp className="h-3 w-3 mr-1" />
-                                  SHOULD'VE BOUGHT
-                                </Badge>
-                              )}
-                              {log.should_have_bought === false && log.manual_review_at && (
-                                <Badge variant="outline" className="bg-muted text-muted-foreground">
-                                  <ThumbsDown className="h-3 w-3 mr-1" />
-                                  Correctly Skipped
-                                </Badge>
-                              )}
-                              {log.actual_outcome && (
-                                <Badge 
-                                  variant="outline" 
-                                  className={
-                                    log.actual_outcome === 'pumped' ? 'bg-green-500/20 text-green-600 border-green-500/40' :
-                                    log.actual_outcome === 'dumped' ? 'bg-red-500/20 text-red-600 border-red-500/40' :
-                                    'bg-muted text-muted-foreground'
-                                  }
-                                >
-                                  {log.actual_outcome.charAt(0).toUpperCase() + log.actual_outcome.slice(1)}
-                                  {log.actual_roi_pct !== null && ` (${log.actual_roi_pct > 0 ? '+' : ''}${log.actual_roi_pct}%)`}
-                                </Badge>
-                              )}
-                            </div>
-                            
-                            {/* Action Buttons */}
-                            <div className="flex items-center gap-2">
-                              {log.decision === 'rejected' && !log.should_have_bought && (
-                                <Button
-                                  variant="outline"
-                                  size="sm"
-                                  className="text-orange-500 border-orange-500/30 hover:bg-orange-500/10"
-                                  onClick={() => markShouldHaveBought(log.id, true)}
-                                >
-                                  <ThumbsUp className="h-3 w-3 mr-1" />
-                                  Should've Bought
-                                </Button>
-                              )}
-                              {log.should_have_bought === true && (
-                                <Button
-                                  variant="ghost"
-                                  size="sm"
-                                  className="text-muted-foreground"
-                                  onClick={() => markShouldHaveBought(log.id, false)}
-                                >
-                                  <XCircle className="h-3 w-3 mr-1" />
-                                  Undo
-                                </Button>
-                              )}
-                              {!log.manual_review_at && log.decision !== 'rejected' && (
-                                <Button
-                                  variant="ghost"
-                                  size="sm"
-                                  className="text-muted-foreground"
-                                  onClick={() => markShouldHaveBought(log.id, false, 'Confirmed correct decision')}
-                                >
-                                  <CheckCircle className="h-3 w-3 mr-1" />
-                                  Confirm OK
-                                </Button>
-                              )}
-                            </div>
-                          </div>
-                          
-                          {/* Review Notes */}
-                          {log.manual_review_notes && (
-                            <div className="mt-2 text-xs text-muted-foreground flex items-start gap-1">
-                              <MessageSquare className="h-3 w-3 mt-0.5 flex-shrink-0" />
-                              <span>{log.manual_review_notes}</span>
-                            </div>
-                          )}
-                          
-                          {log.manual_review_at && (
-                            <div className="mt-1 text-xs text-muted-foreground/60">
-                              Reviewed {formatDistanceToNow(new Date(log.manual_review_at), { addSuffix: true })}
-                            </div>
-                          )}
-                        </div>
-                      </div>
-                    ))
-                  )}
-                </div>
+                          </TableCell>
+                        </TableRow>
+                      ))
+                    )}
+                  </TableBody>
+                </Table>
               </ScrollArea>
-              
-              {/* Load More Pagination */}
-              {filteredLogs.length > 0 && filteredLogs.length < totalLogsCount && logsFilter !== 'this_poll' && (
-                <div className="mt-4 flex items-center justify-center gap-4">
-                  <Button
-                    variant="outline"
-                    onClick={() => {
-                      setLogsPage(prev => prev + 1);
-                      fetchDiscoveryLogs();
-                    }}
-                    className="gap-2"
-                  >
-                    <ChevronDown className="h-4 w-4" />
-                    Load More ({LOGS_PER_PAGE} more)
+              {filteredLogs.length > 0 && filteredLogs.length < totalLogsCount && (
+                <div className="p-2 border-t text-center">
+                  <Button variant="outline" size="sm" onClick={() => setLogsPage(p => p + 1)}>
+                    Load More ({totalLogsCount - (logsPage + 1) * LOGS_PER_PAGE} remaining)
                   </Button>
-                  <span className="text-sm text-muted-foreground">
-                    Page {logsPage + 1}
-                  </span>
                 </div>
               )}
             </CardContent>
