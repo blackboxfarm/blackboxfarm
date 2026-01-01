@@ -703,34 +703,79 @@ serve(async (req) => {
     let needJupiter = false;
     let jupReason: string | undefined;
 
-    // Detect bonding curve launchpad tokens
-    // pump.fun tokens end with "pump"
-    // bonk.fun tokens end with "bonk" 
+    // Detect venue for tokenMint without assuming by suffix.
+    // DexScreener is used as a fast hint so we don't waste fees submitting
+    // PumpPortal txs for tokens that already have Raydium/Jupiter liquidity.
+    async function getDexVenueHint(mintAddress: string): Promise<{
+      dexIds: string[];
+      hasRaydium: boolean;
+      hasPumpFun: boolean;
+      hasBonkFun: boolean;
+    } | null> {
+      try {
+        const res = await fetch(`https://api.dexscreener.com/latest/dex/tokens/${mintAddress}`);
+        if (!res.ok) return null;
+        const json = await res.json();
+        const pairs = Array.isArray(json?.pairs) ? json.pairs : [];
+
+        const ids = pairs
+          .map((p: any) => String(p?.dexId || "").toLowerCase())
+          .filter(Boolean);
+        const set = new Set(ids);
+
+        return {
+          dexIds: Array.from(set),
+          hasRaydium: set.has("raydium"),
+          hasPumpFun: set.has("pumpfun") || set.has("pump"),
+          hasBonkFun: set.has("bonkfun") || set.has("bonk"),
+        };
+      } catch (e) {
+        console.log("DexScreener venue hint failed:", (e as Error)?.message?.slice(0, 120));
+        return null;
+      }
+    }
+
+    // Suffix heuristics as last resort only
     const isPumpFunToken = (mintAddress: string): boolean => {
       if (!mintAddress) return false;
       const lower = mintAddress.toLowerCase();
-      return lower.endsWith('pump');
+      return lower.endsWith("pump");
     };
 
     const isBonkFunToken = (mintAddress: string): boolean => {
       if (!mintAddress) return false;
       const lower = mintAddress.toLowerCase();
-      return lower.endsWith('bonk');
+      return lower.endsWith("bonk");
     };
 
-    const isPumpToken = tokenMint ? isPumpFunToken(String(tokenMint)) : false;
-    const isBonkToken = tokenMint ? isBonkFunToken(String(tokenMint)) : false;
-    const isBondingCurveToken = isPumpToken || isBonkToken;
-    
+    const venueHint = tokenMint ? await getDexVenueHint(String(tokenMint)) : null;
+    if (venueHint) {
+      console.log("Dex venue hint:", { tokenMint, ...venueHint });
+    }
+
+    const suffixPump = tokenMint ? isPumpFunToken(String(tokenMint)) : false;
+    const suffixBonk = tokenMint ? isBonkFunToken(String(tokenMint)) : false;
+
+    const isRaydiumToken = Boolean(venueHint?.hasRaydium);
+    const isPumpToken = Boolean(venueHint?.hasPumpFun) || suffixPump;
+    const isBonkToken = Boolean(venueHint?.hasBonkFun) || suffixBonk;
+
+    // Bonding-curve tokens are only those WITHOUT Raydium liquidity.
+    const isBondingCurveToken = !isRaydiumToken && (isPumpToken || isBonkToken);
+
     // Determine which pool to use for PumpPortal
-    const getBondingCurvePool = (mint: string): 'pump' | 'bonk' | 'auto' => {
-      if (isPumpFunToken(mint)) return 'pump';
-      if (isBonkFunToken(mint)) return 'bonk';
+    const getBondingCurvePool = (): 'pump' | 'bonk' | 'auto' => {
+      if (venueHint?.hasPumpFun) return 'pump';
+      if (venueHint?.hasBonkFun) return 'bonk';
+      if (suffixPump) return 'pump';
+      if (suffixBonk) return 'bonk';
       return 'auto';
     };
-    
+
     // Log routing decision
-    console.log(`Routing decision: token=${tokenMint}, isPumpToken=${isPumpToken}, isBonkToken=${isBonkToken}, side=${side}`);
+    console.log(
+      `Routing decision: token=${tokenMint}, raydium=${isRaydiumToken}, pump=${isPumpToken}, bonk=${isBonkToken}, side=${side}`
+    );
 
     // Get ATAs when not SOL
     let isInputSol = isSolMint(String(inputMint));
@@ -754,7 +799,7 @@ serve(async (req) => {
       
       try {
         // First try with specific pool, then with 'auto' if it fails
-        const pools: Array<'pump' | 'bonk' | 'auto'> = [getBondingCurvePool(String(tokenMint)), 'auto'];
+        const pools: Array<'pump' | 'bonk' | 'auto'> = [getBondingCurvePool(), 'auto'];
         
         for (const pool of pools) {
           const pumpResult = await tryPumpPortalTrade({
@@ -815,15 +860,15 @@ serve(async (req) => {
             }
             
             if (txFailed) {
-              // Check if it's the "graduated to raydium" error - if so, fall back to Jupiter
-              if (txError.includes("6005") || txError.includes("bonding curve") || txError.includes("migrated")) {
-                console.log(`Token has graduated from bonding curve, falling back to Jupiter/Raydium...`);
+              // Don't assume *why* PumpPortal failed; route to DEX aggregators.
+              // 6005 is a common PumpPortal on-chain failure code (often seen after migration).
+              if (txError.includes("6005")) {
+                console.log(`PumpPortal tx failed with custom error 6005; switching to DEX routing (Raydium/Jupiter)...`);
                 needJupiter = true;
-                jupReason = "Token graduated from bonding curve to Raydium";
-                // Don't return - continue to Jupiter fallback below
+                jupReason = `PumpPortal tx failed (6005): ${txError}`;
+                // Don't return - continue to Jupiter/Raydium routing below
               } else {
-                // Other error - still fall back but log it
-                console.log(`PumpPortal tx failed with: ${txError}, falling back to Jupiter...`);
+                console.log(`PumpPortal tx failed with: ${txError}, switching to DEX routing...`);
                 needJupiter = true;
                 jupReason = `PumpPortal tx failed: ${txError}`;
               }
@@ -1064,7 +1109,7 @@ serve(async (req) => {
             action: side as 'buy' | 'sell',
             amount: pumpAmount,
             slippageBps: Number(slippageBps),
-            pool: getBondingCurvePool(String(tokenMint)),
+            pool: getBondingCurvePool(),
           });
           
           if ("tx" in pumpResult) {
