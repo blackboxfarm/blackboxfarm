@@ -6,49 +6,6 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
-interface TokenData {
-  token: {
-    mint: string;
-    name: string;
-    symbol: string;
-    decimals: number;
-    image?: string;
-    description?: string;
-  };
-  pools?: Array<{
-    liquidity?: { usd?: number };
-    price?: { usd?: number };
-    volume?: { h24?: number };
-    txns?: { h24?: number };
-  }>;
-  risk?: {
-    rugged?: boolean;
-    score?: number;
-  };
-  events?: {
-    createdAt?: number;
-  };
-  creator?: string;
-  holders?: number;
-  buys?: number;
-  sells?: number;
-}
-
-interface MonitorConfig {
-  min_volume_sol_5m: number;
-  min_transactions: number;
-  max_token_age_minutes: number;
-  max_bundle_score: number;
-  auto_scalp_enabled: boolean;
-  scalp_test_mode: boolean;
-  is_enabled: boolean;
-}
-
-// Mayhem Mode Detection Constants
-const MAYHEM_MODE_PROGRAM_ID = 'MAyhSmzXzV1pTf7LsNkrNwkWKTo4ougAJ1PPg47MD4e';
-const NORMAL_PUMPFUN_SUPPLY = 1000000000000000; // 1 billion with 6 decimals
-const MAYHEM_PUMPFUN_SUPPLY = 2000000000000000; // 2 billion with 6 decimals
-
 // Helper to create JSON responses
 const jsonResponse = (data: unknown, status = 200) =>
   new Response(JSON.stringify(data), {
@@ -59,717 +16,93 @@ const jsonResponse = (data: unknown, status = 200) =>
 const errorResponse = (message: string, status = 400) =>
   jsonResponse({ success: false, error: message }, status);
 
-// Comprehensive discovery log entry for learning and backtesting
-interface DiscoveryLogEntry {
-  token: TokenData;
-  decision: 'accepted' | 'rejected' | 'error';
-  rejectionReason?: string;
-  volumeSol: number;
-  volumeUsd: number;
-  txCount: number;
-  bundleScore?: number;
-  riskDetails?: any;
-  devIntegrityScore?: number;
-  config: MonitorConfig;
-  passedFilters: string[];
-  failedFilters: string[];
-  acceptanceReasoning?: string[];
-  // Enhanced scoring fields
-  isMayhemMode?: boolean;
-  socialScore?: number;
-  twitterScore?: number;
-  websiteScore?: number;
-  telegramScore?: number;
-  socialDetails?: any;
-  dexPaidEarly?: boolean;
-  dexPaidDetails?: any;
-  priceTier?: string;
-  walletQualityScore?: number;
-  firstBuyersAnalysis?: any;
-  // Token classification fields
-  tokenType?: 'quick_pump' | 'project' | 'unknown';
-  entryWindow?: 'optimal' | 'acceptable' | 'late' | 'missed';
-  currentMultiplier?: number;
-  recommendedAction?: 'enter_quick' | 'enter_hold' | 'watch' | 'skip';
-  strategyDetails?: StrategyRecommendation;
-  classificationReasoning?: string[];
-  // Poll run tracking
-  pollRunId?: string;
-}
-
-// Strategy recommendation interface
-interface StrategyRecommendation {
-  action: 'enter_quick' | 'enter_hold' | 'watch' | 'skip';
-  targetMultiplier: number;
-  sellPercentage: number;
-  maxPositionSol: number;
-  urgency: 'immediate' | 'soon' | 'monitor';
-  reasoning: string[];
-}
-
-// Token classification result
-interface TokenClassification {
-  tokenType: 'quick_pump' | 'project' | 'unknown';
-  confidence: number;
-  reasoning: string[];
-}
-
-// ============================================================================
-// MAYHEM MODE DETECTION (HARD REJECT)
-// ============================================================================
-
-async function checkMayhemMode(tokenMint: string): Promise<{ isMayhemMode: boolean; details: any }> {
-  try {
-    const response = await fetch(`https://frontend-api.pump.fun/coins/${tokenMint}`);
-    if (!response.ok) {
-      return { isMayhemMode: false, details: { error: `HTTP ${response.status}` } };
-    }
-    
-    const data = await response.json();
-    const totalSupply = data.total_supply || 0;
-    const program = data.program || null;
-    
-    // Detect Mayhem Mode:
-    // 1. Check if program field matches Mayhem Mode program ID
-    // 2. Check if total_supply is 2 billion (double the normal 1 billion)
-    const isMayhemMode = program === MAYHEM_MODE_PROGRAM_ID || 
-                         totalSupply >= MAYHEM_PUMPFUN_SUPPLY;
-    
-    if (isMayhemMode) {
-      console.log(`☠️ MAYHEM MODE DETECTED for ${tokenMint.slice(0, 8)} (supply: ${totalSupply}, program: ${program})`);
-    }
-    
-    return {
-      isMayhemMode,
-      details: {
-        program,
-        totalSupply,
-        isMayhemProgramId: program === MAYHEM_MODE_PROGRAM_ID,
-        isDoubleSupply: totalSupply >= MAYHEM_PUMPFUN_SUPPLY,
-      },
-    };
-  } catch (error) {
-    console.error(`Error checking Mayhem Mode for ${tokenMint}:`, error);
-    return { isMayhemMode: false, details: { error: String(error) } };
-  }
-}
-
-// ============================================================================
-// SOCIAL QUALITY SCORING
-// ============================================================================
-
-interface SocialQualityResult {
-  totalScore: number;
-  twitterScore: number;
-  websiteScore: number;
-  telegramScore: number;
-  details: {
-    hasTwitter: boolean;
-    hasWebsite: boolean;
-    hasTelegram: boolean;
-    twitterUrl?: string;
-    websiteUrl?: string;
-    telegramUrl?: string;
-    websiteTld?: string;
-    telegramType?: 'channel' | 'group' | 'unknown';
-    warnings: string[];
+interface TokenData {
+  token: {
+    mint: string;
+    name: string;
+    symbol: string;
+    decimals: number;
+    image?: string;
   };
+  pools?: Array<{
+    liquidity?: { usd?: number };
+    price?: { usd?: number };
+    volume?: { h24?: number };
+    txns?: { h24?: number };
+  }>;
+  events?: { createdAt?: number };
+  creator?: string;
+  holders?: number;
+  buys?: number;
+  sells?: number;
 }
 
-async function analyzeSocialQuality(tokenMint: string): Promise<SocialQualityResult> {
-  const result: SocialQualityResult = {
-    totalScore: 0,
-    twitterScore: 0,
-    websiteScore: 0,
-    telegramScore: 0,
-    details: {
-      hasTwitter: false,
-      hasWebsite: false,
-      hasTelegram: false,
-      warnings: [],
-    },
-  };
-
-  try {
-    // Fetch DexScreener data for social links
-    const response = await fetch(`https://api.dexscreener.com/latest/dex/tokens/${tokenMint}`);
-    if (!response.ok) {
-      return result;
-    }
-
-    const data = await response.json();
-    const pair = data.pairs?.[0];
-    if (!pair) return result;
-
-    // Extract social links from DexScreener
-    const info = pair.info || {};
-    const socials = info.socials || [];
-    const websites = info.websites || [];
-
-    // Twitter Analysis (0-25 points)
-    const twitterLink = socials.find((s: any) => s.type === 'twitter');
-    if (twitterLink?.url) {
-      result.details.hasTwitter = true;
-      result.details.twitterUrl = twitterLink.url;
-      
-      // Basic score for having Twitter
-      result.twitterScore = 10;
-      
-      // Check if Twitter link looks legitimate (not just token name)
-      const twitterHandle = twitterLink.url.split('/').pop()?.toLowerCase();
-      const tokenSymbol = pair.baseToken?.symbol?.toLowerCase();
-      
-      // If Twitter handle matches token exactly = suspicious (new account for token)
-      if (twitterHandle === tokenSymbol) {
-        result.twitterScore = 5;
-        result.details.warnings.push('Twitter handle matches token name exactly');
-      } else {
-        result.twitterScore = 15; // Better if it's an established account
-      }
-    }
-
-    // Website Analysis (0-25 points)
-    const websiteLink = websites[0];
-    if (websiteLink?.url) {
-      result.details.hasWebsite = true;
-      result.details.websiteUrl = websiteLink.url;
-      
-      try {
-        const url = new URL(websiteLink.url);
-        const tld = url.hostname.split('.').pop()?.toLowerCase();
-        result.details.websiteTld = tld;
-        
-        // TLD scoring
-        if (tld === 'com' || tld === 'io' || tld === 'org') {
-          result.websiteScore = 15;
-        } else if (tld === 'xyz' || tld === 'fun' || tld === 'meme') {
-          result.websiteScore = 8;
-          result.details.warnings.push(`Suspicious TLD: .${tld}`);
-        } else {
-          result.websiteScore = 10;
-        }
-      } catch {
-        result.websiteScore = 5;
-      }
-    }
-
-    // Telegram Analysis (0-25 points)
-    const telegramLink = socials.find((s: any) => s.type === 'telegram');
-    if (telegramLink?.url) {
-      result.details.hasTelegram = true;
-      result.details.telegramUrl = telegramLink.url;
-      
-      // Determine if it's a channel (one-way) or group (community)
-      const tgUrl = telegramLink.url.toLowerCase();
-      
-      if (tgUrl.includes('/+') || tgUrl.includes('/joinchat')) {
-        // Group invite link = good (community chat)
-        result.details.telegramType = 'group';
-        result.telegramScore = 20;
-      } else {
-        // Public channel = could be one-way (controlled narrative)
-        result.details.telegramType = 'channel';
-        result.telegramScore = 10;
-        result.details.warnings.push('Telegram appears to be channel-only (one-way)');
-      }
-    }
-
-    // Bonus for having all three
-    const hasAll = result.details.hasTwitter && result.details.hasWebsite && result.details.hasTelegram;
-    if (hasAll) {
-      result.totalScore = result.twitterScore + result.websiteScore + result.telegramScore + 25;
-    } else {
-      result.totalScore = result.twitterScore + result.websiteScore + result.telegramScore;
-    }
-
-    console.log(`📱 Social Score for ${tokenMint.slice(0, 8)}: ${result.totalScore}/100 (T:${result.twitterScore} W:${result.websiteScore} TG:${result.telegramScore})`);
-
-  } catch (error) {
-    console.error(`Error analyzing social quality for ${tokenMint}:`, error);
-  }
-
-  return result;
+interface WatchlistToken {
+  id?: string;
+  token_mint: string;
+  token_symbol?: string;
+  token_name?: string;
+  first_seen_at?: string;
+  last_checked_at?: string;
+  status: 'watching' | 'qualified' | 'dead' | 'bombed' | 'removed';
+  check_count: number;
+  holder_count: number;
+  holder_count_prev: number;
+  volume_sol: number;
+  volume_sol_prev: number;
+  price_usd?: number;
+  price_usd_prev?: number;
+  price_ath_usd?: number;
+  holder_count_peak: number;
+  tx_count: number;
+  market_cap_usd?: number;
+  liquidity_usd?: number;
+  bundle_score?: number;
+  social_score?: number;
+  creator_wallet?: string;
+  qualification_reason?: string;
+  removal_reason?: string;
+  qualified_at?: string;
+  removed_at?: string;
+  metadata?: any;
 }
 
-// ============================================================================
-// DEX PAID STATUS CHECK (Early = Red Flag)
-// ============================================================================
-
-interface DexPaidResult {
-  hasPaidProfile: boolean;
-  hasActiveAds: boolean;
-  hasBoosts: boolean;
-  boostCount: number;
-  isEarlyPaidSuspicious: boolean;
-  details: any;
+interface MonitorConfig {
+  min_volume_sol_5m: number;
+  min_transactions: number;
+  max_token_age_minutes: number;
+  max_bundle_score: number;
+  auto_scalp_enabled: boolean;
+  scalp_test_mode: boolean;
+  is_enabled: boolean;
+  // Watchlist config
+  min_watch_time_minutes?: number; // How long before qualifying (default: 2)
+  max_watch_time_minutes?: number; // Give up after this (default: 60)
+  dead_holder_threshold?: number; // Remove if holders below (default: 3)
+  dead_volume_threshold_sol?: number; // Remove if volume below (default: 0.01)
+  qualification_holder_count?: number; // Need this many holders to qualify (default: 20)
+  qualification_volume_sol?: number; // Need this much volume to qualify (default: 0.5)
 }
 
-async function checkEarlyDexPaid(tokenMint: string, tokenAgeMinutes: number): Promise<DexPaidResult> {
-  const result: DexPaidResult = {
-    hasPaidProfile: false,
-    hasActiveAds: false,
-    hasBoosts: false,
-    boostCount: 0,
-    isEarlyPaidSuspicious: false,
-    details: {},
-  };
-
-  try {
-    // Check DexScreener orders API
-    const ordersResponse = await fetch(`https://api.dexscreener.com/orders/v1/solana/${tokenMint}`);
-    if (ordersResponse.ok) {
-      const orders = await ordersResponse.json();
-      
-      if (Array.isArray(orders)) {
-        for (const order of orders) {
-          if (order.type === 'tokenProfile' && order.status === 'approved') {
-            result.hasPaidProfile = true;
-          }
-          if (order.type === 'communityTakeover' && order.status === 'approved') {
-            result.hasPaidProfile = true; // CTO also counts
-          }
-        }
-        result.details.orders = orders;
-      }
-    }
-
-    // Check boosts API
-    const boostsResponse = await fetch(`https://api.dexscreener.com/token-boosts/latest/v1?chainId=solana&tokenAddress=${tokenMint}`);
-    if (boostsResponse.ok) {
-      const boostsData = await boostsResponse.json();
-      if (Array.isArray(boostsData) && boostsData.length > 0) {
-        result.hasBoosts = true;
-        result.boostCount = boostsData.length;
-        result.details.boosts = boostsData;
-      }
-    }
-
-    // Determine if early paid status is suspicious
-    // If token is under 10 minutes old AND has paid features = RED FLAG
-    if (tokenAgeMinutes < 10 && (result.hasPaidProfile || result.hasBoosts)) {
-      result.isEarlyPaidSuspicious = true;
-      console.log(`🚨 EARLY DEX PAID RED FLAG for ${tokenMint.slice(0, 8)}: Age ${tokenAgeMinutes.toFixed(1)}m, Paid: ${result.hasPaidProfile}, Boosts: ${result.boostCount}`);
-    }
-
-  } catch (error) {
-    console.error(`Error checking DEX paid status for ${tokenMint}:`, error);
-    result.details.error = String(error);
-  }
-
-  return result;
-}
-
-// ============================================================================
-// PRICE TIER DETERMINATION
-// ============================================================================
-
-function determinePriceTier(priceUsd: number | null | undefined): string | null {
-  if (!priceUsd || priceUsd <= 0) return null;
-  
-  if (priceUsd < 0.00001) return 'ultra_low';
-  if (priceUsd < 0.0001) return 'low';
-  if (priceUsd < 0.001) return 'medium';
-  return 'high';
-}
-
-// ============================================================================
-// TOKEN CLASSIFICATION SYSTEM
-// ============================================================================
-
-function classifyTokenType(
-  socialAnalysis: SocialQualityResult,
-  dexPaidResult: DexPaidResult,
-  bundleScore: number,
-  holderCount: number
-): TokenClassification {
-  const reasoning: string[] = [];
-  let quickPumpScore = 0;
-  let projectScore = 0;
-  
-  // QUICK PUMP INDICATORS
-  
-  // Private Telegram (channel only, no group chat) = quick pump indicator
-  if (socialAnalysis.details.hasTelegram && socialAnalysis.details.telegramType === 'channel') {
-    quickPumpScore += 20;
-    reasoning.push('Telegram is channel-only (controlled narrative)');
-  }
-  
-  // Twitter matches token name exactly = likely new account for pump
-  if (socialAnalysis.details.warnings.some(w => w.includes('matches token name'))) {
-    quickPumpScore += 15;
-    reasoning.push('Twitter handle matches token name (new account)');
-  }
-  
-  // Cheap/suspicious TLD
-  if (socialAnalysis.details.warnings.some(w => w.includes('Suspicious TLD'))) {
-    quickPumpScore += 10;
-    reasoning.push('Website uses suspicious TLD (.xyz, .fun)');
-  }
-  
-  // No website at all
-  if (!socialAnalysis.details.hasWebsite) {
-    quickPumpScore += 15;
-    reasoning.push('No website present');
-  }
-  
-  // Early DEX paid = they're pushing it hard, quick money
-  if (dexPaidResult.isEarlyPaidSuspicious) {
-    quickPumpScore += 25;
-    reasoning.push('Early DexScreener paid status (pushing fast)');
-  }
-  
-  // High bundle score = coordinated buying
-  if (bundleScore > 60) {
-    quickPumpScore += 20;
-    reasoning.push(`High bundle score (${bundleScore}) - coordinated buying`);
-  }
-  
-  // PROJECT INDICATORS
-  
-  // Has Telegram GROUP (community can chat)
-  if (socialAnalysis.details.hasTelegram && socialAnalysis.details.telegramType === 'group') {
-    projectScore += 25;
-    reasoning.push('Telegram is a group (community engagement)');
-  }
-  
-  // Has all three socials
-  if (socialAnalysis.details.hasTwitter && socialAnalysis.details.hasWebsite && socialAnalysis.details.hasTelegram) {
-    projectScore += 15;
-    reasoning.push('Has all three socials (Twitter, Website, Telegram)');
-  }
-  
-  // Good TLD
-  if (socialAnalysis.details.websiteTld === 'com' || socialAnalysis.details.websiteTld === 'io') {
-    projectScore += 10;
-    reasoning.push(`Professional website TLD (.${socialAnalysis.details.websiteTld})`);
-  }
-  
-  // Low bundle score = organic buying
-  if (bundleScore < 30) {
-    projectScore += 15;
-    reasoning.push(`Low bundle score (${bundleScore}) - organic buying pattern`);
-  }
-  
-  // Many unique holders = real distribution
-  if (holderCount > 100) {
-    projectScore += 10;
-    reasoning.push(`High holder count (${holderCount}) - good distribution`);
-  }
-  
-  // Determine classification
-  const diff = quickPumpScore - projectScore;
-  let tokenType: 'quick_pump' | 'project' | 'unknown';
-  let confidence: number;
-  
-  if (diff >= 20) {
-    tokenType = 'quick_pump';
-    confidence = Math.min(95, 50 + diff);
-  } else if (diff <= -20) {
-    tokenType = 'project';
-    confidence = Math.min(95, 50 - diff);
-  } else {
-    tokenType = 'unknown';
-    confidence = 50 - Math.abs(diff);
-  }
-  
-  console.log(`🏷️ Classification for token: ${tokenType} (confidence: ${confidence}%, QP:${quickPumpScore} vs P:${projectScore})`);
-  
-  return { tokenType, confidence, reasoning };
-}
-
-// ============================================================================
-// ENTRY TIMING ANALYSIS
-// ============================================================================
-
-interface EntryTimingResult {
-  entryWindow: 'optimal' | 'acceptable' | 'late' | 'missed';
-  currentMultiplier: number;
-  remainingPotential: number;
-  reasoning: string[];
-}
-
-function analyzeEntryTiming(
-  tokenAgeMinutes: number,
-  currentPriceUsd: number,
-  bondingCurvePct: number,
-  volumeSol: number
-): EntryTimingResult {
-  const reasoning: string[] = [];
-  
-  // Estimate initial price based on pump.fun mechanics
-  // Early tokens typically start around $0.000001-0.00001
-  const estimatedInitialPrice = 0.000003; // Conservative estimate
-  const currentMultiplier = currentPriceUsd / estimatedInitialPrice;
-  
-  // Entry window based on age and price movement
-  let entryWindow: 'optimal' | 'acceptable' | 'late' | 'missed';
-  let remainingPotential: number;
-  
-  // OPTIMAL: Very fresh (< 3 min), hasn't pumped much yet
-  if (tokenAgeMinutes < 3 && currentMultiplier < 3) {
-    entryWindow = 'optimal';
-    remainingPotential = 5; // Could 5x from here
-    reasoning.push(`Fresh token (${tokenAgeMinutes.toFixed(1)}m old), low multiplier (${currentMultiplier.toFixed(1)}x)`);
-  }
-  // ACCEPTABLE: Still early (< 5 min), or fresh but moved some
-  else if (tokenAgeMinutes < 5 && currentMultiplier < 5) {
-    entryWindow = 'acceptable';
-    remainingPotential = 3; // Could 3x from here
-    reasoning.push(`Early entry (${tokenAgeMinutes.toFixed(1)}m), moderate move (${currentMultiplier.toFixed(1)}x)`);
-  }
-  // LATE: Getting older or already pumped
-  else if (tokenAgeMinutes < 10 && currentMultiplier < 10) {
-    entryWindow = 'late';
-    remainingPotential = 1.5; // Might get 1.5x
-    reasoning.push(`Late entry (${tokenAgeMinutes.toFixed(1)}m), already moved (${currentMultiplier.toFixed(1)}x)`);
-  }
-  // MISSED: Too old or pumped too much
-  else {
-    entryWindow = 'missed';
-    remainingPotential = 1;
-    reasoning.push(`Missed window (${tokenAgeMinutes.toFixed(1)}m old, ${currentMultiplier.toFixed(1)}x already)`);
-  }
-  
-  // Bonding curve factors
-  if (bondingCurvePct > 50) {
-    reasoning.push(`High bonding curve (${bondingCurvePct.toFixed(0)}%) - closer to graduation`);
-    if (entryWindow === 'optimal') entryWindow = 'acceptable';
-    if (entryWindow === 'acceptable') entryWindow = 'late';
-  }
-  
-  // Volume can indicate strong momentum
-  if (volumeSol > 10) {
-    reasoning.push(`High volume (${volumeSol.toFixed(1)} SOL) - strong momentum`);
-  }
-  
-  console.log(`⏱️ Entry timing: ${entryWindow} (${currentMultiplier.toFixed(1)}x, ${tokenAgeMinutes.toFixed(1)}m)`);
-  
-  return { entryWindow, currentMultiplier, remainingPotential, reasoning };
-}
-
-// ============================================================================
-// STRATEGY RECOMMENDATION ENGINE
-// ============================================================================
-
-function getStrategyRecommendation(
-  classification: TokenClassification,
-  entryTiming: EntryTimingResult,
-  isMayhemMode: boolean,
-  dexPaidResult: DexPaidResult
-): StrategyRecommendation {
-  const reasoning: string[] = [];
-  
-  // HARD SKIP: Mayhem Mode is always a no
-  if (isMayhemMode) {
-    return {
-      action: 'skip',
-      targetMultiplier: 0,
-      sellPercentage: 0,
-      maxPositionSol: 0,
-      urgency: 'monitor',
-      reasoning: ['MAYHEM MODE DETECTED - Always skip'],
-    };
-  }
-  
-  // SKIP: Missed entry window
-  if (entryTiming.entryWindow === 'missed') {
-    return {
-      action: 'skip',
-      targetMultiplier: 0,
-      sellPercentage: 0,
-      maxPositionSol: 0,
-      urgency: 'monitor',
-      reasoning: ['Entry window missed - token already moved significantly', ...entryTiming.reasoning],
-    };
-  }
-  
-  // QUICK PUMP STRATEGY: Enter fast, exit at 1.5x, sell 90%
-  if (classification.tokenType === 'quick_pump') {
-    reasoning.push('Classified as QUICK PUMP token');
-    reasoning.push(...classification.reasoning.slice(0, 3));
-    
-    // Urgency based on entry window
-    let urgency: 'immediate' | 'soon' | 'monitor';
-    let maxPosition: number;
-    
-    if (entryTiming.entryWindow === 'optimal') {
-      urgency = 'immediate';
-      maxPosition = 0.5; // Risk up to 0.5 SOL on quick pump
-      reasoning.push('OPTIMAL entry window - act fast');
-    } else if (entryTiming.entryWindow === 'acceptable') {
-      urgency = 'soon';
-      maxPosition = 0.3; // Smaller position for later entry
-      reasoning.push('ACCEPTABLE entry - smaller position');
-    } else {
-      urgency = 'monitor';
-      maxPosition = 0.2;
-      reasoning.push('LATE entry - minimal position if entering');
-    }
-    
-    return {
-      action: 'enter_quick',
-      targetMultiplier: 1.5,
-      sellPercentage: 90,
-      maxPositionSol: maxPosition,
-      urgency,
-      reasoning,
-    };
-  }
-  
-  // PROJECT STRATEGY: Enter and hold for bigger gains
-  if (classification.tokenType === 'project') {
-    reasoning.push('Classified as PROJECT token');
-    reasoning.push(...classification.reasoning.slice(0, 3));
-    
-    let urgency: 'immediate' | 'soon' | 'monitor';
-    let maxPosition: number;
-    
-    if (entryTiming.entryWindow === 'optimal') {
-      urgency = 'immediate';
-      maxPosition = 1.0; // Can risk more on projects
-      reasoning.push('Early project entry - larger position acceptable');
-    } else if (entryTiming.entryWindow === 'acceptable') {
-      urgency = 'soon';
-      maxPosition = 0.5;
-    } else {
-      urgency = 'monitor';
-      maxPosition = 0.3;
-    }
-    
-    return {
-      action: 'enter_hold',
-      targetMultiplier: 3.0,
-      sellPercentage: 50, // Hold more for projects
-      maxPositionSol: maxPosition,
-      urgency,
-      reasoning,
-    };
-  }
-  
-  // UNKNOWN: Watch and learn
-  return {
-    action: 'watch',
-    targetMultiplier: 0,
-    sellPercentage: 0,
-    maxPositionSol: 0,
-    urgency: 'monitor',
-    reasoning: ['Token classification unclear - watching for more signals', ...classification.reasoning],
-  };
-}
-
-// Log a discovery decision to the database with FULL reasoning
-async function logDiscovery(supabase: any, entry: DiscoveryLogEntry) {
-  try {
-    const { 
-      token, decision, rejectionReason, volumeSol, volumeUsd, txCount, 
-      bundleScore, riskDetails, devIntegrityScore, config, passedFilters, failedFilters, 
-      acceptanceReasoning,
-      // Enhanced scoring fields
-      isMayhemMode, socialScore, twitterScore, websiteScore, telegramScore,
-      socialDetails, dexPaidEarly, dexPaidDetails, priceTier, walletQualityScore, firstBuyersAnalysis,
-      // Classification fields
-      tokenType, entryWindow, currentMultiplier, recommendedAction, strategyDetails, classificationReasoning
-    } = entry;
-    
-    const pool = token.pools?.[0];
-    const createdAt = token.events?.createdAt;
-    const ageMinutes = createdAt ? (Date.now() - createdAt * 1000) / 60000 : null;
-    const priceUsd = pool?.price?.usd;
-    const liquidityUsd = pool?.liquidity?.usd;
-    const marketCapUsd = priceUsd ? priceUsd * 1_000_000_000 : null;
-    const bondingCurvePct = marketCapUsd ? Math.min(100, (marketCapUsd / 69000) * 100) : null;
-    const buysCount = token.buys || 0;
-    const sellsCount = token.sells || 0;
-    const buySellRatio = sellsCount > 0 ? buysCount / sellsCount : buysCount > 0 ? 999 : 0;
-
-    // Build score breakdown for understanding decisions
-    const scoreBreakdown = {
-      volumeScore: volumeSol >= config.min_volume_sol_5m ? 100 : (volumeSol / config.min_volume_sol_5m) * 100,
-      txScore: txCount >= config.min_transactions ? 100 : (txCount / config.min_transactions) * 100,
-      ageScore: ageMinutes && ageMinutes <= config.max_token_age_minutes ? 100 : 0,
-      bundleScore: bundleScore !== undefined ? Math.max(0, 100 - bundleScore) : null,
-      buySellRatioScore: buySellRatio >= 1 ? Math.min(100, buySellRatio * 20) : buySellRatio * 100,
-      holderScore: Math.min(100, (token.holders || 0) * 5),
-      socialScore: socialScore || null,
-    };
-
-    await supabase.from('pumpfun_discovery_logs').insert({
-      token_mint: token.token?.mint,
-      token_symbol: token.token?.symbol,
-      token_name: token.token?.name,
-      decision,
-      rejection_reason: rejectionReason,
-      volume_sol: volumeSol,
-      volume_usd: volumeUsd,
-      tx_count: txCount,
-      bundle_score: bundleScore,
-      holder_count: token.holders,
-      age_minutes: ageMinutes,
-      // Detailed columns
-      price_usd: priceUsd,
-      market_cap_usd: marketCapUsd,
-      liquidity_usd: liquidityUsd,
-      bonding_curve_pct: bondingCurvePct,
-      top5_holder_pct: riskDetails?.top5Holdings,
-      top10_holder_pct: riskDetails?.top10Holdings,
-      similar_holdings_count: riskDetails?.similarSizedCount,
-      creator_wallet: token.creator,
-      creator_integrity_score: devIntegrityScore,
-      buys_count: buysCount,
-      sells_count: sellsCount,
-      buy_sell_ratio: buySellRatio,
-      passed_filters: passedFilters,
-      failed_filters: failedFilters,
-      score_breakdown: scoreBreakdown,
-      acceptance_reasoning: decision === 'accepted' ? {
-        reasons: acceptanceReasoning || [],
-        summary: `Token passed ${passedFilters.length} filters with volume ${volumeSol.toFixed(3)} SOL, ${txCount} txs, bundle score ${bundleScore || 'N/A'}`,
-      } : null,
-      config_snapshot: {
-        min_volume_sol_5m: config.min_volume_sol_5m,
-        min_transactions: config.min_transactions,
-        max_token_age_minutes: config.max_token_age_minutes,
-        max_bundle_score: config.max_bundle_score,
-      },
-      metadata: {
-        image: token.token?.image,
-        description: token.token?.description,
-        pool: pool,
-        riskDetails,
-      },
-      // Enhanced scoring fields
-      is_mayhem_mode: isMayhemMode || false,
-      social_score: socialScore,
-      twitter_score: twitterScore,
-      website_score: websiteScore,
-      telegram_score: telegramScore,
-      social_details: socialDetails,
-      dex_paid_early: dexPaidEarly || false,
-      dex_paid_details: dexPaidDetails,
-      price_tier: priceTier,
-      wallet_quality_score: walletQualityScore,
-      first_buyers_analysis: firstBuyersAnalysis,
-      // Classification fields
-      token_type: tokenType,
-      entry_window: entryWindow,
-      current_multiplier: currentMultiplier,
-      recommended_action: recommendedAction,
-      strategy_details: strategyDetails,
-      classification_reasoning: classificationReasoning,
-      // Poll run tracking
-      poll_run_id: entry.pollRunId || null,
-    });
-  } catch (error) {
-    console.error('Failed to log discovery:', error);
-  }
+interface PollResults {
+  tokensScanned: number;
+  watchlistSize: number;
+  newlyAdded: number;
+  newlyQualified: number;
+  removedDead: number;
+  removedBombed: number;
+  stillWatching: number;
+  updated: number;
+  errors: number;
+  qualifiedTokens: string[];
+  removedTokens: string[];
 }
 
 // Fetch latest tokens from Solana Tracker API
-async function fetchLatestPumpfunTokens(limit = 50): Promise<TokenData[]> {
+async function fetchLatestPumpfunTokens(limit = 200): Promise<TokenData[]> {
   const apiKey = Deno.env.get('SOLANA_TRACKER_API_KEY');
   
   try {
-    // Fetch more tokens to have better filtering
     const response = await fetch(
       `https://data.solanatracker.io/tokens/latest?market=pumpfun&limit=${limit}`,
       {
@@ -793,607 +126,6 @@ async function fetchLatestPumpfunTokens(limit = 50): Promise<TokenData[]> {
   }
 }
 
-// Simple bundle analysis using only holder data from token list response
-async function analyzeTokenRisk(mint: string): Promise<{ bundleScore: number; isBundled: boolean; walletQualityScore: number; details: any }> {
-  try {
-    const apiKey = Deno.env.get('SOLANA_TRACKER_API_KEY');
-    
-    const response = await fetch(
-      `https://data.solanatracker.io/tokens/${mint}/holders`,
-      {
-        headers: {
-          'x-api-key': apiKey || '',
-          'Accept': 'application/json',
-        },
-      }
-    );
-
-    if (response.status === 429) {
-      console.warn(`⏳ Rate limited on holders for ${mint.slice(0, 8)}`);
-      return { bundleScore: 40, isBundled: false, walletQualityScore: 50, details: { error: 'Rate limited' } };
-    }
-
-    if (!response.ok) {
-      return { bundleScore: 40, isBundled: false, walletQualityScore: 50, details: { error: `HTTP ${response.status}` } };
-    }
-
-    const holders = await response.json();
-    
-    if (!Array.isArray(holders) || holders.length === 0) {
-      return { bundleScore: 30, isBundled: false, walletQualityScore: 30, details: { holderCount: 0 } };
-    }
-
-    // Calculate concentration
-    const top10Holdings = holders.slice(0, 10).reduce((sum: number, h: any) => sum + (h.percentage || 0), 0);
-    const top5Holdings = holders.slice(0, 5).reduce((sum: number, h: any) => sum + (h.percentage || 0), 0);
-
-    // Simple bundle score based on concentration
-    let bundleScore = 0;
-    if (top10Holdings > 80) bundleScore += 40;
-    else if (top10Holdings > 60) bundleScore += 25;
-    else if (top10Holdings > 40) bundleScore += 10;
-
-    if (top5Holdings > 60) bundleScore += 30;
-    else if (top5Holdings > 40) bundleScore += 15;
-
-    // Check for similar sized holdings (bundling indicator)
-    const holdingAmounts = holders.slice(0, 10).map((h: any) => h.percentage || 0);
-    const similarSizedCount = holdingAmounts.filter((a: number, i: number) => 
-      holdingAmounts.some((b: number, j: number) => i !== j && Math.abs(a - b) < 0.5 && a > 1)
-    ).length;
-    
-    if (similarSizedCount >= 4) bundleScore += 20;
-    else if (similarSizedCount >= 2) bundleScore += 10;
-
-    // Wallet Quality Score (0-100): Higher = better (less suspicious)
-    let walletQualityScore = 100;
-    
-    // Penalize for concentrated holdings
-    if (top5Holdings > 60) walletQualityScore -= 30;
-    else if (top5Holdings > 40) walletQualityScore -= 15;
-    
-    // Penalize for similar sized holdings (wash trading indicator)
-    walletQualityScore -= similarSizedCount * 10;
-    
-    // Low holder count is suspicious
-    if (holders.length < 10) walletQualityScore -= 20;
-    else if (holders.length < 25) walletQualityScore -= 10;
-    
-    walletQualityScore = Math.max(0, Math.min(100, walletQualityScore));
-
-    return {
-      bundleScore: Math.min(100, bundleScore),
-      isBundled: bundleScore >= 50,
-      walletQualityScore,
-      details: {
-        holderCount: holders.length,
-        top5Holdings,
-        top10Holdings,
-        similarSizedCount,
-      },
-    };
-  } catch (error) {
-    console.error(`Error analyzing risk for ${mint}:`, error);
-    return { bundleScore: 50, isBundled: false, walletQualityScore: 50, details: { error: String(error) } };
-  }
-}
-
-// Check if developer is known scammer
-async function checkDeveloperReputation(supabase: any, creatorWallet: string): Promise<{ isScam: boolean; integrityScore?: number }> {
-  try {
-    const { data } = await supabase
-      .from('developer_profiles')
-      .select('integrity_score, total_tokens_created, successful_tokens')
-      .eq('master_wallet_address', creatorWallet)
-      .single();
-
-    if (!data) {
-      return { isScam: false }; // Unknown dev, not flagged
-    }
-
-    // Flag as scam if very low integrity score
-    if (data.integrity_score !== null && data.integrity_score < 20) {
-      return { isScam: true, integrityScore: data.integrity_score };
-    }
-
-    // Flag if many tokens but none successful
-    if (data.total_tokens_created > 5 && data.successful_tokens === 0) {
-      return { isScam: true, integrityScore: data.integrity_score };
-    }
-
-    return { isScam: false, integrityScore: data.integrity_score };
-  } catch {
-    return { isScam: false };
-  }
-}
-
-// Main polling function - ENHANCED with new quality checks
-async function pollForNewTokens(supabase: any, config: MonitorConfig, pollRunId?: string) {
-  console.log('📡 Starting pump.fun new token poll (ENHANCED)...');
-
-  // Get recent candidates to avoid re-processing
-  const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000).toISOString();
-  const { data: recentCandidates } = await supabase
-    .from('pumpfun_buy_candidates')
-    .select('token_mint')
-    .gte('detected_at', oneHourAgo);
-
-  const existingMints = new Set((recentCandidates || []).map((c: any) => c.token_mint));
-
-  // Fetch latest tokens
-  const tokens = await fetchLatestPumpfunTokens(50);
-  console.log(`📊 Fetched ${tokens.length} tokens from Solana Tracker`);
-
-  if (tokens.length === 0) {
-    console.log('❌ No tokens fetched - API may be down');
-    return {
-      tokensScanned: 0,
-      skippedExisting: 0,
-      skippedLowVolume: 0,
-      skippedOld: 0,
-      skippedHighRisk: 0,
-      skippedMayhemMode: 0,
-      skippedEarlyDexPaid: 0,
-      candidatesAdded: 0,
-      scalpApproved: 0,
-      errors: 0,
-    };
-  }
-
-  const results = {
-    tokensScanned: tokens.length,
-    skippedExisting: 0,
-    skippedLowVolume: 0,
-    skippedOld: 0,
-    skippedHighRisk: 0,
-    skippedMayhemMode: 0,
-    skippedEarlyDexPaid: 0,
-    candidatesAdded: 0,
-    scalpApproved: 0,
-    errors: 0,
-  };
-
-  const solPrice = await getSolPrice(supabase);
-  const promisingTokens: Array<{ 
-    token: TokenData; 
-    volumeSol: number; 
-    volumeUsd: number; 
-    txCount: number; 
-    passedFilters: string[];
-    ageMinutes: number | null;
-    priceTier: string | null;
-  }> = [];
-
-  // Helper to log discovery with poll run ID
-  const logWithPollRun = (entry: DiscoveryLogEntry) => 
-    logDiscovery(supabase, { ...entry, pollRunId });
-
-  // PHASE 1: Quick filter using data we already have (NO extra API calls)
-  console.log('🔍 Phase 1: Quick filtering...');
-  for (const tokenData of tokens) {
-    try {
-      const mint = tokenData.token?.mint;
-      if (!mint) continue;
-
-      const pool = tokenData.pools?.[0];
-      const volumeUsd = pool?.volume?.h24 || 0;
-      const volumeSol = solPrice > 0 ? volumeUsd / solPrice : 0;
-      const txCount = (tokenData.buys || 0) + (tokenData.sells || 0) + (pool?.txns?.h24 || 0);
-      const priceUsd = pool?.price?.usd;
-      const priceTier = determinePriceTier(priceUsd);
-      const passedFilters: string[] = [];
-      const failedFilters: string[] = [];
-      
-      // Calculate age
-      const createdAt = tokenData.events?.createdAt;
-      const ageMinutes = createdAt ? (Date.now() - createdAt * 1000) / 60000 : null;
-
-      // Skip if already processed
-      if (existingMints.has(mint)) {
-        results.skippedExisting++;
-        failedFilters.push('existing_candidate');
-        await logWithPollRun({
-          token: tokenData, decision: 'rejected', rejectionReason: 'existing',
-          volumeSol, volumeUsd, txCount, config, passedFilters, failedFilters,
-          priceTier,
-        });
-        continue;
-      }
-      passedFilters.push('not_existing');
-
-      // Check token age
-      if (createdAt) {
-        if (ageMinutes && ageMinutes > config.max_token_age_minutes) {
-          results.skippedOld++;
-          failedFilters.push(`age_too_old_${ageMinutes.toFixed(0)}m`);
-          console.log(`⏰ ${tokenData.token?.symbol || mint.slice(0, 8)}: Too old (${ageMinutes.toFixed(0)} min)`);
-          await logWithPollRun({
-            token: tokenData, decision: 'rejected', rejectionReason: 'too_old',
-            volumeSol, volumeUsd, txCount, config, passedFilters, failedFilters,
-            priceTier,
-          });
-          continue;
-        }
-        passedFilters.push(`age_ok_${ageMinutes?.toFixed(0)}m`);
-      } else {
-        passedFilters.push('age_unknown');
-      }
-
-      // Volume filter
-      if (volumeSol < config.min_volume_sol_5m) {
-        results.skippedLowVolume++;
-        failedFilters.push(`volume_${volumeSol.toFixed(3)}_SOL_below_${config.min_volume_sol_5m}`);
-        console.log(`📉 ${tokenData.token?.symbol || mint.slice(0, 8)}: Low volume (${volumeSol.toFixed(3)} SOL)`);
-        await logWithPollRun({
-          token: tokenData, decision: 'rejected', rejectionReason: 'low_volume',
-          volumeSol, volumeUsd, txCount, config, passedFilters, failedFilters,
-          priceTier,
-        });
-        continue;
-      }
-      passedFilters.push(`volume_${volumeSol.toFixed(2)}_SOL`);
-
-      // Transaction filter
-      if (txCount < config.min_transactions) {
-        results.skippedLowVolume++;
-        failedFilters.push(`txs_${txCount}_below_${config.min_transactions}`);
-        console.log(`📉 ${tokenData.token?.symbol || mint.slice(0, 8)}: Low txs (${txCount})`);
-        await logWithPollRun({
-          token: tokenData, decision: 'rejected', rejectionReason: 'low_transactions',
-          volumeSol, volumeUsd, txCount, config, passedFilters, failedFilters,
-          priceTier,
-        });
-        continue;
-      }
-      passedFilters.push(`txs_${txCount}`);
-
-      // This token passed quick filters - add to promising list
-      console.log(`✅ ${tokenData.token?.symbol || mint.slice(0, 8)}: Passed quick filters (Vol: ${volumeSol.toFixed(2)} SOL, Txs: ${txCount})`);
-      promisingTokens.push({ token: tokenData, volumeSol, volumeUsd, txCount, passedFilters, ageMinutes, priceTier });
-    } catch (error) {
-      console.error('Error in quick filter:', error);
-      results.errors++;
-    }
-  }
-
-  console.log(`🎯 Phase 1 complete: ${promisingTokens.length} promising tokens from ${tokens.length} scanned`);
-
-  // PHASE 2: Deep analysis only for promising tokens (with API calls)
-  if (promisingTokens.length > 0) {
-    console.log('🔬 Phase 2: Deep analysis with enhanced checks...');
-    
-    for (const { token: tokenData, volumeSol, volumeUsd, txCount, passedFilters, ageMinutes, priceTier } of promisingTokens) {
-      const mint = tokenData.token?.mint!;
-      const failedFilters: string[] = [];
-      let devIntegrityScore: number | undefined;
-      
-      try {
-        // Small delay between API calls
-        await new Promise(r => setTimeout(r, 300));
-
-        // ============================================================
-        // CRITICAL CHECK #1: MAYHEM MODE (HARD REJECT - NO EXCEPTIONS)
-        // ============================================================
-        const mayhemCheck = await checkMayhemMode(mint);
-        
-        if (mayhemCheck.isMayhemMode) {
-          results.skippedMayhemMode++;
-          failedFilters.push('MAYHEM_MODE_DETECTED');
-          console.log(`☠️ ${tokenData.token?.symbol || mint.slice(0, 8)}: MAYHEM MODE - HARD REJECT`);
-          await logWithPollRun({
-            token: tokenData, decision: 'rejected', rejectionReason: 'mayhem_mode',
-            volumeSol, volumeUsd, txCount, config, passedFilters, failedFilters,
-            isMayhemMode: true,
-            priceTier,
-          });
-          continue;
-        }
-        passedFilters.push('not_mayhem_mode');
-
-        // ============================================================
-        // CHECK #2: EARLY DEX PAID STATUS (Red Flag for young tokens)
-        // ============================================================
-        const dexPaidCheck = await checkEarlyDexPaid(mint, ageMinutes || 0);
-        
-        if (dexPaidCheck.isEarlyPaidSuspicious) {
-          results.skippedEarlyDexPaid++;
-          failedFilters.push('EARLY_DEX_PAID_SUSPICIOUS');
-          console.log(`🚨 ${tokenData.token?.symbol || mint.slice(0, 8)}: Early DEX paid - suspicious`);
-          await logWithPollRun({
-            token: tokenData, decision: 'rejected', rejectionReason: 'early_dex_paid_suspicious',
-            volumeSol, volumeUsd, txCount, config, passedFilters, failedFilters,
-            dexPaidEarly: true,
-            dexPaidDetails: dexPaidCheck,
-            priceTier,
-          });
-          continue;
-        }
-        if (dexPaidCheck.hasPaidProfile || dexPaidCheck.hasBoosts) {
-          passedFilters.push(`dex_paid_ok_age_${ageMinutes?.toFixed(0)}m`);
-        } else {
-          passedFilters.push('no_dex_paid');
-        }
-
-        // Small delay
-        await new Promise(r => setTimeout(r, 200));
-
-        // ============================================================
-        // CHECK #3: SOCIAL QUALITY SCORING
-        // ============================================================
-        const socialQuality = await analyzeSocialQuality(mint);
-        passedFilters.push(`social_score_${socialQuality.totalScore}`);
-
-        // Small delay
-        await new Promise(r => setTimeout(r, 200));
-
-        // ============================================================
-        // CHECK #4: BUNDLE/RISK ANALYSIS (with wallet quality)
-        // ============================================================
-        const riskAnalysis = await analyzeTokenRisk(mint);
-        
-        if (riskAnalysis.bundleScore > config.max_bundle_score) {
-          results.skippedHighRisk++;
-          failedFilters.push(`bundle_score_${riskAnalysis.bundleScore}_above_${config.max_bundle_score}`);
-          console.log(`⚠️ ${tokenData.token?.symbol || mint.slice(0, 8)}: High bundle score (${riskAnalysis.bundleScore})`);
-          await logWithPollRun({
-            token: tokenData, decision: 'rejected', rejectionReason: 'high_bundle_score',
-            volumeSol, volumeUsd, txCount, bundleScore: riskAnalysis.bundleScore,
-            riskDetails: riskAnalysis.details, config, passedFilters, failedFilters,
-            socialScore: socialQuality.totalScore,
-            twitterScore: socialQuality.twitterScore,
-            websiteScore: socialQuality.websiteScore,
-            telegramScore: socialQuality.telegramScore,
-            socialDetails: socialQuality.details,
-            dexPaidEarly: false,
-            dexPaidDetails: dexPaidCheck,
-            priceTier,
-            walletQualityScore: riskAnalysis.walletQualityScore,
-          });
-          continue;
-        }
-        passedFilters.push(`bundle_score_${riskAnalysis.bundleScore}`);
-        passedFilters.push(`wallet_quality_${riskAnalysis.walletQualityScore}`);
-
-        // ============================================================
-        // CHECK #5: DEVELOPER REPUTATION
-        // ============================================================
-        const creatorWallet = tokenData.creator;
-        if (creatorWallet) {
-          const devCheck = await checkDeveloperReputation(supabase, creatorWallet);
-          devIntegrityScore = devCheck.integrityScore;
-          if (devCheck.isScam) {
-            results.skippedHighRisk++;
-            failedFilters.push(`scam_dev_integrity_${devCheck.integrityScore}`);
-            console.log(`⚠️ ${tokenData.token?.symbol || mint.slice(0, 8)}: Scam dev flagged`);
-            await logWithPollRun({
-              token: tokenData, decision: 'rejected', rejectionReason: 'scam_developer',
-              volumeSol, volumeUsd, txCount, bundleScore: riskAnalysis.bundleScore,
-              riskDetails: riskAnalysis.details, devIntegrityScore, config, passedFilters, failedFilters,
-              socialScore: socialQuality.totalScore,
-              twitterScore: socialQuality.twitterScore,
-              websiteScore: socialQuality.websiteScore,
-              telegramScore: socialQuality.telegramScore,
-              socialDetails: socialQuality.details,
-              dexPaidEarly: false,
-              dexPaidDetails: dexPaidCheck,
-              priceTier,
-              walletQualityScore: riskAnalysis.walletQualityScore,
-            });
-            continue;
-          }
-          if (devIntegrityScore !== undefined) {
-            passedFilters.push(`dev_integrity_${devIntegrityScore}`);
-          } else {
-            passedFilters.push('dev_unknown');
-          }
-        }
-
-        // Calculate bonding curve percentage if available
-        const pool = tokenData.pools?.[0];
-        const marketCapUsd = pool?.price?.usd ? pool.price.usd * 1_000_000_000 : null;
-        const bondingCurvePct = marketCapUsd ? Math.min(100, (marketCapUsd / 69000) * 100) : null;
-
-        // Build acceptance reasoning
-        const acceptanceReasoning = [
-          `Volume: ${volumeSol.toFixed(3)} SOL (min: ${config.min_volume_sol_5m})`,
-          `Transactions: ${txCount} (min: ${config.min_transactions})`,
-          `Bundle Score: ${riskAnalysis.bundleScore} (max: ${config.max_bundle_score})`,
-          `Wallet Quality: ${riskAnalysis.walletQualityScore}/100`,
-          `Social Score: ${socialQuality.totalScore}/100`,
-          `Holders: ${tokenData.holders || riskAnalysis.details.holderCount || 'unknown'}`,
-          `Top5 Holdings: ${riskAnalysis.details.top5Holdings?.toFixed(1) || 'N/A'}%`,
-          `Top10 Holdings: ${riskAnalysis.details.top10Holdings?.toFixed(1) || 'N/A'}%`,
-          `Buy/Sell Ratio: ${tokenData.buys || 0}/${tokenData.sells || 0}`,
-          `Price Tier: ${priceTier || 'unknown'}`,
-          bondingCurvePct ? `Bonding Curve: ${bondingCurvePct.toFixed(1)}%` : null,
-          marketCapUsd ? `Market Cap: $${marketCapUsd.toFixed(0)}` : null,
-          devIntegrityScore !== undefined ? `Dev Integrity: ${devIntegrityScore}` : 'Dev: Unknown',
-        ].filter(Boolean) as string[];
-
-        // Insert as candidate
-        const candidateData = {
-          token_mint: mint,
-          token_name: tokenData.token?.name,
-          token_symbol: tokenData.token?.symbol,
-          creator_wallet: creatorWallet,
-          volume_sol_5m: volumeSol,
-          volume_usd_5m: volumeUsd,
-          bonding_curve_pct: bondingCurvePct,
-          market_cap_usd: marketCapUsd,
-          holder_count: tokenData.holders || riskAnalysis.details.holderCount || 0,
-          transaction_count: txCount,
-          bundle_score: riskAnalysis.bundleScore,
-          is_bundled: riskAnalysis.isBundled,
-          status: 'pending',
-          auto_buy_enabled: config.auto_scalp_enabled,
-          metadata: {
-            image: tokenData.token?.image,
-            description: tokenData.token?.description,
-            riskDetails: riskAnalysis.details,
-            pool: pool,
-            socialQuality: socialQuality,
-            dexPaidCheck: dexPaidCheck,
-            priceTier: priceTier,
-          },
-        };
-
-        const { error: insertError } = await supabase
-          .from('pumpfun_buy_candidates')
-          .insert(candidateData);
-
-        if (insertError) {
-          if (insertError.code === '23505') {
-            results.skippedExisting++;
-            failedFilters.push('duplicate_insert');
-            await logWithPollRun({
-              token: tokenData, decision: 'rejected', rejectionReason: 'duplicate',
-              volumeSol, volumeUsd, txCount, bundleScore: riskAnalysis.bundleScore,
-              riskDetails: riskAnalysis.details, config, passedFilters, failedFilters,
-              socialScore: socialQuality.totalScore,
-              twitterScore: socialQuality.twitterScore,
-              websiteScore: socialQuality.websiteScore,
-              telegramScore: socialQuality.telegramScore,
-              socialDetails: socialQuality.details,
-              dexPaidEarly: false,
-              dexPaidDetails: dexPaidCheck,
-              priceTier,
-              walletQualityScore: riskAnalysis.walletQualityScore,
-            });
-          } else {
-            console.error(`Error inserting candidate:`, insertError);
-            results.errors++;
-            failedFilters.push(`insert_error_${insertError.code}`);
-            await logWithPollRun({
-              token: tokenData, decision: 'error', rejectionReason: 'insert_failed',
-              volumeSol, volumeUsd, txCount, bundleScore: riskAnalysis.bundleScore,
-              riskDetails: riskAnalysis.details, config, passedFilters, failedFilters,
-              socialScore: socialQuality.totalScore,
-              priceTier,
-              walletQualityScore: riskAnalysis.walletQualityScore,
-            });
-          }
-          continue;
-        }
-
-        // ============================================================
-        // TOKEN CLASSIFICATION SYSTEM
-        // ============================================================
-        
-        // Classify the token type (quick_pump vs project vs unknown)
-        const classification = classifyTokenType(
-          socialQuality,
-          dexPaidCheck,
-          riskAnalysis.bundleScore,
-          tokenData.holders || riskAnalysis.details.holderCount || 0
-        );
-        passedFilters.push(`classified_${classification.tokenType}`);
-        
-        // Analyze entry timing
-        const priceUsd = pool?.price?.usd || 0;
-        const entryTiming = analyzeEntryTiming(
-          ageMinutes || 0,
-          priceUsd,
-          bondingCurvePct || 0,
-          volumeSol
-        );
-        passedFilters.push(`entry_${entryTiming.entryWindow}`);
-        
-        // Get strategy recommendation
-        const strategy = getStrategyRecommendation(
-          classification,
-          entryTiming,
-          false, // already passed mayhem check
-          dexPaidCheck
-        );
-        passedFilters.push(`action_${strategy.action}`);
-        
-        console.log(`🏷️ ${tokenData.token?.symbol || mint.slice(0, 8)}: ${classification.tokenType.toUpperCase()} | Entry: ${entryTiming.entryWindow} | Action: ${strategy.action}`);
-
-        // 🎉 TOKEN ACCEPTED - Log with full reasoning and classification
-        passedFilters.push('inserted_as_candidate');
-        results.candidatesAdded++;
-        console.log(`🚀 Added candidate: ${candidateData.token_symbol} (${mint.slice(0, 8)}...) - Social: ${socialQuality.totalScore}, Wallet: ${riskAnalysis.walletQualityScore}`);
-        await logWithPollRun({
-          token: tokenData, decision: 'accepted',
-          volumeSol, volumeUsd, txCount, bundleScore: riskAnalysis.bundleScore,
-          riskDetails: riskAnalysis.details, devIntegrityScore, config, passedFilters, failedFilters,
-          acceptanceReasoning,
-          socialScore: socialQuality.totalScore,
-          twitterScore: socialQuality.twitterScore,
-          websiteScore: socialQuality.websiteScore,
-          telegramScore: socialQuality.telegramScore,
-          socialDetails: socialQuality.details,
-          dexPaidEarly: false,
-          dexPaidDetails: dexPaidCheck,
-          priceTier,
-          walletQualityScore: riskAnalysis.walletQualityScore,
-          // Classification data
-          tokenType: classification.tokenType,
-          entryWindow: entryTiming.entryWindow,
-          currentMultiplier: entryTiming.currentMultiplier,
-          recommendedAction: strategy.action,
-          strategyDetails: strategy,
-          classificationReasoning: [...classification.reasoning, ...entryTiming.reasoning, ...strategy.reasoning],
-        });
-
-        // Auto-scalp integration if enabled
-        if (config.auto_scalp_enabled) {
-          try {
-            const scalpResult = await runScalpValidation(supabase, mint, candidateData, config.scalp_test_mode);
-            
-            await supabase
-              .from('pumpfun_buy_candidates')
-              .update({
-                scalp_validation_result: scalpResult,
-                scalp_approved: scalpResult.recommendation === 'BUY',
-                status: scalpResult.recommendation === 'BUY' ? 'approved' : 'rejected',
-                rejection_reason: scalpResult.recommendation !== 'BUY' ? scalpResult.hard_rejects?.join(', ') : null,
-              })
-              .eq('token_mint', mint);
-
-            if (scalpResult.recommendation === 'BUY') {
-              results.scalpApproved++;
-              console.log(`🎯 Scalp approved: ${candidateData.token_symbol}`);
-            }
-          } catch (scalpError) {
-            console.error('Scalp validation error:', scalpError);
-          }
-        }
-      } catch (error) {
-        console.error('Error processing token:', error);
-        results.errors++;
-        failedFilters.push(`processing_error`);
-        await logWithPollRun({
-          token: tokenData, decision: 'error', rejectionReason: 'processing_failed',
-          volumeSol, volumeUsd, txCount, config, passedFilters, failedFilters,
-          priceTier,
-        });
-      }
-    }
-  }
-
-  // Update monitor stats
-  const { data: currentConfig } = await supabase
-    .from('pumpfun_monitor_config')
-    .select('id, tokens_processed_count, candidates_found_count')
-    .limit(1)
-    .single();
-
-  if (currentConfig) {
-    await supabase
-      .from('pumpfun_monitor_config')
-      .update({
-        last_poll_at: new Date().toISOString(),
-        tokens_processed_count: (currentConfig.tokens_processed_count || 0) + results.tokensScanned,
-        candidates_found_count: (currentConfig.candidates_found_count || 0) + results.candidatesAdded,
-      })
-      .eq('id', currentConfig.id);
-  }
-
-  console.log('📊 Poll results:', results);
-  return results;
-}
-
 // Get current SOL price
 async function getSolPrice(supabase: any): Promise<number> {
   try {
@@ -1410,42 +142,381 @@ async function getSolPrice(supabase: any): Promise<number> {
   }
 }
 
-// Run scalp mode validation
-async function runScalpValidation(
-  supabase: any,
-  tokenMint: string,
-  candidateData: any,
-  testMode: boolean
-): Promise<any> {
+// Simple bundle analysis
+async function analyzeTokenRisk(mint: string): Promise<{ bundleScore: number; details: any }> {
   try {
-    const { data, error } = await supabase.functions.invoke('scalp-mode-validator', {
-      body: {
-        tokenMint,
-        channelId: 'pumpfun-monitor',
-        messageText: `New pump.fun token: ${candidateData.token_symbol}`,
-        config: {
-          min_bonding_curve_pct: 1,
-          max_bonding_curve_pct: 80,
-          scalp_buy_amount_sol: testMode ? 0 : 0.05,
-          scalp_take_profit_pct: 50,
-          scalp_stop_loss_pct: 35,
+    const apiKey = Deno.env.get('SOLANA_TRACKER_API_KEY');
+    
+    const response = await fetch(
+      `https://data.solanatracker.io/tokens/${mint}/holders`,
+      {
+        headers: {
+          'x-api-key': apiKey || '',
+          'Accept': 'application/json',
         },
-      },
-    });
+      }
+    );
 
-    if (error) {
-      console.error('Scalp validator error:', error);
-      return { recommendation: 'SKIP', error: error.message };
+    if (!response.ok) {
+      return { bundleScore: 40, details: { error: `HTTP ${response.status}` } };
     }
 
-    return data || { recommendation: 'SKIP' };
+    const holders = await response.json();
+    
+    if (!Array.isArray(holders) || holders.length === 0) {
+      return { bundleScore: 30, details: { holderCount: 0 } };
+    }
+
+    const top10Holdings = holders.slice(0, 10).reduce((sum: number, h: any) => sum + (h.percentage || 0), 0);
+    const top5Holdings = holders.slice(0, 5).reduce((sum: number, h: any) => sum + (h.percentage || 0), 0);
+
+    let bundleScore = 0;
+    if (top10Holdings > 80) bundleScore += 40;
+    else if (top10Holdings > 60) bundleScore += 25;
+    if (top5Holdings > 60) bundleScore += 30;
+    else if (top5Holdings > 40) bundleScore += 15;
+
+    return {
+      bundleScore: Math.min(100, bundleScore),
+      details: { holderCount: holders.length, top5Holdings, top10Holdings },
+    };
   } catch (error) {
-    console.error('Scalp validation failed:', error);
-    return { recommendation: 'SKIP', error: String(error) };
+    return { bundleScore: 50, details: { error: String(error) } };
   }
 }
 
-// Get pending candidates
+// Check for Mayhem Mode (hard reject)
+async function checkMayhemMode(tokenMint: string): Promise<boolean> {
+  try {
+    const response = await fetch(`https://frontend-api.pump.fun/coins/${tokenMint}`);
+    if (!response.ok) return false;
+    
+    const data = await response.json();
+    const totalSupply = data.total_supply || 0;
+    const program = data.program || null;
+    
+    const MAYHEM_PROGRAM_ID = 'MAyhSmzXzV1pTf7LsNkrNwkWKTo4ougAJ1PPg47MD4e';
+    const MAYHEM_SUPPLY = 2000000000000000;
+    
+    return program === MAYHEM_PROGRAM_ID || totalSupply >= MAYHEM_SUPPLY;
+  } catch {
+    return false;
+  }
+}
+
+// ============================================================================
+// WATCHLIST POLLING - THE NEW CONTINUOUS MONITORING APPROACH
+// ============================================================================
+
+async function pollWithWatchlist(supabase: any, config: MonitorConfig, pollRunId?: string): Promise<PollResults> {
+  console.log('📡 Starting WATCHLIST-based poll...');
+  
+  const results: PollResults = {
+    tokensScanned: 0,
+    watchlistSize: 0,
+    newlyAdded: 0,
+    newlyQualified: 0,
+    removedDead: 0,
+    removedBombed: 0,
+    stillWatching: 0,
+    updated: 0,
+    errors: 0,
+    qualifiedTokens: [],
+    removedTokens: [],
+  };
+
+  // Config defaults
+  const minWatchTime = config.min_watch_time_minutes ?? 2;
+  const maxWatchTime = config.max_watch_time_minutes ?? 60;
+  const deadHolderThreshold = config.dead_holder_threshold ?? 3;
+  const deadVolumeThreshold = config.dead_volume_threshold_sol ?? 0.01;
+  const qualifyHolders = config.qualification_holder_count ?? 20;
+  const qualifyVolume = config.qualification_volume_sol ?? 0.5;
+
+  const solPrice = await getSolPrice(supabase);
+
+  // STEP 1: Fetch latest 200 tokens from API
+  const tokens = await fetchLatestPumpfunTokens(200);
+  results.tokensScanned = tokens.length;
+  console.log(`📊 Fetched ${tokens.length} tokens from API`);
+
+  if (tokens.length === 0) {
+    return results;
+  }
+
+  // STEP 2: Get current watchlist
+  const { data: currentWatchlist } = await supabase
+    .from('pumpfun_watchlist')
+    .select('*')
+    .in('status', ['watching', 'qualified']);
+  
+  const watchlistMap = new Map<string, WatchlistToken>();
+  (currentWatchlist || []).forEach((t: WatchlistToken) => watchlistMap.set(t.token_mint, t));
+
+  const now = new Date();
+  const tokenMintsFromApi = new Set<string>();
+
+  // STEP 3: Process each token from API
+  for (const tokenData of tokens) {
+    try {
+      const mint = tokenData.token?.mint;
+      if (!mint) continue;
+      
+      tokenMintsFromApi.add(mint);
+      
+      const pool = tokenData.pools?.[0];
+      const volumeUsd = pool?.volume?.h24 || 0;
+      const volumeSol = solPrice > 0 ? volumeUsd / solPrice : 0;
+      const txCount = (tokenData.buys || 0) + (tokenData.sells || 0);
+      const holderCount = tokenData.holders || 0;
+      const priceUsd = pool?.price?.usd;
+      const liquidityUsd = pool?.liquidity?.usd;
+      const marketCapUsd = priceUsd ? priceUsd * 1_000_000_000 : null;
+
+      const existing = watchlistMap.get(mint);
+
+      if (existing) {
+        // UPDATE existing watchlist entry
+        const holderDelta = holderCount - (existing.holder_count || 0);
+        const volumeDelta = volumeSol - (existing.volume_sol || 0);
+        
+        const updates: Partial<WatchlistToken> = {
+          last_checked_at: now.toISOString(),
+          check_count: (existing.check_count || 0) + 1,
+          // Shift current to prev
+          holder_count_prev: existing.holder_count,
+          volume_sol_prev: existing.volume_sol,
+          price_usd_prev: existing.price_usd,
+          // Set new current
+          holder_count: holderCount,
+          volume_sol: volumeSol,
+          tx_count: txCount,
+          price_usd: priceUsd,
+          market_cap_usd: marketCapUsd,
+          liquidity_usd: liquidityUsd,
+          // Track peaks
+          holder_count_peak: Math.max(existing.holder_count_peak || 0, holderCount),
+          price_ath_usd: Math.max(existing.price_ath_usd || 0, priceUsd || 0),
+        };
+
+        // Check for qualification (only if currently 'watching')
+        if (existing.status === 'watching') {
+          const watchingMinutes = (now.getTime() - new Date(existing.first_seen_at!).getTime()) / 60000;
+          
+          // QUALIFICATION CHECK
+          if (watchingMinutes >= minWatchTime && 
+              holderCount >= qualifyHolders && 
+              volumeSol >= qualifyVolume &&
+              (existing.bundle_score === null || existing.bundle_score <= config.max_bundle_score)) {
+            
+            updates.status = 'qualified';
+            updates.qualified_at = now.toISOString();
+            updates.qualification_reason = `Holders: ${holderCount} (Δ+${holderDelta}), Volume: ${volumeSol.toFixed(2)} SOL, Watched: ${watchingMinutes.toFixed(0)}m`;
+            
+            results.newlyQualified++;
+            results.qualifiedTokens.push(`${tokenData.token?.symbol || mint.slice(0, 8)} (${holderCount} holders, ${volumeSol.toFixed(2)} SOL)`);
+            console.log(`🎉 QUALIFIED: ${tokenData.token?.symbol} - ${updates.qualification_reason}`);
+            
+            // Also add to buy candidates
+            await supabase.from('pumpfun_buy_candidates').upsert({
+              token_mint: mint,
+              token_name: tokenData.token?.name,
+              token_symbol: tokenData.token?.symbol,
+              creator_wallet: tokenData.creator,
+              volume_sol_5m: volumeSol,
+              volume_usd_5m: volumeUsd,
+              holder_count: holderCount,
+              transaction_count: txCount,
+              bundle_score: existing.bundle_score,
+              status: 'pending',
+              detected_at: now.toISOString(),
+              metadata: { watchlist_qualification: updates.qualification_reason },
+            }, { onConflict: 'token_mint' });
+          }
+          
+          // DEAD CHECK - token has been watching too long with no activity
+          if (watchingMinutes > maxWatchTime && holderCount < deadHolderThreshold && volumeSol < deadVolumeThreshold) {
+            updates.status = 'dead';
+            updates.removed_at = now.toISOString();
+            updates.removal_reason = `No activity for ${watchingMinutes.toFixed(0)}m, only ${holderCount} holders`;
+            
+            results.removedDead++;
+            results.removedTokens.push(`${tokenData.token?.symbol || mint.slice(0, 8)} (dead - ${holderCount} holders)`);
+            console.log(`💀 DEAD: ${tokenData.token?.symbol} - ${updates.removal_reason}`);
+          }
+        }
+        
+        // BOMBED CHECK - qualified token that crashed
+        if (existing.status === 'qualified' && existing.price_ath_usd && priceUsd) {
+          const dropPct = ((existing.price_ath_usd - priceUsd) / existing.price_ath_usd) * 100;
+          if (dropPct >= 90) {
+            updates.status = 'bombed';
+            updates.removed_at = now.toISOString();
+            updates.removal_reason = `Price dropped ${dropPct.toFixed(0)}% from ATH`;
+            
+            results.removedBombed++;
+            results.removedTokens.push(`${tokenData.token?.symbol || mint.slice(0, 8)} (bombed -${dropPct.toFixed(0)}%)`);
+            console.log(`💥 BOMBED: ${tokenData.token?.symbol} - ${updates.removal_reason}`);
+          }
+        }
+
+        await supabase
+          .from('pumpfun_watchlist')
+          .update(updates)
+          .eq('token_mint', mint);
+        
+        results.updated++;
+        
+      } else {
+        // NEW token - add to watchlist
+        // Quick Mayhem Mode check
+        const isMayhem = await checkMayhemMode(mint);
+        if (isMayhem) {
+          console.log(`☠️ Skipping Mayhem Mode token: ${tokenData.token?.symbol}`);
+          continue;
+        }
+
+        // Get bundle score for new tokens
+        let bundleScore = null;
+        try {
+          await new Promise(r => setTimeout(r, 100)); // Rate limit
+          const risk = await analyzeTokenRisk(mint);
+          bundleScore = risk.bundleScore;
+        } catch { /* ignore */ }
+
+        // Skip if bundle score too high
+        if (bundleScore !== null && bundleScore > config.max_bundle_score) {
+          console.log(`⚠️ Skipping high bundle: ${tokenData.token?.symbol} (${bundleScore})`);
+          continue;
+        }
+
+        const newEntry: Partial<WatchlistToken> = {
+          token_mint: mint,
+          token_symbol: tokenData.token?.symbol,
+          token_name: tokenData.token?.name,
+          first_seen_at: now.toISOString(),
+          last_checked_at: now.toISOString(),
+          status: 'watching',
+          check_count: 1,
+          holder_count: holderCount,
+          holder_count_prev: 0,
+          volume_sol: volumeSol,
+          volume_sol_prev: 0,
+          price_usd: priceUsd,
+          price_ath_usd: priceUsd,
+          holder_count_peak: holderCount,
+          tx_count: txCount,
+          market_cap_usd: marketCapUsd,
+          liquidity_usd: liquidityUsd,
+          bundle_score: bundleScore,
+          creator_wallet: tokenData.creator,
+          metadata: { image: tokenData.token?.image },
+        };
+
+        const { error } = await supabase.from('pumpfun_watchlist').insert(newEntry);
+        
+        if (!error) {
+          results.newlyAdded++;
+          console.log(`➕ Added to watchlist: ${tokenData.token?.symbol} (${holderCount} holders, ${volumeSol.toFixed(2)} SOL)`);
+        }
+      }
+    } catch (error) {
+      console.error('Error processing token:', error);
+      results.errors++;
+    }
+  }
+
+  // STEP 4: Count final stats
+  const { count: watchingCount } = await supabase
+    .from('pumpfun_watchlist')
+    .select('id', { count: 'exact', head: true })
+    .eq('status', 'watching');
+  
+  const { count: qualifiedCount } = await supabase
+    .from('pumpfun_watchlist')
+    .select('id', { count: 'exact', head: true })
+    .eq('status', 'qualified');
+
+  results.watchlistSize = (watchingCount || 0) + (qualifiedCount || 0);
+  results.stillWatching = watchingCount || 0;
+
+  // Update poll run record
+  if (pollRunId) {
+    await supabase.from('pumpfun_poll_runs').update({
+      finished_at: now.toISOString(),
+      status: 'success',
+      results,
+      tokens_scanned: results.tokensScanned,
+      candidates_added: results.newlyQualified,
+    }).eq('id', pollRunId);
+  }
+
+  console.log('📊 POLL RESULTS:', JSON.stringify(results, null, 2));
+  return results;
+}
+
+// Get watchlist entries
+async function getWatchlist(supabase: any, status?: string, limit = 100, sortBy = 'last_checked_at') {
+  let query = supabase
+    .from('pumpfun_watchlist')
+    .select('*')
+    .order(sortBy, { ascending: false })
+    .limit(limit);
+
+  if (status) {
+    query = query.eq('status', status);
+  }
+
+  const { data, error } = await query;
+  if (error) throw error;
+  return data;
+}
+
+// Get watchlist stats
+async function getWatchlistStats(supabase: any) {
+  const [watching, qualified, dead, bombed] = await Promise.all([
+    supabase.from('pumpfun_watchlist').select('id', { count: 'exact', head: true }).eq('status', 'watching'),
+    supabase.from('pumpfun_watchlist').select('id', { count: 'exact', head: true }).eq('status', 'qualified'),
+    supabase.from('pumpfun_watchlist').select('id', { count: 'exact', head: true }).eq('status', 'dead'),
+    supabase.from('pumpfun_watchlist').select('id', { count: 'exact', head: true }).eq('status', 'bombed'),
+  ]);
+
+  // Get recent qualifications
+  const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000).toISOString();
+  const { data: recentQualified } = await supabase
+    .from('pumpfun_watchlist')
+    .select('token_symbol, token_mint, holder_count, volume_sol, qualified_at')
+    .eq('status', 'qualified')
+    .gte('qualified_at', oneHourAgo)
+    .order('qualified_at', { ascending: false })
+    .limit(10);
+
+  return {
+    watching: watching.count || 0,
+    qualified: qualified.count || 0,
+    dead: dead.count || 0,
+    bombed: bombed.count || 0,
+    total: (watching.count || 0) + (qualified.count || 0) + (dead.count || 0) + (bombed.count || 0),
+    recentQualified: recentQualified || [],
+  };
+}
+
+// Remove token from watchlist
+async function removeFromWatchlist(supabase: any, tokenMint: string, reason: string) {
+  const { error } = await supabase
+    .from('pumpfun_watchlist')
+    .update({
+      status: 'removed',
+      removed_at: new Date().toISOString(),
+      removal_reason: reason,
+    })
+    .eq('token_mint', tokenMint);
+
+  if (error) throw error;
+  return { success: true };
+}
+
+// Get candidates (keep for backward compatibility)
 async function getCandidates(supabase: any, status?: string, limit = 50) {
   let query = supabase
     .from('pumpfun_buy_candidates')
@@ -1458,26 +529,7 @@ async function getCandidates(supabase: any, status?: string, limit = 50) {
   }
 
   const { data, error } = await query;
-  
-  if (error) {
-    throw error;
-  }
-
-  return data;
-}
-
-// Get discovery logs
-async function getDiscoveryLogs(supabase: any, limit = 100) {
-  const { data, error } = await supabase
-    .from('pumpfun_discovery_logs')
-    .select('*')
-    .order('created_at', { ascending: false })
-    .limit(limit);
-  
-  if (error) {
-    throw error;
-  }
-
+  if (error) throw error;
   return data;
 }
 
@@ -1493,7 +545,7 @@ async function getConfig(supabase: any): Promise<MonitorConfig> {
     return {
       min_volume_sol_5m: 0.1,
       min_transactions: 5,
-      max_token_age_minutes: 30,
+      max_token_age_minutes: 60,
       max_bundle_score: 70,
       auto_scalp_enabled: false,
       scalp_test_mode: true,
@@ -1504,57 +556,35 @@ async function getConfig(supabase: any): Promise<MonitorConfig> {
   return data;
 }
 
-// Update monitor config
+// Update config
 async function updateConfig(supabase: any, updates: Partial<MonitorConfig>) {
   const { data, error } = await supabase
     .from('pumpfun_monitor_config')
-    .update({
-      ...updates,
-      updated_at: new Date().toISOString(),
-    })
+    .update({ ...updates, updated_at: new Date().toISOString() })
     .not('id', 'is', null)
     .select()
     .single();
 
-  if (error) {
-    throw error;
-  }
-
+  if (error) throw error;
   return data;
 }
 
-// Approve a candidate manually
-async function approveCandidate(supabase: any, candidateId: string, testMode: boolean) {
-  const { data: candidate, error: fetchError } = await supabase
-    .from('pumpfun_buy_candidates')
-    .select('*')
-    .eq('id', candidateId)
-    .single();
-
-  if (fetchError || !candidate) {
-    throw new Error('Candidate not found');
-  }
-
-  const scalpResult = await runScalpValidation(supabase, candidate.token_mint, candidate, testMode);
-
-  const { error: updateError } = await supabase
+// Approve candidate
+async function approveCandidate(supabase: any, candidateId: string) {
+  const { error } = await supabase
     .from('pumpfun_buy_candidates')
     .update({
-      scalp_validation_result: scalpResult,
-      scalp_approved: true,
       status: 'approved',
+      scalp_approved: true,
       updated_at: new Date().toISOString(),
     })
     .eq('id', candidateId);
 
-  if (updateError) {
-    throw updateError;
-  }
-
-  return { success: true, scalpResult };
+  if (error) throw error;
+  return { success: true };
 }
 
-// Reject a candidate
+// Reject candidate
 async function rejectCandidate(supabase: any, candidateId: string, reason: string) {
   const { error } = await supabase
     .from('pumpfun_buy_candidates')
@@ -1565,39 +595,11 @@ async function rejectCandidate(supabase: any, candidateId: string, reason: strin
     })
     .eq('id', candidateId);
 
-  if (error) {
-    throw error;
-  }
-
+  if (error) throw error;
   return { success: true };
 }
 
-// Get statistics
-async function getStats(supabase: any) {
-  const now = new Date();
-  const oneDayAgo = new Date(now.getTime() - 24 * 60 * 60 * 1000).toISOString();
-  const oneHourAgo = new Date(now.getTime() - 60 * 60 * 1000).toISOString();
-
-  const [configResult, totalResult, pendingResult, approvedResult, hourlyResult] = await Promise.all([
-    supabase.from('pumpfun_monitor_config').select('*').limit(1).single(),
-    supabase.from('pumpfun_buy_candidates').select('id', { count: 'exact', head: true }),
-    supabase.from('pumpfun_buy_candidates').select('id', { count: 'exact', head: true }).eq('status', 'pending'),
-    supabase.from('pumpfun_buy_candidates').select('id', { count: 'exact', head: true }).eq('scalp_approved', true),
-    supabase.from('pumpfun_buy_candidates').select('id', { count: 'exact', head: true }).gte('detected_at', oneHourAgo),
-  ]);
-
-  return {
-    config: configResult.data,
-    totalCandidates: totalResult.count || 0,
-    pendingCandidates: pendingResult.count || 0,
-    approvedCandidates: approvedResult.count || 0,
-    candidatesLastHour: hourlyResult.count || 0,
-    lastPollAt: configResult.data?.last_poll_at,
-  };
-}
-
 serve(async (req) => {
-  // Handle CORS preflight
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
   }
@@ -1632,22 +634,23 @@ serve(async (req) => {
         });
 
         try {
-          const results = await pollForNewTokens(supabase, config, pollRunId);
+          const results = await pollWithWatchlist(supabase, config, pollRunId);
           
-          // Update poll run with results
           const pollFinishedAt = new Date();
           await supabase.from('pumpfun_poll_runs').update({
             finished_at: pollFinishedAt.toISOString(),
             duration_ms: pollFinishedAt.getTime() - pollStartedAt.getTime(),
             status: 'success',
             results,
-            tokens_scanned: results.tokensScanned,
-            candidates_added: results.candidatesAdded,
           }).eq('id', pollRunId);
 
-          return jsonResponse({ success: true, results, pollRunId });
+          return jsonResponse({ 
+            success: true, 
+            results, 
+            pollRunId,
+            durationMs: pollFinishedAt.getTime() - pollStartedAt.getTime(),
+          });
         } catch (pollError) {
-          // Mark poll run as failed
           await supabase.from('pumpfun_poll_runs').update({
             finished_at: new Date().toISOString(),
             status: 'error',
@@ -1658,17 +661,31 @@ serve(async (req) => {
         }
       }
 
+      case 'watchlist': {
+        const status = url.searchParams.get('status') || undefined;
+        const limit = parseInt(url.searchParams.get('limit') || '100');
+        const sortBy = url.searchParams.get('sort') || 'last_checked_at';
+        const watchlist = await getWatchlist(supabase, status, limit, sortBy);
+        return jsonResponse({ success: true, watchlist });
+      }
+
+      case 'watchlist_stats': {
+        const stats = await getWatchlistStats(supabase);
+        return jsonResponse({ success: true, stats });
+      }
+
+      case 'remove_from_watchlist': {
+        const body = await req.json();
+        const { tokenMint, reason = 'Manually removed' } = body;
+        const result = await removeFromWatchlist(supabase, tokenMint, reason);
+        return jsonResponse(result);
+      }
+
       case 'candidates': {
         const status = url.searchParams.get('status') || undefined;
         const limit = parseInt(url.searchParams.get('limit') || '50');
         const candidates = await getCandidates(supabase, status, limit);
         return jsonResponse({ success: true, candidates });
-      }
-
-      case 'discovery_logs': {
-        const limit = parseInt(url.searchParams.get('limit') || '100');
-        const logs = await getDiscoveryLogs(supabase, limit);
-        return jsonResponse({ success: true, logs });
       }
 
       case 'config': {
@@ -1684,21 +701,14 @@ serve(async (req) => {
 
       case 'approve': {
         const body = await req.json();
-        const { candidateId, testMode = true } = body;
-        const result = await approveCandidate(supabase, candidateId, testMode);
+        const result = await approveCandidate(supabase, body.candidateId);
         return jsonResponse(result);
       }
 
       case 'reject': {
         const body = await req.json();
-        const { candidateId, reason = 'Manually rejected' } = body;
-        const result = await rejectCandidate(supabase, candidateId, reason);
+        const result = await rejectCandidate(supabase, body.candidateId, body.reason || 'Manually rejected');
         return jsonResponse(result);
-      }
-
-      case 'stats': {
-        const stats = await getStats(supabase);
-        return jsonResponse({ success: true, stats });
       }
 
       default:

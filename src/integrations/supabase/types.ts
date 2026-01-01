@@ -4530,6 +4530,102 @@ export type Database = {
         }
         Relationships: []
       }
+      pumpfun_watchlist: {
+        Row: {
+          bundle_score: number | null
+          check_count: number
+          created_at: string
+          creator_wallet: string | null
+          first_seen_at: string
+          holder_count: number | null
+          holder_count_peak: number | null
+          holder_count_prev: number | null
+          id: string
+          last_checked_at: string
+          liquidity_usd: number | null
+          market_cap_usd: number | null
+          metadata: Json | null
+          price_ath_usd: number | null
+          price_usd: number | null
+          price_usd_prev: number | null
+          qualification_reason: string | null
+          qualified_at: string | null
+          removal_reason: string | null
+          removed_at: string | null
+          social_score: number | null
+          status: string
+          token_mint: string
+          token_name: string | null
+          token_symbol: string | null
+          tx_count: number | null
+          updated_at: string
+          volume_sol: number | null
+          volume_sol_prev: number | null
+        }
+        Insert: {
+          bundle_score?: number | null
+          check_count?: number
+          created_at?: string
+          creator_wallet?: string | null
+          first_seen_at?: string
+          holder_count?: number | null
+          holder_count_peak?: number | null
+          holder_count_prev?: number | null
+          id?: string
+          last_checked_at?: string
+          liquidity_usd?: number | null
+          market_cap_usd?: number | null
+          metadata?: Json | null
+          price_ath_usd?: number | null
+          price_usd?: number | null
+          price_usd_prev?: number | null
+          qualification_reason?: string | null
+          qualified_at?: string | null
+          removal_reason?: string | null
+          removed_at?: string | null
+          social_score?: number | null
+          status?: string
+          token_mint: string
+          token_name?: string | null
+          token_symbol?: string | null
+          tx_count?: number | null
+          updated_at?: string
+          volume_sol?: number | null
+          volume_sol_prev?: number | null
+        }
+        Update: {
+          bundle_score?: number | null
+          check_count?: number
+          created_at?: string
+          creator_wallet?: string | null
+          first_seen_at?: string
+          holder_count?: number | null
+          holder_count_peak?: number | null
+          holder_count_prev?: number | null
+          id?: string
+          last_checked_at?: string
+          liquidity_usd?: number | null
+          market_cap_usd?: number | null
+          metadata?: Json | null
+          price_ath_usd?: number | null
+          price_usd?: number | null
+          price_usd_prev?: number | null
+          qualification_reason?: string | null
+          qualified_at?: string | null
+          removal_reason?: string | null
+          removed_at?: string | null
+          social_score?: number | null
+          status?: string
+          token_mint?: string
+          token_name?: string | null
+          token_symbol?: string | null
+          tx_count?: number | null
+          updated_at?: string
+          volume_sol?: number | null
+          volume_sol_prev?: number | null
+        }
+        Relationships: []
+      }
       rate_limits: {
         Row: {
           action_type: string
