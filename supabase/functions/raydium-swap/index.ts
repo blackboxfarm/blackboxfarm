@@ -220,13 +220,14 @@ async function tryPumpPortalTrade(params: {
     };
     
     if (action === 'buy') {
-      // For buys, amount is in SOL
+      // For buys, amount is in SOL - must be a number, not a string
       requestBody.denominatedInSol = "true";
-      requestBody.amount = amount;
+      requestBody.amount = parseFloat(amount);
     } else {
-      // For sells, use percentage or token amount
+      // For sells, use percentage string or token amount as number
       requestBody.denominatedInSol = "false";
-      requestBody.amount = amount;
+      // If it's a percentage like "100%", keep as string; otherwise convert to number
+      requestBody.amount = amount.includes('%') ? amount : parseFloat(amount);
     }
     
     console.log("PumpPortal request:", JSON.stringify(requestBody));
