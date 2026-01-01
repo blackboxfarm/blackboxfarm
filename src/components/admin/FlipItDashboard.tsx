@@ -1567,33 +1567,15 @@ export function FlipItDashboard() {
                             >
                               <Copy className="h-3 w-3" />
                             </Button>
-                            <a
-                              className="inline-flex"
-                              href={`https://solscan.io/account/${wallet?.pubkey}`}
-                              target="_blank"
-                              rel="noreferrer"
-                              title="View on Solscan"
-                            >
-                              <Button size="icon" variant="ghost" className="h-6 w-6">
-                                <ArrowUpRight className="h-3 w-3" />
-                              </Button>
-                            </a>
                             <Button
                               size="sm"
                               variant="outline"
                               className="h-6 px-2 text-xs"
-                              onClick={handleShowPrivateKey}
-                              disabled={isDecrypting}
-                              title="Export private key for Phantom"
+                              onClick={() => window.open(`https://solscan.io/account/${wallet?.pubkey}`, '_blank')}
+                              title="View on Solscan"
                             >
-                              {isDecrypting ? (
-                                <Loader2 className="h-3 w-3 animate-spin" />
-                              ) : (
-                                <>
-                                  <Key className="h-3 w-3 mr-1" />
-                                  KEYS
-                                </>
-                              )}
+                              <ArrowUpRight className="h-3 w-3 mr-1" />
+                              Solscan
                             </Button>
                           </div>
 

@@ -711,6 +711,7 @@ serve(async (req) => {
       hasRaydium: boolean;
       hasPumpFun: boolean;
       hasBonkFun: boolean;
+      hasBagsFm: boolean;
     } | null> {
       try {
         const res = await fetch(`https://api.dexscreener.com/latest/dex/tokens/${mintAddress}`);
@@ -722,12 +723,18 @@ serve(async (req) => {
           .map((p: any) => String(p?.dexId || "").toLowerCase())
           .filter(Boolean);
         const set = new Set(ids);
+        
+        // Check pair URLs for bags.fm detection
+        const hasBagsFmUrl = pairs.some((p: any) => 
+          String(p?.url || "").toLowerCase().includes("bags.fm")
+        );
 
         return {
           dexIds: Array.from(set),
           hasRaydium: set.has("raydium"),
           hasPumpFun: set.has("pumpfun") || set.has("pump"),
           hasBonkFun: set.has("bonkfun") || set.has("bonk"),
+          hasBagsFm: set.has("bagsfm") || set.has("bags") || hasBagsFmUrl,
         };
       } catch (e) {
         console.log("DexScreener venue hint failed:", (e as Error)?.message?.slice(0, 120));
@@ -759,14 +766,17 @@ serve(async (req) => {
     const isRaydiumToken = Boolean(venueHint?.hasRaydium);
     const isPumpToken = Boolean(venueHint?.hasPumpFun) || suffixPump;
     const isBonkToken = Boolean(venueHint?.hasBonkFun) || suffixBonk;
+    const isBagsToken = Boolean(venueHint?.hasBagsFm);
 
     // Bonding-curve tokens are only those WITHOUT Raydium liquidity.
-    const isBondingCurveToken = !isRaydiumToken && (isPumpToken || isBonkToken);
+    const isBondingCurveToken = !isRaydiumToken && (isPumpToken || isBonkToken || isBagsToken);
 
     // Determine which pool to use for PumpPortal
+    // bags.fm uses 'pump' pool via PumpPortal API
     const getBondingCurvePool = (): 'pump' | 'bonk' | 'auto' => {
       if (venueHint?.hasPumpFun) return 'pump';
       if (venueHint?.hasBonkFun) return 'bonk';
+      if (venueHint?.hasBagsFm) return 'pump'; // bags.fm uses pump pool
       if (suffixPump) return 'pump';
       if (suffixBonk) return 'bonk';
       return 'auto';
@@ -774,7 +784,7 @@ serve(async (req) => {
 
     // Log routing decision
     console.log(
-      `Routing decision: token=${tokenMint}, raydium=${isRaydiumToken}, pump=${isPumpToken}, bonk=${isBonkToken}, side=${side}`
+      `Routing decision: token=${tokenMint}, raydium=${isRaydiumToken}, pump=${isPumpToken}, bonk=${isBonkToken}, bags=${isBagsToken}, side=${side}`
     );
 
     // Get ATAs when not SOL
@@ -784,10 +794,11 @@ serve(async (req) => {
     let inputAccount = isInputSol ? undefined : (await getAssociatedTokenAddress(new PublicKey(inputMint), owner.publicKey)).toBase58();
     let outputAccount = isOutputSol ? undefined : (await getAssociatedTokenAddress(new PublicKey(outputMint), owner.publicKey)).toBase58();
 
-    // For bonding curve tokens (pump.fun/bonk.fun), try PumpPortal FIRST
+    // For bonding curve tokens (pump.fun/bonk.fun/bags.fm), try PumpPortal FIRST
     // These tokens typically don't have Raydium/Jupiter liquidity until graduation
     if (isBondingCurveToken && tokenMint && side) {
-      console.log(`Bonding curve token detected (${isBonkToken ? 'bonk.fun' : 'pump.fun'}), trying PumpPortal first...`);
+      const platform = isBagsToken ? 'bags.fm' : (isBonkToken ? 'bonk.fun' : 'pump.fun');
+      console.log(`Bonding curve token detected (${platform}), trying PumpPortal first...`);
       
       let pumpAmount: string;
       if (side === "buy") {
