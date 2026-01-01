@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -16,24 +16,21 @@ import {
   Play, 
   CheckCircle, 
   XCircle, 
-  TrendingUp,
-  TrendingDown,
   Activity,
   AlertTriangle,
-  Clock,
   Zap,
-  ExternalLink,
   FileText,
   ThumbsUp,
-  ThumbsDown,
   Copy,
   ChevronDown,
   ChevronRight,
+  ChevronUp,
   Eye,
   Skull,
   Rocket,
   Plus,
-  Minus
+  Minus,
+  ShoppingCart
 } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
 
@@ -145,6 +142,40 @@ interface PollSummary {
   pollRunId?: string;
 }
 
+type WatchlistSortColumn = 'token_symbol' | 'status' | 'holder_count' | 'volume_sol' | 'tx_count' | 'first_seen_at' | 'last_checked_at';
+type LogsSortColumn = 'token_symbol' | 'decision' | 'rejection_reason' | 'volume_sol' | 'holder_count' | 'tx_count' | 'created_at';
+type SortDirection = 'asc' | 'desc';
+
+// Sortable table header component
+const SortableHeader = ({ 
+  column, 
+  label, 
+  currentSort, 
+  direction, 
+  onSort,
+  compact = true 
+}: { 
+  column: string; 
+  label: string; 
+  currentSort: string; 
+  direction: SortDirection; 
+  onSort: (col: string) => void;
+  compact?: boolean;
+}) => (
+  <TableHead 
+    compact={compact} 
+    className="cursor-pointer hover:bg-muted/50 select-none" 
+    onClick={() => onSort(column)}
+  >
+    <div className="flex items-center gap-1">
+      {label}
+      {currentSort === column && (
+        direction === 'asc' ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />
+      )}
+    </div>
+  </TableHead>
+);
+
 export function TokenCandidatesDashboard() {
   const [watchlist, setWatchlist] = useState<WatchlistItem[]>([]);
   const [candidates, setCandidates] = useState<Candidate[]>([]);
@@ -162,6 +193,12 @@ export function TokenCandidatesDashboard() {
   const [logsPage, setLogsPage] = useState(0);
   const [totalLogsCount, setTotalLogsCount] = useState(0);
   const LOGS_PER_PAGE = 100;
+
+  // Sorting state
+  const [watchlistSortColumn, setWatchlistSortColumn] = useState<WatchlistSortColumn>('last_checked_at');
+  const [watchlistSortDirection, setWatchlistSortDirection] = useState<SortDirection>('desc');
+  const [logsSortColumn, setLogsSortColumn] = useState<LogsSortColumn>('created_at');
+  const [logsSortDirection, setLogsSortDirection] = useState<SortDirection>('desc');
 
   // Fetch watchlist
   const fetchWatchlist = useCallback(async () => {
@@ -308,6 +345,12 @@ export function TokenCandidatesDashboard() {
     toast.success('Copied');
   };
 
+  // Quick Buy helper - copies mint and shows toast
+  const quickBuy = (mint: string, symbol: string) => {
+    navigator.clipboard.writeText(mint);
+    toast.success(`${symbol} mint copied! Paste in FlipIt to buy.`, { duration: 5000 });
+  };
+
   // Save config
   const saveConfig = async () => {
     try {
@@ -332,6 +375,27 @@ export function TokenCandidatesDashboard() {
       else next.add(id);
       return next;
     });
+  };
+
+  // Sorting handlers
+  const handleWatchlistSort = (column: string) => {
+    const col = column as WatchlistSortColumn;
+    if (watchlistSortColumn === col) {
+      setWatchlistSortDirection(prev => prev === 'asc' ? 'desc' : 'asc');
+    } else {
+      setWatchlistSortColumn(col);
+      setWatchlistSortDirection('desc');
+    }
+  };
+
+  const handleLogsSort = (column: string) => {
+    const col = column as LogsSortColumn;
+    if (logsSortColumn === col) {
+      setLogsSortDirection(prev => prev === 'asc' ? 'desc' : 'asc');
+    } else {
+      setLogsSortColumn(col);
+      setLogsSortDirection('desc');
+    }
   };
 
   // Delta display helper
@@ -367,10 +431,36 @@ export function TokenCandidatesDashboard() {
     }
   };
 
-  // Filtered data
+  // Filtered and sorted watchlist
   const filteredWatchlist = watchlistFilter === 'all' 
     ? watchlist 
     : watchlist.filter(w => w.status === watchlistFilter);
+
+  const sortedWatchlist = useMemo(() => {
+    return [...filteredWatchlist].sort((a, b) => {
+      let aVal: any = a[watchlistSortColumn];
+      let bVal: any = b[watchlistSortColumn];
+      
+      // Handle nulls
+      if (aVal === null || aVal === undefined) aVal = watchlistSortColumn.includes('count') || watchlistSortColumn.includes('sol') ? -Infinity : '';
+      if (bVal === null || bVal === undefined) bVal = watchlistSortColumn.includes('count') || watchlistSortColumn.includes('sol') ? -Infinity : '';
+      
+      // Handle dates
+      if (watchlistSortColumn === 'first_seen_at' || watchlistSortColumn === 'last_checked_at') {
+        aVal = new Date(aVal).getTime();
+        bVal = new Date(bVal).getTime();
+      }
+      
+      // Handle numbers
+      if (typeof aVal === 'number' && typeof bVal === 'number') {
+        return watchlistSortDirection === 'asc' ? aVal - bVal : bVal - aVal;
+      }
+      
+      // Handle strings
+      const comparison = String(aVal).localeCompare(String(bVal));
+      return watchlistSortDirection === 'asc' ? comparison : -comparison;
+    });
+  }, [filteredWatchlist, watchlistSortColumn, watchlistSortDirection]);
 
   const filteredCandidates = candidateFilter === 'all'
     ? candidates
@@ -379,6 +469,32 @@ export function TokenCandidatesDashboard() {
   const filteredLogs = logsFilter === 'all'
     ? discoveryLogs
     : discoveryLogs.filter(l => l.decision === logsFilter);
+
+  const sortedLogs = useMemo(() => {
+    return [...filteredLogs].sort((a, b) => {
+      let aVal: any = a[logsSortColumn];
+      let bVal: any = b[logsSortColumn];
+      
+      // Handle nulls
+      if (aVal === null || aVal === undefined) aVal = logsSortColumn.includes('count') || logsSortColumn.includes('sol') ? -Infinity : '';
+      if (bVal === null || bVal === undefined) bVal = logsSortColumn.includes('count') || logsSortColumn.includes('sol') ? -Infinity : '';
+      
+      // Handle dates
+      if (logsSortColumn === 'created_at') {
+        aVal = new Date(aVal).getTime();
+        bVal = new Date(bVal).getTime();
+      }
+      
+      // Handle numbers
+      if (typeof aVal === 'number' && typeof bVal === 'number') {
+        return logsSortDirection === 'asc' ? aVal - bVal : bVal - aVal;
+      }
+      
+      // Handle strings
+      const comparison = String(aVal).localeCompare(String(bVal));
+      return logsSortDirection === 'asc' ? comparison : -comparison;
+    });
+  }, [filteredLogs, logsSortColumn, logsSortDirection]);
 
   // Watchlist stats
   const watchlistStats = {
@@ -588,27 +704,27 @@ export function TokenCandidatesDashboard() {
                   <TableHeader>
                     <TableRow>
                       <TableHead compact className="w-8"></TableHead>
-                      <TableHead compact>Symbol</TableHead>
+                      <SortableHeader column="token_symbol" label="Symbol" currentSort={watchlistSortColumn} direction={watchlistSortDirection} onSort={handleWatchlistSort} />
                       <TableHead compact>Mint</TableHead>
-                      <TableHead compact>Holders</TableHead>
-                      <TableHead compact>Vol (SOL)</TableHead>
+                      <SortableHeader column="holder_count" label="Holders" currentSort={watchlistSortColumn} direction={watchlistSortDirection} onSort={handleWatchlistSort} />
+                      <SortableHeader column="volume_sol" label="Vol (SOL)" currentSort={watchlistSortColumn} direction={watchlistSortDirection} onSort={handleWatchlistSort} />
                       <TableHead compact>Price</TableHead>
                       <TableHead compact>ATH</TableHead>
-                      <TableHead compact>Age</TableHead>
-                      <TableHead compact>Checks</TableHead>
-                      <TableHead compact>Status</TableHead>
+                      <SortableHeader column="first_seen_at" label="Age" currentSort={watchlistSortColumn} direction={watchlistSortDirection} onSort={handleWatchlistSort} />
+                      <SortableHeader column="tx_count" label="Txs" currentSort={watchlistSortColumn} direction={watchlistSortDirection} onSort={handleWatchlistSort} />
+                      <SortableHeader column="status" label="Status" currentSort={watchlistSortColumn} direction={watchlistSortDirection} onSort={handleWatchlistSort} />
                       <TableHead compact>Actions</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {filteredWatchlist.length === 0 ? (
+                    {sortedWatchlist.length === 0 ? (
                       <TableRow>
                         <TableCell colSpan={11} className="text-center text-muted-foreground py-8">
                           No tokens in watchlist
                         </TableCell>
                       </TableRow>
                     ) : (
-                      filteredWatchlist.map((item) => (
+                      sortedWatchlist.map((item) => (
                         <React.Fragment key={item.id}>
                           <TableRow className="hover:bg-muted/30">
                             <TableCell compact>
@@ -619,10 +735,9 @@ export function TokenCandidatesDashboard() {
                             <TableCell compact className="font-medium">{item.token_symbol || '???'}</TableCell>
                             <TableCell compact>
                               <div className="flex items-center gap-1">
-                                <a href={`https://pump.fun/${item.token_mint}`} target="_blank" rel="noopener noreferrer"
-                                  className="text-primary hover:underline font-mono text-xs">
+                                <span className="text-primary font-mono text-xs">
                                   {item.token_mint?.slice(0, 6)}...
-                                </a>
+                                </span>
                                 <Button variant="ghost" size="icon" className="h-4 w-4" onClick={() => copyToClipboard(item.token_mint)}>
                                   <Copy className="h-2.5 w-2.5" />
                                 </Button>
@@ -643,17 +758,24 @@ export function TokenCandidatesDashboard() {
                             <TableCell compact className="text-xs text-muted-foreground">
                               {formatDistanceToNow(new Date(item.first_seen_at), { addSuffix: false })}
                             </TableCell>
-                            <TableCell compact className="text-xs">{item.check_count}</TableCell>
+                            <TableCell compact className="text-xs">{item.tx_count}</TableCell>
                             <TableCell compact>{getWatchlistStatusBadge(item.status)}</TableCell>
                             <TableCell compact>
                               <div className="flex items-center gap-1">
-                                <Button variant="ghost" size="icon" className="h-5 w-5"
-                                  onClick={() => window.open(`https://pump.fun/${item.token_mint}`, '_blank')}>
-                                  <ExternalLink className="h-3 w-3" />
+                                <Button variant="ghost" size="icon" className="h-5 w-5 p-0"
+                                  onClick={() => window.open(`https://pump.fun/${item.token_mint}`, '_blank')}
+                                  title="View on Pump.fun">
+                                  <img src="/launchpad-logos/pumpfun.png" alt="Pump.fun" className="h-4 w-4 rounded-sm" />
                                 </Button>
-                                <Button variant="ghost" size="icon" className="h-5 w-5"
-                                  onClick={() => window.open(`https://dexscreener.com/solana/${item.token_mint}`, '_blank')}>
-                                  <TrendingUp className="h-3 w-3" />
+                                <Button variant="ghost" size="icon" className="h-5 w-5 p-0"
+                                  onClick={() => window.open(`https://dexscreener.com/solana/${item.token_mint}`, '_blank')}
+                                  title="View on DexScreener">
+                                  <img src="/launchpad-logos/dexscreener.png" alt="DexScreener" className="h-4 w-4 rounded-sm" />
+                                </Button>
+                                <Button variant="ghost" size="icon" className="h-5 w-5 text-green-500"
+                                  onClick={() => quickBuy(item.token_mint, item.token_symbol || '???')}
+                                  title="Quick Buy (copy mint)">
+                                  <ShoppingCart className="h-3 w-3" />
                                 </Button>
                               </div>
                             </TableCell>
@@ -731,10 +853,9 @@ export function TokenCandidatesDashboard() {
                           <TableCell compact className="font-medium">{c.token_symbol || '???'}</TableCell>
                           <TableCell compact>
                             <div className="flex items-center gap-1">
-                              <a href={`https://pump.fun/${c.token_mint}`} target="_blank" rel="noopener noreferrer"
-                                className="text-primary hover:underline font-mono text-xs">
+                              <span className="text-primary font-mono text-xs">
                                 {c.token_mint?.slice(0, 6)}...
-                              </a>
+                              </span>
                               <Button variant="ghost" size="icon" className="h-4 w-4" onClick={() => copyToClipboard(c.token_mint)}>
                                 <Copy className="h-2.5 w-2.5" />
                               </Button>
@@ -764,9 +885,15 @@ export function TokenCandidatesDashboard() {
                           </TableCell>
                           <TableCell compact>
                             <div className="flex items-center gap-1">
-                              <Button variant="ghost" size="icon" className="h-5 w-5"
-                                onClick={() => window.open(`https://pump.fun/${c.token_mint}`, '_blank')}>
-                                <ExternalLink className="h-3 w-3" />
+                              <Button variant="ghost" size="icon" className="h-5 w-5 p-0"
+                                onClick={() => window.open(`https://pump.fun/${c.token_mint}`, '_blank')}
+                                title="View on Pump.fun">
+                                <img src="/launchpad-logos/pumpfun.png" alt="Pump.fun" className="h-4 w-4 rounded-sm" />
+                              </Button>
+                              <Button variant="ghost" size="icon" className="h-5 w-5 p-0"
+                                onClick={() => window.open(`https://dexscreener.com/solana/${c.token_mint}`, '_blank')}
+                                title="View on DexScreener">
+                                <img src="/launchpad-logos/dexscreener.png" alt="DexScreener" className="h-4 w-4 rounded-sm" />
                               </Button>
                               {c.status === 'pending' && (
                                 <>
@@ -814,26 +941,26 @@ export function TokenCandidatesDashboard() {
                 <Table>
                   <TableHeader>
                     <TableRow>
-                      <TableHead compact>Symbol</TableHead>
+                      <SortableHeader column="token_symbol" label="Symbol" currentSort={logsSortColumn} direction={logsSortDirection} onSort={handleLogsSort} />
                       <TableHead compact>Mint</TableHead>
-                      <TableHead compact>Decision</TableHead>
-                      <TableHead compact>Reason</TableHead>
-                      <TableHead compact>Vol</TableHead>
-                      <TableHead compact>Holders</TableHead>
-                      <TableHead compact>Txs</TableHead>
-                      <TableHead compact>Age</TableHead>
+                      <SortableHeader column="decision" label="Decision" currentSort={logsSortColumn} direction={logsSortDirection} onSort={handleLogsSort} />
+                      <SortableHeader column="rejection_reason" label="Reason" currentSort={logsSortColumn} direction={logsSortDirection} onSort={handleLogsSort} />
+                      <SortableHeader column="volume_sol" label="Vol" currentSort={logsSortColumn} direction={logsSortDirection} onSort={handleLogsSort} />
+                      <SortableHeader column="holder_count" label="Holders" currentSort={logsSortColumn} direction={logsSortDirection} onSort={handleLogsSort} />
+                      <SortableHeader column="tx_count" label="Txs" currentSort={logsSortColumn} direction={logsSortDirection} onSort={handleLogsSort} />
+                      <SortableHeader column="created_at" label="Age" currentSort={logsSortColumn} direction={logsSortDirection} onSort={handleLogsSort} />
                       <TableHead compact>Links</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {filteredLogs.length === 0 ? (
+                    {sortedLogs.length === 0 ? (
                       <TableRow>
                         <TableCell colSpan={9} className="text-center text-muted-foreground py-8">
                           No logs
                         </TableCell>
                       </TableRow>
                     ) : (
-                      filteredLogs.map((log) => (
+                      sortedLogs.map((log) => (
                         <TableRow key={log.id} className={log.should_have_bought ? 'bg-orange-500/5' : ''}>
                           <TableCell compact className="font-medium">
                             {log.token_symbol || '???'}
@@ -841,10 +968,9 @@ export function TokenCandidatesDashboard() {
                           </TableCell>
                           <TableCell compact>
                             <div className="flex items-center gap-1">
-                              <a href={`https://pump.fun/${log.token_mint}`} target="_blank" rel="noopener noreferrer"
-                                className="text-primary hover:underline font-mono text-xs">
+                              <span className="text-primary font-mono text-xs">
                                 {log.token_mint?.slice(0, 6)}...
-                              </a>
+                              </span>
                               <Button variant="ghost" size="icon" className="h-4 w-4" onClick={() => copyToClipboard(log.token_mint)}>
                                 <Copy className="h-2.5 w-2.5" />
                               </Button>
@@ -868,13 +994,15 @@ export function TokenCandidatesDashboard() {
                           </TableCell>
                           <TableCell compact>
                             <div className="flex items-center gap-1">
-                              <Button variant="ghost" size="icon" className="h-5 w-5"
-                                onClick={() => window.open(`https://pump.fun/${log.token_mint}`, '_blank')}>
-                                <ExternalLink className="h-3 w-3" />
+                              <Button variant="ghost" size="icon" className="h-5 w-5 p-0"
+                                onClick={() => window.open(`https://pump.fun/${log.token_mint}`, '_blank')}
+                                title="View on Pump.fun">
+                                <img src="/launchpad-logos/pumpfun.png" alt="Pump.fun" className="h-4 w-4 rounded-sm" />
                               </Button>
-                              <Button variant="ghost" size="icon" className="h-5 w-5"
-                                onClick={() => window.open(`https://dexscreener.com/solana/${log.token_mint}`, '_blank')}>
-                                <TrendingUp className="h-3 w-3" />
+                              <Button variant="ghost" size="icon" className="h-5 w-5 p-0"
+                                onClick={() => window.open(`https://dexscreener.com/solana/${log.token_mint}`, '_blank')}
+                                title="View on DexScreener">
+                                <img src="/launchpad-logos/dexscreener.png" alt="DexScreener" className="h-4 w-4 rounded-sm" />
                               </Button>
                             </div>
                           </TableCell>
@@ -884,7 +1012,7 @@ export function TokenCandidatesDashboard() {
                   </TableBody>
                 </Table>
               </ScrollArea>
-              {filteredLogs.length > 0 && filteredLogs.length < totalLogsCount && (
+              {sortedLogs.length > 0 && sortedLogs.length < totalLogsCount && (
                 <div className="p-2 border-t text-center">
                   <Button variant="outline" size="sm" onClick={() => setLogsPage(p => p + 1)}>
                     Load More ({totalLogsCount - (logsPage + 1) * LOGS_PER_PAGE} remaining)
