@@ -1261,14 +1261,17 @@ export function FlipItDashboard() {
   };
 
   const handleRefreshPrices = async () => {
-    const holdingPositions = positions.filter(p => p.status === 'holding');
-    if (holdingPositions.length === 0) {
-      toast.info('No active positions to monitor');
-      return;
-    }
-
     setIsMonitoring(true);
     try {
+      // Always reload positions from DB first
+      await loadPositions();
+      
+      const holdingPositions = positions.filter(p => p.status === 'holding');
+      if (holdingPositions.length === 0) {
+        toast.info('Positions reloaded - no active positions to price check');
+        return;
+      }
+
       const { data, error } = await supabase.functions.invoke('flipit-price-monitor', {
         body: { 
           action: 'check',
@@ -1291,13 +1294,13 @@ export function FlipItDashboard() {
       if (data?.executed?.length > 0) {
         toast.success(`Sold ${data.executed.length} position(s) at target!`);
         loadPositions();
-        refreshWalletBalance(); // Auto-refresh wallet balance after sales
+        refreshWalletBalance();
       } else {
-        toast.success('Prices refreshed');
-        refreshWalletBalance(); // Also refresh balance on price check
+        toast.success('Refreshed');
+        refreshWalletBalance();
       }
     } catch (err: any) {
-      toast.error(err.message || 'Failed to refresh prices');
+      toast.error(err.message || 'Failed to refresh');
     } finally {
       setIsMonitoring(false);
     }
@@ -1901,28 +1904,11 @@ export function FlipItDashboard() {
                   </span>
                 )}
               </Label>
-              <div className="flex gap-2">
-                <Input
-                  placeholder="Paste token address..."
-                  value={tokenAddress}
-                  onChange={e => setTokenAddress(e.target.value)}
-                  className="flex-1"
-                />
-                <Button
-                  size="sm"
-                  variant="outline"
-                  onClick={handleCheckPrice}
-                  disabled={isLoadingInputToken || !tokenAddress.trim()}
-                  className="shrink-0"
-                  title="Refresh token data"
-                >
-                  {isLoadingInputToken ? (
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                  ) : (
-                    <RefreshCw className="h-4 w-4" />
-                  )}
-                </Button>
-              </div>
+              <Input
+                placeholder="Paste token address..."
+                value={tokenAddress}
+                onChange={e => setTokenAddress(e.target.value)}
+              />
               {inputToken.price !== null && buyAmount && (
                 <p className="text-xs text-muted-foreground">
                   Entry: ~{(() => {
@@ -2042,18 +2028,13 @@ export function FlipItDashboard() {
               </Button>
             )}
 
-            <Button variant="outline" onClick={handleRefreshPrices} disabled={isMonitoring}>
-              {isMonitoring ? (
+            <Button variant="outline" onClick={handleRefreshPrices} disabled={isMonitoring || isLoading}>
+              {isMonitoring || isLoading ? (
                 <Loader2 className="h-4 w-4 mr-2 animate-spin" />
               ) : (
                 <RefreshCw className="h-4 w-4 mr-2" />
               )}
-              Refresh Prices
-            </Button>
-
-            <Button variant="ghost" onClick={loadPositions} disabled={isLoading}>
-              <RefreshCw className={`h-4 w-4 mr-2 ${isLoading ? 'animate-spin' : ''}`} />
-              Reload
+              Refresh
             </Button>
           </div>
         </CardContent>
