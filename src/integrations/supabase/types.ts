@@ -4267,15 +4267,20 @@ export type Database = {
           creator_integrity_score: number | null
           creator_wallet: string | null
           decision: string
+          dex_paid_details: Json | null
+          dex_paid_early: boolean | null
           failed_filters: string[] | null
+          first_buyers_analysis: Json | null
           holder_count: number | null
           id: string
+          is_mayhem_mode: boolean | null
           liquidity_usd: number | null
           manual_review_at: string | null
           manual_review_notes: string | null
           market_cap_usd: number | null
           metadata: Json | null
           passed_filters: string[] | null
+          price_tier: string | null
           price_usd: number | null
           rejection_reason: string | null
           reviewed_by: string | null
@@ -4283,14 +4288,20 @@ export type Database = {
           sells_count: number | null
           should_have_bought: boolean | null
           similar_holdings_count: number | null
+          social_details: Json | null
+          social_score: number | null
+          telegram_score: number | null
           token_mint: string
           token_name: string | null
           token_symbol: string | null
           top10_holder_pct: number | null
           top5_holder_pct: number | null
+          twitter_score: number | null
           tx_count: number | null
           volume_sol: number | null
           volume_usd: number | null
+          wallet_quality_score: number | null
+          website_score: number | null
         }
         Insert: {
           acceptance_reasoning?: Json | null
@@ -4306,15 +4317,20 @@ export type Database = {
           creator_integrity_score?: number | null
           creator_wallet?: string | null
           decision: string
+          dex_paid_details?: Json | null
+          dex_paid_early?: boolean | null
           failed_filters?: string[] | null
+          first_buyers_analysis?: Json | null
           holder_count?: number | null
           id?: string
+          is_mayhem_mode?: boolean | null
           liquidity_usd?: number | null
           manual_review_at?: string | null
           manual_review_notes?: string | null
           market_cap_usd?: number | null
           metadata?: Json | null
           passed_filters?: string[] | null
+          price_tier?: string | null
           price_usd?: number | null
           rejection_reason?: string | null
           reviewed_by?: string | null
@@ -4322,14 +4338,20 @@ export type Database = {
           sells_count?: number | null
           should_have_bought?: boolean | null
           similar_holdings_count?: number | null
+          social_details?: Json | null
+          social_score?: number | null
+          telegram_score?: number | null
           token_mint: string
           token_name?: string | null
           token_symbol?: string | null
           top10_holder_pct?: number | null
           top5_holder_pct?: number | null
+          twitter_score?: number | null
           tx_count?: number | null
           volume_sol?: number | null
           volume_usd?: number | null
+          wallet_quality_score?: number | null
+          website_score?: number | null
         }
         Update: {
           acceptance_reasoning?: Json | null
@@ -4345,15 +4367,20 @@ export type Database = {
           creator_integrity_score?: number | null
           creator_wallet?: string | null
           decision?: string
+          dex_paid_details?: Json | null
+          dex_paid_early?: boolean | null
           failed_filters?: string[] | null
+          first_buyers_analysis?: Json | null
           holder_count?: number | null
           id?: string
+          is_mayhem_mode?: boolean | null
           liquidity_usd?: number | null
           manual_review_at?: string | null
           manual_review_notes?: string | null
           market_cap_usd?: number | null
           metadata?: Json | null
           passed_filters?: string[] | null
+          price_tier?: string | null
           price_usd?: number | null
           rejection_reason?: string | null
           reviewed_by?: string | null
@@ -4361,14 +4388,20 @@ export type Database = {
           sells_count?: number | null
           should_have_bought?: boolean | null
           similar_holdings_count?: number | null
+          social_details?: Json | null
+          social_score?: number | null
+          telegram_score?: number | null
           token_mint?: string
           token_name?: string | null
           token_symbol?: string | null
           top10_holder_pct?: number | null
           top5_holder_pct?: number | null
+          twitter_score?: number | null
           tx_count?: number | null
           volume_sol?: number | null
           volume_usd?: number | null
+          wallet_quality_score?: number | null
+          website_score?: number | null
         }
         Relationships: []
       }

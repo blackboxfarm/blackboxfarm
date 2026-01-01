@@ -90,6 +90,18 @@ interface DiscoveryLog {
   actual_outcome: 'pumped' | 'dumped' | 'sideways' | 'unknown' | null;
   actual_roi_pct: number | null;
   reviewed_by: string | null;
+  // Enhanced quality scoring columns
+  is_mayhem_mode: boolean | null;
+  social_score: number | null;
+  twitter_score: number | null;
+  website_score: number | null;
+  telegram_score: number | null;
+  social_details: any | null;
+  dex_paid_early: boolean | null;
+  dex_paid_details: any | null;
+  price_tier: 'ultra_low' | 'low' | 'medium' | 'high' | null;
+  wallet_quality_score: number | null;
+  first_buyers_analysis: any | null;
 }
 
 interface MonitorConfig {
@@ -379,6 +391,8 @@ export function TokenCandidatesDashboard() {
     rejected: discoveryLogs.filter(l => l.decision === 'rejected').length,
     reviewed: discoveryLogs.filter(l => l.manual_review_at !== null).length,
     shouldHaveBought: discoveryLogs.filter(l => l.should_have_bought === true).length,
+    mayhemMode: discoveryLogs.filter(l => l.is_mayhem_mode === true).length,
+    dexPaidEarly: discoveryLogs.filter(l => l.dex_paid_early === true).length,
   };
 
 
@@ -785,6 +799,34 @@ export function TokenCandidatesDashboard() {
                                   <Badge variant="outline" className="bg-yellow-500/10 text-yellow-500 border-yellow-500/30">
                                     <XCircle className="h-3 w-3 mr-1" />
                                     {log.rejection_reason?.replace(/_/g, ' ').toUpperCase() || 'REJECTED'}
+                                  </Badge>
+                                )}
+                                {/* Enhanced Quality Badges */}
+                                {log.is_mayhem_mode && (
+                                  <Badge variant="outline" className="bg-red-600/20 text-red-400 border-red-600/50">
+                                    <Skull className="h-3 w-3 mr-1" />
+                                    MAYHEM
+                                  </Badge>
+                                )}
+                                {log.dex_paid_early && (
+                                  <Badge variant="outline" className="bg-orange-500/20 text-orange-400 border-orange-500/40">
+                                    <DollarSign className="h-3 w-3 mr-1" />
+                                    EARLY DEX PAID
+                                  </Badge>
+                                )}
+                                {log.social_score !== null && (
+                                  <Badge variant="outline" className={
+                                    log.social_score >= 60 ? 'bg-green-500/10 text-green-500 border-green-500/30' :
+                                    log.social_score >= 30 ? 'bg-yellow-500/10 text-yellow-500 border-yellow-500/30' :
+                                    'bg-red-500/10 text-red-500 border-red-500/30'
+                                  }>
+                                    <Globe className="h-3 w-3 mr-1" />
+                                    Social: {log.social_score}
+                                  </Badge>
+                                )}
+                                {log.price_tier && (
+                                  <Badge variant="secondary" className="text-xs">
+                                    {log.price_tier.replace('_', ' ')}
                                   </Badge>
                                 )}
                               </div>
