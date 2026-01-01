@@ -32,7 +32,9 @@ import {
   Globe,
   Target,
   Rocket,
-  Timer
+  Timer,
+  Copy,
+  ChevronDown
 } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
 
@@ -148,25 +150,28 @@ export function TokenCandidatesDashboard() {
   const [polling, setPolling] = useState(false);
   const [activeTab, setActiveTab] = useState('all');
   const [mainTab, setMainTab] = useState<'candidates' | 'logs'>('candidates');
-  const [logsFilter, setLogsFilter] = useState<'all' | 'rejected' | 'accepted' | 'reviewed' | 'should_have_bought'>('all');
+  const [logsFilter, setLogsFilter] = useState<'all' | 'rejected' | 'accepted' | 'reviewed' | 'should_have_bought' | 'this_poll'>('all');
   const [configEdits, setConfigEdits] = useState<Partial<MonitorConfig>>({});
+  const [lastPollSummary, setLastPollSummary] = useState<{
+    tokensScanned: number;
+    candidatesAdded: number;
+    skippedExisting: number;
+    skippedLowVolume: number;
+    skippedOld: number;
+    skippedHighRisk: number;
+    skippedMayhemMode: number;
+    skippedEarlyDexPaid: number;
+    errors: number;
+    pollRunId?: string;
+    durationMs?: number;
+  } | null>(null);
+  const [logsPage, setLogsPage] = useState(0);
+  const [totalLogsCount, setTotalLogsCount] = useState(0);
+  const LOGS_PER_PAGE = 50;
 
-  // Fetch candidates
-  const fetchCandidates = useCallback(async (status?: string) => {
+  // Fetch candidates - FIXED: Direct query, no accidental polling
+  const fetchCandidates = useCallback(async () => {
     try {
-      const url = new URL('https://apxauapuusmgwbbzjgfl.supabase.co/functions/v1/pumpfun-new-token-monitor');
-      url.searchParams.set('action', 'candidates');
-      if (status && status !== 'all') {
-        url.searchParams.set('status', status);
-      }
-      url.searchParams.set('limit', '100');
-
-      const { data, error } = await supabase.functions.invoke('pumpfun-new-token-monitor', {
-        body: null,
-        method: 'GET',
-      });
-
-      // Fallback to direct query
       const { data: candidatesData } = await supabase
         .from('pumpfun_buy_candidates')
         .select('*')
@@ -180,21 +185,34 @@ export function TokenCandidatesDashboard() {
     }
   }, []);
 
-  // Fetch discovery logs
-  const fetchDiscoveryLogs = useCallback(async () => {
+  // Fetch discovery logs with pagination
+  const fetchDiscoveryLogs = useCallback(async (pollRunId?: string) => {
     try {
-      const { data, error } = await supabase
+      // Get total count
+      const { count } = await supabase
+        .from('pumpfun_discovery_logs')
+        .select('id', { count: 'exact', head: true });
+      setTotalLogsCount(count || 0);
+
+      // Build query with optional poll_run_id filter
+      let query = supabase
         .from('pumpfun_discovery_logs')
         .select('*')
-        .order('created_at', { ascending: false })
-        .limit(200);
+        .order('created_at', { ascending: false });
+
+      if (pollRunId) {
+        query = query.eq('poll_run_id', pollRunId);
+      }
+
+      const { data, error } = await query
+        .range(logsPage * LOGS_PER_PAGE, (logsPage + 1) * LOGS_PER_PAGE - 1);
 
       if (error) throw error;
       setDiscoveryLogs((data || []) as DiscoveryLog[]);
     } catch (error) {
       console.error('Error fetching discovery logs:', error);
     }
-  }, []);
+  }, [logsPage]);
 
   // Fetch config and stats
   const fetchConfigAndStats = useCallback(async () => {
@@ -257,9 +275,10 @@ export function TokenCandidatesDashboard() {
     };
   }, [fetchCandidates, fetchConfigAndStats, fetchDiscoveryLogs]);
 
-  // Manual poll trigger
+  // Manual poll trigger with persistent results
   const triggerPoll = async () => {
     setPolling(true);
+    const startTime = Date.now();
     try {
       const { data, error } = await supabase.functions.invoke('pumpfun-new-token-monitor', {
         body: { action: 'poll' },
@@ -267,17 +286,49 @@ export function TokenCandidatesDashboard() {
 
       if (error) throw error;
 
-      const results = data.results;
+      const results = data?.results || {};
+      const durationMs = Date.now() - startTime;
+      
+      // Store persistent summary
+      setLastPollSummary({
+        tokensScanned: results.tokensScanned || 0,
+        candidatesAdded: results.candidatesAdded || 0,
+        skippedExisting: results.skippedExisting || 0,
+        skippedLowVolume: results.skippedLowVolume || 0,
+        skippedOld: results.skippedOld || 0,
+        skippedHighRisk: results.skippedHighRisk || 0,
+        skippedMayhemMode: results.skippedMayhemMode || 0,
+        skippedEarlyDexPaid: results.skippedEarlyDexPaid || 0,
+        errors: results.errors || 0,
+        pollRunId: data?.pollRunId,
+        durationMs,
+      });
+
       toast.success(
-        `Scanned ${results?.tokensScanned || 0} tokens: ${results?.candidatesAdded || 0} added, ${results?.skippedLowVolume || 0} low vol, ${results?.skippedOld || 0} old`
+        `Poll complete in ${(durationMs / 1000).toFixed(1)}s: ${results.tokensScanned || 0} scanned, ${results.candidatesAdded || 0} added`,
+        { duration: 15000 }
       );
-      await Promise.all([fetchCandidates(), fetchConfigAndStats(), fetchDiscoveryLogs()]);
+      
+      await Promise.all([fetchCandidates(), fetchConfigAndStats()]);
+      // Fetch logs for this specific poll run
+      if (data?.pollRunId) {
+        setLogsFilter('this_poll');
+        await fetchDiscoveryLogs(data.pollRunId);
+      } else {
+        await fetchDiscoveryLogs();
+      }
     } catch (error) {
       console.error('Poll error:', error);
-      toast.error('Failed to poll for tokens');
+      toast.error('Failed to poll for tokens', { duration: 15000 });
     } finally {
       setPolling(false);
     }
+  };
+
+  // Copy to clipboard helper
+  const copyToClipboard = (text: string) => {
+    navigator.clipboard.writeText(text);
+    toast.success('Copied to clipboard');
   };
 
   // Update config
@@ -721,7 +772,7 @@ export function TokenCandidatesDashboard() {
                     Detailed reasoning for all token decisions. Mark rejected tokens as "should've bought" for learning.
                   </CardDescription>
                 </div>
-                <Button variant="outline" size="sm" onClick={fetchDiscoveryLogs}>
+                <Button variant="outline" size="sm" onClick={() => fetchDiscoveryLogs()}>
                   <RefreshCw className="h-4 w-4 mr-2" />
                   Refresh
                 </Button>
