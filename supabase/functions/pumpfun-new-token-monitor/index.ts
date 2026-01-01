@@ -391,6 +391,17 @@ async function pollWithWatchlist(supabase: any, config: MonitorConfig, pollRunId
         
       } else {
         // NEW token - add to watchlist
+        
+        // CRITICAL: Check token age - skip tokens older than max_token_age_minutes
+        const createdAt = tokenData.events?.createdAt;
+        if (createdAt) {
+          const tokenAgeMinutes = (now.getTime() - (createdAt * 1000)) / 60000;
+          if (tokenAgeMinutes > config.max_token_age_minutes) {
+            console.log(`⏭️ Skipping old token: ${tokenData.token?.symbol} (${tokenAgeMinutes.toFixed(0)}m old, max: ${config.max_token_age_minutes}m)`);
+            continue;
+          }
+        }
+        
         // Quick Mayhem Mode check
         const isMayhem = await checkMayhemMode(mint);
         if (isMayhem) {
