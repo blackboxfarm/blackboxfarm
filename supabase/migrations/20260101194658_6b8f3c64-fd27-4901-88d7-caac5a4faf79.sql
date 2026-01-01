@@ -1,0 +1,1 @@
+SELECT cron.unschedule('pumpfun-watchlist-monitor-1min');
