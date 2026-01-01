@@ -66,6 +66,7 @@ interface WatchlistItem {
   qualified_at: string | null;
   removed_at: string | null;
   metadata: any;
+  bonding_curve_pct: number | null;
 }
 
 interface Candidate {
@@ -137,16 +138,27 @@ interface MonitorConfig {
   resurrection_volume_threshold_sol?: number;
 }
 
-// Format price to readable decimal (not scientific notation)
+// Format price to readable decimal (always max 10 decimal places, no scientific notation)
 const formatPrice = (price: number | null | undefined): string => {
   if (price === null || price === undefined || isNaN(price)) return '-';
   if (price === 0) return '$0';
   if (price >= 1) return `$${price.toFixed(2)}`;
   if (price >= 0.01) return `$${price.toFixed(4)}`;
-  if (price >= 0.0001) return `$${price.toFixed(6)}`;
-  // For very small prices, show enough decimal places
+  // For small prices, always show 10 decimal places max, trim trailing zeros
   const formatted = price.toFixed(10).replace(/\.?0+$/, '');
   return `$${formatted}`;
+};
+
+// Format volume with 2 decimal places
+const formatVolume = (vol: number | null | undefined): string => {
+  if (vol === null || vol === undefined || isNaN(vol)) return '-';
+  return vol.toFixed(2);
+};
+
+// Format bonding curve percentage
+const formatBondingCurve = (pct: number | null | undefined): string => {
+  if (pct === null || pct === undefined || isNaN(pct)) return '-';
+  return `${pct.toFixed(0)}%`;
 };
 
 interface PollSummary {
@@ -839,10 +851,10 @@ export function TokenCandidatesDashboard() {
                       <TableHead compact>Mint</TableHead>
                       <SortableHeader column="holder_count" label="Holders" currentSort={watchlistSortColumn} direction={watchlistSortDirection} onSort={handleWatchlistSort} />
                       <SortableHeader column="volume_sol" label="Vol (SOL)" currentSort={watchlistSortColumn} direction={watchlistSortDirection} onSort={handleWatchlistSort} />
+                      <TableHead compact>BC%</TableHead>
                       <TableHead compact>Price</TableHead>
                       <TableHead compact>ATH</TableHead>
                       <SortableHeader column="first_seen_at" label="Age" currentSort={watchlistSortColumn} direction={watchlistSortDirection} onSort={handleWatchlistSort} />
-                      <SortableHeader column="tx_count" label="Txs" currentSort={watchlistSortColumn} direction={watchlistSortDirection} onSort={handleWatchlistSort} />
                       <SortableHeader column="status" label="Status" currentSort={watchlistSortColumn} direction={watchlistSortDirection} onSort={handleWatchlistSort} />
                       <TableHead compact>Actions</TableHead>
                     </TableRow>
@@ -850,7 +862,7 @@ export function TokenCandidatesDashboard() {
                   <TableBody>
                     {sortedWatchlist.length === 0 ? (
                       <TableRow>
-                        <TableCell colSpan={11} className="text-center text-muted-foreground py-8">
+                        <TableCell colSpan={12} className="text-center text-muted-foreground py-8">
                           No tokens in watchlist
                         </TableCell>
                       </TableRow>
@@ -877,8 +889,11 @@ export function TokenCandidatesDashboard() {
                             <TableCell compact>
                               <DeltaDisplay current={item.holder_count} prev={item.holder_count_prev} isInteger />
                             </TableCell>
-                            <TableCell compact>
-                              <DeltaDisplay current={Number(item.volume_sol)} prev={item.volume_sol_prev ? Number(item.volume_sol_prev) : null} />
+                            <TableCell compact className="text-xs">
+                              {formatVolume(Number(item.volume_sol))}
+                            </TableCell>
+                            <TableCell compact className="text-xs text-cyan-400">
+                              {formatBondingCurve(item.bonding_curve_pct)}
                             </TableCell>
                             <TableCell compact className="text-xs">
                               {formatPrice(item.price_usd)}
@@ -889,7 +904,6 @@ export function TokenCandidatesDashboard() {
                             <TableCell compact className="text-xs text-muted-foreground">
                               {formatDistanceToNow(new Date(item.first_seen_at), { addSuffix: false })}
                             </TableCell>
-                            <TableCell compact className="text-xs">{item.tx_count}</TableCell>
                             <TableCell compact>{getWatchlistStatusBadge(item.status)}</TableCell>
                             <TableCell compact>
                               <div className="flex items-center gap-1">
@@ -914,7 +928,7 @@ export function TokenCandidatesDashboard() {
                           {/* Expanded Row */}
                           {expandedRows.has(item.id) && (
                             <TableRow className="bg-muted/20">
-                              <TableCell colSpan={11} className="py-3">
+                              <TableCell colSpan={12} className="py-3">
                                 <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-xs">
                                   <div><span className="text-muted-foreground">Name:</span> {item.token_name}</div>
                                   <div><span className="text-muted-foreground">Market Cap:</span> {item.market_cap_usd ? `$${Number(item.market_cap_usd).toLocaleString()}` : '-'}</div>
@@ -923,6 +937,7 @@ export function TokenCandidatesDashboard() {
                                   <div><span className="text-muted-foreground">Peak Holders:</span> {item.holder_count_peak ?? '-'}</div>
                                   <div><span className="text-muted-foreground">TXs:</span> {item.tx_count}</div>
                                   <div><span className="text-muted-foreground">Creator:</span> <span className="font-mono">{item.creator_wallet?.slice(0, 8)}...</span></div>
+                                  <div><span className="text-muted-foreground">Bonding Curve:</span> <span className="text-cyan-400">{formatBondingCurve(item.bonding_curve_pct)}</span></div>
                                   {item.qualification_reason && <div className="col-span-2 text-green-500"><span className="text-muted-foreground">Qualified:</span> {item.qualification_reason}</div>}
                                   {item.removal_reason && <div className="col-span-2 text-red-500"><span className="text-muted-foreground">Removed:</span> {item.removal_reason}</div>}
                                 </div>

@@ -4550,6 +4550,7 @@ export type Database = {
       }
       pumpfun_watchlist: {
         Row: {
+          bonding_curve_pct: number | null
           bundle_checked: boolean | null
           bundle_score: number | null
           check_count: number
@@ -4588,6 +4589,7 @@ export type Database = {
           volume_sol_prev: number | null
         }
         Insert: {
+          bonding_curve_pct?: number | null
           bundle_checked?: boolean | null
           bundle_score?: number | null
           check_count?: number
@@ -4626,6 +4628,7 @@ export type Database = {
           volume_sol_prev?: number | null
         }
         Update: {
+          bonding_curve_pct?: number | null
           bundle_checked?: boolean | null
           bundle_score?: number | null
           check_count?: number
