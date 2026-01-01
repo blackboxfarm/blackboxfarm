@@ -4556,6 +4556,7 @@ export type Database = {
           check_count: number
           consecutive_stale_checks: number | null
           created_at: string
+          created_at_blockchain: string | null
           creator_wallet: string | null
           first_seen_at: string
           holder_count: number | null
@@ -4579,6 +4580,7 @@ export type Database = {
           removed_at: string | null
           social_score: number | null
           socials_checked_at: string | null
+          source: string | null
           status: string
           token_mint: string
           token_name: string | null
@@ -4595,6 +4597,7 @@ export type Database = {
           check_count?: number
           consecutive_stale_checks?: number | null
           created_at?: string
+          created_at_blockchain?: string | null
           creator_wallet?: string | null
           first_seen_at?: string
           holder_count?: number | null
@@ -4618,6 +4621,7 @@ export type Database = {
           removed_at?: string | null
           social_score?: number | null
           socials_checked_at?: string | null
+          source?: string | null
           status?: string
           token_mint: string
           token_name?: string | null
@@ -4634,6 +4638,7 @@ export type Database = {
           check_count?: number
           consecutive_stale_checks?: number | null
           created_at?: string
+          created_at_blockchain?: string | null
           creator_wallet?: string | null
           first_seen_at?: string
           holder_count?: number | null
@@ -4657,6 +4662,7 @@ export type Database = {
           removed_at?: string | null
           social_score?: number | null
           socials_checked_at?: string | null
+          source?: string | null
           status?: string
           token_mint?: string
           token_name?: string | null
