@@ -419,7 +419,7 @@ serve(async (req) => {
       // ============================================
       const solPrice = await fetchSolPrice();
       const buyAmountSol = (buyAmountUsd || 4) / solPrice;
-      const gasFeeBuffer = 0.01; // 0.01 SOL buffer for gas fees
+      const gasFeeBuffer = 0.005; // 0.005 SOL buffer for gas fees (reduced from 0.01)
       const requiredSol = buyAmountSol + gasFeeBuffer;
       
       // Always fetch fresh balance from RPC
