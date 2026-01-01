@@ -300,3 +300,15 @@ verify_jwt = false
 
 [functions.pumpfun-new-token-monitor]
 verify_jwt = false
+
+[functions.pumpfun-token-fetcher]
+verify_jwt = false
+
+[functions.pumpfun-watchlist-monitor]
+verify_jwt = false
+
+[functions.pumpfun-rejected-reviewer]
+verify_jwt = false
+
+[functions.pumpfun-vip-monitor]
+verify_jwt = false

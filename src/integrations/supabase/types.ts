@@ -4550,8 +4550,10 @@ export type Database = {
       }
       pumpfun_watchlist: {
         Row: {
+          bundle_checked: boolean | null
           bundle_score: number | null
           check_count: number
+          consecutive_stale_checks: number | null
           created_at: string
           creator_wallet: string | null
           first_seen_at: string
@@ -4560,9 +4562,12 @@ export type Database = {
           holder_count_prev: number | null
           id: string
           last_checked_at: string
+          last_processor: string | null
           liquidity_usd: number | null
           market_cap_usd: number | null
+          mayhem_checked: boolean | null
           metadata: Json | null
+          metrics_hash: string | null
           permanent_reject: boolean | null
           price_ath_usd: number | null
           price_usd: number | null
@@ -4572,6 +4577,7 @@ export type Database = {
           removal_reason: string | null
           removed_at: string | null
           social_score: number | null
+          socials_checked_at: string | null
           status: string
           token_mint: string
           token_name: string | null
@@ -4582,8 +4588,10 @@ export type Database = {
           volume_sol_prev: number | null
         }
         Insert: {
+          bundle_checked?: boolean | null
           bundle_score?: number | null
           check_count?: number
+          consecutive_stale_checks?: number | null
           created_at?: string
           creator_wallet?: string | null
           first_seen_at?: string
@@ -4592,9 +4600,12 @@ export type Database = {
           holder_count_prev?: number | null
           id?: string
           last_checked_at?: string
+          last_processor?: string | null
           liquidity_usd?: number | null
           market_cap_usd?: number | null
+          mayhem_checked?: boolean | null
           metadata?: Json | null
+          metrics_hash?: string | null
           permanent_reject?: boolean | null
           price_ath_usd?: number | null
           price_usd?: number | null
@@ -4604,6 +4615,7 @@ export type Database = {
           removal_reason?: string | null
           removed_at?: string | null
           social_score?: number | null
+          socials_checked_at?: string | null
           status?: string
           token_mint: string
           token_name?: string | null
@@ -4614,8 +4626,10 @@ export type Database = {
           volume_sol_prev?: number | null
         }
         Update: {
+          bundle_checked?: boolean | null
           bundle_score?: number | null
           check_count?: number
+          consecutive_stale_checks?: number | null
           created_at?: string
           creator_wallet?: string | null
           first_seen_at?: string
@@ -4624,9 +4638,12 @@ export type Database = {
           holder_count_prev?: number | null
           id?: string
           last_checked_at?: string
+          last_processor?: string | null
           liquidity_usd?: number | null
           market_cap_usd?: number | null
+          mayhem_checked?: boolean | null
           metadata?: Json | null
+          metrics_hash?: string | null
           permanent_reject?: boolean | null
           price_ath_usd?: number | null
           price_usd?: number | null
@@ -4636,6 +4653,7 @@ export type Database = {
           removal_reason?: string | null
           removed_at?: string | null
           social_score?: number | null
+          socials_checked_at?: string | null
           status?: string
           token_mint?: string
           token_name?: string | null
