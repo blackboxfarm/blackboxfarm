@@ -105,6 +105,29 @@ export default function RugInvestigator() {
     }
   };
 
+  const retryInvestigation = async (inv: any) => {
+    setTokenMint(inv.token_mint);
+    // Delete the failed record first
+    await supabase
+      .from('rug_investigations')
+      .delete()
+      .eq('id', inv.id);
+    
+    refetchHistory();
+    // Then start a new investigation
+    investigate();
+  };
+
+  const deleteInvestigation = async (id: string) => {
+    await supabase
+      .from('rug_investigations')
+      .delete()
+      .eq('id', id);
+    
+    refetchHistory();
+    toast({ title: 'Investigation deleted' });
+  };
+
   const getRiskBadgeVariant = (level: string) => {
     switch (level) {
       case 'CRITICAL': return 'destructive';
@@ -496,14 +519,33 @@ export default function RugInvestigator() {
                       {new Date(inv.created_at).toLocaleDateString()}
                     </TableCell>
                     <TableCell>
-                      <Button 
-                        variant="ghost" 
-                        size="sm"
-                        onClick={() => loadInvestigation(inv)}
-                        disabled={inv.status !== 'completed'}
-                      >
-                        View
-                      </Button>
+                      {inv.status === 'completed' ? (
+                        <Button 
+                          variant="ghost" 
+                          size="sm"
+                          onClick={() => loadInvestigation(inv)}
+                        >
+                          View
+                        </Button>
+                      ) : inv.status === 'in_progress' ? (
+                        <Button 
+                          variant="ghost" 
+                          size="sm"
+                          onClick={() => deleteInvestigation(inv.id)}
+                          className="text-yellow-500"
+                        >
+                          Cancel
+                        </Button>
+                      ) : (
+                        <Button 
+                          variant="ghost" 
+                          size="sm"
+                          onClick={() => retryInvestigation(inv)}
+                          className="text-orange-500"
+                        >
+                          Retry
+                        </Button>
+                      )}
                     </TableCell>
                   </TableRow>
                 ))}
