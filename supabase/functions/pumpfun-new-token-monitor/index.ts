@@ -74,7 +74,7 @@ interface DiscoveryLogEntry {
   passedFilters: string[];
   failedFilters: string[];
   acceptanceReasoning?: string[];
-  // New enhanced scoring fields
+  // Enhanced scoring fields
   isMayhemMode?: boolean;
   socialScore?: number;
   twitterScore?: number;
@@ -86,6 +86,30 @@ interface DiscoveryLogEntry {
   priceTier?: string;
   walletQualityScore?: number;
   firstBuyersAnalysis?: any;
+  // Token classification fields
+  tokenType?: 'quick_pump' | 'project' | 'unknown';
+  entryWindow?: 'optimal' | 'acceptable' | 'late' | 'missed';
+  currentMultiplier?: number;
+  recommendedAction?: 'enter_quick' | 'enter_hold' | 'watch' | 'skip';
+  strategyDetails?: StrategyRecommendation;
+  classificationReasoning?: string[];
+}
+
+// Strategy recommendation interface
+interface StrategyRecommendation {
+  action: 'enter_quick' | 'enter_hold' | 'watch' | 'skip';
+  targetMultiplier: number;
+  sellPercentage: number;
+  maxPositionSol: number;
+  urgency: 'immediate' | 'soon' | 'monitor';
+  reasoning: string[];
+}
+
+// Token classification result
+interface TokenClassification {
+  tokenType: 'quick_pump' | 'project' | 'unknown';
+  confidence: number;
+  reasoning: string[];
 }
 
 // ============================================================================
@@ -346,6 +370,291 @@ function determinePriceTier(priceUsd: number | null | undefined): string | null 
   return 'high';
 }
 
+// ============================================================================
+// TOKEN CLASSIFICATION SYSTEM
+// ============================================================================
+
+function classifyTokenType(
+  socialAnalysis: SocialQualityResult,
+  dexPaidResult: DexPaidResult,
+  bundleScore: number,
+  holderCount: number
+): TokenClassification {
+  const reasoning: string[] = [];
+  let quickPumpScore = 0;
+  let projectScore = 0;
+  
+  // QUICK PUMP INDICATORS
+  
+  // Private Telegram (channel only, no group chat) = quick pump indicator
+  if (socialAnalysis.details.hasTelegram && socialAnalysis.details.telegramType === 'channel') {
+    quickPumpScore += 20;
+    reasoning.push('Telegram is channel-only (controlled narrative)');
+  }
+  
+  // Twitter matches token name exactly = likely new account for pump
+  if (socialAnalysis.details.warnings.some(w => w.includes('matches token name'))) {
+    quickPumpScore += 15;
+    reasoning.push('Twitter handle matches token name (new account)');
+  }
+  
+  // Cheap/suspicious TLD
+  if (socialAnalysis.details.warnings.some(w => w.includes('Suspicious TLD'))) {
+    quickPumpScore += 10;
+    reasoning.push('Website uses suspicious TLD (.xyz, .fun)');
+  }
+  
+  // No website at all
+  if (!socialAnalysis.details.hasWebsite) {
+    quickPumpScore += 15;
+    reasoning.push('No website present');
+  }
+  
+  // Early DEX paid = they're pushing it hard, quick money
+  if (dexPaidResult.isEarlyPaidSuspicious) {
+    quickPumpScore += 25;
+    reasoning.push('Early DexScreener paid status (pushing fast)');
+  }
+  
+  // High bundle score = coordinated buying
+  if (bundleScore > 60) {
+    quickPumpScore += 20;
+    reasoning.push(`High bundle score (${bundleScore}) - coordinated buying`);
+  }
+  
+  // PROJECT INDICATORS
+  
+  // Has Telegram GROUP (community can chat)
+  if (socialAnalysis.details.hasTelegram && socialAnalysis.details.telegramType === 'group') {
+    projectScore += 25;
+    reasoning.push('Telegram is a group (community engagement)');
+  }
+  
+  // Has all three socials
+  if (socialAnalysis.details.hasTwitter && socialAnalysis.details.hasWebsite && socialAnalysis.details.hasTelegram) {
+    projectScore += 15;
+    reasoning.push('Has all three socials (Twitter, Website, Telegram)');
+  }
+  
+  // Good TLD
+  if (socialAnalysis.details.websiteTld === 'com' || socialAnalysis.details.websiteTld === 'io') {
+    projectScore += 10;
+    reasoning.push(`Professional website TLD (.${socialAnalysis.details.websiteTld})`);
+  }
+  
+  // Low bundle score = organic buying
+  if (bundleScore < 30) {
+    projectScore += 15;
+    reasoning.push(`Low bundle score (${bundleScore}) - organic buying pattern`);
+  }
+  
+  // Many unique holders = real distribution
+  if (holderCount > 100) {
+    projectScore += 10;
+    reasoning.push(`High holder count (${holderCount}) - good distribution`);
+  }
+  
+  // Determine classification
+  const diff = quickPumpScore - projectScore;
+  let tokenType: 'quick_pump' | 'project' | 'unknown';
+  let confidence: number;
+  
+  if (diff >= 20) {
+    tokenType = 'quick_pump';
+    confidence = Math.min(95, 50 + diff);
+  } else if (diff <= -20) {
+    tokenType = 'project';
+    confidence = Math.min(95, 50 - diff);
+  } else {
+    tokenType = 'unknown';
+    confidence = 50 - Math.abs(diff);
+  }
+  
+  console.log(`🏷️ Classification for token: ${tokenType} (confidence: ${confidence}%, QP:${quickPumpScore} vs P:${projectScore})`);
+  
+  return { tokenType, confidence, reasoning };
+}
+
+// ============================================================================
+// ENTRY TIMING ANALYSIS
+// ============================================================================
+
+interface EntryTimingResult {
+  entryWindow: 'optimal' | 'acceptable' | 'late' | 'missed';
+  currentMultiplier: number;
+  remainingPotential: number;
+  reasoning: string[];
+}
+
+function analyzeEntryTiming(
+  tokenAgeMinutes: number,
+  currentPriceUsd: number,
+  bondingCurvePct: number,
+  volumeSol: number
+): EntryTimingResult {
+  const reasoning: string[] = [];
+  
+  // Estimate initial price based on pump.fun mechanics
+  // Early tokens typically start around $0.000001-0.00001
+  const estimatedInitialPrice = 0.000003; // Conservative estimate
+  const currentMultiplier = currentPriceUsd / estimatedInitialPrice;
+  
+  // Entry window based on age and price movement
+  let entryWindow: 'optimal' | 'acceptable' | 'late' | 'missed';
+  let remainingPotential: number;
+  
+  // OPTIMAL: Very fresh (< 3 min), hasn't pumped much yet
+  if (tokenAgeMinutes < 3 && currentMultiplier < 3) {
+    entryWindow = 'optimal';
+    remainingPotential = 5; // Could 5x from here
+    reasoning.push(`Fresh token (${tokenAgeMinutes.toFixed(1)}m old), low multiplier (${currentMultiplier.toFixed(1)}x)`);
+  }
+  // ACCEPTABLE: Still early (< 5 min), or fresh but moved some
+  else if (tokenAgeMinutes < 5 && currentMultiplier < 5) {
+    entryWindow = 'acceptable';
+    remainingPotential = 3; // Could 3x from here
+    reasoning.push(`Early entry (${tokenAgeMinutes.toFixed(1)}m), moderate move (${currentMultiplier.toFixed(1)}x)`);
+  }
+  // LATE: Getting older or already pumped
+  else if (tokenAgeMinutes < 10 && currentMultiplier < 10) {
+    entryWindow = 'late';
+    remainingPotential = 1.5; // Might get 1.5x
+    reasoning.push(`Late entry (${tokenAgeMinutes.toFixed(1)}m), already moved (${currentMultiplier.toFixed(1)}x)`);
+  }
+  // MISSED: Too old or pumped too much
+  else {
+    entryWindow = 'missed';
+    remainingPotential = 1;
+    reasoning.push(`Missed window (${tokenAgeMinutes.toFixed(1)}m old, ${currentMultiplier.toFixed(1)}x already)`);
+  }
+  
+  // Bonding curve factors
+  if (bondingCurvePct > 50) {
+    reasoning.push(`High bonding curve (${bondingCurvePct.toFixed(0)}%) - closer to graduation`);
+    if (entryWindow === 'optimal') entryWindow = 'acceptable';
+    if (entryWindow === 'acceptable') entryWindow = 'late';
+  }
+  
+  // Volume can indicate strong momentum
+  if (volumeSol > 10) {
+    reasoning.push(`High volume (${volumeSol.toFixed(1)} SOL) - strong momentum`);
+  }
+  
+  console.log(`⏱️ Entry timing: ${entryWindow} (${currentMultiplier.toFixed(1)}x, ${tokenAgeMinutes.toFixed(1)}m)`);
+  
+  return { entryWindow, currentMultiplier, remainingPotential, reasoning };
+}
+
+// ============================================================================
+// STRATEGY RECOMMENDATION ENGINE
+// ============================================================================
+
+function getStrategyRecommendation(
+  classification: TokenClassification,
+  entryTiming: EntryTimingResult,
+  isMayhemMode: boolean,
+  dexPaidResult: DexPaidResult
+): StrategyRecommendation {
+  const reasoning: string[] = [];
+  
+  // HARD SKIP: Mayhem Mode is always a no
+  if (isMayhemMode) {
+    return {
+      action: 'skip',
+      targetMultiplier: 0,
+      sellPercentage: 0,
+      maxPositionSol: 0,
+      urgency: 'monitor',
+      reasoning: ['MAYHEM MODE DETECTED - Always skip'],
+    };
+  }
+  
+  // SKIP: Missed entry window
+  if (entryTiming.entryWindow === 'missed') {
+    return {
+      action: 'skip',
+      targetMultiplier: 0,
+      sellPercentage: 0,
+      maxPositionSol: 0,
+      urgency: 'monitor',
+      reasoning: ['Entry window missed - token already moved significantly', ...entryTiming.reasoning],
+    };
+  }
+  
+  // QUICK PUMP STRATEGY: Enter fast, exit at 1.5x, sell 90%
+  if (classification.tokenType === 'quick_pump') {
+    reasoning.push('Classified as QUICK PUMP token');
+    reasoning.push(...classification.reasoning.slice(0, 3));
+    
+    // Urgency based on entry window
+    let urgency: 'immediate' | 'soon' | 'monitor';
+    let maxPosition: number;
+    
+    if (entryTiming.entryWindow === 'optimal') {
+      urgency = 'immediate';
+      maxPosition = 0.5; // Risk up to 0.5 SOL on quick pump
+      reasoning.push('OPTIMAL entry window - act fast');
+    } else if (entryTiming.entryWindow === 'acceptable') {
+      urgency = 'soon';
+      maxPosition = 0.3; // Smaller position for later entry
+      reasoning.push('ACCEPTABLE entry - smaller position');
+    } else {
+      urgency = 'monitor';
+      maxPosition = 0.2;
+      reasoning.push('LATE entry - minimal position if entering');
+    }
+    
+    return {
+      action: 'enter_quick',
+      targetMultiplier: 1.5,
+      sellPercentage: 90,
+      maxPositionSol: maxPosition,
+      urgency,
+      reasoning,
+    };
+  }
+  
+  // PROJECT STRATEGY: Enter and hold for bigger gains
+  if (classification.tokenType === 'project') {
+    reasoning.push('Classified as PROJECT token');
+    reasoning.push(...classification.reasoning.slice(0, 3));
+    
+    let urgency: 'immediate' | 'soon' | 'monitor';
+    let maxPosition: number;
+    
+    if (entryTiming.entryWindow === 'optimal') {
+      urgency = 'immediate';
+      maxPosition = 1.0; // Can risk more on projects
+      reasoning.push('Early project entry - larger position acceptable');
+    } else if (entryTiming.entryWindow === 'acceptable') {
+      urgency = 'soon';
+      maxPosition = 0.5;
+    } else {
+      urgency = 'monitor';
+      maxPosition = 0.3;
+    }
+    
+    return {
+      action: 'enter_hold',
+      targetMultiplier: 3.0,
+      sellPercentage: 50, // Hold more for projects
+      maxPositionSol: maxPosition,
+      urgency,
+      reasoning,
+    };
+  }
+  
+  // UNKNOWN: Watch and learn
+  return {
+    action: 'watch',
+    targetMultiplier: 0,
+    sellPercentage: 0,
+    maxPositionSol: 0,
+    urgency: 'monitor',
+    reasoning: ['Token classification unclear - watching for more signals', ...classification.reasoning],
+  };
+}
+
 // Log a discovery decision to the database with FULL reasoning
 async function logDiscovery(supabase: any, entry: DiscoveryLogEntry) {
   try {
@@ -353,9 +662,11 @@ async function logDiscovery(supabase: any, entry: DiscoveryLogEntry) {
       token, decision, rejectionReason, volumeSol, volumeUsd, txCount, 
       bundleScore, riskDetails, devIntegrityScore, config, passedFilters, failedFilters, 
       acceptanceReasoning,
-      // New enhanced fields
+      // Enhanced scoring fields
       isMayhemMode, socialScore, twitterScore, websiteScore, telegramScore,
-      socialDetails, dexPaidEarly, dexPaidDetails, priceTier, walletQualityScore, firstBuyersAnalysis
+      socialDetails, dexPaidEarly, dexPaidDetails, priceTier, walletQualityScore, firstBuyersAnalysis,
+      // Classification fields
+      tokenType, entryWindow, currentMultiplier, recommendedAction, strategyDetails, classificationReasoning
     } = entry;
     
     const pool = token.pools?.[0];
@@ -424,7 +735,7 @@ async function logDiscovery(supabase: any, entry: DiscoveryLogEntry) {
         pool: pool,
         riskDetails,
       },
-      // NEW: Enhanced scoring fields
+      // Enhanced scoring fields
       is_mayhem_mode: isMayhemMode || false,
       social_score: socialScore,
       twitter_score: twitterScore,
@@ -436,6 +747,13 @@ async function logDiscovery(supabase: any, entry: DiscoveryLogEntry) {
       price_tier: priceTier,
       wallet_quality_score: walletQualityScore,
       first_buyers_analysis: firstBuyersAnalysis,
+      // Classification fields
+      token_type: tokenType,
+      entry_window: entryWindow,
+      current_multiplier: currentMultiplier,
+      recommended_action: recommendedAction,
+      strategy_details: strategyDetails,
+      classification_reasoning: classificationReasoning,
     });
   } catch (error) {
     console.error('Failed to log discovery:', error);
@@ -949,7 +1267,41 @@ async function pollForNewTokens(supabase: any, config: MonitorConfig) {
           continue;
         }
 
-        // 🎉 TOKEN ACCEPTED - Log with full reasoning
+        // ============================================================
+        // TOKEN CLASSIFICATION SYSTEM
+        // ============================================================
+        
+        // Classify the token type (quick_pump vs project vs unknown)
+        const classification = classifyTokenType(
+          socialQuality,
+          dexPaidCheck,
+          riskAnalysis.bundleScore,
+          tokenData.holders || riskAnalysis.details.holderCount || 0
+        );
+        passedFilters.push(`classified_${classification.tokenType}`);
+        
+        // Analyze entry timing
+        const priceUsd = pool?.price?.usd || 0;
+        const entryTiming = analyzeEntryTiming(
+          ageMinutes || 0,
+          priceUsd,
+          bondingCurvePct || 0,
+          volumeSol
+        );
+        passedFilters.push(`entry_${entryTiming.entryWindow}`);
+        
+        // Get strategy recommendation
+        const strategy = getStrategyRecommendation(
+          classification,
+          entryTiming,
+          false, // already passed mayhem check
+          dexPaidCheck
+        );
+        passedFilters.push(`action_${strategy.action}`);
+        
+        console.log(`🏷️ ${tokenData.token?.symbol || mint.slice(0, 8)}: ${classification.tokenType.toUpperCase()} | Entry: ${entryTiming.entryWindow} | Action: ${strategy.action}`);
+
+        // 🎉 TOKEN ACCEPTED - Log with full reasoning and classification
         passedFilters.push('inserted_as_candidate');
         results.candidatesAdded++;
         console.log(`🚀 Added candidate: ${candidateData.token_symbol} (${mint.slice(0, 8)}...) - Social: ${socialQuality.totalScore}, Wallet: ${riskAnalysis.walletQualityScore}`);
@@ -967,6 +1319,13 @@ async function pollForNewTokens(supabase: any, config: MonitorConfig) {
           dexPaidDetails: dexPaidCheck,
           priceTier,
           walletQualityScore: riskAnalysis.walletQualityScore,
+          // Classification data
+          tokenType: classification.tokenType,
+          entryWindow: entryTiming.entryWindow,
+          currentMultiplier: entryTiming.currentMultiplier,
+          recommendedAction: strategy.action,
+          strategyDetails: strategy,
+          classificationReasoning: [...classification.reasoning, ...entryTiming.reasoning, ...strategy.reasoning],
         });
 
         // Auto-scalp integration if enabled
