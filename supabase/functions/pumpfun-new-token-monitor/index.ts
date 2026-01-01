@@ -82,6 +82,13 @@ interface MonitorConfig {
   dead_volume_threshold_sol?: number; // Remove if volume below (default: 0.01)
   qualification_holder_count?: number; // Need this many holders to qualify (default: 20)
   qualification_volume_sol?: number; // Need this much volume to qualify (default: 0.5)
+  // Polling and attrition config
+  polling_interval_seconds?: number; // For UI reference (default: 60)
+  log_retention_hours?: number; // Delete logs older than this (default: 24)
+  dead_retention_hours?: number; // Delete dead tokens older than this (default: 2)
+  max_reevaluate_minutes?: number; // Only resurrect if dead within this time (default: 30)
+  resurrection_holder_threshold?: number; // Resurrect if holders above this (default: 10)
+  resurrection_volume_threshold_sol?: number; // Resurrect if volume above this (default: 0.1)
 }
 
 interface PollResults {
@@ -96,6 +103,11 @@ interface PollResults {
   errors: number;
   qualifiedTokens: string[];
   removedTokens: string[];
+  // Re-evaluation stats
+  resurrected: number;
+  cleanedLogs: number;
+  cleanedDeadTokens: number;
+  promotedToBuyNow: number;
 }
 
 // Fetch latest tokens from Solana Tracker API
@@ -223,6 +235,10 @@ async function pollWithWatchlist(supabase: any, config: MonitorConfig, pollRunId
     errors: 0,
     qualifiedTokens: [],
     removedTokens: [],
+    resurrected: 0,
+    cleanedLogs: 0,
+    cleanedDeadTokens: 0,
+    promotedToBuyNow: 0,
   };
 
   // Config defaults
@@ -232,6 +248,12 @@ async function pollWithWatchlist(supabase: any, config: MonitorConfig, pollRunId
   const deadVolumeThreshold = config.dead_volume_threshold_sol ?? 0.01;
   const qualifyHolders = config.qualification_holder_count ?? 20;
   const qualifyVolume = config.qualification_volume_sol ?? 0.5;
+  // Re-evaluation and attrition config
+  const logRetentionHours = config.log_retention_hours ?? 24;
+  const deadRetentionHours = config.dead_retention_hours ?? 2;
+  const maxReevaluateMinutes = config.max_reevaluate_minutes ?? 30;
+  const resurrectionHolders = config.resurrection_holder_threshold ?? 10;
+  const resurrectionVolume = config.resurrection_volume_threshold_sol ?? 0.1;
 
   const solPrice = await getSolPrice(supabase);
 
@@ -426,7 +448,98 @@ async function pollWithWatchlist(supabase: any, config: MonitorConfig, pollRunId
     }
   }
 
-  // STEP 4: Count final stats
+  // STEP 4: Re-evaluate recently dead/bombed tokens for resurrection
+  const reevaluateCutoff = new Date(now.getTime() - maxReevaluateMinutes * 60 * 1000).toISOString();
+  const { data: recentlyDead } = await supabase
+    .from('pumpfun_watchlist')
+    .select('*')
+    .in('status', ['dead', 'bombed'])
+    .eq('permanent_reject', false)
+    .gte('removed_at', reevaluateCutoff)
+    .limit(50);
+
+  for (const deadToken of (recentlyDead || [])) {
+    // Check if this token appeared in the latest API response with good metrics
+    const apiToken = tokens.find(t => t.token?.mint === deadToken.token_mint);
+    if (apiToken) {
+      const pool = apiToken.pools?.[0];
+      const volumeUsd = pool?.volume?.h24 || 0;
+      const volumeSol = solPrice > 0 ? volumeUsd / solPrice : 0;
+      const holderCount = apiToken.holders || 0;
+      
+      // Resurrection check: metrics now good enough?
+      if (holderCount >= resurrectionHolders || volumeSol >= resurrectionVolume) {
+        await supabase
+          .from('pumpfun_watchlist')
+          .update({
+            status: 'watching',
+            removed_at: null,
+            removal_reason: null,
+            last_checked_at: now.toISOString(),
+            holder_count: holderCount,
+            volume_sol: volumeSol,
+            metadata: { ...deadToken.metadata, resurrected_at: now.toISOString() },
+          })
+          .eq('id', deadToken.id);
+        
+        results.resurrected++;
+        console.log(`🔄 RESURRECTED: ${deadToken.token_symbol} (now ${holderCount} holders, ${volumeSol.toFixed(2)} SOL)`);
+      }
+    }
+  }
+
+  // STEP 5: Promote high-performing qualified tokens to buy_now
+  const { data: qualifiedTokens } = await supabase
+    .from('pumpfun_watchlist')
+    .select('*')
+    .eq('status', 'qualified')
+    .limit(50);
+
+  for (const token of (qualifiedTokens || [])) {
+    // Promote to buy_now if exceptional metrics (3x the qualification threshold)
+    if (token.holder_count >= qualifyHolders * 3 && token.volume_sol >= qualifyVolume * 3) {
+      await supabase
+        .from('pumpfun_watchlist')
+        .update({
+          status: 'buy_now',
+          last_checked_at: now.toISOString(),
+          qualification_reason: `PROMOTED: ${token.holder_count} holders, ${token.volume_sol.toFixed(2)} SOL (3x threshold)`,
+        })
+        .eq('id', token.id);
+      
+      results.promotedToBuyNow++;
+      console.log(`🚀 PROMOTED TO BUY_NOW: ${token.token_symbol}`);
+    }
+  }
+
+  // STEP 6: Attrition - cleanup old logs and permanently dead tokens
+  // Delete old discovery logs
+  const logCutoff = new Date(now.getTime() - logRetentionHours * 60 * 60 * 1000).toISOString();
+  const { count: deletedLogs } = await supabase
+    .from('pumpfun_discovery_logs')
+    .delete()
+    .lt('created_at', logCutoff)
+    .select('id', { count: 'exact', head: true });
+  results.cleanedLogs = deletedLogs || 0;
+  if (results.cleanedLogs > 0) {
+    console.log(`🧹 Cleaned ${results.cleanedLogs} old discovery logs`);
+  }
+
+  // Permanently delete old dead/bombed tokens (or mark as permanent_reject)
+  const deadCutoff = new Date(now.getTime() - deadRetentionHours * 60 * 60 * 1000).toISOString();
+  const { count: permanentlyRejected } = await supabase
+    .from('pumpfun_watchlist')
+    .update({ permanent_reject: true })
+    .in('status', ['dead', 'bombed'])
+    .lt('removed_at', deadCutoff)
+    .eq('permanent_reject', false)
+    .select('id', { count: 'exact', head: true });
+  results.cleanedDeadTokens = permanentlyRejected || 0;
+  if (results.cleanedDeadTokens > 0) {
+    console.log(`🗑️ Marked ${results.cleanedDeadTokens} tokens as permanently rejected`);
+  }
+
+  // STEP 7: Count final stats
   const { count: watchingCount } = await supabase
     .from('pumpfun_watchlist')
     .select('id', { count: 'exact', head: true })
@@ -437,7 +550,12 @@ async function pollWithWatchlist(supabase: any, config: MonitorConfig, pollRunId
     .select('id', { count: 'exact', head: true })
     .eq('status', 'qualified');
 
-  results.watchlistSize = (watchingCount || 0) + (qualifiedCount || 0);
+  const { count: buyNowCount } = await supabase
+    .from('pumpfun_watchlist')
+    .select('id', { count: 'exact', head: true })
+    .eq('status', 'buy_now');
+
+  results.watchlistSize = (watchingCount || 0) + (qualifiedCount || 0) + (buyNowCount || 0);
   results.stillWatching = watchingCount || 0;
 
   // Update poll run record

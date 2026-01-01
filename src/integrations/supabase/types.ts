@@ -4448,13 +4448,19 @@ export type Database = {
           auto_scalp_enabled: boolean
           candidates_found_count: number | null
           created_at: string
+          dead_retention_hours: number | null
           id: string
           is_enabled: boolean
           last_poll_at: string | null
+          log_retention_hours: number | null
           max_bundle_score: number
+          max_reevaluate_minutes: number | null
           max_token_age_minutes: number
           min_transactions: number
           min_volume_sol_5m: number
+          polling_interval_seconds: number | null
+          resurrection_holder_threshold: number | null
+          resurrection_volume_threshold_sol: number | null
           scalp_test_mode: boolean
           tokens_processed_count: number | null
           updated_at: string
@@ -4463,13 +4469,19 @@ export type Database = {
           auto_scalp_enabled?: boolean
           candidates_found_count?: number | null
           created_at?: string
+          dead_retention_hours?: number | null
           id?: string
           is_enabled?: boolean
           last_poll_at?: string | null
+          log_retention_hours?: number | null
           max_bundle_score?: number
+          max_reevaluate_minutes?: number | null
           max_token_age_minutes?: number
           min_transactions?: number
           min_volume_sol_5m?: number
+          polling_interval_seconds?: number | null
+          resurrection_holder_threshold?: number | null
+          resurrection_volume_threshold_sol?: number | null
           scalp_test_mode?: boolean
           tokens_processed_count?: number | null
           updated_at?: string
@@ -4478,13 +4490,19 @@ export type Database = {
           auto_scalp_enabled?: boolean
           candidates_found_count?: number | null
           created_at?: string
+          dead_retention_hours?: number | null
           id?: string
           is_enabled?: boolean
           last_poll_at?: string | null
+          log_retention_hours?: number | null
           max_bundle_score?: number
+          max_reevaluate_minutes?: number | null
           max_token_age_minutes?: number
           min_transactions?: number
           min_volume_sol_5m?: number
+          polling_interval_seconds?: number | null
+          resurrection_holder_threshold?: number | null
+          resurrection_volume_threshold_sol?: number | null
           scalp_test_mode?: boolean
           tokens_processed_count?: number | null
           updated_at?: string
@@ -4545,6 +4563,7 @@ export type Database = {
           liquidity_usd: number | null
           market_cap_usd: number | null
           metadata: Json | null
+          permanent_reject: boolean | null
           price_ath_usd: number | null
           price_usd: number | null
           price_usd_prev: number | null
@@ -4576,6 +4595,7 @@ export type Database = {
           liquidity_usd?: number | null
           market_cap_usd?: number | null
           metadata?: Json | null
+          permanent_reject?: boolean | null
           price_ath_usd?: number | null
           price_usd?: number | null
           price_usd_prev?: number | null
@@ -4607,6 +4627,7 @@ export type Database = {
           liquidity_usd?: number | null
           market_cap_usd?: number | null
           metadata?: Json | null
+          permanent_reject?: boolean | null
           price_ath_usd?: number | null
           price_usd?: number | null
           price_usd_prev?: number | null
