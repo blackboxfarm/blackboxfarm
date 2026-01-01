@@ -215,16 +215,35 @@ export function FlipItDashboard() {
     if (authLoading) return;
 
     // Preview admins can proceed even without Supabase auth session
-    if (!isAuthenticated && !isPreviewAdmin) {
+    // In production, only authenticated users should load data
+    const canLoadData = isAuthenticated || isPreviewAdmin;
+    
+    console.log('[FlipIt] Auth state:', { isAuthenticated, isPreviewAdmin, authLoading, canLoadData });
+    
+    if (!canLoadData) {
+      console.log('[FlipIt] Not authorized to load data, clearing state');
       setWallets([]);
       setSelectedWallet('');
       setPositions([]);
+      setBondingCurveData({});
+      setCurrentPrices({});
       return;
     }
 
-    loadWallets();
-    loadPositions();
-    loadLimitOrders();
+    // Load all data for authorized users
+    const loadAllData = async () => {
+      console.log('[FlipIt] Loading all data for authorized user');
+      await loadWallets();
+      await loadPositions();
+      await loadLimitOrders();
+      
+      // Immediately trigger price/bonding curve fetch after initial load
+      // This ensures production users get the same data as preview users
+      console.log('[FlipIt] Triggering initial price fetch');
+      handleAutoRefresh();
+    };
+    
+    loadAllData();
   }, [isPreviewAdmin, isAuthenticated, authLoading]);
 
   // Real-time subscription to flip_positions changes
@@ -248,10 +267,20 @@ export function FlipItDashboard() {
 
   // Define handlers BEFORE useEffect hooks that reference them
   const handleAutoRefresh = useCallback(async () => {
+    // Even if no holding positions, we still fetch if there are ANY positions
+    // This ensures bonding curve data is populated on initial load
     const holdingPositions = positions.filter(p => p.status === 'holding');
-    if (holdingPositions.length === 0) return;
+    
+    console.log('[FlipIt] Auto-refresh triggered, holding positions:', holdingPositions.length);
+    
+    // Allow refresh if we have any positions (not just holding), to populate bonding curve on first load
+    if (positions.length === 0) {
+      console.log('[FlipIt] No positions at all, skipping auto-refresh');
+      return;
+    }
 
     try {
+      console.log('[FlipIt] Calling flipit-price-monitor...');
       const { data, error } = await supabase.functions.invoke('flipit-price-monitor', {
         body: { 
           action: 'check',
@@ -260,12 +289,21 @@ export function FlipItDashboard() {
         }
       });
 
-      if (error) throw error;
+      if (error) {
+        console.error('[FlipIt] Price monitor error:', error);
+        throw error;
+      }
+
+      console.log('[FlipIt] Price monitor response:', { 
+        pricesCount: Object.keys(data?.prices || {}).length,
+        bondingCurveCount: Object.keys(data?.bondingCurveData || {}).length 
+      });
 
       if (data?.prices) {
         setCurrentPrices(data.prices);
       }
       if (data?.bondingCurveData) {
+        console.log('[FlipIt] Setting bonding curve data:', data.bondingCurveData);
         setBondingCurveData(prev => ({ ...prev, ...data.bondingCurveData }));
       }
       if (data?.checkedAt) {
@@ -284,12 +322,12 @@ export function FlipItDashboard() {
               setWalletBalance(balanceData.balance);
             }
           } catch (balanceErr) {
-            console.error('Balance refresh during price check failed:', balanceErr);
+            console.error('[FlipIt] Balance refresh during price check failed:', balanceErr);
           }
         }
       }
     } catch (err) {
-      console.error('Auto-refresh failed:', err);
+      console.error('[FlipIt] Auto-refresh failed:', err);
     }
   }, [positions, slippageBps, priorityFeeMode, selectedWallet, wallets]);
 
@@ -811,6 +849,7 @@ export function FlipItDashboard() {
   };
 
   const loadPositions = async () => {
+    console.log('[FlipIt] loadPositions called');
     setIsLoading(true);
     const { data, error } = await supabase
       .from('flip_positions')
@@ -818,11 +857,13 @@ export function FlipItDashboard() {
       .order('created_at', { ascending: false });
 
     if (error) {
+      console.error('[FlipIt] Failed to load positions:', error);
       toast.error('Failed to load positions');
       setIsLoading(false);
       return;
     }
 
+    console.log('[FlipIt] Loaded positions:', data?.length || 0);
     let loadedPositions = (data || []) as unknown as FlipPosition[];
     
     // Collect all unique mints to fetch metadata (for symbols and images)
@@ -856,8 +897,10 @@ export function FlipItDashboard() {
     setPositions(loadedPositions);
     setIsLoading(false);
     
-    // Fetch current prices for active positions
+    // Fetch current prices and bonding curve data for ALL positions (not just holding)
+    // This ensures bonding curve percentages are always populated
     const holdingPositions = loadedPositions.filter(p => p.status === 'holding');
+    console.log('[FlipIt] Holding positions for price fetch:', holdingPositions.length);
     if (holdingPositions.length > 0) {
       fetchCurrentPrices(holdingPositions.map(p => p.token_mint));
     }
@@ -952,6 +995,8 @@ export function FlipItDashboard() {
   const fetchCurrentPrices = async (tokenMints: string[]) => {
     if (tokenMints.length === 0) return;
     
+    console.log('[FlipIt] fetchCurrentPrices called for', tokenMints.length, 'tokens');
+    
     try {
       const { data, error } = await supabase.functions.invoke('flipit-price-monitor', {
         body: { 
@@ -961,7 +1006,16 @@ export function FlipItDashboard() {
         }
       });
 
-      if (error) throw error;
+      if (error) {
+        console.error('[FlipIt] fetchCurrentPrices error:', error);
+        throw error;
+      }
+
+      console.log('[FlipIt] fetchCurrentPrices response:', {
+        pricesCount: Object.keys(data?.prices || {}).length,
+        bondingCurveCount: Object.keys(data?.bondingCurveData || {}).length,
+        bondingCurveData: data?.bondingCurveData
+      });
 
       if (data?.prices) {
         setCurrentPrices(data.prices);
@@ -973,7 +1027,7 @@ export function FlipItDashboard() {
         setLastAutoCheck(data.checkedAt);
       }
     } catch (err) {
-      console.error('Failed to fetch prices:', err);
+      console.error('[FlipIt] Failed to fetch prices:', err);
     }
   };
 
