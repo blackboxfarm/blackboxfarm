@@ -377,15 +377,23 @@ async function pollForNewTokens(supabase: any, config: MonitorConfig) {
     }
   }
 
-  // Update monitor stats
-  await supabase
+  // Update monitor stats - fetch current values first, then increment
+  const { data: currentConfig } = await supabase
     .from('pumpfun_monitor_config')
-    .update({
-      last_poll_at: new Date().toISOString(),
-      tokens_processed_count: supabase.sql`tokens_processed_count + ${results.tokensScanned}`,
-      candidates_found_count: supabase.sql`candidates_found_count + ${results.candidatesAdded}`,
-    })
-    .not('id', 'is', null);
+    .select('id, tokens_processed_count, candidates_found_count')
+    .limit(1)
+    .single();
+
+  if (currentConfig) {
+    await supabase
+      .from('pumpfun_monitor_config')
+      .update({
+        last_poll_at: new Date().toISOString(),
+        tokens_processed_count: (currentConfig.tokens_processed_count || 0) + results.tokensScanned,
+        candidates_found_count: (currentConfig.candidates_found_count || 0) + results.candidatesAdded,
+      })
+      .eq('id', currentConfig.id);
+  }
 
   console.log('📊 Poll results:', results);
   return results;
