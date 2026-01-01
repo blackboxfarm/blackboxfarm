@@ -2491,7 +2491,10 @@ export type Database = {
           id: string
           is_scalp_position: boolean | null
           is_test_position: boolean | null
+          moon_bag_dump_threshold_pct: number | null
           moon_bag_enabled: boolean | null
+          moon_bag_peak_change_pct: number | null
+          moon_bag_peak_price_usd: number | null
           moon_bag_percent: number | null
           moon_bag_quantity_tokens: number | null
           original_quantity_tokens: number | null
@@ -2543,7 +2546,10 @@ export type Database = {
           id?: string
           is_scalp_position?: boolean | null
           is_test_position?: boolean | null
+          moon_bag_dump_threshold_pct?: number | null
           moon_bag_enabled?: boolean | null
+          moon_bag_peak_change_pct?: number | null
+          moon_bag_peak_price_usd?: number | null
           moon_bag_percent?: number | null
           moon_bag_quantity_tokens?: number | null
           original_quantity_tokens?: number | null
@@ -2595,7 +2601,10 @@ export type Database = {
           id?: string
           is_scalp_position?: boolean | null
           is_test_position?: boolean | null
+          moon_bag_dump_threshold_pct?: number | null
           moon_bag_enabled?: boolean | null
+          moon_bag_peak_change_pct?: number | null
+          moon_bag_peak_price_usd?: number | null
           moon_bag_percent?: number | null
           moon_bag_quantity_tokens?: number | null
           original_quantity_tokens?: number | null

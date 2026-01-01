@@ -109,6 +109,10 @@ interface ScalpPosition {
   wallet_id: string;
   partial_sells: any[];
   profit_usd: number | null;
+  // Moon bag dump protection fields
+  moon_bag_peak_price_usd: number | null;
+  moon_bag_peak_change_pct: number | null;
+  moon_bag_dump_threshold_pct: number | null;
 }
 
 interface ExecutionResult {
@@ -119,6 +123,16 @@ interface ExecutionResult {
   signature?: string;
   simulatedProfit?: number;
   soldPercent?: number;
+  peakDropPct?: number;
+}
+
+// Calculate graduated dump threshold based on how high it reached
+function getGraduatedDumpThreshold(peakChangePct: number): number {
+  // If it went really high, give it more room to drop
+  if (peakChangePct >= 200) return 50; // Allow 50% drop from peak if it went 3x+
+  if (peakChangePct >= 100) return 40; // Allow 40% drop if it doubled
+  if (peakChangePct >= 50) return 30;  // Allow 30% drop after TP1
+  return 25; // Tight stop if barely past TP1
 }
 
 async function processScalpPosition(
@@ -210,6 +224,8 @@ async function processScalpPosition(
           scalp_stage: "tp1_hit",
           quantity_tokens: remainingQuantity,
           moon_bag_quantity_tokens: remainingQuantity,
+          moon_bag_peak_price_usd: currentPrice,
+          moon_bag_peak_change_pct: priceChangePercent,
           profit_usd: partialProfit,
           partial_sells: [
             {
@@ -249,6 +265,8 @@ async function processScalpPosition(
           scalp_stage: "ladder_100",
           quantity_tokens: remainingQuantity,
           moon_bag_quantity_tokens: remainingQuantity,
+          moon_bag_peak_price_usd: currentPrice,
+          moon_bag_peak_change_pct: priceChangePercent,
           partial_sells: [
             ...existingPartialSells,
             {
@@ -315,6 +333,78 @@ async function processScalpPosition(
       };
     }
 
+    // ======== MOON BAG DUMP PROTECTION (TEST MODE) ========
+    // After TP1 hit, track peak and check for dump
+    if (scalp_stage === "tp1_hit" || scalp_stage === "ladder_100") {
+      const currentPeakPrice = position.moon_bag_peak_price_usd || entryPrice;
+      const currentPeakChangePct = position.moon_bag_peak_change_pct || 0;
+
+      // Update peak if current is higher
+      if (currentPrice > currentPeakPrice) {
+        console.log(`[TEST MODE] New peak for ${position.token_mint}: $${currentPrice.toFixed(6)} (+${priceChangePercent.toFixed(1)}%)`);
+        await supabase
+          .from("flip_positions")
+          .update({
+            moon_bag_peak_price_usd: currentPrice,
+            moon_bag_peak_change_pct: priceChangePercent,
+          })
+          .eq("id", position.id);
+      } else if (position.moon_bag_peak_price_usd) {
+        // Check for dump from peak
+        const peakPrice = position.moon_bag_peak_price_usd;
+        const dropFromPeakPct = ((peakPrice - currentPrice) / peakPrice) * 100;
+        const dumpThreshold = position.moon_bag_dump_threshold_pct || getGraduatedDumpThreshold(currentPeakChangePct);
+
+        console.log(`[TEST MODE] Peak: $${peakPrice.toFixed(6)}, Current: $${currentPrice.toFixed(6)}, Drop: ${dropFromPeakPct.toFixed(1)}%, Threshold: ${dumpThreshold}%`);
+
+        if (dropFromPeakPct >= dumpThreshold) {
+          console.log(`[TEST MODE] 🚨 MOON BAG DUMP DETECTED for ${position.token_mint}! Dropped ${dropFromPeakPct.toFixed(1)}% from peak`);
+
+          const remainingQuantity = position.moon_bag_quantity_tokens || position.quantity_tokens || 0;
+          const finalValue = remainingQuantity * currentPrice;
+          const existingPartialSells = Array.isArray(position.partial_sells) ? position.partial_sells : [];
+          const existingProfit = position.profit_usd || 0;
+          const dumpSaleProfit = finalValue - position.buy_amount_usd * (moonBagPct / 100);
+          const totalProfit = existingProfit + dumpSaleProfit;
+
+          await supabase
+            .from("flip_positions")
+            .update({
+              scalp_stage: "dump_exit",
+              status: "sold",
+              quantity_tokens: 0,
+              moon_bag_quantity_tokens: 0,
+              sell_price_usd: currentPrice,
+              sell_executed_at: new Date().toISOString(),
+              sell_signature: "SIMULATED_DUMP_EXIT_" + Date.now(),
+              profit_usd: totalProfit,
+              partial_sells: [
+                ...existingPartialSells,
+                {
+                  percent: 100,
+                  price: currentPrice,
+                  signature: "SIMULATED_DUMP_EXIT",
+                  timestamp: new Date().toISOString(),
+                  reason: "moon_bag_dump_exit",
+                  peakPrice: peakPrice,
+                  dropFromPeakPct: dropFromPeakPct,
+                },
+              ],
+            })
+            .eq("id", position.id);
+
+          return {
+            positionId: position.id,
+            action: "test_moon_bag_dump_exit",
+            tokenMint: position.token_mint,
+            priceChangePercent,
+            peakDropPct: dropFromPeakPct,
+            signature: "SIMULATED",
+          };
+        }
+      }
+    }
+
     // No trigger hit for test position
     return null;
   }
@@ -367,6 +457,15 @@ async function processScalpPosition(
       });
 
       if (!partialError && partialResult?.success) {
+        // Initialize peak tracking for moon bag
+        await supabase
+          .from("flip_positions")
+          .update({
+            moon_bag_peak_price_usd: currentPrice,
+            moon_bag_peak_change_pct: priceChangePercent,
+          })
+          .eq("id", position.id);
+
         // Send notification
         try {
           await supabase.functions.invoke("send-email-notification", {
@@ -374,7 +473,7 @@ async function processScalpPosition(
               to: "wilsondavid@live.ca",
               subject: `🎯 Scalp TP Hit: ${position.token_symbol || position.token_mint.slice(0, 8)} +${priceChangePercent.toFixed(0)}%`,
               title: "Scalp Take Profit Hit!",
-              message: `Sold ${100 - moonBagPct}% at +${priceChangePercent.toFixed(1)}%, keeping ${moonBagPct}% moon bag.`,
+              message: `Sold ${100 - moonBagPct}% at +${priceChangePercent.toFixed(1)}%, keeping ${moonBagPct}% moon bag. Moon bag peak tracking started.`,
               type: "success",
             },
           });
@@ -414,6 +513,15 @@ async function processScalpPosition(
       });
 
       if (!ladderError && ladderResult?.success) {
+        // Update peak tracking after ladder sell
+        await supabase
+          .from("flip_positions")
+          .update({
+            moon_bag_peak_price_usd: currentPrice,
+            moon_bag_peak_change_pct: priceChangePercent,
+          })
+          .eq("id", position.id);
+
         return {
           positionId: position.id,
           action: "scalp_ladder_100",
@@ -457,6 +565,83 @@ async function processScalpPosition(
       console.error(`Scalp ladder 300 failed for ${position.id}:`, e);
     }
     return null;
+  }
+
+  // ======== MOON BAG DUMP PROTECTION (REAL POSITIONS) ========
+  // After TP1 hit, track peak and check for dump
+  if (scalp_stage === "tp1_hit" || scalp_stage === "ladder_100") {
+    const currentPeakPrice = position.moon_bag_peak_price_usd || entryPrice;
+    const currentPeakChangePct = position.moon_bag_peak_change_pct || 0;
+
+    // Update peak if current is higher
+    if (currentPrice > currentPeakPrice) {
+      console.log(`📈 New peak for ${position.token_mint}: $${currentPrice.toFixed(6)} (+${priceChangePercent.toFixed(1)}%)`);
+      await supabase
+        .from("flip_positions")
+        .update({
+          moon_bag_peak_price_usd: currentPrice,
+          moon_bag_peak_change_pct: priceChangePercent,
+        })
+        .eq("id", position.id);
+    } else if (position.moon_bag_peak_price_usd) {
+      // Check for dump from peak
+      const peakPrice = position.moon_bag_peak_price_usd;
+      const dropFromPeakPct = ((peakPrice - currentPrice) / peakPrice) * 100;
+      const dumpThreshold = position.moon_bag_dump_threshold_pct || getGraduatedDumpThreshold(currentPeakChangePct);
+
+      console.log(`Moon bag check: Peak=$${peakPrice.toFixed(6)}, Now=$${currentPrice.toFixed(6)}, Drop=${dropFromPeakPct.toFixed(1)}%, Threshold=${dumpThreshold}%`);
+
+      if (dropFromPeakPct >= dumpThreshold) {
+        console.log(`🚨 MOON BAG DUMP DETECTED for ${position.token_mint}! Dropped ${dropFromPeakPct.toFixed(1)}% from peak - SELLING ALL`);
+
+        try {
+          const { data: dumpResult, error: dumpError } = await supabase.functions.invoke("flipit-execute", {
+            body: {
+              action: "partial_sell",
+              positionId: position.id,
+              sellPercent: 100,
+              reason: "moon_bag_dump_exit",
+              slippageBps: scalpSellSlippage,
+              priorityFeeMode: scalpSellPriority,
+            },
+          });
+
+          if (!dumpError && dumpResult?.success) {
+            // Update scalp_stage to dump_exit
+            await supabase
+              .from("flip_positions")
+              .update({ scalp_stage: "dump_exit" })
+              .eq("id", position.id);
+
+            // Send notification about dump exit
+            try {
+              await supabase.functions.invoke("send-email-notification", {
+                body: {
+                  to: "wilsondavid@live.ca",
+                  subject: `🚨 Moon Bag Dump Exit: ${position.token_symbol || position.token_mint.slice(0, 8)} -${dropFromPeakPct.toFixed(0)}% from peak`,
+                  title: "Moon Bag Dump Protection Triggered",
+                  message: `Sold remaining moon bag after ${dropFromPeakPct.toFixed(1)}% drop from peak price of $${peakPrice.toFixed(6)}. Current: $${currentPrice.toFixed(6)}`,
+                  type: "warning",
+                },
+              });
+            } catch (e) {
+              console.error("Email notification failed:", e);
+            }
+
+            return {
+              positionId: position.id,
+              action: "moon_bag_dump_exit",
+              tokenMint: position.token_mint,
+              priceChangePercent,
+              peakDropPct: dropFromPeakPct,
+              signature: dumpResult.signature,
+            };
+          }
+        } catch (e) {
+          console.error(`Moon bag dump exit failed for ${position.id}:`, e);
+        }
+      }
+    }
   }
 
   return null;
