@@ -1461,7 +1461,8 @@ export function FlipItDashboard() {
   };
 
   const activePositions = positions.filter(p => ['pending_buy', 'holding', 'pending_sell'].includes(p.status));
-  const completedPositions = positions.filter(p => ['sold', 'failed'].includes(p.status));
+  // Only show completed flips that have rebuy enabled - normal sells are not kept on display
+  const completedPositions = positions.filter(p => ['sold', 'failed'].includes(p.status) && p.rebuy_enabled === true);
 
   const totalProfit = completedPositions
     .filter(p => p.profit_usd !== null)
@@ -2227,6 +2228,16 @@ export function FlipItDashboard() {
           <CardHeader className="flex flex-row items-center justify-between">
             <CardTitle className="flex items-center gap-2">
               Active Flips ({activePositions.length})
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-7 w-7 p-0"
+                onClick={handleRefreshPrices}
+                disabled={isMonitoring}
+                title="Refresh active flip prices"
+              >
+                <RefreshCw className={`h-4 w-4 ${isMonitoring ? 'animate-spin' : ''}`} />
+              </Button>
               {positions.filter(p => p.status === 'holding' && p.emergency_sell_status === 'watching').length > 0 && (
                 <Badge variant="destructive" className="gap-1">
                   <AlertTriangle className="h-3 w-3" />
