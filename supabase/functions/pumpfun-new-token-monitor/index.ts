@@ -82,30 +82,42 @@ async function fetchLatestPumpfunTokens(limit = 20): Promise<TokenData[]> {
   }
 }
 
-// Fetch detailed token info including volume
-async function fetchTokenDetails(mint: string): Promise<any> {
+// Fetch detailed token info including volume - with retry and rate limit handling
+async function fetchTokenDetails(mint: string, retries = 2): Promise<any> {
   const apiKey = Deno.env.get('SOLANA_TRACKER_API_KEY');
   
-  try {
-    const response = await fetch(
-      `https://data.solanatracker.io/tokens/${mint}`,
-      {
-        headers: {
-          'x-api-key': apiKey || '',
-          'Accept': 'application/json',
-        },
+  for (let attempt = 0; attempt <= retries; attempt++) {
+    try {
+      const response = await fetch(
+        `https://data.solanatracker.io/tokens/${mint}`,
+        {
+          headers: {
+            'x-api-key': apiKey || '',
+            'Accept': 'application/json',
+          },
+        }
+      );
+
+      if (response.status === 429) {
+        console.warn(`⏳ Rate limited on token details for ${mint.slice(0, 8)}, waiting...`);
+        await new Promise(r => setTimeout(r, 1000 * (attempt + 1)));
+        continue;
       }
-    );
 
-    if (!response.ok) {
-      return null;
+      if (!response.ok) {
+        console.warn(`❌ Token details API error for ${mint.slice(0, 8)}: ${response.status}`);
+        return null;
+      }
+
+      return await response.json();
+    } catch (error) {
+      console.error(`Error fetching details for ${mint.slice(0, 8)}:`, error);
+      if (attempt < retries) {
+        await new Promise(r => setTimeout(r, 500));
+      }
     }
-
-    return await response.json();
-  } catch (error) {
-    console.error(`Error fetching details for ${mint}:`, error);
-    return null;
   }
+  return null;
 }
 
 // Simple bundle analysis - check first buyers
@@ -124,8 +136,14 @@ async function analyzeTokenRisk(mint: string): Promise<{ bundleScore: number; is
       }
     );
 
+    if (response.status === 429) {
+      console.warn(`⏳ Rate limited on holders for ${mint.slice(0, 8)}`);
+      return { bundleScore: 40, isBundled: false, details: { error: 'Rate limited' } };
+    }
+
     if (!response.ok) {
-      return { bundleScore: 50, isBundled: false, details: { error: 'Could not fetch holders' } };
+      console.warn(`❌ Holders API error for ${mint.slice(0, 8)}: ${response.status}`);
+      return { bundleScore: 40, isBundled: false, details: { error: `HTTP ${response.status}` } };
     }
 
     const holders = await response.json();
@@ -242,15 +260,18 @@ async function pollForNewTokens(supabase: any, config: MonitorConfig) {
         continue;
       }
 
-      // Get detailed token info
+      // Add small delay between tokens to avoid rate limits
+      await new Promise(r => setTimeout(r, 300));
+
+      // Get detailed token info - use tokenData as fallback
       const details = await fetchTokenDetails(mint);
       if (!details) {
-        results.errors++;
-        continue;
+        // Use the data we already have from the initial fetch
+        console.log(`ℹ️ Using initial data for ${mint.slice(0, 8)} (details fetch failed)`);
       }
 
-      // Check token age
-      const createdAt = details.events?.createdAt || tokenData.events?.createdAt;
+      // Check token age - use fallback from tokenData if details unavailable
+      const createdAt = details?.events?.createdAt || tokenData.events?.createdAt;
       if (createdAt) {
         const ageMinutes = (Date.now() - createdAt * 1000) / 60000;
         if (ageMinutes > config.max_token_age_minutes) {
@@ -259,11 +280,11 @@ async function pollForNewTokens(supabase: any, config: MonitorConfig) {
         }
       }
 
-      // Calculate volume in SOL
-      const pool = details.pools?.[0] || tokenData.pools?.[0];
+      // Calculate volume in SOL - use best available data
+      const pool = details?.pools?.[0] || tokenData.pools?.[0];
       const volumeUsd = pool?.volume?.h24 || 0;
       const volumeSol = solPrice > 0 ? volumeUsd / solPrice : 0;
-      const txCount = (details.buys || 0) + (details.sells || 0) + (pool?.txns?.h24 || 0);
+      const txCount = (details?.buys || tokenData.buys || 0) + (details?.sells || tokenData.sells || 0) + (pool?.txns?.h24 || 0);
 
       // Volume surge filter
       if (volumeSol < config.min_volume_sol_5m) {
@@ -302,25 +323,25 @@ async function pollForNewTokens(supabase: any, config: MonitorConfig) {
       const marketCapUsd = pool?.price?.usd ? pool.price.usd * 1_000_000_000 : null;
       const bondingCurvePct = marketCapUsd ? Math.min(100, (marketCapUsd / 69000) * 100) : null;
 
-      // Insert as candidate
+      // Insert as candidate - use fallbacks from tokenData
       const candidateData = {
         token_mint: mint,
-        token_name: details.token?.name || tokenData.token?.name,
-        token_symbol: details.token?.symbol || tokenData.token?.symbol,
+        token_name: details?.token?.name || tokenData.token?.name,
+        token_symbol: details?.token?.symbol || tokenData.token?.symbol,
         creator_wallet: creatorWallet,
         volume_sol_5m: volumeSol,
         volume_usd_5m: volumeUsd,
         bonding_curve_pct: bondingCurvePct,
         market_cap_usd: marketCapUsd,
-        holder_count: details.holders || riskAnalysis.details.holderCount || 0,
+        holder_count: details?.holders || tokenData.holders || riskAnalysis.details.holderCount || 0,
         transaction_count: txCount,
         bundle_score: riskAnalysis.bundleScore,
         is_bundled: riskAnalysis.isBundled,
         status: 'pending',
         auto_buy_enabled: config.auto_scalp_enabled,
         metadata: {
-          image: details.token?.image,
-          description: details.token?.description,
+          image: details?.token?.image || tokenData.token?.image,
+          description: details?.token?.description || tokenData.token?.description,
           riskDetails: riskAnalysis.details,
           pool: pool,
         },
@@ -369,8 +390,7 @@ async function pollForNewTokens(supabase: any, config: MonitorConfig) {
         }
       }
 
-      // Small delay to avoid rate limits
-      await new Promise(r => setTimeout(r, 200));
+      // Delay is now at the start of the loop
     } catch (error) {
       console.error('Error processing token:', error);
       results.errors++;
