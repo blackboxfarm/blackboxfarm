@@ -278,8 +278,12 @@ async function tryJupiterSwap(params: {
       return { error: `Invalid swap amount for Jupiter: ${String(amount)}` };
     }
 
-    // Prefer quote-api (more reliable). Keep api.jup as a fallback.
-    const jupiterHosts = ["https://quote-api.jup.ag", "https://api.jup.ag"];
+    // Try multiple Jupiter hosts - some may have DNS issues in edge environments
+    const jupiterHosts = [
+      "https://lite-api.jup.ag",
+      "https://quote-api.jup.ag", 
+      "https://api.jup.ag"
+    ];
 
     // Try the newer swap API first, then v6 (many examples still use v6).
     const apiVariants = [
@@ -749,38 +753,45 @@ serve(async (req) => {
       }
       
       try {
-        const pumpResult = await tryPumpPortalTrade({
-          mint: String(tokenMint),
-          userPublicKey: owner.publicKey.toBase58(),
-          action: side as 'buy' | 'sell',
-          amount: pumpAmount,
-          slippageBps: Number(slippageBps),
-          pool: getBondingCurvePool(String(tokenMint)),
-        });
+        // First try with specific pool, then with 'auto' if it fails
+        const pools: Array<'pump' | 'bonk' | 'auto'> = [getBondingCurvePool(String(tokenMint)), 'auto'];
         
-        if ("tx" in pumpResult) {
-          const vtx = VersionedTransaction.deserialize(pumpResult.tx);
+        for (const pool of pools) {
+          const pumpResult = await tryPumpPortalTrade({
+            mint: String(tokenMint),
+            userPublicKey: owner.publicKey.toBase58(),
+            action: side as 'buy' | 'sell',
+            amount: pumpAmount,
+            slippageBps: Number(slippageBps),
+            pool: pool,
+          });
           
-          const HELIUS_API_KEY = Deno.env.get('HELIUS_API_KEY');
-          const txRpc = HELIUS_API_KEY 
-            ? new Connection(`https://mainnet.helius-rpc.com/?api-key=${HELIUS_API_KEY}`, { commitment: "confirmed" })
-            : connection;
-          
-          const { blockhash, lastValidBlockHeight } = await txRpc.getLatestBlockhash("confirmed");
-          (vtx as any).message.recentBlockhash = blockhash;
-          vtx.sign([owner]);
-          
-          const sig = await txRpc.sendTransaction(vtx, { skipPreflight: true, maxRetries: 3 });
-          
-          if (confirmPolicy !== "none") {
-            await txRpc.confirmTransaction({ blockhash, lastValidBlockHeight, signature: sig }, confirmPolicy as any);
+          if ("tx" in pumpResult) {
+            const vtx = VersionedTransaction.deserialize(pumpResult.tx);
+            
+            const HELIUS_API_KEY = Deno.env.get('HELIUS_API_KEY');
+            const txRpc = HELIUS_API_KEY 
+              ? new Connection(`https://mainnet.helius-rpc.com/?api-key=${HELIUS_API_KEY}`, { commitment: "confirmed" })
+              : connection;
+            
+            const { blockhash, lastValidBlockHeight } = await txRpc.getLatestBlockhash("confirmed");
+            (vtx as any).message.recentBlockhash = blockhash;
+            vtx.sign([owner]);
+            
+            const sig = await txRpc.sendTransaction(vtx, { skipPreflight: true, maxRetries: 3 });
+            
+            if (confirmPolicy !== "none") {
+              await txRpc.confirmTransaction({ blockhash, lastValidBlockHeight, signature: sig }, confirmPolicy as any);
+            }
+            
+            console.log(`PumpPortal ${side} successful with pool=${pool}:`, sig);
+            return ok({ signatures: [sig], source: "pumpportal", pool: pool });
+          } else if (pool === 'auto') {
+            // Both specific and auto pools failed - token might have graduated to unsupported DEX
+            console.log(`PumpPortal failed for token with all pools, falling back to DEX routing: ${pumpResult.error}`);
+          } else {
+            console.log(`PumpPortal pool=${pool} failed, trying auto...`);
           }
-          
-          console.log(`PumpPortal ${side} successful for ${isBonkToken ? 'bonk.fun' : 'pump.fun'} token:`, sig);
-          return ok({ signatures: [sig], source: "pumpportal", pool: getBondingCurvePool(String(tokenMint)) });
-        } else {
-          // PumpPortal failed - token might have graduated, continue to Raydium/Jupiter
-          console.log(`PumpPortal failed for bonding curve token, falling back to DEX routing: ${pumpResult.error}`);
         }
       } catch (pumpError) {
         console.log(`PumpPortal error for bonding curve token, falling back: ${(pumpError as Error).message}`);
