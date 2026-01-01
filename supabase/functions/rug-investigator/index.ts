@@ -170,7 +170,11 @@ async function getTokenHolders(tokenMint: string): Promise<any[]> {
     
     if (response.ok) {
       const data = await response.json();
-      return data.holders || data || [];
+      // Handle different response formats
+      if (Array.isArray(data)) return data;
+      if (data?.holders && Array.isArray(data.holders)) return data.holders;
+      if (data?.data && Array.isArray(data.data)) return data.data;
+      return [];
     }
     return [];
   } catch (error) {
