@@ -196,16 +196,17 @@ function b64ToU8(b64: string): Uint8Array {
   return bytes;
 }
 
-// Try PumpPortal API for pump.fun bonding curve tokens
+// Try PumpPortal API for pump.fun/bonk.fun bonding curve tokens
 async function tryPumpPortalTrade(params: {
   mint: string;
   userPublicKey: string;
   action: 'buy' | 'sell';
   amount: string; // For buy: SOL amount like "0.01", for sell: "100%" or token amount
   slippageBps: number;
+  pool?: 'pump' | 'bonk' | 'auto'; // Which launchpad pool to use
 }): Promise<{ tx: Uint8Array } | { error: string }> {
   try {
-    const { mint, userPublicKey, action, amount, slippageBps } = params;
+    const { mint, userPublicKey, action, amount, slippageBps, pool = 'auto' } = params;
     
     const slippagePercent = Math.min(50, Math.max(1, Math.floor(slippageBps / 100)));
     
@@ -215,7 +216,7 @@ async function tryPumpPortalTrade(params: {
       mint: mint,
       priorityFee: 0.0005, // 0.0005 SOL priority fee
       slippage: slippagePercent,
-      pool: "auto"
+      pool: pool // 'pump' for pump.fun, 'bonk' for bonk.fun, 'auto' to detect
     };
     
     if (action === 'buy') {
@@ -697,19 +698,34 @@ serve(async (req) => {
     let needJupiter = false;
     let jupReason: string | undefined;
 
-    // Only use alternate routing for ACTUAL pump.fun bonding curve tokens
-    // These have mint addresses ending in "pump" - NOT based on address length
+    // Detect bonding curve launchpad tokens
+    // pump.fun tokens end with "pump"
+    // bonk.fun tokens end with "bonk" 
     const isPumpFunToken = (mintAddress: string): boolean => {
       if (!mintAddress) return false;
       const lower = mintAddress.toLowerCase();
-      // Only actual pump.fun bonding curve mints end with "pump"
       return lower.endsWith('pump');
     };
 
+    const isBonkFunToken = (mintAddress: string): boolean => {
+      if (!mintAddress) return false;
+      const lower = mintAddress.toLowerCase();
+      return lower.endsWith('bonk');
+    };
+
     const isPumpToken = tokenMint ? isPumpFunToken(String(tokenMint)) : false;
+    const isBonkToken = tokenMint ? isBonkFunToken(String(tokenMint)) : false;
+    const isBondingCurveToken = isPumpToken || isBonkToken;
+    
+    // Determine which pool to use for PumpPortal
+    const getBondingCurvePool = (mint: string): 'pump' | 'bonk' | 'auto' => {
+      if (isPumpFunToken(mint)) return 'pump';
+      if (isBonkFunToken(mint)) return 'bonk';
+      return 'auto';
+    };
     
     // Log routing decision
-    console.log(`Routing decision: token=${tokenMint}, isPumpToken=${isPumpToken}, side=${side}`);
+    console.log(`Routing decision: token=${tokenMint}, isPumpToken=${isPumpToken}, isBonkToken=${isBonkToken}, side=${side}`);
 
     // Get ATAs when not SOL
     let isInputSol = isSolMint(String(inputMint));
@@ -717,6 +733,58 @@ serve(async (req) => {
 
     let inputAccount = isInputSol ? undefined : (await getAssociatedTokenAddress(new PublicKey(inputMint), owner.publicKey)).toBase58();
     let outputAccount = isOutputSol ? undefined : (await getAssociatedTokenAddress(new PublicKey(outputMint), owner.publicKey)).toBase58();
+
+    // For bonding curve tokens (pump.fun/bonk.fun), try PumpPortal FIRST
+    // These tokens typically don't have Raydium/Jupiter liquidity until graduation
+    if (isBondingCurveToken && tokenMint && side) {
+      console.log(`Bonding curve token detected (${isBonkToken ? 'bonk.fun' : 'pump.fun'}), trying PumpPortal first...`);
+      
+      let pumpAmount: string;
+      if (side === "buy") {
+        const solAmount = Number(amount) / 1_000_000_000;
+        pumpAmount = solAmount.toString();
+      } else {
+        pumpAmount = sellAll ? "100%" : String(amount);
+      }
+      
+      try {
+        const pumpResult = await tryPumpPortalTrade({
+          mint: String(tokenMint),
+          userPublicKey: owner.publicKey.toBase58(),
+          action: side as 'buy' | 'sell',
+          amount: pumpAmount,
+          slippageBps: Number(slippageBps),
+          pool: getBondingCurvePool(String(tokenMint)),
+        });
+        
+        if ("tx" in pumpResult) {
+          const vtx = VersionedTransaction.deserialize(pumpResult.tx);
+          
+          const HELIUS_API_KEY = Deno.env.get('HELIUS_API_KEY');
+          const txRpc = HELIUS_API_KEY 
+            ? new Connection(`https://mainnet.helius-rpc.com/?api-key=${HELIUS_API_KEY}`, { commitment: "confirmed" })
+            : connection;
+          
+          const { blockhash, lastValidBlockHeight } = await txRpc.getLatestBlockhash("confirmed");
+          (vtx as any).message.recentBlockhash = blockhash;
+          vtx.sign([owner]);
+          
+          const sig = await txRpc.sendTransaction(vtx, { skipPreflight: true, maxRetries: 3 });
+          
+          if (confirmPolicy !== "none") {
+            await txRpc.confirmTransaction({ blockhash, lastValidBlockHeight, signature: sig }, confirmPolicy as any);
+          }
+          
+          console.log(`PumpPortal ${side} successful for ${isBonkToken ? 'bonk.fun' : 'pump.fun'} token:`, sig);
+          return ok({ signatures: [sig], source: "pumpportal", pool: getBondingCurvePool(String(tokenMint)) });
+        } else {
+          // PumpPortal failed - token might have graduated, continue to Raydium/Jupiter
+          console.log(`PumpPortal failed for bonding curve token, falling back to DEX routing: ${pumpResult.error}`);
+        }
+      } catch (pumpError) {
+        console.log(`PumpPortal error for bonding curve token, falling back: ${(pumpError as Error).message}`);
+      }
+    }
 
     // Compute route (with SOL fallback for buys if USDC route lacks liquidity)
     let usedFallbackToSOL = false;
@@ -935,6 +1003,7 @@ serve(async (req) => {
             action: side as 'buy' | 'sell',
             amount: pumpAmount,
             slippageBps: Number(slippageBps),
+            pool: getBondingCurvePool(String(tokenMint)),
           });
           
           if ("tx" in pumpResult) {
