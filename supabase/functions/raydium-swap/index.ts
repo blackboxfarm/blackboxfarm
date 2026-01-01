@@ -780,21 +780,70 @@ serve(async (req) => {
             
             const sig = await txRpc.sendTransaction(vtx, { skipPreflight: true, maxRetries: 3 });
             
-            if (confirmPolicy !== "none") {
-              await txRpc.confirmTransaction({ blockhash, lastValidBlockHeight, signature: sig }, confirmPolicy as any);
+            // CRITICAL: Check if transaction actually succeeded on-chain
+            // PumpPortal can return a signature even if the tx will fail (e.g., token graduated to Raydium)
+            let txFailed = false;
+            let txError = "";
+            
+            try {
+              const confirmation = await txRpc.confirmTransaction({ blockhash, lastValidBlockHeight, signature: sig }, "confirmed" as any);
+              
+              if (confirmation.value?.err) {
+                txFailed = true;
+                txError = JSON.stringify(confirmation.value.err);
+                console.error(`PumpPortal tx confirmed but FAILED on-chain: ${txError}`);
+              }
+            } catch (confirmErr) {
+              // Confirmation timed out or failed - check transaction status directly
+              console.log(`Confirmation error, checking tx status: ${(confirmErr as Error).message}`);
+              try {
+                await new Promise(resolve => setTimeout(resolve, 2000)); // Wait a bit
+                const txStatus = await txRpc.getSignatureStatus(sig, { searchTransactionHistory: true });
+                if (txStatus.value?.err) {
+                  txFailed = true;
+                  txError = JSON.stringify(txStatus.value.err);
+                  console.error(`PumpPortal tx failed on-chain (from status): ${txError}`);
+                } else if (!txStatus.value) {
+                  // Transaction not found - might have been dropped
+                  txFailed = true;
+                  txError = "Transaction not found after sending";
+                  console.error(`PumpPortal tx not found: ${sig}`);
+                }
+              } catch (statusErr) {
+                console.error(`Failed to get tx status: ${(statusErr as Error).message}`);
+              }
             }
             
-            console.log(`PumpPortal ${side} successful with pool=${pool}:`, sig);
-            return ok({ signatures: [sig], source: "pumpportal", pool: pool });
+            if (txFailed) {
+              // Check if it's the "graduated to raydium" error - if so, fall back to Jupiter
+              if (txError.includes("6005") || txError.includes("bonding curve") || txError.includes("migrated")) {
+                console.log(`Token has graduated from bonding curve, falling back to Jupiter/Raydium...`);
+                needJupiter = true;
+                jupReason = "Token graduated from bonding curve to Raydium";
+                // Don't return - continue to Jupiter fallback below
+              } else {
+                // Other error - still fall back but log it
+                console.log(`PumpPortal tx failed with: ${txError}, falling back to Jupiter...`);
+                needJupiter = true;
+                jupReason = `PumpPortal tx failed: ${txError}`;
+              }
+            } else {
+              console.log(`PumpPortal ${side} successful with pool=${pool}:`, sig);
+              return ok({ signatures: [sig], source: "pumpportal", pool: pool });
+            }
           } else if (pool === 'auto') {
             // Both specific and auto pools failed - token might have graduated to unsupported DEX
             console.log(`PumpPortal failed for token with all pools, falling back to DEX routing: ${pumpResult.error}`);
+            needJupiter = true;
+            jupReason = `PumpPortal failed: ${pumpResult.error}`;
           } else {
             console.log(`PumpPortal pool=${pool} failed, trying auto...`);
           }
         }
       } catch (pumpError) {
         console.log(`PumpPortal error for bonding curve token, falling back: ${(pumpError as Error).message}`);
+        needJupiter = true;
+        jupReason = `PumpPortal error: ${(pumpError as Error).message}`;
       }
     }
 
@@ -1037,8 +1086,35 @@ serve(async (req) => {
               
               const sig = await txRpc.sendTransaction(vtx, { skipPreflight: true, maxRetries: 3 });
               
-              if (confirmPolicy !== "none") {
-                await txRpc.confirmTransaction({ blockhash, lastValidBlockHeight, signature: sig }, confirmPolicy as any);
+              // CRITICAL: Verify transaction actually succeeded on-chain
+              let txFailed = false;
+              let txError = "";
+              
+              try {
+                const confirmation = await txRpc.confirmTransaction({ blockhash, lastValidBlockHeight, signature: sig }, "confirmed" as any);
+                if (confirmation.value?.err) {
+                  txFailed = true;
+                  txError = JSON.stringify(confirmation.value.err);
+                  console.error(`PumpPortal fallback tx FAILED on-chain: ${txError}`);
+                }
+              } catch (confirmErr) {
+                console.log(`Fallback confirmation error, checking status: ${(confirmErr as Error).message}`);
+                try {
+                  await new Promise(resolve => setTimeout(resolve, 2000));
+                  const txStatus = await txRpc.getSignatureStatus(sig, { searchTransactionHistory: true });
+                  if (txStatus.value?.err) {
+                    txFailed = true;
+                    txError = JSON.stringify(txStatus.value.err);
+                  }
+                } catch {}
+              }
+              
+              if (txFailed) {
+                console.error("PumpPortal fallback tx failed:", txError);
+                return softError(
+                  "SWAP_FAILED",
+                  `All swap methods failed. Raydium: ${jupReason}; Jupiter: ${j.error}; PumpPortal tx failed on-chain: ${txError}`
+                );
               }
               
               console.log(`PumpPortal ${side} successful:`, sig);
