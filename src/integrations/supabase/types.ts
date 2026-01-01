@@ -4262,13 +4262,16 @@ export type Database = {
           bundle_score: number | null
           buy_sell_ratio: number | null
           buys_count: number | null
+          classification_reasoning: string[] | null
           config_snapshot: Json | null
           created_at: string
           creator_integrity_score: number | null
           creator_wallet: string | null
+          current_multiplier: number | null
           decision: string
           dex_paid_details: Json | null
           dex_paid_early: boolean | null
+          entry_window: string | null
           failed_filters: string[] | null
           first_buyers_analysis: Json | null
           holder_count: number | null
@@ -4282,6 +4285,7 @@ export type Database = {
           passed_filters: string[] | null
           price_tier: string | null
           price_usd: number | null
+          recommended_action: string | null
           rejection_reason: string | null
           reviewed_by: string | null
           score_breakdown: Json | null
@@ -4290,10 +4294,12 @@ export type Database = {
           similar_holdings_count: number | null
           social_details: Json | null
           social_score: number | null
+          strategy_details: Json | null
           telegram_score: number | null
           token_mint: string
           token_name: string | null
           token_symbol: string | null
+          token_type: string | null
           top10_holder_pct: number | null
           top5_holder_pct: number | null
           twitter_score: number | null
@@ -4312,13 +4318,16 @@ export type Database = {
           bundle_score?: number | null
           buy_sell_ratio?: number | null
           buys_count?: number | null
+          classification_reasoning?: string[] | null
           config_snapshot?: Json | null
           created_at?: string
           creator_integrity_score?: number | null
           creator_wallet?: string | null
+          current_multiplier?: number | null
           decision: string
           dex_paid_details?: Json | null
           dex_paid_early?: boolean | null
+          entry_window?: string | null
           failed_filters?: string[] | null
           first_buyers_analysis?: Json | null
           holder_count?: number | null
@@ -4332,6 +4341,7 @@ export type Database = {
           passed_filters?: string[] | null
           price_tier?: string | null
           price_usd?: number | null
+          recommended_action?: string | null
           rejection_reason?: string | null
           reviewed_by?: string | null
           score_breakdown?: Json | null
@@ -4340,10 +4350,12 @@ export type Database = {
           similar_holdings_count?: number | null
           social_details?: Json | null
           social_score?: number | null
+          strategy_details?: Json | null
           telegram_score?: number | null
           token_mint: string
           token_name?: string | null
           token_symbol?: string | null
+          token_type?: string | null
           top10_holder_pct?: number | null
           top5_holder_pct?: number | null
           twitter_score?: number | null
@@ -4362,13 +4374,16 @@ export type Database = {
           bundle_score?: number | null
           buy_sell_ratio?: number | null
           buys_count?: number | null
+          classification_reasoning?: string[] | null
           config_snapshot?: Json | null
           created_at?: string
           creator_integrity_score?: number | null
           creator_wallet?: string | null
+          current_multiplier?: number | null
           decision?: string
           dex_paid_details?: Json | null
           dex_paid_early?: boolean | null
+          entry_window?: string | null
           failed_filters?: string[] | null
           first_buyers_analysis?: Json | null
           holder_count?: number | null
@@ -4382,6 +4397,7 @@ export type Database = {
           passed_filters?: string[] | null
           price_tier?: string | null
           price_usd?: number | null
+          recommended_action?: string | null
           rejection_reason?: string | null
           reviewed_by?: string | null
           score_breakdown?: Json | null
@@ -4390,10 +4406,12 @@ export type Database = {
           similar_holdings_count?: number | null
           social_details?: Json | null
           social_score?: number | null
+          strategy_details?: Json | null
           telegram_score?: number | null
           token_mint?: string
           token_name?: string | null
           token_symbol?: string | null
+          token_type?: string | null
           top10_holder_pct?: number | null
           top5_holder_pct?: number | null
           twitter_score?: number | null

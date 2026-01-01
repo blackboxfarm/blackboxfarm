@@ -26,7 +26,13 @@ import {
   ThumbsUp,
   ThumbsDown,
   MessageSquare,
-  Star
+  Star,
+  Skull,
+  DollarSign,
+  Globe,
+  Target,
+  Rocket,
+  Timer
 } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
 
@@ -102,6 +108,13 @@ interface DiscoveryLog {
   price_tier: 'ultra_low' | 'low' | 'medium' | 'high' | null;
   wallet_quality_score: number | null;
   first_buyers_analysis: any | null;
+  // Token classification fields
+  token_type: 'quick_pump' | 'project' | 'unknown' | null;
+  entry_window: 'optimal' | 'acceptable' | 'late' | 'missed' | null;
+  current_multiplier: number | null;
+  recommended_action: 'enter_quick' | 'enter_hold' | 'watch' | 'skip' | null;
+  strategy_details: any | null;
+  classification_reasoning: string[] | null;
 }
 
 interface MonitorConfig {
@@ -827,6 +840,39 @@ export function TokenCandidatesDashboard() {
                                 {log.price_tier && (
                                   <Badge variant="secondary" className="text-xs">
                                     {log.price_tier.replace('_', ' ')}
+                                  </Badge>
+                                )}
+                                {/* Token Classification Badges */}
+                                {log.token_type && (
+                                  <Badge variant="outline" className={
+                                    log.token_type === 'quick_pump' ? 'bg-orange-500/20 text-orange-400 border-orange-500/40' :
+                                    log.token_type === 'project' ? 'bg-green-500/20 text-green-400 border-green-500/40' :
+                                    'bg-gray-500/20 text-gray-400 border-gray-500/40'
+                                  }>
+                                    <Rocket className="h-3 w-3 mr-1" />
+                                    {log.token_type.replace('_', ' ')}
+                                  </Badge>
+                                )}
+                                {log.entry_window && (
+                                  <Badge variant="outline" className={
+                                    log.entry_window === 'optimal' ? 'bg-green-500/20 text-green-400 border-green-500/40' :
+                                    log.entry_window === 'acceptable' ? 'bg-yellow-500/20 text-yellow-400 border-yellow-500/40' :
+                                    log.entry_window === 'late' ? 'bg-orange-500/20 text-orange-400 border-orange-500/40' :
+                                    'bg-red-500/20 text-red-400 border-red-500/40'
+                                  }>
+                                    <Timer className="h-3 w-3 mr-1" />
+                                    {log.entry_window}
+                                  </Badge>
+                                )}
+                                {log.recommended_action && (
+                                  <Badge variant="outline" className={
+                                    log.recommended_action === 'enter_quick' ? 'bg-purple-500/20 text-purple-400 border-purple-500/40' :
+                                    log.recommended_action === 'enter_hold' ? 'bg-blue-500/20 text-blue-400 border-blue-500/40' :
+                                    log.recommended_action === 'watch' ? 'bg-yellow-500/20 text-yellow-400 border-yellow-500/40' :
+                                    'bg-gray-500/20 text-gray-400 border-gray-500/40'
+                                  }>
+                                    <Target className="h-3 w-3 mr-1" />
+                                    {log.recommended_action.replace('_', ' ')}
                                   </Badge>
                                 )}
                               </div>
