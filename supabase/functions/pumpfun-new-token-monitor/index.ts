@@ -93,6 +93,8 @@ interface DiscoveryLogEntry {
   recommendedAction?: 'enter_quick' | 'enter_hold' | 'watch' | 'skip';
   strategyDetails?: StrategyRecommendation;
   classificationReasoning?: string[];
+  // Poll run tracking
+  pollRunId?: string;
 }
 
 // Strategy recommendation interface
@@ -754,6 +756,8 @@ async function logDiscovery(supabase: any, entry: DiscoveryLogEntry) {
       recommended_action: recommendedAction,
       strategy_details: strategyDetails,
       classification_reasoning: classificationReasoning,
+      // Poll run tracking
+      poll_run_id: entry.pollRunId || null,
     });
   } catch (error) {
     console.error('Failed to log discovery:', error);
@@ -904,7 +908,7 @@ async function checkDeveloperReputation(supabase: any, creatorWallet: string): P
 }
 
 // Main polling function - ENHANCED with new quality checks
-async function pollForNewTokens(supabase: any, config: MonitorConfig) {
+async function pollForNewTokens(supabase: any, config: MonitorConfig, pollRunId?: string) {
   console.log('📡 Starting pump.fun new token poll (ENHANCED)...');
 
   // Get recent candidates to avoid re-processing
@@ -960,6 +964,10 @@ async function pollForNewTokens(supabase: any, config: MonitorConfig) {
     priceTier: string | null;
   }> = [];
 
+  // Helper to log discovery with poll run ID
+  const logWithPollRun = (entry: DiscoveryLogEntry) => 
+    logDiscovery(supabase, { ...entry, pollRunId });
+
   // PHASE 1: Quick filter using data we already have (NO extra API calls)
   console.log('🔍 Phase 1: Quick filtering...');
   for (const tokenData of tokens) {
@@ -984,7 +992,7 @@ async function pollForNewTokens(supabase: any, config: MonitorConfig) {
       if (existingMints.has(mint)) {
         results.skippedExisting++;
         failedFilters.push('existing_candidate');
-        await logDiscovery(supabase, {
+        await logWithPollRun({
           token: tokenData, decision: 'rejected', rejectionReason: 'existing',
           volumeSol, volumeUsd, txCount, config, passedFilters, failedFilters,
           priceTier,
@@ -999,7 +1007,7 @@ async function pollForNewTokens(supabase: any, config: MonitorConfig) {
           results.skippedOld++;
           failedFilters.push(`age_too_old_${ageMinutes.toFixed(0)}m`);
           console.log(`⏰ ${tokenData.token?.symbol || mint.slice(0, 8)}: Too old (${ageMinutes.toFixed(0)} min)`);
-          await logDiscovery(supabase, {
+          await logWithPollRun({
             token: tokenData, decision: 'rejected', rejectionReason: 'too_old',
             volumeSol, volumeUsd, txCount, config, passedFilters, failedFilters,
             priceTier,
@@ -1016,7 +1024,7 @@ async function pollForNewTokens(supabase: any, config: MonitorConfig) {
         results.skippedLowVolume++;
         failedFilters.push(`volume_${volumeSol.toFixed(3)}_SOL_below_${config.min_volume_sol_5m}`);
         console.log(`📉 ${tokenData.token?.symbol || mint.slice(0, 8)}: Low volume (${volumeSol.toFixed(3)} SOL)`);
-        await logDiscovery(supabase, {
+        await logWithPollRun({
           token: tokenData, decision: 'rejected', rejectionReason: 'low_volume',
           volumeSol, volumeUsd, txCount, config, passedFilters, failedFilters,
           priceTier,
@@ -1030,7 +1038,7 @@ async function pollForNewTokens(supabase: any, config: MonitorConfig) {
         results.skippedLowVolume++;
         failedFilters.push(`txs_${txCount}_below_${config.min_transactions}`);
         console.log(`📉 ${tokenData.token?.symbol || mint.slice(0, 8)}: Low txs (${txCount})`);
-        await logDiscovery(supabase, {
+        await logWithPollRun({
           token: tokenData, decision: 'rejected', rejectionReason: 'low_transactions',
           volumeSol, volumeUsd, txCount, config, passedFilters, failedFilters,
           priceTier,
@@ -1072,7 +1080,7 @@ async function pollForNewTokens(supabase: any, config: MonitorConfig) {
           results.skippedMayhemMode++;
           failedFilters.push('MAYHEM_MODE_DETECTED');
           console.log(`☠️ ${tokenData.token?.symbol || mint.slice(0, 8)}: MAYHEM MODE - HARD REJECT`);
-          await logDiscovery(supabase, {
+          await logWithPollRun({
             token: tokenData, decision: 'rejected', rejectionReason: 'mayhem_mode',
             volumeSol, volumeUsd, txCount, config, passedFilters, failedFilters,
             isMayhemMode: true,
@@ -1091,7 +1099,7 @@ async function pollForNewTokens(supabase: any, config: MonitorConfig) {
           results.skippedEarlyDexPaid++;
           failedFilters.push('EARLY_DEX_PAID_SUSPICIOUS');
           console.log(`🚨 ${tokenData.token?.symbol || mint.slice(0, 8)}: Early DEX paid - suspicious`);
-          await logDiscovery(supabase, {
+          await logWithPollRun({
             token: tokenData, decision: 'rejected', rejectionReason: 'early_dex_paid_suspicious',
             volumeSol, volumeUsd, txCount, config, passedFilters, failedFilters,
             dexPaidEarly: true,
@@ -1127,7 +1135,7 @@ async function pollForNewTokens(supabase: any, config: MonitorConfig) {
           results.skippedHighRisk++;
           failedFilters.push(`bundle_score_${riskAnalysis.bundleScore}_above_${config.max_bundle_score}`);
           console.log(`⚠️ ${tokenData.token?.symbol || mint.slice(0, 8)}: High bundle score (${riskAnalysis.bundleScore})`);
-          await logDiscovery(supabase, {
+          await logWithPollRun({
             token: tokenData, decision: 'rejected', rejectionReason: 'high_bundle_score',
             volumeSol, volumeUsd, txCount, bundleScore: riskAnalysis.bundleScore,
             riskDetails: riskAnalysis.details, config, passedFilters, failedFilters,
@@ -1157,7 +1165,7 @@ async function pollForNewTokens(supabase: any, config: MonitorConfig) {
             results.skippedHighRisk++;
             failedFilters.push(`scam_dev_integrity_${devCheck.integrityScore}`);
             console.log(`⚠️ ${tokenData.token?.symbol || mint.slice(0, 8)}: Scam dev flagged`);
-            await logDiscovery(supabase, {
+            await logWithPollRun({
               token: tokenData, decision: 'rejected', rejectionReason: 'scam_developer',
               volumeSol, volumeUsd, txCount, bundleScore: riskAnalysis.bundleScore,
               riskDetails: riskAnalysis.details, devIntegrityScore, config, passedFilters, failedFilters,
@@ -1237,7 +1245,7 @@ async function pollForNewTokens(supabase: any, config: MonitorConfig) {
           if (insertError.code === '23505') {
             results.skippedExisting++;
             failedFilters.push('duplicate_insert');
-            await logDiscovery(supabase, {
+            await logWithPollRun({
               token: tokenData, decision: 'rejected', rejectionReason: 'duplicate',
               volumeSol, volumeUsd, txCount, bundleScore: riskAnalysis.bundleScore,
               riskDetails: riskAnalysis.details, config, passedFilters, failedFilters,
@@ -1255,7 +1263,7 @@ async function pollForNewTokens(supabase: any, config: MonitorConfig) {
             console.error(`Error inserting candidate:`, insertError);
             results.errors++;
             failedFilters.push(`insert_error_${insertError.code}`);
-            await logDiscovery(supabase, {
+            await logWithPollRun({
               token: tokenData, decision: 'error', rejectionReason: 'insert_failed',
               volumeSol, volumeUsd, txCount, bundleScore: riskAnalysis.bundleScore,
               riskDetails: riskAnalysis.details, config, passedFilters, failedFilters,
@@ -1305,7 +1313,7 @@ async function pollForNewTokens(supabase: any, config: MonitorConfig) {
         passedFilters.push('inserted_as_candidate');
         results.candidatesAdded++;
         console.log(`🚀 Added candidate: ${candidateData.token_symbol} (${mint.slice(0, 8)}...) - Social: ${socialQuality.totalScore}, Wallet: ${riskAnalysis.walletQualityScore}`);
-        await logDiscovery(supabase, {
+        await logWithPollRun({
           token: tokenData, decision: 'accepted',
           volumeSol, volumeUsd, txCount, bundleScore: riskAnalysis.bundleScore,
           riskDetails: riskAnalysis.details, devIntegrityScore, config, passedFilters, failedFilters,
@@ -1355,7 +1363,7 @@ async function pollForNewTokens(supabase: any, config: MonitorConfig) {
         console.error('Error processing token:', error);
         results.errors++;
         failedFilters.push(`processing_error`);
-        await logDiscovery(supabase, {
+        await logWithPollRun({
           token: tokenData, decision: 'error', rejectionReason: 'processing_failed',
           volumeSol, volumeUsd, txCount, config, passedFilters, failedFilters,
           priceTier,
@@ -1613,8 +1621,41 @@ serve(async (req) => {
           return jsonResponse({ success: false, message: 'Monitor is disabled' });
         }
 
-        const results = await pollForNewTokens(supabase, config);
-        return jsonResponse({ success: true, results });
+        // Create poll run record
+        const pollRunId = crypto.randomUUID();
+        const pollStartedAt = new Date();
+        
+        await supabase.from('pumpfun_poll_runs').insert({
+          id: pollRunId,
+          started_at: pollStartedAt.toISOString(),
+          status: 'running',
+        });
+
+        try {
+          const results = await pollForNewTokens(supabase, config, pollRunId);
+          
+          // Update poll run with results
+          const pollFinishedAt = new Date();
+          await supabase.from('pumpfun_poll_runs').update({
+            finished_at: pollFinishedAt.toISOString(),
+            duration_ms: pollFinishedAt.getTime() - pollStartedAt.getTime(),
+            status: 'success',
+            results,
+            tokens_scanned: results.tokensScanned,
+            candidates_added: results.candidatesAdded,
+          }).eq('id', pollRunId);
+
+          return jsonResponse({ success: true, results, pollRunId });
+        } catch (pollError) {
+          // Mark poll run as failed
+          await supabase.from('pumpfun_poll_runs').update({
+            finished_at: new Date().toISOString(),
+            status: 'error',
+            error_message: String(pollError),
+          }).eq('id', pollRunId);
+          
+          throw pollError;
+        }
       }
 
       case 'candidates': {

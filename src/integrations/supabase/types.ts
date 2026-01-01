@@ -4292,6 +4292,7 @@ export type Database = {
           market_cap_usd: number | null
           metadata: Json | null
           passed_filters: string[] | null
+          poll_run_id: string | null
           price_tier: string | null
           price_usd: number | null
           recommended_action: string | null
@@ -4348,6 +4349,7 @@ export type Database = {
           market_cap_usd?: number | null
           metadata?: Json | null
           passed_filters?: string[] | null
+          poll_run_id?: string | null
           price_tier?: string | null
           price_usd?: number | null
           recommended_action?: string | null
@@ -4404,6 +4406,7 @@ export type Database = {
           market_cap_usd?: number | null
           metadata?: Json | null
           passed_filters?: string[] | null
+          poll_run_id?: string | null
           price_tier?: string | null
           price_usd?: number | null
           recommended_action?: string | null
@@ -4430,7 +4433,15 @@ export type Database = {
           wallet_quality_score?: number | null
           website_score?: number | null
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "pumpfun_discovery_logs_poll_run_id_fkey"
+            columns: ["poll_run_id"]
+            isOneToOne: false
+            referencedRelation: "pumpfun_poll_runs"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       pumpfun_monitor_config: {
         Row: {
@@ -4477,6 +4488,45 @@ export type Database = {
           scalp_test_mode?: boolean
           tokens_processed_count?: number | null
           updated_at?: string
+        }
+        Relationships: []
+      }
+      pumpfun_poll_runs: {
+        Row: {
+          candidates_added: number | null
+          created_at: string
+          duration_ms: number | null
+          error_message: string | null
+          finished_at: string | null
+          id: string
+          results: Json | null
+          started_at: string
+          status: string
+          tokens_scanned: number | null
+        }
+        Insert: {
+          candidates_added?: number | null
+          created_at?: string
+          duration_ms?: number | null
+          error_message?: string | null
+          finished_at?: string | null
+          id?: string
+          results?: Json | null
+          started_at?: string
+          status?: string
+          tokens_scanned?: number | null
+        }
+        Update: {
+          candidates_added?: number | null
+          created_at?: string
+          duration_ms?: number | null
+          error_message?: string | null
+          finished_at?: string | null
+          id?: string
+          results?: Json | null
+          started_at?: string
+          status?: string
+          tokens_scanned?: number | null
         }
         Relationships: []
       }
