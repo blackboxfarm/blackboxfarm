@@ -4820,6 +4820,87 @@ export type Database = {
           },
         ]
       }
+      rug_investigations: {
+        Row: {
+          bundle_details: Json | null
+          bundles_detected: number | null
+          cex_trace_details: Json | null
+          cex_traces_found: number | null
+          created_at: string | null
+          error_message: string | null
+          full_report: Json | null
+          id: string
+          investigation_date: string | null
+          liquidity_usd: number | null
+          market_cap_usd: number | null
+          price_at_investigation: number | null
+          price_ath: number | null
+          price_drop_percent: number | null
+          risk_factors: Json | null
+          rug_risk_score: number | null
+          status: string | null
+          token_mint: string
+          token_name: string | null
+          token_symbol: string | null
+          top_seller_wallets: Json | null
+          total_sellers: number | null
+          total_sold_usd: number | null
+          updated_at: string | null
+        }
+        Insert: {
+          bundle_details?: Json | null
+          bundles_detected?: number | null
+          cex_trace_details?: Json | null
+          cex_traces_found?: number | null
+          created_at?: string | null
+          error_message?: string | null
+          full_report?: Json | null
+          id?: string
+          investigation_date?: string | null
+          liquidity_usd?: number | null
+          market_cap_usd?: number | null
+          price_at_investigation?: number | null
+          price_ath?: number | null
+          price_drop_percent?: number | null
+          risk_factors?: Json | null
+          rug_risk_score?: number | null
+          status?: string | null
+          token_mint: string
+          token_name?: string | null
+          token_symbol?: string | null
+          top_seller_wallets?: Json | null
+          total_sellers?: number | null
+          total_sold_usd?: number | null
+          updated_at?: string | null
+        }
+        Update: {
+          bundle_details?: Json | null
+          bundles_detected?: number | null
+          cex_trace_details?: Json | null
+          cex_traces_found?: number | null
+          created_at?: string | null
+          error_message?: string | null
+          full_report?: Json | null
+          id?: string
+          investigation_date?: string | null
+          liquidity_usd?: number | null
+          market_cap_usd?: number | null
+          price_at_investigation?: number | null
+          price_ath?: number | null
+          price_drop_percent?: number | null
+          risk_factors?: Json | null
+          rug_risk_score?: number | null
+          status?: string | null
+          token_mint?: string
+          token_name?: string | null
+          token_symbol?: string | null
+          top_seller_wallets?: Json | null
+          total_sellers?: number | null
+          total_sold_usd?: number | null
+          updated_at?: string | null
+        }
+        Relationships: []
+      }
       scalp_signal_tracker: {
         Row: {
           bonding_curve_pct: number | null

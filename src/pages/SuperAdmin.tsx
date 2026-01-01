@@ -40,6 +40,7 @@ const FlipItDashboard = lazy(() => import("@/components/admin/FlipItDashboard").
 const TelegramChannelMonitor = lazy(() => import("@/components/admin/TelegramChannelMonitor"));
 const TwitterAccountManager = lazy(() => import("@/components/admin/TwitterAccountManager"));
 const TokenCandidatesDashboard = lazy(() => import("@/components/admin/TokenCandidatesDashboard").then(m => ({ default: m.TokenCandidatesDashboard })));
+const RugInvestigator = lazy(() => import("@/components/admin/RugInvestigator"));
 
 export default function SuperAdmin() {
   const [activeTab, setActiveTab] = useState("fuckoff");
@@ -132,6 +133,7 @@ export default function SuperAdmin() {
             <TabsTrigger value="telegram" className="flex-shrink-0 data-[state=active]:bg-gradient-to-r data-[state=active]:from-sky-500/30 data-[state=active]:to-blue-500/20">📡 Telegram Monitor</TabsTrigger>
             <TabsTrigger value="twitter-accounts" className="flex-shrink-0 data-[state=active]:bg-gradient-to-r data-[state=active]:from-sky-500/30 data-[state=active]:to-cyan-500/20">🐦 Twitter Accounts</TabsTrigger>
             <TabsTrigger value="pumpfun-monitor" className="flex-shrink-0 data-[state=active]:bg-gradient-to-r data-[state=active]:from-green-500/30 data-[state=active]:to-emerald-500/20">🚀 Pump.fun Monitor</TabsTrigger>
+            <TabsTrigger value="rug-investigator" className="flex-shrink-0 data-[state=active]:bg-gradient-to-r data-[state=active]:from-red-500/30 data-[state=active]:to-rose-500/20">🔍 Rug Investigator</TabsTrigger>
           </TabsList>
           
           <TabsContent value="fuckoff">
@@ -330,6 +332,12 @@ export default function SuperAdmin() {
           <TabsContent value="pumpfun-monitor">
             <ActiveTabOnly activeTab={activeTab} tabValue="pumpfun-monitor">
               <TokenCandidatesDashboard />
+            </ActiveTabOnly>
+          </TabsContent>
+
+          <TabsContent value="rug-investigator">
+            <ActiveTabOnly activeTab={activeTab} tabValue="rug-investigator">
+              <RugInvestigator />
             </ActiveTabOnly>
           </TabsContent>
         </Tabs>
