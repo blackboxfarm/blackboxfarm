@@ -21,7 +21,10 @@
     ],
     "logoUrl": "https://bonk.fun/favicon.ico",
     "api": {
-      "enabled": false
+      "enabled": true,
+      "provider": "pumpportal",
+      "method": "trade-local",
+      "pool": "bonk"
     }
   },
   "bagsfm": {
