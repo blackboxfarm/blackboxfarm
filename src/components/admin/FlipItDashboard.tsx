@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -2911,13 +2912,25 @@ export function FlipItDashboard() {
 
       {/* Fee Calculator Widget - moved under Active Flips */}
       {buyAmount && parseFloat(buyAmount) > 0 && solPrice && (
-        <FlipItFeeCalculator
-          buyAmountSol={buyAmountMode === 'sol' ? parseFloat(buyAmount) : parseFloat(buyAmount) / solPrice}
-          solPrice={solPrice}
-          priorityFeeMode={priorityFeeMode}
-          slippageBps={slippageBps}
-          targetMultiplier={targetMultiplier}
-        />
+        <Accordion type="single" collapsible className="w-full">
+          <AccordionItem value="fee-calculator" className="border rounded-lg">
+            <AccordionTrigger className="px-4 py-3 hover:no-underline">
+              <span className="flex items-center gap-2 text-sm font-medium">
+                <DollarSign className="h-4 w-4" />
+                Fee Calculator
+              </span>
+            </AccordionTrigger>
+            <AccordionContent className="px-4 pb-4">
+              <FlipItFeeCalculator
+                buyAmountSol={buyAmountMode === 'sol' ? parseFloat(buyAmount) : parseFloat(buyAmount) / solPrice}
+                solPrice={solPrice}
+                priorityFeeMode={priorityFeeMode}
+                slippageBps={slippageBps}
+                targetMultiplier={targetMultiplier}
+              />
+            </AccordionContent>
+          </AccordionItem>
+        </Accordion>
       )}
 
       {/* Completed Positions with Rebuy */}
