@@ -61,6 +61,23 @@ interface DiscoveryLog {
   age_minutes: number | null;
   created_at: string;
   metadata: any;
+  // New detailed columns for learning
+  price_usd: number | null;
+  market_cap_usd: number | null;
+  liquidity_usd: number | null;
+  bonding_curve_pct: number | null;
+  top5_holder_pct: number | null;
+  top10_holder_pct: number | null;
+  buys_count: number | null;
+  sells_count: number | null;
+  buy_sell_ratio: number | null;
+  creator_wallet: string | null;
+  creator_integrity_score: number | null;
+  passed_filters: string[] | null;
+  failed_filters: string[] | null;
+  acceptance_reasoning: { reasons?: string[]; summary?: string } | null;
+  score_breakdown: Record<string, number | null> | null;
+  config_snapshot: Record<string, any> | null;
 }
 
 interface MonitorConfig {
@@ -615,10 +632,10 @@ export function TokenCandidatesDashboard() {
                 <div>
                   <CardTitle className="flex items-center gap-2">
                     <FileText className="h-5 w-5" />
-                    Discovery Logs
+                    Discovery Logs - Learning & Backtesting
                   </CardTitle>
                   <CardDescription>
-                    All scanned tokens and filtering decisions
+                    Detailed reasoning for all token decisions. Use to train and improve detection.
                   </CardDescription>
                 </div>
                 <Button variant="outline" size="sm" onClick={fetchDiscoveryLogs}>
@@ -628,86 +645,188 @@ export function TokenCandidatesDashboard() {
               </div>
             </CardHeader>
             <CardContent>
-              <ScrollArea className="h-[500px]">
-                <div className="rounded-md border">
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>Token</TableHead>
-                        <TableHead>Decision</TableHead>
-                        <TableHead>Reason</TableHead>
-                        <TableHead>Volume</TableHead>
-                        <TableHead>Txs</TableHead>
-                        <TableHead>Age</TableHead>
-                        <TableHead>Bundle</TableHead>
-                        <TableHead>Time</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {discoveryLogs.length === 0 ? (
-                        <TableRow>
-                          <TableCell colSpan={8} className="text-center text-muted-foreground py-8">
-                            No discovery logs yet. Click "Poll Now" to scan for tokens.
-                          </TableCell>
-                        </TableRow>
-                      ) : (
-                        discoveryLogs.map((log) => (
-                          <TableRow key={log.id} className={log.decision === 'accepted' ? 'bg-green-500/5' : log.decision === 'error' ? 'bg-red-500/5' : ''}>
-                            <TableCell>
-                              <div className="flex flex-col">
-                                <span className="font-medium">{log.token_symbol || 'Unknown'}</span>
-                                <span className="text-xs text-muted-foreground truncate max-w-[100px]">
-                                  {log.token_mint?.slice(0, 8)}...
-                                </span>
+              <ScrollArea className="h-[600px]">
+                <div className="space-y-3">
+                  {discoveryLogs.length === 0 ? (
+                    <div className="text-center text-muted-foreground py-8 border rounded-md">
+                      No discovery logs yet. Click "Poll Now" to scan for tokens.
+                    </div>
+                  ) : (
+                    discoveryLogs.map((log) => (
+                      <div 
+                        key={log.id} 
+                        className={`border rounded-lg p-4 space-y-3 ${
+                          log.decision === 'accepted' ? 'bg-green-500/5 border-green-500/30' : 
+                          log.decision === 'error' ? 'bg-red-500/5 border-red-500/30' : 
+                          'bg-muted/30'
+                        }`}
+                      >
+                        {/* Header Row */}
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-3">
+                            <div>
+                              <div className="flex items-center gap-2">
+                                <span className="font-bold text-lg">{log.token_symbol || 'Unknown'}</span>
+                                {log.decision === 'accepted' ? (
+                                  <Badge variant="outline" className="bg-green-500/10 text-green-500 border-green-500/30">
+                                    <CheckCircle className="h-3 w-3 mr-1" />
+                                    ACCEPTED
+                                  </Badge>
+                                ) : log.decision === 'error' ? (
+                                  <Badge variant="outline" className="bg-red-500/10 text-red-500 border-red-500/30">
+                                    <AlertTriangle className="h-3 w-3 mr-1" />
+                                    ERROR
+                                  </Badge>
+                                ) : (
+                                  <Badge variant="outline" className="bg-yellow-500/10 text-yellow-500 border-yellow-500/30">
+                                    <XCircle className="h-3 w-3 mr-1" />
+                                    {log.rejection_reason?.replace(/_/g, ' ').toUpperCase() || 'REJECTED'}
+                                  </Badge>
+                                )}
                               </div>
-                            </TableCell>
-                            <TableCell>
-                              {log.decision === 'accepted' ? (
-                                <Badge variant="outline" className="bg-green-500/10 text-green-500 border-green-500/30">
-                                  <CheckCircle className="h-3 w-3 mr-1" />
-                                  Accepted
-                                </Badge>
-                              ) : log.decision === 'error' ? (
-                                <Badge variant="outline" className="bg-red-500/10 text-red-500 border-red-500/30">
-                                  <AlertTriangle className="h-3 w-3 mr-1" />
-                                  Error
-                                </Badge>
-                              ) : (
-                                <Badge variant="outline" className="bg-yellow-500/10 text-yellow-500 border-yellow-500/30">
-                                  <XCircle className="h-3 w-3 mr-1" />
-                                  Rejected
-                                </Badge>
-                              )}
-                            </TableCell>
-                            <TableCell>
-                              <span className="text-xs text-muted-foreground">
-                                {log.rejection_reason?.replace(/_/g, ' ') || '-'}
-                              </span>
-                            </TableCell>
-                            <TableCell>
-                              <span className={Number(log.volume_sol) >= 0.1 ? 'text-green-500' : 'text-muted-foreground'}>
-                                {Number(log.volume_sol).toFixed(3)} SOL
-                              </span>
-                            </TableCell>
-                            <TableCell>{log.tx_count || 0}</TableCell>
-                            <TableCell>
-                              {log.age_minutes ? `${Math.round(log.age_minutes)}m` : '-'}
-                            </TableCell>
-                            <TableCell>
-                              {log.bundle_score !== null ? (
-                                <span className={log.bundle_score >= 50 ? 'text-red-500' : log.bundle_score >= 30 ? 'text-yellow-500' : 'text-green-500'}>
-                                  {log.bundle_score}
-                                </span>
-                              ) : '-'}
-                            </TableCell>
-                            <TableCell className="text-xs text-muted-foreground">
-                              {formatDistanceToNow(new Date(log.created_at), { addSuffix: true })}
-                            </TableCell>
-                          </TableRow>
-                        ))
-                      )}
-                    </TableBody>
-                  </Table>
+                              <div className="text-xs text-muted-foreground flex items-center gap-2">
+                                <span>{log.token_mint?.slice(0, 16)}...</span>
+                                <span>•</span>
+                                <span>{formatDistanceToNow(new Date(log.created_at), { addSuffix: true })}</span>
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  className="h-5 w-5"
+                                  onClick={() => window.open(`https://pump.fun/${log.token_mint}`, '_blank')}
+                                >
+                                  <ExternalLink className="h-3 w-3" />
+                                </Button>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Key Metrics Grid */}
+                        <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-3 text-sm">
+                          <div className="bg-background/50 rounded p-2">
+                            <div className="text-xs text-muted-foreground">Volume</div>
+                            <div className={Number(log.volume_sol) >= 0.1 ? 'text-green-500 font-medium' : 'text-muted-foreground'}>
+                              {Number(log.volume_sol).toFixed(3)} SOL
+                            </div>
+                          </div>
+                          <div className="bg-background/50 rounded p-2">
+                            <div className="text-xs text-muted-foreground">Transactions</div>
+                            <div className="font-medium">{log.tx_count || 0}</div>
+                          </div>
+                          <div className="bg-background/50 rounded p-2">
+                            <div className="text-xs text-muted-foreground">Bundle Score</div>
+                            <div className={`font-medium ${
+                              log.bundle_score !== null ? (
+                                log.bundle_score >= 50 ? 'text-red-500' : 
+                                log.bundle_score >= 30 ? 'text-yellow-500' : 'text-green-500'
+                              ) : ''
+                            }`}>
+                              {log.bundle_score !== null ? log.bundle_score : '-'}
+                            </div>
+                          </div>
+                          <div className="bg-background/50 rounded p-2">
+                            <div className="text-xs text-muted-foreground">Age</div>
+                            <div className="font-medium">{log.age_minutes ? `${Math.round(log.age_minutes)}m` : '-'}</div>
+                          </div>
+                          <div className="bg-background/50 rounded p-2">
+                            <div className="text-xs text-muted-foreground">Holders</div>
+                            <div className="font-medium">{log.holder_count || '-'}</div>
+                          </div>
+                          <div className="bg-background/50 rounded p-2">
+                            <div className="text-xs text-muted-foreground">Buy/Sell</div>
+                            <div className={`font-medium ${
+                              log.buy_sell_ratio !== null ? (
+                                log.buy_sell_ratio >= 2 ? 'text-green-500' : 
+                                log.buy_sell_ratio >= 1 ? 'text-yellow-500' : 'text-red-500'
+                              ) : ''
+                            }`}>
+                              {log.buys_count || 0}/{log.sells_count || 0}
+                              {log.buy_sell_ratio !== null && ` (${Number(log.buy_sell_ratio).toFixed(1)}x)`}
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Extended Metrics */}
+                        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm">
+                          <div className="bg-background/50 rounded p-2">
+                            <div className="text-xs text-muted-foreground">Market Cap</div>
+                            <div className="font-medium">
+                              {log.market_cap_usd ? `$${Number(log.market_cap_usd).toLocaleString(undefined, { maximumFractionDigits: 0 })}` : '-'}
+                            </div>
+                          </div>
+                          <div className="bg-background/50 rounded p-2">
+                            <div className="text-xs text-muted-foreground">Liquidity</div>
+                            <div className="font-medium">
+                              {log.liquidity_usd ? `$${Number(log.liquidity_usd).toLocaleString(undefined, { maximumFractionDigits: 0 })}` : '-'}
+                            </div>
+                          </div>
+                          <div className="bg-background/50 rounded p-2">
+                            <div className="text-xs text-muted-foreground">Top 5 Holdings</div>
+                            <div className={`font-medium ${
+                              log.top5_holder_pct !== null ? (
+                                log.top5_holder_pct >= 60 ? 'text-red-500' : 
+                                log.top5_holder_pct >= 40 ? 'text-yellow-500' : 'text-green-500'
+                              ) : ''
+                            }`}>
+                              {log.top5_holder_pct !== null ? `${Number(log.top5_holder_pct).toFixed(1)}%` : '-'}
+                            </div>
+                          </div>
+                          <div className="bg-background/50 rounded p-2">
+                            <div className="text-xs text-muted-foreground">Top 10 Holdings</div>
+                            <div className={`font-medium ${
+                              log.top10_holder_pct !== null ? (
+                                log.top10_holder_pct >= 80 ? 'text-red-500' : 
+                                log.top10_holder_pct >= 60 ? 'text-yellow-500' : 'text-green-500'
+                              ) : ''
+                            }`}>
+                              {log.top10_holder_pct !== null ? `${Number(log.top10_holder_pct).toFixed(1)}%` : '-'}
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Filters Passed/Failed */}
+                        <div className="flex flex-wrap gap-2">
+                          {log.passed_filters?.map((filter, i) => (
+                            <Badge key={`pass-${i}`} variant="outline" className="bg-green-500/10 text-green-600 border-green-500/30 text-xs">
+                              ✓ {filter}
+                            </Badge>
+                          ))}
+                          {log.failed_filters?.map((filter, i) => (
+                            <Badge key={`fail-${i}`} variant="outline" className="bg-red-500/10 text-red-500 border-red-500/30 text-xs">
+                              ✗ {filter}
+                            </Badge>
+                          ))}
+                        </div>
+
+                        {/* Acceptance Reasoning (for accepted tokens) */}
+                        {log.decision === 'accepted' && log.acceptance_reasoning && (
+                          <div className="bg-green-500/10 rounded p-3 border border-green-500/20">
+                            <div className="text-xs font-medium text-green-600 mb-2">Why this token was accepted:</div>
+                            <div className="text-sm text-green-700 dark:text-green-400">
+                              {log.acceptance_reasoning.summary}
+                            </div>
+                            {log.acceptance_reasoning.reasons && log.acceptance_reasoning.reasons.length > 0 && (
+                              <ul className="mt-2 text-xs text-green-600 dark:text-green-500 space-y-1">
+                                {log.acceptance_reasoning.reasons.map((reason, i) => (
+                                  <li key={i}>• {reason}</li>
+                                ))}
+                              </ul>
+                            )}
+                          </div>
+                        )}
+
+                        {/* Config Snapshot (collapsible) */}
+                        {log.config_snapshot && (
+                          <details className="text-xs text-muted-foreground">
+                            <summary className="cursor-pointer hover:text-foreground">Config at scan time</summary>
+                            <pre className="mt-1 p-2 bg-muted/50 rounded text-xs overflow-x-auto">
+                              {JSON.stringify(log.config_snapshot, null, 2)}
+                            </pre>
+                          </details>
+                        )}
+                      </div>
+                    ))
+                  )}
                 </div>
               </ScrollArea>
             </CardContent>

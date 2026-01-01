@@ -4254,49 +4254,100 @@ export type Database = {
       }
       pumpfun_discovery_logs: {
         Row: {
+          acceptance_reasoning: Json | null
           age_minutes: number | null
+          bonding_curve_pct: number | null
           bundle_score: number | null
+          buy_sell_ratio: number | null
+          buys_count: number | null
+          config_snapshot: Json | null
           created_at: string
+          creator_integrity_score: number | null
+          creator_wallet: string | null
           decision: string
+          failed_filters: string[] | null
           holder_count: number | null
           id: string
+          liquidity_usd: number | null
+          market_cap_usd: number | null
           metadata: Json | null
+          passed_filters: string[] | null
+          price_usd: number | null
           rejection_reason: string | null
+          score_breakdown: Json | null
+          sells_count: number | null
+          similar_holdings_count: number | null
           token_mint: string
           token_name: string | null
           token_symbol: string | null
+          top10_holder_pct: number | null
+          top5_holder_pct: number | null
           tx_count: number | null
           volume_sol: number | null
           volume_usd: number | null
         }
         Insert: {
+          acceptance_reasoning?: Json | null
           age_minutes?: number | null
+          bonding_curve_pct?: number | null
           bundle_score?: number | null
+          buy_sell_ratio?: number | null
+          buys_count?: number | null
+          config_snapshot?: Json | null
           created_at?: string
+          creator_integrity_score?: number | null
+          creator_wallet?: string | null
           decision: string
+          failed_filters?: string[] | null
           holder_count?: number | null
           id?: string
+          liquidity_usd?: number | null
+          market_cap_usd?: number | null
           metadata?: Json | null
+          passed_filters?: string[] | null
+          price_usd?: number | null
           rejection_reason?: string | null
+          score_breakdown?: Json | null
+          sells_count?: number | null
+          similar_holdings_count?: number | null
           token_mint: string
           token_name?: string | null
           token_symbol?: string | null
+          top10_holder_pct?: number | null
+          top5_holder_pct?: number | null
           tx_count?: number | null
           volume_sol?: number | null
           volume_usd?: number | null
         }
         Update: {
+          acceptance_reasoning?: Json | null
           age_minutes?: number | null
+          bonding_curve_pct?: number | null
           bundle_score?: number | null
+          buy_sell_ratio?: number | null
+          buys_count?: number | null
+          config_snapshot?: Json | null
           created_at?: string
+          creator_integrity_score?: number | null
+          creator_wallet?: string | null
           decision?: string
+          failed_filters?: string[] | null
           holder_count?: number | null
           id?: string
+          liquidity_usd?: number | null
+          market_cap_usd?: number | null
           metadata?: Json | null
+          passed_filters?: string[] | null
+          price_usd?: number | null
           rejection_reason?: string | null
+          score_breakdown?: Json | null
+          sells_count?: number | null
+          similar_holdings_count?: number | null
           token_mint?: string
           token_name?: string | null
           token_symbol?: string | null
+          top10_holder_pct?: number | null
+          top5_holder_pct?: number | null
           tx_count?: number | null
           volume_sol?: number | null
           volume_usd?: number | null
