@@ -54,19 +54,48 @@ const jsonResponse = (data: unknown, status = 200) =>
 const errorResponse = (message: string, status = 400) =>
   jsonResponse({ success: false, error: message }, status);
 
-// Log a discovery decision to the database
-async function logDiscovery(
-  supabase: any,
-  token: TokenData,
-  decision: 'accepted' | 'rejected' | 'error',
-  rejectionReason?: string,
-  metadata?: any
-) {
+// Comprehensive discovery log entry for learning and backtesting
+interface DiscoveryLogEntry {
+  token: TokenData;
+  decision: 'accepted' | 'rejected' | 'error';
+  rejectionReason?: string;
+  volumeSol: number;
+  volumeUsd: number;
+  txCount: number;
+  bundleScore?: number;
+  riskDetails?: any;
+  devIntegrityScore?: number;
+  config: MonitorConfig;
+  passedFilters: string[];
+  failedFilters: string[];
+  acceptanceReasoning?: string[];
+}
+
+// Log a discovery decision to the database with FULL reasoning
+async function logDiscovery(supabase: any, entry: DiscoveryLogEntry) {
   try {
+    const { token, decision, rejectionReason, volumeSol, volumeUsd, txCount, bundleScore, riskDetails, devIntegrityScore, config, passedFilters, failedFilters, acceptanceReasoning } = entry;
+    
     const pool = token.pools?.[0];
-    const txCount = (token.buys || 0) + (token.sells || 0) + (pool?.txns?.h24 || 0);
     const createdAt = token.events?.createdAt;
     const ageMinutes = createdAt ? (Date.now() - createdAt * 1000) / 60000 : null;
+    const priceUsd = pool?.price?.usd;
+    const liquidityUsd = pool?.liquidity?.usd;
+    const marketCapUsd = priceUsd ? priceUsd * 1_000_000_000 : null;
+    const bondingCurvePct = marketCapUsd ? Math.min(100, (marketCapUsd / 69000) * 100) : null;
+    const buysCount = token.buys || 0;
+    const sellsCount = token.sells || 0;
+    const buySellRatio = sellsCount > 0 ? buysCount / sellsCount : buysCount > 0 ? 999 : 0;
+
+    // Build score breakdown for understanding decisions
+    const scoreBreakdown = {
+      volumeScore: volumeSol >= config.min_volume_sol_5m ? 100 : (volumeSol / config.min_volume_sol_5m) * 100,
+      txScore: txCount >= config.min_transactions ? 100 : (txCount / config.min_transactions) * 100,
+      ageScore: ageMinutes && ageMinutes <= config.max_token_age_minutes ? 100 : 0,
+      bundleScore: bundleScore !== undefined ? Math.max(0, 100 - bundleScore) : null,
+      buySellRatioScore: buySellRatio >= 1 ? Math.min(100, buySellRatio * 20) : buySellRatio * 100,
+      holderScore: Math.min(100, (token.holders || 0) * 5),
+    };
 
     await supabase.from('pumpfun_discovery_logs').insert({
       token_mint: token.token?.mint,
@@ -74,17 +103,43 @@ async function logDiscovery(
       token_name: token.token?.name,
       decision,
       rejection_reason: rejectionReason,
-      volume_sol: metadata?.volumeSol || 0,
-      volume_usd: pool?.volume?.h24 || 0,
+      volume_sol: volumeSol,
+      volume_usd: volumeUsd,
       tx_count: txCount,
-      bundle_score: metadata?.bundleScore,
+      bundle_score: bundleScore,
       holder_count: token.holders,
       age_minutes: ageMinutes,
+      // New detailed columns
+      price_usd: priceUsd,
+      market_cap_usd: marketCapUsd,
+      liquidity_usd: liquidityUsd,
+      bonding_curve_pct: bondingCurvePct,
+      top5_holder_pct: riskDetails?.top5Holdings,
+      top10_holder_pct: riskDetails?.top10Holdings,
+      similar_holdings_count: riskDetails?.similarSizedCount,
+      creator_wallet: token.creator,
+      creator_integrity_score: devIntegrityScore,
+      buys_count: buysCount,
+      sells_count: sellsCount,
+      buy_sell_ratio: buySellRatio,
+      passed_filters: passedFilters,
+      failed_filters: failedFilters,
+      score_breakdown: scoreBreakdown,
+      acceptance_reasoning: decision === 'accepted' ? {
+        reasons: acceptanceReasoning || [],
+        summary: `Token passed ${passedFilters.length} filters with volume ${volumeSol.toFixed(3)} SOL, ${txCount} txs, bundle score ${bundleScore || 'N/A'}`,
+      } : null,
+      config_snapshot: {
+        min_volume_sol_5m: config.min_volume_sol_5m,
+        min_transactions: config.min_transactions,
+        max_token_age_minutes: config.max_token_age_minutes,
+        max_bundle_score: config.max_bundle_score,
+      },
       metadata: {
-        ...metadata,
-        creator: token.creator,
-        price_usd: pool?.price?.usd,
-        liquidity_usd: pool?.liquidity?.usd,
+        image: token.token?.image,
+        description: token.token?.description,
+        pool: pool,
+        riskDetails,
       },
     });
   } catch (error) {
@@ -262,7 +317,7 @@ async function pollForNewTokens(supabase: any, config: MonitorConfig) {
   };
 
   const solPrice = await getSolPrice(supabase);
-  const promisingTokens: Array<{ token: TokenData; volumeSol: number; volumeUsd: number; txCount: number }> = [];
+  const promisingTokens: Array<{ token: TokenData; volumeSol: number; volumeUsd: number; txCount: number; passedFilters: string[] }> = [];
 
   // PHASE 1: Quick filter using data we already have (NO extra API calls)
   console.log('🔍 Phase 1: Quick filtering...');
@@ -271,12 +326,24 @@ async function pollForNewTokens(supabase: any, config: MonitorConfig) {
       const mint = tokenData.token?.mint;
       if (!mint) continue;
 
+      const pool = tokenData.pools?.[0];
+      const volumeUsd = pool?.volume?.h24 || 0;
+      const volumeSol = solPrice > 0 ? volumeUsd / solPrice : 0;
+      const txCount = (tokenData.buys || 0) + (tokenData.sells || 0) + (pool?.txns?.h24 || 0);
+      const passedFilters: string[] = [];
+      const failedFilters: string[] = [];
+
       // Skip if already processed
       if (existingMints.has(mint)) {
         results.skippedExisting++;
-        await logDiscovery(supabase, tokenData, 'rejected', 'existing', { volumeSol: 0 });
+        failedFilters.push('existing_candidate');
+        await logDiscovery(supabase, {
+          token: tokenData, decision: 'rejected', rejectionReason: 'existing',
+          volumeSol, volumeUsd, txCount, config, passedFilters, failedFilters,
+        });
         continue;
       }
+      passedFilters.push('not_existing');
 
       // Check token age using data from initial response
       const createdAt = tokenData.events?.createdAt;
@@ -284,37 +351,48 @@ async function pollForNewTokens(supabase: any, config: MonitorConfig) {
         const ageMinutes = (Date.now() - createdAt * 1000) / 60000;
         if (ageMinutes > config.max_token_age_minutes) {
           results.skippedOld++;
+          failedFilters.push(`age_too_old_${ageMinutes.toFixed(0)}m`);
           console.log(`⏰ ${tokenData.token?.symbol || mint.slice(0, 8)}: Too old (${ageMinutes.toFixed(0)} min)`);
-          await logDiscovery(supabase, tokenData, 'rejected', 'too_old', { volumeSol: 0, ageMinutes });
+          await logDiscovery(supabase, {
+            token: tokenData, decision: 'rejected', rejectionReason: 'too_old',
+            volumeSol, volumeUsd, txCount, config, passedFilters, failedFilters,
+          });
           continue;
         }
+        passedFilters.push(`age_ok_${ageMinutes.toFixed(0)}m`);
+      } else {
+        passedFilters.push('age_unknown');
       }
-
-      // Calculate volume in SOL using data from initial response
-      const pool = tokenData.pools?.[0];
-      const volumeUsd = pool?.volume?.h24 || 0;
-      const volumeSol = solPrice > 0 ? volumeUsd / solPrice : 0;
-      const txCount = (tokenData.buys || 0) + (tokenData.sells || 0) + (pool?.txns?.h24 || 0);
 
       // Volume filter
       if (volumeSol < config.min_volume_sol_5m) {
         results.skippedLowVolume++;
+        failedFilters.push(`volume_${volumeSol.toFixed(3)}_SOL_below_${config.min_volume_sol_5m}`);
         console.log(`📉 ${tokenData.token?.symbol || mint.slice(0, 8)}: Low volume (${volumeSol.toFixed(3)} SOL)`);
-        await logDiscovery(supabase, tokenData, 'rejected', 'low_volume', { volumeSol, txCount });
+        await logDiscovery(supabase, {
+          token: tokenData, decision: 'rejected', rejectionReason: 'low_volume',
+          volumeSol, volumeUsd, txCount, config, passedFilters, failedFilters,
+        });
         continue;
       }
+      passedFilters.push(`volume_${volumeSol.toFixed(2)}_SOL`);
 
       // Transaction filter
       if (txCount < config.min_transactions) {
         results.skippedLowVolume++;
+        failedFilters.push(`txs_${txCount}_below_${config.min_transactions}`);
         console.log(`📉 ${tokenData.token?.symbol || mint.slice(0, 8)}: Low txs (${txCount})`);
-        await logDiscovery(supabase, tokenData, 'rejected', 'low_transactions', { volumeSol, txCount });
+        await logDiscovery(supabase, {
+          token: tokenData, decision: 'rejected', rejectionReason: 'low_transactions',
+          volumeSol, volumeUsd, txCount, config, passedFilters, failedFilters,
+        });
         continue;
       }
+      passedFilters.push(`txs_${txCount}`);
 
       // This token passed quick filters - add to promising list
       console.log(`✅ ${tokenData.token?.symbol || mint.slice(0, 8)}: Passed quick filters (Vol: ${volumeSol.toFixed(2)} SOL, Txs: ${txCount})`);
-      promisingTokens.push({ token: tokenData, volumeSol, volumeUsd, txCount });
+      promisingTokens.push({ token: tokenData, volumeSol, volumeUsd, txCount, passedFilters });
     } catch (error) {
       console.error('Error in quick filter:', error);
       results.errors++;
@@ -327,8 +405,10 @@ async function pollForNewTokens(supabase: any, config: MonitorConfig) {
   if (promisingTokens.length > 0) {
     console.log('🔬 Phase 2: Deep analysis...');
     
-    for (const { token: tokenData, volumeSol, volumeUsd, txCount } of promisingTokens) {
+    for (const { token: tokenData, volumeSol, volumeUsd, txCount, passedFilters } of promisingTokens) {
       const mint = tokenData.token?.mint!;
+      const failedFilters: string[] = [];
+      let devIntegrityScore: number | undefined;
       
       try {
         // Small delay between API calls
@@ -339,24 +419,37 @@ async function pollForNewTokens(supabase: any, config: MonitorConfig) {
         
         if (riskAnalysis.bundleScore > config.max_bundle_score) {
           results.skippedHighRisk++;
+          failedFilters.push(`bundle_score_${riskAnalysis.bundleScore}_above_${config.max_bundle_score}`);
           console.log(`⚠️ ${tokenData.token?.symbol || mint.slice(0, 8)}: High bundle score (${riskAnalysis.bundleScore})`);
-          await logDiscovery(supabase, tokenData, 'rejected', 'high_bundle_score', { 
-            volumeSol, 
-            bundleScore: riskAnalysis.bundleScore,
-            ...riskAnalysis.details 
+          await logDiscovery(supabase, {
+            token: tokenData, decision: 'rejected', rejectionReason: 'high_bundle_score',
+            volumeSol, volumeUsd, txCount, bundleScore: riskAnalysis.bundleScore,
+            riskDetails: riskAnalysis.details, config, passedFilters, failedFilters,
           });
           continue;
         }
+        passedFilters.push(`bundle_score_${riskAnalysis.bundleScore}`);
 
         // Check developer reputation (local DB query, fast)
         const creatorWallet = tokenData.creator;
         if (creatorWallet) {
           const devCheck = await checkDeveloperReputation(supabase, creatorWallet);
+          devIntegrityScore = devCheck.integrityScore;
           if (devCheck.isScam) {
             results.skippedHighRisk++;
+            failedFilters.push(`scam_dev_integrity_${devCheck.integrityScore}`);
             console.log(`⚠️ ${tokenData.token?.symbol || mint.slice(0, 8)}: Scam dev flagged`);
-            await logDiscovery(supabase, tokenData, 'rejected', 'scam_developer', { volumeSol, integrityScore: devCheck.integrityScore });
+            await logDiscovery(supabase, {
+              token: tokenData, decision: 'rejected', rejectionReason: 'scam_developer',
+              volumeSol, volumeUsd, txCount, bundleScore: riskAnalysis.bundleScore,
+              riskDetails: riskAnalysis.details, devIntegrityScore, config, passedFilters, failedFilters,
+            });
             continue;
+          }
+          if (devIntegrityScore !== undefined) {
+            passedFilters.push(`dev_integrity_${devIntegrityScore}`);
+          } else {
+            passedFilters.push('dev_unknown');
           }
         }
 
@@ -364,6 +457,20 @@ async function pollForNewTokens(supabase: any, config: MonitorConfig) {
         const pool = tokenData.pools?.[0];
         const marketCapUsd = pool?.price?.usd ? pool.price.usd * 1_000_000_000 : null;
         const bondingCurvePct = marketCapUsd ? Math.min(100, (marketCapUsd / 69000) * 100) : null;
+
+        // Build acceptance reasoning
+        const acceptanceReasoning = [
+          `Volume: ${volumeSol.toFixed(3)} SOL (min: ${config.min_volume_sol_5m})`,
+          `Transactions: ${txCount} (min: ${config.min_transactions})`,
+          `Bundle Score: ${riskAnalysis.bundleScore} (max: ${config.max_bundle_score})`,
+          `Holders: ${tokenData.holders || riskAnalysis.details.holderCount || 'unknown'}`,
+          `Top5 Holdings: ${riskAnalysis.details.top5Holdings?.toFixed(1) || 'N/A'}%`,
+          `Top10 Holdings: ${riskAnalysis.details.top10Holdings?.toFixed(1) || 'N/A'}%`,
+          `Buy/Sell Ratio: ${tokenData.buys || 0}/${tokenData.sells || 0}`,
+          bondingCurvePct ? `Bonding Curve: ${bondingCurvePct.toFixed(1)}%` : null,
+          marketCapUsd ? `Market Cap: $${marketCapUsd.toFixed(0)}` : null,
+          devIntegrityScore !== undefined ? `Dev Integrity: ${devIntegrityScore}` : 'Dev: Unknown',
+        ].filter(Boolean) as string[];
 
         // Insert as candidate
         const candidateData = {
@@ -396,21 +503,34 @@ async function pollForNewTokens(supabase: any, config: MonitorConfig) {
         if (insertError) {
           if (insertError.code === '23505') {
             results.skippedExisting++;
-            await logDiscovery(supabase, tokenData, 'rejected', 'duplicate', { volumeSol });
+            failedFilters.push('duplicate_insert');
+            await logDiscovery(supabase, {
+              token: tokenData, decision: 'rejected', rejectionReason: 'duplicate',
+              volumeSol, volumeUsd, txCount, bundleScore: riskAnalysis.bundleScore,
+              riskDetails: riskAnalysis.details, config, passedFilters, failedFilters,
+            });
           } else {
             console.error(`Error inserting candidate:`, insertError);
             results.errors++;
-            await logDiscovery(supabase, tokenData, 'error', 'insert_failed', { error: insertError.message });
+            failedFilters.push(`insert_error_${insertError.code}`);
+            await logDiscovery(supabase, {
+              token: tokenData, decision: 'error', rejectionReason: 'insert_failed',
+              volumeSol, volumeUsd, txCount, bundleScore: riskAnalysis.bundleScore,
+              riskDetails: riskAnalysis.details, config, passedFilters, failedFilters,
+            });
           }
           continue;
         }
 
+        // 🎉 TOKEN ACCEPTED - Log with full reasoning
+        passedFilters.push('inserted_as_candidate');
         results.candidatesAdded++;
         console.log(`🚀 Added candidate: ${candidateData.token_symbol} (${mint.slice(0, 8)}...)`);
-        await logDiscovery(supabase, tokenData, 'accepted', undefined, { 
-          volumeSol, 
-          bundleScore: riskAnalysis.bundleScore,
-          holderCount: candidateData.holder_count 
+        await logDiscovery(supabase, {
+          token: tokenData, decision: 'accepted',
+          volumeSol, volumeUsd, txCount, bundleScore: riskAnalysis.bundleScore,
+          riskDetails: riskAnalysis.details, devIntegrityScore, config, passedFilters, failedFilters,
+          acceptanceReasoning,
         });
 
         // Auto-scalp integration if enabled
@@ -439,7 +559,11 @@ async function pollForNewTokens(supabase: any, config: MonitorConfig) {
       } catch (error) {
         console.error('Error processing token:', error);
         results.errors++;
-        await logDiscovery(supabase, tokenData, 'error', 'processing_failed', { error: String(error) });
+        failedFilters.push(`processing_error`);
+        await logDiscovery(supabase, {
+          token: tokenData, decision: 'error', rejectionReason: 'processing_failed',
+          volumeSol, volumeUsd, txCount, config, passedFilters, failedFilters,
+        });
       }
     }
   }
