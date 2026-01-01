@@ -562,8 +562,82 @@ export function TokenCandidatesDashboard() {
               </Button>
             </div>
           </div>
+          
+          {/* Last Poll Summary Panel */}
+          {lastPollSummary && (
+            <div className="mt-4 bg-muted/30 border rounded-lg p-4">
+              <div className="flex items-center justify-between mb-3">
+                <h4 className="font-medium flex items-center gap-2">
+                  <CheckCircle className="h-4 w-4 text-green-500" />
+                  Last Poll Results
+                </h4>
+                <span className="text-sm text-muted-foreground">
+                  {lastPollSummary.durationMs ? `${(lastPollSummary.durationMs / 1000).toFixed(1)}s` : ''}
+                </span>
+              </div>
+              <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-3 text-sm">
+                <div className="bg-background rounded p-2">
+                  <div className="text-xs text-muted-foreground">Scanned</div>
+                  <div className="font-bold text-lg">{lastPollSummary.tokensScanned}</div>
+                </div>
+                <div className="bg-background rounded p-2">
+                  <div className="text-xs text-muted-foreground">Candidates Added</div>
+                  <div className="font-bold text-lg text-green-500">{lastPollSummary.candidatesAdded}</div>
+                </div>
+                <div className="bg-background rounded p-2">
+                  <div className="text-xs text-muted-foreground">Skipped (Existing)</div>
+                  <div className="font-medium">{lastPollSummary.skippedExisting}</div>
+                </div>
+                <div className="bg-background rounded p-2">
+                  <div className="text-xs text-muted-foreground">Low Volume</div>
+                  <div className="font-medium">{lastPollSummary.skippedLowVolume}</div>
+                </div>
+                <div className="bg-background rounded p-2">
+                  <div className="text-xs text-muted-foreground">Too Old</div>
+                  <div className="font-medium">{lastPollSummary.skippedOld}</div>
+                </div>
+                <div className="bg-background rounded p-2">
+                  <div className="text-xs text-muted-foreground">High Risk</div>
+                  <div className="font-medium text-red-500">{lastPollSummary.skippedHighRisk}</div>
+                </div>
+                <div className="bg-background rounded p-2">
+                  <div className="text-xs text-muted-foreground">Mayhem Mode</div>
+                  <div className="font-medium text-orange-500">{lastPollSummary.skippedMayhemMode}</div>
+                </div>
+                <div className="bg-background rounded p-2">
+                  <div className="text-xs text-muted-foreground">Early DEX Paid</div>
+                  <div className="font-medium">{lastPollSummary.skippedEarlyDexPaid}</div>
+                </div>
+                {lastPollSummary.errors > 0 && (
+                  <div className="bg-red-500/10 rounded p-2">
+                    <div className="text-xs text-red-500">Errors</div>
+                    <div className="font-medium text-red-500">{lastPollSummary.errors}</div>
+                  </div>
+                )}
+              </div>
+              {lastPollSummary.pollRunId && (
+                <div className="mt-3 flex items-center gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => {
+                      setMainTab('logs');
+                      setLogsFilter('this_poll');
+                      fetchDiscoveryLogs(lastPollSummary.pollRunId);
+                    }}
+                  >
+                    <FileText className="h-3 w-3 mr-1" />
+                    View This Poll's Logs
+                  </Button>
+                  <span className="text-xs text-muted-foreground">
+                    ID: {lastPollSummary.pollRunId.slice(0, 8)}...
+                  </span>
+                </div>
+              )}
+            </div>
+          )}
         </CardHeader>
-        <CardContent>
+        <CardContent className="space-y-4">
           <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4">
             <div className="space-y-2">
               <Label className="text-xs">Min Volume (SOL)</Label>
@@ -624,7 +698,7 @@ export function TokenCandidatesDashboard() {
               </div>
             </div>
           </div>
-          <div className="mt-4 flex justify-end">
+          <div className="flex justify-end">
             <Button onClick={saveConfig} size="sm">
               Save Configuration
             </Button>
@@ -685,12 +759,27 @@ export function TokenCandidatesDashboard() {
                         ) : (
                           filteredCandidates.map((candidate) => (
                             <TableRow key={candidate.id}>
-                              <TableCell>
-                                <div className="flex flex-col">
+                            <TableCell>
+                                <div className="flex flex-col gap-1">
                                   <span className="font-medium">{candidate.token_symbol || 'Unknown'}</span>
-                                  <span className="text-xs text-muted-foreground truncate max-w-[120px]">
-                                    {candidate.token_mint?.slice(0, 8)}...
-                                  </span>
+                                  <div className="flex items-center gap-1">
+                                    <a 
+                                      href={`https://pump.fun/${candidate.token_mint}`}
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                      className="text-xs text-primary hover:underline truncate max-w-[100px]"
+                                    >
+                                      {candidate.token_mint?.slice(0, 8)}...
+                                    </a>
+                                    <Button
+                                      variant="ghost"
+                                      size="icon"
+                                      className="h-5 w-5"
+                                      onClick={() => copyToClipboard(candidate.token_mint)}
+                                    >
+                                      <Copy className="h-3 w-3" />
+                                    </Button>
+                                  </div>
                                 </div>
                               </TableCell>
                               <TableCell>
@@ -820,6 +909,23 @@ export function TokenCandidatesDashboard() {
                     <ThumbsUp className="h-3 w-3 mr-1" />
                     Should've Bought ({logStats.shouldHaveBought})
                   </Button>
+                  {lastPollSummary?.pollRunId && (
+                    <Button 
+                      variant={logsFilter === 'this_poll' ? 'default' : 'outline'} 
+                      size="sm"
+                      onClick={() => {
+                        setLogsFilter('this_poll');
+                        fetchDiscoveryLogs(lastPollSummary.pollRunId);
+                      }}
+                      className={logsFilter === 'this_poll' ? '' : 'text-blue-500 border-blue-500/30 hover:bg-blue-500/10'}
+                    >
+                      <Zap className="h-3 w-3 mr-1" />
+                      This Poll
+                    </Button>
+                  )}
+                </div>
+                <div className="text-sm text-muted-foreground">
+                  Showing {filteredLogs.length} of {totalLogsCount.toLocaleString()} total logs
                 </div>
               </div>
 
@@ -927,18 +1033,35 @@ export function TokenCandidatesDashboard() {
                                   </Badge>
                                 )}
                               </div>
-                              <div className="text-xs text-muted-foreground flex items-center gap-2">
-                                <span>{log.token_mint?.slice(0, 16)}...</span>
-                                <span>•</span>
-                                <span>{formatDistanceToNow(new Date(log.created_at), { addSuffix: true })}</span>
+                              <div className="text-xs text-muted-foreground flex items-center gap-2 flex-wrap">
+                                <a 
+                                  href={`https://pump.fun/${log.token_mint}`}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="text-primary hover:underline font-mono"
+                                >
+                                  {log.token_mint?.slice(0, 16)}...
+                                </a>
                                 <Button
                                   variant="ghost"
                                   size="icon"
                                   className="h-5 w-5"
-                                  onClick={() => window.open(`https://pump.fun/${log.token_mint}`, '_blank')}
+                                  onClick={() => copyToClipboard(log.token_mint)}
+                                  title="Copy mint address"
+                                >
+                                  <Copy className="h-3 w-3" />
+                                </Button>
+                                <span>•</span>
+                                <span>{formatDistanceToNow(new Date(log.created_at), { addSuffix: true })}</span>
+                                <a
+                                  href={`https://dexscreener.com/solana/${log.token_mint}`}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="hover:text-primary"
+                                  title="DexScreener"
                                 >
                                   <ExternalLink className="h-3 w-3" />
-                                </Button>
+                                </a>
                               </div>
                             </div>
                           </div>
@@ -1161,6 +1284,26 @@ export function TokenCandidatesDashboard() {
                   )}
                 </div>
               </ScrollArea>
+              
+              {/* Load More Pagination */}
+              {filteredLogs.length > 0 && filteredLogs.length < totalLogsCount && logsFilter !== 'this_poll' && (
+                <div className="mt-4 flex items-center justify-center gap-4">
+                  <Button
+                    variant="outline"
+                    onClick={() => {
+                      setLogsPage(prev => prev + 1);
+                      fetchDiscoveryLogs();
+                    }}
+                    className="gap-2"
+                  >
+                    <ChevronDown className="h-4 w-4" />
+                    Load More ({LOGS_PER_PAGE} more)
+                  </Button>
+                  <span className="text-sm text-muted-foreground">
+                    Page {logsPage + 1}
+                  </span>
+                </div>
+              )}
             </CardContent>
           </Card>
         </TabsContent>
