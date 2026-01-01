@@ -603,16 +603,18 @@ serve(async (req) => {
         });
 
       } catch (buyErr: any) {
-        // Mark position as failed
-        await supabase
-          .from("flip_positions")
-          .update({
-            status: "failed",
-            error_message: buyErr.message
-          })
-          .eq("id", position.id);
+        const errMsg = buyErr?.message || String(buyErr);
 
-        return bad("Buy failed: " + buyErr.message);
+        // User asked: don't insert rows when a buy fails.
+        // Delete the pending position so failed attempts don't show up as "holding"/"failed" positions.
+        try {
+          await supabase.from("flip_positions").delete().eq("id", position.id);
+        } catch (delErr) {
+          console.error("Failed to delete failed buy position:", delErr);
+        }
+
+        console.error("Buy failed:", errMsg);
+        return ok({ success: false, error: `Buy failed: ${errMsg}` });
       }
     }
 

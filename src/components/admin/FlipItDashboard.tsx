@@ -1136,7 +1136,20 @@ export function FlipItDashboard() {
         refreshWalletBalance(); // Auto-refresh wallet balance after buy
       }
     } catch (err: any) {
-      toast.error(err.message || 'Failed to execute flip');
+      let msg = err?.message || 'Failed to execute flip';
+
+      // Supabase functions can throw FunctionsHttpError for non-2xx; extract the JSON body.
+      try {
+        const ctx = err?.context;
+        if (ctx && typeof ctx.json === 'function') {
+          const payload = await ctx.json();
+          if (payload?.error) msg = String(payload.error);
+        }
+      } catch {
+        // ignore
+      }
+
+      toast.error(msg);
     } finally {
       setIsFlipping(false);
     }
