@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -9,11 +9,13 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { 
   RefreshCw, 
   Play, 
+  Pause,
   CheckCircle, 
   XCircle, 
   Activity,
@@ -30,7 +32,8 @@ import {
   Rocket,
   Plus,
   Minus,
-  ShoppingCart
+  ShoppingCart,
+  Timer
 } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
 
@@ -118,14 +121,33 @@ interface MonitorConfig {
   last_poll_at: string;
   tokens_processed_count: number;
   candidates_found_count: number;
-  // New watchlist config fields
+  // Watchlist config fields
   min_watch_time_minutes?: number;
   max_watch_time_minutes?: number;
   qualification_holder_count?: number;
   qualification_volume_sol?: number;
   dead_holder_threshold?: number;
   dead_volume_threshold_sol?: number;
+  // Polling and attrition config
+  polling_interval_seconds?: number;
+  log_retention_hours?: number;
+  dead_retention_hours?: number;
+  max_reevaluate_minutes?: number;
+  resurrection_holder_threshold?: number;
+  resurrection_volume_threshold_sol?: number;
 }
+
+// Format price to readable decimal (not scientific notation)
+const formatPrice = (price: number | null | undefined): string => {
+  if (price === null || price === undefined || isNaN(price)) return '-';
+  if (price === 0) return '$0';
+  if (price >= 1) return `$${price.toFixed(2)}`;
+  if (price >= 0.01) return `$${price.toFixed(4)}`;
+  if (price >= 0.0001) return `$${price.toFixed(6)}`;
+  // For very small prices, show enough decimal places
+  const formatted = price.toFixed(10).replace(/\.?0+$/, '');
+  return `$${formatted}`;
+};
 
 interface PollSummary {
   tokensScanned: number;
@@ -199,6 +221,13 @@ export function TokenCandidatesDashboard() {
   const [watchlistSortDirection, setWatchlistSortDirection] = useState<SortDirection>('desc');
   const [logsSortColumn, setLogsSortColumn] = useState<LogsSortColumn>('created_at');
   const [logsSortDirection, setLogsSortDirection] = useState<SortDirection>('desc');
+
+  // Continuous polling state
+  const [continuousPolling, setContinuousPolling] = useState(false);
+  const [pollingInterval, setPollingInterval] = useState(60); // seconds
+  const [nextPollIn, setNextPollIn] = useState<number | null>(null);
+  const pollingTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const countdownTimerRef = useRef<NodeJS.Timeout | null>(null);
 
   // Fetch watchlist
   const fetchWatchlist = useCallback(async () => {
@@ -294,6 +323,59 @@ export function TokenCandidatesDashboard() {
       supabase.removeChannel(channel);
     };
   }, [fetchWatchlist, fetchCandidates, fetchConfig, fetchDiscoveryLogs]);
+
+  // Continuous polling effect
+  useEffect(() => {
+    if (continuousPolling) {
+      // Start countdown
+      setNextPollIn(pollingInterval);
+      
+      // Countdown timer
+      countdownTimerRef.current = setInterval(() => {
+        setNextPollIn(prev => {
+          if (prev === null || prev <= 1) return pollingInterval;
+          return prev - 1;
+        });
+      }, 1000);
+      
+      // Poll timer - immediate first poll then interval
+      const runPoll = async () => {
+        if (!polling) {
+          await triggerPoll();
+        }
+      };
+      
+      // Start polling after the interval
+      pollingTimerRef.current = setInterval(runPoll, pollingInterval * 1000);
+      
+      return () => {
+        if (pollingTimerRef.current) clearInterval(pollingTimerRef.current);
+        if (countdownTimerRef.current) clearInterval(countdownTimerRef.current);
+      };
+    } else {
+      // Clean up timers
+      if (pollingTimerRef.current) clearInterval(pollingTimerRef.current);
+      if (countdownTimerRef.current) clearInterval(countdownTimerRef.current);
+      setNextPollIn(null);
+    }
+  }, [continuousPolling, pollingInterval]);
+
+  // Stop continuous polling when component unmounts
+  useEffect(() => {
+    return () => {
+      if (pollingTimerRef.current) clearInterval(pollingTimerRef.current);
+      if (countdownTimerRef.current) clearInterval(countdownTimerRef.current);
+    };
+  }, []);
+
+  // Start/stop continuous polling
+  const toggleContinuousPolling = () => {
+    if (!continuousPolling) {
+      // Starting - trigger immediate poll
+      triggerPoll();
+    }
+    setContinuousPolling(!continuousPolling);
+  };
 
   // Poll trigger with new watchlist model
   const triggerPoll = async () => {
@@ -398,18 +480,23 @@ export function TokenCandidatesDashboard() {
     }
   };
 
-  // Delta display helper
-  const DeltaDisplay = ({ current, prev, suffix = '' }: { current: number; prev: number | null; suffix?: string }) => {
+  // Delta display helper - isInteger flag for holder counts
+  const DeltaDisplay = ({ current, prev, suffix = '', isInteger = false }: { current: number; prev: number | null; suffix?: string; isInteger?: boolean }) => {
+    const formatVal = (val: number) => {
+      if (isInteger) return Math.round(val).toString();
+      return val < 10 ? val.toFixed(2) : val.toFixed(0);
+    };
+    
     if (prev === null || prev === undefined) {
-      return <span>{current?.toFixed?.(current < 10 ? 2 : 0) ?? current}{suffix}</span>;
+      return <span>{formatVal(current)}{suffix}</span>;
     }
     const delta = current - prev;
-    if (delta === 0) return <span>{current?.toFixed?.(current < 10 ? 2 : 0) ?? current}{suffix}</span>;
+    if (delta === 0) return <span>{formatVal(current)}{suffix}</span>;
     return (
       <span className="flex items-center gap-1">
-        {current?.toFixed?.(current < 10 ? 2 : 0) ?? current}{suffix}
+        {formatVal(current)}{suffix}
         <span className={delta > 0 ? 'text-green-500 text-xs' : 'text-red-500 text-xs'}>
-          ({delta > 0 ? '+' : ''}{delta?.toFixed?.(delta < 10 && delta > -10 ? 2 : 0) ?? delta})
+          ({delta > 0 ? '+' : ''}{isInteger ? Math.round(delta) : (Math.abs(delta) < 10 ? delta.toFixed(2) : delta.toFixed(0))})
         </span>
       </span>
     );
@@ -537,13 +624,57 @@ export function TokenCandidatesDashboard() {
           <span className="font-bold">{candidates.length}</span>
         </div>
         <div className="ml-auto flex items-center gap-2">
-          <span className="text-xs text-muted-foreground">
-            Last poll: {config?.last_poll_at ? formatDistanceToNow(new Date(config.last_poll_at), { addSuffix: true }) : 'Never'}
-          </span>
+          {/* Polling interval selector */}
+          <div className="flex items-center gap-1">
+            <Timer className="h-3 w-3 text-muted-foreground" />
+            <Select 
+              value={pollingInterval.toString()} 
+              onValueChange={(v) => setPollingInterval(parseInt(v))}
+              disabled={continuousPolling}
+            >
+              <SelectTrigger className="h-7 w-[80px] text-xs">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="15">15s</SelectItem>
+                <SelectItem value="30">30s</SelectItem>
+                <SelectItem value="60">1m</SelectItem>
+                <SelectItem value="120">2m</SelectItem>
+                <SelectItem value="300">5m</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          
+          {/* Auto-poll toggle */}
+          <Button 
+            variant={continuousPolling ? "destructive" : "default"} 
+            size="sm" 
+            onClick={toggleContinuousPolling}
+            className="min-w-[90px]"
+          >
+            {continuousPolling ? (
+              <>
+                <Pause className="h-3 w-3 mr-1" />
+                {nextPollIn !== null ? `${nextPollIn}s` : 'Stop'}
+              </>
+            ) : (
+              <>
+                <Play className="h-3 w-3 mr-1" />
+                Auto
+              </>
+            )}
+          </Button>
+          
+          {/* Manual poll */}
           <Button variant="outline" size="sm" onClick={triggerPoll} disabled={polling}>
             {polling ? <RefreshCw className="h-4 w-4 animate-spin" /> : <Play className="h-4 w-4" />}
             <span className="ml-1">Poll</span>
           </Button>
+          
+          <span className="text-xs text-muted-foreground">
+            {config?.last_poll_at ? formatDistanceToNow(new Date(config.last_poll_at), { addSuffix: true }) : 'Never'}
+          </span>
+          
           <Button variant="ghost" size="sm" onClick={() => { fetchWatchlist(); fetchCandidates(); }}>
             <RefreshCw className="h-4 w-4" />
           </Button>
@@ -744,16 +875,16 @@ export function TokenCandidatesDashboard() {
                               </div>
                             </TableCell>
                             <TableCell compact>
-                              <DeltaDisplay current={item.holder_count} prev={item.holder_count_prev} />
+                              <DeltaDisplay current={item.holder_count} prev={item.holder_count_prev} isInteger />
                             </TableCell>
                             <TableCell compact>
                               <DeltaDisplay current={Number(item.volume_sol)} prev={item.volume_sol_prev ? Number(item.volume_sol_prev) : null} />
                             </TableCell>
                             <TableCell compact className="text-xs">
-                              {item.price_usd ? `$${Number(item.price_usd).toExponential(2)}` : '-'}
+                              {formatPrice(item.price_usd)}
                             </TableCell>
                             <TableCell compact className="text-xs text-green-500">
-                              {item.price_ath_usd ? `$${Number(item.price_ath_usd).toExponential(2)}` : '-'}
+                              {formatPrice(item.price_ath_usd)}
                             </TableCell>
                             <TableCell compact className="text-xs text-muted-foreground">
                               {formatDistanceToNow(new Date(item.first_seen_at), { addSuffix: false })}
