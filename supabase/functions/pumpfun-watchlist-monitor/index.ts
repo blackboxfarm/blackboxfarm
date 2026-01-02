@@ -51,6 +51,8 @@ interface MonitorStats {
   deadTokens: string[];
   devSellTokens: string[];
   skippedRecent: number;
+  rugcheckRejected: number;
+  rugcheckTokens: string[];
 }
 
 interface TokenMetrics {
@@ -62,6 +64,24 @@ interface TokenMetrics {
   bondingCurvePct: number | null;
   buys: number;
   sells: number;
+}
+
+interface RugCheckRisk {
+  name: string;
+  value: string;
+  description: string;
+  score: number;
+  level: 'danger' | 'warn' | 'info' | 'good';
+}
+
+interface RugCheckResult {
+  score: number;
+  normalised: number;
+  risks: RugCheckRisk[];
+  passed: boolean;
+  hasCriticalRisk: boolean;
+  criticalRiskNames: string[];
+  error?: string;
 }
 
 // Delay helper
@@ -159,6 +179,80 @@ async function getSolPrice(supabase: any): Promise<number> {
   }
 }
 
+// Fetch RugCheck analysis for buy gate verification
+async function fetchRugCheckForBuyGate(mint: string, config: any): Promise<RugCheckResult> {
+  const defaultResult: RugCheckResult = {
+    score: 0,
+    normalised: 0,
+    risks: [],
+    passed: false,
+    hasCriticalRisk: false,
+    criticalRiskNames: [],
+  };
+
+  try {
+    // Rate limit delay
+    await delay(config.rugcheck_rate_limit_ms || 500);
+    
+    const response = await fetch(`https://api.rugcheck.xyz/v1/tokens/${mint}/report/summary`, {
+      headers: { 'Accept': 'application/json' },
+    });
+
+    if (!response.ok) {
+      console.log(`   ⚠️ RugCheck API error: ${response.status} - failing open`);
+      // Fail open - don't block buy if API is down
+      return { ...defaultResult, passed: true, error: `API error: ${response.status}` };
+    }
+
+    const data = await response.json();
+    
+    // Extract score (RugCheck score: 0-1000, higher = safer)
+    const rawScore = data.score || 0;
+    const normalised = Math.min(100, Math.max(0, rawScore / 10)); // Convert to 0-100
+    
+    // Extract risks
+    const risks: RugCheckRisk[] = (data.risks || []).map((r: any) => ({
+      name: r.name || 'Unknown',
+      value: r.value || '',
+      description: r.description || '',
+      score: r.score || 0,
+      level: r.level || 'info',
+    }));
+    
+    // Check for critical risks
+    const criticalRiskList: string[] = config.rugcheck_critical_risks || [
+      'Freeze Authority still enabled',
+      'Mint Authority still enabled',
+      'Low Liquidity',
+      'Copycat token',
+      'Top 10 holders own high percentage',
+      'Single holder owns high percentage',
+    ];
+    
+    const dangerRisks = risks.filter(r => r.level === 'danger');
+    const criticalRiskNames = dangerRisks
+      .filter(r => criticalRiskList.some(cr => r.name.toLowerCase().includes(cr.toLowerCase())))
+      .map(r => r.name);
+    
+    const hasCriticalRisk = criticalRiskNames.length > 0;
+    const minScore = config.min_rugcheck_score || 50;
+    const passed = normalised >= minScore && !hasCriticalRisk;
+    
+    return {
+      score: rawScore,
+      normalised,
+      risks,
+      passed,
+      hasCriticalRisk,
+      criticalRiskNames,
+    };
+  } catch (error) {
+    console.error(`   ⚠️ RugCheck error for ${mint}:`, error);
+    // Fail open - don't block buy if API call fails
+    return { ...defaultResult, passed: true, error: String(error) };
+  }
+}
+
 // Get monitor config
 async function getConfig(supabase: any) {
   const { data } = await supabase
@@ -177,6 +271,18 @@ async function getConfig(supabase: any) {
     qualification_volume_sol: data?.qualification_volume_sol ?? 0.5,
     max_bundle_score: data?.max_bundle_score ?? 70,
     max_single_wallet_pct: data?.max_single_wallet_pct ?? 15,
+    // RugCheck thresholds
+    min_rugcheck_score: data?.min_rugcheck_score ?? 50,
+    rugcheck_critical_risks: data?.rugcheck_critical_risks ?? [
+      'Freeze Authority still enabled',
+      'Mint Authority still enabled',
+      'Low Liquidity',
+      'Copycat token',
+      'Top 10 holders own high percentage',
+      'Single holder owns high percentage',
+    ],
+    rugcheck_recheck_minutes: data?.rugcheck_recheck_minutes ?? 30,
+    rugcheck_rate_limit_ms: data?.rugcheck_rate_limit_ms ?? 500,
   };
 }
 
@@ -196,6 +302,8 @@ async function monitorWatchlistTokens(supabase: any): Promise<MonitorStats> {
     deadTokens: [],
     devSellTokens: [],
     skippedRecent: 0,
+    rugcheckRejected: 0,
+    rugcheckTokens: [],
   };
 
   console.log('👁️ WATCHLIST MONITOR: Starting monitoring cycle...');
@@ -341,33 +449,72 @@ async function monitorWatchlistTokens(supabase: any): Promise<MonitorStats> {
             (token.bundle_score === null || token.bundle_score <= config.max_bundle_score) &&
             passesWalletConcentration) {
           
-          updates.status = 'qualified';
-          updates.qualified_at = now.toISOString();
-          updates.qualification_reason = `Holders: ${metrics.holders}, Volume: ${metrics.volume24hSol.toFixed(2)} SOL, Watched: ${watchingMinutes.toFixed(0)}m, Bundle: ${token.bundle_score || 'N/A'}`;
+          // === BUY GATE RUGCHECK RE-VERIFICATION ===
+          // Check if rugcheck needs re-verification (stale or missing)
+          const rugcheckAge = token.rugcheck_checked_at 
+            ? (now.getTime() - new Date(token.rugcheck_checked_at).getTime()) / 60000 
+            : Infinity;
+          const needsRugcheckRecheck = rugcheckAge > config.rugcheck_recheck_minutes;
           
-          stats.promoted++;
-          stats.promotedTokens.push(`${token.token_symbol} (${metrics.holders} holders, ${metrics.volume24hSol.toFixed(2)} SOL)`);
-          console.log(`🎉 PROMOTED: ${token.token_symbol} - ${updates.qualification_reason}`);
+          let rugcheckPassed = token.rugcheck_passed === true;
+          let rugcheckResult: RugCheckResult | null = null;
+          
+          if (needsRugcheckRecheck) {
+            console.log(`   🔍 Re-verifying RugCheck for ${token.token_symbol} (last check: ${rugcheckAge.toFixed(0)}m ago)`);
+            rugcheckResult = await fetchRugCheckForBuyGate(token.token_mint, config);
+            rugcheckPassed = rugcheckResult.passed;
+            
+            // Update rugcheck fields
+            updates.rugcheck_score = rugcheckResult.score;
+            updates.rugcheck_normalised = rugcheckResult.normalised;
+            updates.rugcheck_risks = rugcheckResult.risks;
+            updates.rugcheck_passed = rugcheckResult.passed;
+            updates.rugcheck_checked_at = now.toISOString();
+            updates.rugcheck_version = (token.rugcheck_version || 0) + 1;
+          }
+          
+          if (!rugcheckPassed) {
+            // RugCheck failed - reject instead of promote
+            console.log(`   ⛔ RUGCHECK FAILED at buy gate: ${token.token_symbol} - score: ${rugcheckResult?.normalised?.toFixed(0) || token.rugcheck_normalised || 'N/A'}`);
+            updates.status = 'rejected';
+            updates.rejection_type = rugcheckResult?.hasCriticalRisk ? 'permanent' : 'soft';
+            updates.rejection_reason = `rugcheck_buy_gate:${rugcheckResult?.criticalRiskNames?.join(',') || 'low_score'}`;
+            updates.rejection_reasons = ['rugcheck_buy_gate_failed'];
+            updates.removed_at = now.toISOString();
+            
+            stats.rugcheckRejected++;
+            stats.rugcheckTokens.push(`${token.token_symbol} (score: ${rugcheckResult?.normalised?.toFixed(0) || 'N/A'})`);
+          } else {
+            // All checks passed including RugCheck - promote!
+            updates.status = 'qualified';
+            updates.qualified_at = now.toISOString();
+            updates.qualification_reason = `Holders: ${metrics.holders}, Volume: ${metrics.volume24hSol.toFixed(2)} SOL, Watched: ${watchingMinutes.toFixed(0)}m, Bundle: ${token.bundle_score || 'N/A'}, RugCheck: ${rugcheckResult?.normalised?.toFixed(0) || token.rugcheck_normalised || 'cached'}`;
+            
+            stats.promoted++;
+            stats.promotedTokens.push(`${token.token_symbol} (${metrics.holders} holders, ${metrics.volume24hSol.toFixed(2)} SOL)`);
+            console.log(`🎉 PROMOTED: ${token.token_symbol} - ${updates.qualification_reason}`);
 
-          // Also add to buy candidates
-          await supabase.from('pumpfun_buy_candidates').upsert({
-            token_mint: token.token_mint,
-            token_name: token.token_name,
-            token_symbol: token.token_symbol,
-            creator_wallet: token.creator_wallet,
-            volume_sol_5m: metrics.volume24hSol,
-            volume_usd_5m: metrics.volume24hSol * solPrice,
-            holder_count: metrics.holders,
-            transaction_count: txCount,
-            bundle_score: token.bundle_score,
-            bonding_curve_pct: metrics.bondingCurvePct,
-            status: 'pending',
-            detected_at: now.toISOString(),
-            metadata: { 
-              watchlist_qualification: updates.qualification_reason,
-              max_single_wallet_pct: token.max_single_wallet_pct,
-            },
-          }, { onConflict: 'token_mint' });
+            // Also add to buy candidates
+            await supabase.from('pumpfun_buy_candidates').upsert({
+              token_mint: token.token_mint,
+              token_name: token.token_name,
+              token_symbol: token.token_symbol,
+              creator_wallet: token.creator_wallet,
+              volume_sol_5m: metrics.volume24hSol,
+              volume_usd_5m: metrics.volume24hSol * solPrice,
+              holder_count: metrics.holders,
+              transaction_count: txCount,
+              bundle_score: token.bundle_score,
+              bonding_curve_pct: metrics.bondingCurvePct,
+              status: 'pending',
+              detected_at: now.toISOString(),
+              metadata: { 
+                watchlist_qualification: updates.qualification_reason,
+                max_single_wallet_pct: token.max_single_wallet_pct,
+                rugcheck_score: rugcheckResult?.normalised || token.rugcheck_normalised,
+              },
+            }, { onConflict: 'token_mint' });
+          }
         }
         
         // === DEAD CHECK === 
@@ -424,7 +571,7 @@ async function monitorWatchlistTokens(supabase: any): Promise<MonitorStats> {
   }
 
   stats.durationMs = Date.now() - startTime;
-  console.log(`📊 MONITOR COMPLETE: ${stats.tokensChecked} checked, ${stats.promoted} promoted, ${stats.markedDead} dead, ${stats.markedStale} stale, ${stats.devSellRejected} dev-rejected, ${stats.skippedRecent} skipped (${stats.durationMs}ms)`);
+  console.log(`📊 MONITOR COMPLETE: ${stats.tokensChecked} checked, ${stats.promoted} promoted, ${stats.markedDead} dead, ${stats.markedStale} stale, ${stats.devSellRejected} dev-rejected, ${stats.rugcheckRejected} rugcheck-rejected, ${stats.skippedRecent} skipped (${stats.durationMs}ms)`);
 
   return stats;
 }

@@ -4533,6 +4533,7 @@ export type Database = {
           max_token_age_minutes: number
           max_watchdog_count: number | null
           min_rolling_win_rate: number | null
+          min_rugcheck_score: number | null
           min_socials_count: number | null
           min_transactions: number
           min_volume_sol_5m: number
@@ -4540,6 +4541,9 @@ export type Database = {
           require_image: boolean | null
           resurrection_holder_threshold: number | null
           resurrection_volume_threshold_sol: number | null
+          rugcheck_critical_risks: string[] | null
+          rugcheck_rate_limit_ms: number | null
+          rugcheck_recheck_minutes: number | null
           scalp_test_mode: boolean
           soft_reject_resurrection_minutes: number | null
           tokens_processed_count: number | null
@@ -4575,6 +4579,7 @@ export type Database = {
           max_token_age_minutes?: number
           max_watchdog_count?: number | null
           min_rolling_win_rate?: number | null
+          min_rugcheck_score?: number | null
           min_socials_count?: number | null
           min_transactions?: number
           min_volume_sol_5m?: number
@@ -4582,6 +4587,9 @@ export type Database = {
           require_image?: boolean | null
           resurrection_holder_threshold?: number | null
           resurrection_volume_threshold_sol?: number | null
+          rugcheck_critical_risks?: string[] | null
+          rugcheck_rate_limit_ms?: number | null
+          rugcheck_recheck_minutes?: number | null
           scalp_test_mode?: boolean
           soft_reject_resurrection_minutes?: number | null
           tokens_processed_count?: number | null
@@ -4617,6 +4625,7 @@ export type Database = {
           max_token_age_minutes?: number
           max_watchdog_count?: number | null
           min_rolling_win_rate?: number | null
+          min_rugcheck_score?: number | null
           min_socials_count?: number | null
           min_transactions?: number
           min_volume_sol_5m?: number
@@ -4624,6 +4633,9 @@ export type Database = {
           require_image?: boolean | null
           resurrection_holder_threshold?: number | null
           resurrection_volume_threshold_sol?: number | null
+          rugcheck_critical_risks?: string[] | null
+          rugcheck_rate_limit_ms?: number | null
+          rugcheck_recheck_minutes?: number | null
           scalp_test_mode?: boolean
           soft_reject_resurrection_minutes?: number | null
           tokens_processed_count?: number | null
@@ -4721,6 +4733,12 @@ export type Database = {
           rejection_type: string | null
           removal_reason: string | null
           removed_at: string | null
+          rugcheck_checked_at: string | null
+          rugcheck_normalised: number | null
+          rugcheck_passed: boolean | null
+          rugcheck_risks: Json | null
+          rugcheck_score: number | null
+          rugcheck_version: number | null
           social_score: number | null
           socials_checked_at: string | null
           socials_count: number | null
@@ -4788,6 +4806,12 @@ export type Database = {
           rejection_type?: string | null
           removal_reason?: string | null
           removed_at?: string | null
+          rugcheck_checked_at?: string | null
+          rugcheck_normalised?: number | null
+          rugcheck_passed?: boolean | null
+          rugcheck_risks?: Json | null
+          rugcheck_score?: number | null
+          rugcheck_version?: number | null
           social_score?: number | null
           socials_checked_at?: string | null
           socials_count?: number | null
@@ -4855,6 +4879,12 @@ export type Database = {
           rejection_type?: string | null
           removal_reason?: string | null
           removed_at?: string | null
+          rugcheck_checked_at?: string | null
+          rugcheck_normalised?: number | null
+          rugcheck_passed?: boolean | null
+          rugcheck_risks?: Json | null
+          rugcheck_score?: number | null
+          rugcheck_version?: number | null
           social_score?: number | null
           socials_checked_at?: string | null
           socials_count?: number | null
