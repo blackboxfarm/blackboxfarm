@@ -1586,14 +1586,15 @@ export function TokenCandidatesDashboard() {
                       <TableHead compact>Target</TableHead>
                       <TableHead compact>Status</TableHead>
                       <TableHead compact>P&L</TableHead>
-                      <TableHead compact>Age</TableHead>
+                      <TableHead compact>Buy Time (Toronto)</TableHead>
                       <TableHead compact>Links</TableHead>
+                      <TableHead compact>Action</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
                     {fantasyPositions.length === 0 ? (
                       <TableRow>
-                        <TableCell colSpan={11} className="text-center text-muted-foreground py-8">
+                        <TableCell colSpan={12} className="text-center text-muted-foreground py-8">
                           No fantasy positions yet. Tokens reaching 'buy_now' status will appear here.
                         </TableCell>
                       </TableRow>
@@ -1617,8 +1618,8 @@ export function TokenCandidatesDashboard() {
                                 </Button>
                               </div>
                             </TableCell>
-                            <TableCell compact className="text-xs">{formatPrice(pos.entry_price_usd)}</TableCell>
-                            <TableCell compact className="text-xs">{formatPrice(pos.current_price_usd)}</TableCell>
+                            <TableCell compact className="text-xs font-mono">${pos.entry_price_usd?.toFixed(8) || '0.00000000'}</TableCell>
+                            <TableCell compact className="text-xs font-mono">${pos.current_price_usd?.toFixed(8) || '0.00000000'}</TableCell>
                             <TableCell compact className={`text-xs font-medium ${athMultiplier >= targetMultiplier ? 'text-green-500' : athMultiplier >= 1 ? 'text-yellow-500' : 'text-red-500'}`}>
                               {athMultiplier.toFixed(2)}x
                             </TableCell>
@@ -1639,8 +1640,17 @@ export function TokenCandidatesDashboard() {
                             <TableCell compact className={`text-xs ${(pnl || 0) >= 0 ? 'text-green-500' : 'text-red-500'}`}>
                               {(pnl || 0) >= 0 ? '+' : ''}{(pnl || 0).toFixed(4)}
                             </TableCell>
-                            <TableCell compact className="text-xs text-muted-foreground">
-                              {formatDistanceToNow(new Date(pos.created_at), { addSuffix: false })}
+                            <TableCell compact className="text-xs text-muted-foreground font-mono">
+                              {new Date(pos.created_at).toLocaleString('en-CA', { 
+                                timeZone: 'America/Toronto',
+                                year: 'numeric',
+                                month: '2-digit',
+                                day: '2-digit',
+                                hour: '2-digit',
+                                minute: '2-digit',
+                                second: '2-digit',
+                                hour12: false
+                              })}
                             </TableCell>
                             <TableCell compact>
                               <div className="flex items-center gap-1">
@@ -1655,6 +1665,35 @@ export function TokenCandidatesDashboard() {
                                   <img src="/launchpad-logos/dexscreener.png" alt="DexScreener" className="h-4 w-4 rounded-sm" />
                                 </Button>
                               </div>
+                            </TableCell>
+                            <TableCell compact>
+                              {pos.status === 'open' && (
+                                <Button 
+                                  variant="destructive" 
+                                  size="sm" 
+                                  className="h-6 text-xs px-2"
+                                  onClick={async () => {
+                                    try {
+                                      const { error } = await supabase
+                                        .from('pumpfun_fantasy_positions')
+                                        .update({ 
+                                          status: 'closed',
+                                          sell_type: 'manual',
+                                          closed_at: new Date().toISOString(),
+                                          total_realized_pnl_sol: pos.unrealized_pnl_sol
+                                        })
+                                        .eq('id', pos.id);
+                                      if (error) throw error;
+                                      toast.success(`Sold ${pos.token_symbol}`);
+                                      fetchFantasyData();
+                                    } catch (err: any) {
+                                      toast.error(err.message);
+                                    }
+                                  }}
+                                >
+                                  Sell
+                                </Button>
+                              )}
                             </TableCell>
                           </TableRow>
                         );
