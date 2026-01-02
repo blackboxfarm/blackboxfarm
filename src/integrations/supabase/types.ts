@@ -4592,6 +4592,7 @@ export type Database = {
           twitter_url: string | null
           tx_count: number | null
           updated_at: string
+          volume_5m: number | null
           volume_sol: number | null
           volume_sol_prev: number | null
           website_url: string | null
@@ -4639,6 +4640,7 @@ export type Database = {
           twitter_url?: string | null
           tx_count?: number | null
           updated_at?: string
+          volume_5m?: number | null
           volume_sol?: number | null
           volume_sol_prev?: number | null
           website_url?: string | null
@@ -4686,6 +4688,7 @@ export type Database = {
           twitter_url?: string | null
           tx_count?: number | null
           updated_at?: string
+          volume_5m?: number | null
           volume_sol?: number | null
           volume_sol_prev?: number | null
           website_url?: string | null
