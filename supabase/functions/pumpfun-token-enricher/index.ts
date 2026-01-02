@@ -17,7 +17,7 @@ interface WatchlistToken {
   status: string;
   holder_count: number | null;
   bundle_score: number | null;
-  bonding_curve_percent: number | null;
+  bonding_curve_pct: number | null;
   market_cap_sol: number | null;
 }
 
@@ -135,7 +135,7 @@ async function enrichTokenBatch(
     // Extract data
     const holderCount = tokenData?.holders || details.holderCount || token.holder_count || 0;
     const marketCapSol = tokenData?.pools?.[0]?.marketCap?.quote || token.market_cap_sol || 0;
-    const bondingCurve = tokenData?.pools?.[0]?.curvePercentage || token.bonding_curve_percent || 0;
+    const bondingCurve = tokenData?.pools?.[0]?.curvePercentage || token.bonding_curve_pct || 0;
     
     // Check rejection criteria
     let shouldReject = false;
@@ -156,7 +156,7 @@ async function enrichTokenBatch(
           bundle_score: bundleScore,
           holder_count: holderCount,
           market_cap_sol: marketCapSol,
-          bonding_curve_percent: bondingCurve,
+          bonding_curve_pct: bondingCurve,
           removed_at: new Date().toISOString(),
           last_checked_at: new Date().toISOString(),
         })
@@ -172,7 +172,7 @@ async function enrichTokenBatch(
           bundle_score: bundleScore,
           holder_count: holderCount,
           market_cap_sol: marketCapSol,
-          bonding_curve_percent: bondingCurve,
+          bonding_curve_pct: bondingCurve,
           last_checked_at: new Date().toISOString(),
           created_at_blockchain: createdAt ? new Date(createdAt * 1000).toISOString() : null,
         })
@@ -213,7 +213,7 @@ serve(async (req) => {
       // Get pending_triage tokens
       const { data: pendingTokens, error } = await supabase
         .from('pumpfun_watchlist')
-        .select('id, token_mint, token_symbol, status, holder_count, bundle_score, bonding_curve_percent, market_cap_sol')
+        .select('id, token_mint, token_symbol, status, holder_count, bundle_score, bonding_curve_pct, market_cap_sol')
         .eq('status', 'pending_triage')
         .order('created_at', { ascending: true })
         .limit(BATCH_SIZE);
