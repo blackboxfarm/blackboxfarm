@@ -319,6 +319,117 @@ async function getStats(supabase: any) {
   };
 }
 
+// Manual add to fantasy - add any token by mint address
+async function manualFantasyBuy(supabase: any, tokenMint: string): Promise<{ success: boolean; position?: any; error?: string }> {
+  console.log(`🎮 MANUAL FANTASY BUY: Processing ${tokenMint}`);
+
+  const config = await getConfig(supabase);
+  
+  if (!config.fantasy_mode_enabled) {
+    return { success: false, error: 'Fantasy mode is disabled' };
+  }
+
+  // Check if position already exists
+  const { data: existing } = await supabase
+    .from('pumpfun_fantasy_positions')
+    .select('id, token_symbol')
+    .eq('token_mint', tokenMint)
+    .eq('status', 'open')
+    .limit(1)
+    .single();
+
+  if (existing) {
+    return { success: false, error: `Position already exists for ${existing.token_symbol || tokenMint}` };
+  }
+
+  // Get SOL price
+  const solPrice = await getSolPrice();
+  
+  // Get token price and metadata
+  const price = await getTokenPrice(tokenMint, solPrice);
+  
+  // Try to get token info from pump.fun
+  let tokenSymbol = tokenMint.slice(0, 6);
+  let tokenName = tokenMint.slice(0, 6);
+  
+  try {
+    const pumpResponse = await fetch(`https://frontend-api.pump.fun/coins/${tokenMint}`, {
+      headers: { 'Accept': 'application/json' }
+    });
+    if (pumpResponse.ok) {
+      const pumpData = await pumpResponse.json();
+      tokenSymbol = pumpData.symbol || tokenSymbol;
+      tokenName = pumpData.name || tokenName;
+    }
+  } catch (e) {
+    // Try DexScreener
+    try {
+      const dexResponse = await fetch(`https://api.dexscreener.com/latest/dex/tokens/${tokenMint}`);
+      const dexData = await dexResponse.json();
+      const pair = dexData?.pairs?.[0];
+      if (pair?.baseToken) {
+        tokenSymbol = pair.baseToken.symbol || tokenSymbol;
+        tokenName = pair.baseToken.name || tokenName;
+      }
+    } catch (e2) {
+      console.log('Could not fetch token metadata');
+    }
+  }
+
+  if (!price || price.priceUsd <= 0) {
+    return { success: false, error: 'Could not fetch token price' };
+  }
+
+  const now = new Date().toISOString();
+  const tokenAmount = config.fantasy_buy_amount_sol / price.priceSol;
+
+  // Create fantasy position
+  const { data: position, error: insertError } = await supabase
+    .from('pumpfun_fantasy_positions')
+    .insert({
+      watchlist_id: null, // Manual add - no watchlist entry
+      token_mint: tokenMint,
+      token_symbol: tokenSymbol,
+      token_name: tokenName,
+      entry_price_usd: price.priceUsd,
+      entry_price_sol: price.priceSol,
+      entry_amount_sol: config.fantasy_buy_amount_sol,
+      token_amount: tokenAmount,
+      entry_at: now,
+      current_price_usd: price.priceUsd,
+      current_price_sol: price.priceSol,
+      status: 'open',
+      target_multiplier: config.fantasy_target_multiplier,
+      sell_percentage: config.fantasy_sell_percentage,
+      moonbag_percentage: config.fantasy_moonbag_percentage,
+      signal_strength: 'manual',
+      peak_price_usd: price.priceUsd,
+      peak_multiplier: 1.0,
+      peak_at: now,
+    })
+    .select()
+    .single();
+
+  if (insertError) {
+    console.error('Error creating manual fantasy position:', insertError);
+    return { success: false, error: insertError.message };
+  }
+
+  console.log(`🎮 MANUAL FANTASY BUY SUCCESS: ${tokenSymbol} @ $${price.priceUsd.toFixed(8)} (${config.fantasy_buy_amount_sol} SOL = ${tokenAmount.toFixed(2)} tokens)`);
+
+  return { 
+    success: true, 
+    position: {
+      id: position.id,
+      symbol: tokenSymbol,
+      name: tokenName,
+      entryPrice: price.priceUsd,
+      tokenAmount,
+      amountSol: config.fantasy_buy_amount_sol,
+    }
+  };
+}
+
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
@@ -344,6 +455,18 @@ serve(async (req) => {
       case 'status': {
         const stats = await getStats(supabase);
         return jsonResponse({ success: true, ...stats });
+      }
+
+      case 'manual_buy': {
+        const body = await req.json();
+        const tokenMint = body.tokenMint || body.token_mint;
+        
+        if (!tokenMint) {
+          return errorResponse('tokenMint is required');
+        }
+        
+        const result = await manualFantasyBuy(supabase, tokenMint);
+        return jsonResponse(result, result.success ? 200 : 400);
       }
 
       default:

@@ -620,6 +620,49 @@ export function TokenCandidatesDashboard() {
     toast.success(`${symbol} mint copied! Paste in FlipIt to buy.`, { duration: 5000 });
   };
 
+  // Manual Add to Fantasy - add any token to fantasy tracking
+  const [addingToFantasy, setAddingToFantasy] = useState<string | null>(null);
+  const [manualMintInput, setManualMintInput] = useState('');
+  
+  const addToFantasy = async (tokenMint: string, tokenSymbol?: string) => {
+    if (!tokenMint || tokenMint.length < 32) {
+      toast.error('Invalid token mint address');
+      return;
+    }
+    
+    setAddingToFantasy(tokenMint);
+    try {
+      const { data, error } = await supabase.functions.invoke('pumpfun-fantasy-executor', {
+        body: { action: 'manual_buy', tokenMint }
+      });
+
+      if (error) throw error;
+      
+      if (data?.success) {
+        toast.success(`🎮 Added ${data.position?.symbol || tokenSymbol || tokenMint.slice(0, 6)} to Fantasy @ $${data.position?.entryPrice?.toFixed(8) || '?'}`, {
+          duration: 5000
+        });
+        await fetchFantasyData();
+      } else {
+        toast.error(data?.error || 'Failed to add to fantasy');
+      }
+    } catch (error) {
+      console.error('Error adding to fantasy:', error);
+      toast.error(`Failed: ${error}`);
+    } finally {
+      setAddingToFantasy(null);
+    }
+  };
+
+  const handleManualFantasyAdd = async () => {
+    if (!manualMintInput.trim()) {
+      toast.error('Please enter a token mint address');
+      return;
+    }
+    await addToFantasy(manualMintInput.trim());
+    setManualMintInput('');
+  };
+
   // Save config
   const saveConfig = async () => {
    try {
@@ -1290,6 +1333,19 @@ export function TokenCandidatesDashboard() {
                                   title="Quick Buy (copy mint)">
                                   <ShoppingCart className="h-3 w-3" />
                                 </Button>
+                                <Button 
+                                  variant="ghost" 
+                                  size="icon" 
+                                  className="h-5 w-5 text-purple-500 hover:text-purple-400 hover:bg-purple-500/10"
+                                  onClick={() => addToFantasy(item.token_mint, item.token_symbol)}
+                                  disabled={addingToFantasy === item.token_mint}
+                                  title="Add to Fantasy">
+                                  {addingToFantasy === item.token_mint ? (
+                                    <RefreshCw className="h-3 w-3 animate-spin" />
+                                  ) : (
+                                    <TestTube className="h-3 w-3" />
+                                  )}
+                                </Button>
                               </div>
                             </TableCell>
                           </TableRow>
@@ -1415,6 +1471,28 @@ export function TokenCandidatesDashboard() {
               </div>
             </CardHeader>
             <CardContent>
+              {/* Manual Add to Fantasy */}
+              <div className="flex items-center gap-2 mb-4 p-3 bg-purple-500/5 border border-purple-500/20 rounded-lg">
+                <TestTube className="h-4 w-4 text-purple-400" />
+                <span className="text-xs text-purple-400 font-medium">Add Token to Fantasy:</span>
+                <Input 
+                  placeholder="Paste token mint address..." 
+                  className="flex-1 h-8 text-xs"
+                  value={manualMintInput}
+                  onChange={(e) => setManualMintInput(e.target.value)}
+                  onKeyDown={(e) => e.key === 'Enter' && handleManualFantasyAdd()}
+                />
+                <Button 
+                  size="sm" 
+                  onClick={handleManualFantasyAdd}
+                  disabled={!!addingToFantasy || !manualMintInput.trim()}
+                  className="bg-purple-500 hover:bg-purple-600"
+                >
+                  {addingToFantasy ? <RefreshCw className="h-3 w-3 animate-spin mr-1" /> : <Plus className="h-3 w-3 mr-1" />}
+                  Add
+                </Button>
+              </div>
+
               {/* Stats Summary */}
               {fantasyStats && (
                 <div className="grid grid-cols-2 md:grid-cols-6 gap-3 mb-4 text-sm">

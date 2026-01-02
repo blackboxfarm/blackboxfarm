@@ -114,7 +114,83 @@ async function fetchWithBackoff(url: string, options: RequestInit, maxRetries = 
   throw lastError || new Error('Max retries exceeded');
 }
 
-// Fetch token metrics from pump.fun API (includes bonding curve info)
+// Fetch token metrics from DexScreener (fallback API)
+async function fetchDexScreenerMetrics(mint: string): Promise<TokenMetrics | null> {
+  try {
+    const response = await fetch(`https://api.dexscreener.com/latest/dex/tokens/${mint}`, {
+      headers: { 'Accept': 'application/json' }
+    });
+
+    if (!response.ok) {
+      console.log(`   📊 DexScreener API error for ${mint}: ${response.status}`);
+      return null;
+    }
+
+    const data = await response.json();
+    const pair = data?.pairs?.[0]; // Get first pair (usually SOL pair)
+
+    if (!pair) {
+      console.log(`   📊 DexScreener: No pairs found for ${mint}`);
+      return null;
+    }
+
+    const priceUsd = parseFloat(pair.priceUsd) || 0;
+    const volume24h = parseFloat(pair.volume?.h24) || 0;
+    const liquidity = parseFloat(pair.liquidity?.usd) || 0;
+    const marketCap = parseFloat(pair.marketCap) || (pair.fdv ? parseFloat(pair.fdv) : null);
+    
+    // Estimate holders from txns if available
+    const txns24h = pair.txns?.h24 || {};
+    const estimatedHolders = Math.min((txns24h.buys || 0) + (txns24h.sells || 0), 1000);
+
+    // Convert volume USD to SOL (estimate using price)
+    const solPrice = priceUsd > 0 && pair.priceNative ? (priceUsd / parseFloat(pair.priceNative)) : 200;
+    const volumeSol = volume24h / solPrice;
+
+    console.log(`   📊 DexScreener fallback: ${mint.slice(0, 8)} - $${priceUsd.toFixed(8)}, vol: ${volumeSol.toFixed(2)} SOL`);
+
+    return {
+      holders: estimatedHolders,
+      volume24hSol: volumeSol,
+      priceUsd: priceUsd,
+      liquidityUsd: liquidity,
+      marketCapUsd: marketCap,
+      bondingCurvePct: null, // DexScreener doesn't have bonding curve data
+      buys: txns24h.buys || 0,
+      sells: txns24h.sells || 0,
+    };
+  } catch (error) {
+    console.error(`Error fetching DexScreener metrics for ${mint}:`, error);
+    return null;
+  }
+}
+
+// Fetch just price from Jupiter (price-only fallback)
+async function fetchJupiterPrice(mint: string): Promise<number | null> {
+  try {
+    const response = await fetch(`https://api.jup.ag/price/v2?ids=${mint}`, {
+      headers: { 'Accept': 'application/json' }
+    });
+
+    if (!response.ok) {
+      return null;
+    }
+
+    const data = await response.json();
+    const price = data?.data?.[mint]?.price;
+    
+    if (price) {
+      console.log(`   💹 Jupiter price fallback: ${mint.slice(0, 8)} - $${price.toFixed(8)}`);
+      return price;
+    }
+    return null;
+  } catch (error) {
+    console.error(`Error fetching Jupiter price for ${mint}:`, error);
+    return null;
+  }
+}
+
+// Fetch token metrics from pump.fun API with fallbacks to DexScreener/Jupiter
 async function fetchPumpFunMetrics(mint: string): Promise<TokenMetrics | null> {
   try {
     const response = await fetchWithBackoff(
@@ -122,37 +198,68 @@ async function fetchPumpFunMetrics(mint: string): Promise<TokenMetrics | null> {
       { headers: { 'Accept': 'application/json' } }
     );
 
+    // If pump.fun returns 5xx error, try fallbacks
+    if (response.status >= 500) {
+      console.log(`   ⚠️ pump.fun API error ${response.status} for ${mint}, trying fallbacks...`);
+      
+      // Try DexScreener first (has volume + price)
+      const dexMetrics = await fetchDexScreenerMetrics(mint);
+      if (dexMetrics && dexMetrics.priceUsd && dexMetrics.priceUsd > 0) {
+        return dexMetrics;
+      }
+      
+      // Try Jupiter for price only
+      const jupPrice = await fetchJupiterPrice(mint);
+      if (jupPrice) {
+        return {
+          holders: 0, // Unknown from Jupiter
+          volume24hSol: 0, // Unknown from Jupiter
+          priceUsd: jupPrice,
+          liquidityUsd: null,
+          marketCapUsd: null,
+          bondingCurvePct: null,
+          buys: 0,
+          sells: 0,
+        };
+      }
+      
+      // All fallbacks failed
+      return null;
+    }
+
     if (!response.ok) {
       if (response.status === 404) {
         return { holders: 0, volume24hSol: 0, priceUsd: null, liquidityUsd: null, marketCapUsd: null, bondingCurvePct: null, buys: 0, sells: 0 };
       }
       console.error(`pump.fun API error for ${mint}: ${response.status}`);
+      
+      // Try fallbacks for other errors too
+      const dexMetrics = await fetchDexScreenerMetrics(mint);
+      if (dexMetrics && dexMetrics.priceUsd && dexMetrics.priceUsd > 0) {
+        return dexMetrics;
+      }
+      
       return null;
     }
 
     const data = await response.json();
     
     // Calculate bonding curve percentage
-    // virtual_sol_reserves starts at ~30 SOL, goes to 0 when graduated (at ~85 SOL raised)
-    // Bonding curve completes at ~$69k market cap or when ~79 SOL is raised
     const virtualSolReserves = data.virtual_sol_reserves || 0;
     const virtualTokenReserves = data.virtual_token_reserves || 0;
-    const totalSupply = data.total_supply || 1000000000000000; // 1B with 6 decimals default
+    const totalSupply = data.total_supply || 1000000000000000;
     
-    // Calculate market cap in USD
     const priceUsd = data.usd_market_cap ? data.usd_market_cap / (totalSupply / 1e6) : null;
     
-    // Calculate bonding curve % remaining (100% = just launched, 0% = graduated)
-    // The bonding curve holds ~800M tokens initially out of 1B total
-    const bondingCurveTokens = virtualTokenReserves / 1e6; // Convert to actual tokens
-    const maxBondingCurveTokens = 800000000; // 800M tokens
+    const bondingCurveTokens = virtualTokenReserves / 1e6;
+    const maxBondingCurveTokens = 800000000;
     const bondingCurvePct = Math.min(100, Math.max(0, (bondingCurveTokens / maxBondingCurveTokens) * 100));
     
     return {
       holders: data.holder_count || 0,
-      volume24hSol: (data.volume_24h || 0) / 1e9, // Convert lamports to SOL
+      volume24hSol: (data.volume_24h || 0) / 1e9,
       priceUsd: priceUsd,
-      liquidityUsd: virtualSolReserves > 0 ? (virtualSolReserves / 1e9) * 200 : null, // Estimate liquidity
+      liquidityUsd: virtualSolReserves > 0 ? (virtualSolReserves / 1e9) * 200 : null,
       marketCapUsd: data.usd_market_cap || null,
       bondingCurvePct: data.complete ? 0 : bondingCurvePct,
       buys: data.buy_count || 0,
@@ -160,6 +267,13 @@ async function fetchPumpFunMetrics(mint: string): Promise<TokenMetrics | null> {
     };
   } catch (error) {
     console.error(`Error fetching pump.fun metrics for ${mint}:`, error);
+    
+    // Try fallbacks on error
+    const dexMetrics = await fetchDexScreenerMetrics(mint);
+    if (dexMetrics && dexMetrics.priceUsd && dexMetrics.priceUsd > 0) {
+      return dexMetrics;
+    }
+    
     return null;
   }
 }
