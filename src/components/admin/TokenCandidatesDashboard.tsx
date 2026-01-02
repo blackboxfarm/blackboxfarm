@@ -1650,17 +1650,30 @@ export function TokenCandidatesDashboard() {
                                 const buyDate = new Date(pos.created_at);
                                 const buyTimeStr = buyDate.toISOString().slice(11, 19);
                                 const buyDateStr = buyDate.toISOString().slice(0, 10);
+                                const fullTimestamp = `${buyDateStr} ${buyTimeStr} UTC`;
                                 
                                 // Discovery time from watchlist (when token was first detected)
                                 const discoveryTime = pos.pumpfun_watchlist?.first_seen_at;
                                 const discoveryDate = discoveryTime ? new Date(discoveryTime) : null;
                                 const discoveryTimeStr = discoveryDate?.toISOString().slice(11, 19);
                                 
+                                const copyTimestamp = () => {
+                                  navigator.clipboard.writeText(fullTimestamp);
+                                  toast.success('Timestamp copied');
+                                };
+                                
                                 return (
                                   <div className="flex flex-col gap-0.5">
                                     <div className="flex items-center gap-1">
                                       <span className="text-[10px] text-muted-foreground">Buy:</span>
                                       <span className="text-yellow-500 font-semibold">{buyTimeStr}</span>
+                                      <button 
+                                        onClick={copyTimestamp}
+                                        className="text-muted-foreground hover:text-foreground transition-colors"
+                                        title="Copy timestamp"
+                                      >
+                                        <Copy className="h-3 w-3" />
+                                      </button>
                                     </div>
                                     {discoveryTimeStr && (
                                       <div className="flex items-center gap-1">
