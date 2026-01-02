@@ -838,7 +838,7 @@ export function TokenCandidatesDashboard() {
         <TabsList>
           <TabsTrigger value="watchlist" className="flex items-center gap-1">
             <Eye className="h-3 w-3" />
-            Watchlist ({watchlistStats.total})
+            Watchlist ({watchlistStats.watching})
           </TabsTrigger>
           <TabsTrigger value="candidates" className="flex items-center gap-1">
             <Rocket className="h-3 w-3" />
