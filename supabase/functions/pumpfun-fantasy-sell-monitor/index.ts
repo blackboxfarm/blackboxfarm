@@ -89,33 +89,124 @@ async function getSolPrice(): Promise<number> {
   }
 }
 
-// Batch fetch prices from Jupiter
-async function batchFetchPrices(mints: string[]): Promise<Map<string, number>> {
+// Batch fetch prices from multiple sources (watchlist, PumpFun, DexScreener, Jupiter)
+async function batchFetchPrices(mints: string[], supabase: any): Promise<Map<string, number>> {
   const priceMap = new Map<string, number>();
   
   if (mints.length === 0) return priceMap;
 
+  let watchlistCount = 0;
+  let pumpfunCount = 0;
+  let dexscreenerCount = 0;
+  let jupiterCount = 0;
+
+  // 1. FIRST: Get prices from pumpfun_watchlist (already being updated by enricher)
   try {
-    // Jupiter supports comma-separated mints
-    const batchSize = 100;
-    for (let i = 0; i < mints.length; i += batchSize) {
-      const batch = mints.slice(i, i + batchSize);
-      const response = await fetch(`https://api.jup.ag/price/v2?ids=${batch.join(',')}`);
-      const data = await response.json();
-      
-      for (const mint of batch) {
-        if (data?.data?.[mint]?.price) {
-          priceMap.set(mint, data.data[mint].price);
+    const { data: watchlistPrices } = await supabase
+      .from('pumpfun_watchlist')
+      .select('token_mint, price_usd')
+      .in('token_mint', mints)
+      .not('price_usd', 'is', null);
+
+    if (watchlistPrices) {
+      for (const wp of watchlistPrices) {
+        if (wp.price_usd && wp.price_usd > 0) {
+          priceMap.set(wp.token_mint, wp.price_usd);
+          watchlistCount++;
         }
-      }
-      
-      // Rate limiting
-      if (i + batchSize < mints.length) {
-        await new Promise(r => setTimeout(r, 200));
       }
     }
   } catch (error) {
-    console.error('Error batch fetching prices:', error);
+    console.error('Error fetching watchlist prices:', error);
+  }
+
+  // Find mints still missing prices
+  let missingMints = mints.filter(m => !priceMap.has(m));
+  
+  if (missingMints.length === 0) {
+    console.log(`📈 Prices: ${priceMap.size}/${mints.length} (watchlist: ${watchlistCount})`);
+    return priceMap;
+  }
+
+  // 2. SECOND: Try PumpFun API for bonding curve tokens
+  for (const mint of missingMints) {
+    try {
+      const response = await fetch(`https://frontend-api.pump.fun/coins/${mint}`, {
+        headers: { 'Accept': 'application/json' }
+      });
+      if (response.ok) {
+        const data = await response.json();
+        if (data?.usd_market_cap && data?.total_supply) {
+          const priceUsd = data.usd_market_cap / (data.total_supply / 1e6);
+          priceMap.set(mint, priceUsd);
+          pumpfunCount++;
+        }
+      }
+      await new Promise(r => setTimeout(r, 100)); // Rate limit
+    } catch (e) {
+      // Continue to next source
+    }
+  }
+
+  // Find mints still missing
+  missingMints = mints.filter(m => !priceMap.has(m));
+  
+  if (missingMints.length === 0) {
+    console.log(`📈 Prices: ${priceMap.size}/${mints.length} (watchlist: ${watchlistCount}, pumpfun: ${pumpfunCount})`);
+    return priceMap;
+  }
+
+  // 3. THIRD: Try DexScreener for graduated tokens
+  for (const mint of missingMints) {
+    try {
+      const response = await fetch(`https://api.dexscreener.com/latest/dex/tokens/${mint}`);
+      if (response.ok) {
+        const data = await response.json();
+        if (data?.pairs?.[0]?.priceUsd) {
+          priceMap.set(mint, parseFloat(data.pairs[0].priceUsd));
+          dexscreenerCount++;
+        }
+      }
+      await new Promise(r => setTimeout(r, 100)); // Rate limit
+    } catch (e) {
+      // Continue
+    }
+  }
+
+  // Find mints still missing
+  missingMints = mints.filter(m => !priceMap.has(m));
+
+  // 4. LAST: Jupiter API as final fallback (for graduated tokens on DEXes)
+  if (missingMints.length > 0) {
+    try {
+      const batchSize = 100;
+      for (let i = 0; i < missingMints.length; i += batchSize) {
+        const batch = missingMints.slice(i, i + batchSize);
+        const response = await fetch(`https://api.jup.ag/price/v2?ids=${batch.join(',')}`);
+        const data = await response.json();
+        
+        for (const mint of batch) {
+          if (data?.data?.[mint]?.price) {
+            priceMap.set(mint, data.data[mint].price);
+            jupiterCount++;
+          }
+        }
+        
+        if (i + batchSize < missingMints.length) {
+          await new Promise(r => setTimeout(r, 200));
+        }
+      }
+    } catch (e) {
+      // Ignore
+    }
+  }
+
+  console.log(`📈 Prices: ${priceMap.size}/${mints.length} (watchlist: ${watchlistCount}, pumpfun: ${pumpfunCount}, dex: ${dexscreenerCount}, jupiter: ${jupiterCount})`);
+  
+  // Log missing prices for debugging
+  const stillMissing = mints.filter(m => !priceMap.has(m));
+  if (stillMissing.length > 0) {
+    console.log(`⚠️ Still missing prices for: ${stillMissing.join(', ')}`);
   }
 
   return priceMap;
@@ -359,9 +450,9 @@ async function monitorPositions(supabase: any): Promise<MonitorStats> {
   // Get SOL price
   const solPrice = await getSolPrice();
 
-  // Batch fetch all prices
+  // Batch fetch all prices using multiple sources
   const mints = [...new Set(positions.map((p: any) => p.token_mint))];
-  const priceMap = await batchFetchPrices(mints);
+  const priceMap = await batchFetchPrices(mints, supabase);
 
   const now = new Date().toISOString();
 
