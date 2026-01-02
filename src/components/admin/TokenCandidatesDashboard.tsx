@@ -37,7 +37,11 @@ import {
   Shield,
   ShieldOff,
   TrendingUp,
-  Scissors
+  Scissors,
+  TestTube,
+  DollarSign,
+  Target,
+  Moon
 } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
 
@@ -130,6 +134,47 @@ interface DiscoveryLog {
   manual_review_at: string | null;
 }
 
+interface FantasyPosition {
+  id: string;
+  token_mint: string;
+  token_symbol: string | null;
+  token_name: string | null;
+  entry_price_usd: number;
+  entry_amount_sol: number;
+  token_amount: number;
+  current_price_usd: number | null;
+  unrealized_pnl_sol: number | null;
+  unrealized_pnl_percent: number | null;
+  status: string;
+  target_multiplier: number;
+  main_sold_at: string | null;
+  main_realized_pnl_sol: number | null;
+  moonbag_active: boolean | null;
+  moonbag_current_value_sol: number | null;
+  moonbag_drawdown_pct: number | null;
+  exit_at: string | null;
+  exit_reason: string | null;
+  total_realized_pnl_sol: number | null;
+  total_pnl_percent: number | null;
+  peak_multiplier: number | null;
+  created_at: string;
+}
+
+interface FantasyStats {
+  totalPositions: number;
+  openPositions: number;
+  moonbagPositions: number;
+  closedPositions: number;
+  targetsHit: number;
+  winRate: number;
+  totalInvested: number;
+  totalRealizedPnl: number;
+  unrealizedPnl: number;
+  moonbagPnl: number;
+  avgPnlPerTrade: number;
+  targetHitRate: number;
+}
+
 interface MonitorConfig {
   min_volume_sol_5m: number;
   min_transactions: number;
@@ -165,6 +210,7 @@ interface MonitorConfig {
   active_watchdog_count?: number;
   min_rolling_win_rate?: number;
   last_prune_at?: string | null;
+  fantasy_mode_enabled?: boolean;
 }
 
 interface SafeguardStatus {
@@ -259,7 +305,7 @@ export function TokenCandidatesDashboard() {
   const [config, setConfig] = useState<MonitorConfig | null>(null);
   const [loading, setLoading] = useState(true);
   const [polling, setPolling] = useState(false);
-  const [mainTab, setMainTab] = useState<'watchlist' | 'candidates' | 'logs'>('watchlist');
+  const [mainTab, setMainTab] = useState<'watchlist' | 'candidates' | 'fantasy' | 'logs'>('watchlist');
   const [watchlistFilter, setWatchlistFilter] = useState<'all' | 'watching' | 'qualified' | 'rejected' | 'dead'>('all');
   const [candidateFilter, setCandidateFilter] = useState<'all' | 'pending' | 'approved' | 'rejected'>('all');
   const [logsFilter, setLogsFilter] = useState<'all' | 'rejected' | 'accepted'>('all');
@@ -285,6 +331,11 @@ export function TokenCandidatesDashboard() {
   
   // Phase 5: Safeguard status
   const [safeguardStatus, setSafeguardStatus] = useState<SafeguardStatus | null>(null);
+  
+  // Fantasy tracking
+  const [fantasyPositions, setFantasyPositions] = useState<FantasyPosition[]>([]);
+  const [fantasyStats, setFantasyStats] = useState<FantasyStats | null>(null);
+  const [loadingFantasy, setLoadingFantasy] = useState(false);
 
   // Fetch watchlist
   const fetchWatchlist = useCallback(async () => {
@@ -368,6 +419,35 @@ export function TokenCandidatesDashboard() {
       }
     } catch (error) {
       console.error('Error fetching safeguard status:', error);
+    }
+  }, []);
+
+  // Fetch fantasy positions and stats
+  const fetchFantasyData = useCallback(async () => {
+    setLoadingFantasy(true);
+    try {
+      // Fetch positions
+      const { data: positions, error: posError } = await supabase
+        .from('pumpfun_fantasy_positions')
+        .select('*')
+        .order('created_at', { ascending: false })
+        .limit(100);
+
+      if (posError) throw posError;
+      setFantasyPositions((positions || []) as FantasyPosition[]);
+
+      // Fetch stats from edge function
+      const { data: statsData, error: statsError } = await supabase.functions.invoke('pumpfun-fantasy-sell-monitor', {
+        body: { action: 'stats' }
+      });
+
+      if (!statsError && statsData) {
+        setFantasyStats(statsData as FantasyStats);
+      }
+    } catch (error) {
+      console.error('Error fetching fantasy data:', error);
+    } finally {
+      setLoadingFantasy(false);
     }
   }, []);
 
@@ -1067,7 +1147,10 @@ export function TokenCandidatesDashboard() {
       </Collapsible>
 
       {/* Main Tabs */}
-      <Tabs value={mainTab} onValueChange={(v) => setMainTab(v as 'watchlist' | 'candidates' | 'logs')}>
+      <Tabs value={mainTab} onValueChange={(v) => { 
+        setMainTab(v as 'watchlist' | 'candidates' | 'fantasy' | 'logs');
+        if (v === 'fantasy') fetchFantasyData();
+      }}>
         <TabsList>
           <TabsTrigger value="watchlist" className="flex items-center gap-1">
             <Eye className="h-3 w-3" />
@@ -1076,6 +1159,10 @@ export function TokenCandidatesDashboard() {
           <TabsTrigger value="candidates" className="flex items-center gap-1">
             <Rocket className="h-3 w-3" />
             Qualified ({watchlistStats.qualified})
+          </TabsTrigger>
+          <TabsTrigger value="fantasy" className="flex items-center gap-1">
+            <TestTube className="h-3 w-3" />
+            Fantasy ({fantasyPositions.length})
           </TabsTrigger>
           <TabsTrigger value="logs" className="flex items-center gap-1">
             <FileText className="h-3 w-3" />
@@ -1294,6 +1381,111 @@ export function TokenCandidatesDashboard() {
                           </TableCell>
                         </TableRow>
                       ))
+                    )}
+                  </TableBody>
+                </Table>
+              </div>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        {/* Fantasy Tab */}
+        <TabsContent value="fantasy" className="mt-4">
+          <Card>
+            <CardHeader className="py-3">
+              <div className="flex items-center justify-between">
+                <CardTitle className="text-base flex items-center gap-2">
+                  <TestTube className="h-4 w-4" />
+                  Fantasy Mode Positions
+                  {config?.fantasy_mode_enabled && <Badge variant="outline" className="bg-green-500/10 text-green-500">Active</Badge>}
+                </CardTitle>
+                <Button variant="outline" size="sm" onClick={fetchFantasyData} disabled={loadingFantasy}>
+                  {loadingFantasy ? <RefreshCw className="h-3 w-3 animate-spin" /> : <RefreshCw className="h-3 w-3" />}
+                </Button>
+              </div>
+            </CardHeader>
+            <CardContent>
+              {/* Stats Summary */}
+              {fantasyStats && (
+                <div className="grid grid-cols-2 md:grid-cols-6 gap-3 mb-4 text-sm">
+                  <div className="bg-muted/30 rounded p-2">
+                    <span className="text-muted-foreground text-xs">Total</span>
+                    <div className="font-bold">{fantasyStats.totalPositions}</div>
+                  </div>
+                  <div className="bg-blue-500/10 rounded p-2">
+                    <span className="text-muted-foreground text-xs">Open</span>
+                    <div className="font-bold text-blue-500">{fantasyStats.openPositions}</div>
+                  </div>
+                  <div className="bg-purple-500/10 rounded p-2">
+                    <span className="text-muted-foreground text-xs">Moonbag</span>
+                    <div className="font-bold text-purple-500">{fantasyStats.moonbagPositions}</div>
+                  </div>
+                  <div className="bg-green-500/10 rounded p-2">
+                    <span className="text-muted-foreground text-xs">Target Hit %</span>
+                    <div className="font-bold text-green-500">{fantasyStats.targetHitRate?.toFixed(1) || 0}%</div>
+                  </div>
+                  <div className="bg-green-500/10 rounded p-2">
+                    <span className="text-muted-foreground text-xs">Win Rate</span>
+                    <div className="font-bold text-green-500">{fantasyStats.winRate?.toFixed(1) || 0}%</div>
+                  </div>
+                  <div className={`rounded p-2 ${(fantasyStats.totalRealizedPnl || 0) >= 0 ? 'bg-green-500/10' : 'bg-red-500/10'}`}>
+                    <span className="text-muted-foreground text-xs">Total P&L</span>
+                    <div className={`font-bold ${(fantasyStats.totalRealizedPnl || 0) >= 0 ? 'text-green-500' : 'text-red-500'}`}>
+                      {(fantasyStats.totalRealizedPnl || 0) >= 0 ? '+' : ''}{(fantasyStats.totalRealizedPnl || 0).toFixed(4)} SOL
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Positions Table */}
+              <div className="border rounded-md">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead compact>Symbol</TableHead>
+                      <TableHead compact>Entry</TableHead>
+                      <TableHead compact>Current</TableHead>
+                      <TableHead compact>Multiplier</TableHead>
+                      <TableHead compact>Status</TableHead>
+                      <TableHead compact>P&L</TableHead>
+                      <TableHead compact>Age</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {fantasyPositions.length === 0 ? (
+                      <TableRow>
+                        <TableCell colSpan={7} className="text-center text-muted-foreground py-8">
+                          No fantasy positions yet. Tokens reaching 'buy_now' status will appear here.
+                        </TableCell>
+                      </TableRow>
+                    ) : (
+                      fantasyPositions.map((pos) => {
+                        const multiplier = pos.current_price_usd && pos.entry_price_usd ? pos.current_price_usd / pos.entry_price_usd : 0;
+                        const pnl = pos.status === 'closed' ? pos.total_realized_pnl_sol : pos.unrealized_pnl_sol;
+                        return (
+                          <TableRow key={pos.id}>
+                            <TableCell compact className="font-medium">{pos.token_symbol || '???'}</TableCell>
+                            <TableCell compact className="text-xs">{formatPrice(pos.entry_price_usd)}</TableCell>
+                            <TableCell compact className="text-xs">{formatPrice(pos.current_price_usd)}</TableCell>
+                            <TableCell compact className={`text-xs font-medium ${multiplier >= 1.5 ? 'text-green-500' : multiplier < 1 ? 'text-red-500' : ''}`}>
+                              {multiplier.toFixed(2)}x
+                            </TableCell>
+                            <TableCell compact>
+                              <Badge variant="outline" className={
+                                pos.status === 'open' ? 'bg-blue-500/10 text-blue-500' :
+                                pos.status === 'moonbag' ? 'bg-purple-500/10 text-purple-500' :
+                                pos.status === 'closed' ? 'bg-muted text-muted-foreground' : ''
+                              }>{pos.status}</Badge>
+                            </TableCell>
+                            <TableCell compact className={`text-xs ${(pnl || 0) >= 0 ? 'text-green-500' : 'text-red-500'}`}>
+                              {(pnl || 0) >= 0 ? '+' : ''}{(pnl || 0).toFixed(4)}
+                            </TableCell>
+                            <TableCell compact className="text-xs text-muted-foreground">
+                              {formatDistanceToNow(new Date(pos.created_at), { addSuffix: false })}
+                            </TableCell>
+                          </TableRow>
+                        );
+                      })
                     )}
                   </TableBody>
                 </Table>
