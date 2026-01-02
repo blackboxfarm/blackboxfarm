@@ -33,6 +33,7 @@ interface FantasyConfig {
   is_enabled: boolean;
   fantasy_mode_enabled: boolean;
   fantasy_buy_amount_sol: number;
+  fantasy_buy_amount_usd: number;
   fantasy_target_multiplier: number;
   fantasy_sell_percentage: number;
   fantasy_moonbag_percentage: number;
@@ -63,6 +64,7 @@ async function getConfig(supabase: any): Promise<FantasyConfig> {
     is_enabled: data?.is_enabled ?? true,
     fantasy_mode_enabled: data?.fantasy_mode_enabled ?? true,
     fantasy_buy_amount_sol: data?.fantasy_buy_amount_sol ?? 0.1,
+    fantasy_buy_amount_usd: data?.fantasy_buy_amount_usd ?? 10,
     fantasy_target_multiplier: data?.fantasy_target_multiplier ?? 1.5,
     fantasy_sell_percentage: data?.fantasy_sell_percentage ?? 90,
     fantasy_moonbag_percentage: data?.fantasy_moonbag_percentage ?? 10,
@@ -380,8 +382,12 @@ async function manualFantasyBuy(supabase: any, tokenMint: string): Promise<{ suc
     return { success: false, error: 'Could not fetch token price' };
   }
 
+  // Calculate buy amount in SOL from USD
+  const buyAmountUsd = config.fantasy_buy_amount_usd || 10;
+  const buyAmountSol = buyAmountUsd / solPrice;
+  
   const now = new Date().toISOString();
-  const tokenAmount = config.fantasy_buy_amount_sol / price.priceSol;
+  const tokenAmount = buyAmountSol / price.priceSol;
 
   // Create fantasy position
   const { data: position, error: insertError } = await supabase
@@ -393,7 +399,8 @@ async function manualFantasyBuy(supabase: any, tokenMint: string): Promise<{ suc
       token_name: tokenName,
       entry_price_usd: price.priceUsd,
       entry_price_sol: price.priceSol,
-      entry_amount_sol: config.fantasy_buy_amount_sol,
+      entry_amount_sol: buyAmountSol,
+      entry_amount_usd: buyAmountUsd,
       token_amount: tokenAmount,
       entry_at: now,
       current_price_usd: price.priceUsd,
@@ -415,7 +422,7 @@ async function manualFantasyBuy(supabase: any, tokenMint: string): Promise<{ suc
     return { success: false, error: insertError.message };
   }
 
-  console.log(`🎮 MANUAL FANTASY BUY SUCCESS: ${tokenSymbol} @ $${price.priceUsd.toFixed(8)} (${config.fantasy_buy_amount_sol} SOL = ${tokenAmount.toFixed(2)} tokens)`);
+  console.log(`🎮 MANUAL FANTASY BUY SUCCESS: ${tokenSymbol} @ $${price.priceUsd.toFixed(8)} ($${buyAmountUsd} = ${buyAmountSol.toFixed(4)} SOL = ${tokenAmount.toFixed(2)} tokens)`);
 
   return { 
     success: true, 
@@ -425,7 +432,8 @@ async function manualFantasyBuy(supabase: any, tokenMint: string): Promise<{ suc
       name: tokenName,
       entryPrice: price.priceUsd,
       tokenAmount,
-      amountSol: config.fantasy_buy_amount_sol,
+      amountSol: buyAmountSol,
+      amountUsd: buyAmountUsd,
     }
   };
 }

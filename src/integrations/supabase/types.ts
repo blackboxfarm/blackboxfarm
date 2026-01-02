@@ -4741,6 +4741,7 @@ export type Database = {
           dead_retention_hours: number | null
           dead_volume_threshold_sol: number | null
           fantasy_buy_amount_sol: number | null
+          fantasy_buy_amount_usd: number | null
           fantasy_mode_enabled: boolean | null
           fantasy_moonbag_drawdown_limit: number | null
           fantasy_moonbag_percentage: number | null
@@ -4809,6 +4810,7 @@ export type Database = {
           dead_retention_hours?: number | null
           dead_volume_threshold_sol?: number | null
           fantasy_buy_amount_sol?: number | null
+          fantasy_buy_amount_usd?: number | null
           fantasy_mode_enabled?: boolean | null
           fantasy_moonbag_drawdown_limit?: number | null
           fantasy_moonbag_percentage?: number | null
@@ -4877,6 +4879,7 @@ export type Database = {
           dead_retention_hours?: number | null
           dead_volume_threshold_sol?: number | null
           fantasy_buy_amount_sol?: number | null
+          fantasy_buy_amount_usd?: number | null
           fantasy_mode_enabled?: boolean | null
           fantasy_moonbag_drawdown_limit?: number | null
           fantasy_moonbag_percentage?: number | null

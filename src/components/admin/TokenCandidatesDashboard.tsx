@@ -211,6 +211,10 @@ interface MonitorConfig {
   min_rolling_win_rate?: number;
   last_prune_at?: string | null;
   fantasy_mode_enabled?: boolean;
+  fantasy_buy_amount_usd?: number;
+  fantasy_target_multiplier?: number;
+  fantasy_moonbag_percentage?: number;
+  fantasy_sell_percentage?: number;
 }
 
 interface SafeguardStatus {
@@ -639,7 +643,8 @@ export function TokenCandidatesDashboard() {
       if (error) throw error;
       
       if (data?.success) {
-        toast.success(`🎮 Added ${data.position?.symbol || tokenSymbol || tokenMint.slice(0, 6)} to Fantasy @ $${data.position?.entryPrice?.toFixed(8) || '?'}`, {
+        const usdAmount = data.position?.amountUsd || config?.fantasy_buy_amount_usd || 10;
+        toast.success(`🎮 Added ${data.position?.symbol || tokenSymbol || tokenMint.slice(0, 6)} to Fantasy @ $${data.position?.entryPrice?.toFixed(8)} ($${usdAmount} position)`, {
           duration: 5000
         });
         await fetchFantasyData();
@@ -1181,6 +1186,48 @@ export function TokenCandidatesDashboard() {
                       {configEdits.fantasy_mode_enabled ? 'Fantasy Mode' : 'LIVE MODE'}
                     </span>
                   </div>
+                  {/* Fantasy Config */}
+                  {configEdits.fantasy_mode_enabled && (
+                    <div className="flex items-center gap-3 px-2 py-1 rounded-md bg-muted/50 border border-border/50">
+                      <div className="flex items-center gap-1">
+                        <DollarSign className="h-3 w-3 text-green-400" />
+                        <Input 
+                          type="number" 
+                          step="1" 
+                          min="1"
+                          className="w-16 h-6 text-xs" 
+                          value={configEdits.fantasy_buy_amount_usd ?? 10} 
+                          onChange={(e) => setConfigEdits(prev => ({ ...prev, fantasy_buy_amount_usd: parseFloat(e.target.value) || 10 }))} 
+                        />
+                        <span className="text-xs text-muted-foreground">USD</span>
+                      </div>
+                      <div className="flex items-center gap-1">
+                        <Target className="h-3 w-3 text-blue-400" />
+                        <Input 
+                          type="number" 
+                          step="0.1" 
+                          min="1.1"
+                          className="w-14 h-6 text-xs" 
+                          value={configEdits.fantasy_target_multiplier ?? 1.5} 
+                          onChange={(e) => setConfigEdits(prev => ({ ...prev, fantasy_target_multiplier: parseFloat(e.target.value) || 1.5 }))} 
+                        />
+                        <span className="text-xs text-muted-foreground">x</span>
+                      </div>
+                      <div className="flex items-center gap-1">
+                        <Moon className="h-3 w-3 text-purple-400" />
+                        <Input 
+                          type="number" 
+                          step="1" 
+                          min="0"
+                          max="100"
+                          className="w-12 h-6 text-xs" 
+                          value={configEdits.fantasy_moonbag_percentage ?? 10} 
+                          onChange={(e) => setConfigEdits(prev => ({ ...prev, fantasy_moonbag_percentage: parseFloat(e.target.value) || 10 }))} 
+                        />
+                        <span className="text-xs text-muted-foreground">% bag</span>
+                      </div>
+                    </div>
+                  )}
                   <div className="flex items-center gap-2">
                     <Switch checked={configEdits.auto_scalp_enabled ?? false}
                       onCheckedChange={(checked) => setConfigEdits(prev => ({ ...prev, auto_scalp_enabled: checked }))} />
