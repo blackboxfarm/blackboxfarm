@@ -68,6 +68,13 @@ interface WatchlistItem {
   removed_at: string | null;
   metadata: any;
   bonding_curve_pct: number | null;
+  // Phase 1 additions
+  rejection_type: 'soft' | 'permanent' | null;
+  dev_sold: boolean | null;
+  dev_launched_new: boolean | null;
+  max_single_wallet_pct: number | null;
+  has_image: boolean | null;
+  socials_count: number | null;
 }
 
 interface Candidate {
@@ -218,7 +225,7 @@ export function TokenCandidatesDashboard() {
   const [loading, setLoading] = useState(true);
   const [polling, setPolling] = useState(false);
   const [mainTab, setMainTab] = useState<'watchlist' | 'candidates' | 'logs'>('watchlist');
-  const [watchlistFilter, setWatchlistFilter] = useState<'all' | 'watching' | 'qualified' | 'dead'>('all');
+  const [watchlistFilter, setWatchlistFilter] = useState<'all' | 'watching' | 'qualified' | 'rejected' | 'dead'>('all');
   const [candidateFilter, setCandidateFilter] = useState<'all' | 'pending' | 'approved' | 'rejected'>('all');
   const [logsFilter, setLogsFilter] = useState<'all' | 'rejected' | 'accepted'>('all');
   const [configEdits, setConfigEdits] = useState<Partial<MonitorConfig>>({});
@@ -535,17 +542,29 @@ export function TokenCandidatesDashboard() {
     );
   };
 
-  // Status badge for watchlist
-  const getWatchlistStatusBadge = (status: string) => {
+  // Status badge for watchlist - now includes rejection type
+  const getWatchlistStatusBadge = (status: string, item?: WatchlistItem) => {
+    // Show dev alerts as highest priority
+    if (item?.dev_sold) {
+      return <Badge variant="outline" className="bg-red-600/20 text-red-400 border-red-600/50 text-xs font-bold">🚨 DEV SOLD</Badge>;
+    }
+    if (item?.dev_launched_new) {
+      return <Badge variant="outline" className="bg-orange-600/20 text-orange-400 border-orange-600/50 text-xs font-bold">⚠️ DEV NEW</Badge>;
+    }
+    
     switch (status) {
       case 'watching':
         return <Badge variant="outline" className="bg-blue-500/10 text-blue-500 border-blue-500/30 text-xs">Watching</Badge>;
       case 'qualified':
         return <Badge variant="outline" className="bg-green-500/10 text-green-500 border-green-500/30 text-xs">Qualified</Badge>;
       case 'pending_triage':
-        return <Badge variant="outline" className="bg-yellow-500/10 text-yellow-500 border-yellow-500/30 text-xs">Pending Triage</Badge>;
+        return <Badge variant="outline" className="bg-yellow-500/10 text-yellow-500 border-yellow-500/30 text-xs">Pending</Badge>;
       case 'rejected':
-        return <Badge variant="outline" className="bg-red-500/10 text-red-500 border-red-500/30 text-xs">Rejected</Badge>;
+        // Show rejection type for rejected tokens
+        if (item?.rejection_type === 'permanent') {
+          return <Badge variant="outline" className="bg-red-600/20 text-red-400 border-red-600/50 text-xs">Rejected ⛔</Badge>;
+        }
+        return <Badge variant="outline" className="bg-red-500/10 text-red-500 border-red-500/30 text-xs">Rejected ⏳</Badge>;
       case 'dead':
         return <Badge variant="outline" className="bg-muted text-muted-foreground text-xs">Dead</Badge>;
       case 'bombed':
@@ -627,7 +646,12 @@ export function TokenCandidatesDashboard() {
     total: watchlist.length,
     watching: watchlist.filter(w => w.status === 'watching').length,
     qualified: watchlist.filter(w => w.status === 'qualified').length,
+    rejected: watchlist.filter(w => w.status === 'rejected').length,
+    rejectedPermanent: watchlist.filter(w => w.status === 'rejected' && w.rejection_type === 'permanent').length,
+    rejectedSoft: watchlist.filter(w => w.status === 'rejected' && w.rejection_type === 'soft').length,
     dead: watchlist.filter(w => w.status === 'dead' || w.status === 'bombed').length,
+    devSold: watchlist.filter(w => w.dev_sold).length,
+    devLaunchedNew: watchlist.filter(w => w.dev_launched_new).length,
   };
 
   if (loading) {
@@ -653,15 +677,30 @@ export function TokenCandidatesDashboard() {
           <span className="font-bold text-green-500">{watchlistStats.qualified}</span>
         </div>
         <div className="flex items-center gap-2">
+          <XCircle className="h-4 w-4 text-red-500" />
+          <span className="text-muted-foreground">Rejected:</span>
+          <span className="font-bold text-red-500">
+            {watchlistStats.rejected}
+            {watchlistStats.rejectedPermanent > 0 && (
+              <span className="text-xs ml-1">(⛔{watchlistStats.rejectedPermanent})</span>
+            )}
+          </span>
+        </div>
+        <div className="flex items-center gap-2">
           <Skull className="h-4 w-4 text-muted-foreground" />
           <span className="text-muted-foreground">Dead:</span>
           <span className="font-bold">{watchlistStats.dead}</span>
         </div>
-        <div className="flex items-center gap-2">
-          <Activity className="h-4 w-4 text-orange-500" />
-          <span className="text-muted-foreground">Candidates:</span>
-          <span className="font-bold">{candidates.length}</span>
-        </div>
+        {(watchlistStats.devSold > 0 || watchlistStats.devLaunchedNew > 0) && (
+          <div className="flex items-center gap-2 text-orange-500">
+            <AlertTriangle className="h-4 w-4" />
+            <span className="text-xs">
+              {watchlistStats.devSold > 0 && `${watchlistStats.devSold} dev sold`}
+              {watchlistStats.devSold > 0 && watchlistStats.devLaunchedNew > 0 && ' · '}
+              {watchlistStats.devLaunchedNew > 0 && `${watchlistStats.devLaunchedNew} dev new`}
+            </span>
+          </div>
+        )}
         <div className="ml-auto flex items-center gap-2">
           {/* Polling interval selector */}
           <div className="flex items-center gap-1">
@@ -858,11 +897,11 @@ export function TokenCandidatesDashboard() {
               <div className="flex items-center justify-between">
                 <CardTitle className="text-base">Token Watchlist</CardTitle>
                 <div className="flex gap-1">
-                  {(['all', 'watching', 'qualified', 'dead'] as const).map((f) => (
+                  {(['all', 'watching', 'qualified', 'rejected', 'dead'] as const).map((f) => (
                     <Button key={f} variant={watchlistFilter === f ? 'default' : 'ghost'} size="sm"
                       onClick={() => setWatchlistFilter(f)}>
                       {f === 'all' ? 'All' : f.charAt(0).toUpperCase() + f.slice(1)}
-                      {f !== 'all' && ` (${f === 'dead' ? watchlistStats.dead : watchlist.filter(w => w.status === f).length})`}
+                      {f !== 'all' && ` (${f === 'dead' ? watchlistStats.dead : f === 'rejected' ? watchlistStats.rejected : watchlist.filter(w => w.status === f).length})`}
                     </Button>
                   ))}
                 </div>
@@ -932,7 +971,7 @@ export function TokenCandidatesDashboard() {
                             <TableCell compact className="text-xs text-muted-foreground">
                               {formatDistanceToNow(new Date(item.first_seen_at), { addSuffix: false })}
                             </TableCell>
-                            <TableCell compact>{getWatchlistStatusBadge(item.status)}</TableCell>
+                            <TableCell compact>{getWatchlistStatusBadge(item.status, item)}</TableCell>
                             <TableCell compact className="text-xs max-w-[120px] truncate" title={item.qualification_reason || item.rejection_reason || item.removal_reason || ''}>
                               {item.qualification_reason ? (
                                 <span className="text-green-500">{item.qualification_reason}</span>
