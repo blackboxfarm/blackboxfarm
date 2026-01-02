@@ -324,3 +324,6 @@ verify_jwt = false
 
 [functions.pumpfun-dev-wallet-monitor]
 verify_jwt = false
+
+[functions.pumpfun-global-safeguards]
+verify_jwt = false

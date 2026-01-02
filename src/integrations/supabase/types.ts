@@ -4261,6 +4261,66 @@ export type Database = {
           },
         ]
       }
+      pumpfun_daily_stats: {
+        Row: {
+          created_at: string | null
+          failed_sells: number | null
+          id: string
+          kill_switch_triggers: number | null
+          net_pnl_sol: number | null
+          prune_events: number | null
+          stat_date: string
+          successful_sells: number | null
+          tokens_bought: number | null
+          tokens_discovered: number | null
+          tokens_rejected: number | null
+          tokens_sold: number | null
+          total_buys: number | null
+          total_loss_sol: number | null
+          total_profit_sol: number | null
+          updated_at: string | null
+          win_rate: number | null
+        }
+        Insert: {
+          created_at?: string | null
+          failed_sells?: number | null
+          id?: string
+          kill_switch_triggers?: number | null
+          net_pnl_sol?: number | null
+          prune_events?: number | null
+          stat_date?: string
+          successful_sells?: number | null
+          tokens_bought?: number | null
+          tokens_discovered?: number | null
+          tokens_rejected?: number | null
+          tokens_sold?: number | null
+          total_buys?: number | null
+          total_loss_sol?: number | null
+          total_profit_sol?: number | null
+          updated_at?: string | null
+          win_rate?: number | null
+        }
+        Update: {
+          created_at?: string | null
+          failed_sells?: number | null
+          id?: string
+          kill_switch_triggers?: number | null
+          net_pnl_sol?: number | null
+          prune_events?: number | null
+          stat_date?: string
+          successful_sells?: number | null
+          tokens_bought?: number | null
+          tokens_discovered?: number | null
+          tokens_rejected?: number | null
+          tokens_sold?: number | null
+          total_buys?: number | null
+          total_loss_sol?: number | null
+          total_profit_sol?: number | null
+          updated_at?: string | null
+          win_rate?: number | null
+        }
+        Relationships: []
+      }
       pumpfun_discovery_logs: {
         Row: {
           acceptance_reasoning: Json | null
@@ -4445,14 +4505,21 @@ export type Database = {
       }
       pumpfun_monitor_config: {
         Row: {
+          active_watchdog_count: number | null
           auto_scalp_enabled: boolean
           candidates_found_count: number | null
           created_at: string
           daily_buy_cap: number | null
+          daily_buys_today: number | null
           dead_retention_hours: number | null
           id: string
           is_enabled: boolean
+          kill_switch_activated_at: string | null
+          kill_switch_active: boolean | null
+          kill_switch_reason: string | null
+          last_daily_reset: string | null
           last_poll_at: string | null
+          last_prune_at: string | null
           log_retention_hours: number | null
           max_bundle_score: number
           max_bundled_buy_count: number | null
@@ -4465,6 +4532,7 @@ export type Database = {
           max_ticker_length: number | null
           max_token_age_minutes: number
           max_watchdog_count: number | null
+          min_rolling_win_rate: number | null
           min_socials_count: number | null
           min_transactions: number
           min_volume_sol_5m: number
@@ -4476,16 +4544,24 @@ export type Database = {
           soft_reject_resurrection_minutes: number | null
           tokens_processed_count: number | null
           updated_at: string
+          win_rate_lookback_hours: number | null
         }
         Insert: {
+          active_watchdog_count?: number | null
           auto_scalp_enabled?: boolean
           candidates_found_count?: number | null
           created_at?: string
           daily_buy_cap?: number | null
+          daily_buys_today?: number | null
           dead_retention_hours?: number | null
           id?: string
           is_enabled?: boolean
+          kill_switch_activated_at?: string | null
+          kill_switch_active?: boolean | null
+          kill_switch_reason?: string | null
+          last_daily_reset?: string | null
           last_poll_at?: string | null
+          last_prune_at?: string | null
           log_retention_hours?: number | null
           max_bundle_score?: number
           max_bundled_buy_count?: number | null
@@ -4498,6 +4574,7 @@ export type Database = {
           max_ticker_length?: number | null
           max_token_age_minutes?: number
           max_watchdog_count?: number | null
+          min_rolling_win_rate?: number | null
           min_socials_count?: number | null
           min_transactions?: number
           min_volume_sol_5m?: number
@@ -4509,16 +4586,24 @@ export type Database = {
           soft_reject_resurrection_minutes?: number | null
           tokens_processed_count?: number | null
           updated_at?: string
+          win_rate_lookback_hours?: number | null
         }
         Update: {
+          active_watchdog_count?: number | null
           auto_scalp_enabled?: boolean
           candidates_found_count?: number | null
           created_at?: string
           daily_buy_cap?: number | null
+          daily_buys_today?: number | null
           dead_retention_hours?: number | null
           id?: string
           is_enabled?: boolean
+          kill_switch_activated_at?: string | null
+          kill_switch_active?: boolean | null
+          kill_switch_reason?: string | null
+          last_daily_reset?: string | null
           last_poll_at?: string | null
+          last_prune_at?: string | null
           log_retention_hours?: number | null
           max_bundle_score?: number
           max_bundled_buy_count?: number | null
@@ -4531,6 +4616,7 @@ export type Database = {
           max_ticker_length?: number | null
           max_token_age_minutes?: number
           max_watchdog_count?: number | null
+          min_rolling_win_rate?: number | null
           min_socials_count?: number | null
           min_transactions?: number
           min_volume_sol_5m?: number
@@ -4542,6 +4628,7 @@ export type Database = {
           soft_reject_resurrection_minutes?: number | null
           tokens_processed_count?: number | null
           updated_at?: string
+          win_rate_lookback_hours?: number | null
         }
         Relationships: []
       }
@@ -4624,6 +4711,9 @@ export type Database = {
           price_start_usd: number | null
           price_usd: number | null
           price_usd_prev: number | null
+          priority_score: number | null
+          prune_reason: string | null
+          pruned_at: string | null
           qualification_reason: string | null
           qualified_at: string | null
           rejection_reason: string | null
@@ -4688,6 +4778,9 @@ export type Database = {
           price_start_usd?: number | null
           price_usd?: number | null
           price_usd_prev?: number | null
+          priority_score?: number | null
+          prune_reason?: string | null
+          pruned_at?: string | null
           qualification_reason?: string | null
           qualified_at?: string | null
           rejection_reason?: string | null
@@ -4752,6 +4845,9 @@ export type Database = {
           price_start_usd?: number | null
           price_usd?: number | null
           price_usd_prev?: number | null
+          priority_score?: number | null
+          prune_reason?: string | null
+          pruned_at?: string | null
           qualification_reason?: string | null
           qualified_at?: string | null
           rejection_reason?: string | null
