@@ -4511,7 +4511,9 @@ export type Database = {
           created_at: string
           daily_buy_cap: number | null
           daily_buys_today: number | null
+          dead_holder_threshold: number | null
           dead_retention_hours: number | null
+          dead_volume_threshold_sol: number | null
           id: string
           is_enabled: boolean
           kill_switch_activated_at: string | null
@@ -4531,13 +4533,17 @@ export type Database = {
           max_suspicious_wallet_pct: number | null
           max_ticker_length: number | null
           max_token_age_minutes: number
+          max_watch_time_minutes: number | null
           max_watchdog_count: number | null
           min_rolling_win_rate: number | null
           min_rugcheck_score: number | null
           min_socials_count: number | null
           min_transactions: number
           min_volume_sol_5m: number
+          min_watch_time_minutes: number | null
           polling_interval_seconds: number | null
+          qualification_holder_count: number | null
+          qualification_volume_sol: number | null
           require_image: boolean | null
           resurrection_holder_threshold: number | null
           resurrection_volume_threshold_sol: number | null
@@ -4545,6 +4551,9 @@ export type Database = {
           rugcheck_rate_limit_ms: number | null
           rugcheck_recheck_minutes: number | null
           scalp_test_mode: boolean
+          signal_strong_holder_threshold: number | null
+          signal_strong_rugcheck_threshold: number | null
+          signal_strong_volume_threshold_sol: number | null
           soft_reject_resurrection_minutes: number | null
           tokens_processed_count: number | null
           updated_at: string
@@ -4557,7 +4566,9 @@ export type Database = {
           created_at?: string
           daily_buy_cap?: number | null
           daily_buys_today?: number | null
+          dead_holder_threshold?: number | null
           dead_retention_hours?: number | null
+          dead_volume_threshold_sol?: number | null
           id?: string
           is_enabled?: boolean
           kill_switch_activated_at?: string | null
@@ -4577,13 +4588,17 @@ export type Database = {
           max_suspicious_wallet_pct?: number | null
           max_ticker_length?: number | null
           max_token_age_minutes?: number
+          max_watch_time_minutes?: number | null
           max_watchdog_count?: number | null
           min_rolling_win_rate?: number | null
           min_rugcheck_score?: number | null
           min_socials_count?: number | null
           min_transactions?: number
           min_volume_sol_5m?: number
+          min_watch_time_minutes?: number | null
           polling_interval_seconds?: number | null
+          qualification_holder_count?: number | null
+          qualification_volume_sol?: number | null
           require_image?: boolean | null
           resurrection_holder_threshold?: number | null
           resurrection_volume_threshold_sol?: number | null
@@ -4591,6 +4606,9 @@ export type Database = {
           rugcheck_rate_limit_ms?: number | null
           rugcheck_recheck_minutes?: number | null
           scalp_test_mode?: boolean
+          signal_strong_holder_threshold?: number | null
+          signal_strong_rugcheck_threshold?: number | null
+          signal_strong_volume_threshold_sol?: number | null
           soft_reject_resurrection_minutes?: number | null
           tokens_processed_count?: number | null
           updated_at?: string
@@ -4603,7 +4621,9 @@ export type Database = {
           created_at?: string
           daily_buy_cap?: number | null
           daily_buys_today?: number | null
+          dead_holder_threshold?: number | null
           dead_retention_hours?: number | null
+          dead_volume_threshold_sol?: number | null
           id?: string
           is_enabled?: boolean
           kill_switch_activated_at?: string | null
@@ -4623,13 +4643,17 @@ export type Database = {
           max_suspicious_wallet_pct?: number | null
           max_ticker_length?: number | null
           max_token_age_minutes?: number
+          max_watch_time_minutes?: number | null
           max_watchdog_count?: number | null
           min_rolling_win_rate?: number | null
           min_rugcheck_score?: number | null
           min_socials_count?: number | null
           min_transactions?: number
           min_volume_sol_5m?: number
+          min_watch_time_minutes?: number | null
           polling_interval_seconds?: number | null
+          qualification_holder_count?: number | null
+          qualification_volume_sol?: number | null
           require_image?: boolean | null
           resurrection_holder_threshold?: number | null
           resurrection_volume_threshold_sol?: number | null
@@ -4637,6 +4661,9 @@ export type Database = {
           rugcheck_rate_limit_ms?: number | null
           rugcheck_recheck_minutes?: number | null
           scalp_test_mode?: boolean
+          signal_strong_holder_threshold?: number | null
+          signal_strong_rugcheck_threshold?: number | null
+          signal_strong_volume_threshold_sol?: number | null
           soft_reject_resurrection_minutes?: number | null
           tokens_processed_count?: number | null
           updated_at?: string
@@ -4708,6 +4735,7 @@ export type Database = {
           image_url: string | null
           insider_activity_detected: boolean | null
           last_checked_at: string
+          last_dev_check_at: string | null
           last_processor: string | null
           linked_wallet_count: number | null
           liquidity_usd: number | null
@@ -4739,6 +4767,7 @@ export type Database = {
           rugcheck_risks: Json | null
           rugcheck_score: number | null
           rugcheck_version: number | null
+          signal_strength: string | null
           social_score: number | null
           socials_checked_at: string | null
           socials_count: number | null
@@ -4781,6 +4810,7 @@ export type Database = {
           image_url?: string | null
           insider_activity_detected?: boolean | null
           last_checked_at?: string
+          last_dev_check_at?: string | null
           last_processor?: string | null
           linked_wallet_count?: number | null
           liquidity_usd?: number | null
@@ -4812,6 +4842,7 @@ export type Database = {
           rugcheck_risks?: Json | null
           rugcheck_score?: number | null
           rugcheck_version?: number | null
+          signal_strength?: string | null
           social_score?: number | null
           socials_checked_at?: string | null
           socials_count?: number | null
@@ -4854,6 +4885,7 @@ export type Database = {
           image_url?: string | null
           insider_activity_detected?: boolean | null
           last_checked_at?: string
+          last_dev_check_at?: string | null
           last_processor?: string | null
           linked_wallet_count?: number | null
           liquidity_usd?: number | null
@@ -4885,6 +4917,7 @@ export type Database = {
           rugcheck_risks?: Json | null
           rugcheck_score?: number | null
           rugcheck_version?: number | null
+          signal_strength?: string | null
           social_score?: number | null
           socials_checked_at?: string | null
           socials_count?: number | null

@@ -283,7 +283,31 @@ async function getConfig(supabase: any) {
     ],
     rugcheck_recheck_minutes: data?.rugcheck_recheck_minutes ?? 30,
     rugcheck_rate_limit_ms: data?.rugcheck_rate_limit_ms ?? 500,
+    // Signal strength thresholds (Stage 11)
+    signal_strong_holder_threshold: data?.signal_strong_holder_threshold ?? 50,
+    signal_strong_volume_threshold_sol: data?.signal_strong_volume_threshold_sol ?? 2.0,
+    signal_strong_rugcheck_threshold: data?.signal_strong_rugcheck_threshold ?? 70,
   };
+}
+
+// Determine signal strength classification (Stage 11)
+function classifySignalStrength(
+  metrics: TokenMetrics,
+  rugcheckNormalised: number | null,
+  config: any
+): 'strong' | 'weak' {
+  // SIGNAL_STRONG criteria:
+  // - High holder count
+  // - High volume
+  // - High rugcheck score
+  const passesHolders = metrics.holders >= config.signal_strong_holder_threshold;
+  const passesVolume = metrics.volume24hSol >= config.signal_strong_volume_threshold_sol;
+  const passesRugcheck = (rugcheckNormalised ?? 0) >= config.signal_strong_rugcheck_threshold;
+  
+  // Need to pass at least 2 of 3 criteria for STRONG
+  const passCount = [passesHolders, passesVolume, passesRugcheck].filter(Boolean).length;
+  
+  return passCount >= 2 ? 'strong' : 'weak';
 }
 
 // Main monitoring logic with rate limiting
@@ -485,16 +509,23 @@ async function monitorWatchlistTokens(supabase: any): Promise<MonitorStats> {
             stats.rugcheckRejected++;
             stats.rugcheckTokens.push(`${token.token_symbol} (score: ${rugcheckResult?.normalised?.toFixed(0) || 'N/A'})`);
           } else {
-            // All checks passed including RugCheck - promote!
+            // All checks passed including RugCheck - classify signal strength and promote!
+            const signalStrength = classifySignalStrength(
+              metrics, 
+              rugcheckResult?.normalised ?? token.rugcheck_normalised ?? null,
+              config
+            );
+            
             updates.status = 'qualified';
             updates.qualified_at = now.toISOString();
-            updates.qualification_reason = `Holders: ${metrics.holders}, Volume: ${metrics.volume24hSol.toFixed(2)} SOL, Watched: ${watchingMinutes.toFixed(0)}m, Bundle: ${token.bundle_score || 'N/A'}, RugCheck: ${rugcheckResult?.normalised?.toFixed(0) || token.rugcheck_normalised || 'cached'}`;
+            updates.signal_strength = signalStrength;
+            updates.qualification_reason = `Holders: ${metrics.holders}, Volume: ${metrics.volume24hSol.toFixed(2)} SOL, Watched: ${watchingMinutes.toFixed(0)}m, Bundle: ${token.bundle_score || 'N/A'}, RugCheck: ${rugcheckResult?.normalised?.toFixed(0) || token.rugcheck_normalised || 'cached'}, Signal: ${signalStrength.toUpperCase()}`;
             
             stats.promoted++;
-            stats.promotedTokens.push(`${token.token_symbol} (${metrics.holders} holders, ${metrics.volume24hSol.toFixed(2)} SOL)`);
-            console.log(`🎉 PROMOTED: ${token.token_symbol} - ${updates.qualification_reason}`);
+            stats.promotedTokens.push(`${token.token_symbol} (${metrics.holders} holders, ${metrics.volume24hSol.toFixed(2)} SOL, ${signalStrength.toUpperCase()})`);
+            console.log(`🎉 PROMOTED [${signalStrength.toUpperCase()}]: ${token.token_symbol} - ${updates.qualification_reason}`);
 
-            // Also add to buy candidates
+            // Also add to buy candidates with signal strength
             await supabase.from('pumpfun_buy_candidates').upsert({
               token_mint: token.token_mint,
               token_name: token.token_name,
@@ -512,6 +543,7 @@ async function monitorWatchlistTokens(supabase: any): Promise<MonitorStats> {
                 watchlist_qualification: updates.qualification_reason,
                 max_single_wallet_pct: token.max_single_wallet_pct,
                 rugcheck_score: rugcheckResult?.normalised || token.rugcheck_normalised,
+                signal_strength: signalStrength,
               },
             }, { onConflict: 'token_mint' });
           }
