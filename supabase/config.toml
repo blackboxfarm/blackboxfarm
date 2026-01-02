@@ -327,3 +327,6 @@ verify_jwt = false
 
 [functions.pumpfun-global-safeguards]
 verify_jwt = false
+
+[functions.pumpfun-buy-executor]
+verify_jwt = false
