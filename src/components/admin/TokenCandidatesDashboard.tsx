@@ -158,6 +158,10 @@ interface FantasyPosition {
   total_pnl_percent: number | null;
   peak_multiplier: number | null;
   created_at: string;
+  entry_at: string | null;
+  pumpfun_watchlist?: {
+    first_seen_at: string;
+  } | null;
 }
 
 interface FantasyStats {
@@ -430,10 +434,10 @@ export function TokenCandidatesDashboard() {
   const fetchFantasyData = useCallback(async () => {
     setLoadingFantasy(true);
     try {
-      // Fetch positions
+      // Fetch positions with watchlist join for first_seen_at
       const { data: positions, error: posError } = await supabase
         .from('pumpfun_fantasy_positions')
-        .select('*')
+        .select('*, pumpfun_watchlist:watchlist_id(first_seen_at)')
         .order('created_at', { ascending: false })
         .limit(100);
 
@@ -1641,18 +1645,20 @@ export function TokenCandidatesDashboard() {
                               {(pnl || 0) >= 0 ? '+' : ''}{(pnl || 0).toFixed(4)}
                             </TableCell>
                             <TableCell compact className="text-xs text-muted-foreground font-mono">
-                              <div className="flex flex-col">
-                                <span>{new Date(pos.created_at).toISOString().replace('T', ' ').slice(0, 19)} UTC</span>
-                                <span className="text-[10px] text-muted-foreground/70">
-                                  ({new Date(pos.created_at).toLocaleTimeString('en-US', { 
-                                    timeZone: 'UTC',
-                                    hour: '2-digit',
-                                    minute: '2-digit',
-                                    second: '2-digit',
-                                    hour12: false
-                                  })})
-                                </span>
-                              </div>
+                              {(() => {
+                                // Use first_seen_at from watchlist (actual detection time) for chart correlation
+                                const buyTime = pos.pumpfun_watchlist?.first_seen_at || pos.entry_at || pos.created_at;
+                                const date = new Date(buyTime);
+                                // Format as HH:MM:SS UTC to match Dexscreener chart x-axis
+                                const timeStr = date.toISOString().slice(11, 19);
+                                const dateStr = date.toISOString().slice(0, 10);
+                                return (
+                                  <div className="flex flex-col">
+                                    <span className="text-yellow-500 font-semibold">{timeStr} UTC</span>
+                                    <span className="text-[10px] text-muted-foreground/70">{dateStr}</span>
+                                  </div>
+                                );
+                              })()}
                             </TableCell>
                             <TableCell compact>
                               <div className="flex items-center gap-1">
