@@ -1664,6 +1664,12 @@ export function TokenCandidatesDashboard() {
                                 
                                 return (
                                   <div className="flex flex-col gap-0.5">
+                                    {discoveryTimeStr && (
+                                      <div className="flex items-center gap-1">
+                                        <span className="text-[10px] text-muted-foreground">Found:</span>
+                                        <span className="text-blue-400">{discoveryTimeStr}</span>
+                                      </div>
+                                    )}
                                     <div className="flex items-center gap-1">
                                       <span className="text-[10px] text-muted-foreground">Buy:</span>
                                       <span className="text-yellow-500 font-semibold">{buyTimeStr}</span>
@@ -1675,12 +1681,6 @@ export function TokenCandidatesDashboard() {
                                         <Copy className="h-3 w-3" />
                                       </button>
                                     </div>
-                                    {discoveryTimeStr && (
-                                      <div className="flex items-center gap-1">
-                                        <span className="text-[10px] text-muted-foreground">Found:</span>
-                                        <span className="text-blue-400">{discoveryTimeStr}</span>
-                                      </div>
-                                    )}
                                     <span className="text-[10px] text-muted-foreground/70">{buyDateStr} UTC</span>
                                   </div>
                                 );
