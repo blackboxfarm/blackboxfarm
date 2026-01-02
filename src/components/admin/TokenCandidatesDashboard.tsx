@@ -1578,19 +1578,22 @@ export function TokenCandidatesDashboard() {
                   <TableHeader>
                     <TableRow>
                       <TableHead compact>Symbol</TableHead>
+                      <TableHead compact>Token</TableHead>
                       <TableHead compact>Entry</TableHead>
                       <TableHead compact>Current</TableHead>
+                      <TableHead compact>ATH</TableHead>
                       <TableHead compact>Gain</TableHead>
                       <TableHead compact>Target</TableHead>
                       <TableHead compact>Status</TableHead>
                       <TableHead compact>P&L</TableHead>
                       <TableHead compact>Age</TableHead>
+                      <TableHead compact>Links</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
                     {fantasyPositions.length === 0 ? (
                       <TableRow>
-                        <TableCell colSpan={8} className="text-center text-muted-foreground py-8">
+                        <TableCell colSpan={11} className="text-center text-muted-foreground py-8">
                           No fantasy positions yet. Tokens reaching 'buy_now' status will appear here.
                         </TableCell>
                       </TableRow>
@@ -1600,11 +1603,25 @@ export function TokenCandidatesDashboard() {
                         const targetMultiplier = pos.target_multiplier || 1.5;
                         const targetHit = currentGain >= targetMultiplier;
                         const pnl = pos.status === 'closed' ? pos.total_realized_pnl_sol : pos.unrealized_pnl_sol;
+                        const athMultiplier = pos.peak_multiplier || currentGain;
                         return (
                           <TableRow key={pos.id}>
                             <TableCell compact className="font-medium">{pos.token_symbol || '???'}</TableCell>
+                            <TableCell compact>
+                              <div className="flex items-center gap-1">
+                                <span className="text-primary font-mono text-xs">
+                                  {pos.token_mint?.slice(0, 6)}...
+                                </span>
+                                <Button variant="ghost" size="icon" className="h-4 w-4" onClick={() => copyToClipboard(pos.token_mint)}>
+                                  <Copy className="h-2.5 w-2.5" />
+                                </Button>
+                              </div>
+                            </TableCell>
                             <TableCell compact className="text-xs">{formatPrice(pos.entry_price_usd)}</TableCell>
                             <TableCell compact className="text-xs">{formatPrice(pos.current_price_usd)}</TableCell>
+                            <TableCell compact className={`text-xs font-medium ${athMultiplier >= targetMultiplier ? 'text-green-500' : athMultiplier >= 1 ? 'text-yellow-500' : 'text-red-500'}`}>
+                              {athMultiplier.toFixed(2)}x
+                            </TableCell>
                             <TableCell compact className={`text-xs font-medium ${currentGain >= targetMultiplier ? 'text-green-500' : currentGain < 1 ? 'text-red-500' : 'text-yellow-500'}`}>
                               {currentGain.toFixed(2)}x
                             </TableCell>
@@ -1624,6 +1641,20 @@ export function TokenCandidatesDashboard() {
                             </TableCell>
                             <TableCell compact className="text-xs text-muted-foreground">
                               {formatDistanceToNow(new Date(pos.created_at), { addSuffix: false })}
+                            </TableCell>
+                            <TableCell compact>
+                              <div className="flex items-center gap-1">
+                                <Button variant="ghost" size="icon" className="h-5 w-5 p-0"
+                                  onClick={() => window.open(`https://pump.fun/${pos.token_mint}`, '_blank')}
+                                  title="View on Pump.fun">
+                                  <img src="/launchpad-logos/pumpfun.png" alt="Pump.fun" className="h-4 w-4 rounded-sm" />
+                                </Button>
+                                <Button variant="ghost" size="icon" className="h-5 w-5 p-0"
+                                  onClick={() => window.open(`https://dexscreener.com/solana/${pos.token_mint}`, '_blank')}
+                                  title="View on DexScreener">
+                                  <img src="/launchpad-logos/dexscreener.png" alt="DexScreener" className="h-4 w-4 rounded-sm" />
+                                </Button>
+                              </div>
                             </TableCell>
                           </TableRow>
                         );
