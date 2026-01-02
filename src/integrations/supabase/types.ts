@@ -4448,6 +4448,7 @@ export type Database = {
           auto_scalp_enabled: boolean
           candidates_found_count: number | null
           created_at: string
+          daily_buy_cap: number | null
           dead_retention_hours: number | null
           id: string
           is_enabled: boolean
@@ -4455,13 +4456,19 @@ export type Database = {
           log_retention_hours: number | null
           max_bundle_score: number
           max_reevaluate_minutes: number | null
+          max_single_wallet_pct: number | null
+          max_ticker_length: number | null
           max_token_age_minutes: number
+          max_watchdog_count: number | null
+          min_socials_count: number | null
           min_transactions: number
           min_volume_sol_5m: number
           polling_interval_seconds: number | null
+          require_image: boolean | null
           resurrection_holder_threshold: number | null
           resurrection_volume_threshold_sol: number | null
           scalp_test_mode: boolean
+          soft_reject_resurrection_minutes: number | null
           tokens_processed_count: number | null
           updated_at: string
         }
@@ -4469,6 +4476,7 @@ export type Database = {
           auto_scalp_enabled?: boolean
           candidates_found_count?: number | null
           created_at?: string
+          daily_buy_cap?: number | null
           dead_retention_hours?: number | null
           id?: string
           is_enabled?: boolean
@@ -4476,13 +4484,19 @@ export type Database = {
           log_retention_hours?: number | null
           max_bundle_score?: number
           max_reevaluate_minutes?: number | null
+          max_single_wallet_pct?: number | null
+          max_ticker_length?: number | null
           max_token_age_minutes?: number
+          max_watchdog_count?: number | null
+          min_socials_count?: number | null
           min_transactions?: number
           min_volume_sol_5m?: number
           polling_interval_seconds?: number | null
+          require_image?: boolean | null
           resurrection_holder_threshold?: number | null
           resurrection_volume_threshold_sol?: number | null
           scalp_test_mode?: boolean
+          soft_reject_resurrection_minutes?: number | null
           tokens_processed_count?: number | null
           updated_at?: string
         }
@@ -4490,6 +4504,7 @@ export type Database = {
           auto_scalp_enabled?: boolean
           candidates_found_count?: number | null
           created_at?: string
+          daily_buy_cap?: number | null
           dead_retention_hours?: number | null
           id?: string
           is_enabled?: boolean
@@ -4497,13 +4512,19 @@ export type Database = {
           log_retention_hours?: number | null
           max_bundle_score?: number
           max_reevaluate_minutes?: number | null
+          max_single_wallet_pct?: number | null
+          max_ticker_length?: number | null
           max_token_age_minutes?: number
+          max_watchdog_count?: number | null
+          min_socials_count?: number | null
           min_transactions?: number
           min_volume_sol_5m?: number
           polling_interval_seconds?: number | null
+          require_image?: boolean | null
           resurrection_holder_threshold?: number | null
           resurrection_volume_threshold_sol?: number | null
           scalp_test_mode?: boolean
+          soft_reject_resurrection_minutes?: number | null
           tokens_processed_count?: number | null
           updated_at?: string
         }
@@ -4558,7 +4579,11 @@ export type Database = {
           created_at: string
           created_at_blockchain: string | null
           creator_wallet: string | null
+          dev_launched_new: boolean | null
+          dev_sold: boolean | null
           first_seen_at: string
+          freeze_authority_revoked: boolean | null
+          has_image: boolean | null
           holder_count: number | null
           holder_count_peak: number | null
           holder_count_prev: number | null
@@ -4569,9 +4594,11 @@ export type Database = {
           liquidity_usd: number | null
           market_cap_sol: number | null
           market_cap_usd: number | null
+          max_single_wallet_pct: number | null
           mayhem_checked: boolean | null
           metadata: Json | null
           metrics_hash: string | null
+          mint_authority_revoked: boolean | null
           permanent_reject: boolean | null
           price_ath_usd: number | null
           price_start_usd: number | null
@@ -4580,10 +4607,13 @@ export type Database = {
           qualification_reason: string | null
           qualified_at: string | null
           rejection_reason: string | null
+          rejection_reasons: string[] | null
+          rejection_type: string | null
           removal_reason: string | null
           removed_at: string | null
           social_score: number | null
           socials_checked_at: string | null
+          socials_count: number | null
           source: string | null
           status: string
           telegram_url: string | null
@@ -4607,7 +4637,11 @@ export type Database = {
           created_at?: string
           created_at_blockchain?: string | null
           creator_wallet?: string | null
+          dev_launched_new?: boolean | null
+          dev_sold?: boolean | null
           first_seen_at?: string
+          freeze_authority_revoked?: boolean | null
+          has_image?: boolean | null
           holder_count?: number | null
           holder_count_peak?: number | null
           holder_count_prev?: number | null
@@ -4618,9 +4652,11 @@ export type Database = {
           liquidity_usd?: number | null
           market_cap_sol?: number | null
           market_cap_usd?: number | null
+          max_single_wallet_pct?: number | null
           mayhem_checked?: boolean | null
           metadata?: Json | null
           metrics_hash?: string | null
+          mint_authority_revoked?: boolean | null
           permanent_reject?: boolean | null
           price_ath_usd?: number | null
           price_start_usd?: number | null
@@ -4629,10 +4665,13 @@ export type Database = {
           qualification_reason?: string | null
           qualified_at?: string | null
           rejection_reason?: string | null
+          rejection_reasons?: string[] | null
+          rejection_type?: string | null
           removal_reason?: string | null
           removed_at?: string | null
           social_score?: number | null
           socials_checked_at?: string | null
+          socials_count?: number | null
           source?: string | null
           status?: string
           telegram_url?: string | null
@@ -4656,7 +4695,11 @@ export type Database = {
           created_at?: string
           created_at_blockchain?: string | null
           creator_wallet?: string | null
+          dev_launched_new?: boolean | null
+          dev_sold?: boolean | null
           first_seen_at?: string
+          freeze_authority_revoked?: boolean | null
+          has_image?: boolean | null
           holder_count?: number | null
           holder_count_peak?: number | null
           holder_count_prev?: number | null
@@ -4667,9 +4710,11 @@ export type Database = {
           liquidity_usd?: number | null
           market_cap_sol?: number | null
           market_cap_usd?: number | null
+          max_single_wallet_pct?: number | null
           mayhem_checked?: boolean | null
           metadata?: Json | null
           metrics_hash?: string | null
+          mint_authority_revoked?: boolean | null
           permanent_reject?: boolean | null
           price_ath_usd?: number | null
           price_start_usd?: number | null
@@ -4678,10 +4723,13 @@ export type Database = {
           qualification_reason?: string | null
           qualified_at?: string | null
           rejection_reason?: string | null
+          rejection_reasons?: string[] | null
+          rejection_type?: string | null
           removal_reason?: string | null
           removed_at?: string | null
           social_score?: number | null
           socials_checked_at?: string | null
+          socials_count?: number | null
           source?: string | null
           status?: string
           telegram_url?: string | null
