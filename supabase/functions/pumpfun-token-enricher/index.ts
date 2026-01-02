@@ -39,6 +39,24 @@ interface AuthorityCheck {
   details: string;
 }
 
+interface RugCheckRisk {
+  name: string;
+  value: string;
+  description: string;
+  score: number;
+  level: 'danger' | 'warn' | 'info' | 'good';
+}
+
+interface RugCheckResult {
+  score: number;
+  normalised: number;
+  risks: RugCheckRisk[];
+  passed: boolean;
+  hasCriticalRisk: boolean;
+  criticalRiskNames: string[];
+  error?: string;
+}
+
 interface HolderAnalysis {
   bundleScore: number;
   holderCount: number;
@@ -444,6 +462,82 @@ async function fetchPumpFunData(mint: string): Promise<any> {
   }
 }
 
+// Fetch RugCheck analysis for a token
+async function fetchRugCheck(mint: string, config: any): Promise<RugCheckResult> {
+  const defaultResult: RugCheckResult = {
+    score: 0,
+    normalised: 0,
+    risks: [],
+    passed: false,
+    hasCriticalRisk: false,
+    criticalRiskNames: [],
+  };
+
+  try {
+    // Rate limit delay
+    await new Promise(resolve => setTimeout(resolve, config.rugcheck_rate_limit_ms || 500));
+    
+    const response = await fetch(`https://api.rugcheck.xyz/v1/tokens/${mint}/report/summary`, {
+      headers: { 'Accept': 'application/json' },
+    });
+
+    if (!response.ok) {
+      console.log(`   ⚠️ RugCheck API error: ${response.status}`);
+      // Fail open - don't reject if API is down
+      return { ...defaultResult, passed: true, error: `API error: ${response.status}` };
+    }
+
+    const data = await response.json();
+    
+    // Extract score (RugCheck score: 0-1000, higher = safer)
+    const rawScore = data.score || 0;
+    const normalised = Math.min(100, Math.max(0, rawScore / 10)); // Convert to 0-100
+    
+    // Extract risks
+    const risks: RugCheckRisk[] = (data.risks || []).map((r: any) => ({
+      name: r.name || 'Unknown',
+      value: r.value || '',
+      description: r.description || '',
+      score: r.score || 0,
+      level: r.level || 'info',
+    }));
+    
+    // Check for critical risks
+    const criticalRiskList: string[] = config.rugcheck_critical_risks || [
+      'Freeze Authority still enabled',
+      'Mint Authority still enabled',
+      'Low Liquidity',
+      'Copycat token',
+      'Top 10 holders own high percentage',
+      'Single holder owns high percentage',
+    ];
+    
+    const dangerRisks = risks.filter(r => r.level === 'danger');
+    const criticalRiskNames = dangerRisks
+      .filter(r => criticalRiskList.some(cr => r.name.toLowerCase().includes(cr.toLowerCase())))
+      .map(r => r.name);
+    
+    const hasCriticalRisk = criticalRiskNames.length > 0;
+    const minScore = config.min_rugcheck_score || 50;
+    const passed = normalised >= minScore && !hasCriticalRisk;
+    
+    console.log(`   🔍 RugCheck: score=${normalised.toFixed(1)}, risks=${risks.length}, critical=${hasCriticalRisk ? criticalRiskNames.join(', ') : 'none'}, passed=${passed}`);
+    
+    return {
+      score: rawScore,
+      normalised,
+      risks,
+      passed,
+      hasCriticalRisk,
+      criticalRiskNames,
+    };
+  } catch (error) {
+    console.error(`   ⚠️ RugCheck error for ${mint}:`, error);
+    // Fail open - don't reject if API call fails
+    return { ...defaultResult, passed: true, error: String(error) };
+  }
+}
+
 // Get config from database
 async function getConfig(supabase: any) {
   const { data } = await supabase
@@ -467,6 +561,18 @@ async function getConfig(supabase: any) {
     max_bundled_buy_count: data?.max_bundled_buy_count ?? 3,
     max_fresh_wallet_pct: data?.max_fresh_wallet_pct ?? 50,
     max_suspicious_wallet_pct: data?.max_suspicious_wallet_pct ?? 30,
+    // RugCheck thresholds
+    min_rugcheck_score: data?.min_rugcheck_score ?? 50,
+    rugcheck_critical_risks: data?.rugcheck_critical_risks ?? [
+      'Freeze Authority still enabled',
+      'Mint Authority still enabled',
+      'Low Liquidity',
+      'Copycat token',
+      'Top 10 holders own high percentage',
+      'Single holder owns high percentage',
+    ],
+    rugcheck_recheck_minutes: data?.rugcheck_recheck_minutes ?? 30,
+    rugcheck_rate_limit_ms: data?.rugcheck_rate_limit_ms ?? 500,
   };
 }
 
@@ -541,6 +647,9 @@ async function enrichTokenBatch(
     // Analyze bundle risk and holder concentration
     const holderAnalysis = await analyzeTokenRisk(token.token_mint);
     
+    // RUGCHECK ANALYSIS - Stage 1 integration
+    const rugCheckResult = await fetchRugCheck(token.token_mint, config);
+    
     // Extract data
     const holderCount = tokenData?.holders || holderAnalysis.holderCount || token.holder_count || 0;
     const marketCapSol = tokenData?.pools?.[0]?.marketCap?.quote || token.market_cap_sol || 0;
@@ -556,6 +665,17 @@ async function enrichTokenBatch(
     // Build rejection reasons array
     const rejectionReasons: string[] = [];
     let isPermanentReject = false;
+    
+    // RUGCHECK CRITICAL RISK CHECK - PERMANENT
+    if (rugCheckResult.hasCriticalRisk) {
+      rejectionReasons.push(`rugcheck_critical:${rugCheckResult.criticalRiskNames.join(',')}`);
+      isPermanentReject = true;
+    }
+    
+    // RUGCHECK SCORE CHECK - SOFT (only if no critical risks and score is low)
+    if (!rugCheckResult.hasCriticalRisk && !rugCheckResult.passed && !rugCheckResult.error) {
+      rejectionReasons.push(`rugcheck_score:${rugCheckResult.normalised.toFixed(0)}<${config.min_rugcheck_score}`);
+    }
     
     // MINT AUTHORITY CHECK - PERMANENT
     if (!authorityCheck.mintAuthorityRevoked) {
@@ -651,6 +771,7 @@ async function enrichTokenBatch(
     console.log(`      Bonding Curve: ${bondingCurve.toFixed(1)}% (range: ${config.bonding_curve_min}-${config.bonding_curve_max}%)`);
     console.log(`      Has Image: ${hasImage} (required: ${config.require_image})`);
     console.log(`      Socials: ${socialsCount} (min: ${config.min_socials_count})`);
+    console.log(`      RugCheck Score: ${rugCheckResult.normalised.toFixed(1)} (min: ${config.min_rugcheck_score}) ${rugCheckResult.passed ? '✅' : '❌'}${rugCheckResult.hasCriticalRisk ? ' ⛔ CRITICAL' : ''}`);
     console.log(`      Price: $${priceUsd?.toFixed(8) || 'N/A'}, Volume: ${volumeSol} SOL, MCap: $${marketCapUsd || 'N/A'}`);
     
     const shouldReject = rejectionReasons.length > 0;
@@ -686,6 +807,12 @@ async function enrichTokenBatch(
           fresh_wallet_pct: holderAnalysis.freshWalletPct,
           suspicious_wallet_pct: holderAnalysis.suspiciousWalletPct,
           insider_activity_detected: holderAnalysis.insiderActivityDetected,
+          // RugCheck metrics
+          rugcheck_score: rugCheckResult.score,
+          rugcheck_normalised: rugCheckResult.normalised,
+          rugcheck_risks: rugCheckResult.risks,
+          rugcheck_passed: rugCheckResult.passed,
+          rugcheck_checked_at: new Date().toISOString(),
           removed_at: new Date().toISOString(),
           last_checked_at: new Date().toISOString(),
         })
@@ -697,8 +824,8 @@ async function enrichTokenBatch(
         softRejected++;
       }
     } else {
-      // Promote to watching with reason (include Phase 4 metrics)
-      const promotionReason = `bundle:${holderAnalysis.bundleScore}/${config.max_bundle_score}, gini:${holderAnalysis.giniCoefficient.toFixed(2)}, linked:${holderAnalysis.linkedWalletCount}, bundled:${holderAnalysis.bundledBuyCount}, holders:${holderCount}, maxWallet:${holderAnalysis.maxSingleWalletPct.toFixed(1)}%`;
+      // Promote to watching with reason (include Phase 4 metrics + RugCheck)
+      const promotionReason = `bundle:${holderAnalysis.bundleScore}/${config.max_bundle_score}, gini:${holderAnalysis.giniCoefficient.toFixed(2)}, linked:${holderAnalysis.linkedWalletCount}, bundled:${holderAnalysis.bundledBuyCount}, holders:${holderCount}, maxWallet:${holderAnalysis.maxSingleWalletPct.toFixed(1)}%, rugcheck:${rugCheckResult.normalised.toFixed(0)}`;
       console.log(`   ✅ PROMOTED to watching: ${promotionReason}`);
       
       await supabase
@@ -727,6 +854,12 @@ async function enrichTokenBatch(
           fresh_wallet_pct: holderAnalysis.freshWalletPct,
           suspicious_wallet_pct: holderAnalysis.suspiciousWalletPct,
           insider_activity_detected: holderAnalysis.insiderActivityDetected,
+          // RugCheck metrics
+          rugcheck_score: rugCheckResult.score,
+          rugcheck_normalised: rugCheckResult.normalised,
+          rugcheck_risks: rugCheckResult.risks,
+          rugcheck_passed: rugCheckResult.passed,
+          rugcheck_checked_at: new Date().toISOString(),
           last_checked_at: new Date().toISOString(),
           created_at_blockchain: createdAt ? new Date(createdAt * 1000).toISOString() : null,
           qualification_reason: promotionReason,
