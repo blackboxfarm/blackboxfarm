@@ -447,7 +447,7 @@ export function TokenCandidatesDashboard() {
 
   // Save config
   const saveConfig = async () => {
-    try {
+   try {
       const { error } = await supabase
         .from('pumpfun_monitor_config')
         .update({ ...configEdits, updated_at: new Date().toISOString() })
@@ -458,6 +458,27 @@ export function TokenCandidatesDashboard() {
       await fetchConfig();
     } catch (error) {
       toast.error('Failed to save config');
+    }
+  };
+
+  // Clear all discovery logs
+  const clearLogs = async () => {
+    if (!confirm(`Are you sure you want to delete all ${totalLogsCount} logs?`)) return;
+    
+    try {
+      const { error } = await supabase
+        .from('pumpfun_discovery_logs')
+        .delete()
+        .not('id', 'is', null);
+
+      if (error) throw error;
+      toast.success('Logs cleared');
+      setDiscoveryLogs([]);
+      setTotalLogsCount(0);
+      setLogsPage(0);
+    } catch (error) {
+      console.error('Error clearing logs:', error);
+      toast.error('Failed to clear logs');
     }
   };
 
@@ -1078,6 +1099,10 @@ export function TokenCandidatesDashboard() {
                   ))}
                   <Button variant="ghost" size="sm" onClick={() => fetchDiscoveryLogs()}>
                     <RefreshCw className="h-3 w-3" />
+                  </Button>
+                  <Button variant="ghost" size="sm" onClick={clearLogs} className="text-red-500 hover:text-red-400 hover:bg-red-500/10">
+                    <XCircle className="h-3 w-3 mr-1" />
+                    Clear
                   </Button>
                 </div>
               </div>
