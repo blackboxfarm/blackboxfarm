@@ -456,10 +456,15 @@ async function monitorWatchlistTokens(supabase: any): Promise<MonitorStats> {
           // Track peaks
           holder_count_peak: Math.max(token.holder_count_peak || 0, metrics.holders),
           price_ath_usd: Math.max(token.price_ath_usd || 0, metrics.priceUsd || 0),
-          // Staleness tracking
-          metrics_hash: newMetricsHash,
-          consecutive_stale_checks: isStale ? (token.consecutive_stale_checks || 0) + 1 : 0,
-          last_processor: 'watchlist-monitor',
+        // Staleness tracking
+        metrics_hash: newMetricsHash,
+        consecutive_stale_checks: isStale ? (token.consecutive_stale_checks || 0) + 1 : 0,
+        last_processor: 'watchlist-monitor',
+        // Graduation detection - if bonding curve is 0 or null (complete), mark as graduated
+        is_graduated: metrics.bondingCurvePct !== null && metrics.bondingCurvePct <= 5,
+        graduated_at: (metrics.bondingCurvePct !== null && metrics.bondingCurvePct <= 5 && !token.is_graduated) 
+          ? now.toISOString() 
+          : token.graduated_at,
         };
 
         // === QUALIFICATION CHECK ===

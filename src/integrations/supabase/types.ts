@@ -4506,7 +4506,12 @@ export type Database = {
       pumpfun_monitor_config: {
         Row: {
           active_watchdog_count: number | null
+          auto_buy_enabled: boolean | null
           auto_scalp_enabled: boolean
+          buy_amount_sol: number | null
+          buy_priority_fee_sol: number | null
+          buy_slippage_bps: number | null
+          buy_wallet_id: string | null
           candidates_found_count: number | null
           created_at: string
           daily_buy_cap: number | null
@@ -4525,6 +4530,7 @@ export type Database = {
           log_retention_hours: number | null
           max_bundle_score: number
           max_bundled_buy_count: number | null
+          max_buy_price_usd: number | null
           max_fresh_wallet_pct: number | null
           max_gini_coefficient: number | null
           max_linked_wallet_count: number | null
@@ -4561,7 +4567,12 @@ export type Database = {
         }
         Insert: {
           active_watchdog_count?: number | null
+          auto_buy_enabled?: boolean | null
           auto_scalp_enabled?: boolean
+          buy_amount_sol?: number | null
+          buy_priority_fee_sol?: number | null
+          buy_slippage_bps?: number | null
+          buy_wallet_id?: string | null
           candidates_found_count?: number | null
           created_at?: string
           daily_buy_cap?: number | null
@@ -4580,6 +4591,7 @@ export type Database = {
           log_retention_hours?: number | null
           max_bundle_score?: number
           max_bundled_buy_count?: number | null
+          max_buy_price_usd?: number | null
           max_fresh_wallet_pct?: number | null
           max_gini_coefficient?: number | null
           max_linked_wallet_count?: number | null
@@ -4616,7 +4628,12 @@ export type Database = {
         }
         Update: {
           active_watchdog_count?: number | null
+          auto_buy_enabled?: boolean | null
           auto_scalp_enabled?: boolean
+          buy_amount_sol?: number | null
+          buy_priority_fee_sol?: number | null
+          buy_slippage_bps?: number | null
+          buy_wallet_id?: string | null
           candidates_found_count?: number | null
           created_at?: string
           daily_buy_cap?: number | null
@@ -4635,6 +4652,7 @@ export type Database = {
           log_retention_hours?: number | null
           max_bundle_score?: number
           max_bundled_buy_count?: number | null
+          max_buy_price_usd?: number | null
           max_fresh_wallet_pct?: number | null
           max_gini_coefficient?: number | null
           max_linked_wallet_count?: number | null
@@ -4716,6 +4734,11 @@ export type Database = {
           bundle_checked: boolean | null
           bundle_score: number | null
           bundled_buy_count: number | null
+          buy_amount_sol: number | null
+          buy_attempted_at: string | null
+          buy_error: string | null
+          buy_executed_at: string | null
+          buy_tx_signature: string | null
           check_count: number
           consecutive_stale_checks: number | null
           created_at: string
@@ -4727,6 +4750,7 @@ export type Database = {
           freeze_authority_revoked: boolean | null
           fresh_wallet_pct: number | null
           gini_coefficient: number | null
+          graduated_at: string | null
           has_image: boolean | null
           holder_count: number | null
           holder_count_peak: number | null
@@ -4734,6 +4758,7 @@ export type Database = {
           id: string
           image_url: string | null
           insider_activity_detected: boolean | null
+          is_graduated: boolean | null
           last_checked_at: string
           last_dev_check_at: string | null
           last_processor: string | null
@@ -4756,6 +4781,7 @@ export type Database = {
           pruned_at: string | null
           qualification_reason: string | null
           qualified_at: string | null
+          raydium_pool_address: string | null
           rejection_reason: string | null
           rejection_reasons: string[] | null
           rejection_type: string | null
@@ -4791,6 +4817,11 @@ export type Database = {
           bundle_checked?: boolean | null
           bundle_score?: number | null
           bundled_buy_count?: number | null
+          buy_amount_sol?: number | null
+          buy_attempted_at?: string | null
+          buy_error?: string | null
+          buy_executed_at?: string | null
+          buy_tx_signature?: string | null
           check_count?: number
           consecutive_stale_checks?: number | null
           created_at?: string
@@ -4802,6 +4833,7 @@ export type Database = {
           freeze_authority_revoked?: boolean | null
           fresh_wallet_pct?: number | null
           gini_coefficient?: number | null
+          graduated_at?: string | null
           has_image?: boolean | null
           holder_count?: number | null
           holder_count_peak?: number | null
@@ -4809,6 +4841,7 @@ export type Database = {
           id?: string
           image_url?: string | null
           insider_activity_detected?: boolean | null
+          is_graduated?: boolean | null
           last_checked_at?: string
           last_dev_check_at?: string | null
           last_processor?: string | null
@@ -4831,6 +4864,7 @@ export type Database = {
           pruned_at?: string | null
           qualification_reason?: string | null
           qualified_at?: string | null
+          raydium_pool_address?: string | null
           rejection_reason?: string | null
           rejection_reasons?: string[] | null
           rejection_type?: string | null
@@ -4866,6 +4900,11 @@ export type Database = {
           bundle_checked?: boolean | null
           bundle_score?: number | null
           bundled_buy_count?: number | null
+          buy_amount_sol?: number | null
+          buy_attempted_at?: string | null
+          buy_error?: string | null
+          buy_executed_at?: string | null
+          buy_tx_signature?: string | null
           check_count?: number
           consecutive_stale_checks?: number | null
           created_at?: string
@@ -4877,6 +4916,7 @@ export type Database = {
           freeze_authority_revoked?: boolean | null
           fresh_wallet_pct?: number | null
           gini_coefficient?: number | null
+          graduated_at?: string | null
           has_image?: boolean | null
           holder_count?: number | null
           holder_count_peak?: number | null
@@ -4884,6 +4924,7 @@ export type Database = {
           id?: string
           image_url?: string | null
           insider_activity_detected?: boolean | null
+          is_graduated?: boolean | null
           last_checked_at?: string
           last_dev_check_at?: string | null
           last_processor?: string | null
@@ -4906,6 +4947,7 @@ export type Database = {
           pruned_at?: string | null
           qualification_reason?: string | null
           qualified_at?: string | null
+          raydium_pool_address?: string | null
           rejection_reason?: string | null
           rejection_reasons?: string[] | null
           rejection_type?: string | null
