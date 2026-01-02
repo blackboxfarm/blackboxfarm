@@ -41,7 +41,9 @@ import {
   TestTube,
   DollarSign,
   Target,
-  Moon
+  Moon,
+  SearchCheck,
+  Binoculars
 } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
 
@@ -161,6 +163,7 @@ interface FantasyPosition {
   entry_at: string | null;
   pumpfun_watchlist?: {
     first_seen_at: string;
+    qualified_at: string | null;
   } | null;
 }
 
@@ -434,10 +437,10 @@ export function TokenCandidatesDashboard() {
   const fetchFantasyData = useCallback(async () => {
     setLoadingFantasy(true);
     try {
-      // Fetch positions with watchlist join for first_seen_at
+      // Fetch positions with watchlist join for first_seen_at and qualified_at
       const { data: positions, error: posError } = await supabase
         .from('pumpfun_fantasy_positions')
-        .select('*, pumpfun_watchlist:watchlist_id(first_seen_at)')
+        .select('*, pumpfun_watchlist:watchlist_id(first_seen_at, qualified_at)')
         .order('created_at', { ascending: false })
         .limit(100);
 
@@ -1652,10 +1655,15 @@ export function TokenCandidatesDashboard() {
                                 const buyDateStr = buyDate.toISOString().slice(0, 10);
                                 const fullTimestamp = `${buyDateStr} ${buyTimeStr} UTC`;
                                 
-                                // Discovery time from watchlist (when token was first detected)
+                                // Discovery time from watchlist (when token was first detected on Pump.fun)
                                 const discoveryTime = pos.pumpfun_watchlist?.first_seen_at;
                                 const discoveryDate = discoveryTime ? new Date(discoveryTime) : null;
                                 const discoveryTimeStr = discoveryDate?.toISOString().slice(11, 19);
+                                
+                                // Qualified time (when promoted to watching)
+                                const qualifiedTime = pos.pumpfun_watchlist?.qualified_at;
+                                const qualifiedDate = qualifiedTime ? new Date(qualifiedTime) : null;
+                                const qualifiedTimeStr = qualifiedDate?.toISOString().slice(11, 19);
                                 
                                 const copyTimestamp = () => {
                                   navigator.clipboard.writeText(fullTimestamp);
@@ -1664,14 +1672,24 @@ export function TokenCandidatesDashboard() {
                                 
                                 return (
                                   <div className="flex flex-col gap-0.5">
+                                    {/* 1. Found on Pump.fun - magnifying glass with check */}
                                     {discoveryTimeStr && (
-                                      <div className="flex items-center gap-1">
-                                        <span className="text-[10px] text-muted-foreground">Found:</span>
+                                      <div className="flex items-center gap-1" title="Found on Pump.fun">
+                                        <SearchCheck className="h-3 w-3 text-muted-foreground" />
                                         <span className="text-blue-400">{discoveryTimeStr}</span>
                                       </div>
                                     )}
-                                    <div className="flex items-center gap-1">
-                                      <span className="text-[10px] text-muted-foreground">Buy:</span>
+                                    {/* 2. Promoted to Watching - binoculars */}
+                                    {qualifiedTimeStr && (
+                                      <div className="flex items-center gap-1" title="Promoted to Watching">
+                                        <Binoculars className="h-3 w-3 text-muted-foreground" />
+                                        <span className="text-purple-400">{qualifiedTimeStr}</span>
+                                      </div>
+                                    )}
+                                    {/* 3. Fantasy Buy - dollar sign + timer */}
+                                    <div className="flex items-center gap-1" title="Fantasy Buy">
+                                      <DollarSign className="h-3 w-3 text-muted-foreground" />
+                                      <Timer className="h-3 w-3 text-muted-foreground -ml-1" />
                                       <span className="text-yellow-500 font-semibold">{buyTimeStr}</span>
                                       <button 
                                         onClick={copyTimestamp}
