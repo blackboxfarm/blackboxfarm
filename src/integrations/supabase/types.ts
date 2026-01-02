@@ -4574,6 +4574,7 @@ export type Database = {
           metrics_hash: string | null
           permanent_reject: boolean | null
           price_ath_usd: number | null
+          price_start_usd: number | null
           price_usd: number | null
           price_usd_prev: number | null
           qualification_reason: string | null
@@ -4622,6 +4623,7 @@ export type Database = {
           metrics_hash?: string | null
           permanent_reject?: boolean | null
           price_ath_usd?: number | null
+          price_start_usd?: number | null
           price_usd?: number | null
           price_usd_prev?: number | null
           qualification_reason?: string | null
@@ -4670,6 +4672,7 @@ export type Database = {
           metrics_hash?: string | null
           permanent_reject?: boolean | null
           price_ath_usd?: number | null
+          price_start_usd?: number | null
           price_usd?: number | null
           price_usd_prev?: number | null
           qualification_reason?: string | null
