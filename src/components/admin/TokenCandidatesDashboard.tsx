@@ -45,7 +45,7 @@ interface WatchlistItem {
   token_name: string;
   first_seen_at: string;
   last_checked_at: string;
-  status: 'watching' | 'qualified' | 'dead' | 'bombed' | 'removed';
+  status: 'watching' | 'qualified' | 'dead' | 'bombed' | 'removed' | 'pending_triage' | 'rejected';
   check_count: number;
   holder_count: number;
   holder_count_prev: number | null;
@@ -62,6 +62,7 @@ interface WatchlistItem {
   social_score: number | null;
   creator_wallet: string | null;
   qualification_reason: string | null;
+  rejection_reason: string | null;
   removal_reason: string | null;
   qualified_at: string | null;
   removed_at: string | null;
@@ -882,6 +883,7 @@ export function TokenCandidatesDashboard() {
                       <TableHead compact>ATH</TableHead>
                       <SortableHeader column="first_seen_at" label="Age" currentSort={watchlistSortColumn} direction={watchlistSortDirection} onSort={handleWatchlistSort} />
                       <SortableHeader column="status" label="Status" currentSort={watchlistSortColumn} direction={watchlistSortDirection} onSort={handleWatchlistSort} />
+                      <TableHead compact>Reason</TableHead>
                       <TableHead compact>Actions</TableHead>
                     </TableRow>
                   </TableHeader>
@@ -931,6 +933,17 @@ export function TokenCandidatesDashboard() {
                               {formatDistanceToNow(new Date(item.first_seen_at), { addSuffix: false })}
                             </TableCell>
                             <TableCell compact>{getWatchlistStatusBadge(item.status)}</TableCell>
+                            <TableCell compact className="text-xs max-w-[120px] truncate" title={item.qualification_reason || item.rejection_reason || item.removal_reason || ''}>
+                              {item.qualification_reason ? (
+                                <span className="text-green-500">{item.qualification_reason}</span>
+                              ) : item.rejection_reason ? (
+                                <span className="text-red-500">{item.rejection_reason}</span>
+                              ) : item.removal_reason ? (
+                                <span className="text-orange-500">{item.removal_reason}</span>
+                              ) : (
+                                <span className="text-muted-foreground">-</span>
+                              )}
+                            </TableCell>
                             <TableCell compact>
                               <div className="flex items-center gap-1">
                                 <Button variant="ghost" size="icon" className="h-5 w-5 p-0"
@@ -965,7 +978,8 @@ export function TokenCandidatesDashboard() {
                                   <div><span className="text-muted-foreground">Creator:</span> <span className="font-mono">{item.creator_wallet?.slice(0, 8)}...</span></div>
                                   <div><span className="text-muted-foreground">Bonding Curve:</span> <span className="text-cyan-400">{formatBondingCurve(item.bonding_curve_pct)}</span></div>
                                   {item.qualification_reason && <div className="col-span-2 text-green-500"><span className="text-muted-foreground">Qualified:</span> {item.qualification_reason}</div>}
-                                  {item.removal_reason && <div className="col-span-2 text-red-500"><span className="text-muted-foreground">Removed:</span> {item.removal_reason}</div>}
+                                  {item.rejection_reason && <div className="col-span-2 text-red-500"><span className="text-muted-foreground">Rejected:</span> {item.rejection_reason}</div>}
+                                  {item.removal_reason && <div className="col-span-2 text-orange-500"><span className="text-muted-foreground">Removed:</span> {item.removal_reason}</div>}
                                 </div>
                               </TableCell>
                             </TableRow>
