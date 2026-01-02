@@ -4563,9 +4563,11 @@ export type Database = {
           holder_count_peak: number | null
           holder_count_prev: number | null
           id: string
+          image_url: string | null
           last_checked_at: string
           last_processor: string | null
           liquidity_usd: number | null
+          market_cap_sol: number | null
           market_cap_usd: number | null
           mayhem_checked: boolean | null
           metadata: Json | null
@@ -4576,19 +4578,23 @@ export type Database = {
           price_usd_prev: number | null
           qualification_reason: string | null
           qualified_at: string | null
+          rejection_reason: string | null
           removal_reason: string | null
           removed_at: string | null
           social_score: number | null
           socials_checked_at: string | null
           source: string | null
           status: string
+          telegram_url: string | null
           token_mint: string
           token_name: string | null
           token_symbol: string | null
+          twitter_url: string | null
           tx_count: number | null
           updated_at: string
           volume_sol: number | null
           volume_sol_prev: number | null
+          website_url: string | null
         }
         Insert: {
           bonding_curve_pct?: number | null
@@ -4604,9 +4610,11 @@ export type Database = {
           holder_count_peak?: number | null
           holder_count_prev?: number | null
           id?: string
+          image_url?: string | null
           last_checked_at?: string
           last_processor?: string | null
           liquidity_usd?: number | null
+          market_cap_sol?: number | null
           market_cap_usd?: number | null
           mayhem_checked?: boolean | null
           metadata?: Json | null
@@ -4617,19 +4625,23 @@ export type Database = {
           price_usd_prev?: number | null
           qualification_reason?: string | null
           qualified_at?: string | null
+          rejection_reason?: string | null
           removal_reason?: string | null
           removed_at?: string | null
           social_score?: number | null
           socials_checked_at?: string | null
           source?: string | null
           status?: string
+          telegram_url?: string | null
           token_mint: string
           token_name?: string | null
           token_symbol?: string | null
+          twitter_url?: string | null
           tx_count?: number | null
           updated_at?: string
           volume_sol?: number | null
           volume_sol_prev?: number | null
+          website_url?: string | null
         }
         Update: {
           bonding_curve_pct?: number | null
@@ -4645,9 +4657,11 @@ export type Database = {
           holder_count_peak?: number | null
           holder_count_prev?: number | null
           id?: string
+          image_url?: string | null
           last_checked_at?: string
           last_processor?: string | null
           liquidity_usd?: number | null
+          market_cap_sol?: number | null
           market_cap_usd?: number | null
           mayhem_checked?: boolean | null
           metadata?: Json | null
@@ -4658,19 +4672,23 @@ export type Database = {
           price_usd_prev?: number | null
           qualification_reason?: string | null
           qualified_at?: string | null
+          rejection_reason?: string | null
           removal_reason?: string | null
           removed_at?: string | null
           social_score?: number | null
           socials_checked_at?: string | null
           source?: string | null
           status?: string
+          telegram_url?: string | null
           token_mint?: string
           token_name?: string | null
           token_symbol?: string | null
+          twitter_url?: string | null
           tx_count?: number | null
           updated_at?: string
           volume_sol?: number | null
           volume_sol_prev?: number | null
+          website_url?: string | null
         }
         Relationships: []
       }
