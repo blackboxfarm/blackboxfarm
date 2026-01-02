@@ -33,7 +33,11 @@ import {
   Plus,
   Minus,
   ShoppingCart,
-  Timer
+  Timer,
+  Shield,
+  ShieldOff,
+  TrendingUp,
+  Scissors
 } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
 
@@ -151,6 +155,30 @@ interface MonitorConfig {
   max_reevaluate_minutes?: number;
   resurrection_holder_threshold?: number;
   resurrection_volume_threshold_sol?: number;
+  // Phase 5: Global Safeguards
+  kill_switch_active?: boolean;
+  kill_switch_reason?: string | null;
+  kill_switch_activated_at?: string | null;
+  daily_buy_cap?: number;
+  daily_buys_today?: number;
+  max_watchdog_count?: number;
+  active_watchdog_count?: number;
+  min_rolling_win_rate?: number;
+  last_prune_at?: string | null;
+}
+
+interface SafeguardStatus {
+  killSwitchActive: boolean;
+  killSwitchReason: string | null;
+  dailyBuysToday: number;
+  dailyBuyCap: number;
+  buyingHalted: boolean;
+  activeWatchdogCount: number;
+  maxWatchdogCount: number;
+  prunedCount: number;
+  rollingWinRate: number;
+  minWinRate: number;
+  actions: string[];
 }
 
 // Format price to readable decimal (max 6 decimal places)
@@ -254,6 +282,9 @@ export function TokenCandidatesDashboard() {
   const [nextPollIn, setNextPollIn] = useState<number | null>(null);
   const pollingTimerRef = useRef<NodeJS.Timeout | null>(null);
   const countdownTimerRef = useRef<NodeJS.Timeout | null>(null);
+  
+  // Phase 5: Safeguard status
+  const [safeguardStatus, setSafeguardStatus] = useState<SafeguardStatus | null>(null);
 
   // Fetch watchlist
   const fetchWatchlist = useCallback(async () => {
@@ -325,11 +356,57 @@ export function TokenCandidatesDashboard() {
     }
   }, []);
 
+  // Fetch safeguard status
+  const fetchSafeguardStatus = useCallback(async () => {
+    try {
+      const { data, error } = await supabase.functions.invoke('pumpfun-global-safeguards', {
+        body: { action: 'check' }
+      });
+      if (error) throw error;
+      if (data?.status) {
+        setSafeguardStatus(data.status);
+      }
+    } catch (error) {
+      console.error('Error fetching safeguard status:', error);
+    }
+  }, []);
+
+  // Reset kill switch
+  const resetKillSwitch = async () => {
+    try {
+      const { error } = await supabase.functions.invoke('pumpfun-global-safeguards', {
+        body: { action: 'reset_kill_switch' }
+      });
+      if (error) throw error;
+      toast.success('Kill switch reset');
+      await fetchSafeguardStatus();
+      await fetchConfig();
+    } catch (error) {
+      console.error('Error resetting kill switch:', error);
+      toast.error('Failed to reset kill switch');
+    }
+  };
+
+  // Update priority scores
+  const updatePriorityScores = async () => {
+    try {
+      const { error } = await supabase.functions.invoke('pumpfun-global-safeguards', {
+        body: { action: 'update_priorities' }
+      });
+      if (error) throw error;
+      toast.success('Priority scores updated');
+      await fetchWatchlist();
+    } catch (error) {
+      console.error('Error updating priorities:', error);
+      toast.error('Failed to update priorities');
+    }
+  };
+
   // Initial load
   useEffect(() => {
     const load = async () => {
       setLoading(true);
-      await Promise.all([fetchWatchlist(), fetchCandidates(), fetchConfig(), fetchDiscoveryLogs()]);
+      await Promise.all([fetchWatchlist(), fetchCandidates(), fetchConfig(), fetchDiscoveryLogs(), fetchSafeguardStatus()]);
       setLoading(false);
     };
     load();
@@ -343,12 +420,16 @@ export function TokenCandidatesDashboard() {
       .on('postgres_changes', { event: '*', schema: 'public', table: 'pumpfun_buy_candidates' }, () => {
         fetchCandidates();
       })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'pumpfun_monitor_config' }, () => {
+        fetchConfig();
+        fetchSafeguardStatus();
+      })
       .subscribe();
 
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [fetchWatchlist, fetchCandidates, fetchConfig, fetchDiscoveryLogs]);
+  }, [fetchWatchlist, fetchCandidates, fetchConfig, fetchDiscoveryLogs, fetchSafeguardStatus]);
 
   // Continuous polling effect
   useEffect(() => {
@@ -835,6 +916,86 @@ export function TokenCandidatesDashboard() {
                 )}
               </div>
             )}
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Phase 5: Global Safeguards Panel */}
+      {(safeguardStatus || config?.kill_switch_active) && (
+        <Card className={`${safeguardStatus?.killSwitchActive || config?.kill_switch_active ? 'border-red-500/50 bg-red-500/5' : 'bg-muted/30'}`}>
+          <CardContent className="py-3">
+            <div className="flex flex-wrap items-center gap-4 text-sm">
+              <div className="flex items-center gap-2">
+                {safeguardStatus?.killSwitchActive || config?.kill_switch_active ? (
+                  <ShieldOff className="h-4 w-4 text-red-500" />
+                ) : (
+                  <Shield className="h-4 w-4 text-green-500" />
+                )}
+                <span className="font-medium">Safeguards</span>
+              </div>
+
+              {/* Kill Switch Status */}
+              {(safeguardStatus?.killSwitchActive || config?.kill_switch_active) && (
+                <div className="flex items-center gap-2">
+                  <Badge variant="destructive" className="text-xs">🚨 KILL SWITCH ACTIVE</Badge>
+                  {(safeguardStatus?.killSwitchReason || config?.kill_switch_reason) && (
+                    <span className="text-xs text-red-400">{safeguardStatus?.killSwitchReason || config?.kill_switch_reason}</span>
+                  )}
+                  <Button variant="outline" size="sm" className="h-6 text-xs" onClick={resetKillSwitch}>
+                    Reset
+                  </Button>
+                </div>
+              )}
+
+              {/* Daily Buy Cap */}
+              <div className="flex items-center gap-1">
+                <ShoppingCart className="h-3 w-3 text-muted-foreground" />
+                <span className="text-muted-foreground">Daily:</span>
+                <span className={`font-mono ${safeguardStatus?.buyingHalted ? 'text-red-500' : ''}`}>
+                  {safeguardStatus?.dailyBuysToday ?? config?.daily_buys_today ?? 0}/{safeguardStatus?.dailyBuyCap ?? config?.daily_buy_cap ?? 20}
+                </span>
+                {safeguardStatus?.buyingHalted && (
+                  <Badge variant="outline" className="text-xs bg-red-500/10 text-red-500 border-red-500/30">HALTED</Badge>
+                )}
+              </div>
+
+              {/* Watchdog Count */}
+              <div className="flex items-center gap-1">
+                <Eye className="h-3 w-3 text-muted-foreground" />
+                <span className="text-muted-foreground">Watchdogs:</span>
+                <span className="font-mono">
+                  {safeguardStatus?.activeWatchdogCount ?? config?.active_watchdog_count ?? watchlistStats.watching}/{safeguardStatus?.maxWatchdogCount ?? config?.max_watchdog_count ?? 500}
+                </span>
+                {safeguardStatus?.prunedCount !== undefined && safeguardStatus.prunedCount > 0 && (
+                  <Badge variant="outline" className="text-xs bg-orange-500/10 text-orange-500 border-orange-500/30">
+                    <Scissors className="h-3 w-3 mr-1" />
+                    {safeguardStatus.prunedCount} pruned
+                  </Badge>
+                )}
+              </div>
+
+              {/* Rolling Win Rate */}
+              {safeguardStatus && (
+                <div className="flex items-center gap-1">
+                  <TrendingUp className="h-3 w-3 text-muted-foreground" />
+                  <span className="text-muted-foreground">Win Rate:</span>
+                  <span className={`font-mono ${safeguardStatus.rollingWinRate < safeguardStatus.minWinRate ? 'text-red-500' : 'text-green-500'}`}>
+                    {(safeguardStatus.rollingWinRate * 100).toFixed(1)}%
+                  </span>
+                  <span className="text-xs text-muted-foreground">(min: {(safeguardStatus.minWinRate * 100).toFixed(0)}%)</span>
+                </div>
+              )}
+
+              {/* Actions */}
+              <div className="ml-auto flex items-center gap-2">
+                <Button variant="ghost" size="sm" className="h-6 text-xs" onClick={updatePriorityScores}>
+                  Update Priorities
+                </Button>
+                <Button variant="ghost" size="sm" className="h-6 text-xs" onClick={fetchSafeguardStatus}>
+                  <RefreshCw className="h-3 w-3" />
+                </Button>
+              </div>
+            </div>
           </CardContent>
         </Card>
       )}
