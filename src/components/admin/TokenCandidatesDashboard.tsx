@@ -10,6 +10,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Checkbox } from '@/components/ui/checkbox';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { 
@@ -364,6 +365,7 @@ export function TokenCandidatesDashboard() {
   const [resetConfirmText, setResetConfirmText] = useState('');
   const [isResetting, setIsResetting] = useState(false);
   const [resetCounts, setResetCounts] = useState<Record<string, number>>({});
+  const [keepLearnings, setKeepLearnings] = useState(true);
 
   // Fetch watchlist
   const fetchWatchlist = useCallback(async () => {
@@ -732,51 +734,57 @@ export function TokenCandidatesDashboard() {
   // Fetch counts for reset confirmation
   const fetchResetCounts = async () => {
     try {
-      const [watchlistRes, fantasyRes, candidatesRes, logsRes] = await Promise.all([
+      const [watchlistRes, fantasyRes, candidatesRes, logsRes, learningsRes] = await Promise.all([
         supabase.from('pumpfun_watchlist').select('id', { count: 'exact', head: true }),
         supabase.from('pumpfun_fantasy_positions').select('id', { count: 'exact', head: true }),
         supabase.from('pumpfun_buy_candidates').select('id', { count: 'exact', head: true }),
         supabase.from('pumpfun_discovery_logs').select('id', { count: 'exact', head: true }),
+        supabase.from('pumpfun_trade_learnings').select('id', { count: 'exact', head: true }),
       ]);
       setResetCounts({
         watchlist: watchlistRes.count || 0,
         fantasy: fantasyRes.count || 0,
         candidates: candidatesRes.count || 0,
         logs: logsRes.count || 0,
+        learnings: learningsRes.count || 0,
       });
     } catch (error) {
       console.error('Error fetching reset counts:', error);
     }
   };
 
-  // System reset - delete all Pump.fun monitoring data
+  // System reset - delete all Pump.fun monitoring data (preserves discovery logs)
   const handleSystemReset = async () => {
     setIsResetting(true);
     try {
       // Delete in order for foreign key constraints
+      // Note: pumpfun_discovery_logs is NEVER deleted - used for historical reference & duplicate ticker detection
       await supabase.from('pumpfun_fantasy_positions').delete().neq('id', '00000000-0000-0000-0000-000000000000');
       await supabase.from('pumpfun_fantasy_stats').delete().neq('id', '00000000-0000-0000-0000-000000000000');
       await supabase.from('pumpfun_buy_candidates').delete().neq('id', '00000000-0000-0000-0000-000000000000');
-      await supabase.from('pumpfun_discovery_logs').delete().neq('id', '00000000-0000-0000-0000-000000000000');
       await supabase.from('pumpfun_poll_runs').delete().neq('id', '00000000-0000-0000-0000-000000000000');
       await supabase.from('pumpfun_daily_stats').delete().neq('id', '00000000-0000-0000-0000-000000000000');
-      await supabase.from('pumpfun_trade_learnings').delete().neq('id', '00000000-0000-0000-0000-000000000000');
+      
+      // Conditionally delete trade learnings based on user preference
+      if (!keepLearnings) {
+        await supabase.from('pumpfun_trade_learnings').delete().neq('id', '00000000-0000-0000-0000-000000000000');
+      }
+      
       await supabase.from('pumpfun_watchlist').delete().neq('id', '00000000-0000-0000-0000-000000000000');
       
-      toast.success('System reset complete! Starting fresh.');
+      const learningsMsg = keepLearnings ? ' (learnings preserved)' : '';
+      toast.success(`System reset complete!${learningsMsg} Starting fresh.`);
       
       // Refresh all data
       setWatchlist([]);
       setCandidates([]);
-      setDiscoveryLogs([]);
       setFantasyPositions([]);
       setFantasyStats(null);
-      setTotalLogsCount(0);
       setLogsPage(0);
       setLastPollSummary(null);
       
       // Refetch to confirm
-      await Promise.all([fetchWatchlist(), fetchCandidates(), fetchFantasyData(), fetchConfig()]);
+      await Promise.all([fetchWatchlist(), fetchCandidates(), fetchFantasyData(), fetchConfig(), fetchDiscoveryLogs()]);
     } catch (error) {
       console.error('System reset error:', error);
       toast.error('Reset failed: ' + (error as Error).message);
@@ -784,6 +792,7 @@ export function TokenCandidatesDashboard() {
       setIsResetting(false);
       setShowResetDialog(false);
       setResetConfirmText('');
+      setKeepLearnings(true); // Reset checkbox to default
     }
   };
 
@@ -1967,7 +1976,7 @@ export function TokenCandidatesDashboard() {
             </AlertDialogTitle>
             <AlertDialogDescription asChild>
               <div className="space-y-4">
-                <p>This will permanently delete ALL monitoring data:</p>
+                <p>This will permanently delete operational data:</p>
                 <ul className="space-y-1 text-sm">
                   <li className="flex items-center gap-2">
                     <Eye className="h-4 w-4 text-blue-500" />
@@ -1982,11 +1991,50 @@ export function TokenCandidatesDashboard() {
                     <span>{resetCounts.candidates || 0} buy candidates</span>
                   </li>
                   <li className="flex items-center gap-2">
-                    <FileText className="h-4 w-4 text-muted-foreground" />
-                    <span>{resetCounts.logs || 0} log entries</span>
+                    <Activity className="h-4 w-4 text-muted-foreground" />
+                    <span>Poll runs &amp; daily stats</span>
                   </li>
+                  {!keepLearnings && (
+                    <li className="flex items-center gap-2 text-amber-500">
+                      <AlertTriangle className="h-4 w-4" />
+                      <span>{resetCounts.learnings || 0} trade learnings</span>
+                    </li>
+                  )}
                 </ul>
-                <p className="font-semibold text-foreground">Your configuration settings will be preserved.</p>
+                
+                {/* Preserved data section */}
+                <div className="border-t border-border pt-3 space-y-2">
+                  <p className="text-sm font-medium text-green-500">✓ Data preserved:</p>
+                  <ul className="space-y-1 text-sm text-muted-foreground">
+                    <li className="flex items-center gap-2">
+                      <FileText className="h-4 w-4" />
+                      <span>{resetCounts.logs || 0} discovery logs (for duplicate ticker detection)</span>
+                    </li>
+                    {keepLearnings && (
+                      <li className="flex items-center gap-2">
+                        <Binoculars className="h-4 w-4" />
+                        <span>{resetCounts.learnings || 0} trade learnings</span>
+                      </li>
+                    )}
+                    <li className="flex items-center gap-2">
+                      <Shield className="h-4 w-4" />
+                      <span>Configuration settings</span>
+                    </li>
+                  </ul>
+                </div>
+                
+                {/* Keep learnings checkbox */}
+                <div className="flex items-center space-x-2 border border-border rounded-md p-3 bg-muted/30">
+                  <Checkbox 
+                    id="keep-learnings" 
+                    checked={keepLearnings}
+                    onCheckedChange={(checked) => setKeepLearnings(checked === true)}
+                  />
+                  <label htmlFor="keep-learnings" className="text-sm cursor-pointer">
+                    Keep accumulated trade learnings <span className="text-muted-foreground">(recommended)</span>
+                  </label>
+                </div>
+                
                 <div className="space-y-2">
                   <p className="text-sm">Type <code className="bg-muted px-1.5 py-0.5 rounded font-mono">RESET</code> to confirm:</p>
                   <Input 
