@@ -1580,7 +1580,8 @@ export function TokenCandidatesDashboard() {
                       <TableHead compact>Symbol</TableHead>
                       <TableHead compact>Entry</TableHead>
                       <TableHead compact>Current</TableHead>
-                      <TableHead compact>Multiplier</TableHead>
+                      <TableHead compact>Gain</TableHead>
+                      <TableHead compact>Target</TableHead>
                       <TableHead compact>Status</TableHead>
                       <TableHead compact>P&L</TableHead>
                       <TableHead compact>Age</TableHead>
@@ -1589,21 +1590,27 @@ export function TokenCandidatesDashboard() {
                   <TableBody>
                     {fantasyPositions.length === 0 ? (
                       <TableRow>
-                        <TableCell colSpan={7} className="text-center text-muted-foreground py-8">
+                        <TableCell colSpan={8} className="text-center text-muted-foreground py-8">
                           No fantasy positions yet. Tokens reaching 'buy_now' status will appear here.
                         </TableCell>
                       </TableRow>
                     ) : (
                       fantasyPositions.map((pos) => {
-                        const multiplier = pos.current_price_usd && pos.entry_price_usd ? pos.current_price_usd / pos.entry_price_usd : 0;
+                        const currentGain = pos.current_price_usd && pos.entry_price_usd ? pos.current_price_usd / pos.entry_price_usd : 0;
+                        const targetMultiplier = pos.target_multiplier || 1.5;
+                        const targetHit = currentGain >= targetMultiplier;
                         const pnl = pos.status === 'closed' ? pos.total_realized_pnl_sol : pos.unrealized_pnl_sol;
                         return (
                           <TableRow key={pos.id}>
                             <TableCell compact className="font-medium">{pos.token_symbol || '???'}</TableCell>
                             <TableCell compact className="text-xs">{formatPrice(pos.entry_price_usd)}</TableCell>
                             <TableCell compact className="text-xs">{formatPrice(pos.current_price_usd)}</TableCell>
-                            <TableCell compact className={`text-xs font-medium ${multiplier >= 1.5 ? 'text-green-500' : multiplier < 1 ? 'text-red-500' : ''}`}>
-                              {multiplier.toFixed(2)}x
+                            <TableCell compact className={`text-xs font-medium ${currentGain >= targetMultiplier ? 'text-green-500' : currentGain < 1 ? 'text-red-500' : 'text-yellow-500'}`}>
+                              {currentGain.toFixed(2)}x
+                            </TableCell>
+                            <TableCell compact className={`text-xs font-medium ${targetHit ? 'text-green-500' : 'text-muted-foreground'}`}>
+                              {targetMultiplier.toFixed(2)}x
+                              {targetHit && <span className="ml-1">✓</span>}
                             </TableCell>
                             <TableCell compact>
                               <Badge variant="outline" className={

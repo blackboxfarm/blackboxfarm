@@ -190,6 +190,20 @@ async function executeFantasyBuys(supabase: any): Promise<ExecutorStats> {
     stats.tokensProcessed++;
 
     try {
+      // Check if an open position already exists for this token
+      const { data: existingPosition } = await supabase
+        .from('pumpfun_fantasy_positions')
+        .select('id')
+        .eq('token_mint', token.token_mint)
+        .eq('status', 'open')
+        .limit(1)
+        .maybeSingle();
+
+      if (existingPosition) {
+        console.log(`⚠️ Position already exists for ${token.token_symbol}, skipping`);
+        continue;
+      }
+
       // Get current token price
       const price = await getTokenPrice(token.token_mint, solPrice);
       
@@ -210,8 +224,10 @@ async function executeFantasyBuys(supabase: any): Promise<ExecutorStats> {
         continue;
       }
 
-      // Calculate token amount
-      const tokenAmount = config.fantasy_buy_amount_sol / entryPriceSol;
+      // Calculate token amount based on USD amount
+      const buyAmountUsd = config.fantasy_buy_amount_usd || 10;
+      const buyAmountSol = buyAmountUsd / solPrice;
+      const tokenAmount = buyAmountSol / entryPriceSol;
 
       // Create fantasy position
       const { data: position, error: insertError } = await supabase
@@ -223,7 +239,7 @@ async function executeFantasyBuys(supabase: any): Promise<ExecutorStats> {
           token_name: token.token_name,
           entry_price_usd: entryPriceUsd,
           entry_price_sol: entryPriceSol,
-          entry_amount_sol: config.fantasy_buy_amount_sol,
+          entry_amount_sol: buyAmountSol,
           token_amount: tokenAmount,
           entry_at: now,
           current_price_usd: entryPriceUsd,
@@ -256,14 +272,14 @@ async function executeFantasyBuys(supabase: any): Promise<ExecutorStats> {
         .eq('id', token.id);
 
       stats.positionsCreated++;
-      stats.totalVirtualSolDeployed += config.fantasy_buy_amount_sol;
+      stats.totalVirtualSolDeployed += buyAmountSol;
       stats.positions.push({
         symbol: token.token_symbol,
         mint: token.token_mint,
         entryPrice: entryPriceUsd,
       });
 
-      console.log(`🎮 FANTASY BUY: ${token.token_symbol} @ $${entryPriceUsd.toFixed(8)} (${config.fantasy_buy_amount_sol} SOL = ${tokenAmount.toFixed(2)} tokens)`);
+      console.log(`🎮 FANTASY BUY: ${token.token_symbol} @ $${entryPriceUsd.toFixed(8)} ($${buyAmountUsd} = ${buyAmountSol.toFixed(4)} SOL = ${tokenAmount.toFixed(2)} tokens)`);
 
     } catch (error) {
       console.error(`Error processing ${token.token_symbol}:`, error);
