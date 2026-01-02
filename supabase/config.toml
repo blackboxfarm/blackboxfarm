@@ -321,3 +321,6 @@ verify_jwt = false
 
 [functions.pumpfun-token-enricher]
 verify_jwt = false
+
+[functions.pumpfun-dev-wallet-monitor]
+verify_jwt = false
