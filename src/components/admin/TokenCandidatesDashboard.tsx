@@ -1646,16 +1646,29 @@ export function TokenCandidatesDashboard() {
                             </TableCell>
                             <TableCell compact className="text-xs text-muted-foreground font-mono">
                               {(() => {
-                                // Use first_seen_at from watchlist (actual detection time) for chart correlation
-                                const buyTime = pos.pumpfun_watchlist?.first_seen_at || pos.entry_at || pos.created_at;
-                                const date = new Date(buyTime);
-                                // Format as HH:MM:SS UTC to match Dexscreener chart x-axis
-                                const timeStr = date.toISOString().slice(11, 19);
-                                const dateStr = date.toISOString().slice(0, 10);
+                                // Fantasy buy execution time (when we actually bought)
+                                const buyDate = new Date(pos.created_at);
+                                const buyTimeStr = buyDate.toISOString().slice(11, 19);
+                                const buyDateStr = buyDate.toISOString().slice(0, 10);
+                                
+                                // Discovery time from watchlist (when token was first detected)
+                                const discoveryTime = pos.pumpfun_watchlist?.first_seen_at;
+                                const discoveryDate = discoveryTime ? new Date(discoveryTime) : null;
+                                const discoveryTimeStr = discoveryDate?.toISOString().slice(11, 19);
+                                
                                 return (
-                                  <div className="flex flex-col">
-                                    <span className="text-yellow-500 font-semibold">{timeStr} UTC</span>
-                                    <span className="text-[10px] text-muted-foreground/70">{dateStr}</span>
+                                  <div className="flex flex-col gap-0.5">
+                                    <div className="flex items-center gap-1">
+                                      <span className="text-[10px] text-muted-foreground">Buy:</span>
+                                      <span className="text-yellow-500 font-semibold">{buyTimeStr}</span>
+                                    </div>
+                                    {discoveryTimeStr && (
+                                      <div className="flex items-center gap-1">
+                                        <span className="text-[10px] text-muted-foreground">Found:</span>
+                                        <span className="text-blue-400">{discoveryTimeStr}</span>
+                                      </div>
+                                    )}
+                                    <span className="text-[10px] text-muted-foreground/70">{buyDateStr} UTC</span>
                                   </div>
                                 );
                               })()}
