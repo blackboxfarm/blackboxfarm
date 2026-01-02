@@ -336,3 +336,6 @@ verify_jwt = false
 
 [functions.pumpfun-fantasy-sell-monitor]
 verify_jwt = false
+
+[functions.pumpfun-sell-monitor]
+verify_jwt = false
