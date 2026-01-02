@@ -45,8 +45,20 @@ interface MonitorStats {
   moonbagsClosed: number;
   lpRemovalDetected: number;
   drawdownExits: number;
+  learningsCreated: number;
   errors: string[];
   durationMs: number;
+}
+
+// Outcome types for AI learning
+type TradeOutcome = 'success' | 'partial_win' | 'loss' | 'rug' | 'slow_bleed';
+
+interface OutcomeClassification {
+  outcome: TradeOutcome;
+  notes: string;
+  correctSignals: string[];
+  wrongSignals: string[];
+  shouldHaveAvoided: boolean;
 }
 
 // Get config
@@ -133,6 +145,175 @@ async function checkLiquidity(mint: string): Promise<{ liquidityUsd: number | nu
   }
 }
 
+// Classify trade outcome for AI learning
+function classifyOutcome(
+  position: any,
+  exitReason: string,
+  totalPnlPercent: number,
+  peakMultiplier: number,
+  timeSinceEntryMins: number,
+  timeSincePeakMins: number
+): OutcomeClassification {
+  const correctSignals: string[] = [];
+  const wrongSignals: string[] = [];
+  let outcome: TradeOutcome;
+  let notes = '';
+  let shouldHaveAvoided = false;
+
+  // Determine outcome based on exit conditions and P&L
+  if (exitReason === 'lp_removed') {
+    if (totalPnlPercent > 0) {
+      outcome = 'partial_win';
+      notes = `LP removed after hitting target. Got out with ${totalPnlPercent.toFixed(1)}% profit before rug.`;
+      correctSignals.push('hit_target_before_rug');
+    } else {
+      outcome = 'rug';
+      notes = `LP removed. Price peaked at ${peakMultiplier.toFixed(2)}x but rugged before we could exit.`;
+      wrongSignals.push('did_not_hit_target');
+      
+      if (timeSinceEntryMins < 30) {
+        wrongSignals.push('token_too_young');
+        notes += ` Token was only ${timeSinceEntryMins}m old.`;
+      }
+    }
+  } else if (exitReason === 'drawdown') {
+    if (totalPnlPercent > 20) {
+      outcome = 'success';
+      notes = `Exited moonbag on drawdown with ${totalPnlPercent.toFixed(1)}% total profit.`;
+      correctSignals.push('hit_target', 'moonbag_profit');
+    } else if (totalPnlPercent > 0) {
+      outcome = 'partial_win';
+      notes = `Hit target but moonbag lost value. Total: ${totalPnlPercent.toFixed(1)}% profit.`;
+      correctSignals.push('hit_target');
+      wrongSignals.push('moonbag_lost_value');
+    } else {
+      outcome = 'loss';
+      notes = `Never hit target, closed on drawdown at ${totalPnlPercent.toFixed(1)}%.`;
+      wrongSignals.push('missed_target');
+      
+      if (peakMultiplier < 1.2) {
+        outcome = 'slow_bleed';
+        notes = `Slow bleed - never gained momentum. Peak was only ${peakMultiplier.toFixed(2)}x.`;
+        wrongSignals.push('no_momentum');
+        shouldHaveAvoided = true;
+      }
+    }
+  } else {
+    // General classification for other exit reasons
+    if (totalPnlPercent > 20) {
+      outcome = 'success';
+      notes = `Successful trade with ${totalPnlPercent.toFixed(1)}% profit.`;
+      correctSignals.push('profitable_trade');
+    } else if (totalPnlPercent > 0) {
+      outcome = 'partial_win';
+      notes = `Small profit: ${totalPnlPercent.toFixed(1)}%.`;
+    } else if (totalPnlPercent > -30) {
+      outcome = 'loss';
+      notes = `Loss: ${totalPnlPercent.toFixed(1)}%.`;
+      wrongSignals.push('unprofitable_trade');
+    } else {
+      outcome = 'rug';
+      notes = `Major loss: ${totalPnlPercent.toFixed(1)}%. Likely rug or major dump.`;
+      wrongSignals.push('major_loss');
+      shouldHaveAvoided = true;
+    }
+  }
+
+  // Analyze entry conditions for signals
+  if (position.entry_rugcheck_score) {
+    if (position.entry_rugcheck_score > 5000 && (outcome === 'rug' || outcome === 'loss')) {
+      wrongSignals.push('high_rugcheck_score_ignored');
+      notes += ` High RugCheck score (${position.entry_rugcheck_score}) was a warning sign.`;
+    } else if (position.entry_rugcheck_score < 3000 && (outcome === 'success' || outcome === 'partial_win')) {
+      correctSignals.push('low_rugcheck_score');
+    }
+  }
+
+  if (position.entry_holder_count) {
+    if (position.entry_holder_count < 20 && (outcome === 'rug' || outcome === 'loss')) {
+      wrongSignals.push('too_few_holders');
+      shouldHaveAvoided = true;
+    } else if (position.entry_holder_count >= 25 && position.entry_holder_count <= 50 && outcome === 'success') {
+      correctSignals.push('ideal_holder_count');
+    }
+  }
+
+  if (position.entry_market_cap_usd) {
+    if (position.entry_market_cap_usd > 15000 && outcome === 'rug') {
+      notes += ` Entry MC was high ($${position.entry_market_cap_usd.toFixed(0)}), may have entered too late.`;
+      wrongSignals.push('entry_mc_too_high');
+    } else if (position.entry_market_cap_usd >= 5600 && position.entry_market_cap_usd <= 10000 && outcome === 'success') {
+      correctSignals.push('ideal_entry_mc');
+    }
+  }
+
+  return { outcome, notes, correctSignals, wrongSignals, shouldHaveAvoided };
+}
+
+// Create learning record from closed position
+async function createLearningRecord(
+  supabase: any,
+  position: any,
+  classification: OutcomeClassification,
+  timeToPeakMins: number,
+  timeToExitMins: number
+): Promise<boolean> {
+  try {
+    const { error } = await supabase
+      .from('pumpfun_trade_learnings')
+      .insert({
+        fantasy_position_id: position.id,
+        token_mint: position.token_mint,
+        token_symbol: position.token_symbol,
+        
+        // Entry conditions
+        entry_market_cap_usd: position.entry_market_cap_usd,
+        entry_holder_count: position.entry_holder_count,
+        entry_volume_sol: position.entry_volume_24h_sol,
+        entry_token_age_mins: position.entry_token_age_mins,
+        entry_signal_strength: position.entry_signal_strength_raw,
+        entry_rugcheck_score: position.entry_rugcheck_score,
+        entry_bonding_curve_pct: position.entry_bonding_curve_pct,
+        
+        // Outcome
+        outcome: classification.outcome,
+        final_pnl_percent: position.total_pnl_percent || 0,
+        peak_multiplier: position.peak_multiplier || 1.0,
+        time_to_peak_mins: timeToPeakMins,
+        time_to_exit_mins: timeToExitMins,
+        
+        // Signals
+        correct_signals: classification.correctSignals,
+        wrong_signals: classification.wrongSignals,
+        should_have_avoided: classification.shouldHaveAvoided,
+        
+        // Calculate optimal ranges based on this trade
+        optimal_market_cap_min: classification.outcome === 'success' ? 
+          Math.max(5000, (position.entry_market_cap_usd || 0) * 0.8) : null,
+        optimal_market_cap_max: classification.outcome === 'success' ?
+          Math.min(15000, (position.entry_market_cap_usd || 0) * 1.2) : null,
+        optimal_holder_count_min: classification.outcome === 'success' && position.entry_holder_count ?
+          Math.max(20, position.entry_holder_count - 10) : null,
+        optimal_holder_count_max: classification.outcome === 'success' && position.entry_holder_count ?
+          Math.min(60, position.entry_holder_count + 10) : null,
+        
+        // Notes
+        analysis_notes: classification.notes,
+      });
+
+    if (error) {
+      console.error('Error creating learning record:', error);
+      return false;
+    }
+
+    console.log(`📚 LEARNING CREATED: ${position.token_symbol} | Outcome: ${classification.outcome} | Signals: +${classification.correctSignals.length}/-${classification.wrongSignals.length}`);
+    return true;
+  } catch (error) {
+    console.error('Error in createLearningRecord:', error);
+    return false;
+  }
+}
+
 // Main monitoring logic
 async function monitorPositions(supabase: any): Promise<MonitorStats> {
   const startTime = Date.now();
@@ -144,6 +325,7 @@ async function monitorPositions(supabase: any): Promise<MonitorStats> {
     moonbagsClosed: 0,
     lpRemovalDetected: 0,
     drawdownExits: 0,
+    learningsCreated: 0,
     errors: [],
     durationMs: 0,
   };
@@ -308,6 +490,24 @@ async function monitorPositions(supabase: any): Promise<MonitorStats> {
           const totalRealizedPnlSol = (position.main_realized_pnl_sol || 0) + moonbagRealizedPnlSol;
           const totalPnlPercent = ((totalRealizedPnlSol / position.entry_amount_sol)) * 100;
 
+          // Calculate timing for learning
+          const entryTime = new Date(position.entry_at).getTime();
+          const peakTime = position.peak_at ? new Date(position.peak_at).getTime() : entryTime;
+          const exitTime = new Date(now).getTime();
+          const timeSinceEntryMins = Math.floor((exitTime - entryTime) / (1000 * 60));
+          const timeToPeakMins = Math.floor((peakTime - entryTime) / (1000 * 60));
+          const timeSincePeakMins = Math.floor((exitTime - peakTime) / (1000 * 60));
+
+          // Classify outcome for AI learning
+          const classification = classifyOutcome(
+            position,
+            exitReason,
+            totalPnlPercent,
+            position.peak_multiplier || 1.0,
+            timeSinceEntryMins,
+            timeSincePeakMins
+          );
+
           await supabase
             .from('pumpfun_fantasy_positions')
             .update({
@@ -324,13 +524,35 @@ async function monitorPositions(supabase: any): Promise<MonitorStats> {
               total_pnl_percent: totalPnlPercent,
               lp_checked_at: now,
               lp_liquidity_usd: liquidityUsd,
+              // Outcome classification
+              outcome: classification.outcome,
+              outcome_classified_at: now,
+              outcome_notes: classification.notes,
+              time_to_peak_mins: timeToPeakMins,
               updated_at: now,
             })
             .eq('id', position.id);
 
+          // Create learning record
+          const learningCreated = await createLearningRecord(
+            supabase,
+            {
+              ...position,
+              total_pnl_percent: totalPnlPercent,
+              peak_multiplier: position.peak_multiplier || 1.0,
+            },
+            classification,
+            timeToPeakMins,
+            timeSinceEntryMins
+          );
+          
+          if (learningCreated) {
+            stats.learningsCreated++;
+          }
+
           stats.moonbagsClosed++;
           
-          console.log(`🏁 MOONBAG CLOSED: ${position.token_symbol} | Reason: ${exitReason} | Final P&L: ${totalRealizedPnlSol >= 0 ? '+' : ''}${totalRealizedPnlSol.toFixed(4)} SOL (${totalPnlPercent.toFixed(1)}%)`);
+          console.log(`🏁 MOONBAG CLOSED: ${position.token_symbol} | Outcome: ${classification.outcome.toUpperCase()} | ${exitReason} | Final P&L: ${totalRealizedPnlSol >= 0 ? '+' : ''}${totalRealizedPnlSol.toFixed(4)} SOL (${totalPnlPercent.toFixed(1)}%)`);
 
         } else {
           // Just update moonbag tracking

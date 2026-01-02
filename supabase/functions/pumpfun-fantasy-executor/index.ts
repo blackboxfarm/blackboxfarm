@@ -119,6 +119,28 @@ async function getTokenPrice(mint: string, solPrice: number): Promise<{ priceUsd
   }
 }
 
+// Calculate token age in minutes from blockchain timestamp
+function calculateTokenAgeMins(createdAt: string | null): number | null {
+  if (!createdAt) return null;
+  try {
+    const created = new Date(createdAt);
+    const now = new Date();
+    return Math.floor((now.getTime() - created.getTime()) / (1000 * 60));
+  } catch {
+    return null;
+  }
+}
+
+// Count socials from watchlist data
+function countSocials(token: any): number {
+  let count = 0;
+  if (token.twitter) count++;
+  if (token.telegram) count++;
+  if (token.website) count++;
+  if (token.discord) count++;
+  return count;
+}
+
 // Create fantasy positions
 async function executeFantasyBuys(supabase: any): Promise<ExecutorStats> {
   const startTime = Date.now();
@@ -229,7 +251,19 @@ async function executeFantasyBuys(supabase: any): Promise<ExecutorStats> {
       const buyAmountSol = buyAmountUsd / solPrice;
       const tokenAmount = buyAmountSol / entryPriceSol;
 
-      // Create fantasy position
+      // Calculate entry snapshot data for AI learning
+      const entryMarketCapUsd = token.market_cap || token.market_cap_usd || null;
+      const entryHolderCount = token.holder_count || null;
+      const entryVolume24hSol = token.volume_24h_sol || token.volume_sol || null;
+      const entryTokenAgeMins = calculateTokenAgeMins(token.created_at_blockchain);
+      const entryBondingCurvePct = token.bonding_curve_progress || null;
+      const entryRugcheckScore = token.rugcheck_score || null;
+      const entrySignalStrengthRaw = token.signal_strength || null;
+      const entrySocialsCount = countSocials(token);
+
+      console.log(`📸 Entry snapshot for ${token.token_symbol}: MC=$${entryMarketCapUsd?.toFixed(0) || '?'}, Holders=${entryHolderCount || '?'}, Age=${entryTokenAgeMins || '?'}m, Rugcheck=${entryRugcheckScore || '?'}`);
+
+      // Create fantasy position with entry snapshot
       const { data: position, error: insertError } = await supabase
         .from('pumpfun_fantasy_positions')
         .insert({
@@ -252,6 +286,15 @@ async function executeFantasyBuys(supabase: any): Promise<ExecutorStats> {
           peak_price_usd: entryPriceUsd,
           peak_multiplier: 1.0,
           peak_at: now,
+          // Entry snapshot for AI learning
+          entry_market_cap_usd: entryMarketCapUsd,
+          entry_holder_count: entryHolderCount,
+          entry_volume_24h_sol: entryVolume24hSol,
+          entry_token_age_mins: entryTokenAgeMins,
+          entry_bonding_curve_pct: entryBondingCurvePct,
+          entry_rugcheck_score: entryRugcheckScore,
+          entry_signal_strength_raw: entrySignalStrengthRaw,
+          entry_socials_count: entrySocialsCount,
         })
         .select()
         .single();
@@ -366,10 +409,18 @@ async function manualFantasyBuy(supabase: any, tokenMint: string): Promise<{ suc
   // Get token price and metadata
   const price = await getTokenPrice(tokenMint, solPrice);
   
-  // Try to get token info from pump.fun
+  // Variables for entry snapshot
   let tokenSymbol = tokenMint.slice(0, 6);
   let tokenName = tokenMint.slice(0, 6);
+  let entryMarketCapUsd: number | null = null;
+  let entryHolderCount: number | null = null;
+  let entryVolume24hSol: number | null = null;
+  let entryTokenAgeMins: number | null = null;
+  let entryBondingCurvePct: number | null = null;
+  let entryRugcheckScore: number | null = null;
+  let entrySocialsCount = 0;
   
+  // Try to get token info from pump.fun
   try {
     const pumpResponse = await fetch(`https://frontend-api.pump.fun/coins/${tokenMint}`, {
       headers: { 'Accept': 'application/json' }
@@ -378,20 +429,55 @@ async function manualFantasyBuy(supabase: any, tokenMint: string): Promise<{ suc
       const pumpData = await pumpResponse.json();
       tokenSymbol = pumpData.symbol || tokenSymbol;
       tokenName = pumpData.name || tokenName;
+      entryMarketCapUsd = pumpData.usd_market_cap || pumpData.market_cap || null;
+      entryBondingCurvePct = pumpData.bonding_curve_progress || null;
+      
+      // Calculate token age from pump.fun data
+      if (pumpData.created_timestamp) {
+        const created = new Date(pumpData.created_timestamp);
+        const now = new Date();
+        entryTokenAgeMins = Math.floor((now.getTime() - created.getTime()) / (1000 * 60));
+      }
+      
+      // Count socials
+      if (pumpData.twitter) entrySocialsCount++;
+      if (pumpData.telegram) entrySocialsCount++;
+      if (pumpData.website) entrySocialsCount++;
     }
   } catch (e) {
-    // Try DexScreener
-    try {
-      const dexResponse = await fetch(`https://api.dexscreener.com/latest/dex/tokens/${tokenMint}`);
-      const dexData = await dexResponse.json();
-      const pair = dexData?.pairs?.[0];
-      if (pair?.baseToken) {
-        tokenSymbol = pair.baseToken.symbol || tokenSymbol;
-        tokenName = pair.baseToken.name || tokenName;
+    console.log('Could not fetch pump.fun metadata');
+  }
+
+  // Try DexScreener for additional data
+  try {
+    const dexResponse = await fetch(`https://api.dexscreener.com/latest/dex/tokens/${tokenMint}`);
+    const dexData = await dexResponse.json();
+    const pair = dexData?.pairs?.[0];
+    if (pair) {
+      if (!tokenSymbol || tokenSymbol === tokenMint.slice(0, 6)) {
+        tokenSymbol = pair.baseToken?.symbol || tokenSymbol;
+        tokenName = pair.baseToken?.name || tokenName;
       }
-    } catch (e2) {
-      console.log('Could not fetch token metadata');
+      if (!entryMarketCapUsd && pair.marketCap) {
+        entryMarketCapUsd = pair.marketCap;
+      }
+      if (pair.volume?.h24) {
+        entryVolume24hSol = pair.volume.h24 / solPrice;
+      }
     }
+  } catch (e2) {
+    console.log('Could not fetch DexScreener metadata');
+  }
+
+  // Try RugCheck
+  try {
+    const rugcheckResponse = await fetch(`https://api.rugcheck.xyz/v1/tokens/${tokenMint}/report/summary`);
+    if (rugcheckResponse.ok) {
+      const rugData = await rugcheckResponse.json();
+      entryRugcheckScore = rugData.score || null;
+    }
+  } catch (e) {
+    console.log('Could not fetch RugCheck score');
   }
 
   if (!price || price.priceUsd <= 0) {
@@ -405,7 +491,9 @@ async function manualFantasyBuy(supabase: any, tokenMint: string): Promise<{ suc
   const now = new Date().toISOString();
   const tokenAmount = buyAmountSol / price.priceSol;
 
-  // Create fantasy position
+  console.log(`📸 Manual entry snapshot for ${tokenSymbol}: MC=$${entryMarketCapUsd?.toFixed(0) || '?'}, Age=${entryTokenAgeMins || '?'}m, Rugcheck=${entryRugcheckScore || '?'}`);
+
+  // Create fantasy position with entry snapshot
   const { data: position, error: insertError } = await supabase
     .from('pumpfun_fantasy_positions')
     .insert({
@@ -428,6 +516,15 @@ async function manualFantasyBuy(supabase: any, tokenMint: string): Promise<{ suc
       peak_price_usd: price.priceUsd,
       peak_multiplier: 1.0,
       peak_at: now,
+      // Entry snapshot for AI learning
+      entry_market_cap_usd: entryMarketCapUsd,
+      entry_holder_count: entryHolderCount,
+      entry_volume_24h_sol: entryVolume24hSol,
+      entry_token_age_mins: entryTokenAgeMins,
+      entry_bonding_curve_pct: entryBondingCurvePct,
+      entry_rugcheck_score: entryRugcheckScore,
+      entry_signal_strength_raw: 'manual',
+      entry_socials_count: entrySocialsCount,
     })
     .select()
     .single();
