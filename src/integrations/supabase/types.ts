@@ -5118,8 +5118,10 @@ export type Database = {
       }
       pumpfun_watchlist: {
         Row: {
+          authority_checked_at: string | null
           bonding_curve_pct: number | null
           bundle_checked: boolean | null
+          bundle_checked_at: string | null
           bundle_score: number | null
           bundled_buy_count: number | null
           buy_amount_sol: number | null
@@ -5202,8 +5204,10 @@ export type Database = {
           website_url: string | null
         }
         Insert: {
+          authority_checked_at?: string | null
           bonding_curve_pct?: number | null
           bundle_checked?: boolean | null
+          bundle_checked_at?: string | null
           bundle_score?: number | null
           bundled_buy_count?: number | null
           buy_amount_sol?: number | null
@@ -5286,8 +5290,10 @@ export type Database = {
           website_url?: string | null
         }
         Update: {
+          authority_checked_at?: string | null
           bonding_curve_pct?: number | null
           bundle_checked?: boolean | null
+          bundle_checked_at?: string | null
           bundle_score?: number | null
           bundled_buy_count?: number | null
           buy_amount_sol?: number | null

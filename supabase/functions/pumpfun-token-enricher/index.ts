@@ -29,6 +29,12 @@ interface WatchlistToken {
   twitter_url: string | null;
   telegram_url: string | null;
   website_url: string | null;
+  // Caching fields
+  mint_authority_revoked: boolean | null;
+  freeze_authority_revoked: boolean | null;
+  authority_checked_at: string | null;
+  bundled_buy_count: number | null;
+  bundle_checked_at: string | null;
 }
 
 interface AuthorityCheck {
@@ -126,10 +132,26 @@ function detectLinkedWallets(holders: any[]): { linkedCount: number; clusters: s
 }
 
 // Detect bundled buys (multiple buys in same block/slot)
-async function detectBundledBuys(mint: string): Promise<{ bundledCount: number; details: any }> {
+// OPTIMIZED: Uses cache from database to reduce Helius API calls
+async function detectBundledBuys(
+  mint: string, 
+  existingBundleCount?: number,
+  bundleCheckedAt?: string | null
+): Promise<{ bundledCount: number; details: any; fromCache: boolean }> {
+  // Check if we have a recent cache (within 1 hour)
+  if (bundleCheckedAt && existingBundleCount !== undefined) {
+    const cacheAge = Date.now() - new Date(bundleCheckedAt).getTime();
+    const ONE_HOUR = 60 * 60 * 1000;
+    
+    if (cacheAge < ONE_HOUR) {
+      console.log(`   📦 Bundle check cached (${Math.round(cacheAge / 60000)}m ago): ${existingBundleCount} bundled buys`);
+      return { bundledCount: existingBundleCount, details: { cached: true }, fromCache: true };
+    }
+  }
+  
   const heliusKey = Deno.env.get('HELIUS_API_KEY');
   if (!heliusKey) {
-    return { bundledCount: 0, details: { error: 'No Helius key' } };
+    return { bundledCount: existingBundleCount || 0, details: { error: 'No Helius key' }, fromCache: false };
   }
   
   try {
@@ -137,7 +159,12 @@ async function detectBundledBuys(mint: string): Promise<{ bundledCount: number; 
     const response = await fetch(`https://api.helius.xyz/v0/addresses/${mint}/transactions?api-key=${heliusKey}&limit=50`);
     
     if (!response.ok) {
-      return { bundledCount: 0, details: { error: `API error: ${response.status}` } };
+      // If rate limited, use cached value if available
+      if (response.status === 429 && existingBundleCount !== undefined) {
+        console.log(`   ⚠️ Helius rate limited, using cached bundle count: ${existingBundleCount}`);
+        return { bundledCount: existingBundleCount, details: { rateLimited: true }, fromCache: true };
+      }
+      return { bundledCount: existingBundleCount || 0, details: { error: `API error: ${response.status}` }, fromCache: false };
     }
     
     const txs = await response.json();
@@ -172,65 +199,56 @@ async function detectBundledBuys(mint: string): Promise<{ bundledCount: number; 
         totalTxs: txs.length, 
         slotsAnalyzed: slotGroups.size,
         bundledSlots 
-      } 
+      },
+      fromCache: false
     };
   } catch (error) {
     console.error(`Error detecting bundled buys for ${mint}:`, error);
-    return { bundledCount: 0, details: { error: String(error) } };
+    return { bundledCount: existingBundleCount || 0, details: { error: String(error) }, fromCache: false };
   }
 }
 
-// Analyze fresh wallets (wallets with minimal history)
-async function analyzeFreshWallets(holders: any[]): Promise<{ freshPct: number; suspiciousPct: number }> {
-  // For efficiency, sample up to 10 wallets
-  const sample = holders.slice(0, 10);
+// Analyze fresh wallets using HEURISTICS ONLY (no Helius calls)
+// OPTIMIZED: Removed Helius API calls, uses balance patterns instead
+function analyzeFreshWallets(holders: any[]): { freshPct: number; suspiciousPct: number } {
+  // Sample up to 20 wallets for heuristic analysis
+  const sample = holders.slice(0, 20);
   let freshCount = 0;
   let suspiciousCount = 0;
   
-  const heliusKey = Deno.env.get('HELIUS_API_KEY');
-  
   for (const holder of sample) {
-    const address = holder.address || holder.owner;
-    if (!address) continue;
+    const balance = holder.amount || 0;
+    const pctOwned = holder.pct || 0;
+    const address = holder.address || holder.owner || '';
     
-    try {
-      // Check transaction count for wallet
-      const url = heliusKey 
-        ? `https://api.helius.xyz/v0/addresses/${address}/transactions?api-key=${heliusKey}&limit=5`
-        : null;
+    // HEURISTIC 1: Very precise round-number holdings are suspicious
+    // Fresh wallets often buy exact amounts like 1,000,000 or 10,000,000
+    if (balance > 0) {
+      const isRoundNumber = balance % 1000000 === 0;
+      const isVeryRound = balance % 10000000 === 0;
       
-      if (!url) {
-        // Without Helius, use heuristics based on balance
-        const balance = holder.amount || 0;
-        const pctOwned = holder.pct || 0;
-        
-        // Very precise round-number holdings are suspicious
-        if (balance > 0 && balance % 1000000 === 0) {
-          suspiciousCount++;
-        }
-        continue;
-      }
-      
-      const response = await fetch(url);
-      if (!response.ok) continue;
-      
-      const txs = await response.json();
-      
-      // Fresh wallet: fewer than 5 transactions
-      if (txs.length < 5) {
+      if (isVeryRound) {
+        suspiciousCount++;
+        freshCount++;
+      } else if (isRoundNumber && pctOwned > 1) {
         freshCount++;
       }
-      
-      // Suspicious: wallet has very few txs AND holds significant %
-      const pctOwned = holder.pct || 0;
-      if (txs.length < 3 && pctOwned > 1) {
-        suspiciousCount++;
+    }
+    
+    // HEURISTIC 2: Small percentage holders with very specific amounts
+    // Bots often hold identical or near-identical amounts
+    if (pctOwned > 0 && pctOwned < 0.5) {
+      // Check for suspiciously precise percentages (like exactly 0.1%)
+      const pctString = pctOwned.toFixed(4);
+      if (pctString.endsWith('0000') || pctString.endsWith('1000') || pctString.endsWith('5000')) {
+        freshCount++;
       }
-      
-      // Rate limit between wallet checks
-      await new Promise(resolve => setTimeout(resolve, 100));
-    } catch {
-      // Skip on error
+    }
+    
+    // HEURISTIC 3: Large holders (>2%) are often insiders/bundled
+    if (pctOwned > 2 && pctOwned < 10) {
+      // Multiple large holders = suspicious distribution
+      suspiciousCount++;
     }
   }
   
@@ -241,7 +259,12 @@ async function analyzeFreshWallets(holders: any[]): Promise<{ freshPct: number; 
 }
 
 // Analyze token risk (bundle detection + holder concentration + Phase 4 metrics)
-async function analyzeTokenRisk(mint: string): Promise<HolderAnalysis> {
+// OPTIMIZED: Accepts existing values for caching
+async function analyzeTokenRisk(
+  mint: string,
+  existingBundleCount?: number,
+  bundleCheckedAt?: string | null
+): Promise<HolderAnalysis & { bundleFromCache: boolean }> {
   try {
     const response = await fetch(`https://data.solanatracker.io/tokens/${mint}/holders`);
     if (!response.ok) {
@@ -249,7 +272,8 @@ async function analyzeTokenRisk(mint: string): Promise<HolderAnalysis> {
         bundleScore: 0, holderCount: 0, top5Percent: 0, maxSingleWalletPct: 0,
         giniCoefficient: 0, linkedWalletCount: 0, bundledBuyCount: 0,
         freshWalletPct: 0, suspiciousWalletPct: 0, insiderActivityDetected: false,
-        details: { error: 'Failed to fetch holders' } 
+        details: { error: 'Failed to fetch holders' },
+        bundleFromCache: false
       };
     }
     
@@ -261,7 +285,8 @@ async function analyzeTokenRisk(mint: string): Promise<HolderAnalysis> {
         bundleScore: 0, holderCount: 0, top5Percent: 0, maxSingleWalletPct: 0,
         giniCoefficient: 0, linkedWalletCount: 0, bundledBuyCount: 0,
         freshWalletPct: 0, suspiciousWalletPct: 0, insiderActivityDetected: false,
-        details: { holderCount: 0 } 
+        details: { holderCount: 0 },
+        bundleFromCache: false
       };
     }
     
@@ -281,11 +306,11 @@ async function analyzeTokenRisk(mint: string): Promise<HolderAnalysis> {
     // PHASE 4: Linked wallet detection
     const linkedAnalysis = detectLinkedWallets(holders);
     
-    // PHASE 4: Fresh wallet analysis
-    const walletAnalysis = await analyzeFreshWallets(holders);
+    // PHASE 4: Fresh wallet analysis (now uses heuristics only, no Helius)
+    const walletAnalysis = analyzeFreshWallets(holders);
     
-    // PHASE 4: Bundled buy detection (async)
-    const bundledAnalysis = await detectBundledBuys(mint);
+    // PHASE 4: Bundled buy detection with CACHING
+    const bundledAnalysis = await detectBundledBuys(mint, existingBundleCount, bundleCheckedAt);
     
     // High concentration = higher bundle score
     let bundleScore = 0;
@@ -318,6 +343,7 @@ async function analyzeTokenRisk(mint: string): Promise<HolderAnalysis> {
       freshWalletPct: walletAnalysis.freshPct,
       suspiciousWalletPct: walletAnalysis.suspiciousPct,
       insiderActivityDetected,
+      bundleFromCache: bundledAnalysis.fromCache,
       details: {
         holderCount: holders.length,
         top5Percent: top5Percent.toFixed(2),
@@ -335,7 +361,8 @@ async function analyzeTokenRisk(mint: string): Promise<HolderAnalysis> {
       bundleScore: 0, holderCount: 0, top5Percent: 0, maxSingleWalletPct: 0,
       giniCoefficient: 0, linkedWalletCount: 0, bundledBuyCount: 0,
       freshWalletPct: 0, suspiciousWalletPct: 0, insiderActivityDetected: false,
-      details: { error: String(error) } 
+      details: { error: String(error) },
+      bundleFromCache: false
     };
   }
 }
@@ -353,7 +380,32 @@ async function fetchTokenData(mint: string): Promise<any> {
 }
 
 // Check mint and freeze authority status via Helius RPC
-async function checkTokenAuthorities(mint: string): Promise<AuthorityCheck> {
+// OPTIMIZED: Uses caching to reduce RPC calls
+async function checkTokenAuthorities(
+  mint: string,
+  existingCheck?: { mintRevoked?: boolean; freezeRevoked?: boolean; authorityCheckedAt?: string | null }
+): Promise<AuthorityCheck & { fromCache: boolean }> {
+  // Check if we have a recent cache (within 1 hour)
+  // Authority status rarely changes after token creation
+  if (existingCheck?.authorityCheckedAt && 
+      existingCheck.mintRevoked !== undefined && 
+      existingCheck.freezeRevoked !== undefined) {
+    const cacheAge = Date.now() - new Date(existingCheck.authorityCheckedAt).getTime();
+    const ONE_HOUR = 60 * 60 * 1000;
+    
+    if (cacheAge < ONE_HOUR) {
+      console.log(`   🔐 Authority check cached (${Math.round(cacheAge / 60000)}m ago): mint=${existingCheck.mintRevoked ? 'revoked' : 'active'}, freeze=${existingCheck.freezeRevoked ? 'revoked' : 'active'}`);
+      return {
+        mintAuthorityRevoked: existingCheck.mintRevoked,
+        freezeAuthorityRevoked: existingCheck.freezeRevoked,
+        supplyValid: true, // Assume valid from cache
+        totalSupply: 0,
+        details: 'Cached check',
+        fromCache: true
+      };
+    }
+  }
+  
   const heliusKey = Deno.env.get('HELIUS_API_KEY');
   const rpcUrl = heliusKey 
     ? `https://mainnet.helius-rpc.com/?api-key=${heliusKey}`
@@ -377,12 +429,24 @@ async function checkTokenAuthorities(mint: string): Promise<AuthorityCheck> {
     
     if (!response.ok) {
       console.error(`RPC error for ${mint}: ${response.status}`);
+      // Use cached values if available
+      if (existingCheck?.mintRevoked !== undefined) {
+        return {
+          mintAuthorityRevoked: existingCheck.mintRevoked,
+          freezeAuthorityRevoked: existingCheck.freezeRevoked ?? true,
+          supplyValid: true,
+          totalSupply: 0,
+          details: 'RPC error - using cached values',
+          fromCache: true
+        };
+      }
       return {
         mintAuthorityRevoked: true, // Assume safe if can't check
         freezeAuthorityRevoked: true,
         supplyValid: true,
         totalSupply: 0,
-        details: 'RPC error - assuming safe'
+        details: 'RPC error - assuming safe',
+        fromCache: false
       };
     }
     
@@ -395,7 +459,8 @@ async function checkTokenAuthorities(mint: string): Promise<AuthorityCheck> {
         freezeAuthorityRevoked: true,
         supplyValid: true,
         totalSupply: 0,
-        details: 'No account data - assuming safe'
+        details: 'No account data - assuming safe',
+        fromCache: false
       };
     }
     
@@ -406,7 +471,8 @@ async function checkTokenAuthorities(mint: string): Promise<AuthorityCheck> {
         freezeAuthorityRevoked: true,
         supplyValid: true,
         totalSupply: 0,
-        details: 'Not a mint account'
+        details: 'Not a mint account',
+        fromCache: false
       };
     }
     
@@ -436,7 +502,8 @@ async function checkTokenAuthorities(mint: string): Promise<AuthorityCheck> {
       freezeAuthorityRevoked,
       supplyValid,
       totalSupply: supply,
-      details
+      details,
+      fromCache: false
     };
   } catch (error) {
     console.error(`Error checking authorities for ${mint}:`, error);
@@ -445,7 +512,8 @@ async function checkTokenAuthorities(mint: string): Promise<AuthorityCheck> {
       freezeAuthorityRevoked: true,
       supplyValid: true,
       totalSupply: 0,
-      details: `Error: ${String(error)}`
+      details: `Error: ${String(error)}`,
+      fromCache: false
     };
   }
 }
@@ -597,11 +665,15 @@ async function enrichTokenBatch(
   for (const token of tokens) {
     console.log(`\n📊 Enriching: ${token.token_symbol} (${token.token_mint.slice(0, 8)}...)`);
     
-    // Fetch current token data from both APIs + authority check
+    // Fetch current token data from both APIs + authority check (with caching)
     const [tokenData, pumpData, authorityCheck] = await Promise.all([
       fetchTokenData(token.token_mint),
       fetchPumpFunData(token.token_mint),
-      checkTokenAuthorities(token.token_mint)
+      checkTokenAuthorities(token.token_mint, {
+        mintRevoked: token.mint_authority_revoked ?? undefined,
+        freezeRevoked: token.freeze_authority_revoked ?? undefined,
+        authorityCheckedAt: token.authority_checked_at
+      })
     ]);
     
     // Extract price/volume from pump.fun API
@@ -644,8 +716,12 @@ async function enrichTokenBatch(
       }
     }
     
-    // Analyze bundle risk and holder concentration
-    const holderAnalysis = await analyzeTokenRisk(token.token_mint);
+    // Analyze bundle risk and holder concentration (with caching for bundled buys)
+    const holderAnalysis = await analyzeTokenRisk(
+      token.token_mint,
+      token.bundled_buy_count ?? undefined,
+      token.bundle_checked_at
+    );
     
     // RUGCHECK ANALYSIS - Stage 1 integration
     const rugCheckResult = await fetchRugCheck(token.token_mint, config);
@@ -813,6 +889,9 @@ async function enrichTokenBatch(
           rugcheck_risks: rugCheckResult.risks,
           rugcheck_passed: rugCheckResult.passed,
           rugcheck_checked_at: new Date().toISOString(),
+          // Caching timestamps for Helius optimization
+          authority_checked_at: authorityCheck.fromCache ? undefined : new Date().toISOString(),
+          bundle_checked_at: holderAnalysis.bundleFromCache ? undefined : new Date().toISOString(),
           removed_at: new Date().toISOString(),
           last_checked_at: new Date().toISOString(),
         })
@@ -860,6 +939,9 @@ async function enrichTokenBatch(
           rugcheck_risks: rugCheckResult.risks,
           rugcheck_passed: rugCheckResult.passed,
           rugcheck_checked_at: new Date().toISOString(),
+          // Caching timestamps for Helius optimization
+          authority_checked_at: authorityCheck.fromCache ? undefined : new Date().toISOString(),
+          bundle_checked_at: holderAnalysis.bundleFromCache ? undefined : new Date().toISOString(),
           last_checked_at: new Date().toISOString(),
           created_at_blockchain: createdAt ? new Date(createdAt * 1000).toISOString() : null,
           qualification_reason: promotionReason,
