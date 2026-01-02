@@ -1641,16 +1641,18 @@ export function TokenCandidatesDashboard() {
                               {(pnl || 0) >= 0 ? '+' : ''}{(pnl || 0).toFixed(4)}
                             </TableCell>
                             <TableCell compact className="text-xs text-muted-foreground font-mono">
-                              {new Date(pos.created_at).toLocaleString('en-CA', { 
-                                timeZone: 'America/Toronto',
-                                year: 'numeric',
-                                month: '2-digit',
-                                day: '2-digit',
-                                hour: '2-digit',
-                                minute: '2-digit',
-                                second: '2-digit',
-                                hour12: false
-                              })}
+                              <div className="flex flex-col">
+                                <span>{new Date(pos.created_at).toISOString().replace('T', ' ').slice(0, 19)} UTC</span>
+                                <span className="text-[10px] text-muted-foreground/70">
+                                  ({new Date(pos.created_at).toLocaleTimeString('en-US', { 
+                                    timeZone: 'UTC',
+                                    hour: '2-digit',
+                                    minute: '2-digit',
+                                    second: '2-digit',
+                                    hour12: false
+                                  })})
+                                </span>
+                              </div>
                             </TableCell>
                             <TableCell compact>
                               <div className="flex items-center gap-1">
