@@ -160,7 +160,6 @@ async function enrichTokenBatch(
     
     // Analyze bundle risk
     const { bundleScore, details } = await analyzeTokenRisk(token.token_mint);
-    console.log(`   Bundle Score: ${bundleScore} (${JSON.stringify(details)})`);
     
     // Extract data
     const holderCount = tokenData?.holders || details.holderCount || token.holder_count || 0;
@@ -169,17 +168,34 @@ async function enrichTokenBatch(
       ? pumpData.bonding_curve_progress * 100 
       : (tokenData?.pools?.[0]?.curvePercentage || token.bonding_curve_pct || 0);
     
+    // Decision log - track all criteria
+    const criteria = {
+      bundleScore: { value: bundleScore, max: config.max_bundle_score, pass: bundleScore <= config.max_bundle_score },
+      holderCount: { value: holderCount, min: config.min_holder_count, pass: true }, // Not blocking, just tracking
+      bondingCurve: { value: bondingCurve, min: config.bonding_curve_min, max: config.bonding_curve_max, 
+        pass: bondingCurve >= config.bonding_curve_min && bondingCurve <= config.bonding_curve_max },
+    };
+    
+    console.log(`   📋 DECISION CRITERIA:`);
+    console.log(`      Bundle Score: ${bundleScore} (max: ${config.max_bundle_score}) ${criteria.bundleScore.pass ? '✅' : '❌'}`);
+    console.log(`      Holders: ${holderCount} (tracking, min for qual: ${config.min_holder_count})`);
+    console.log(`      Bonding Curve: ${bondingCurve.toFixed(1)}% (range: ${config.bonding_curve_min}-${config.bonding_curve_max}%) ${criteria.bondingCurve.pass ? '✅' : '⚠️'}`);
+    console.log(`      Price: $${priceUsd?.toFixed(8) || 'N/A'}, Volume: ${volumeSol} SOL, MCap: $${marketCapUsd || 'N/A'}`);
+    
     // Check rejection criteria
     let shouldReject = false;
     let rejectionReason = '';
+    let rejectionDetails: string[] = [];
     
     if (bundleScore > config.max_bundle_score) {
       shouldReject = true;
-      rejectionReason = `bundle_score_${bundleScore}`;
-      console.log(`   ❌ Bundle score too high: ${bundleScore} > ${config.max_bundle_score}`);
+      rejectionDetails.push(`bundle:${bundleScore}>${config.max_bundle_score}`);
     }
     
+    rejectionReason = rejectionDetails.join(', ');
+    
     if (shouldReject) {
+      console.log(`   ❌ REJECTED: ${rejectionReason}`);
       await supabase
         .from('pumpfun_watchlist')
         .update({
@@ -190,7 +206,7 @@ async function enrichTokenBatch(
           market_cap_sol: marketCapSol,
           bonding_curve_pct: bondingCurve,
           price_usd: priceUsd,
-          price_ath_usd: priceUsd, // Set ATH to current price on first check
+          price_ath_usd: priceUsd,
           volume_sol: volumeSol,
           market_cap_usd: marketCapUsd,
           liquidity_usd: liquidityUsd,
@@ -201,7 +217,10 @@ async function enrichTokenBatch(
         
       rejected++;
     } else {
-      // Promote to watching
+      // Promote to watching with reason
+      const promotionReason = `bundle:${bundleScore}/${config.max_bundle_score}, holders:${holderCount}, bc:${bondingCurve.toFixed(0)}%`;
+      console.log(`   ✅ PROMOTED to watching: ${promotionReason}`);
+      
       await supabase
         .from('pumpfun_watchlist')
         .update({
@@ -211,17 +230,17 @@ async function enrichTokenBatch(
           market_cap_sol: marketCapSol,
           bonding_curve_pct: bondingCurve,
           price_usd: priceUsd,
-          price_start_usd: priceUsd, // Set start price when entering watching
-          price_ath_usd: priceUsd, // Set ATH to current price on first check
+          price_start_usd: priceUsd,
+          price_ath_usd: priceUsd,
           volume_sol: volumeSol,
           market_cap_usd: marketCapUsd,
           liquidity_usd: liquidityUsd,
           last_checked_at: new Date().toISOString(),
           created_at_blockchain: createdAt ? new Date(createdAt * 1000).toISOString() : null,
+          qualification_reason: promotionReason, // Store the promotion criteria for reference
         })
         .eq('id', token.id);
         
-      console.log(`   ✅ Promoted to watching`);
       promoted++;
     }
     
