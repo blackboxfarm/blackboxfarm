@@ -1128,6 +1128,16 @@ export function TokenCandidatesDashboard() {
               </div>
               <div className="flex items-center justify-between mt-3">
                 <div className="flex items-center gap-4">
+                  <div className="flex items-center gap-2 px-2 py-1 rounded-md bg-purple-500/10 border border-purple-500/30">
+                    <Switch 
+                      checked={configEdits.fantasy_mode_enabled ?? true}
+                      onCheckedChange={(checked) => setConfigEdits(prev => ({ ...prev, fantasy_mode_enabled: checked }))} 
+                    />
+                    <TestTube className="h-3 w-3 text-purple-400" />
+                    <span className="text-xs font-medium text-purple-400">
+                      {configEdits.fantasy_mode_enabled ? 'Fantasy Mode' : 'LIVE MODE'}
+                    </span>
+                  </div>
                   <div className="flex items-center gap-2">
                     <Switch checked={configEdits.auto_scalp_enabled ?? false}
                       onCheckedChange={(checked) => setConfigEdits(prev => ({ ...prev, auto_scalp_enabled: checked }))} />
