@@ -1,0 +1,451 @@
+import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+
+/**
+ * PUMPFUN FANTASY SELL MONITOR
+ * 
+ * Purpose: Monitor fantasy positions, simulate 90% sell at 1.5x target, track moonbags
+ * Schedule: Every minute via cron
+ * 
+ * Logic:
+ * 1. Fetch all open and moonbag fantasy positions
+ * 2. Get current prices in batch
+ * 3. For 'open' positions: check if target hit (1.5x) -> simulate 90% sell -> create moonbag
+ * 4. For 'moonbag' positions: monitor for exit conditions (LP removal, 70% drawdown)
+ * 5. Update all P&L calculations
+ */
+
+const corsHeaders = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+};
+
+const jsonResponse = (data: unknown, status = 200) =>
+  new Response(JSON.stringify(data), {
+    status,
+    headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+  });
+
+const errorResponse = (message: string, status = 400) =>
+  jsonResponse({ success: false, error: message }, status);
+
+interface MonitorConfig {
+  fantasy_target_multiplier: number;
+  fantasy_sell_percentage: number;
+  fantasy_moonbag_percentage: number;
+  fantasy_moonbag_drawdown_limit: number;
+  fantasy_moonbag_volume_check: boolean;
+}
+
+interface MonitorStats {
+  positionsChecked: number;
+  pricesUpdated: number;
+  targetsSold: number;
+  moonbagsCreated: number;
+  moonbagsClosed: number;
+  lpRemovalDetected: number;
+  drawdownExits: number;
+  errors: string[];
+  durationMs: number;
+}
+
+// Get config
+async function getConfig(supabase: any): Promise<MonitorConfig> {
+  const { data } = await supabase
+    .from('pumpfun_monitor_config')
+    .select('fantasy_target_multiplier, fantasy_sell_percentage, fantasy_moonbag_percentage, fantasy_moonbag_drawdown_limit, fantasy_moonbag_volume_check')
+    .limit(1)
+    .single();
+
+  return {
+    fantasy_target_multiplier: data?.fantasy_target_multiplier ?? 1.5,
+    fantasy_sell_percentage: data?.fantasy_sell_percentage ?? 90,
+    fantasy_moonbag_percentage: data?.fantasy_moonbag_percentage ?? 10,
+    fantasy_moonbag_drawdown_limit: data?.fantasy_moonbag_drawdown_limit ?? 70,
+    fantasy_moonbag_volume_check: data?.fantasy_moonbag_volume_check ?? true,
+  };
+}
+
+// Get SOL price
+async function getSolPrice(): Promise<number> {
+  try {
+    const response = await fetch('https://api.jup.ag/price/v2?ids=So11111111111111111111111111111111111111112');
+    const data = await response.json();
+    return data?.data?.['So11111111111111111111111111111111111111112']?.price || 200;
+  } catch {
+    return 200;
+  }
+}
+
+// Batch fetch prices from Jupiter
+async function batchFetchPrices(mints: string[]): Promise<Map<string, number>> {
+  const priceMap = new Map<string, number>();
+  
+  if (mints.length === 0) return priceMap;
+
+  try {
+    // Jupiter supports comma-separated mints
+    const batchSize = 100;
+    for (let i = 0; i < mints.length; i += batchSize) {
+      const batch = mints.slice(i, i + batchSize);
+      const response = await fetch(`https://api.jup.ag/price/v2?ids=${batch.join(',')}`);
+      const data = await response.json();
+      
+      for (const mint of batch) {
+        if (data?.data?.[mint]?.price) {
+          priceMap.set(mint, data.data[mint].price);
+        }
+      }
+      
+      // Rate limiting
+      if (i + batchSize < mints.length) {
+        await new Promise(r => setTimeout(r, 200));
+      }
+    }
+  } catch (error) {
+    console.error('Error batch fetching prices:', error);
+  }
+
+  return priceMap;
+}
+
+// Check liquidity for moonbag positions
+async function checkLiquidity(mint: string): Promise<{ liquidityUsd: number | null; lpRemoved: boolean }> {
+  try {
+    const response = await fetch(`https://api.dexscreener.com/latest/dex/tokens/${mint}`);
+    const data = await response.json();
+    const pair = data?.pairs?.[0];
+    
+    if (!pair) {
+      // No pair found = likely LP removed
+      return { liquidityUsd: null, lpRemoved: true };
+    }
+
+    const liquidityUsd = pair.liquidity?.usd || 0;
+    
+    // Consider LP removed if liquidity drops below $500
+    const lpRemoved = liquidityUsd < 500;
+    
+    return { liquidityUsd, lpRemoved };
+  } catch (error) {
+    console.error(`Error checking liquidity for ${mint}:`, error);
+    return { liquidityUsd: null, lpRemoved: false };
+  }
+}
+
+// Main monitoring logic
+async function monitorPositions(supabase: any): Promise<MonitorStats> {
+  const startTime = Date.now();
+  const stats: MonitorStats = {
+    positionsChecked: 0,
+    pricesUpdated: 0,
+    targetsSold: 0,
+    moonbagsCreated: 0,
+    moonbagsClosed: 0,
+    lpRemovalDetected: 0,
+    drawdownExits: 0,
+    errors: [],
+    durationMs: 0,
+  };
+
+  console.log('📊 FANTASY SELL MONITOR: Starting monitoring cycle...');
+
+  const config = await getConfig(supabase);
+
+  // Get all active positions (open and moonbag)
+  const { data: positions, error } = await supabase
+    .from('pumpfun_fantasy_positions')
+    .select('*')
+    .in('status', ['open', 'moonbag'])
+    .order('created_at', { ascending: true });
+
+  if (error) {
+    console.error('Error fetching positions:', error);
+    stats.errors.push(error.message);
+    stats.durationMs = Date.now() - startTime;
+    return stats;
+  }
+
+  if (!positions?.length) {
+    console.log('📋 No active positions to monitor');
+    stats.durationMs = Date.now() - startTime;
+    return stats;
+  }
+
+  console.log(`📋 Monitoring ${positions.length} active positions`);
+
+  // Get SOL price
+  const solPrice = await getSolPrice();
+
+  // Batch fetch all prices
+  const mints = [...new Set(positions.map((p: any) => p.token_mint))];
+  const priceMap = await batchFetchPrices(mints);
+
+  const now = new Date().toISOString();
+
+  for (const position of positions) {
+    stats.positionsChecked++;
+
+    try {
+      const currentPriceUsd = priceMap.get(position.token_mint);
+      
+      if (!currentPriceUsd) {
+        console.log(`⚠️ No price for ${position.token_symbol}, skipping`);
+        continue;
+      }
+
+      const currentPriceSol = currentPriceUsd / solPrice;
+      const multiplier = currentPriceUsd / position.entry_price_usd;
+      
+      // Track peak
+      const isNewPeak = currentPriceUsd > (position.peak_price_usd || 0);
+      
+      if (position.status === 'open') {
+        // Calculate current unrealized P&L
+        const currentValue = position.token_amount * currentPriceSol;
+        const unrealizedPnlSol = currentValue - position.entry_amount_sol;
+        const unrealizedPnlPercent = ((currentValue / position.entry_amount_sol) - 1) * 100;
+
+        // Check if target hit
+        if (multiplier >= position.target_multiplier) {
+          // TARGET HIT! Simulate 90% sell
+          console.log(`🎯 TARGET HIT: ${position.token_symbol} @ ${multiplier.toFixed(2)}x (target: ${position.target_multiplier}x)`);
+
+          const sellPercentage = position.sell_percentage / 100;
+          const moonbagPercentage = position.moonbag_percentage / 100;
+          
+          // Calculate main sell
+          const tokensToSell = position.token_amount * sellPercentage;
+          const mainSellValueSol = tokensToSell * currentPriceSol;
+          const mainCostBasisSol = position.entry_amount_sol * sellPercentage;
+          const mainRealizedPnlSol = mainSellValueSol - mainCostBasisSol;
+
+          // Calculate moonbag
+          const moonbagTokens = position.token_amount * moonbagPercentage;
+          const moonbagValueSol = moonbagTokens * currentPriceSol;
+          const moonbagCostBasisSol = position.entry_amount_sol * moonbagPercentage;
+
+          // Update position to moonbag status
+          await supabase
+            .from('pumpfun_fantasy_positions')
+            .update({
+              status: 'moonbag',
+              current_price_usd: currentPriceUsd,
+              current_price_sol: currentPriceSol,
+              main_sold_at: now,
+              main_sold_price_usd: currentPriceUsd,
+              main_sold_amount_sol: mainSellValueSol,
+              main_realized_pnl_sol: mainRealizedPnlSol,
+              moonbag_active: true,
+              moonbag_token_amount: moonbagTokens,
+              moonbag_entry_value_sol: moonbagCostBasisSol,
+              moonbag_current_value_sol: moonbagValueSol,
+              moonbag_peak_price_usd: currentPriceUsd,
+              moonbag_drawdown_pct: 0,
+              total_realized_pnl_sol: mainRealizedPnlSol,
+              peak_price_usd: isNewPeak ? currentPriceUsd : position.peak_price_usd,
+              peak_multiplier: isNewPeak ? multiplier : position.peak_multiplier,
+              peak_at: isNewPeak ? now : position.peak_at,
+              updated_at: now,
+            })
+            .eq('id', position.id);
+
+          stats.targetsSold++;
+          stats.moonbagsCreated++;
+          
+          console.log(`💰 SOLD 90%: ${position.token_symbol} | +${mainRealizedPnlSol.toFixed(4)} SOL | Moonbag: ${moonbagTokens.toFixed(2)} tokens`);
+
+        } else {
+          // Just update current price and P&L
+          await supabase
+            .from('pumpfun_fantasy_positions')
+            .update({
+              current_price_usd: currentPriceUsd,
+              current_price_sol: currentPriceSol,
+              unrealized_pnl_sol: unrealizedPnlSol,
+              unrealized_pnl_percent: unrealizedPnlPercent,
+              peak_price_usd: isNewPeak ? currentPriceUsd : position.peak_price_usd,
+              peak_multiplier: isNewPeak ? multiplier : position.peak_multiplier,
+              peak_at: isNewPeak ? now : position.peak_at,
+              updated_at: now,
+            })
+            .eq('id', position.id);
+
+          stats.pricesUpdated++;
+        }
+
+      } else if (position.status === 'moonbag') {
+        // Monitor moonbag for exit conditions
+        const moonbagValueSol = position.moonbag_token_amount * currentPriceSol;
+        
+        // Calculate drawdown from moonbag peak (not entry peak)
+        const moonbagPeakPriceUsd = position.moonbag_peak_price_usd || position.main_sold_price_usd || position.peak_price_usd;
+        const isNewMoonbagPeak = currentPriceUsd > moonbagPeakPriceUsd;
+        const effectivePeak = isNewMoonbagPeak ? currentPriceUsd : moonbagPeakPriceUsd;
+        const drawdownPct = ((effectivePeak - currentPriceUsd) / effectivePeak) * 100;
+
+        // Check LP status
+        const { liquidityUsd, lpRemoved } = await checkLiquidity(position.token_mint);
+
+        let shouldExit = false;
+        let exitReason = '';
+
+        if (lpRemoved) {
+          shouldExit = true;
+          exitReason = 'lp_removed';
+          stats.lpRemovalDetected++;
+          console.log(`🚨 LP REMOVED: ${position.token_symbol}`);
+        } else if (drawdownPct >= config.fantasy_moonbag_drawdown_limit) {
+          shouldExit = true;
+          exitReason = 'drawdown';
+          stats.drawdownExits++;
+          console.log(`📉 DRAWDOWN EXIT: ${position.token_symbol} @ ${drawdownPct.toFixed(1)}% drawdown`);
+        }
+
+        if (shouldExit) {
+          // Calculate final moonbag P&L
+          const moonbagRealizedPnlSol = moonbagValueSol - position.moonbag_entry_value_sol;
+          const totalRealizedPnlSol = (position.main_realized_pnl_sol || 0) + moonbagRealizedPnlSol;
+          const totalPnlPercent = ((totalRealizedPnlSol / position.entry_amount_sol)) * 100;
+
+          await supabase
+            .from('pumpfun_fantasy_positions')
+            .update({
+              status: 'closed',
+              current_price_usd: currentPriceUsd,
+              current_price_sol: currentPriceSol,
+              moonbag_active: false,
+              moonbag_current_value_sol: moonbagValueSol,
+              moonbag_drawdown_pct: drawdownPct,
+              exit_at: now,
+              exit_price_usd: currentPriceUsd,
+              exit_reason: exitReason,
+              total_realized_pnl_sol: totalRealizedPnlSol,
+              total_pnl_percent: totalPnlPercent,
+              lp_checked_at: now,
+              lp_liquidity_usd: liquidityUsd,
+              updated_at: now,
+            })
+            .eq('id', position.id);
+
+          stats.moonbagsClosed++;
+          
+          console.log(`🏁 MOONBAG CLOSED: ${position.token_symbol} | Reason: ${exitReason} | Final P&L: ${totalRealizedPnlSol >= 0 ? '+' : ''}${totalRealizedPnlSol.toFixed(4)} SOL (${totalPnlPercent.toFixed(1)}%)`);
+
+        } else {
+          // Just update moonbag tracking
+          await supabase
+            .from('pumpfun_fantasy_positions')
+            .update({
+              current_price_usd: currentPriceUsd,
+              current_price_sol: currentPriceSol,
+              moonbag_current_value_sol: moonbagValueSol,
+              moonbag_peak_price_usd: isNewMoonbagPeak ? currentPriceUsd : moonbagPeakPriceUsd,
+              moonbag_drawdown_pct: drawdownPct,
+              lp_checked_at: now,
+              lp_liquidity_usd: liquidityUsd,
+              updated_at: now,
+            })
+            .eq('id', position.id);
+
+          stats.pricesUpdated++;
+        }
+
+        // Rate limiting for LP checks
+        await new Promise(r => setTimeout(r, 100));
+      }
+
+    } catch (error) {
+      console.error(`Error processing ${position.token_symbol}:`, error);
+      stats.errors.push(`${position.token_symbol}: ${String(error)}`);
+    }
+  }
+
+  stats.durationMs = Date.now() - startTime;
+  console.log(`📊 FANTASY SELL MONITOR COMPLETE: ${stats.positionsChecked} checked, ${stats.targetsSold} targets hit, ${stats.moonbagsClosed} moonbags closed (${stats.durationMs}ms)`);
+
+  return stats;
+}
+
+// Get summary stats
+async function getSummaryStats(supabase: any) {
+  const { data: positions } = await supabase
+    .from('pumpfun_fantasy_positions')
+    .select('*');
+
+  if (!positions?.length) {
+    return {
+      totalPositions: 0,
+      openPositions: 0,
+      moonbagPositions: 0,
+      closedPositions: 0,
+      targetsHit: 0,
+      winRate: 0,
+      totalInvested: 0,
+      totalRealizedPnl: 0,
+      avgPnlPerTrade: 0,
+    };
+  }
+
+  const openPositions = positions.filter((p: any) => p.status === 'open');
+  const moonbagPositions = positions.filter((p: any) => p.status === 'moonbag');
+  const closedPositions = positions.filter((p: any) => p.status === 'closed');
+  const targetsHit = positions.filter((p: any) => p.main_sold_at !== null);
+  const winningTrades = closedPositions.filter((p: any) => p.total_realized_pnl_sol > 0);
+
+  const totalInvested = positions.reduce((sum: number, p: any) => sum + (p.entry_amount_sol || 0), 0);
+  const totalRealizedPnl = closedPositions.reduce((sum: number, p: any) => sum + (p.total_realized_pnl_sol || 0), 0);
+  const unrealizedPnl = openPositions.reduce((sum: number, p: any) => sum + (p.unrealized_pnl_sol || 0), 0);
+  const moonbagPnl = moonbagPositions.reduce((sum: number, p: any) => sum + (p.main_realized_pnl_sol || 0), 0);
+
+  return {
+    totalPositions: positions.length,
+    openPositions: openPositions.length,
+    moonbagPositions: moonbagPositions.length,
+    closedPositions: closedPositions.length,
+    targetsHit: targetsHit.length,
+    winRate: closedPositions.length > 0 ? (winningTrades.length / closedPositions.length) * 100 : 0,
+    totalInvested,
+    totalRealizedPnl,
+    unrealizedPnl,
+    moonbagPnl,
+    avgPnlPerTrade: closedPositions.length > 0 ? totalRealizedPnl / closedPositions.length : 0,
+    targetHitRate: positions.length > 0 ? (targetsHit.length / positions.length) * 100 : 0,
+  };
+}
+
+serve(async (req) => {
+  if (req.method === 'OPTIONS') {
+    return new Response(null, { headers: corsHeaders });
+  }
+
+  try {
+    const supabase = createClient(
+      Deno.env.get('SUPABASE_URL') ?? '',
+      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
+    );
+
+    const url = new URL(req.url);
+    const action = url.searchParams.get('action') || 'monitor';
+
+    console.log(`🎯 pumpfun-fantasy-sell-monitor action: ${action}`);
+
+    switch (action) {
+      case 'monitor': {
+        const stats = await monitorPositions(supabase);
+        return jsonResponse({ success: true, stats });
+      }
+
+      case 'stats': {
+        const stats = await getSummaryStats(supabase);
+        return jsonResponse({ success: true, ...stats });
+      }
+
+      default:
+        return errorResponse(`Unknown action: ${action}`);
+    }
+  } catch (error) {
+    console.error('Error in pumpfun-fantasy-sell-monitor:', error);
+    return errorResponse(String(error), 500);
+  }
+});

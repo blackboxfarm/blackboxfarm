@@ -4503,6 +4503,227 @@ export type Database = {
           },
         ]
       }
+      pumpfun_fantasy_positions: {
+        Row: {
+          created_at: string | null
+          current_price_sol: number | null
+          current_price_usd: number | null
+          entry_amount_sol: number
+          entry_at: string | null
+          entry_price_sol: number | null
+          entry_price_usd: number | null
+          exit_at: string | null
+          exit_price_usd: number | null
+          exit_reason: string | null
+          id: string
+          lp_checked_at: string | null
+          lp_liquidity_usd: number | null
+          main_realized_pnl_sol: number | null
+          main_sold_amount_sol: number | null
+          main_sold_at: string | null
+          main_sold_price_usd: number | null
+          moonbag_active: boolean | null
+          moonbag_current_value_sol: number | null
+          moonbag_drawdown_pct: number | null
+          moonbag_entry_value_sol: number | null
+          moonbag_peak_price_usd: number | null
+          moonbag_percentage: number | null
+          moonbag_token_amount: number | null
+          peak_at: string | null
+          peak_multiplier: number | null
+          peak_price_usd: number | null
+          sell_percentage: number | null
+          signal_strength: number | null
+          status: string
+          target_multiplier: number | null
+          token_amount: number | null
+          token_mint: string
+          token_name: string | null
+          token_symbol: string | null
+          total_pnl_percent: number | null
+          total_realized_pnl_sol: number | null
+          unrealized_pnl_percent: number | null
+          unrealized_pnl_sol: number | null
+          updated_at: string | null
+          watchlist_id: string | null
+        }
+        Insert: {
+          created_at?: string | null
+          current_price_sol?: number | null
+          current_price_usd?: number | null
+          entry_amount_sol: number
+          entry_at?: string | null
+          entry_price_sol?: number | null
+          entry_price_usd?: number | null
+          exit_at?: string | null
+          exit_price_usd?: number | null
+          exit_reason?: string | null
+          id?: string
+          lp_checked_at?: string | null
+          lp_liquidity_usd?: number | null
+          main_realized_pnl_sol?: number | null
+          main_sold_amount_sol?: number | null
+          main_sold_at?: string | null
+          main_sold_price_usd?: number | null
+          moonbag_active?: boolean | null
+          moonbag_current_value_sol?: number | null
+          moonbag_drawdown_pct?: number | null
+          moonbag_entry_value_sol?: number | null
+          moonbag_peak_price_usd?: number | null
+          moonbag_percentage?: number | null
+          moonbag_token_amount?: number | null
+          peak_at?: string | null
+          peak_multiplier?: number | null
+          peak_price_usd?: number | null
+          sell_percentage?: number | null
+          signal_strength?: number | null
+          status?: string
+          target_multiplier?: number | null
+          token_amount?: number | null
+          token_mint: string
+          token_name?: string | null
+          token_symbol?: string | null
+          total_pnl_percent?: number | null
+          total_realized_pnl_sol?: number | null
+          unrealized_pnl_percent?: number | null
+          unrealized_pnl_sol?: number | null
+          updated_at?: string | null
+          watchlist_id?: string | null
+        }
+        Update: {
+          created_at?: string | null
+          current_price_sol?: number | null
+          current_price_usd?: number | null
+          entry_amount_sol?: number
+          entry_at?: string | null
+          entry_price_sol?: number | null
+          entry_price_usd?: number | null
+          exit_at?: string | null
+          exit_price_usd?: number | null
+          exit_reason?: string | null
+          id?: string
+          lp_checked_at?: string | null
+          lp_liquidity_usd?: number | null
+          main_realized_pnl_sol?: number | null
+          main_sold_amount_sol?: number | null
+          main_sold_at?: string | null
+          main_sold_price_usd?: number | null
+          moonbag_active?: boolean | null
+          moonbag_current_value_sol?: number | null
+          moonbag_drawdown_pct?: number | null
+          moonbag_entry_value_sol?: number | null
+          moonbag_peak_price_usd?: number | null
+          moonbag_percentage?: number | null
+          moonbag_token_amount?: number | null
+          peak_at?: string | null
+          peak_multiplier?: number | null
+          peak_price_usd?: number | null
+          sell_percentage?: number | null
+          signal_strength?: number | null
+          status?: string
+          target_multiplier?: number | null
+          token_amount?: number | null
+          token_mint?: string
+          token_name?: string | null
+          token_symbol?: string | null
+          total_pnl_percent?: number | null
+          total_realized_pnl_sol?: number | null
+          unrealized_pnl_percent?: number | null
+          unrealized_pnl_sol?: number | null
+          updated_at?: string | null
+          watchlist_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "pumpfun_fantasy_positions_watchlist_id_fkey"
+            columns: ["watchlist_id"]
+            isOneToOne: false
+            referencedRelation: "pumpfun_watchlist"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      pumpfun_fantasy_stats: {
+        Row: {
+          avg_exit_multiplier: number | null
+          avg_hold_time_minutes: number | null
+          avg_pnl_per_trade_sol: number | null
+          avg_time_to_target_minutes: number | null
+          best_trade_pnl_sol: number | null
+          best_trade_token: string | null
+          created_at: string | null
+          id: string
+          max_multiplier_achieved: number | null
+          moonbag_win_rate: number | null
+          period_end: string
+          period_start: string
+          period_type: string | null
+          positions_hit_target: number | null
+          positions_lp_removed: number | null
+          positions_moonbag_sold: number | null
+          positions_stopped_out: number | null
+          total_positions: number | null
+          total_realized_pnl_sol: number | null
+          total_virtual_invested_sol: number | null
+          updated_at: string | null
+          win_rate: number | null
+          worst_trade_pnl_sol: number | null
+          worst_trade_token: string | null
+        }
+        Insert: {
+          avg_exit_multiplier?: number | null
+          avg_hold_time_minutes?: number | null
+          avg_pnl_per_trade_sol?: number | null
+          avg_time_to_target_minutes?: number | null
+          best_trade_pnl_sol?: number | null
+          best_trade_token?: string | null
+          created_at?: string | null
+          id?: string
+          max_multiplier_achieved?: number | null
+          moonbag_win_rate?: number | null
+          period_end: string
+          period_start: string
+          period_type?: string | null
+          positions_hit_target?: number | null
+          positions_lp_removed?: number | null
+          positions_moonbag_sold?: number | null
+          positions_stopped_out?: number | null
+          total_positions?: number | null
+          total_realized_pnl_sol?: number | null
+          total_virtual_invested_sol?: number | null
+          updated_at?: string | null
+          win_rate?: number | null
+          worst_trade_pnl_sol?: number | null
+          worst_trade_token?: string | null
+        }
+        Update: {
+          avg_exit_multiplier?: number | null
+          avg_hold_time_minutes?: number | null
+          avg_pnl_per_trade_sol?: number | null
+          avg_time_to_target_minutes?: number | null
+          best_trade_pnl_sol?: number | null
+          best_trade_token?: string | null
+          created_at?: string | null
+          id?: string
+          max_multiplier_achieved?: number | null
+          moonbag_win_rate?: number | null
+          period_end?: string
+          period_start?: string
+          period_type?: string | null
+          positions_hit_target?: number | null
+          positions_lp_removed?: number | null
+          positions_moonbag_sold?: number | null
+          positions_stopped_out?: number | null
+          total_positions?: number | null
+          total_realized_pnl_sol?: number | null
+          total_virtual_invested_sol?: number | null
+          updated_at?: string | null
+          win_rate?: number | null
+          worst_trade_pnl_sol?: number | null
+          worst_trade_token?: string | null
+        }
+        Relationships: []
+      }
       pumpfun_monitor_config: {
         Row: {
           active_watchdog_count: number | null
@@ -4519,6 +4740,13 @@ export type Database = {
           dead_holder_threshold: number | null
           dead_retention_hours: number | null
           dead_volume_threshold_sol: number | null
+          fantasy_buy_amount_sol: number | null
+          fantasy_mode_enabled: boolean | null
+          fantasy_moonbag_drawdown_limit: number | null
+          fantasy_moonbag_percentage: number | null
+          fantasy_moonbag_volume_check: boolean | null
+          fantasy_sell_percentage: number | null
+          fantasy_target_multiplier: number | null
           id: string
           is_enabled: boolean
           kill_switch_activated_at: string | null
@@ -4580,6 +4808,13 @@ export type Database = {
           dead_holder_threshold?: number | null
           dead_retention_hours?: number | null
           dead_volume_threshold_sol?: number | null
+          fantasy_buy_amount_sol?: number | null
+          fantasy_mode_enabled?: boolean | null
+          fantasy_moonbag_drawdown_limit?: number | null
+          fantasy_moonbag_percentage?: number | null
+          fantasy_moonbag_volume_check?: boolean | null
+          fantasy_sell_percentage?: number | null
+          fantasy_target_multiplier?: number | null
           id?: string
           is_enabled?: boolean
           kill_switch_activated_at?: string | null
@@ -4641,6 +4876,13 @@ export type Database = {
           dead_holder_threshold?: number | null
           dead_retention_hours?: number | null
           dead_volume_threshold_sol?: number | null
+          fantasy_buy_amount_sol?: number | null
+          fantasy_mode_enabled?: boolean | null
+          fantasy_moonbag_drawdown_limit?: number | null
+          fantasy_moonbag_percentage?: number | null
+          fantasy_moonbag_volume_check?: boolean | null
+          fantasy_sell_percentage?: number | null
+          fantasy_target_multiplier?: number | null
           id?: string
           is_enabled?: boolean
           kill_switch_activated_at?: string | null
@@ -4746,6 +4988,7 @@ export type Database = {
           creator_wallet: string | null
           dev_launched_new: boolean | null
           dev_sold: boolean | null
+          fantasy_position_id: string | null
           first_seen_at: string
           freeze_authority_revoked: boolean | null
           fresh_wallet_pct: number | null
@@ -4829,6 +5072,7 @@ export type Database = {
           creator_wallet?: string | null
           dev_launched_new?: boolean | null
           dev_sold?: boolean | null
+          fantasy_position_id?: string | null
           first_seen_at?: string
           freeze_authority_revoked?: boolean | null
           fresh_wallet_pct?: number | null
@@ -4912,6 +5156,7 @@ export type Database = {
           creator_wallet?: string | null
           dev_launched_new?: boolean | null
           dev_sold?: boolean | null
+          fantasy_position_id?: string | null
           first_seen_at?: string
           freeze_authority_revoked?: boolean | null
           fresh_wallet_pct?: number | null
@@ -4978,7 +5223,15 @@ export type Database = {
           volume_sol_prev?: number | null
           website_url?: string | null
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "pumpfun_watchlist_fantasy_position_id_fkey"
+            columns: ["fantasy_position_id"]
+            isOneToOne: false
+            referencedRelation: "pumpfun_fantasy_positions"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       rate_limits: {
         Row: {

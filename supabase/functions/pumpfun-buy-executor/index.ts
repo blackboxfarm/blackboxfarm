@@ -43,6 +43,7 @@ interface ExecutorStats {
 interface BuyConfig {
   is_enabled: boolean;
   auto_buy_enabled: boolean;
+  fantasy_mode_enabled: boolean;
   buy_amount_sol: number;
   max_buy_price_usd: number;
   buy_slippage_bps: number;
@@ -63,6 +64,7 @@ async function getConfig(supabase: any): Promise<BuyConfig> {
   return {
     is_enabled: data?.is_enabled ?? true,
     auto_buy_enabled: data?.auto_buy_enabled ?? false,
+    fantasy_mode_enabled: data?.fantasy_mode_enabled ?? true,
     buy_amount_sol: data?.buy_amount_sol ?? 0.05,
     max_buy_price_usd: data?.max_buy_price_usd ?? 0.001,
     buy_slippage_bps: data?.buy_slippage_bps ?? 500,
@@ -215,6 +217,13 @@ async function executeBuys(supabase: any): Promise<ExecutorStats> {
 
   if (!config.auto_buy_enabled) {
     console.log('⏸️ Auto-buy disabled, skipping');
+    stats.durationMs = Date.now() - startTime;
+    return stats;
+  }
+
+  // Check if fantasy mode - redirect to fantasy executor
+  if (config.fantasy_mode_enabled) {
+    console.log('🎮 Fantasy mode enabled - buy executor redirecting to fantasy pipeline');
     stats.durationMs = Date.now() - startTime;
     return stats;
   }
