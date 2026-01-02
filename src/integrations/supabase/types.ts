@@ -4510,8 +4510,16 @@ export type Database = {
           current_price_usd: number | null
           entry_amount_sol: number
           entry_at: string | null
+          entry_bonding_curve_pct: number | null
+          entry_holder_count: number | null
+          entry_market_cap_usd: number | null
           entry_price_sol: number | null
           entry_price_usd: number | null
+          entry_rugcheck_score: number | null
+          entry_signal_strength_raw: string | null
+          entry_socials_count: number | null
+          entry_token_age_mins: number | null
+          entry_volume_24h_sol: number | null
           exit_at: string | null
           exit_price_usd: number | null
           exit_reason: string | null
@@ -4529,6 +4537,11 @@ export type Database = {
           moonbag_peak_price_usd: number | null
           moonbag_percentage: number | null
           moonbag_token_amount: number | null
+          optimal_entry_market_cap: number | null
+          optimal_exit_multiplier: number | null
+          outcome: string | null
+          outcome_classified_at: string | null
+          outcome_notes: string | null
           peak_at: string | null
           peak_multiplier: number | null
           peak_price_usd: number | null
@@ -4536,6 +4549,8 @@ export type Database = {
           signal_strength: number | null
           status: string
           target_multiplier: number | null
+          time_to_peak_mins: number | null
+          time_to_rug_mins: number | null
           token_amount: number | null
           token_mint: string
           token_name: string | null
@@ -4553,8 +4568,16 @@ export type Database = {
           current_price_usd?: number | null
           entry_amount_sol: number
           entry_at?: string | null
+          entry_bonding_curve_pct?: number | null
+          entry_holder_count?: number | null
+          entry_market_cap_usd?: number | null
           entry_price_sol?: number | null
           entry_price_usd?: number | null
+          entry_rugcheck_score?: number | null
+          entry_signal_strength_raw?: string | null
+          entry_socials_count?: number | null
+          entry_token_age_mins?: number | null
+          entry_volume_24h_sol?: number | null
           exit_at?: string | null
           exit_price_usd?: number | null
           exit_reason?: string | null
@@ -4572,6 +4595,11 @@ export type Database = {
           moonbag_peak_price_usd?: number | null
           moonbag_percentage?: number | null
           moonbag_token_amount?: number | null
+          optimal_entry_market_cap?: number | null
+          optimal_exit_multiplier?: number | null
+          outcome?: string | null
+          outcome_classified_at?: string | null
+          outcome_notes?: string | null
           peak_at?: string | null
           peak_multiplier?: number | null
           peak_price_usd?: number | null
@@ -4579,6 +4607,8 @@ export type Database = {
           signal_strength?: number | null
           status?: string
           target_multiplier?: number | null
+          time_to_peak_mins?: number | null
+          time_to_rug_mins?: number | null
           token_amount?: number | null
           token_mint: string
           token_name?: string | null
@@ -4596,8 +4626,16 @@ export type Database = {
           current_price_usd?: number | null
           entry_amount_sol?: number
           entry_at?: string | null
+          entry_bonding_curve_pct?: number | null
+          entry_holder_count?: number | null
+          entry_market_cap_usd?: number | null
           entry_price_sol?: number | null
           entry_price_usd?: number | null
+          entry_rugcheck_score?: number | null
+          entry_signal_strength_raw?: string | null
+          entry_socials_count?: number | null
+          entry_token_age_mins?: number | null
+          entry_volume_24h_sol?: number | null
           exit_at?: string | null
           exit_price_usd?: number | null
           exit_reason?: string | null
@@ -4615,6 +4653,11 @@ export type Database = {
           moonbag_peak_price_usd?: number | null
           moonbag_percentage?: number | null
           moonbag_token_amount?: number | null
+          optimal_entry_market_cap?: number | null
+          optimal_exit_multiplier?: number | null
+          outcome?: string | null
+          outcome_classified_at?: string | null
+          outcome_notes?: string | null
           peak_at?: string | null
           peak_multiplier?: number | null
           peak_price_usd?: number | null
@@ -4622,6 +4665,8 @@ export type Database = {
           signal_strength?: number | null
           status?: string
           target_multiplier?: number | null
+          time_to_peak_mins?: number | null
+          time_to_rug_mins?: number | null
           token_amount?: number | null
           token_mint?: string
           token_name?: string | null
@@ -4972,6 +5017,104 @@ export type Database = {
           tokens_scanned?: number | null
         }
         Relationships: []
+      }
+      pumpfun_trade_learnings: {
+        Row: {
+          ai_insights: string | null
+          analysis_notes: string | null
+          correct_signals: string[] | null
+          created_at: string | null
+          entry_bonding_curve_pct: number | null
+          entry_holder_count: number | null
+          entry_market_cap_usd: number | null
+          entry_rugcheck_score: number | null
+          entry_signal_strength: string | null
+          entry_token_age_mins: number | null
+          entry_volume_sol: number | null
+          fantasy_position_id: string | null
+          final_pnl_percent: number | null
+          id: string
+          optimal_holder_count_max: number | null
+          optimal_holder_count_min: number | null
+          optimal_market_cap_max: number | null
+          optimal_market_cap_min: number | null
+          outcome: string
+          peak_multiplier: number | null
+          should_have_avoided: boolean | null
+          time_to_exit_mins: number | null
+          time_to_peak_mins: number | null
+          token_mint: string
+          token_symbol: string | null
+          updated_at: string | null
+          wrong_signals: string[] | null
+        }
+        Insert: {
+          ai_insights?: string | null
+          analysis_notes?: string | null
+          correct_signals?: string[] | null
+          created_at?: string | null
+          entry_bonding_curve_pct?: number | null
+          entry_holder_count?: number | null
+          entry_market_cap_usd?: number | null
+          entry_rugcheck_score?: number | null
+          entry_signal_strength?: string | null
+          entry_token_age_mins?: number | null
+          entry_volume_sol?: number | null
+          fantasy_position_id?: string | null
+          final_pnl_percent?: number | null
+          id?: string
+          optimal_holder_count_max?: number | null
+          optimal_holder_count_min?: number | null
+          optimal_market_cap_max?: number | null
+          optimal_market_cap_min?: number | null
+          outcome: string
+          peak_multiplier?: number | null
+          should_have_avoided?: boolean | null
+          time_to_exit_mins?: number | null
+          time_to_peak_mins?: number | null
+          token_mint: string
+          token_symbol?: string | null
+          updated_at?: string | null
+          wrong_signals?: string[] | null
+        }
+        Update: {
+          ai_insights?: string | null
+          analysis_notes?: string | null
+          correct_signals?: string[] | null
+          created_at?: string | null
+          entry_bonding_curve_pct?: number | null
+          entry_holder_count?: number | null
+          entry_market_cap_usd?: number | null
+          entry_rugcheck_score?: number | null
+          entry_signal_strength?: string | null
+          entry_token_age_mins?: number | null
+          entry_volume_sol?: number | null
+          fantasy_position_id?: string | null
+          final_pnl_percent?: number | null
+          id?: string
+          optimal_holder_count_max?: number | null
+          optimal_holder_count_min?: number | null
+          optimal_market_cap_max?: number | null
+          optimal_market_cap_min?: number | null
+          outcome?: string
+          peak_multiplier?: number | null
+          should_have_avoided?: boolean | null
+          time_to_exit_mins?: number | null
+          time_to_peak_mins?: number | null
+          token_mint?: string
+          token_symbol?: string | null
+          updated_at?: string | null
+          wrong_signals?: string[] | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "pumpfun_trade_learnings_fantasy_position_id_fkey"
+            columns: ["fantasy_position_id"]
+            isOneToOne: false
+            referencedRelation: "pumpfun_fantasy_positions"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       pumpfun_watchlist: {
         Row: {
