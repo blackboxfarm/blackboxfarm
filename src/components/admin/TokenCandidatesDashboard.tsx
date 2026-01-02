@@ -75,6 +75,13 @@ interface WatchlistItem {
   max_single_wallet_pct: number | null;
   has_image: boolean | null;
   socials_count: number | null;
+  // Phase 4 additions
+  gini_coefficient: number | null;
+  linked_wallet_count: number | null;
+  bundled_buy_count: number | null;
+  fresh_wallet_pct: number | null;
+  suspicious_wallet_pct: number | null;
+  insider_activity_detected: boolean | null;
 }
 
 interface Candidate {
@@ -542,7 +549,7 @@ export function TokenCandidatesDashboard() {
     );
   };
 
-  // Status badge for watchlist - now includes rejection type
+  // Status badge for watchlist - now includes rejection type and Phase 4 indicators
   const getWatchlistStatusBadge = (status: string, item?: WatchlistItem) => {
     // Show dev alerts as highest priority
     if (item?.dev_sold) {
@@ -550,6 +557,10 @@ export function TokenCandidatesDashboard() {
     }
     if (item?.dev_launched_new) {
       return <Badge variant="outline" className="bg-orange-600/20 text-orange-400 border-orange-600/50 text-xs font-bold">⚠️ DEV NEW</Badge>;
+    }
+    // Phase 4: Show insider activity as high priority
+    if (item?.insider_activity_detected) {
+      return <Badge variant="outline" className="bg-purple-600/20 text-purple-400 border-purple-600/50 text-xs font-bold">🕵️ INSIDER</Badge>;
     }
     
     switch (status) {
@@ -574,6 +585,27 @@ export function TokenCandidatesDashboard() {
       default:
         return <Badge variant="secondary" className="text-xs">{status}</Badge>;
     }
+  };
+
+  // Phase 4 metrics tooltip
+  const getPhase4Indicators = (item: WatchlistItem) => {
+    const indicators: string[] = [];
+    if (item.gini_coefficient !== null && item.gini_coefficient > 0.7) {
+      indicators.push(`Gini:${item.gini_coefficient.toFixed(2)}`);
+    }
+    if (item.linked_wallet_count !== null && item.linked_wallet_count > 0) {
+      indicators.push(`Linked:${item.linked_wallet_count}`);
+    }
+    if (item.bundled_buy_count !== null && item.bundled_buy_count > 0) {
+      indicators.push(`Bundled:${item.bundled_buy_count}`);
+    }
+    if (item.fresh_wallet_pct !== null && item.fresh_wallet_pct > 30) {
+      indicators.push(`Fresh:${item.fresh_wallet_pct.toFixed(0)}%`);
+    }
+    if (item.suspicious_wallet_pct !== null && item.suspicious_wallet_pct > 20) {
+      indicators.push(`Suspicious:${item.suspicious_wallet_pct.toFixed(0)}%`);
+    }
+    return indicators;
   };
 
   // Filtered and sorted watchlist

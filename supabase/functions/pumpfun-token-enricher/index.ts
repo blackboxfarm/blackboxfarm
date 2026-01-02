@@ -44,32 +44,230 @@ interface HolderAnalysis {
   holderCount: number;
   top5Percent: number;
   maxSingleWalletPct: number;
+  giniCoefficient: number;
+  linkedWalletCount: number;
+  bundledBuyCount: number;
+  freshWalletPct: number;
+  suspiciousWalletPct: number;
+  insiderActivityDetected: boolean;
   details: any;
 }
 
-// Analyze token risk (bundle detection + holder concentration)
+// Calculate Gini coefficient for wealth distribution (0 = perfect equality, 1 = total inequality)
+function calculateGiniCoefficient(holdings: number[]): number {
+  if (!holdings || holdings.length === 0) return 0;
+  
+  const sorted = [...holdings].sort((a, b) => a - b);
+  const n = sorted.length;
+  const total = sorted.reduce((sum, val) => sum + val, 0);
+  
+  if (total === 0) return 0;
+  
+  let cumulativeSum = 0;
+  let giniSum = 0;
+  
+  for (let i = 0; i < n; i++) {
+    cumulativeSum += sorted[i];
+    giniSum += (2 * (i + 1) - n - 1) * sorted[i];
+  }
+  
+  return giniSum / (n * total);
+}
+
+// Detect linked wallets via funding pattern analysis
+function detectLinkedWallets(holders: any[]): { linkedCount: number; clusters: string[][] } {
+  const clusters: string[][] = [];
+  
+  // Group wallets by similar balance amounts (within 5% tolerance)
+  const balanceGroups: Map<string, string[]> = new Map();
+  
+  for (const holder of holders) {
+    const balance = holder.amount || 0;
+    if (balance === 0) continue;
+    
+    // Round to nearest 5% bucket
+    const bucketKey = Math.round(balance / (balance * 0.05)) * (balance * 0.05);
+    const key = bucketKey.toFixed(0);
+    
+    if (!balanceGroups.has(key)) {
+      balanceGroups.set(key, []);
+    }
+    balanceGroups.get(key)!.push(holder.address || holder.owner);
+  }
+  
+  // Clusters with 3+ wallets with identical-ish balances are suspicious
+  let linkedCount = 0;
+  for (const [, wallets] of balanceGroups) {
+    if (wallets.length >= 3) {
+      clusters.push(wallets);
+      linkedCount += wallets.length;
+    }
+  }
+  
+  return { linkedCount, clusters };
+}
+
+// Detect bundled buys (multiple buys in same block/slot)
+async function detectBundledBuys(mint: string): Promise<{ bundledCount: number; details: any }> {
+  const heliusKey = Deno.env.get('HELIUS_API_KEY');
+  if (!heliusKey) {
+    return { bundledCount: 0, details: { error: 'No Helius key' } };
+  }
+  
+  try {
+    // Fetch recent transactions for the token
+    const response = await fetch(`https://api.helius.xyz/v0/addresses/${mint}/transactions?api-key=${heliusKey}&limit=50`);
+    
+    if (!response.ok) {
+      return { bundledCount: 0, details: { error: `API error: ${response.status}` } };
+    }
+    
+    const txs = await response.json();
+    
+    // Group transactions by slot (block)
+    const slotGroups: Map<number, any[]> = new Map();
+    
+    for (const tx of txs) {
+      const slot = tx.slot;
+      if (!slotGroups.has(slot)) {
+        slotGroups.set(slot, []);
+      }
+      slotGroups.get(slot)!.push(tx);
+    }
+    
+    // Count slots with multiple buys (likely bundled)
+    let bundledCount = 0;
+    const bundledSlots: number[] = [];
+    
+    for (const [slot, txGroup] of slotGroups) {
+      // Multiple transactions in same slot from different signers = bundled
+      const uniqueSigners = new Set(txGroup.map((t: any) => t.feePayer));
+      if (txGroup.length >= 2 && uniqueSigners.size >= 2) {
+        bundledCount++;
+        bundledSlots.push(slot);
+      }
+    }
+    
+    return { 
+      bundledCount, 
+      details: { 
+        totalTxs: txs.length, 
+        slotsAnalyzed: slotGroups.size,
+        bundledSlots 
+      } 
+    };
+  } catch (error) {
+    console.error(`Error detecting bundled buys for ${mint}:`, error);
+    return { bundledCount: 0, details: { error: String(error) } };
+  }
+}
+
+// Analyze fresh wallets (wallets with minimal history)
+async function analyzeFreshWallets(holders: any[]): Promise<{ freshPct: number; suspiciousPct: number }> {
+  // For efficiency, sample up to 10 wallets
+  const sample = holders.slice(0, 10);
+  let freshCount = 0;
+  let suspiciousCount = 0;
+  
+  const heliusKey = Deno.env.get('HELIUS_API_KEY');
+  
+  for (const holder of sample) {
+    const address = holder.address || holder.owner;
+    if (!address) continue;
+    
+    try {
+      // Check transaction count for wallet
+      const url = heliusKey 
+        ? `https://api.helius.xyz/v0/addresses/${address}/transactions?api-key=${heliusKey}&limit=5`
+        : null;
+      
+      if (!url) {
+        // Without Helius, use heuristics based on balance
+        const balance = holder.amount || 0;
+        const pctOwned = holder.pct || 0;
+        
+        // Very precise round-number holdings are suspicious
+        if (balance > 0 && balance % 1000000 === 0) {
+          suspiciousCount++;
+        }
+        continue;
+      }
+      
+      const response = await fetch(url);
+      if (!response.ok) continue;
+      
+      const txs = await response.json();
+      
+      // Fresh wallet: fewer than 5 transactions
+      if (txs.length < 5) {
+        freshCount++;
+      }
+      
+      // Suspicious: wallet has very few txs AND holds significant %
+      const pctOwned = holder.pct || 0;
+      if (txs.length < 3 && pctOwned > 1) {
+        suspiciousCount++;
+      }
+      
+      // Rate limit between wallet checks
+      await new Promise(resolve => setTimeout(resolve, 100));
+    } catch {
+      // Skip on error
+    }
+  }
+  
+  const freshPct = sample.length > 0 ? (freshCount / sample.length) * 100 : 0;
+  const suspiciousPct = sample.length > 0 ? (suspiciousCount / sample.length) * 100 : 0;
+  
+  return { freshPct, suspiciousPct };
+}
+
+// Analyze token risk (bundle detection + holder concentration + Phase 4 metrics)
 async function analyzeTokenRisk(mint: string): Promise<HolderAnalysis> {
   try {
     const response = await fetch(`https://data.solanatracker.io/tokens/${mint}/holders`);
     if (!response.ok) {
-      return { bundleScore: 0, holderCount: 0, top5Percent: 0, maxSingleWalletPct: 0, details: { error: 'Failed to fetch holders' } };
+      return { 
+        bundleScore: 0, holderCount: 0, top5Percent: 0, maxSingleWalletPct: 0,
+        giniCoefficient: 0, linkedWalletCount: 0, bundledBuyCount: 0,
+        freshWalletPct: 0, suspiciousWalletPct: 0, insiderActivityDetected: false,
+        details: { error: 'Failed to fetch holders' } 
+      };
     }
     
     const data = await response.json();
     const holders = Array.isArray(data) ? data : (data.holders || []);
     
     if (!Array.isArray(holders) || holders.length === 0) {
-      return { bundleScore: 0, holderCount: 0, top5Percent: 0, maxSingleWalletPct: 0, details: { holderCount: 0 } };
+      return { 
+        bundleScore: 0, holderCount: 0, top5Percent: 0, maxSingleWalletPct: 0,
+        giniCoefficient: 0, linkedWalletCount: 0, bundledBuyCount: 0,
+        freshWalletPct: 0, suspiciousWalletPct: 0, insiderActivityDetected: false,
+        details: { holderCount: 0 } 
+      };
     }
     
     // Calculate supply concentration
-    const totalSupply = holders.reduce((sum: number, h: any) => sum + (h.amount || 0), 0);
+    const holdings = holders.map((h: any) => h.amount || 0);
+    const totalSupply = holdings.reduce((sum, amt) => sum + amt, 0);
     const top5Holdings = holders.slice(0, 5).reduce((sum: number, h: any) => sum + (h.amount || 0), 0);
     const top5Percent = totalSupply > 0 ? (top5Holdings / totalSupply) * 100 : 0;
     
     // Calculate max single wallet percentage
-    const maxHolding = holders.length > 0 ? Math.max(...holders.map((h: any) => h.amount || 0)) : 0;
+    const maxHolding = holdings.length > 0 ? Math.max(...holdings) : 0;
     const maxSingleWalletPct = totalSupply > 0 ? (maxHolding / totalSupply) * 100 : 0;
+    
+    // PHASE 4: Gini coefficient
+    const giniCoefficient = calculateGiniCoefficient(holdings);
+    
+    // PHASE 4: Linked wallet detection
+    const linkedAnalysis = detectLinkedWallets(holders);
+    
+    // PHASE 4: Fresh wallet analysis
+    const walletAnalysis = await analyzeFreshWallets(holders);
+    
+    // PHASE 4: Bundled buy detection (async)
+    const bundledAnalysis = await detectBundledBuys(mint);
     
     // High concentration = higher bundle score
     let bundleScore = 0;
@@ -79,20 +277,48 @@ async function analyzeTokenRisk(mint: string): Promise<HolderAnalysis> {
     else if (top5Percent > 20) bundleScore = 30;
     else bundleScore = 10;
     
+    // Boost bundle score if suspicious patterns detected
+    if (giniCoefficient > 0.8) bundleScore = Math.min(100, bundleScore + 15);
+    if (linkedAnalysis.linkedCount > 5) bundleScore = Math.min(100, bundleScore + 10);
+    if (bundledAnalysis.bundledCount > 2) bundleScore = Math.min(100, bundleScore + 10);
+    
+    // Insider activity detection
+    const insiderActivityDetected = 
+      giniCoefficient > 0.85 || 
+      linkedAnalysis.linkedCount > 5 || 
+      bundledAnalysis.bundledCount > 3 ||
+      walletAnalysis.suspiciousPct > 30;
+    
     return {
       bundleScore,
       holderCount: holders.length,
       top5Percent,
       maxSingleWalletPct,
+      giniCoefficient,
+      linkedWalletCount: linkedAnalysis.linkedCount,
+      bundledBuyCount: bundledAnalysis.bundledCount,
+      freshWalletPct: walletAnalysis.freshPct,
+      suspiciousWalletPct: walletAnalysis.suspiciousPct,
+      insiderActivityDetected,
       details: {
         holderCount: holders.length,
         top5Percent: top5Percent.toFixed(2),
         maxSingleWalletPct: maxSingleWalletPct.toFixed(2),
+        giniCoefficient: giniCoefficient.toFixed(3),
+        linkedWallets: linkedAnalysis,
+        bundledBuys: bundledAnalysis.details,
+        freshWalletPct: walletAnalysis.freshPct.toFixed(1),
+        suspiciousWalletPct: walletAnalysis.suspiciousPct.toFixed(1),
       }
     };
   } catch (error) {
     console.error(`Error analyzing risk for ${mint}:`, error);
-    return { bundleScore: 0, holderCount: 0, top5Percent: 0, maxSingleWalletPct: 0, details: { error: String(error) } };
+    return { 
+      bundleScore: 0, holderCount: 0, top5Percent: 0, maxSingleWalletPct: 0,
+      giniCoefficient: 0, linkedWalletCount: 0, bundledBuyCount: 0,
+      freshWalletPct: 0, suspiciousWalletPct: 0, insiderActivityDetected: false,
+      details: { error: String(error) } 
+    };
   }
 }
 
@@ -223,7 +449,7 @@ async function getConfig(supabase: any) {
   const { data } = await supabase
     .from('pumpfun_monitor_config')
     .select('*')
-    .eq('id', 'default')
+    .limit(1)
     .maybeSingle();
     
   return {
@@ -235,6 +461,12 @@ async function getConfig(supabase: any) {
     require_image: data?.require_image ?? false,
     min_socials_count: data?.min_socials_count ?? 0,
     max_single_wallet_pct: data?.max_single_wallet_pct ?? 15,
+    // Phase 4 thresholds
+    max_gini_coefficient: data?.max_gini_coefficient ?? 0.85,
+    max_linked_wallet_count: data?.max_linked_wallet_count ?? 5,
+    max_bundled_buy_count: data?.max_bundled_buy_count ?? 3,
+    max_fresh_wallet_pct: data?.max_fresh_wallet_pct ?? 50,
+    max_suspicious_wallet_pct: data?.max_suspicious_wallet_pct ?? 30,
   };
 }
 
@@ -353,6 +585,39 @@ async function enrichTokenBatch(
       rejectionReasons.push(`single_wallet:${holderAnalysis.maxSingleWalletPct.toFixed(1)}%>${config.max_single_wallet_pct}%`);
     }
     
+    // PHASE 4: GINI COEFFICIENT CHECK - SOFT
+    if (holderAnalysis.giniCoefficient > config.max_gini_coefficient) {
+      rejectionReasons.push(`gini:${holderAnalysis.giniCoefficient.toFixed(2)}>${config.max_gini_coefficient}`);
+    }
+    
+    // PHASE 4: LINKED WALLETS CHECK - SOFT
+    if (holderAnalysis.linkedWalletCount > config.max_linked_wallet_count) {
+      rejectionReasons.push(`linked_wallets:${holderAnalysis.linkedWalletCount}>${config.max_linked_wallet_count}`);
+    }
+    
+    // PHASE 4: BUNDLED BUYS CHECK - SOFT
+    if (holderAnalysis.bundledBuyCount > config.max_bundled_buy_count) {
+      rejectionReasons.push(`bundled_buys:${holderAnalysis.bundledBuyCount}>${config.max_bundled_buy_count}`);
+    }
+    
+    // PHASE 4: FRESH WALLET CHECK - SOFT
+    if (holderAnalysis.freshWalletPct > config.max_fresh_wallet_pct) {
+      rejectionReasons.push(`fresh_wallets:${holderAnalysis.freshWalletPct.toFixed(0)}%>${config.max_fresh_wallet_pct}%`);
+    }
+    
+    // PHASE 4: SUSPICIOUS WALLET CHECK - SOFT (can be permanent if extreme)
+    if (holderAnalysis.suspiciousWalletPct > config.max_suspicious_wallet_pct) {
+      rejectionReasons.push(`suspicious_wallets:${holderAnalysis.suspiciousWalletPct.toFixed(0)}%>${config.max_suspicious_wallet_pct}%`);
+      if (holderAnalysis.suspiciousWalletPct > 60) {
+        isPermanentReject = true; // Extreme suspicious activity = permanent
+      }
+    }
+    
+    // PHASE 4: INSIDER ACTIVITY CHECK - SOFT (aggregated signal)
+    if (holderAnalysis.insiderActivityDetected) {
+      rejectionReasons.push('insider_activity_detected');
+    }
+    
     // IMAGE CHECK - SOFT (only if required)
     if (config.require_image && !hasImage) {
       rejectionReasons.push('no_image');
@@ -364,30 +629,28 @@ async function enrichTokenBatch(
     }
     
     // Decision log - track all criteria
-    const criteria = {
-      mintAuthorityRevoked: { value: authorityCheck.mintAuthorityRevoked, required: true, pass: authorityCheck.mintAuthorityRevoked },
-      freezeAuthorityRevoked: { value: authorityCheck.freezeAuthorityRevoked, required: true, pass: authorityCheck.freezeAuthorityRevoked },
-      supplyValid: { value: authorityCheck.supplyValid, required: true, pass: authorityCheck.supplyValid },
-      bundleScore: { value: holderAnalysis.bundleScore, max: config.max_bundle_score, pass: holderAnalysis.bundleScore <= config.max_bundle_score },
-      holderCount: { value: holderCount, min: config.min_holder_count, pass: true }, // Not blocking, just tracking
-      bondingCurve: { value: bondingCurve, min: config.bonding_curve_min, max: config.bonding_curve_max, 
-        pass: bondingCurve >= config.bonding_curve_min && bondingCurve <= config.bonding_curve_max },
-      maxSingleWallet: { value: holderAnalysis.maxSingleWalletPct, max: config.max_single_wallet_pct, 
-        pass: holderAnalysis.maxSingleWalletPct <= config.max_single_wallet_pct },
-      hasImage: { value: hasImage, required: config.require_image, pass: !config.require_image || hasImage },
-      socialsCount: { value: socialsCount, min: config.min_socials_count, pass: socialsCount >= config.min_socials_count },
-    };
+    const giniPass = holderAnalysis.giniCoefficient <= config.max_gini_coefficient;
+    const linkedPass = holderAnalysis.linkedWalletCount <= config.max_linked_wallet_count;
+    const bundledPass = holderAnalysis.bundledBuyCount <= config.max_bundled_buy_count;
+    const freshPass = holderAnalysis.freshWalletPct <= config.max_fresh_wallet_pct;
+    const suspiciousPass = holderAnalysis.suspiciousWalletPct <= config.max_suspicious_wallet_pct;
     
     console.log(`   📋 DECISION CRITERIA:`);
-    console.log(`      Mint Authority Revoked: ${authorityCheck.mintAuthorityRevoked} ${criteria.mintAuthorityRevoked.pass ? '✅' : '⛔'}`);
-    console.log(`      Freeze Authority Revoked: ${authorityCheck.freezeAuthorityRevoked} ${criteria.freezeAuthorityRevoked.pass ? '✅' : '⛔'}`);
-    console.log(`      Supply Valid: ${authorityCheck.supplyValid} ${criteria.supplyValid.pass ? '✅' : '⛔'}`);
-    console.log(`      Bundle Score: ${holderAnalysis.bundleScore} (max: ${config.max_bundle_score}) ${criteria.bundleScore.pass ? '✅' : '❌'}`);
-    console.log(`      Max Single Wallet: ${holderAnalysis.maxSingleWalletPct.toFixed(1)}% (max: ${config.max_single_wallet_pct}%) ${criteria.maxSingleWallet.pass ? '✅' : '❌'}`);
-    console.log(`      Holders: ${holderCount} (tracking, min for qual: ${config.min_holder_count})`);
-    console.log(`      Bonding Curve: ${bondingCurve.toFixed(1)}% (range: ${config.bonding_curve_min}-${config.bonding_curve_max}%) ${criteria.bondingCurve.pass ? '✅' : '⚠️'}`);
-    console.log(`      Has Image: ${hasImage} (required: ${config.require_image}) ${criteria.hasImage.pass ? '✅' : '❌'}`);
-    console.log(`      Socials: ${socialsCount} (min: ${config.min_socials_count}) ${criteria.socialsCount.pass ? '✅' : '❌'}`);
+    console.log(`      Mint Authority Revoked: ${authorityCheck.mintAuthorityRevoked} ${authorityCheck.mintAuthorityRevoked ? '✅' : '⛔'}`);
+    console.log(`      Freeze Authority Revoked: ${authorityCheck.freezeAuthorityRevoked} ${authorityCheck.freezeAuthorityRevoked ? '✅' : '⛔'}`);
+    console.log(`      Supply Valid: ${authorityCheck.supplyValid} ${authorityCheck.supplyValid ? '✅' : '⛔'}`);
+    console.log(`      Bundle Score: ${holderAnalysis.bundleScore} (max: ${config.max_bundle_score}) ${holderAnalysis.bundleScore <= config.max_bundle_score ? '✅' : '❌'}`);
+    console.log(`      Max Single Wallet: ${holderAnalysis.maxSingleWalletPct.toFixed(1)}% (max: ${config.max_single_wallet_pct}%) ${holderAnalysis.maxSingleWalletPct <= config.max_single_wallet_pct ? '✅' : '❌'}`);
+    console.log(`      Gini Coefficient: ${holderAnalysis.giniCoefficient.toFixed(3)} (max: ${config.max_gini_coefficient}) ${giniPass ? '✅' : '❌'}`);
+    console.log(`      Linked Wallets: ${holderAnalysis.linkedWalletCount} (max: ${config.max_linked_wallet_count}) ${linkedPass ? '✅' : '❌'}`);
+    console.log(`      Bundled Buys: ${holderAnalysis.bundledBuyCount} (max: ${config.max_bundled_buy_count}) ${bundledPass ? '✅' : '❌'}`);
+    console.log(`      Fresh Wallet %: ${holderAnalysis.freshWalletPct.toFixed(1)}% (max: ${config.max_fresh_wallet_pct}%) ${freshPass ? '✅' : '❌'}`);
+    console.log(`      Suspicious Wallet %: ${holderAnalysis.suspiciousWalletPct.toFixed(1)}% (max: ${config.max_suspicious_wallet_pct}%) ${suspiciousPass ? '✅' : '❌'}`);
+    console.log(`      Insider Activity: ${holderAnalysis.insiderActivityDetected ? '🚨 YES' : 'No'}`);
+    console.log(`      Holders: ${holderCount} (min for qual: ${config.min_holder_count})`);
+    console.log(`      Bonding Curve: ${bondingCurve.toFixed(1)}% (range: ${config.bonding_curve_min}-${config.bonding_curve_max}%)`);
+    console.log(`      Has Image: ${hasImage} (required: ${config.require_image})`);
+    console.log(`      Socials: ${socialsCount} (min: ${config.min_socials_count})`);
     console.log(`      Price: $${priceUsd?.toFixed(8) || 'N/A'}, Volume: ${volumeSol} SOL, MCap: $${marketCapUsd || 'N/A'}`);
     
     const shouldReject = rejectionReasons.length > 0;
@@ -416,6 +679,13 @@ async function enrichTokenBatch(
           socials_count: socialsCount,
           mint_authority_revoked: authorityCheck.mintAuthorityRevoked,
           freeze_authority_revoked: authorityCheck.freezeAuthorityRevoked,
+          // Phase 4 metrics
+          gini_coefficient: holderAnalysis.giniCoefficient,
+          linked_wallet_count: holderAnalysis.linkedWalletCount,
+          bundled_buy_count: holderAnalysis.bundledBuyCount,
+          fresh_wallet_pct: holderAnalysis.freshWalletPct,
+          suspicious_wallet_pct: holderAnalysis.suspiciousWalletPct,
+          insider_activity_detected: holderAnalysis.insiderActivityDetected,
           removed_at: new Date().toISOString(),
           last_checked_at: new Date().toISOString(),
         })
@@ -427,8 +697,8 @@ async function enrichTokenBatch(
         softRejected++;
       }
     } else {
-      // Promote to watching with reason
-      const promotionReason = `bundle:${holderAnalysis.bundleScore}/${config.max_bundle_score}, holders:${holderCount}, bc:${bondingCurve.toFixed(0)}%, maxWallet:${holderAnalysis.maxSingleWalletPct.toFixed(1)}%`;
+      // Promote to watching with reason (include Phase 4 metrics)
+      const promotionReason = `bundle:${holderAnalysis.bundleScore}/${config.max_bundle_score}, gini:${holderAnalysis.giniCoefficient.toFixed(2)}, linked:${holderAnalysis.linkedWalletCount}, bundled:${holderAnalysis.bundledBuyCount}, holders:${holderCount}, maxWallet:${holderAnalysis.maxSingleWalletPct.toFixed(1)}%`;
       console.log(`   ✅ PROMOTED to watching: ${promotionReason}`);
       
       await supabase
@@ -450,9 +720,16 @@ async function enrichTokenBatch(
           socials_count: socialsCount,
           mint_authority_revoked: authorityCheck.mintAuthorityRevoked,
           freeze_authority_revoked: authorityCheck.freezeAuthorityRevoked,
+          // Phase 4 metrics
+          gini_coefficient: holderAnalysis.giniCoefficient,
+          linked_wallet_count: holderAnalysis.linkedWalletCount,
+          bundled_buy_count: holderAnalysis.bundledBuyCount,
+          fresh_wallet_pct: holderAnalysis.freshWalletPct,
+          suspicious_wallet_pct: holderAnalysis.suspiciousWalletPct,
+          insider_activity_detected: holderAnalysis.insiderActivityDetected,
           last_checked_at: new Date().toISOString(),
           created_at_blockchain: createdAt ? new Date(createdAt * 1000).toISOString() : null,
-          qualification_reason: promotionReason, // Store the promotion criteria for reference
+          qualification_reason: promotionReason,
         })
         .eq('id', token.id);
         

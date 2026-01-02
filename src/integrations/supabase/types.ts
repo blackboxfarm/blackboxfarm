@@ -4455,8 +4455,13 @@ export type Database = {
           last_poll_at: string | null
           log_retention_hours: number | null
           max_bundle_score: number
+          max_bundled_buy_count: number | null
+          max_fresh_wallet_pct: number | null
+          max_gini_coefficient: number | null
+          max_linked_wallet_count: number | null
           max_reevaluate_minutes: number | null
           max_single_wallet_pct: number | null
+          max_suspicious_wallet_pct: number | null
           max_ticker_length: number | null
           max_token_age_minutes: number
           max_watchdog_count: number | null
@@ -4483,8 +4488,13 @@ export type Database = {
           last_poll_at?: string | null
           log_retention_hours?: number | null
           max_bundle_score?: number
+          max_bundled_buy_count?: number | null
+          max_fresh_wallet_pct?: number | null
+          max_gini_coefficient?: number | null
+          max_linked_wallet_count?: number | null
           max_reevaluate_minutes?: number | null
           max_single_wallet_pct?: number | null
+          max_suspicious_wallet_pct?: number | null
           max_ticker_length?: number | null
           max_token_age_minutes?: number
           max_watchdog_count?: number | null
@@ -4511,8 +4521,13 @@ export type Database = {
           last_poll_at?: string | null
           log_retention_hours?: number | null
           max_bundle_score?: number
+          max_bundled_buy_count?: number | null
+          max_fresh_wallet_pct?: number | null
+          max_gini_coefficient?: number | null
+          max_linked_wallet_count?: number | null
           max_reevaluate_minutes?: number | null
           max_single_wallet_pct?: number | null
+          max_suspicious_wallet_pct?: number | null
           max_ticker_length?: number | null
           max_token_age_minutes?: number
           max_watchdog_count?: number | null
@@ -4574,6 +4589,7 @@ export type Database = {
           bonding_curve_pct: number | null
           bundle_checked: boolean | null
           bundle_score: number | null
+          bundled_buy_count: number | null
           check_count: number
           consecutive_stale_checks: number | null
           created_at: string
@@ -4583,14 +4599,18 @@ export type Database = {
           dev_sold: boolean | null
           first_seen_at: string
           freeze_authority_revoked: boolean | null
+          fresh_wallet_pct: number | null
+          gini_coefficient: number | null
           has_image: boolean | null
           holder_count: number | null
           holder_count_peak: number | null
           holder_count_prev: number | null
           id: string
           image_url: string | null
+          insider_activity_detected: boolean | null
           last_checked_at: string
           last_processor: string | null
+          linked_wallet_count: number | null
           liquidity_usd: number | null
           market_cap_sol: number | null
           market_cap_usd: number | null
@@ -4616,6 +4636,7 @@ export type Database = {
           socials_count: number | null
           source: string | null
           status: string
+          suspicious_wallet_pct: number | null
           telegram_url: string | null
           token_mint: string
           token_name: string | null
@@ -4632,6 +4653,7 @@ export type Database = {
           bonding_curve_pct?: number | null
           bundle_checked?: boolean | null
           bundle_score?: number | null
+          bundled_buy_count?: number | null
           check_count?: number
           consecutive_stale_checks?: number | null
           created_at?: string
@@ -4641,14 +4663,18 @@ export type Database = {
           dev_sold?: boolean | null
           first_seen_at?: string
           freeze_authority_revoked?: boolean | null
+          fresh_wallet_pct?: number | null
+          gini_coefficient?: number | null
           has_image?: boolean | null
           holder_count?: number | null
           holder_count_peak?: number | null
           holder_count_prev?: number | null
           id?: string
           image_url?: string | null
+          insider_activity_detected?: boolean | null
           last_checked_at?: string
           last_processor?: string | null
+          linked_wallet_count?: number | null
           liquidity_usd?: number | null
           market_cap_sol?: number | null
           market_cap_usd?: number | null
@@ -4674,6 +4700,7 @@ export type Database = {
           socials_count?: number | null
           source?: string | null
           status?: string
+          suspicious_wallet_pct?: number | null
           telegram_url?: string | null
           token_mint: string
           token_name?: string | null
@@ -4690,6 +4717,7 @@ export type Database = {
           bonding_curve_pct?: number | null
           bundle_checked?: boolean | null
           bundle_score?: number | null
+          bundled_buy_count?: number | null
           check_count?: number
           consecutive_stale_checks?: number | null
           created_at?: string
@@ -4699,14 +4727,18 @@ export type Database = {
           dev_sold?: boolean | null
           first_seen_at?: string
           freeze_authority_revoked?: boolean | null
+          fresh_wallet_pct?: number | null
+          gini_coefficient?: number | null
           has_image?: boolean | null
           holder_count?: number | null
           holder_count_peak?: number | null
           holder_count_prev?: number | null
           id?: string
           image_url?: string | null
+          insider_activity_detected?: boolean | null
           last_checked_at?: string
           last_processor?: string | null
+          linked_wallet_count?: number | null
           liquidity_usd?: number | null
           market_cap_sol?: number | null
           market_cap_usd?: number | null
@@ -4732,6 +4764,7 @@ export type Database = {
           socials_count?: number | null
           source?: string | null
           status?: string
+          suspicious_wallet_pct?: number | null
           telegram_url?: string | null
           token_mint?: string
           token_name?: string | null
