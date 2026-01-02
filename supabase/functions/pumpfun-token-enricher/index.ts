@@ -10,6 +10,10 @@ const corsHeaders = {
 const BATCH_SIZE = 5;
 const BATCH_DELAY_MS = 2000;
 
+// Standard pump.fun supply: 1 billion tokens with 6 decimals
+const STANDARD_PUMPFUN_SUPPLY = 1_000_000_000_000_000;
+const SUPPLY_TOLERANCE = 0.01; // 1% tolerance
+
 interface WatchlistToken {
   id: string;
   token_mint: string;
@@ -25,6 +29,14 @@ interface WatchlistToken {
   twitter_url: string | null;
   telegram_url: string | null;
   website_url: string | null;
+}
+
+interface AuthorityCheck {
+  mintAuthorityRevoked: boolean;
+  freezeAuthorityRevoked: boolean;
+  supplyValid: boolean;
+  totalSupply: number;
+  details: string;
 }
 
 interface HolderAnalysis {
@@ -96,6 +108,104 @@ async function fetchTokenData(mint: string): Promise<any> {
   }
 }
 
+// Check mint and freeze authority status via Helius RPC
+async function checkTokenAuthorities(mint: string): Promise<AuthorityCheck> {
+  const heliusKey = Deno.env.get('HELIUS_API_KEY');
+  const rpcUrl = heliusKey 
+    ? `https://mainnet.helius-rpc.com/?api-key=${heliusKey}`
+    : 'https://api.mainnet-beta.solana.com';
+  
+  try {
+    // Get token mint account info
+    const response = await fetch(rpcUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        jsonrpc: '2.0',
+        id: 1,
+        method: 'getAccountInfo',
+        params: [
+          mint,
+          { encoding: 'jsonParsed' }
+        ]
+      })
+    });
+    
+    if (!response.ok) {
+      console.error(`RPC error for ${mint}: ${response.status}`);
+      return {
+        mintAuthorityRevoked: true, // Assume safe if can't check
+        freezeAuthorityRevoked: true,
+        supplyValid: true,
+        totalSupply: 0,
+        details: 'RPC error - assuming safe'
+      };
+    }
+    
+    const data = await response.json();
+    
+    if (data.error || !data.result?.value) {
+      console.error(`No account data for ${mint}:`, data.error);
+      return {
+        mintAuthorityRevoked: true,
+        freezeAuthorityRevoked: true,
+        supplyValid: true,
+        totalSupply: 0,
+        details: 'No account data - assuming safe'
+      };
+    }
+    
+    const parsed = data.result.value.data.parsed;
+    if (!parsed || parsed.type !== 'mint') {
+      return {
+        mintAuthorityRevoked: true,
+        freezeAuthorityRevoked: true,
+        supplyValid: true,
+        totalSupply: 0,
+        details: 'Not a mint account'
+      };
+    }
+    
+    const info = parsed.info;
+    const mintAuthority = info.mintAuthority;
+    const freezeAuthority = info.freezeAuthority;
+    const supply = parseInt(info.supply || '0');
+    
+    // Check if authorities are revoked (null = revoked)
+    const mintAuthorityRevoked = mintAuthority === null;
+    const freezeAuthorityRevoked = freezeAuthority === null;
+    
+    // Check if supply matches expected pump.fun supply (with tolerance)
+    const supplyDiff = Math.abs(supply - STANDARD_PUMPFUN_SUPPLY) / STANDARD_PUMPFUN_SUPPLY;
+    const supplyValid = supplyDiff <= SUPPLY_TOLERANCE;
+    
+    const details = [
+      `mint:${mintAuthorityRevoked ? 'revoked' : mintAuthority?.slice(0,8)}`,
+      `freeze:${freezeAuthorityRevoked ? 'revoked' : freezeAuthority?.slice(0,8)}`,
+      `supply:${(supply / 1e6).toFixed(0)}M${supplyValid ? '' : ' (INVALID)'}`
+    ].join(', ');
+    
+    console.log(`   🔐 Authority check: ${details}`);
+    
+    return {
+      mintAuthorityRevoked,
+      freezeAuthorityRevoked,
+      supplyValid,
+      totalSupply: supply,
+      details
+    };
+  } catch (error) {
+    console.error(`Error checking authorities for ${mint}:`, error);
+    return {
+      mintAuthorityRevoked: true, // Assume safe if can't check
+      freezeAuthorityRevoked: true,
+      supplyValid: true,
+      totalSupply: 0,
+      details: `Error: ${String(error)}`
+    };
+  }
+}
+
 // Fetch token data from pump.fun API for price/volume
 async function fetchPumpFunData(mint: string): Promise<any> {
   try {
@@ -149,9 +259,12 @@ async function enrichTokenBatch(
   for (const token of tokens) {
     console.log(`\n📊 Enriching: ${token.token_symbol} (${token.token_mint.slice(0, 8)}...)`);
     
-    // Fetch current token data from both APIs
-    const tokenData = await fetchTokenData(token.token_mint);
-    const pumpData = await fetchPumpFunData(token.token_mint);
+    // Fetch current token data from both APIs + authority check
+    const [tokenData, pumpData, authorityCheck] = await Promise.all([
+      fetchTokenData(token.token_mint),
+      fetchPumpFunData(token.token_mint),
+      checkTokenAuthorities(token.token_mint)
+    ]);
     
     // Extract price/volume from pump.fun API
     const priceUsd = pumpData?.usd_market_cap && pumpData?.total_supply 
@@ -159,7 +272,7 @@ async function enrichTokenBatch(
       : null;
     const volumeSol = pumpData?.volume_24h || 0;
     const marketCapUsd = pumpData?.usd_market_cap || null;
-    const liquidityUsd = pumpData?.virtual_sol_reserves 
+    const liquidityUsd = pumpData?.virtual_sol_reserves
       ? (pumpData.virtual_sol_reserves / 1e9) * (pumpData?.sol_price || 150) 
       : null;
     
@@ -212,6 +325,24 @@ async function enrichTokenBatch(
     const rejectionReasons: string[] = [];
     let isPermanentReject = false;
     
+    // MINT AUTHORITY CHECK - PERMANENT
+    if (!authorityCheck.mintAuthorityRevoked) {
+      rejectionReasons.push('mint_authority_not_revoked');
+      isPermanentReject = true;
+    }
+    
+    // FREEZE AUTHORITY CHECK - PERMANENT
+    if (!authorityCheck.freezeAuthorityRevoked) {
+      rejectionReasons.push('freeze_authority_not_revoked');
+      isPermanentReject = true;
+    }
+    
+    // SUPPLY CHECK - PERMANENT
+    if (!authorityCheck.supplyValid) {
+      rejectionReasons.push('non_standard_supply');
+      isPermanentReject = true;
+    }
+    
     // BUNDLE SCORE CHECK - SOFT
     if (holderAnalysis.bundleScore > config.max_bundle_score) {
       rejectionReasons.push(`bundle:${holderAnalysis.bundleScore}>${config.max_bundle_score}`);
@@ -234,6 +365,9 @@ async function enrichTokenBatch(
     
     // Decision log - track all criteria
     const criteria = {
+      mintAuthorityRevoked: { value: authorityCheck.mintAuthorityRevoked, required: true, pass: authorityCheck.mintAuthorityRevoked },
+      freezeAuthorityRevoked: { value: authorityCheck.freezeAuthorityRevoked, required: true, pass: authorityCheck.freezeAuthorityRevoked },
+      supplyValid: { value: authorityCheck.supplyValid, required: true, pass: authorityCheck.supplyValid },
       bundleScore: { value: holderAnalysis.bundleScore, max: config.max_bundle_score, pass: holderAnalysis.bundleScore <= config.max_bundle_score },
       holderCount: { value: holderCount, min: config.min_holder_count, pass: true }, // Not blocking, just tracking
       bondingCurve: { value: bondingCurve, min: config.bonding_curve_min, max: config.bonding_curve_max, 
@@ -245,6 +379,9 @@ async function enrichTokenBatch(
     };
     
     console.log(`   📋 DECISION CRITERIA:`);
+    console.log(`      Mint Authority Revoked: ${authorityCheck.mintAuthorityRevoked} ${criteria.mintAuthorityRevoked.pass ? '✅' : '⛔'}`);
+    console.log(`      Freeze Authority Revoked: ${authorityCheck.freezeAuthorityRevoked} ${criteria.freezeAuthorityRevoked.pass ? '✅' : '⛔'}`);
+    console.log(`      Supply Valid: ${authorityCheck.supplyValid} ${criteria.supplyValid.pass ? '✅' : '⛔'}`);
     console.log(`      Bundle Score: ${holderAnalysis.bundleScore} (max: ${config.max_bundle_score}) ${criteria.bundleScore.pass ? '✅' : '❌'}`);
     console.log(`      Max Single Wallet: ${holderAnalysis.maxSingleWalletPct.toFixed(1)}% (max: ${config.max_single_wallet_pct}%) ${criteria.maxSingleWallet.pass ? '✅' : '❌'}`);
     console.log(`      Holders: ${holderCount} (tracking, min for qual: ${config.min_holder_count})`);
@@ -277,6 +414,8 @@ async function enrichTokenBatch(
           max_single_wallet_pct: holderAnalysis.maxSingleWalletPct,
           has_image: hasImage,
           socials_count: socialsCount,
+          mint_authority_revoked: authorityCheck.mintAuthorityRevoked,
+          freeze_authority_revoked: authorityCheck.freezeAuthorityRevoked,
           removed_at: new Date().toISOString(),
           last_checked_at: new Date().toISOString(),
         })
@@ -309,6 +448,8 @@ async function enrichTokenBatch(
           max_single_wallet_pct: holderAnalysis.maxSingleWalletPct,
           has_image: hasImage,
           socials_count: socialsCount,
+          mint_authority_revoked: authorityCheck.mintAuthorityRevoked,
+          freeze_authority_revoked: authorityCheck.freezeAuthorityRevoked,
           last_checked_at: new Date().toISOString(),
           created_at_blockchain: createdAt ? new Date(createdAt * 1000).toISOString() : null,
           qualification_reason: promotionReason, // Store the promotion criteria for reference
