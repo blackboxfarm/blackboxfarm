@@ -330,3 +330,9 @@ verify_jwt = false
 
 [functions.pumpfun-buy-executor]
 verify_jwt = false
+
+[functions.pumpfun-fantasy-executor]
+verify_jwt = false
+
+[functions.pumpfun-fantasy-sell-monitor]
+verify_jwt = false
