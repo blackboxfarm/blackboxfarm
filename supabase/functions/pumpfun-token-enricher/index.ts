@@ -211,6 +211,7 @@ async function enrichTokenBatch(
           market_cap_sol: marketCapSol,
           bonding_curve_pct: bondingCurve,
           price_usd: priceUsd,
+          price_start_usd: priceUsd, // Set start price when entering watching
           price_ath_usd: priceUsd, // Set ATH to current price on first check
           volume_sol: volumeSol,
           market_cap_usd: marketCapUsd,
