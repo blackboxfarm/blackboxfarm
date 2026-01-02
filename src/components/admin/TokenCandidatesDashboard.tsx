@@ -843,7 +843,7 @@ export function TokenCandidatesDashboard() {
           </TabsTrigger>
           <TabsTrigger value="candidates" className="flex items-center gap-1">
             <Rocket className="h-3 w-3" />
-            Candidates ({candidates.length})
+            Qualified ({watchlistStats.qualified})
           </TabsTrigger>
           <TabsTrigger value="logs" className="flex items-center gap-1">
             <FileText className="h-3 w-3" />
@@ -971,7 +971,6 @@ export function TokenCandidatesDashboard() {
                                 <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-xs">
                                   <div><span className="text-muted-foreground">Name:</span> {item.token_name}</div>
                                   <div><span className="text-muted-foreground">Market Cap:</span> {item.market_cap_usd ? `$${Number(item.market_cap_usd).toLocaleString()}` : '-'}</div>
-                                  <div><span className="text-muted-foreground">Liquidity:</span> {item.liquidity_usd ? `$${Number(item.liquidity_usd).toLocaleString()}` : '-'}</div>
                                   <div><span className="text-muted-foreground">Bundle Score:</span> <span className={item.bundle_score && item.bundle_score >= 50 ? 'text-red-500' : ''}>{item.bundle_score ?? '-'}</span></div>
                                   <div><span className="text-muted-foreground">Peak Holders:</span> {item.holder_count_peak ?? '-'}</div>
                                   <div><span className="text-muted-foreground">TXs:</span> {item.tx_count}</div>
@@ -994,21 +993,11 @@ export function TokenCandidatesDashboard() {
           </Card>
         </TabsContent>
 
-        {/* Candidates Tab - Compact */}
+        {/* Qualified Tab - Shows watchlist items with status='qualified' */}
         <TabsContent value="candidates" className="mt-4">
           <Card>
             <CardHeader className="py-3">
-              <div className="flex items-center justify-between">
-                <CardTitle className="text-base">Qualified Candidates</CardTitle>
-                <div className="flex gap-1">
-                  {(['all', 'pending', 'approved', 'rejected'] as const).map((f) => (
-                    <Button key={f} variant={candidateFilter === f ? 'default' : 'ghost'} size="sm"
-                      onClick={() => setCandidateFilter(f)}>
-                      {f.charAt(0).toUpperCase() + f.slice(1)}
-                    </Button>
-                  ))}
-                </div>
-              </div>
+              <CardTitle className="text-base">Qualified Tokens</CardTitle>
             </CardHeader>
             <CardContent className="p-0">
               <div className="border rounded-md">
@@ -1017,80 +1006,58 @@ export function TokenCandidatesDashboard() {
                     <TableRow>
                       <TableHead compact>Symbol</TableHead>
                       <TableHead compact>Mint</TableHead>
-                      <TableHead compact>Vol (SOL)</TableHead>
                       <TableHead compact>Holders</TableHead>
-                      <TableHead compact>Txs</TableHead>
-                      <TableHead compact>Bundle</TableHead>
-                      <TableHead compact>Status</TableHead>
-                      <TableHead compact>Age</TableHead>
+                      <TableHead compact>Vol (SOL)</TableHead>
+                      <TableHead compact>BC%</TableHead>
+                      <TableHead compact>Price</TableHead>
+                      <TableHead compact>Qualified</TableHead>
+                      <TableHead compact>Reason</TableHead>
                       <TableHead compact>Actions</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {filteredCandidates.length === 0 ? (
+                    {watchlist.filter(w => w.status === 'qualified').length === 0 ? (
                       <TableRow>
                         <TableCell colSpan={9} className="text-center text-muted-foreground py-8">
-                          No candidates
+                          No qualified tokens yet
                         </TableCell>
                       </TableRow>
                     ) : (
-                      filteredCandidates.map((c) => (
-                        <TableRow key={c.id}>
-                          <TableCell compact className="font-medium">{c.token_symbol || '???'}</TableCell>
+                      watchlist.filter(w => w.status === 'qualified').map((item) => (
+                        <TableRow key={item.id}>
+                          <TableCell compact className="font-medium">{item.token_symbol || '???'}</TableCell>
                           <TableCell compact>
                             <div className="flex items-center gap-1">
                               <span className="text-primary font-mono text-xs">
-                                {c.token_mint?.slice(0, 6)}...
+                                {item.token_mint?.slice(0, 6)}...
                               </span>
-                              <Button variant="ghost" size="icon" className="h-4 w-4" onClick={() => copyToClipboard(c.token_mint)}>
+                              <Button variant="ghost" size="icon" className="h-4 w-4" onClick={() => copyToClipboard(item.token_mint)}>
                                 <Copy className="h-2.5 w-2.5" />
                               </Button>
                             </div>
                           </TableCell>
-                          <TableCell compact className={c.volume_sol_5m >= 5 ? 'text-green-500 font-medium' : ''}>
-                            {c.volume_sol_5m?.toFixed(2)}
-                          </TableCell>
-                          <TableCell compact>{c.holder_count}</TableCell>
-                          <TableCell compact>{c.transaction_count}</TableCell>
-                          <TableCell compact>
-                            <span className={c.bundle_score >= 50 ? 'text-red-500' : c.bundle_score >= 30 ? 'text-yellow-500' : 'text-green-500'}>
-                              {c.bundle_score}
-                            </span>
-                            {c.is_bundled && <AlertTriangle className="h-3 w-3 text-red-500 inline ml-1" />}
-                          </TableCell>
-                          <TableCell compact>
-                            <Badge variant="outline" className={
-                              c.status === 'pending' ? 'bg-yellow-500/10 text-yellow-500 border-yellow-500/30' :
-                              c.status === 'approved' ? 'bg-green-500/10 text-green-500 border-green-500/30' :
-                              c.status === 'rejected' ? 'bg-red-500/10 text-red-500 border-red-500/30' :
-                              ''
-                            }>{c.status}</Badge>
-                          </TableCell>
+                          <TableCell compact>{item.holder_count}</TableCell>
+                          <TableCell compact className="text-xs">{formatVolume(Number(item.volume_sol))}</TableCell>
+                          <TableCell compact className="text-xs text-cyan-400">{formatBondingCurve(item.bonding_curve_pct)}</TableCell>
+                          <TableCell compact className="text-xs">{formatPrice(item.price_usd)}</TableCell>
                           <TableCell compact className="text-xs text-muted-foreground">
-                            {formatDistanceToNow(new Date(c.detected_at), { addSuffix: false })}
+                            {item.qualified_at ? formatDistanceToNow(new Date(item.qualified_at), { addSuffix: true }) : '-'}
+                          </TableCell>
+                          <TableCell compact className="text-xs max-w-[150px] truncate text-green-500" title={item.qualification_reason || ''}>
+                            {item.qualification_reason || '-'}
                           </TableCell>
                           <TableCell compact>
                             <div className="flex items-center gap-1">
                               <Button variant="ghost" size="icon" className="h-5 w-5 p-0"
-                                onClick={() => window.open(`https://pump.fun/${c.token_mint}`, '_blank')}
+                                onClick={() => window.open(`https://pump.fun/${item.token_mint}`, '_blank')}
                                 title="View on Pump.fun">
                                 <img src="/launchpad-logos/pumpfun.png" alt="Pump.fun" className="h-4 w-4 rounded-sm" />
                               </Button>
                               <Button variant="ghost" size="icon" className="h-5 w-5 p-0"
-                                onClick={() => window.open(`https://dexscreener.com/solana/${c.token_mint}`, '_blank')}
+                                onClick={() => window.open(`https://dexscreener.com/solana/${item.token_mint}`, '_blank')}
                                 title="View on DexScreener">
                                 <img src="/launchpad-logos/dexscreener.png" alt="DexScreener" className="h-4 w-4 rounded-sm" />
                               </Button>
-                              {c.status === 'pending' && (
-                                <>
-                                  <Button variant="ghost" size="icon" className="h-5 w-5 text-green-500">
-                                    <CheckCircle className="h-3 w-3" />
-                                  </Button>
-                                  <Button variant="ghost" size="icon" className="h-5 w-5 text-red-500">
-                                    <XCircle className="h-3 w-3" />
-                                  </Button>
-                                </>
-                              )}
                             </div>
                           </TableCell>
                         </TableRow>
