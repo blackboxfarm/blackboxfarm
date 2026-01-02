@@ -1,0 +1,2 @@
+ALTER TABLE pumpfun_watchlist 
+ADD COLUMN IF NOT EXISTS volume_5m NUMERIC DEFAULT 0;
