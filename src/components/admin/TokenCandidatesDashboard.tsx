@@ -138,15 +138,14 @@ interface MonitorConfig {
   resurrection_volume_threshold_sol?: number;
 }
 
-// Format price to readable decimal (always max 10 decimal places, no scientific notation)
+// Format price to readable decimal (max 6 decimal places)
 const formatPrice = (price: number | null | undefined): string => {
   if (price === null || price === undefined || isNaN(price)) return '-';
-  if (price === 0) return '$0';
+  if (price === 0) return '-';
   if (price >= 1) return `$${price.toFixed(2)}`;
   if (price >= 0.01) return `$${price.toFixed(4)}`;
-  // For small prices, always show 10 decimal places max, trim trailing zeros
-  const formatted = price.toFixed(10).replace(/\.?0+$/, '');
-  return `$${formatted}`;
+  // For small prices, show exactly 6 decimal places
+  return `$${price.toFixed(6)}`;
 };
 
 // Format volume with 2 decimal places
@@ -542,10 +541,16 @@ export function TokenCandidatesDashboard() {
         return <Badge variant="outline" className="bg-blue-500/10 text-blue-500 border-blue-500/30 text-xs">Watching</Badge>;
       case 'qualified':
         return <Badge variant="outline" className="bg-green-500/10 text-green-500 border-green-500/30 text-xs">Qualified</Badge>;
+      case 'pending_triage':
+        return <Badge variant="outline" className="bg-yellow-500/10 text-yellow-500 border-yellow-500/30 text-xs">Pending Triage</Badge>;
+      case 'rejected':
+        return <Badge variant="outline" className="bg-red-500/10 text-red-500 border-red-500/30 text-xs">Rejected</Badge>;
       case 'dead':
         return <Badge variant="outline" className="bg-muted text-muted-foreground text-xs">Dead</Badge>;
       case 'bombed':
         return <Badge variant="outline" className="bg-red-500/10 text-red-500 border-red-500/30 text-xs">Bombed</Badge>;
+      case 'buy_now':
+        return <Badge variant="outline" className="bg-emerald-500/10 text-emerald-500 border-emerald-500/30 text-xs">Buy Now</Badge>;
       default:
         return <Badge variant="secondary" className="text-xs">{status}</Badge>;
     }

@@ -74,6 +74,18 @@ async function fetchTokenData(mint: string): Promise<any> {
   }
 }
 
+// Fetch token data from pump.fun API for price/volume
+async function fetchPumpFunData(mint: string): Promise<any> {
+  try {
+    const response = await fetch(`https://frontend-api.pump.fun/coins/${mint}`);
+    if (!response.ok) return null;
+    return await response.json();
+  } catch (error) {
+    console.error(`Error fetching pump.fun data for ${mint}:`, error);
+    return null;
+  }
+}
+
 // Get config from database
 async function getConfig(supabase: any) {
   const { data } = await supabase
@@ -104,11 +116,24 @@ async function enrichTokenBatch(
   for (const token of tokens) {
     console.log(`\n📊 Enriching: ${token.token_symbol} (${token.token_mint.slice(0, 8)}...)`);
     
-    // Fetch current token data
+    // Fetch current token data from both APIs
     const tokenData = await fetchTokenData(token.token_mint);
+    const pumpData = await fetchPumpFunData(token.token_mint);
+    
+    // Extract price/volume from pump.fun API
+    const priceUsd = pumpData?.usd_market_cap && pumpData?.total_supply 
+      ? pumpData.usd_market_cap / (pumpData.total_supply / 1e6) 
+      : null;
+    const volumeSol = pumpData?.volume_24h || 0;
+    const marketCapUsd = pumpData?.usd_market_cap || null;
+    const liquidityUsd = pumpData?.virtual_sol_reserves 
+      ? (pumpData.virtual_sol_reserves / 1e9) * (pumpData?.sol_price || 150) 
+      : null;
+    
+    console.log(`   Price: $${priceUsd?.toFixed(8) || 'N/A'}, Volume: ${volumeSol} SOL, MCap: $${marketCapUsd || 'N/A'}`);
     
     // Check token age if we have blockchain creation time
-    const createdAt = tokenData?.events?.createdAt;
+    const createdAt = tokenData?.events?.createdAt || (pumpData?.created_timestamp ? pumpData.created_timestamp / 1000 : null);
     if (createdAt) {
       const ageMinutes = (Date.now() - createdAt * 1000) / 60000;
       if (ageMinutes > config.max_token_age_minutes) {
@@ -120,6 +145,11 @@ async function enrichTokenBatch(
             status: 'rejected',
             rejection_reason: 'token_too_old',
             removed_at: new Date().toISOString(),
+            price_usd: priceUsd,
+            volume_sol: volumeSol,
+            market_cap_usd: marketCapUsd,
+            liquidity_usd: liquidityUsd,
+            last_checked_at: new Date().toISOString(),
           })
           .eq('id', token.id);
           
@@ -135,7 +165,9 @@ async function enrichTokenBatch(
     // Extract data
     const holderCount = tokenData?.holders || details.holderCount || token.holder_count || 0;
     const marketCapSol = tokenData?.pools?.[0]?.marketCap?.quote || token.market_cap_sol || 0;
-    const bondingCurve = tokenData?.pools?.[0]?.curvePercentage || token.bonding_curve_pct || 0;
+    const bondingCurve = pumpData?.bonding_curve_progress 
+      ? pumpData.bonding_curve_progress * 100 
+      : (tokenData?.pools?.[0]?.curvePercentage || token.bonding_curve_pct || 0);
     
     // Check rejection criteria
     let shouldReject = false;
@@ -157,6 +189,11 @@ async function enrichTokenBatch(
           holder_count: holderCount,
           market_cap_sol: marketCapSol,
           bonding_curve_pct: bondingCurve,
+          price_usd: priceUsd,
+          price_ath_usd: priceUsd, // Set ATH to current price on first check
+          volume_sol: volumeSol,
+          market_cap_usd: marketCapUsd,
+          liquidity_usd: liquidityUsd,
           removed_at: new Date().toISOString(),
           last_checked_at: new Date().toISOString(),
         })
@@ -173,6 +210,11 @@ async function enrichTokenBatch(
           holder_count: holderCount,
           market_cap_sol: marketCapSol,
           bonding_curve_pct: bondingCurve,
+          price_usd: priceUsd,
+          price_ath_usd: priceUsd, // Set ATH to current price on first check
+          volume_sol: volumeSol,
+          market_cap_usd: marketCapUsd,
+          liquidity_usd: liquidityUsd,
           last_checked_at: new Date().toISOString(),
           created_at_blockchain: createdAt ? new Date(createdAt * 1000).toISOString() : null,
         })
