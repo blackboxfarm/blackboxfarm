@@ -43,8 +43,19 @@ import {
   Target,
   Moon,
   SearchCheck,
-  Binoculars
+  Binoculars,
+  RotateCcw
 } from 'lucide-react';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 import { formatDistanceToNow } from 'date-fns';
 
 // Watchlist item from pumpfun_watchlist table
@@ -347,6 +358,12 @@ export function TokenCandidatesDashboard() {
   const [fantasyPositions, setFantasyPositions] = useState<FantasyPosition[]>([]);
   const [fantasyStats, setFantasyStats] = useState<FantasyStats | null>(null);
   const [loadingFantasy, setLoadingFantasy] = useState(false);
+
+  // System Reset state
+  const [showResetDialog, setShowResetDialog] = useState(false);
+  const [resetConfirmText, setResetConfirmText] = useState('');
+  const [isResetting, setIsResetting] = useState(false);
+  const [resetCounts, setResetCounts] = useState<Record<string, number>>({});
 
   // Fetch watchlist
   const fetchWatchlist = useCallback(async () => {
@@ -712,6 +729,64 @@ export function TokenCandidatesDashboard() {
     }
   };
 
+  // Fetch counts for reset confirmation
+  const fetchResetCounts = async () => {
+    try {
+      const [watchlistRes, fantasyRes, candidatesRes, logsRes] = await Promise.all([
+        supabase.from('pumpfun_watchlist').select('id', { count: 'exact', head: true }),
+        supabase.from('pumpfun_fantasy_positions').select('id', { count: 'exact', head: true }),
+        supabase.from('pumpfun_buy_candidates').select('id', { count: 'exact', head: true }),
+        supabase.from('pumpfun_discovery_logs').select('id', { count: 'exact', head: true }),
+      ]);
+      setResetCounts({
+        watchlist: watchlistRes.count || 0,
+        fantasy: fantasyRes.count || 0,
+        candidates: candidatesRes.count || 0,
+        logs: logsRes.count || 0,
+      });
+    } catch (error) {
+      console.error('Error fetching reset counts:', error);
+    }
+  };
+
+  // System reset - delete all Pump.fun monitoring data
+  const handleSystemReset = async () => {
+    setIsResetting(true);
+    try {
+      // Delete in order for foreign key constraints
+      await supabase.from('pumpfun_fantasy_positions').delete().neq('id', '00000000-0000-0000-0000-000000000000');
+      await supabase.from('pumpfun_fantasy_stats').delete().neq('id', '00000000-0000-0000-0000-000000000000');
+      await supabase.from('pumpfun_buy_candidates').delete().neq('id', '00000000-0000-0000-0000-000000000000');
+      await supabase.from('pumpfun_discovery_logs').delete().neq('id', '00000000-0000-0000-0000-000000000000');
+      await supabase.from('pumpfun_poll_runs').delete().neq('id', '00000000-0000-0000-0000-000000000000');
+      await supabase.from('pumpfun_daily_stats').delete().neq('id', '00000000-0000-0000-0000-000000000000');
+      await supabase.from('pumpfun_trade_learnings').delete().neq('id', '00000000-0000-0000-0000-000000000000');
+      await supabase.from('pumpfun_watchlist').delete().neq('id', '00000000-0000-0000-0000-000000000000');
+      
+      toast.success('System reset complete! Starting fresh.');
+      
+      // Refresh all data
+      setWatchlist([]);
+      setCandidates([]);
+      setDiscoveryLogs([]);
+      setFantasyPositions([]);
+      setFantasyStats(null);
+      setTotalLogsCount(0);
+      setLogsPage(0);
+      setLastPollSummary(null);
+      
+      // Refetch to confirm
+      await Promise.all([fetchWatchlist(), fetchCandidates(), fetchFantasyData(), fetchConfig()]);
+    } catch (error) {
+      console.error('System reset error:', error);
+      toast.error('Reset failed: ' + (error as Error).message);
+    } finally {
+      setIsResetting(false);
+      setShowResetDialog(false);
+      setResetConfirmText('');
+    }
+  };
+
   // Toggle row expansion
   const toggleExpand = (id: string) => {
     setExpandedRows(prev => {
@@ -1003,6 +1078,19 @@ export function TokenCandidatesDashboard() {
           
           <Button variant="ghost" size="sm" onClick={() => { fetchWatchlist(); fetchCandidates(); }}>
             <RefreshCw className="h-4 w-4" />
+          </Button>
+          
+          {/* System Reset */}
+          <Button 
+            variant="outline" 
+            size="sm" 
+            onClick={() => {
+              fetchResetCounts();
+              setShowResetDialog(true);
+            }}
+            className="text-destructive border-destructive/50 hover:bg-destructive/10"
+          >
+            <RotateCcw className="h-4 w-4" />
           </Button>
         </div>
       </div>
@@ -1868,6 +1956,68 @@ export function TokenCandidatesDashboard() {
           </Card>
         </TabsContent>
       </Tabs>
+
+      {/* System Reset Dialog */}
+      <AlertDialog open={showResetDialog} onOpenChange={setShowResetDialog}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle className="text-destructive flex items-center gap-2">
+              <RotateCcw className="h-5 w-5" />
+              Reset Pump.fun Monitoring System?
+            </AlertDialogTitle>
+            <AlertDialogDescription asChild>
+              <div className="space-y-4">
+                <p>This will permanently delete ALL monitoring data:</p>
+                <ul className="space-y-1 text-sm">
+                  <li className="flex items-center gap-2">
+                    <Eye className="h-4 w-4 text-blue-500" />
+                    <span>{resetCounts.watchlist || 0} watchlist tokens</span>
+                  </li>
+                  <li className="flex items-center gap-2">
+                    <TestTube className="h-4 w-4 text-purple-500" />
+                    <span>{resetCounts.fantasy || 0} fantasy positions</span>
+                  </li>
+                  <li className="flex items-center gap-2">
+                    <Target className="h-4 w-4 text-green-500" />
+                    <span>{resetCounts.candidates || 0} buy candidates</span>
+                  </li>
+                  <li className="flex items-center gap-2">
+                    <FileText className="h-4 w-4 text-muted-foreground" />
+                    <span>{resetCounts.logs || 0} log entries</span>
+                  </li>
+                </ul>
+                <p className="font-semibold text-foreground">Your configuration settings will be preserved.</p>
+                <div className="space-y-2">
+                  <p className="text-sm">Type <code className="bg-muted px-1.5 py-0.5 rounded font-mono">RESET</code> to confirm:</p>
+                  <Input 
+                    value={resetConfirmText}
+                    onChange={(e) => setResetConfirmText(e.target.value.toUpperCase())}
+                    placeholder="Type RESET to confirm"
+                    className="font-mono"
+                  />
+                </div>
+              </div>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={isResetting}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              disabled={resetConfirmText !== 'RESET' || isResetting}
+              onClick={handleSystemReset}
+              className="bg-destructive hover:bg-destructive/90"
+            >
+              {isResetting ? (
+                <>
+                  <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
+                  Resetting...
+                </>
+              ) : (
+                'Reset Everything'
+              )}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
