@@ -120,7 +120,7 @@ async function processNewToken(
       rejection_reason: 'mayhem_mode',
       source: 'websocket',
       created_at_blockchain: new Date().toISOString(),
-      bonding_curve_percent: (vSolInBondingCurve / 85) * 100, // Rough estimate
+      bonding_curve_pct: (vSolInBondingCurve / 85) * 100, // Rough estimate
       market_cap_sol: marketCapSol,
     });
     
@@ -146,7 +146,7 @@ async function processNewToken(
     status: 'pending_triage',
     source: 'websocket',
     created_at_blockchain: new Date().toISOString(),
-    bonding_curve_percent: bondingCurvePercent,
+    bonding_curve_pct: bondingCurvePercent,
     market_cap_sol: marketCapSol,
     twitter_url: metadata?.twitter || null,
     telegram_url: metadata?.telegram || null,
