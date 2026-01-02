@@ -12,6 +12,9 @@ const PUMPPORTAL_WS_URL = 'wss://pumpportal.fun/api/data';
 // Maximum token age in minutes - reject anything older
 const MAX_TOKEN_AGE_MINUTES = 30;
 
+// Standard pump.fun token supply (1 billion with 6 decimals)
+const STANDARD_PUMPFUN_SUPPLY = 1000000000000000;
+
 interface NewTokenEvent {
   signature: string;
   mint: string;
@@ -37,7 +40,101 @@ interface TokenMetadata {
   website?: string;
 }
 
-// Mayhem Mode check - reject if true
+interface IntakeConfig {
+  max_ticker_length: number;
+  require_image: boolean;
+  min_socials_count: number;
+}
+
+// Get config from database
+async function getConfig(supabase: any): Promise<IntakeConfig> {
+  const { data } = await supabase
+    .from('pumpfun_monitor_config')
+    .select('max_ticker_length, require_image, min_socials_count')
+    .eq('id', 'default')
+    .maybeSingle();
+    
+  return {
+    max_ticker_length: data?.max_ticker_length ?? 10,
+    require_image: data?.require_image ?? false,
+    min_socials_count: data?.min_socials_count ?? 0,
+  };
+}
+
+// Check if ticker contains emoji or problematic unicode
+function containsEmojiOrUnicode(text: string): boolean {
+  // Regex to detect emojis and extended unicode (above basic ASCII/Latin)
+  const emojiRegex = /[\u{1F000}-\u{1FFFF}]|[\u{2600}-\u{26FF}]|[\u{2700}-\u{27BF}]|[\u{FE00}-\u{FEFF}]|[\u{1F900}-\u{1F9FF}]/u;
+  // Also reject tickers with unusual unicode characters (keeping basic Latin + numbers)
+  const hasEmoji = emojiRegex.test(text);
+  // Check for non-basic characters (allow A-Z, a-z, 0-9, and common symbols like $)
+  const hasWeirdChars = /[^\x20-\x7E]/.test(text);
+  return hasEmoji || hasWeirdChars;
+}
+
+// Validate token intake - Stage 0 checks
+function validateIntake(
+  event: NewTokenEvent, 
+  metadata: TokenMetadata | null,
+  config: IntakeConfig
+): { valid: boolean; rejectionReasons: string[]; rejectionType: 'soft' | 'permanent' | null } {
+  const reasons: string[] = [];
+  let isPermanent = false;
+  
+  // NULL NAME/TICKER CHECK - PERMANENT
+  if (!event.name || event.name.trim() === '') {
+    reasons.push('null_name');
+    isPermanent = true;
+  }
+  
+  if (!event.symbol || event.symbol.trim() === '') {
+    reasons.push('null_ticker');
+    isPermanent = true;
+  }
+  
+  // TICKER LENGTH CHECK - PERMANENT
+  if (event.symbol && event.symbol.length > config.max_ticker_length) {
+    reasons.push(`ticker_too_long:${event.symbol.length}>${config.max_ticker_length}`);
+    isPermanent = true;
+  }
+  
+  // EMOJI/UNICODE CHECK - PERMANENT
+  if (event.symbol && containsEmojiOrUnicode(event.symbol)) {
+    reasons.push('ticker_emoji_unicode');
+    isPermanent = true;
+  }
+  
+  // Also check name for emojis (less strict, but flag it)
+  if (event.name && containsEmojiOrUnicode(event.name)) {
+    reasons.push('name_emoji_unicode');
+    // Name with emoji is soft reject, not permanent
+  }
+  
+  // IMAGE CHECK - SOFT (only if required)
+  const hasImage = metadata?.image && metadata.image !== '' && !metadata.image.includes('placeholder');
+  if (config.require_image && !hasImage) {
+    reasons.push('no_image');
+  }
+  
+  // SOCIALS CHECK - SOFT
+  const socialsCount = [metadata?.twitter, metadata?.telegram, metadata?.website]
+    .filter(s => s && s.trim() !== '').length;
+  if (socialsCount < config.min_socials_count) {
+    reasons.push(`low_socials:${socialsCount}<${config.min_socials_count}`);
+  }
+  
+  if (reasons.length === 0) {
+    return { valid: true, rejectionReasons: [], rejectionType: null };
+  }
+  
+  return { 
+    valid: false, 
+    rejectionReasons: reasons, 
+    rejectionType: isPermanent ? 'permanent' : 'soft' 
+  };
+}
+
+// Mayhem Mode check - reject if true (PERMANENT)
 async function checkMayhemMode(tokenMint: string): Promise<boolean> {
   try {
     const response = await fetch(`https://api.rugcheck.xyz/v1/tokens/${tokenMint}/report/summary`);
@@ -84,7 +181,8 @@ async function fetchTokenMetadata(uri: string): Promise<TokenMetadata | null> {
 // Process a new token event from PumpPortal
 async function processNewToken(
   supabase: any,
-  event: NewTokenEvent
+  event: NewTokenEvent,
+  config: IntakeConfig
 ): Promise<{ success: boolean; reason?: string }> {
   const { mint, name, symbol, traderPublicKey, marketCapSol, uri, vSolInBondingCurve } = event;
   
@@ -105,12 +203,53 @@ async function processNewToken(
     return { success: false, reason: 'already_exists' };
   }
   
-  // Quick Mayhem Mode check
+  // Fetch metadata for social links and image
+  let metadata: TokenMetadata | null = null;
+  if (uri) {
+    metadata = await fetchTokenMetadata(uri);
+  }
+  
+  // Calculate socials count
+  const socialsCount = [metadata?.twitter, metadata?.telegram, metadata?.website]
+    .filter(s => s && s.trim() !== '').length;
+  const hasImage = !!(metadata?.image && metadata.image !== '' && !metadata.image.includes('placeholder'));
+  
+  // STAGE 0: Intake Validation
+  const validation = validateIntake(event, metadata, config);
+  
+  if (!validation.valid) {
+    console.log(`   ⚠️ INTAKE VALIDATION FAILED: ${validation.rejectionReasons.join(', ')} (${validation.rejectionType})`);
+    
+    // Insert as rejected with proper type
+    await supabase.from('pumpfun_watchlist').insert({
+      token_mint: mint,
+      token_name: name,
+      token_symbol: symbol,
+      creator_wallet: traderPublicKey,
+      status: 'rejected',
+      rejection_reason: validation.rejectionReasons.join(', '),
+      rejection_type: validation.rejectionType,
+      rejection_reasons: validation.rejectionReasons,
+      source: 'websocket',
+      created_at_blockchain: new Date().toISOString(),
+      bonding_curve_pct: (vSolInBondingCurve / 85) * 100,
+      market_cap_sol: marketCapSol,
+      has_image: hasImage,
+      socials_count: socialsCount,
+      image_url: metadata?.image || null,
+      twitter_url: metadata?.twitter || null,
+      telegram_url: metadata?.telegram || null,
+      website_url: metadata?.website || null,
+    });
+    
+    return { success: false, reason: validation.rejectionReasons.join(', ') };
+  }
+  
+  // Quick Mayhem Mode check - PERMANENT rejection
   const isMayhem = await checkMayhemMode(mint);
   if (isMayhem) {
-    console.log(`   🔴 REJECTED: Mayhem Mode active`);
+    console.log(`   🔴 REJECTED: Mayhem Mode active (PERMANENT)`);
     
-    // Insert as rejected for tracking
     await supabase.from('pumpfun_watchlist').insert({
       token_mint: mint,
       token_name: name,
@@ -118,19 +257,21 @@ async function processNewToken(
       creator_wallet: traderPublicKey,
       status: 'rejected',
       rejection_reason: 'mayhem_mode',
+      rejection_type: 'permanent',
+      rejection_reasons: ['mayhem_mode'],
       source: 'websocket',
       created_at_blockchain: new Date().toISOString(),
-      bonding_curve_pct: (vSolInBondingCurve / 85) * 100, // Rough estimate
+      bonding_curve_pct: (vSolInBondingCurve / 85) * 100,
       market_cap_sol: marketCapSol,
+      has_image: hasImage,
+      socials_count: socialsCount,
+      image_url: metadata?.image || null,
+      twitter_url: metadata?.twitter || null,
+      telegram_url: metadata?.telegram || null,
+      website_url: metadata?.website || null,
     });
     
     return { success: false, reason: 'mayhem_mode' };
-  }
-  
-  // Fetch metadata for social links
-  let metadata: TokenMetadata | null = null;
-  if (uri) {
-    metadata = await fetchTokenMetadata(uri);
   }
   
   // Calculate bonding curve percentage (rough estimate)
@@ -152,6 +293,8 @@ async function processNewToken(
     telegram_url: metadata?.telegram || null,
     website_url: metadata?.website || null,
     image_url: metadata?.image || null,
+    has_image: hasImage,
+    socials_count: socialsCount,
     holder_count: 1, // Just created, only creator
     volume_5m: event.initialBuy || 0,
   });
@@ -161,7 +304,7 @@ async function processNewToken(
     return { success: false, reason: 'insert_error' };
   }
   
-  console.log(`   ✅ Added to watchlist (pending_triage)`);
+  console.log(`   ✅ Added to watchlist (pending_triage) - Image: ${hasImage ? 'YES' : 'NO'}, Socials: ${socialsCount}`);
   return { success: true };
 }
 
@@ -174,6 +317,7 @@ interface ListenerStats {
   tokensRejected: number;
   lastTokenAt: string | null;
   errors: number;
+  rejectionBreakdown: Record<string, number>;
 }
 
 serve(async (req) => {
@@ -189,6 +333,10 @@ serve(async (req) => {
     const url = new URL(req.url);
     const action = url.searchParams.get('action') || 'listen';
 
+    // Load config
+    const config = await getConfig(supabase);
+    console.log('📋 Intake Config:', config);
+
     if (action === 'status') {
       // Return current listener status from cache
       const { data: cache } = await supabase
@@ -199,7 +347,8 @@ serve(async (req) => {
         
       return new Response(JSON.stringify({
         success: true,
-        stats: cache?.value || { connected: false, tokensReceived: 0 }
+        stats: cache?.value || { connected: false, tokensReceived: 0 },
+        config
       }), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' }
       });
@@ -224,6 +373,7 @@ serve(async (req) => {
         tokensRejected: 0,
         lastTokenAt: null,
         errors: 0,
+        rejectionBreakdown: {},
       };
       
       return new Promise((resolve) => {
@@ -261,12 +411,16 @@ serve(async (req) => {
               stats.tokensReceived++;
               stats.lastTokenAt = new Date().toISOString();
               
-              const result = await processNewToken(supabase, data as NewTokenEvent);
+              const result = await processNewToken(supabase, data as NewTokenEvent, config);
               
               if (result.success) {
                 stats.tokensAdded++;
               } else {
                 stats.tokensRejected++;
+                // Track rejection reasons
+                if (result.reason) {
+                  stats.rejectionBreakdown[result.reason] = (stats.rejectionBreakdown[result.reason] || 0) + 1;
+                }
               }
             }
           } catch (error) {
@@ -286,6 +440,7 @@ serve(async (req) => {
           console.log(`   Tokens received: ${stats.tokensReceived}`);
           console.log(`   Tokens added: ${stats.tokensAdded}`);
           console.log(`   Tokens rejected: ${stats.tokensRejected}`);
+          console.log(`   Rejection breakdown:`, stats.rejectionBreakdown);
           console.log(`   Errors: ${stats.errors}`);
           
           // Cache stats
@@ -344,6 +499,28 @@ serve(async (req) => {
         }
       }
       
+      // Validate ticker
+      const symbol = tokenData.token?.symbol || '???';
+      const name = tokenData.token?.name || 'Unknown';
+      
+      if (symbol.length > config.max_ticker_length) {
+        return new Response(JSON.stringify({ 
+          error: 'Ticker too long',
+          tickerLength: symbol.length,
+          maxLength: config.max_ticker_length
+        }), {
+          status: 400,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        });
+      }
+      
+      if (containsEmojiOrUnicode(symbol)) {
+        return new Response(JSON.stringify({ error: 'Ticker contains emoji/unicode' }), {
+          status: 400,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        });
+      }
+      
       // Check Mayhem Mode
       const isMayhem = await checkMayhemMode(mint);
       if (isMayhem) {
@@ -356,14 +533,16 @@ serve(async (req) => {
       // Insert token
       const { error } = await supabase.from('pumpfun_watchlist').insert({
         token_mint: mint,
-        token_name: tokenData.token?.name || 'Unknown',
-        token_symbol: tokenData.token?.symbol || '???',
+        token_name: name,
+        token_symbol: symbol,
         creator_wallet: tokenData.token?.creator || null,
         status: 'pending_triage',
         source: 'manual',
         created_at_blockchain: createdAt ? new Date(createdAt * 1000).toISOString() : null,
         holder_count: tokenData.holders || 0,
         market_cap_sol: tokenData.pools?.[0]?.marketCap?.quote || 0,
+        has_image: !!tokenData.token?.image,
+        socials_count: 0, // Would need to fetch metadata for this
       });
       
       if (error) {
@@ -375,7 +554,7 @@ serve(async (req) => {
       
       return new Response(JSON.stringify({ 
         success: true, 
-        message: `Added ${tokenData.token?.symbol} to watchlist` 
+        message: `Added ${symbol} to watchlist` 
       }), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' }
       });

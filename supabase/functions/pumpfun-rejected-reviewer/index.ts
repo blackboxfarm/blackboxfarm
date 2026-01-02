@@ -4,15 +4,17 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 /**
  * PUMPFUN REJECTED REVIEWER
  * 
- * Purpose: Review rejected tokens for resurrection, permanently delete old ones
+ * Purpose: Review SOFT rejected tokens for resurrection, permanently delete old ones
  * Schedule: Every 2-5 minutes via cron
  * 
  * Logic:
- * 1. Get tokens with status 'dead' or 'bombed' where removed_at is within last 30 minutes
+ * 1. Get tokens with status 'dead', 'bombed', or 'rejected' WHERE rejection_type = 'soft'
  * 2. Fetch current metrics for each (max 50 per run)
- * 3. Resurrection check: If holders now >= 10 OR volume now >= 0.1 SOL -> back to 'watching'
- * 4. Permanent rejection: If removed_at > 2 hours ago -> set permanent_reject = true
- * 5. Database cleanup: Delete records where permanent_reject = true AND removed_at > 24 hours
+ * 3. Resurrection check: If socials added OR holders now >= 10 OR volume now >= 0.1 SOL -> back to 'watching'
+ * 4. Permanent rejection: If removed_at > 2 hours ago OR no improvement seen -> set rejection_type = 'permanent'
+ * 5. Database cleanup: Delete records where rejection_type = 'permanent' AND removed_at > 24 hours
+ * 
+ * IMPORTANT: NEVER resurrect tokens with rejection_type = 'permanent'
  */
 
 const corsHeaders = {
@@ -37,10 +39,11 @@ interface ReviewerStats {
   errors: number;
   durationMs: number;
   resurrectedTokens: string[];
+  permanentRejectReasons: Record<string, number>;
 }
 
 // Fetch token metrics
-async function fetchTokenMetrics(mint: string): Promise<{ holders: number; volumeUsd: number } | null> {
+async function fetchTokenMetrics(mint: string): Promise<{ holders: number; volumeUsd: number; hasSocials: boolean } | null> {
   const apiKey = Deno.env.get('SOLANA_TRACKER_API_KEY');
   
   try {
@@ -60,10 +63,15 @@ async function fetchTokenMetrics(mint: string): Promise<{ holders: number; volum
 
     const data = await response.json();
     const pool = data.pools?.[0];
+    const token = data.token || {};
+    
+    // Check if socials have been added
+    const hasSocials = !!(token.twitter || token.telegram || token.website);
     
     return {
       holders: data.holders || 0,
       volumeUsd: pool?.volume?.h24 || 0,
+      hasSocials,
     };
   } catch (error) {
     console.error(`Error fetching metrics for ${mint}:`, error);
@@ -98,7 +106,7 @@ async function getConfig(supabase: any) {
     is_enabled: data?.is_enabled ?? true,
     log_retention_hours: data?.log_retention_hours ?? 24,
     dead_retention_hours: data?.dead_retention_hours ?? 2,
-    max_reevaluate_minutes: data?.max_reevaluate_minutes ?? 30,
+    soft_reject_resurrection_minutes: data?.soft_reject_resurrection_minutes ?? 90,
     resurrection_holder_threshold: data?.resurrection_holder_threshold ?? 10,
     resurrection_volume_threshold_sol: data?.resurrection_volume_threshold_sol ?? 0.1,
   };
@@ -115,6 +123,7 @@ async function reviewRejectedTokens(supabase: any): Promise<ReviewerStats> {
     errors: 0,
     durationMs: 0,
     resurrectedTokens: [],
+    permanentRejectReasons: {},
   };
 
   console.log('🔄 REJECTED REVIEWER: Starting review cycle...');
@@ -129,26 +138,27 @@ async function reviewRejectedTokens(supabase: any): Promise<ReviewerStats> {
   const solPrice = await getSolPrice(supabase);
   const now = new Date();
 
-  // STEP 1: Review recently dead/bombed tokens for resurrection
-  const reevaluateCutoff = new Date(now.getTime() - config.max_reevaluate_minutes * 60 * 1000).toISOString();
+  // STEP 1: Review SOFT rejected tokens for resurrection
+  // Only look at tokens rejected within the resurrection window
+  const reevaluateCutoff = new Date(now.getTime() - config.soft_reject_resurrection_minutes * 60 * 1000).toISOString();
   
-  const { data: recentlyDead, error: fetchError } = await supabase
+  const { data: softRejected, error: fetchError } = await supabase
     .from('pumpfun_watchlist')
     .select('*')
-    .in('status', ['dead', 'bombed'])
-    .eq('permanent_reject', false)
+    .in('status', ['dead', 'bombed', 'rejected'])
+    .eq('rejection_type', 'soft') // ONLY soft rejects can be resurrected
     .gte('removed_at', reevaluateCutoff)
     .order('removed_at', { ascending: false })
     .limit(50);
 
   if (fetchError) {
-    console.error('Error fetching recently dead tokens:', fetchError);
+    console.error('Error fetching soft rejected tokens:', fetchError);
     stats.errors++;
   }
 
-  console.log(`📋 Reviewing ${recentlyDead?.length || 0} recently rejected tokens`);
+  console.log(`📋 Reviewing ${softRejected?.length || 0} SOFT rejected tokens for resurrection`);
 
-  for (const token of (recentlyDead || [])) {
+  for (const token of (softRejected || [])) {
     try {
       stats.tokensReviewed++;
 
@@ -161,32 +171,51 @@ async function reviewRejectedTokens(supabase: any): Promise<ReviewerStats> {
       await new Promise(r => setTimeout(r, 50));
 
       const volumeSol = solPrice > 0 ? metrics.volumeUsd / solPrice : 0;
-
-      // Resurrection check
-      if (metrics.holders >= config.resurrection_holder_threshold || volumeSol >= config.resurrection_volume_threshold_sol) {
+      
+      // Check resurrection criteria
+      // 1. Socials were added (major positive signal)
+      // 2. Holders grew above threshold
+      // 3. Volume grew above threshold
+      // 4. Dev wallet hasn't sold (we'll check this in monitor)
+      const socialsAdded = metrics.hasSocials && (token.socials_count === 0);
+      const holdersGrew = metrics.holders >= config.resurrection_holder_threshold;
+      const volumeGrew = volumeSol >= config.resurrection_volume_threshold_sol;
+      
+      if (socialsAdded || holdersGrew || volumeGrew) {
+        const resurrectionReason = [
+          socialsAdded ? 'socials_added' : null,
+          holdersGrew ? `holders:${metrics.holders}` : null,
+          volumeGrew ? `volume:${volumeSol.toFixed(2)}SOL` : null,
+        ].filter(Boolean).join(', ');
+        
         const { error } = await supabase
           .from('pumpfun_watchlist')
           .update({
             status: 'watching',
+            rejection_type: null,
+            rejection_reason: null,
+            rejection_reasons: null,
             removed_at: null,
             removal_reason: null,
             last_checked_at: now.toISOString(),
             holder_count: metrics.holders,
             volume_sol: volumeSol,
+            socials_count: metrics.hasSocials ? (token.socials_count || 0) + 1 : token.socials_count,
             consecutive_stale_checks: 0,
             last_processor: 'rejected-reviewer',
             metadata: { 
               ...token.metadata, 
               resurrected_at: now.toISOString(),
-              resurrection_reason: `Holders: ${metrics.holders}, Volume: ${volumeSol.toFixed(2)} SOL`
+              resurrection_reason: resurrectionReason,
+              previous_rejection_reason: token.rejection_reason,
             },
           })
           .eq('id', token.id);
 
         if (!error) {
           stats.resurrected++;
-          stats.resurrectedTokens.push(`${token.token_symbol} (${metrics.holders} holders, ${volumeSol.toFixed(2)} SOL)`);
-          console.log(`🔄 RESURRECTED: ${token.token_symbol} - ${metrics.holders} holders, ${volumeSol.toFixed(2)} SOL`);
+          stats.resurrectedTokens.push(`${token.token_symbol} (${resurrectionReason})`);
+          console.log(`🔄 RESURRECTED: ${token.token_symbol} - ${resurrectionReason}`);
         }
       }
     } catch (error) {
@@ -195,32 +224,57 @@ async function reviewRejectedTokens(supabase: any): Promise<ReviewerStats> {
     }
   }
 
-  // STEP 2: Mark old dead tokens as permanently rejected
+  // STEP 2: Mark old soft rejected tokens as permanently rejected
+  // Soft rejects that are past the resurrection window become permanent
+  const softToPermanentCutoff = new Date(now.getTime() - config.soft_reject_resurrection_minutes * 60 * 1000).toISOString();
+  
+  const { count: convertedToPermanent, error: convertError } = await supabase
+    .from('pumpfun_watchlist')
+    .update({ 
+      rejection_type: 'permanent',
+      last_processor: 'rejected-reviewer',
+    })
+    .in('status', ['dead', 'bombed', 'rejected'])
+    .eq('rejection_type', 'soft')
+    .lt('removed_at', softToPermanentCutoff)
+    .select('id', { count: 'exact', head: true });
+
+  if (!convertError && convertedToPermanent) {
+    console.log(`📌 Converted ${convertedToPermanent} soft rejects to permanent (past resurrection window)`);
+    stats.permanentRejectReasons['past_resurrection_window'] = convertedToPermanent;
+  }
+
+  // STEP 3: Mark old dead/bombed tokens (with null rejection_type) as permanently rejected
   const deadCutoff = new Date(now.getTime() - config.dead_retention_hours * 60 * 60 * 1000).toISOString();
   
   const { count: permanentlyRejected, error: rejectError } = await supabase
     .from('pumpfun_watchlist')
-    .update({ permanent_reject: true, last_processor: 'rejected-reviewer' })
+    .update({ 
+      rejection_type: 'permanent',
+      permanent_reject: true, 
+      last_processor: 'rejected-reviewer' 
+    })
     .in('status', ['dead', 'bombed'])
     .lt('removed_at', deadCutoff)
-    .eq('permanent_reject', false)
+    .or('rejection_type.is.null,rejection_type.neq.permanent')
     .select('id', { count: 'exact', head: true });
 
   if (!rejectError) {
-    stats.permanentlyRejected = permanentlyRejected || 0;
-    if (stats.permanentlyRejected > 0) {
-      console.log(`🚫 Permanently rejected ${stats.permanentlyRejected} old tokens`);
+    stats.permanentlyRejected = (permanentlyRejected || 0) + (convertedToPermanent || 0);
+    if (permanentlyRejected) {
+      console.log(`🚫 Permanently rejected ${permanentlyRejected} old dead/bombed tokens`);
+      stats.permanentRejectReasons['dead_retention_exceeded'] = permanentlyRejected;
     }
   }
 
-  // STEP 3: Delete very old permanently rejected tokens (24+ hours)
+  // STEP 4: Delete very old permanently rejected tokens (24+ hours)
   const deleteCutoff = new Date(now.getTime() - config.log_retention_hours * 60 * 60 * 1000).toISOString();
   
   const { count: deleted, error: deleteError } = await supabase
     .from('pumpfun_watchlist')
     .delete()
-    .in('status', ['dead', 'bombed', 'removed'])
-    .eq('permanent_reject', true)
+    .in('status', ['dead', 'bombed', 'removed', 'rejected'])
+    .eq('rejection_type', 'permanent')
     .lt('removed_at', deleteCutoff)
     .select('id', { count: 'exact', head: true });
 
@@ -231,7 +285,7 @@ async function reviewRejectedTokens(supabase: any): Promise<ReviewerStats> {
     }
   }
 
-  // STEP 4: Also clean old discovery logs
+  // STEP 5: Also clean old discovery logs
   const logCutoff = new Date(now.getTime() - config.log_retention_hours * 60 * 60 * 1000).toISOString();
   await supabase
     .from('pumpfun_discovery_logs')
@@ -267,22 +321,30 @@ serve(async (req) => {
       }
 
       case 'status': {
-        const { count: deadCount } = await supabase
+        // Get counts of soft vs permanent rejects
+        const { count: softCount } = await supabase
           .from('pumpfun_watchlist')
           .select('id', { count: 'exact', head: true })
-          .in('status', ['dead', 'bombed'])
-          .eq('permanent_reject', false);
+          .in('status', ['dead', 'bombed', 'rejected'])
+          .eq('rejection_type', 'soft');
 
         const { count: permanentCount } = await supabase
           .from('pumpfun_watchlist')
           .select('id', { count: 'exact', head: true })
-          .eq('permanent_reject', true);
+          .eq('rejection_type', 'permanent');
+
+        const { count: nullTypeCount } = await supabase
+          .from('pumpfun_watchlist')
+          .select('id', { count: 'exact', head: true })
+          .in('status', ['dead', 'bombed', 'rejected'])
+          .is('rejection_type', null);
 
         return jsonResponse({
           success: true,
           status: 'healthy',
-          pendingReview: deadCount || 0,
-          permanentlyRejected: permanentCount || 0,
+          softRejects: softCount || 0,
+          permanentRejects: permanentCount || 0,
+          unclassified: nullTypeCount || 0,
         });
       }
 

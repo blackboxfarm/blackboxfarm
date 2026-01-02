@@ -11,9 +11,10 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
  * 1. Get ALL tokens with status 'watching' from database (batch of 50)
  * 2. Fetch current metrics for each token directly from pump.fun API
  * 3. Compare to previous metrics and update database
- * 4. Promotion: If holders >= 20 AND volume >= 0.5 SOL AND watched >= 2 min -> 'qualified'
- * 5. Staleness: If NO changes for 3+ consecutive checks -> increment stale counter
- * 6. Dead check: If holders < 3 OR volume < 0.01 SOL after 15+ minutes -> 'dead'
+ * 4. CHECK DEV BEHAVIOR: If dev_sold or dev_launched_new -> immediate PERMANENT reject
+ * 5. Promotion: If holders >= 20 AND volume >= 0.5 SOL AND watched >= 2 min -> 'qualified'
+ * 6. Staleness: If NO changes for 3+ consecutive checks -> increment stale counter
+ * 7. Dead check: If holders < 3 OR volume < 0.01 SOL after 15+ minutes -> 'dead'
  */
 
 const corsHeaders = {
@@ -43,10 +44,12 @@ interface MonitorStats {
   promoted: number;
   markedDead: number;
   markedStale: number;
+  devSellRejected: number;
   errors: number;
   durationMs: number;
   promotedTokens: string[];
   deadTokens: string[];
+  devSellTokens: string[];
   skippedRecent: number;
 }
 
@@ -173,6 +176,7 @@ async function getConfig(supabase: any) {
     qualification_holder_count: data?.qualification_holder_count ?? 20,
     qualification_volume_sol: data?.qualification_volume_sol ?? 0.5,
     max_bundle_score: data?.max_bundle_score ?? 70,
+    max_single_wallet_pct: data?.max_single_wallet_pct ?? 15,
   };
 }
 
@@ -185,10 +189,12 @@ async function monitorWatchlistTokens(supabase: any): Promise<MonitorStats> {
     promoted: 0,
     markedDead: 0,
     markedStale: 0,
+    devSellRejected: 0,
     errors: 0,
     durationMs: 0,
     promotedTokens: [],
     deadTokens: [],
+    devSellTokens: [],
     skippedRecent: 0,
   };
 
@@ -235,6 +241,52 @@ async function monitorWatchlistTokens(supabase: any): Promise<MonitorStats> {
       try {
         stats.tokensChecked++;
 
+        // === DEV BEHAVIOR CHECK (HIGHEST PRIORITY) ===
+        // If dev has sold or launched a new token, PERMANENT reject immediately
+        if (token.dev_sold === true) {
+          console.log(`🚨 DEV SOLD: ${token.token_symbol} - PERMANENT REJECT`);
+          
+          await supabase
+            .from('pumpfun_watchlist')
+            .update({
+              status: 'rejected',
+              rejection_type: 'permanent',
+              rejection_reason: 'dev_sold',
+              rejection_reasons: ['dev_sold'],
+              removed_at: now.toISOString(),
+              removal_reason: 'Developer sold tokens',
+              last_checked_at: now.toISOString(),
+              last_processor: 'watchlist-monitor',
+            })
+            .eq('id', token.id);
+            
+          stats.devSellRejected++;
+          stats.devSellTokens.push(`${token.token_symbol} (dev sold)`);
+          continue;
+        }
+        
+        if (token.dev_launched_new === true) {
+          console.log(`🚨 DEV LAUNCHED NEW: ${token.token_symbol} - PERMANENT REJECT`);
+          
+          await supabase
+            .from('pumpfun_watchlist')
+            .update({
+              status: 'rejected',
+              rejection_type: 'permanent',
+              rejection_reason: 'dev_launched_new',
+              rejection_reasons: ['dev_launched_new'],
+              removed_at: now.toISOString(),
+              removal_reason: 'Developer launched a new token',
+              last_checked_at: now.toISOString(),
+              last_processor: 'watchlist-monitor',
+            })
+            .eq('id', token.id);
+            
+          stats.devSellRejected++;
+          stats.devSellTokens.push(`${token.token_symbol} (dev launched new)`);
+          continue;
+        }
+
         // Fetch current metrics from pump.fun API
         const metrics = await fetchPumpFunMetrics(token.token_mint);
         
@@ -278,15 +330,20 @@ async function monitorWatchlistTokens(supabase: any): Promise<MonitorStats> {
           last_processor: 'watchlist-monitor',
         };
 
-        // QUALIFICATION CHECK
+        // === QUALIFICATION CHECK ===
+        // Must pass all criteria including max_single_wallet_pct if we have the data
+        const passesWalletConcentration = token.max_single_wallet_pct === null || 
+          token.max_single_wallet_pct <= config.max_single_wallet_pct;
+        
         if (watchingMinutes >= config.min_watch_time_minutes && 
             metrics.holders >= config.qualification_holder_count && 
             metrics.volume24hSol >= config.qualification_volume_sol &&
-            (token.bundle_score === null || token.bundle_score <= config.max_bundle_score)) {
+            (token.bundle_score === null || token.bundle_score <= config.max_bundle_score) &&
+            passesWalletConcentration) {
           
           updates.status = 'qualified';
           updates.qualified_at = now.toISOString();
-          updates.qualification_reason = `Holders: ${metrics.holders}, Volume: ${metrics.volume24hSol.toFixed(2)} SOL, Watched: ${watchingMinutes.toFixed(0)}m`;
+          updates.qualification_reason = `Holders: ${metrics.holders}, Volume: ${metrics.volume24hSol.toFixed(2)} SOL, Watched: ${watchingMinutes.toFixed(0)}m, Bundle: ${token.bundle_score || 'N/A'}`;
           
           stats.promoted++;
           stats.promotedTokens.push(`${token.token_symbol} (${metrics.holders} holders, ${metrics.volume24hSol.toFixed(2)} SOL)`);
@@ -306,15 +363,20 @@ async function monitorWatchlistTokens(supabase: any): Promise<MonitorStats> {
             bonding_curve_pct: metrics.bondingCurvePct,
             status: 'pending',
             detected_at: now.toISOString(),
-            metadata: { watchlist_qualification: updates.qualification_reason },
+            metadata: { 
+              watchlist_qualification: updates.qualification_reason,
+              max_single_wallet_pct: token.max_single_wallet_pct,
+            },
           }, { onConflict: 'token_mint' });
         }
         
-        // DEAD CHECK - token has been watching too long with no activity
+        // === DEAD CHECK === 
+        // Token has been watching too long with no activity
         else if (watchingMinutes > config.max_watch_time_minutes || 
                  (watchingMinutes > 15 && metrics.holders < config.dead_holder_threshold && metrics.volume24hSol < config.dead_volume_threshold_sol)) {
           
           updates.status = 'dead';
+          updates.rejection_type = 'soft'; // Dead tokens can potentially be resurrected
           updates.removed_at = now.toISOString();
           updates.removal_reason = `Watched ${watchingMinutes.toFixed(0)}m, only ${metrics.holders} holders, ${metrics.volume24hSol.toFixed(3)} SOL`;
           
@@ -323,9 +385,11 @@ async function monitorWatchlistTokens(supabase: any): Promise<MonitorStats> {
           console.log(`💀 DEAD: ${token.token_symbol} - ${updates.removal_reason}`);
         }
         
-        // STALE CHECK - no changes for multiple consecutive checks
+        // === STALE CHECK === 
+        // No changes for multiple consecutive checks
         else if (updates.consecutive_stale_checks >= 5 && watchingMinutes > 10) {
           updates.status = 'dead';
+          updates.rejection_type = 'soft'; // Stale tokens can potentially be resurrected
           updates.removed_at = now.toISOString();
           updates.removal_reason = `Stale: No metric changes for ${updates.consecutive_stale_checks} checks`;
           
@@ -360,7 +424,7 @@ async function monitorWatchlistTokens(supabase: any): Promise<MonitorStats> {
   }
 
   stats.durationMs = Date.now() - startTime;
-  console.log(`📊 MONITOR COMPLETE: ${stats.tokensChecked} checked, ${stats.promoted} promoted, ${stats.markedDead} dead, ${stats.markedStale} stale, ${stats.skippedRecent} skipped (${stats.durationMs}ms)`);
+  console.log(`📊 MONITOR COMPLETE: ${stats.tokensChecked} checked, ${stats.promoted} promoted, ${stats.markedDead} dead, ${stats.markedStale} stale, ${stats.devSellRejected} dev-rejected, ${stats.skippedRecent} skipped (${stats.durationMs}ms)`);
 
   return stats;
 }
@@ -399,11 +463,17 @@ serve(async (req) => {
           .eq('status', 'watching')
           .gte('consecutive_stale_checks', 3);
 
+        const { count: devSoldCount } = await supabase
+          .from('pumpfun_watchlist')
+          .select('id', { count: 'exact', head: true })
+          .eq('dev_sold', true);
+
         return jsonResponse({
           success: true,
           status: 'healthy',
           watchingCount: watchingCount || 0,
           staleCount: staleCount || 0,
+          devSoldCount: devSoldCount || 0,
         });
       }
 

@@ -19,27 +19,45 @@ interface WatchlistToken {
   bundle_score: number | null;
   bonding_curve_pct: number | null;
   market_cap_sol: number | null;
+  has_image: boolean | null;
+  socials_count: number | null;
+  image_url: string | null;
+  twitter_url: string | null;
+  telegram_url: string | null;
+  website_url: string | null;
 }
 
-// Analyze token risk (bundle detection)
-async function analyzeTokenRisk(mint: string): Promise<{ bundleScore: number; details: any }> {
+interface HolderAnalysis {
+  bundleScore: number;
+  holderCount: number;
+  top5Percent: number;
+  maxSingleWalletPct: number;
+  details: any;
+}
+
+// Analyze token risk (bundle detection + holder concentration)
+async function analyzeTokenRisk(mint: string): Promise<HolderAnalysis> {
   try {
     const response = await fetch(`https://data.solanatracker.io/tokens/${mint}/holders`);
     if (!response.ok) {
-      return { bundleScore: 0, details: { error: 'Failed to fetch holders' } };
+      return { bundleScore: 0, holderCount: 0, top5Percent: 0, maxSingleWalletPct: 0, details: { error: 'Failed to fetch holders' } };
     }
     
     const data = await response.json();
     const holders = Array.isArray(data) ? data : (data.holders || []);
     
     if (!Array.isArray(holders) || holders.length === 0) {
-      return { bundleScore: 0, details: { holderCount: 0 } };
+      return { bundleScore: 0, holderCount: 0, top5Percent: 0, maxSingleWalletPct: 0, details: { holderCount: 0 } };
     }
     
     // Calculate supply concentration
     const totalSupply = holders.reduce((sum: number, h: any) => sum + (h.amount || 0), 0);
     const top5Holdings = holders.slice(0, 5).reduce((sum: number, h: any) => sum + (h.amount || 0), 0);
     const top5Percent = totalSupply > 0 ? (top5Holdings / totalSupply) * 100 : 0;
+    
+    // Calculate max single wallet percentage
+    const maxHolding = holders.length > 0 ? Math.max(...holders.map((h: any) => h.amount || 0)) : 0;
+    const maxSingleWalletPct = totalSupply > 0 ? (maxHolding / totalSupply) * 100 : 0;
     
     // High concentration = higher bundle score
     let bundleScore = 0;
@@ -51,14 +69,18 @@ async function analyzeTokenRisk(mint: string): Promise<{ bundleScore: number; de
     
     return {
       bundleScore,
+      holderCount: holders.length,
+      top5Percent,
+      maxSingleWalletPct,
       details: {
         holderCount: holders.length,
         top5Percent: top5Percent.toFixed(2),
+        maxSingleWalletPct: maxSingleWalletPct.toFixed(2),
       }
     };
   } catch (error) {
     console.error(`Error analyzing risk for ${mint}:`, error);
-    return { bundleScore: 0, details: { error: String(error) } };
+    return { bundleScore: 0, holderCount: 0, top5Percent: 0, maxSingleWalletPct: 0, details: { error: String(error) } };
   }
 }
 
@@ -100,7 +122,17 @@ async function getConfig(supabase: any) {
     max_token_age_minutes: data?.max_token_age_minutes ?? 60,
     bonding_curve_min: data?.bonding_curve_min ?? 5,
     bonding_curve_max: data?.bonding_curve_max ?? 95,
+    require_image: data?.require_image ?? false,
+    min_socials_count: data?.min_socials_count ?? 0,
+    max_single_wallet_pct: data?.max_single_wallet_pct ?? 15,
   };
+}
+
+// Check if image URL is valid (not null, not placeholder)
+function isValidImage(imageUrl: string | null | undefined): boolean {
+  if (!imageUrl || imageUrl.trim() === '') return false;
+  if (imageUrl.includes('placeholder')) return false;
+  return true;
 }
 
 // Process a batch of pending tokens
@@ -108,10 +140,11 @@ async function enrichTokenBatch(
   supabase: any,
   tokens: WatchlistToken[],
   config: any
-): Promise<{ enriched: number; promoted: number; rejected: number }> {
+): Promise<{ enriched: number; promoted: number; rejected: number; softRejected: number }> {
   let enriched = 0;
   let promoted = 0;
   let rejected = 0;
+  let softRejected = 0;
   
   for (const token of tokens) {
     console.log(`\n📊 Enriching: ${token.token_symbol} (${token.token_mint.slice(0, 8)}...)`);
@@ -144,6 +177,8 @@ async function enrichTokenBatch(
           .update({
             status: 'rejected',
             rejection_reason: 'token_too_old',
+            rejection_type: 'permanent',
+            rejection_reasons: ['token_too_old'],
             removed_at: new Date().toISOString(),
             price_usd: priceUsd,
             volume_sol: volumeSol,
@@ -158,50 +193,79 @@ async function enrichTokenBatch(
       }
     }
     
-    // Analyze bundle risk
-    const { bundleScore, details } = await analyzeTokenRisk(token.token_mint);
+    // Analyze bundle risk and holder concentration
+    const holderAnalysis = await analyzeTokenRisk(token.token_mint);
     
     // Extract data
-    const holderCount = tokenData?.holders || details.holderCount || token.holder_count || 0;
+    const holderCount = tokenData?.holders || holderAnalysis.holderCount || token.holder_count || 0;
     const marketCapSol = tokenData?.pools?.[0]?.marketCap?.quote || token.market_cap_sol || 0;
     const bondingCurve = pumpData?.bonding_curve_progress 
       ? pumpData.bonding_curve_progress * 100 
       : (tokenData?.pools?.[0]?.curvePercentage || token.bonding_curve_pct || 0);
     
+    // Check image and socials (use existing if we have them, otherwise fetch)
+    const hasImage = token.has_image ?? isValidImage(token.image_url);
+    const socialsCount = token.socials_count ?? [token.twitter_url, token.telegram_url, token.website_url]
+      .filter(s => s && s.trim() !== '').length;
+    
+    // Build rejection reasons array
+    const rejectionReasons: string[] = [];
+    let isPermanentReject = false;
+    
+    // BUNDLE SCORE CHECK - SOFT
+    if (holderAnalysis.bundleScore > config.max_bundle_score) {
+      rejectionReasons.push(`bundle:${holderAnalysis.bundleScore}>${config.max_bundle_score}`);
+    }
+    
+    // MAX SINGLE WALLET CHECK - SOFT
+    if (holderAnalysis.maxSingleWalletPct > config.max_single_wallet_pct) {
+      rejectionReasons.push(`single_wallet:${holderAnalysis.maxSingleWalletPct.toFixed(1)}%>${config.max_single_wallet_pct}%`);
+    }
+    
+    // IMAGE CHECK - SOFT (only if required)
+    if (config.require_image && !hasImage) {
+      rejectionReasons.push('no_image');
+    }
+    
+    // SOCIALS CHECK - SOFT (only if required)
+    if (socialsCount < config.min_socials_count) {
+      rejectionReasons.push(`low_socials:${socialsCount}<${config.min_socials_count}`);
+    }
+    
     // Decision log - track all criteria
     const criteria = {
-      bundleScore: { value: bundleScore, max: config.max_bundle_score, pass: bundleScore <= config.max_bundle_score },
+      bundleScore: { value: holderAnalysis.bundleScore, max: config.max_bundle_score, pass: holderAnalysis.bundleScore <= config.max_bundle_score },
       holderCount: { value: holderCount, min: config.min_holder_count, pass: true }, // Not blocking, just tracking
       bondingCurve: { value: bondingCurve, min: config.bonding_curve_min, max: config.bonding_curve_max, 
         pass: bondingCurve >= config.bonding_curve_min && bondingCurve <= config.bonding_curve_max },
+      maxSingleWallet: { value: holderAnalysis.maxSingleWalletPct, max: config.max_single_wallet_pct, 
+        pass: holderAnalysis.maxSingleWalletPct <= config.max_single_wallet_pct },
+      hasImage: { value: hasImage, required: config.require_image, pass: !config.require_image || hasImage },
+      socialsCount: { value: socialsCount, min: config.min_socials_count, pass: socialsCount >= config.min_socials_count },
     };
     
     console.log(`   📋 DECISION CRITERIA:`);
-    console.log(`      Bundle Score: ${bundleScore} (max: ${config.max_bundle_score}) ${criteria.bundleScore.pass ? '✅' : '❌'}`);
+    console.log(`      Bundle Score: ${holderAnalysis.bundleScore} (max: ${config.max_bundle_score}) ${criteria.bundleScore.pass ? '✅' : '❌'}`);
+    console.log(`      Max Single Wallet: ${holderAnalysis.maxSingleWalletPct.toFixed(1)}% (max: ${config.max_single_wallet_pct}%) ${criteria.maxSingleWallet.pass ? '✅' : '❌'}`);
     console.log(`      Holders: ${holderCount} (tracking, min for qual: ${config.min_holder_count})`);
     console.log(`      Bonding Curve: ${bondingCurve.toFixed(1)}% (range: ${config.bonding_curve_min}-${config.bonding_curve_max}%) ${criteria.bondingCurve.pass ? '✅' : '⚠️'}`);
+    console.log(`      Has Image: ${hasImage} (required: ${config.require_image}) ${criteria.hasImage.pass ? '✅' : '❌'}`);
+    console.log(`      Socials: ${socialsCount} (min: ${config.min_socials_count}) ${criteria.socialsCount.pass ? '✅' : '❌'}`);
     console.log(`      Price: $${priceUsd?.toFixed(8) || 'N/A'}, Volume: ${volumeSol} SOL, MCap: $${marketCapUsd || 'N/A'}`);
     
-    // Check rejection criteria
-    let shouldReject = false;
-    let rejectionReason = '';
-    let rejectionDetails: string[] = [];
-    
-    if (bundleScore > config.max_bundle_score) {
-      shouldReject = true;
-      rejectionDetails.push(`bundle:${bundleScore}>${config.max_bundle_score}`);
-    }
-    
-    rejectionReason = rejectionDetails.join(', ');
+    const shouldReject = rejectionReasons.length > 0;
+    const rejectionType = isPermanentReject ? 'permanent' : 'soft';
     
     if (shouldReject) {
-      console.log(`   ❌ REJECTED: ${rejectionReason}`);
+      console.log(`   ❌ REJECTED (${rejectionType}): ${rejectionReasons.join(', ')}`);
       await supabase
         .from('pumpfun_watchlist')
         .update({
           status: 'rejected',
-          rejection_reason: rejectionReason,
-          bundle_score: bundleScore,
+          rejection_reason: rejectionReasons.join(', '),
+          rejection_type: rejectionType,
+          rejection_reasons: rejectionReasons,
+          bundle_score: holderAnalysis.bundleScore,
           holder_count: holderCount,
           market_cap_sol: marketCapSol,
           bonding_curve_pct: bondingCurve,
@@ -210,22 +274,29 @@ async function enrichTokenBatch(
           volume_sol: volumeSol,
           market_cap_usd: marketCapUsd,
           liquidity_usd: liquidityUsd,
+          max_single_wallet_pct: holderAnalysis.maxSingleWalletPct,
+          has_image: hasImage,
+          socials_count: socialsCount,
           removed_at: new Date().toISOString(),
           last_checked_at: new Date().toISOString(),
         })
         .eq('id', token.id);
         
-      rejected++;
+      if (isPermanentReject) {
+        rejected++;
+      } else {
+        softRejected++;
+      }
     } else {
       // Promote to watching with reason
-      const promotionReason = `bundle:${bundleScore}/${config.max_bundle_score}, holders:${holderCount}, bc:${bondingCurve.toFixed(0)}%`;
+      const promotionReason = `bundle:${holderAnalysis.bundleScore}/${config.max_bundle_score}, holders:${holderCount}, bc:${bondingCurve.toFixed(0)}%, maxWallet:${holderAnalysis.maxSingleWalletPct.toFixed(1)}%`;
       console.log(`   ✅ PROMOTED to watching: ${promotionReason}`);
       
       await supabase
         .from('pumpfun_watchlist')
         .update({
           status: 'watching',
-          bundle_score: bundleScore,
+          bundle_score: holderAnalysis.bundleScore,
           holder_count: holderCount,
           market_cap_sol: marketCapSol,
           bonding_curve_pct: bondingCurve,
@@ -235,6 +306,9 @@ async function enrichTokenBatch(
           volume_sol: volumeSol,
           market_cap_usd: marketCapUsd,
           liquidity_usd: liquidityUsd,
+          max_single_wallet_pct: holderAnalysis.maxSingleWalletPct,
+          has_image: hasImage,
+          socials_count: socialsCount,
           last_checked_at: new Date().toISOString(),
           created_at_blockchain: createdAt ? new Date(createdAt * 1000).toISOString() : null,
           qualification_reason: promotionReason, // Store the promotion criteria for reference
@@ -250,7 +324,7 @@ async function enrichTokenBatch(
     await new Promise(resolve => setTimeout(resolve, 500));
   }
   
-  return { enriched, promoted, rejected };
+  return { enriched, promoted, rejected, softRejected };
 }
 
 serve(async (req) => {
@@ -275,7 +349,7 @@ serve(async (req) => {
       // Get pending_triage tokens
       const { data: pendingTokens, error } = await supabase
         .from('pumpfun_watchlist')
-        .select('id, token_mint, token_symbol, status, holder_count, bundle_score, bonding_curve_pct, market_cap_sol')
+        .select('id, token_mint, token_symbol, status, holder_count, bundle_score, bonding_curve_pct, market_cap_sol, has_image, socials_count, image_url, twitter_url, telegram_url, website_url')
         .eq('status', 'pending_triage')
         .order('created_at', { ascending: true })
         .limit(BATCH_SIZE);
@@ -288,7 +362,7 @@ serve(async (req) => {
         return new Response(JSON.stringify({
           success: true,
           message: 'No pending tokens to enrich',
-          stats: { enriched: 0, promoted: 0, rejected: 0 }
+          stats: { enriched: 0, promoted: 0, rejected: 0, softRejected: 0 }
         }), {
           headers: { ...corsHeaders, 'Content-Type': 'application/json' }
         });
@@ -301,7 +375,8 @@ serve(async (req) => {
       console.log('\n📊 Enrichment Summary:');
       console.log(`   Enriched: ${stats.enriched}`);
       console.log(`   Promoted: ${stats.promoted}`);
-      console.log(`   Rejected: ${stats.rejected}`);
+      console.log(`   Rejected (permanent): ${stats.rejected}`);
+      console.log(`   Rejected (soft): ${stats.softRejected}`);
       
       return new Response(JSON.stringify({
         success: true,
@@ -315,13 +390,15 @@ serve(async (req) => {
       // Get counts by status
       const { data: statusCounts } = await supabase
         .from('pumpfun_watchlist')
-        .select('status')
+        .select('status, rejection_type')
         .in('status', ['pending_triage', 'watching', 'rejected', 'qualified', 'dead']);
         
       const counts = {
         pending_triage: 0,
         watching: 0,
         rejected: 0,
+        rejected_soft: 0,
+        rejected_permanent: 0,
         qualified: 0,
         dead: 0,
       };
@@ -329,6 +406,10 @@ serve(async (req) => {
       statusCounts?.forEach((row: any) => {
         if (row.status in counts) {
           counts[row.status as keyof typeof counts]++;
+        }
+        if (row.status === 'rejected') {
+          if (row.rejection_type === 'soft') counts.rejected_soft++;
+          else if (row.rejection_type === 'permanent') counts.rejected_permanent++;
         }
       });
       
