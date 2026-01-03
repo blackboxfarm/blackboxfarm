@@ -191,7 +191,7 @@ async function processNewToken(
   console.log(`   Creator: ${traderPublicKey}`);
   console.log(`   Initial MC: ${marketCapSol.toFixed(4)} SOL`);
   
-  // Check if token already exists
+  // Check if token already exists by mint
   const { data: existing } = await supabase
     .from('pumpfun_watchlist')
     .select('id')
@@ -201,6 +201,59 @@ async function processNewToken(
   if (existing) {
     console.log(`   ⏭️ Already in watchlist, skipping`);
     return { success: false, reason: 'already_exists' };
+  }
+  
+  // === DUPLICATE TICKER CHECK ===
+  // Check if same ticker already exists in watching/qualified status (reject scam copies)
+  if (symbol) {
+    const { data: duplicateTickers, error: dupError } = await supabase
+      .from('pumpfun_watchlist')
+      .select('id, token_mint, token_symbol, status, first_seen_at, holder_count')
+      .eq('token_symbol', symbol.toUpperCase())
+      .in('status', ['watching', 'qualified', 'buy_now', 'pending_triage'])
+      .order('first_seen_at', { ascending: true })
+      .limit(5);
+    
+    if (!dupError && duplicateTickers && duplicateTickers.length > 0) {
+      // There's already a token with this ticker - reject as duplicate
+      const originalToken = duplicateTickers[0];
+      console.log(`   🚫 DUPLICATE TICKER REJECTED: ${symbol} - already exists as ${originalToken.token_mint.slice(0,8)}... (${originalToken.status}, ${originalToken.holder_count || 0} holders)`);
+      
+      // Fetch metadata for social links and image
+      let metadata: TokenMetadata | null = null;
+      if (uri) {
+        metadata = await fetchTokenMetadata(uri);
+      }
+      
+      const socialsCount = [metadata?.twitter, metadata?.telegram, metadata?.website]
+        .filter(s => s && s.trim() !== '').length;
+      const hasImage = !!(metadata?.image && metadata.image !== '' && !metadata.image.includes('placeholder'));
+      
+      // Insert as rejected (permanent - scam/copycat)
+      await supabase.from('pumpfun_watchlist').insert({
+        token_mint: mint,
+        token_name: name,
+        token_symbol: symbol,
+        creator_wallet: traderPublicKey,
+        status: 'rejected',
+        rejection_reason: `duplicate_ticker:${originalToken.token_mint.slice(0,8)}`,
+        rejection_type: 'permanent',
+        rejection_reasons: ['duplicate_ticker', 'copycat_scam'],
+        source: 'websocket',
+        created_at_blockchain: new Date().toISOString(),
+        bonding_curve_pct: (vSolInBondingCurve / 85) * 100,
+        market_cap_sol: marketCapSol,
+        has_image: hasImage,
+        socials_count: socialsCount,
+        image_url: metadata?.image || null,
+        twitter_url: metadata?.twitter || null,
+        telegram_url: metadata?.telegram || null,
+        website_url: metadata?.website || null,
+        removal_reason: `Duplicate ticker - original: ${originalToken.token_mint}`,
+      });
+      
+      return { success: false, reason: 'duplicate_ticker' };
+    }
   }
   
   // Fetch metadata for social links and image
