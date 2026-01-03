@@ -114,6 +114,70 @@ async function fetchWithBackoff(url: string, options: RequestInit, maxRetries = 
   throw lastError || new Error('Max retries exceeded');
 }
 
+// Fetch token metrics from HELIUS API (PRIMARY FALLBACK - most reliable)
+async function fetchHeliusMetrics(mint: string): Promise<TokenMetrics | null> {
+  const heliusApiKey = Deno.env.get('HELIUS_API_KEY');
+  if (!heliusApiKey) {
+    console.log(`   ⚠️ HELIUS_API_KEY not set`);
+    return null;
+  }
+
+  try {
+    // Use Helius DAS API for token info
+    const response = await fetch(`https://mainnet.helius-rpc.com/?api-key=${heliusApiKey}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        jsonrpc: '2.0',
+        id: 'helius-token-metrics',
+        method: 'getAsset',
+        params: { id: mint }
+      })
+    });
+
+    if (!response.ok) {
+      console.log(`   📊 Helius API error for ${mint}: ${response.status}`);
+      return null;
+    }
+
+    const data = await response.json();
+    
+    if (data.error) {
+      console.log(`   📊 Helius error: ${data.error.message}`);
+      return null;
+    }
+
+    const asset = data.result;
+    if (!asset) {
+      console.log(`   📊 Helius: No asset data for ${mint}`);
+      return null;
+    }
+
+    // Helius provides supply info, try to get holder count from token_info
+    const tokenInfo = asset.token_info || {};
+    const supply = tokenInfo.supply || 0;
+    const decimals = tokenInfo.decimals || 6;
+    const pricePerToken = tokenInfo.price_info?.price_per_token || null;
+    
+    console.log(`   📊 Helius fallback: ${mint.slice(0, 8)} - price: $${pricePerToken?.toFixed(8) || 'N/A'}`);
+
+    // Helius doesn't give us holder count directly from getAsset, but it's reliable for price
+    return {
+      holders: 0, // Will need separate call or use cached value
+      volume24hSol: 0, // Helius doesn't provide this in getAsset
+      priceUsd: pricePerToken,
+      liquidityUsd: null,
+      marketCapUsd: pricePerToken && supply ? (pricePerToken * supply / Math.pow(10, decimals)) : null,
+      bondingCurvePct: null,
+      buys: 0,
+      sells: 0,
+    };
+  } catch (error) {
+    console.error(`Error fetching Helius metrics for ${mint}:`, error);
+    return null;
+  }
+}
+
 // Fetch token metrics from SolanaTracker API (better for pump.fun tokens)
 async function fetchSolanaTrackerMetrics(mint: string): Promise<TokenMetrics | null> {
   try {
@@ -233,7 +297,7 @@ async function fetchJupiterPrice(mint: string): Promise<number | null> {
   }
 }
 
-// Fetch token metrics from pump.fun API with fallbacks: SolanaTracker -> DexScreener -> Jupiter
+// Fetch token metrics from pump.fun API with fallbacks: Helius -> SolanaTracker -> DexScreener -> Jupiter
 async function fetchPumpFunMetrics(mint: string): Promise<TokenMetrics | null> {
   try {
     const response = await fetchWithBackoff(
@@ -243,21 +307,28 @@ async function fetchPumpFunMetrics(mint: string): Promise<TokenMetrics | null> {
 
     // If pump.fun returns 5xx error, try fallbacks
     if (response.status >= 500) {
-      console.log(`   ⚠️ pump.fun API error ${response.status} for ${mint}, trying fallbacks...`);
+      console.log(`   ⚠️ pump.fun API error ${response.status} for ${mint}, trying HELIUS first...`);
       
-      // Fallback 1: SolanaTracker (best for pump.fun tokens - has holder count)
+      // Fallback 1: HELIUS (most reliable - primary fallback)
+      const heliusMetrics = await fetchHeliusMetrics(mint);
+      if (heliusMetrics && heliusMetrics.priceUsd && heliusMetrics.priceUsd > 0) {
+        console.log(`   ✅ Helius returned valid data for ${mint}`);
+        return heliusMetrics;
+      }
+      
+      // Fallback 2: SolanaTracker (has holder count)
       const stMetrics = await fetchSolanaTrackerMetrics(mint);
       if (stMetrics && stMetrics.holders > 0) {
         return stMetrics;
       }
       
-      // Fallback 2: DexScreener (better for graduated tokens)
+      // Fallback 3: DexScreener (better for graduated tokens)
       const dexMetrics = await fetchDexScreenerMetrics(mint);
       if (dexMetrics && dexMetrics.priceUsd && dexMetrics.priceUsd > 0) {
         return dexMetrics;
       }
       
-      // Fallback 3: Jupiter for price only (last resort)
+      // Fallback 4: Jupiter for price only (last resort)
       const jupPrice = await fetchJupiterPrice(mint);
       if (jupPrice) {
         return {
@@ -273,7 +344,7 @@ async function fetchPumpFunMetrics(mint: string): Promise<TokenMetrics | null> {
       }
       
       // All fallbacks failed
-      console.log(`   ❌ All API fallbacks failed for ${mint}`);
+      console.log(`   ❌ All API fallbacks (Helius, SolanaTracker, DexScreener, Jupiter) failed for ${mint}`);
       return null;
     }
 
@@ -281,9 +352,15 @@ async function fetchPumpFunMetrics(mint: string): Promise<TokenMetrics | null> {
       if (response.status === 404) {
         return { holders: 0, volume24hSol: 0, priceUsd: null, liquidityUsd: null, marketCapUsd: null, bondingCurvePct: null, buys: 0, sells: 0 };
       }
-      console.error(`pump.fun API error for ${mint}: ${response.status}`);
+      console.error(`pump.fun API error for ${mint}: ${response.status}, trying Helius...`);
       
-      // Try SolanaTracker first for non-5xx errors
+      // Try Helius first for non-5xx errors too
+      const heliusMetrics = await fetchHeliusMetrics(mint);
+      if (heliusMetrics && heliusMetrics.priceUsd && heliusMetrics.priceUsd > 0) {
+        return heliusMetrics;
+      }
+      
+      // Then SolanaTracker
       const stMetrics = await fetchSolanaTrackerMetrics(mint);
       if (stMetrics && stMetrics.holders > 0) {
         return stMetrics;
@@ -324,7 +401,13 @@ async function fetchPumpFunMetrics(mint: string): Promise<TokenMetrics | null> {
   } catch (error) {
     console.error(`Error fetching pump.fun metrics for ${mint}:`, error);
     
-    // Try SolanaTracker first on error
+    // Try Helius first on error
+    const heliusMetrics = await fetchHeliusMetrics(mint);
+    if (heliusMetrics && heliusMetrics.priceUsd && heliusMetrics.priceUsd > 0) {
+      return heliusMetrics;
+    }
+    
+    // Then SolanaTracker
     const stMetrics = await fetchSolanaTrackerMetrics(mint);
     if (stMetrics && stMetrics.holders > 0) {
       return stMetrics;
