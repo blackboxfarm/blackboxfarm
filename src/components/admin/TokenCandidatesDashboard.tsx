@@ -330,6 +330,7 @@ export function TokenCandidatesDashboard() {
   const [polling, setPolling] = useState(false);
   const [mainTab, setMainTab] = useState<'watchlist' | 'candidates' | 'fantasy' | 'logs'>('watchlist');
   const [watchlistFilter, setWatchlistFilter] = useState<'all' | 'watching' | 'qualified' | 'rejected' | 'dead'>('all');
+  const [fantasyFilter, setFantasyFilter] = useState<'open' | 'closed' | 'all'>('open');
   const [candidateFilter, setCandidateFilter] = useState<'all' | 'pending' | 'approved' | 'rejected'>('all');
   const [logsFilter, setLogsFilter] = useState<'all' | 'rejected' | 'accepted'>('all');
   const [configEdits, setConfigEdits] = useState<Partial<MonitorConfig>>({});
@@ -457,11 +458,19 @@ export function TokenCandidatesDashboard() {
     setLoadingFantasy(true);
     try {
       // Fetch positions with watchlist join for first_seen_at and qualified_at
-      const { data: positions, error: posError } = await supabase
+      // Filter by status based on fantasyFilter
+      let query = supabase
         .from('pumpfun_fantasy_positions')
         .select('*, pumpfun_watchlist:watchlist_id(first_seen_at, qualified_at)')
         .order('created_at', { ascending: false })
         .limit(100);
+
+      // Apply status filter (default to 'open' to avoid showing duplicates)
+      if (fantasyFilter !== 'all') {
+        query = query.eq('status', fantasyFilter);
+      }
+
+      const { data: positions, error: posError } = await query;
 
       if (posError) throw posError;
       setFantasyPositions((positions || []) as FantasyPosition[]);
@@ -479,7 +488,7 @@ export function TokenCandidatesDashboard() {
     } finally {
       setLoadingFantasy(false);
     }
-  }, []);
+  }, [fantasyFilter]);
 
   // Reset kill switch
   const resetKillSwitch = async () => {
@@ -540,6 +549,13 @@ export function TokenCandidatesDashboard() {
       supabase.removeChannel(channel);
     };
   }, [fetchWatchlist, fetchCandidates, fetchConfig, fetchDiscoveryLogs, fetchSafeguardStatus]);
+
+  // Refetch fantasy data when filter changes
+  useEffect(() => {
+    if (mainTab === 'fantasy') {
+      fetchFantasyData();
+    }
+  }, [fantasyFilter, fetchFantasyData, mainTab]);
 
   // Continuous polling effect
   useEffect(() => {
@@ -1616,9 +1632,32 @@ export function TokenCandidatesDashboard() {
                   Fantasy Mode Positions
                   {config?.fantasy_mode_enabled && <Badge variant="outline" className="bg-green-500/10 text-green-500">Active</Badge>}
                 </CardTitle>
-                <Button variant="outline" size="sm" onClick={fetchFantasyData} disabled={loadingFantasy}>
-                  {loadingFantasy ? <RefreshCw className="h-3 w-3 animate-spin" /> : <RefreshCw className="h-3 w-3" />}
-                </Button>
+                <div className="flex items-center gap-2">
+                  {/* Status filter tabs */}
+                  <div className="flex items-center border rounded-md overflow-hidden">
+                    <button
+                      className={`px-3 py-1 text-xs font-medium transition-colors ${fantasyFilter === 'open' ? 'bg-primary text-primary-foreground' : 'bg-muted hover:bg-muted/80'}`}
+                      onClick={() => setFantasyFilter('open')}
+                    >
+                      Open
+                    </button>
+                    <button
+                      className={`px-3 py-1 text-xs font-medium transition-colors ${fantasyFilter === 'closed' ? 'bg-primary text-primary-foreground' : 'bg-muted hover:bg-muted/80'}`}
+                      onClick={() => setFantasyFilter('closed')}
+                    >
+                      Closed
+                    </button>
+                    <button
+                      className={`px-3 py-1 text-xs font-medium transition-colors ${fantasyFilter === 'all' ? 'bg-primary text-primary-foreground' : 'bg-muted hover:bg-muted/80'}`}
+                      onClick={() => setFantasyFilter('all')}
+                    >
+                      All
+                    </button>
+                  </div>
+                  <Button variant="outline" size="sm" onClick={fetchFantasyData} disabled={loadingFantasy}>
+                    {loadingFantasy ? <RefreshCw className="h-3 w-3 animate-spin" /> : <RefreshCw className="h-3 w-3" />}
+                  </Button>
+                </div>
               </div>
             </CardHeader>
             <CardContent>

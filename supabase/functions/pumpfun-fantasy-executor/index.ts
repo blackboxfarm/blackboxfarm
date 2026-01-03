@@ -233,17 +233,19 @@ async function executeFantasyBuys(supabase: any): Promise<ExecutorStats> {
     stats.tokensProcessed++;
 
     try {
-      // Check if an open position already exists for this token
-      const { data: existingPosition } = await supabase
+      // Check if ANY position (open OR closed) exists for this token within last 24 hours
+      // This prevents re-buying tokens that we already traded recently
+      const twentyFourHoursAgo = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+      const { data: recentPosition } = await supabase
         .from('pumpfun_fantasy_positions')
-        .select('id')
+        .select('id, status, created_at')
         .eq('token_mint', token.token_mint)
-        .eq('status', 'open')
+        .gte('created_at', twentyFourHoursAgo)
         .limit(1)
         .maybeSingle();
 
-      if (existingPosition) {
-        console.log(`⚠️ Position already exists for ${token.token_symbol}, skipping`);
+      if (recentPosition) {
+        console.log(`⚠️ Already traded ${token.token_symbol} within 24h (status: ${recentPosition.status}), skipping`);
         continue;
       }
 
