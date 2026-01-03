@@ -181,17 +181,16 @@ serve(async (req) => {
 
     // Calculate 12-hour cutoff
     const twelveHoursAgo = new Date(Date.now() - 12 * 60 * 60 * 1000).toISOString();
-    console.log(`[telegram-fantasy-price-monitor] Only processing positions created after ${twelveHoursAgo}`);
+    console.log(`[telegram-fantasy-price-monitor] 12-hour cutoff: ${twelveHoursAgo}`);
 
-    // Get ACTIVE open fantasy positions only (within 12 hours)
-    const { data: positions, error: fetchError } = await supabase
+    // Get ALL ACTIVE open fantasy positions (we'll filter intelligently)
+    const { data: allPositions, error: fetchError } = await supabase
       .from('telegram_fantasy_positions')
       .select('*')
       .eq('status', 'open')
-      .eq('is_active', true)
-      .gt('created_at', twelveHoursAgo);
+      .eq('is_active', true);
 
-    // Also fetch sold positions that have trail tracking enabled (within 12 hours)
+    // Also fetch sold positions that have trail tracking enabled (within 12 hours only)
     const { data: soldPositions, error: soldFetchError } = await supabase
       .from('telegram_fantasy_positions')
       .select('*')
@@ -207,20 +206,54 @@ serve(async (req) => {
       }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 500 });
     }
 
-    const allOpenPositions = positions || [];
+    // Smart pruning:
+    // - Under 12 hours: always monitor (dipping is OK)
+    // - Over 12 hours: only monitor if showing positive momentum towards target
+    const now = new Date();
+    const positions = (allPositions || []).filter((p: FantasyPosition) => {
+      const createdAt = new Date(p.created_at);
+      const ageHours = (now.getTime() - createdAt.getTime()) / (1000 * 60 * 60);
+      
+      if (ageHours <= 12) {
+        return true; // Under 12 hours - always monitor
+      }
+      
+      // Over 12 hours - check if price is moving towards target
+      const currentPrice = p.current_price_usd || 0;
+      const entryPrice = p.entry_price_usd || 0;
+      
+      if (currentPrice <= 0 || entryPrice <= 0) {
+        console.log(`[telegram-fantasy-price-monitor] Pruning ${p.token_symbol || p.token_mint.slice(0, 8)}: no price data, age ${ageHours.toFixed(1)}h`);
+        return false; // No price data - don't waste API calls
+      }
+      
+      const currentMultiplier = currentPrice / entryPrice;
+      
+      // Keep if price is at least 0.5x (not totally crashed) AND showing some life
+      if (currentMultiplier >= 0.5) {
+        return true; // Still has potential
+      }
+      
+      console.log(`[telegram-fantasy-price-monitor] Pruning ${p.token_symbol || p.token_mint.slice(0, 8)}: ${currentMultiplier.toFixed(2)}x at ${ageHours.toFixed(1)}h old`);
+      return false;
+    });
+
+    const allOpenPositions = positions;
     const allSoldPositions = soldPositions || [];
+    const prunedCount = (allPositions?.length || 0) - allOpenPositions.length;
     
     if (allOpenPositions.length === 0 && allSoldPositions.length === 0) {
       return new Response(JSON.stringify({
         success: true,
-        message: 'No positions to monitor within 12-hour window',
+        message: 'No positions to monitor after pruning',
         updated: 0,
         autoSold: 0,
-        trailsUpdated: 0
+        trailsUpdated: 0,
+        pruned: prunedCount
       }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
 
-    console.log(`[telegram-fantasy-price-monitor] Found ${allOpenPositions.length} active open positions, ${allSoldPositions.length} sold positions with trail tracking (within 12h)`);
+    console.log(`[telegram-fantasy-price-monitor] Monitoring ${allOpenPositions.length} positions (pruned ${prunedCount} old/crashed), ${allSoldPositions.length} sold with trail tracking`);
 
     // Get unique token mints from both open and sold positions
     const allMints = [
@@ -352,10 +385,10 @@ serve(async (req) => {
         console.log(`[telegram-fantasy-price-monitor] New peak for ${position.token_symbol || position.token_mint}: ${data.price} (${currentMultiplier.toFixed(2)}x)`);
       }
 
-      // Fetch ATH data if not already set or if price is higher than recorded ATH
-      if (!position.ath_price_usd || data.price > position.ath_price_usd) {
+      // Only fetch ATH if not already set (reduces API calls significantly)
+      if (!position.ath_price_usd) {
         const athData = await fetchATHData(position.token_mint, entryPrice);
-        if (athData && (!position.ath_price_usd || athData.athPrice > position.ath_price_usd)) {
+        if (athData) {
           updateObj.ath_price_usd = athData.athPrice;
           updateObj.ath_at = athData.athAt;
           updateObj.ath_multiplier = athData.athMultiplier;
@@ -440,7 +473,7 @@ serve(async (req) => {
       }
     }
 
-    console.log(`[telegram-fantasy-price-monitor] Updated ${updatedCount} open positions, auto-sold ${autoSoldCount}, trails updated ${trailsUpdated}, ATH updated ${athUpdated}`);
+    console.log(`[telegram-fantasy-price-monitor] Updated ${updatedCount} open positions, auto-sold ${autoSoldCount}, trails updated ${trailsUpdated}, ATH updated ${athUpdated}, pruned ${prunedCount}`);
 
     return new Response(JSON.stringify({
       success: true,
@@ -448,6 +481,7 @@ serve(async (req) => {
       autoSold: autoSoldCount,
       trailsUpdated: trailsUpdated,
       athUpdated: athUpdated,
+      pruned: prunedCount,
       totalOpenPositions: allOpenPositions.length,
       totalSoldPositions: allSoldPositions.length,
       updates,
