@@ -9,6 +9,8 @@ const corsHeaders = {
 interface TokenData {
   price: number;
   symbol: string | null;
+  athPrice?: number;
+  athAt?: string;
 }
 
 interface FantasyPosition {
@@ -30,6 +32,10 @@ interface FantasyPosition {
   trail_tracking_enabled: boolean | null;
   trail_peak_price_usd: number | null;
   trail_low_price_usd: number | null;
+  created_at: string;
+  ath_price_usd: number | null;
+  ath_at: string | null;
+  ath_multiplier: number | null;
 }
 
 // Fetch token prices and symbols in batch from Jupiter + DexScreener
@@ -84,6 +90,83 @@ async function fetchTokenData(tokenMints: string[]): Promise<Record<string, Toke
   return tokenData;
 }
 
+// Fetch ATH data from GeckoTerminal OHLCV
+async function fetchATHData(tokenMint: string, entryPriceUsd: number): Promise<{ athPrice: number; athAt: string; athMultiplier: number } | null> {
+  try {
+    // First find pool on GeckoTerminal
+    const searchRes = await fetch(`https://api.geckoterminal.com/api/v2/search/pools?query=${tokenMint}&network=solana`);
+    const searchData = await searchRes.json();
+    const pool = searchData?.data?.[0];
+    
+    if (!pool) {
+      console.log(`[telegram-fantasy-price-monitor] No pool found for ${tokenMint} on GeckoTerminal`);
+      return null;
+    }
+    
+    const poolAddress = pool.attributes?.address || pool.id?.split('_')?.[1];
+    if (!poolAddress) return null;
+    
+    // Get OHLCV data (1-day candles for the past 30 days to find ATH)
+    const ohlcvRes = await fetch(
+      `https://api.geckoterminal.com/api/v2/networks/solana/pools/${poolAddress}/ohlcv/day?limit=30`
+    );
+    const ohlcvData = await ohlcvRes.json();
+    
+    if (!ohlcvData?.data?.attributes?.ohlcv_list?.length) {
+      // Try hourly for newer tokens
+      const hourlyRes = await fetch(
+        `https://api.geckoterminal.com/api/v2/networks/solana/pools/${poolAddress}/ohlcv/hour?limit=168`
+      );
+      const hourlyData = await hourlyRes.json();
+      
+      if (!hourlyData?.data?.attributes?.ohlcv_list?.length) return null;
+      
+      const candles = hourlyData.data.attributes.ohlcv_list;
+      let athPrice = 0;
+      let athTimestamp = 0;
+      
+      for (const candle of candles) {
+        const high = parseFloat(candle[2]); // High price
+        if (high > athPrice) {
+          athPrice = high;
+          athTimestamp = candle[0];
+        }
+      }
+      
+      if (athPrice <= 0) return null;
+      
+      return {
+        athPrice,
+        athAt: new Date(athTimestamp * 1000).toISOString(),
+        athMultiplier: entryPriceUsd > 0 ? athPrice / entryPriceUsd : 0
+      };
+    }
+    
+    const candles = ohlcvData.data.attributes.ohlcv_list;
+    let athPrice = 0;
+    let athTimestamp = 0;
+    
+    for (const candle of candles) {
+      const high = parseFloat(candle[2]); // High price
+      if (high > athPrice) {
+        athPrice = high;
+        athTimestamp = candle[0];
+      }
+    }
+    
+    if (athPrice <= 0) return null;
+    
+    return {
+      athPrice,
+      athAt: new Date(athTimestamp * 1000).toISOString(),
+      athMultiplier: entryPriceUsd > 0 ? athPrice / entryPriceUsd : 0
+    };
+  } catch (error) {
+    console.error(`[telegram-fantasy-price-monitor] Error fetching ATH for ${tokenMint}:`, error);
+    return null;
+  }
+}
+
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
@@ -96,19 +179,25 @@ serve(async (req) => {
 
     console.log('[telegram-fantasy-price-monitor] Starting price monitor scan...');
 
-    // Get ACTIVE open fantasy positions only
+    // Calculate 12-hour cutoff
+    const twelveHoursAgo = new Date(Date.now() - 12 * 60 * 60 * 1000).toISOString();
+    console.log(`[telegram-fantasy-price-monitor] Only processing positions created after ${twelveHoursAgo}`);
+
+    // Get ACTIVE open fantasy positions only (within 12 hours)
     const { data: positions, error: fetchError } = await supabase
       .from('telegram_fantasy_positions')
       .select('*')
       .eq('status', 'open')
-      .eq('is_active', true);
+      .eq('is_active', true)
+      .gt('created_at', twelveHoursAgo);
 
-    // Also fetch sold positions that have trail tracking enabled
+    // Also fetch sold positions that have trail tracking enabled (within 12 hours)
     const { data: soldPositions, error: soldFetchError } = await supabase
       .from('telegram_fantasy_positions')
       .select('*')
       .eq('status', 'sold')
-      .eq('trail_tracking_enabled', true);
+      .eq('trail_tracking_enabled', true)
+      .gt('created_at', twelveHoursAgo);
 
     if (fetchError) {
       console.error('[telegram-fantasy-price-monitor] Error fetching positions:', fetchError);
@@ -124,14 +213,14 @@ serve(async (req) => {
     if (allOpenPositions.length === 0 && allSoldPositions.length === 0) {
       return new Response(JSON.stringify({
         success: true,
-        message: 'No positions to monitor',
+        message: 'No positions to monitor within 12-hour window',
         updated: 0,
         autoSold: 0,
         trailsUpdated: 0
       }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
 
-    console.log(`[telegram-fantasy-price-monitor] Found ${allOpenPositions.length} active open positions, ${allSoldPositions.length} sold positions with trail tracking`);
+    console.log(`[telegram-fantasy-price-monitor] Found ${allOpenPositions.length} active open positions, ${allSoldPositions.length} sold positions with trail tracking (within 12h)`);
 
     // Get unique token mints from both open and sold positions
     const allMints = [
@@ -148,9 +237,11 @@ serve(async (req) => {
     let updatedCount = 0;
     let autoSoldCount = 0;
     let trailsUpdated = 0;
+    let athUpdated = 0;
     const autoSells: any[] = [];
     const updates: any[] = [];
     const trailUpdates: any[] = [];
+    const athUpdates: any[] = [];
 
     // Process open positions
     for (const position of allOpenPositions as FantasyPosition[]) {
@@ -261,6 +352,25 @@ serve(async (req) => {
         console.log(`[telegram-fantasy-price-monitor] New peak for ${position.token_symbol || position.token_mint}: ${data.price} (${currentMultiplier.toFixed(2)}x)`);
       }
 
+      // Fetch ATH data if not already set or if price is higher than recorded ATH
+      if (!position.ath_price_usd || data.price > position.ath_price_usd) {
+        const athData = await fetchATHData(position.token_mint, entryPrice);
+        if (athData && (!position.ath_price_usd || athData.athPrice > position.ath_price_usd)) {
+          updateObj.ath_price_usd = athData.athPrice;
+          updateObj.ath_at = athData.athAt;
+          updateObj.ath_multiplier = athData.athMultiplier;
+          athUpdated++;
+          athUpdates.push({
+            id: position.id,
+            token: data.symbol || position.token_symbol || position.token_mint.slice(0, 8),
+            athPrice: athData.athPrice,
+            athMultiplier: athData.athMultiplier.toFixed(2),
+            athAt: athData.athAt
+          });
+          console.log(`[telegram-fantasy-price-monitor] ATH for ${position.token_symbol || position.token_mint}: $${athData.athPrice} (${athData.athMultiplier.toFixed(2)}x)`);
+        }
+      }
+
       const { error: updateError } = await supabase
         .from('telegram_fantasy_positions')
         .update(updateObj)
@@ -330,18 +440,20 @@ serve(async (req) => {
       }
     }
 
-    console.log(`[telegram-fantasy-price-monitor] Updated ${updatedCount} open positions, auto-sold ${autoSoldCount}, trails updated ${trailsUpdated}`);
+    console.log(`[telegram-fantasy-price-monitor] Updated ${updatedCount} open positions, auto-sold ${autoSoldCount}, trails updated ${trailsUpdated}, ATH updated ${athUpdated}`);
 
     return new Response(JSON.stringify({
       success: true,
       updated: updatedCount,
       autoSold: autoSoldCount,
       trailsUpdated: trailsUpdated,
+      athUpdated: athUpdated,
       totalOpenPositions: allOpenPositions.length,
       totalSoldPositions: allSoldPositions.length,
       updates,
       autoSells,
       trailUpdates,
+      athUpdates,
       timestamp: new Date().toISOString()
     }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
 

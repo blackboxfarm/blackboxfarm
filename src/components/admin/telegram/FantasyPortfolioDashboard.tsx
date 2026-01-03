@@ -33,8 +33,11 @@ import {
   Ban,
   CheckCircle,
   Filter,
-  Twitter
+  Twitter,
+  LineChart,
+  Radio
 } from 'lucide-react';
+import { TokenChartModal } from './TokenChartModal';
 import { formatDistanceToNow } from 'date-fns';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 
@@ -93,6 +96,11 @@ interface FantasyPosition {
   rugcheck_passed: boolean | null;
   rugcheck_checked_at: string | null;
   skip_reason: string | null;
+  // NEW: Timestamp and ATH fields
+  message_received_at: string | null;
+  ath_price_usd: number | null;
+  ath_at: string | null;
+  ath_multiplier: number | null;
 }
 
 interface PortfolioStats {
@@ -963,13 +971,14 @@ export function FantasyPortfolioDashboard() {
                   <TableHead className="w-12">Active</TableHead>
                   <TableHead>Token</TableHead>
                   <TableHead>Channel</TableHead>
+                  <TableHead>Heard</TableHead>
                   <TableHead>Entry</TableHead>
                   <TableHead>Current</TableHead>
                   <TableHead>Peak 🏆</TableHead>
+                  <TableHead>ATH</TableHead>
                   <TableHead>Target</TableHead>
                   <TableHead className="w-32">Progress</TableHead>
                   <TableHead>P&L</TableHead>
-                  <TableHead>Age</TableHead>
                   <TableHead>Actions</TableHead>
                 </TableRow>
               </TableHeader>
@@ -1021,6 +1030,35 @@ export function FantasyPortfolioDashboard() {
                         </div>
                       </TableCell>
                       <TableCell>
+                        <TooltipProvider>
+                          <Tooltip>
+                            <TooltipTrigger>
+                              <div className="text-xs">
+                                <div className="flex items-center gap-1">
+                                  <Radio className="h-3 w-3 text-cyan-500" />
+                                  <span className="text-cyan-500 font-medium">
+                                    {pos.message_received_at 
+                                      ? formatDistanceToNow(new Date(pos.message_received_at), { addSuffix: true })
+                                      : formatDistanceToNow(new Date(pos.created_at), { addSuffix: true })}
+                                  </span>
+                                </div>
+                                <p className="text-muted-foreground">
+                                  Bought: {formatDistanceToNow(new Date(pos.created_at), { addSuffix: true })}
+                                </p>
+                              </div>
+                            </TooltipTrigger>
+                            <TooltipContent>
+                              <div className="space-y-1 text-xs">
+                                <p>Heard: {pos.message_received_at 
+                                  ? new Date(pos.message_received_at).toLocaleString()
+                                  : 'N/A'}</p>
+                                <p>Bought: {new Date(pos.created_at).toLocaleString()}</p>
+                              </div>
+                            </TooltipContent>
+                          </Tooltip>
+                        </TooltipProvider>
+                      </TableCell>
+                      <TableCell>
                         <div>
                           <span className="text-xs">${pos.entry_price_usd?.toFixed(8) || '0'}</span>
                           <p className="text-xs text-muted-foreground">${pos.entry_amount_usd}</p>
@@ -1047,6 +1085,29 @@ export function FantasyPortfolioDashboard() {
                               {formatPeakDate(pos.peak_price_at)}
                             </p>
                           </div>
+                        ) : (
+                          <span className="text-xs text-muted-foreground">-</span>
+                        )}
+                      </TableCell>
+                      <TableCell>
+                        {pos.ath_multiplier ? (
+                          <TooltipProvider>
+                            <Tooltip>
+                              <TooltipTrigger>
+                                <div className="text-purple-500">
+                                  <span className="font-medium text-xs">{pos.ath_multiplier.toFixed(2)}x</span>
+                                  <p className="text-xs">${pos.ath_price_usd?.toFixed(8)}</p>
+                                </div>
+                              </TooltipTrigger>
+                              <TooltipContent>
+                                <p>ATH: ${pos.ath_price_usd?.toFixed(10)}</p>
+                                <p className="text-xs">At: {pos.ath_at ? new Date(pos.ath_at).toLocaleString() : 'N/A'}</p>
+                                <p className="text-xs text-muted-foreground">
+                                  If held: +${((pos.ath_multiplier - 1) * pos.entry_amount_usd).toFixed(2)}
+                                </p>
+                              </TooltipContent>
+                            </Tooltip>
+                          </TooltipProvider>
                         ) : (
                           <span className="text-xs text-muted-foreground">-</span>
                         )}
@@ -1090,12 +1151,11 @@ export function FantasyPortfolioDashboard() {
                         </div>
                       </TableCell>
                       <TableCell>
-                        <span className="text-xs text-muted-foreground">
-                          {formatDistanceToNow(new Date(pos.created_at), { addSuffix: false })}
-                        </span>
-                      </TableCell>
-                      <TableCell>
                         <div className="flex items-center gap-1">
+                          <TokenChartModal 
+                            tokenMint={pos.token_mint} 
+                            tokenSymbol={pos.token_symbol} 
+                          />
                           <Button
                             size="sm"
                             variant="ghost"
