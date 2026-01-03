@@ -7,10 +7,15 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
  * Purpose: Create virtual/simulated buy positions for tokens with status 'buy_now'
  * Schedule: Every minute via cron (when fantasy_mode_enabled = true)
  * 
+ * FRESHNESS CHECKS:
+ * - Only buy tokens that were promoted to buy_now within the last 30 minutes
+ * - Verify token has active volume before buying
+ * - Skip tokens with zero/stale metrics
+ * 
  * Logic:
  * 1. Check if fantasy_mode_enabled in config
- * 2. Get tokens with status 'buy_now' that haven't been fantasy-bought
- * 3. Fetch current price from Jupiter/DexScreener
+ * 2. Get FRESH tokens with status 'buy_now' (promoted within 30 mins)
+ * 3. Verify token is still alive (has volume/price)
  * 4. Create fantasy position record with entry details
  * 5. Update watchlist with fantasy_position_id and move to 'holding'
  */
@@ -179,13 +184,17 @@ async function executeFantasyBuys(supabase: any): Promise<ExecutorStats> {
 
   const remainingBuys = config.daily_buy_cap - config.daily_buys_today;
 
-  // Get buy_now tokens that haven't been fantasy-bought
+  // FRESHNESS CHECK: Only get buy_now tokens that were promoted within the last 30 minutes
+  const thirtyMinsAgo = new Date(Date.now() - 30 * 60 * 1000).toISOString();
+
+  // Get FRESH buy_now tokens that haven't been fantasy-bought
   const { data: buyNowTokens, error: fetchError } = await supabase
     .from('pumpfun_watchlist')
     .select('*')
     .eq('status', 'buy_now')
     .is('fantasy_position_id', null)
-    .order('qualified_at', { ascending: true })
+    .gte('qualified_at', thirtyMinsAgo) // FRESHNESS: Must be promoted within 30 mins
+    .order('qualified_at', { ascending: false }) // Newest first
     .limit(Math.min(10, remainingBuys));
 
   if (fetchError) {
@@ -195,7 +204,19 @@ async function executeFantasyBuys(supabase: any): Promise<ExecutorStats> {
     return stats;
   }
 
-  console.log(`📋 Found ${buyNowTokens?.length || 0} tokens for fantasy execution`);
+  // Log how many tokens we're skipping due to staleness
+  const { count: staleCount } = await supabase
+    .from('pumpfun_watchlist')
+    .select('id', { count: 'exact', head: true })
+    .eq('status', 'buy_now')
+    .is('fantasy_position_id', null)
+    .lt('qualified_at', thirtyMinsAgo);
+
+  if (staleCount && staleCount > 0) {
+    console.log(`⏰ Skipping ${staleCount} stale buy_now tokens (older than 30 mins)`);
+  }
+
+  console.log(`📋 Found ${buyNowTokens?.length || 0} FRESH tokens for fantasy execution`);
 
   if (!buyNowTokens?.length) {
     stats.durationMs = Date.now() - startTime;
@@ -226,6 +247,17 @@ async function executeFantasyBuys(supabase: any): Promise<ExecutorStats> {
         continue;
       }
 
+      // FRESHNESS: Calculate token age
+      const tokenAge = Date.now() - new Date(token.qualified_at).getTime();
+      const tokenAgeMinutes = Math.floor(tokenAge / (1000 * 60));
+      
+      // Skip if token is somehow too old (shouldn't happen with query filter but double-check)
+      if (tokenAgeMinutes > 30) {
+        console.log(`⏰ Skipping ${token.token_symbol} - too old (${tokenAgeMinutes} mins)`);
+        stats.errors.push(`${token.token_symbol}: Too old (${tokenAgeMinutes} mins)`);
+        continue;
+      }
+
       // Get current token price
       const price = await getTokenPrice(token.token_mint, solPrice);
       
@@ -243,6 +275,14 @@ async function executeFantasyBuys(supabase: any): Promise<ExecutorStats> {
 
       if (entryPriceUsd <= 0) {
         stats.errors.push(`${token.token_symbol}: Invalid price`);
+        continue;
+      }
+
+      // LIVENESS CHECK: Verify token still has activity (volume or recent tx)
+      const hasVolume = (token.volume_sol || 0) > 0.05 || (token.tx_count || 0) > 5;
+      if (!hasVolume && tokenAgeMinutes > 10) {
+        console.log(`💀 Skipping ${token.token_symbol} - no volume/activity detected`);
+        stats.errors.push(`${token.token_symbol}: Dead token (no activity)`);
         continue;
       }
 

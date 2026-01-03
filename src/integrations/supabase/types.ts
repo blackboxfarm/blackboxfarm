@@ -5134,6 +5134,8 @@ export type Database = {
           created_at: string
           created_at_blockchain: string | null
           creator_wallet: string | null
+          demoted_at: string | null
+          demotion_reason: string | null
           dev_launched_new: boolean | null
           dev_sold: boolean | null
           fantasy_position_id: string | null
@@ -5168,6 +5170,7 @@ export type Database = {
           price_usd: number | null
           price_usd_prev: number | null
           priority_score: number | null
+          promoted_to_buy_now_at: string | null
           prune_reason: string | null
           pruned_at: string | null
           qualification_reason: string | null
@@ -5220,6 +5223,8 @@ export type Database = {
           created_at?: string
           created_at_blockchain?: string | null
           creator_wallet?: string | null
+          demoted_at?: string | null
+          demotion_reason?: string | null
           dev_launched_new?: boolean | null
           dev_sold?: boolean | null
           fantasy_position_id?: string | null
@@ -5254,6 +5259,7 @@ export type Database = {
           price_usd?: number | null
           price_usd_prev?: number | null
           priority_score?: number | null
+          promoted_to_buy_now_at?: string | null
           prune_reason?: string | null
           pruned_at?: string | null
           qualification_reason?: string | null
@@ -5306,6 +5312,8 @@ export type Database = {
           created_at?: string
           created_at_blockchain?: string | null
           creator_wallet?: string | null
+          demoted_at?: string | null
+          demotion_reason?: string | null
           dev_launched_new?: boolean | null
           dev_sold?: boolean | null
           fantasy_position_id?: string | null
@@ -5340,6 +5348,7 @@ export type Database = {
           price_usd?: number | null
           price_usd_prev?: number | null
           priority_score?: number | null
+          promoted_to_buy_now_at?: string | null
           prune_reason?: string | null
           pruned_at?: string | null
           qualification_reason?: string | null

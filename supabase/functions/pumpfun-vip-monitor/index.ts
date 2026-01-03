@@ -9,10 +9,11 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
  * 
  * Logic:
  * 1. Get ALL tokens with status 'qualified' or 'buy_now'
- * 2. Fetch real-time metrics for each (high priority)
- * 3. Promotion: If qualified reaches 3x threshold (60 holders, 1.5 SOL) -> 'buy_now'
- * 4. Crash detection: If price drops 50%+ from ATH -> 'bombed'
- * 5. Socials check: Only check socials once per hour (store socials_checked_at)
+ * 2. Fetch real-time metrics for each (with fallback APIs)
+ * 3. EXPIRATION: Demote stale qualified (>30 min) or buy_now (>2 hours)
+ * 4. Promotion: If qualified reaches 3x threshold (60 holders, 1.5 SOL) -> 'buy_now'
+ * 5. Crash detection: If price drops 50%+ from ATH -> 'bombed'
+ * 6. Socials check: Only check socials once per hour
  */
 
 const corsHeaders = {
@@ -33,11 +34,14 @@ interface VIPStats {
   tokensMonitored: number;
   promotedToBuyNow: number;
   bombed: number;
+  expiredQualified: number;
+  expiredBuyNow: number;
   socialsUpdated: number;
   errors: number;
   durationMs: number;
   promotedTokens: string[];
   bombedTokens: string[];
+  expiredTokens: string[];
 }
 
 interface TokenMetrics {
@@ -48,10 +52,12 @@ interface TokenMetrics {
   marketCapUsd: number | null;
   buys: number;
   sells: number;
+  source: string;
 }
 
-// Fetch token metrics
+// Fetch token metrics with fallback APIs
 async function fetchTokenMetrics(mint: string): Promise<TokenMetrics | null> {
+  // Try SolanaTracker first
   const apiKey = Deno.env.get('SOLANA_TRACKER_API_KEY');
   
   try {
@@ -65,26 +71,101 @@ async function fetchTokenMetrics(mint: string): Promise<TokenMetrics | null> {
       }
     );
 
-    if (!response.ok) {
-      return null;
+    if (response.ok) {
+      const data = await response.json();
+      const pool = data.pools?.[0];
+      
+      if (data.holders || pool?.price?.usd) {
+        return {
+          holders: data.holders || 0,
+          volumeUsd: pool?.volume?.h24 || 0,
+          priceUsd: pool?.price?.usd || null,
+          liquidityUsd: pool?.liquidity?.usd || null,
+          marketCapUsd: data.marketCap || null,
+          buys: data.buys || 0,
+          sells: data.sells || 0,
+          source: 'solanatracker',
+        };
+      }
     }
-
-    const data = await response.json();
-    const pool = data.pools?.[0];
-    
-    return {
-      holders: data.holders || 0,
-      volumeUsd: pool?.volume?.h24 || 0,
-      priceUsd: pool?.price?.usd || null,
-      liquidityUsd: pool?.liquidity?.usd || null,
-      marketCapUsd: data.marketCap || null,
-      buys: data.buys || 0,
-      sells: data.sells || 0,
-    };
   } catch (error) {
-    console.error(`Error fetching metrics for ${mint}:`, error);
-    return null;
+    console.log(`SolanaTracker failed for ${mint}, trying fallbacks...`);
   }
+
+  // Fallback 1: DexScreener
+  try {
+    const dexResponse = await fetch(`https://api.dexscreener.com/latest/dex/tokens/${mint}`);
+    if (dexResponse.ok) {
+      const dexData = await dexResponse.json();
+      const pair = dexData?.pairs?.[0];
+      
+      if (pair) {
+        return {
+          holders: 0, // DexScreener doesn't provide holders
+          volumeUsd: pair.volume?.h24 || 0,
+          priceUsd: pair.priceUsd ? parseFloat(pair.priceUsd) : null,
+          liquidityUsd: pair.liquidity?.usd || null,
+          marketCapUsd: pair.marketCap || null,
+          buys: pair.txns?.h24?.buys || 0,
+          sells: pair.txns?.h24?.sells || 0,
+          source: 'dexscreener',
+        };
+      }
+    }
+  } catch (error) {
+    console.log(`DexScreener failed for ${mint}`);
+  }
+
+  // Fallback 2: Jupiter Price API
+  try {
+    const jupResponse = await fetch(`https://api.jup.ag/price/v2?ids=${mint}`);
+    if (jupResponse.ok) {
+      const jupData = await jupResponse.json();
+      const price = jupData?.data?.[mint]?.price;
+      
+      if (price) {
+        return {
+          holders: 0,
+          volumeUsd: 0,
+          priceUsd: price,
+          liquidityUsd: null,
+          marketCapUsd: null,
+          buys: 0,
+          sells: 0,
+          source: 'jupiter',
+        };
+      }
+    }
+  } catch (error) {
+    console.log(`Jupiter failed for ${mint}`);
+  }
+
+  // Fallback 3: Pump.fun API
+  try {
+    const pumpResponse = await fetch(`https://frontend-api.pump.fun/coins/${mint}`);
+    if (pumpResponse.ok) {
+      const pumpData = await pumpResponse.json();
+      
+      if (pumpData) {
+        return {
+          holders: 0,
+          volumeUsd: 0,
+          priceUsd: pumpData.usd_market_cap && pumpData.total_supply 
+            ? pumpData.usd_market_cap / pumpData.total_supply 
+            : null,
+          liquidityUsd: null,
+          marketCapUsd: pumpData.usd_market_cap || null,
+          buys: 0,
+          sells: 0,
+          source: 'pumpfun',
+        };
+      }
+    }
+  } catch (error) {
+    console.log(`Pump.fun failed for ${mint}`);
+  }
+
+  return null;
 }
 
 // Fetch social info (Twitter, Telegram, Website)
@@ -141,11 +222,14 @@ async function monitorVIPTokens(supabase: any): Promise<VIPStats> {
     tokensMonitored: 0,
     promotedToBuyNow: 0,
     bombed: 0,
+    expiredQualified: 0,
+    expiredBuyNow: 0,
     socialsUpdated: 0,
     errors: 0,
     durationMs: 0,
     promotedTokens: [],
     bombedTokens: [],
+    expiredTokens: [],
   };
 
   console.log('⭐ VIP MONITOR: Starting VIP monitoring cycle...');
@@ -159,7 +243,10 @@ async function monitorVIPTokens(supabase: any): Promise<VIPStats> {
 
   const solPrice = await getSolPrice(supabase);
   const now = new Date();
+  const nowIso = now.toISOString();
   const oneHourAgo = new Date(now.getTime() - 60 * 60 * 1000).toISOString();
+  const thirtyMinsAgo = new Date(now.getTime() - 30 * 60 * 1000).toISOString();
+  const twoHoursAgo = new Date(now.getTime() - 2 * 60 * 60 * 1000).toISOString();
 
   // Get all qualified and buy_now tokens
   const { data: vipTokens, error: fetchError } = await supabase
@@ -185,10 +272,74 @@ async function monitorVIPTokens(supabase: any): Promise<VIPStats> {
     try {
       stats.tokensMonitored++;
 
+      const qualifiedAt = new Date(token.qualified_at);
+      const ageMinutes = (now.getTime() - qualifiedAt.getTime()) / (1000 * 60);
+
+      // EXPIRATION CHECK - before fetching metrics to save API calls
+      
+      // Expire qualified tokens after 30 minutes without promotion
+      if (token.status === 'qualified' && token.qualified_at < thirtyMinsAgo) {
+        const { error: expireError } = await supabase
+          .from('pumpfun_watchlist')
+          .update({
+            status: 'rejected',
+            demoted_at: nowIso,
+            demotion_reason: `Expired: qualified for ${Math.floor(ageMinutes)} mins without promotion`,
+            removal_reason: 'Auto-expired: Too old for pump.fun',
+            last_checked_at: nowIso,
+          })
+          .eq('id', token.id);
+
+        if (!expireError) {
+          stats.expiredQualified++;
+          stats.expiredTokens.push(`${token.token_symbol} (qualified ${Math.floor(ageMinutes)}m)`);
+          console.log(`⏰ EXPIRED: ${token.token_symbol} - qualified for ${Math.floor(ageMinutes)} minutes`);
+        }
+        continue; // Skip further processing
+      }
+
+      // Expire buy_now tokens after 2 hours (way too old for pump.fun)
+      if (token.status === 'buy_now' && token.qualified_at < twoHoursAgo) {
+        const { error: expireError } = await supabase
+          .from('pumpfun_watchlist')
+          .update({
+            status: 'rejected',
+            demoted_at: nowIso,
+            demotion_reason: `Expired: buy_now for ${Math.floor(ageMinutes)} mins without execution`,
+            removal_reason: 'Auto-expired: Too old for pump.fun',
+            last_checked_at: nowIso,
+          })
+          .eq('id', token.id);
+
+        if (!expireError) {
+          stats.expiredBuyNow++;
+          stats.expiredTokens.push(`${token.token_symbol} (buy_now ${Math.floor(ageMinutes)}m)`);
+          console.log(`⏰ EXPIRED: ${token.token_symbol} - buy_now for ${Math.floor(ageMinutes)} minutes`);
+        }
+        continue; // Skip further processing
+      }
+
+      // Now fetch metrics for tokens that passed expiration check
       const metrics = await fetchTokenMetrics(token.token_mint);
       if (!metrics) {
-        console.log(`⚠️ Could not fetch metrics for VIP ${token.token_symbol}`);
+        console.log(`⚠️ Could not fetch metrics for VIP ${token.token_symbol} (all APIs failed)`);
         stats.errors++;
+        
+        // If we can't get metrics for a qualified token after 15 mins, expire it
+        if (token.status === 'qualified' && ageMinutes > 15) {
+          await supabase
+            .from('pumpfun_watchlist')
+            .update({
+              status: 'rejected',
+              demoted_at: nowIso,
+              demotion_reason: 'Expired: Unable to fetch metrics from any API',
+              removal_reason: 'Auto-expired: No API data available',
+              last_checked_at: nowIso,
+            })
+            .eq('id', token.id);
+          stats.expiredQualified++;
+          stats.expiredTokens.push(`${token.token_symbol} (no API data)`);
+        }
         continue;
       }
 
@@ -199,28 +350,51 @@ async function monitorVIPTokens(supabase: any): Promise<VIPStats> {
       const txCount = metrics.buys + metrics.sells;
 
       const updates: any = {
-        last_checked_at: now.toISOString(),
+        last_checked_at: nowIso,
         check_count: (token.check_count || 0) + 1,
         holder_count_prev: token.holder_count,
         volume_sol_prev: token.volume_sol,
         price_usd_prev: token.price_usd,
-        holder_count: metrics.holders,
         volume_sol: volumeSol,
         tx_count: txCount,
         price_usd: metrics.priceUsd,
         market_cap_usd: metrics.marketCapUsd,
         liquidity_usd: metrics.liquidityUsd,
-        holder_count_peak: Math.max(token.holder_count_peak || 0, metrics.holders),
         price_ath_usd: Math.max(token.price_ath_usd || 0, metrics.priceUsd || 0),
-        last_processor: 'vip-monitor',
+        last_processor: `vip-monitor-${metrics.source}`,
       };
 
+      // Only update holders if we got them from API (DexScreener/Jupiter don't provide)
+      if (metrics.holders > 0) {
+        updates.holder_count = metrics.holders;
+        updates.holder_count_peak = Math.max(token.holder_count_peak || 0, metrics.holders);
+      }
+
+      // DECAY CHECK - qualified token with declining metrics after 10 mins
+      if (token.status === 'qualified' && ageMinutes > 10) {
+        const holdersDeclined = metrics.holders > 0 && token.holder_count > 0 && metrics.holders < token.holder_count * 0.8;
+        const volumeDead = volumeSol < 0.1 && (token.volume_sol || 0) > 0.2;
+        
+        if (holdersDeclined || volumeDead) {
+          updates.status = 'rejected';
+          updates.demoted_at = nowIso;
+          updates.demotion_reason = holdersDeclined 
+            ? `Decay: Holders dropped from ${token.holder_count} to ${metrics.holders}` 
+            : `Decay: Volume died (${volumeSol.toFixed(2)} SOL)`;
+          updates.removal_reason = 'Auto-demoted: Metrics declining';
+          
+          stats.expiredQualified++;
+          stats.expiredTokens.push(`${token.token_symbol} (decay)`);
+          console.log(`📉 DECAY: ${token.token_symbol} - ${updates.demotion_reason}`);
+        }
+      }
+
       // BOMBED CHECK - price crashed 50%+ from ATH
-      if (token.price_ath_usd && metrics.priceUsd) {
+      if (!updates.status && token.price_ath_usd && metrics.priceUsd) {
         const dropPct = ((token.price_ath_usd - metrics.priceUsd) / token.price_ath_usd) * 100;
         if (dropPct >= 50) {
           updates.status = 'bombed';
-          updates.removed_at = now.toISOString();
+          updates.removed_at = nowIso;
           updates.removal_reason = `Price dropped ${dropPct.toFixed(0)}% from ATH ($${token.price_ath_usd.toFixed(8)} -> $${metrics.priceUsd.toFixed(8)})`;
           
           stats.bombed++;
@@ -231,12 +405,16 @@ async function monitorVIPTokens(supabase: any): Promise<VIPStats> {
 
       // BUY_NOW PROMOTION - qualified token exceeds 3x thresholds
       if (token.status === 'qualified' && !updates.status) {
-        if (metrics.holders >= buyNowHolderThreshold && volumeSol >= buyNowVolumeThreshold) {
+        const holdersOk = metrics.holders >= buyNowHolderThreshold || (metrics.holders === 0 && token.holder_count >= buyNowHolderThreshold);
+        const volumeOk = volumeSol >= buyNowVolumeThreshold;
+        
+        if (holdersOk && volumeOk) {
           updates.status = 'buy_now';
-          updates.qualification_reason = `PROMOTED: ${metrics.holders} holders (3x), ${volumeSol.toFixed(2)} SOL (3x threshold)`;
+          updates.promoted_to_buy_now_at = nowIso;
+          updates.qualification_reason = `PROMOTED: ${metrics.holders || token.holder_count} holders, ${volumeSol.toFixed(2)} SOL volume`;
           
           stats.promotedToBuyNow++;
-          stats.promotedTokens.push(`${token.token_symbol} (${metrics.holders} holders, ${volumeSol.toFixed(2)} SOL)`);
+          stats.promotedTokens.push(`${token.token_symbol} (${metrics.holders || token.holder_count} holders, ${volumeSol.toFixed(2)} SOL)`);
           console.log(`🚀 BUY_NOW PROMOTION: ${token.token_symbol} - ${updates.qualification_reason}`);
         }
       }
@@ -245,7 +423,7 @@ async function monitorVIPTokens(supabase: any): Promise<VIPStats> {
       if (!token.socials_checked_at || token.socials_checked_at < oneHourAgo) {
         const socials = await fetchSocialInfo(token.token_mint);
         if (socials) {
-          updates.socials_checked_at = now.toISOString();
+          updates.socials_checked_at = nowIso;
           
           // Calculate social score
           let socialScore = 0;
@@ -257,7 +435,7 @@ async function monitorVIPTokens(supabase: any): Promise<VIPStats> {
           updates.metadata = { 
             ...token.metadata, 
             socials,
-            socials_last_checked: now.toISOString(),
+            socials_last_checked: nowIso,
           };
           
           stats.socialsUpdated++;
@@ -283,7 +461,7 @@ async function monitorVIPTokens(supabase: any): Promise<VIPStats> {
   }
 
   stats.durationMs = Date.now() - startTime;
-  console.log(`📊 VIP MONITOR COMPLETE: ${stats.tokensMonitored} monitored, ${stats.promotedToBuyNow} promoted to buy_now, ${stats.bombed} bombed (${stats.durationMs}ms)`);
+  console.log(`📊 VIP MONITOR COMPLETE: ${stats.tokensMonitored} monitored, ${stats.promotedToBuyNow} promoted, ${stats.bombed} bombed, ${stats.expiredQualified + stats.expiredBuyNow} expired (${stats.durationMs}ms)`);
 
   return stats;
 }
