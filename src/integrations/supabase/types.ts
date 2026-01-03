@@ -6355,6 +6355,9 @@ export type Database = {
       telegram_fantasy_positions: {
         Row: {
           adjusted_by_dev_risk: boolean | null
+          ath_at: string | null
+          ath_multiplier: number | null
+          ath_price_usd: number | null
           auto_sell_triggered: boolean | null
           call_id: string | null
           caller_display_name: string | null
@@ -6375,6 +6378,7 @@ export type Database = {
           id: string
           interpretation_id: string | null
           is_active: boolean | null
+          message_received_at: string | null
           original_sell_multiplier: number | null
           peak_multiplier: number | null
           peak_price_at: string | null
@@ -6414,6 +6418,9 @@ export type Database = {
         }
         Insert: {
           adjusted_by_dev_risk?: boolean | null
+          ath_at?: string | null
+          ath_multiplier?: number | null
+          ath_price_usd?: number | null
           auto_sell_triggered?: boolean | null
           call_id?: string | null
           caller_display_name?: string | null
@@ -6434,6 +6441,7 @@ export type Database = {
           id?: string
           interpretation_id?: string | null
           is_active?: boolean | null
+          message_received_at?: string | null
           original_sell_multiplier?: number | null
           peak_multiplier?: number | null
           peak_price_at?: string | null
@@ -6473,6 +6481,9 @@ export type Database = {
         }
         Update: {
           adjusted_by_dev_risk?: boolean | null
+          ath_at?: string | null
+          ath_multiplier?: number | null
+          ath_price_usd?: number | null
           auto_sell_triggered?: boolean | null
           call_id?: string | null
           caller_display_name?: string | null
@@ -6493,6 +6504,7 @@ export type Database = {
           id?: string
           interpretation_id?: string | null
           is_active?: boolean | null
+          message_received_at?: string | null
           original_sell_multiplier?: number | null
           peak_multiplier?: number | null
           peak_price_at?: string | null
