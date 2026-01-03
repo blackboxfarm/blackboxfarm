@@ -114,7 +114,50 @@ async function fetchWithBackoff(url: string, options: RequestInit, maxRetries = 
   throw lastError || new Error('Max retries exceeded');
 }
 
-// Fetch token metrics from DexScreener (fallback API)
+// Fetch token metrics from SolanaTracker API (better for pump.fun tokens)
+async function fetchSolanaTrackerMetrics(mint: string): Promise<TokenMetrics | null> {
+  try {
+    const response = await fetch(`https://data.solanatracker.io/tokens/${mint}`, {
+      headers: { 
+        'Accept': 'application/json',
+        'x-api-key': Deno.env.get('SOLANA_TRACKER_API_KEY') || '',
+      }
+    });
+
+    if (!response.ok) {
+      console.log(`   📊 SolanaTracker API error for ${mint}: ${response.status}`);
+      return null;
+    }
+
+    const data = await response.json();
+    
+    if (!data || data.error) {
+      console.log(`   📊 SolanaTracker: No data for ${mint}`);
+      return null;
+    }
+
+    const pools = data.pools || [];
+    const mainPool = pools[0] || {};
+    
+    console.log(`   📊 SolanaTracker fallback: ${mint.slice(0, 8)} - ${data.token?.holder || 0} holders`);
+
+    return {
+      holders: data.token?.holder || 0,
+      volume24hSol: (mainPool.volume?.h24 || 0) / (mainPool.price?.sol || 200),
+      priceUsd: mainPool.price?.usd || null,
+      liquidityUsd: mainPool.liquidity?.usd || null,
+      marketCapUsd: data.token?.market_cap || null,
+      bondingCurvePct: null, // SolanaTracker doesn't have bonding curve data
+      buys: mainPool.txns?.h24?.buys || 0,
+      sells: mainPool.txns?.h24?.sells || 0,
+    };
+  } catch (error) {
+    console.error(`Error fetching SolanaTracker metrics for ${mint}:`, error);
+    return null;
+  }
+}
+
+// Fetch token metrics from DexScreener (fallback API - better for graduated tokens)
 async function fetchDexScreenerMetrics(mint: string): Promise<TokenMetrics | null> {
   try {
     const response = await fetch(`https://api.dexscreener.com/latest/dex/tokens/${mint}`, {
@@ -190,7 +233,7 @@ async function fetchJupiterPrice(mint: string): Promise<number | null> {
   }
 }
 
-// Fetch token metrics from pump.fun API with fallbacks to DexScreener/Jupiter
+// Fetch token metrics from pump.fun API with fallbacks: SolanaTracker -> DexScreener -> Jupiter
 async function fetchPumpFunMetrics(mint: string): Promise<TokenMetrics | null> {
   try {
     const response = await fetchWithBackoff(
@@ -202,13 +245,19 @@ async function fetchPumpFunMetrics(mint: string): Promise<TokenMetrics | null> {
     if (response.status >= 500) {
       console.log(`   ⚠️ pump.fun API error ${response.status} for ${mint}, trying fallbacks...`);
       
-      // Try DexScreener first (has volume + price)
+      // Fallback 1: SolanaTracker (best for pump.fun tokens - has holder count)
+      const stMetrics = await fetchSolanaTrackerMetrics(mint);
+      if (stMetrics && stMetrics.holders > 0) {
+        return stMetrics;
+      }
+      
+      // Fallback 2: DexScreener (better for graduated tokens)
       const dexMetrics = await fetchDexScreenerMetrics(mint);
       if (dexMetrics && dexMetrics.priceUsd && dexMetrics.priceUsd > 0) {
         return dexMetrics;
       }
       
-      // Try Jupiter for price only
+      // Fallback 3: Jupiter for price only (last resort)
       const jupPrice = await fetchJupiterPrice(mint);
       if (jupPrice) {
         return {
@@ -224,6 +273,7 @@ async function fetchPumpFunMetrics(mint: string): Promise<TokenMetrics | null> {
       }
       
       // All fallbacks failed
+      console.log(`   ❌ All API fallbacks failed for ${mint}`);
       return null;
     }
 
@@ -233,7 +283,13 @@ async function fetchPumpFunMetrics(mint: string): Promise<TokenMetrics | null> {
       }
       console.error(`pump.fun API error for ${mint}: ${response.status}`);
       
-      // Try fallbacks for other errors too
+      // Try SolanaTracker first for non-5xx errors
+      const stMetrics = await fetchSolanaTrackerMetrics(mint);
+      if (stMetrics && stMetrics.holders > 0) {
+        return stMetrics;
+      }
+      
+      // Then DexScreener
       const dexMetrics = await fetchDexScreenerMetrics(mint);
       if (dexMetrics && dexMetrics.priceUsd && dexMetrics.priceUsd > 0) {
         return dexMetrics;
@@ -268,7 +324,13 @@ async function fetchPumpFunMetrics(mint: string): Promise<TokenMetrics | null> {
   } catch (error) {
     console.error(`Error fetching pump.fun metrics for ${mint}:`, error);
     
-    // Try fallbacks on error
+    // Try SolanaTracker first on error
+    const stMetrics = await fetchSolanaTrackerMetrics(mint);
+    if (stMetrics && stMetrics.holders > 0) {
+      return stMetrics;
+    }
+    
+    // Then DexScreener
     const dexMetrics = await fetchDexScreenerMetrics(mint);
     if (dexMetrics && dexMetrics.priceUsd && dexMetrics.priceUsd > 0) {
       return dexMetrics;
@@ -668,13 +730,46 @@ async function monitorWatchlistTokens(supabase: any): Promise<MonitorStats> {
           }
         }
         
-        // === DEAD CHECK === 
-        // Token has been watching too long with no activity
-        else if (watchingMinutes > config.max_watch_time_minutes || 
-                 (watchingMinutes > 15 && metrics.holders < config.dead_holder_threshold && metrics.volume24hSol < config.dead_volume_threshold_sol)) {
-          
+        // === AGGRESSIVE DEAD CHECK === 
+        // Multiple conditions to quickly remove dead tokens
+        
+        // Condition 1: Watched > max time (60 min default) = dead immediately
+        if (watchingMinutes > config.max_watch_time_minutes) {
           updates.status = 'dead';
-          updates.rejection_type = 'soft'; // Dead tokens can potentially be resurrected
+          updates.rejection_type = 'soft';
+          updates.removed_at = now.toISOString();
+          updates.removal_reason = `Exceeded max watch time: ${watchingMinutes.toFixed(0)}m > ${config.max_watch_time_minutes}m`;
+          
+          stats.markedDead++;
+          stats.deadTokens.push(`${token.token_symbol} (max time exceeded)`);
+          console.log(`💀 DEAD (max time): ${token.token_symbol} - ${updates.removal_reason}`);
+        }
+        // Condition 2: Watched > 30 min with 1 holder and 0 volume = definitely dead
+        else if (watchingMinutes > 30 && metrics.holders <= 1 && metrics.volume24hSol <= 0.001) {
+          updates.status = 'dead';
+          updates.rejection_type = 'soft';
+          updates.removed_at = now.toISOString();
+          updates.removal_reason = `Zombie token: ${watchingMinutes.toFixed(0)}m with ${metrics.holders} holders, ${metrics.volume24hSol.toFixed(4)} SOL`;
+          
+          stats.markedDead++;
+          stats.deadTokens.push(`${token.token_symbol} (zombie)`);
+          console.log(`💀 DEAD (zombie): ${token.token_symbol} - ${updates.removal_reason}`);
+        }
+        // Condition 3: Watched > 60 min with < 5 holders = dead
+        else if (watchingMinutes > 60 && metrics.holders < 5) {
+          updates.status = 'dead';
+          updates.rejection_type = 'soft';
+          updates.removed_at = now.toISOString();
+          updates.removal_reason = `Low activity after 1h: ${metrics.holders} holders`;
+          
+          stats.markedDead++;
+          stats.deadTokens.push(`${token.token_symbol} (low activity 1h)`);
+          console.log(`💀 DEAD (low activity): ${token.token_symbol} - ${updates.removal_reason}`);
+        }
+        // Condition 4: Original dead check - 15+ min with very low metrics
+        else if (watchingMinutes > 15 && metrics.holders < config.dead_holder_threshold && metrics.volume24hSol < config.dead_volume_threshold_sol) {
+          updates.status = 'dead';
+          updates.rejection_type = 'soft';
           updates.removed_at = now.toISOString();
           updates.removal_reason = `Watched ${watchingMinutes.toFixed(0)}m, only ${metrics.holders} holders, ${metrics.volume24hSol.toFixed(3)} SOL`;
           
@@ -682,14 +777,12 @@ async function monitorWatchlistTokens(supabase: any): Promise<MonitorStats> {
           stats.deadTokens.push(`${token.token_symbol} (${metrics.holders} holders)`);
           console.log(`💀 DEAD: ${token.token_symbol} - ${updates.removal_reason}`);
         }
-        
-        // === STALE CHECK === 
-        // No changes for multiple consecutive checks
-        else if (updates.consecutive_stale_checks >= 5 && watchingMinutes > 10) {
+        // Condition 5: Stale check - no metric changes for multiple consecutive checks
+        else if (updates.consecutive_stale_checks >= 4 && watchingMinutes > 8) {
           updates.status = 'dead';
-          updates.rejection_type = 'soft'; // Stale tokens can potentially be resurrected
+          updates.rejection_type = 'soft';
           updates.removed_at = now.toISOString();
-          updates.removal_reason = `Stale: No metric changes for ${updates.consecutive_stale_checks} checks`;
+          updates.removal_reason = `Stale: No metric changes for ${updates.consecutive_stale_checks} checks over ${watchingMinutes.toFixed(0)}m`;
           
           stats.markedStale++;
           console.log(`🥀 STALE -> DEAD: ${token.token_symbol} (${updates.consecutive_stale_checks} stale checks)`);
