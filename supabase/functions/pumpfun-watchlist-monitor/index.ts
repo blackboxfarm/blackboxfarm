@@ -598,8 +598,50 @@ async function monitorWatchlistTokens(supabase: any): Promise<MonitorStats> {
         // Fetch current metrics from pump.fun API
         const metrics = await fetchPumpFunMetrics(token.token_mint);
         
+        // === AGE-BASED KILL WHEN API FAILS ===
+        // If we can't get metrics, check if token is old enough to kill based on age alone
+        const watchingMinutesNow = (now.getTime() - new Date(token.first_seen_at).getTime()) / 60000;
+        
         if (!metrics) {
-          console.log(`⚠️ Could not fetch metrics for ${token.token_symbol}`);
+          console.log(`⚠️ Could not fetch metrics for ${token.token_symbol} (age: ${watchingMinutesNow.toFixed(0)}m)`);
+          
+          // Kill tokens older than 60 minutes that we can't get metrics for
+          if (watchingMinutesNow > 60) {
+            console.log(`💀 KILLING (API failed, old): ${token.token_symbol} - ${watchingMinutesNow.toFixed(0)}m old, no API response`);
+            await supabase
+              .from('pumpfun_watchlist')
+              .update({
+                status: 'dead',
+                rejection_type: 'soft',
+                removed_at: now.toISOString(),
+                removal_reason: `API failed, token ${watchingMinutesNow.toFixed(0)}m old - presumed dead`,
+                last_checked_at: now.toISOString(),
+                last_processor: 'watchlist-monitor',
+              })
+              .eq('id', token.id);
+            
+            stats.markedDead++;
+            stats.deadTokens.push(`${token.token_symbol} (API fail, ${watchingMinutesNow.toFixed(0)}m old)`);
+          }
+          // Kill tokens older than 30 minutes with only 1 holder in our last data
+          else if (watchingMinutesNow > 30 && (token.holder_count || 0) <= 1) {
+            console.log(`💀 KILLING (API failed, low holder): ${token.token_symbol} - ${watchingMinutesNow.toFixed(0)}m old, ${token.holder_count} holders`);
+            await supabase
+              .from('pumpfun_watchlist')
+              .update({
+                status: 'dead',
+                rejection_type: 'soft',
+                removed_at: now.toISOString(),
+                removal_reason: `API failed, only ${token.holder_count || 0} holder(s) after ${watchingMinutesNow.toFixed(0)}m`,
+                last_checked_at: now.toISOString(),
+                last_processor: 'watchlist-monitor',
+              })
+              .eq('id', token.id);
+            
+            stats.markedDead++;
+            stats.deadTokens.push(`${token.token_symbol} (API fail, 1 holder)`);
+          }
+          
           stats.errors++;
           continue;
         }
