@@ -38,6 +38,13 @@ interface CleanResponse {
   walletsProcessed: number;
   totalAccountsClosed: number;
   totalSolRecovered: number;
+  consolidation?: {
+    targetWallet: string;
+    walletsConsolidated: number;
+    totalConsolidated: number;
+    signatures: string[];
+    errors: string[];
+  } | null;
   results: CleanResult[];
 }
 
@@ -178,7 +185,7 @@ export function TokenAccountCleaner() {
         {/* Clean Results */}
         {cleanResults && (
           <div className="space-y-4">
-            <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
               <div className="bg-muted/50 rounded-lg p-4 text-center">
                 <div className="text-2xl font-bold">{cleanResults.walletsProcessed}</div>
                 <div className="text-xs text-muted-foreground">Wallets Processed</div>
@@ -193,7 +200,45 @@ export function TokenAccountCleaner() {
                 </div>
                 <div className="text-xs text-muted-foreground">Recovered</div>
               </div>
+              {cleanResults.consolidation && (
+                <div className="bg-amber-500/10 rounded-lg p-4 text-center">
+                  <div className="text-2xl font-bold text-amber-500">
+                    {cleanResults.consolidation.totalConsolidated.toFixed(4)} SOL
+                  </div>
+                  <div className="text-xs text-muted-foreground">→ FlipIt Wallet</div>
+                </div>
+              )}
             </div>
+
+            {/* Consolidation Summary */}
+            {cleanResults.consolidation && cleanResults.consolidation.totalConsolidated > 0 && (
+              <div className="p-4 bg-amber-500/10 border border-amber-500/30 rounded-lg">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <Flame className="h-5 w-5 text-amber-500" />
+                    <span className="font-medium">Consolidated to FlipIt Wallet</span>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <code className="text-xs bg-background/50 px-2 py-1 rounded">
+                      {shortenAddress(cleanResults.consolidation.targetWallet)}
+                    </code>
+                    <span className="text-amber-500 font-bold">
+                      +{cleanResults.consolidation.totalConsolidated.toFixed(4)} SOL
+                    </span>
+                    {cleanResults.consolidation.signatures.length > 0 && (
+                      <a
+                        href={`https://solscan.io/tx/${cleanResults.consolidation.signatures[0]}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-muted-foreground hover:text-foreground"
+                      >
+                        <ExternalLink className="h-4 w-4" />
+                      </a>
+                    )}
+                  </div>
+                </div>
+              </div>
+            )}
 
             {/* Per-wallet results */}
             <ScrollArea className="h-[300px]">
