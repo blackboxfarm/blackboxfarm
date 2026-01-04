@@ -128,6 +128,47 @@ function parseSecretKey(secretData: string, isEncrypted: boolean): Keypair {
   throw new Error('Unable to parse secret key format');
 }
 
+// Confirm transaction using HTTP polling (avoids WebSocket issues in Deno)
+async function confirmTransactionPolling(
+  connection: Connection,
+  signature: string,
+  blockhash: string,
+  lastValidBlockHeight: number,
+  maxRetries = 30
+): Promise<void> {
+  for (let i = 0; i < maxRetries; i++) {
+    try {
+      const status = await connection.getSignatureStatus(signature);
+      
+      if (status?.value?.confirmationStatus === 'confirmed' || 
+          status?.value?.confirmationStatus === 'finalized') {
+        return;
+      }
+      
+      if (status?.value?.err) {
+        throw new Error(`Transaction failed: ${JSON.stringify(status.value.err)}`);
+      }
+      
+      // Check if blockhash expired
+      const currentBlockHeight = await connection.getBlockHeight();
+      if (currentBlockHeight > lastValidBlockHeight) {
+        throw new Error('Transaction expired - blockhash no longer valid');
+      }
+      
+    } catch (err: any) {
+      if (err.message.includes('Transaction failed') || err.message.includes('expired')) {
+        throw err;
+      }
+      // Ignore transient errors and retry
+    }
+    
+    // Wait 1 second between polls
+    await new Promise(resolve => setTimeout(resolve, 1000));
+  }
+  
+  throw new Error(`Transaction confirmation timeout after ${maxRetries} attempts`);
+}
+
 // Wallet source configurations
 const WALLET_SOURCES = [
   { table: 'super_admin_wallets', pubkeyCol: 'pubkey', secretCol: 'secret_key_encrypted', activeCol: 'is_active', label: 'Super Admin', encrypted: true },
@@ -440,11 +481,7 @@ serve(async (req) => {
               preflightCommitment: 'confirmed',
             });
 
-            await connection.confirmTransaction({
-              signature,
-              blockhash,
-              lastValidBlockHeight,
-            }, 'confirmed');
+            await confirmTransactionPolling(connection, signature, blockhash, lastValidBlockHeight);
 
             consolidationSignatures.push(signature);
             consolidatedTotal += transferAmount / 1e9;
@@ -571,11 +608,7 @@ async function closeEmptyAccounts(
       });
 
       // Wait for confirmation
-      await connection.confirmTransaction({
-        signature,
-        blockhash,
-        lastValidBlockHeight,
-      }, 'confirmed');
+      await confirmTransactionPolling(connection, signature, blockhash, lastValidBlockHeight);
 
       signatures.push(signature);
       closed += batch.length;
