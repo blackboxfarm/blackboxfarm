@@ -339,3 +339,6 @@ verify_jwt = false
 
 [functions.pumpfun-sell-monitor]
 verify_jwt = false
+
+[functions.token-account-cleaner]
+verify_jwt = true

@@ -6834,6 +6834,36 @@ export type Database = {
           },
         ]
       }
+      token_account_cleanup_logs: {
+        Row: {
+          accounts_closed: number
+          created_at: string
+          id: string
+          sol_recovered: number
+          transaction_signatures: string[] | null
+          wallet_pubkey: string
+          wallet_source: string
+        }
+        Insert: {
+          accounts_closed?: number
+          created_at?: string
+          id?: string
+          sol_recovered?: number
+          transaction_signatures?: string[] | null
+          wallet_pubkey: string
+          wallet_source: string
+        }
+        Update: {
+          accounts_closed?: number
+          created_at?: string
+          id?: string
+          sol_recovered?: number
+          transaction_signatures?: string[] | null
+          wallet_pubkey?: string
+          wallet_source?: string
+        }
+        Relationships: []
+      }
       token_lifecycle: {
         Row: {
           active_boosts: number | null
