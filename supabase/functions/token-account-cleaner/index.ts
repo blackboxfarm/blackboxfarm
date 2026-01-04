@@ -118,6 +118,7 @@ interface CleanResult {
   solRecovered: number;
   signatures: string[];
   errors: string[];
+  consolidationSignature?: string;
 }
 
 serve(async (req) => {
@@ -239,6 +240,25 @@ serve(async (req) => {
       let totalClosed = 0;
       let totalRecovered = 0;
 
+      // First, get the main FlipIt wallet for consolidation
+      const { data: flipitWallets, error: flipitErr } = await supabase
+        .from('super_admin_wallets')
+        .select('id, pubkey, secret_key_encrypted')
+        .eq('wallet_type', 'flipit')
+        .eq('is_active', true)
+        .order('created_at', { ascending: true })
+        .limit(1);
+
+      const mainFlipItWallet = flipitWallets?.[0];
+      if (!mainFlipItWallet) {
+        console.warn("No main FlipIt wallet found for consolidation - rent will stay in source wallets");
+      } else {
+        console.log(`Main FlipIt wallet for consolidation: ${mainFlipItWallet.pubkey}`);
+      }
+
+      // Track wallets that received recovered rent for consolidation
+      const walletsToConsolidate: { keypair: Keypair; recovered: number; pubkey: string }[] = [];
+
       for (const wallet of allWallets) {
         try {
           console.log(`Processing wallet ${wallet.pubkey} (${wallet.source})...`);
@@ -278,14 +298,21 @@ serve(async (req) => {
           totalClosed += result.closed;
           totalRecovered += result.recovered;
 
-          cleanResults.push({
+          const cleanResult: CleanResult = {
             walletPubkey: wallet.pubkey,
             source: wallet.source,
             accountsClosed: result.closed,
             solRecovered: result.recovered,
             signatures: result.signatures,
             errors: result.errors,
-          });
+          };
+
+          // Track for consolidation (skip if this IS the FlipIt wallet)
+          if (result.closed > 0 && mainFlipItWallet && wallet.pubkey !== mainFlipItWallet.pubkey) {
+            walletsToConsolidate.push({ keypair, recovered: result.recovered, pubkey: wallet.pubkey });
+          }
+
+          cleanResults.push(cleanResult);
 
           // Log to database
           if (result.closed > 0) {
@@ -311,11 +338,99 @@ serve(async (req) => {
         }
       }
 
+      // CONSOLIDATION PHASE: Transfer recovered rent to main FlipIt wallet
+      let consolidatedTotal = 0;
+      const consolidationSignatures: string[] = [];
+      const consolidationErrors: string[] = [];
+
+      if (mainFlipItWallet && walletsToConsolidate.length > 0) {
+        console.log(`\n=== CONSOLIDATION PHASE ===`);
+        console.log(`Consolidating from ${walletsToConsolidate.length} wallets to FlipIt: ${mainFlipItWallet.pubkey}`);
+
+        const flipItPubkey = new PublicKey(mainFlipItWallet.pubkey);
+        const FEE_BUFFER_LAMPORTS = 5000; // 0.000005 SOL for transaction fee
+
+        for (const { keypair, recovered, pubkey } of walletsToConsolidate) {
+          try {
+            // Get current balance of the wallet
+            const balance = await connection.getBalance(keypair.publicKey);
+            const transferAmount = balance - FEE_BUFFER_LAMPORTS;
+
+            if (transferAmount <= 0) {
+              console.log(`Wallet ${pubkey} has insufficient balance for transfer (${balance} lamports)`);
+              continue;
+            }
+
+            console.log(`Transferring ${transferAmount / 1e9} SOL from ${pubkey} to FlipIt wallet`);
+
+            const transaction = new Transaction().add(
+              SystemProgram.transfer({
+                fromPubkey: keypair.publicKey,
+                toPubkey: flipItPubkey,
+                lamports: transferAmount,
+              })
+            );
+
+            const { blockhash, lastValidBlockHeight } = await connection.getLatestBlockhash();
+            transaction.recentBlockhash = blockhash;
+            transaction.feePayer = keypair.publicKey;
+
+            transaction.sign(keypair);
+            const signature = await connection.sendRawTransaction(transaction.serialize(), {
+              skipPreflight: false,
+              preflightCommitment: 'confirmed',
+            });
+
+            await connection.confirmTransaction({
+              signature,
+              blockhash,
+              lastValidBlockHeight,
+            }, 'confirmed');
+
+            consolidationSignatures.push(signature);
+            consolidatedTotal += transferAmount / 1e9;
+
+            // Update the clean result with consolidation signature
+            const resultIndex = cleanResults.findIndex(r => r.walletPubkey === pubkey);
+            if (resultIndex >= 0) {
+              cleanResults[resultIndex].consolidationSignature = signature;
+            }
+
+            console.log(`Consolidated ${transferAmount / 1e9} SOL in tx ${signature}`);
+
+            // Small delay between transfers
+            await new Promise(resolve => setTimeout(resolve, 300));
+
+          } catch (err: any) {
+            console.error(`Error consolidating from ${pubkey}:`, err.message);
+            consolidationErrors.push(`${pubkey}: ${err.message}`);
+          }
+        }
+
+        // Log the consolidation
+        if (consolidatedTotal > 0) {
+          await supabase.from('token_account_cleanup_logs').insert({
+            wallet_pubkey: mainFlipItWallet.pubkey,
+            wallet_source: 'Consolidation Target (FlipIt)',
+            accounts_closed: 0,
+            sol_recovered: consolidatedTotal,
+            transaction_signatures: consolidationSignatures,
+          });
+        }
+      }
+
       return ok({
         action,
         walletsProcessed: allWallets.length,
         totalAccountsClosed: totalClosed,
         totalSolRecovered: parseFloat(totalRecovered.toFixed(6)),
+        consolidation: mainFlipItWallet ? {
+          targetWallet: mainFlipItWallet.pubkey,
+          walletsConsolidated: walletsToConsolidate.length,
+          totalConsolidated: parseFloat(consolidatedTotal.toFixed(6)),
+          signatures: consolidationSignatures,
+          errors: consolidationErrors,
+        } : null,
         results: cleanResults,
       });
     }
