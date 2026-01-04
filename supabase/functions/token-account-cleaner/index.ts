@@ -77,13 +77,64 @@ class SecureStorage {
   }
 }
 
+// Parse secret key to Keypair - handles multiple formats
+function parseSecretKey(secretData: string, isEncrypted: boolean): Keypair {
+  let keyData = secretData;
+  
+  // Try to parse as JSON array first (most common format for encrypted keys)
+  try {
+    const parsed = JSON.parse(keyData);
+    if (Array.isArray(parsed)) {
+      return Keypair.fromSecretKey(new Uint8Array(parsed));
+    }
+  } catch {
+    // Not JSON, try base58
+  }
+  
+  // Try base58 decode (common for raw/unencrypted keys)
+  try {
+    // Base58 decode
+    const ALPHABET = '123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz';
+    const base58ToBytes = (str: string): Uint8Array => {
+      const bytes: number[] = [];
+      for (const char of str) {
+        let carry = ALPHABET.indexOf(char);
+        if (carry === -1) throw new Error('Invalid base58 character');
+        for (let i = 0; i < bytes.length; ++i) {
+          carry += bytes[i] * 58;
+          bytes[i] = carry & 0xff;
+          carry >>= 8;
+        }
+        while (carry > 0) {
+          bytes.push(carry & 0xff);
+          carry >>= 8;
+        }
+      }
+      for (const char of str) {
+        if (char === '1') bytes.push(0);
+        else break;
+      }
+      return new Uint8Array(bytes.reverse());
+    };
+    
+    const decoded = base58ToBytes(keyData);
+    if (decoded.length === 64) {
+      return Keypair.fromSecretKey(decoded);
+    }
+  } catch {
+    // Not valid base58
+  }
+  
+  throw new Error('Unable to parse secret key format');
+}
+
 // Wallet source configurations
 const WALLET_SOURCES = [
-  { table: 'super_admin_wallets', pubkeyCol: 'pubkey', secretCol: 'secret_key_encrypted', activeCol: 'is_active', label: 'Super Admin' },
-  { table: 'blackbox_wallets', pubkeyCol: 'pubkey', secretCol: 'secret_key_encrypted', activeCol: 'is_active', label: 'Blackbox' },
-  { table: 'wallet_pools', pubkeyCol: 'pubkey', secretCol: 'secret_key_encrypted', activeCol: 'is_active', label: 'Wallet Pool' },
-  { table: 'airdrop_wallets', pubkeyCol: 'pubkey', secretCol: 'secret_key_encrypted', activeCol: 'is_active', label: 'Airdrop' },
-  { table: 'mega_whale_auto_buy_wallets', pubkeyCol: 'pubkey', secretCol: 'private_key_encrypted', activeCol: 'is_active', label: 'Mega Whale' },
+  { table: 'super_admin_wallets', pubkeyCol: 'pubkey', secretCol: 'secret_key_encrypted', activeCol: 'is_active', label: 'Super Admin', encrypted: true },
+  { table: 'blackbox_wallets', pubkeyCol: 'pubkey', secretCol: 'secret_key_encrypted', activeCol: 'is_active', label: 'Blackbox', encrypted: true },
+  { table: 'wallet_pools', pubkeyCol: 'pubkey', secretCol: 'secret_key', activeCol: 'is_active', label: 'Wallet Pool', encrypted: false },
+  { table: 'airdrop_wallets', pubkeyCol: 'pubkey', secretCol: 'secret_key_encrypted', activeCol: 'is_active', label: 'Airdrop', encrypted: true },
+  { table: 'mega_whale_auto_buy_wallets', pubkeyCol: 'pubkey', secretCol: 'secret_key_encrypted', activeCol: 'is_active', label: 'Mega Whale', encrypted: true },
 ];
 
 // Rent per token account (approximately 0.00203 SOL)
@@ -95,6 +146,7 @@ interface WalletInfo {
   pubkey: string;
   secretKeyEncrypted: string;
   source: string;
+  encrypted: boolean;
 }
 
 interface EmptyAccount {
@@ -174,6 +226,7 @@ serve(async (req) => {
               pubkey: w[src.pubkeyCol],
               secretKeyEncrypted: w[src.secretCol],
               source: src.label,
+              encrypted: src.encrypted,
             });
           }
         }
@@ -273,12 +326,18 @@ serve(async (req) => {
 
           console.log(`Found ${emptyAccounts.length} empty accounts in ${wallet.pubkey}`);
 
-          // Decrypt the private key
+          // Decrypt/parse the private key
           let keypair: Keypair;
           try {
-            const secretKeyJson = await SecureStorage.decrypt(wallet.secretKeyEncrypted);
-            const secretKeyArray = JSON.parse(secretKeyJson);
-            keypair = Keypair.fromSecretKey(new Uint8Array(secretKeyArray));
+            let keyData = wallet.secretKeyEncrypted;
+            
+            // Decrypt if encrypted
+            if (wallet.encrypted) {
+              keyData = await SecureStorage.decrypt(wallet.secretKeyEncrypted);
+            }
+            
+            // Parse the key data (handles JSON array and base58 formats)
+            keypair = parseSecretKey(keyData, wallet.encrypted);
           } catch (decryptErr: any) {
             console.error(`Failed to decrypt wallet ${wallet.pubkey}:`, decryptErr.message);
             cleanResults.push({
