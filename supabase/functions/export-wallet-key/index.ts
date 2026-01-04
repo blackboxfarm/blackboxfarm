@@ -1,41 +1,11 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { SecureStorage } from "../_shared/encryption.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
-
-// Encryption key for decryption
-async function getEncryptionKey(): Promise<CryptoKey> {
-  const keyBase64 = Deno.env.get("ENCRYPTION_KEY");
-  if (!keyBase64) {
-    throw new Error("ENCRYPTION_KEY not configured");
-  }
-  const keyBytes = Uint8Array.from(atob(keyBase64), c => c.charCodeAt(0));
-  return await crypto.subtle.importKey(
-    "raw",
-    keyBytes,
-    { name: "AES-GCM" },
-    false,
-    ["decrypt"]
-  );
-}
-
-async function decrypt(encryptedData: string): Promise<string> {
-  const key = await getEncryptionKey();
-  const combined = Uint8Array.from(atob(encryptedData), c => c.charCodeAt(0));
-  const iv = combined.slice(0, 12);
-  const ciphertext = combined.slice(12);
-  
-  const decrypted = await crypto.subtle.decrypt(
-    { name: "AES-GCM", iv },
-    key,
-    ciphertext
-  );
-  
-  return new TextDecoder().decode(decrypted);
-}
 
 // Wallet source configurations
 const WALLET_SOURCES = [
@@ -132,9 +102,9 @@ serve(async (req) => {
     let secretKey: string;
     
     if (sourceConfig.encrypted) {
-      // Decrypt the secret
+      // Decrypt the secret using shared SecureStorage
       try {
-        secretKey = await decrypt(rawSecret);
+        secretKey = await SecureStorage.decryptWalletSecret(rawSecret);
       } catch (err: any) {
         console.error("[export-wallet-key] Decryption failed:", err.message);
         return new Response(
