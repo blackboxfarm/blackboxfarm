@@ -8,12 +8,13 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/component
 import { 
   RefreshCw, Search, Wallet, Copy, ExternalLink, ChevronDown, ChevronUp,
   Coins, TrendingUp, TrendingDown, DollarSign, Shield, Zap, Target,
-  AlertTriangle, Users, Bot, Crown
+  AlertTriangle, Users, Bot, Crown, Key, History
 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from '@/hooks/use-toast';
 import { useSolPrice } from '@/hooks/useSolPrice';
 import { WalletTokenManager } from '@/components/blackbox/WalletTokenManager';
+
 interface TokenBalance {
   mint: string;
   symbol: string;
@@ -29,6 +30,7 @@ interface MasterWallet {
   id: string;
   pubkey: string;
   source: 'wallet_pool' | 'blackbox' | 'super_admin' | 'airdrop';
+  sourceTable: string;
   sourceEmoji: string;
   sourceLabel: string;
   purpose?: string;
@@ -40,13 +42,14 @@ interface MasterWallet {
   isLoading: boolean;
   lastUpdated?: Date;
   linkedCampaigns?: string[];
+  hasTransactionHistory?: boolean;
 }
 
 const WALLET_SOURCE_CONFIG = {
-  wallet_pool: { emoji: '🏊', label: 'Pool Wallet', color: 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200' },
-  blackbox: { emoji: '📦', label: 'BlackBox', color: 'bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200' },
-  super_admin: { emoji: '👑', label: 'Super Admin', color: 'bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-200' },
-  airdrop: { emoji: '🪂', label: 'Airdrop', color: 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200' },
+  wallet_pool: { emoji: '🏊', label: 'Pool Wallet', color: 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200', table: 'wallet_pools' },
+  blackbox: { emoji: '📦', label: 'BlackBox', color: 'bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200', table: 'blackbox_wallets' },
+  super_admin: { emoji: '👑', label: 'Super Admin', color: 'bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-200', table: 'super_admin_wallets' },
+  airdrop: { emoji: '🪂', label: 'Airdrop', color: 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200', table: 'airdrop_wallets' },
 };
 
 const WALLET_PURPOSE_EMOJIS: Record<string, { emoji: string; label: string }> = {
@@ -66,6 +69,8 @@ export function MasterWalletsDashboard() {
   const [searchTerm, setSearchTerm] = useState('');
   const [expandedWallets, setExpandedWallets] = useState<Set<string>>(new Set());
   const [activeTab, setActiveTab] = useState('all');
+  const [showOnlyWithHistory, setShowOnlyWithHistory] = useState(false);
+  const [exportingKey, setExportingKey] = useState<string | null>(null);
   const { price: solPrice } = useSolPrice();
 
   // Load wallet balance via edge function (uses Helius API key server-side)
@@ -168,6 +173,7 @@ export function MasterWalletsDashboard() {
           id: w.id,
           pubkey: w.pubkey,
           source: 'wallet_pool',
+          sourceTable: cfg.table,
           sourceEmoji: cfg.emoji,
           sourceLabel: cfg.label,
           purpose: 'trading',
@@ -176,6 +182,7 @@ export function MasterWalletsDashboard() {
           solBalance: w.sol_balance || 0,
           tokens: [],
           isLoading: false,
+          hasTransactionHistory: true, // Pool wallets likely have history
         });
       });
 
@@ -187,6 +194,7 @@ export function MasterWalletsDashboard() {
           id: w.id,
           pubkey: w.pubkey,
           source: 'blackbox',
+          sourceTable: cfg.table,
           sourceEmoji: cfg.emoji,
           sourceLabel: cfg.label,
           purpose: campaigns.length > 0 ? 'volume' : 'bump',
@@ -197,6 +205,7 @@ export function MasterWalletsDashboard() {
           isLoading: false,
           lastUpdated: w.updated_at ? new Date(w.updated_at) : undefined,
           linkedCampaigns: campaigns,
+          hasTransactionHistory: campaigns.length > 0 || (w.sol_balance || 0) > 0,
         });
       });
 
@@ -208,6 +217,7 @@ export function MasterWalletsDashboard() {
           id: w.id,
           pubkey: w.pubkey,
           source: 'super_admin',
+          sourceTable: cfg.table,
           sourceEmoji: cfg.emoji,
           sourceLabel: cfg.label,
           label: w.label,
@@ -218,6 +228,7 @@ export function MasterWalletsDashboard() {
           tokens: [],
           isLoading: false,
           lastUpdated: w.created_at ? new Date(w.created_at) : undefined,
+          hasTransactionHistory: true, // Admin wallets usually have history
         });
       });
 
@@ -228,6 +239,7 @@ export function MasterWalletsDashboard() {
           id: w.id,
           pubkey: w.pubkey,
           source: 'airdrop',
+          sourceTable: cfg.table,
           sourceEmoji: cfg.emoji,
           sourceLabel: cfg.label,
           label: w.nickname,
@@ -238,6 +250,7 @@ export function MasterWalletsDashboard() {
           tokens: [],
           isLoading: false,
           lastUpdated: w.updated_at ? new Date(w.updated_at) : undefined,
+          hasTransactionHistory: (w.sol_balance || 0) > 0,
         });
       });
 
@@ -295,7 +308,36 @@ export function MasterWalletsDashboard() {
     window.open(`https://solscan.io/account/${address}`, '_blank');
   };
 
-  // Filter wallets based on search and tab
+  // Export private key
+  const exportPrivateKey = async (wallet: MasterWallet) => {
+    setExportingKey(wallet.id);
+    try {
+      const { data, error } = await supabase.functions.invoke('export-wallet-key', {
+        body: { wallet_id: wallet.id, source: wallet.sourceTable }
+      });
+
+      if (error) throw error;
+      if (!data?.success) throw new Error(data?.error || 'Export failed');
+
+      // Copy to clipboard
+      await navigator.clipboard.writeText(data.secret_key);
+      toast({
+        title: "🔐 Private Key Copied",
+        description: `Key for ${wallet.pubkey.slice(0, 8)}... copied to clipboard`,
+      });
+    } catch (error: any) {
+      console.error('[MasterWallets] Export key failed:', error);
+      toast({
+        title: "Export Failed",
+        description: error.message,
+        variant: "destructive"
+      });
+    } finally {
+      setExportingKey(null);
+    }
+  };
+
+  // Filter wallets based on search, tab, and history filter
   const filteredWallets = wallets.filter(wallet => {
     const matchesSearch = 
       wallet.pubkey.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -309,8 +351,13 @@ export function MasterWalletsDashboard() {
       (activeTab === 'inactive' && !wallet.isActive) ||
       activeTab === wallet.source;
 
-    return matchesSearch && matchesTab;
+    const matchesHistory = !showOnlyWithHistory || wallet.hasTransactionHistory || wallet.solBalance > 0;
+
+    return matchesSearch && matchesTab && matchesHistory;
   });
+
+  // Count wallets with balance (for history filter)
+  const walletsWithBalance = wallets.filter(w => w.solBalance > 0 || w.hasTransactionHistory).length;
 
   // Calculate totals
   const totalSol = filteredWallets.reduce((sum, w) => sum + w.solBalance, 0);
@@ -369,14 +416,25 @@ export function MasterWalletsDashboard() {
 
       {/* Filters and Controls */}
       <div className="flex flex-col md:flex-row gap-4 items-start md:items-center justify-between">
-        <div className="relative flex-1 max-w-md">
-          <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-          <Input
-            placeholder="Search wallets, tokens, labels..."
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            className="pl-10"
-          />
+        <div className="flex gap-2 items-center flex-1">
+          <div className="relative flex-1 max-w-md">
+            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+            <Input
+              placeholder="Search wallets, tokens, labels..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="pl-10"
+            />
+          </div>
+          <Button
+            variant={showOnlyWithHistory ? "default" : "outline"}
+            size="sm"
+            onClick={() => setShowOnlyWithHistory(!showOnlyWithHistory)}
+            className="whitespace-nowrap"
+          >
+            <History className="h-4 w-4 mr-1" />
+            With Balance ({walletsWithBalance})
+          </Button>
         </div>
         <Button onClick={loadAllWallets} disabled={isLoading}>
           <RefreshCw className={`h-4 w-4 mr-2 ${isLoading ? 'animate-spin' : ''}`} />
@@ -497,6 +555,19 @@ export function MasterWalletsDashboard() {
                         disabled={wallet.isLoading}
                       >
                         <RefreshCw className={`h-3 w-3 ${wallet.isLoading ? 'animate-spin' : ''}`} />
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => exportPrivateKey(wallet)}
+                        disabled={exportingKey === wallet.id}
+                        className="text-amber-600 hover:text-amber-700 hover:bg-amber-50 dark:text-amber-400 dark:hover:bg-amber-900/20"
+                      >
+                        {exportingKey === wallet.id ? (
+                          <RefreshCw className="h-3 w-3 animate-spin" />
+                        ) : (
+                          <Key className="h-3 w-3" />
+                        )}
                       </Button>
                       <Button
                         variant="outline"
