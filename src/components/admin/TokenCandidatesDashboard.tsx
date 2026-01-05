@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef, lazy, Suspense } from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -60,7 +60,9 @@ import {
 } from '@/components/ui/alert-dialog';
 import { formatDistanceToNow } from 'date-fns';
 
-// Watchlist item from pumpfun_watchlist table
+// Lazy load the pipeline debugger
+const PipelineDebugger = lazy(() => import('./PipelineDebugger'));
+
 interface WatchlistItem {
   id: string;
   token_mint: string;
@@ -329,7 +331,7 @@ export function TokenCandidatesDashboard() {
   const [config, setConfig] = useState<MonitorConfig | null>(null);
   const [loading, setLoading] = useState(true);
   const [polling, setPolling] = useState(false);
-  const [mainTab, setMainTab] = useState<'watchlist' | 'candidates' | 'fantasy' | 'logs'>('watchlist');
+  const [mainTab, setMainTab] = useState<'watchlist' | 'candidates' | 'fantasy' | 'logs' | 'debugger'>('watchlist');
   const [watchlistFilter, setWatchlistFilter] = useState<'all' | 'watching' | 'qualified' | 'rejected' | 'dead'>('all');
   const [fantasyFilter, setFantasyFilter] = useState<'open' | 'closed' | 'all'>('open');
   const [candidateFilter, setCandidateFilter] = useState<'all' | 'pending' | 'approved' | 'rejected'>('all');
@@ -1379,7 +1381,7 @@ export function TokenCandidatesDashboard() {
 
       {/* Main Tabs */}
       <Tabs value={mainTab} onValueChange={(v) => { 
-        setMainTab(v as 'watchlist' | 'candidates' | 'fantasy' | 'logs');
+        setMainTab(v as 'watchlist' | 'candidates' | 'fantasy' | 'logs' | 'debugger');
         if (v === 'fantasy') fetchFantasyData();
       }}>
         <TabsList>
@@ -1398,6 +1400,10 @@ export function TokenCandidatesDashboard() {
           <TabsTrigger value="logs" className="flex items-center gap-1">
             <FileText className="h-3 w-3" />
             Logs ({totalLogsCount})
+          </TabsTrigger>
+          <TabsTrigger value="debugger" className="flex items-center gap-1">
+            <SearchCheck className="h-3 w-3" />
+            🔬 Pipeline
           </TabsTrigger>
         </TabsList>
 
@@ -2013,6 +2019,13 @@ export function TokenCandidatesDashboard() {
               )}
             </CardContent>
           </Card>
+        </TabsContent>
+
+        {/* Pipeline Debugger Tab */}
+        <TabsContent value="debugger" className="mt-4">
+          <Suspense fallback={<div className="flex items-center justify-center p-8"><RefreshCw className="h-6 w-6 animate-spin" /></div>}>
+            <PipelineDebugger />
+          </Suspense>
         </TabsContent>
       </Tabs>
 
