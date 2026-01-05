@@ -35,10 +35,10 @@ async function safeFetch(url: string, options: RequestInit = {}, timeoutMs = 100
 }
 
 // Step 1: Token Discovery - Fetch batch of new tokens
-async function runDiscovery(liveMode: boolean): Promise<any> {
+async function runDiscovery(liveMode: boolean, supabase?: any): Promise<any> {
   console.log('[Step 1] Running token discovery, liveMode:', liveMode);
   const startTime = Date.now();
-  
+
   if (!liveMode) {
     // Demo mode - return sample data
     return {
@@ -67,34 +67,30 @@ async function runDiscovery(liveMode: boolean): Promise<any> {
 
   // Live mode - fetch from pumpfun_watchlist (real newly discovered tokens)
   try {
-    // Get newest tokens from watchlist that were just added by websocket listener
-    const { data: supabase } = await createClient(
-      Deno.env.get('SUPABASE_URL') ?? '',
-      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
-    );
-    
+    if (!supabase) throw new Error('Supabase client not provided');
+
     const { data: tokens, error } = await supabase
       .from('pumpfun_watchlist')
       .select('token_mint, token_symbol, token_name, market_cap_sol, created_at, status')
       .order('created_at', { ascending: false })
       .limit(50);
-    
+
     if (error) throw error;
-    
+
     const formattedTokens = (tokens || []).map((t: any) => ({
       mint: t.token_mint,
       symbol: t.token_symbol || '',
       name: t.token_name || '',
       marketCapSol: t.market_cap_sol || 0,
       status: t.status,
-      createdAt: t.created_at
+      createdAt: t.created_at,
     }));
 
     return {
       source: 'pumpfun_watchlist (WebSocket)',
       fetchedCount: formattedTokens.length,
       fetchTimeMs: Date.now() - startTime,
-      tokens: formattedTokens
+      tokens: formattedTokens,
     };
   } catch (err: any) {
     console.error('[Step 1] Discovery error:', err);
@@ -103,7 +99,7 @@ async function runDiscovery(liveMode: boolean): Promise<any> {
       fetchedCount: 0,
       fetchTimeMs: Date.now() - startTime,
       tokens: [],
-      error: err.message
+      error: err?.message ?? String(err),
     };
   }
 }
@@ -111,11 +107,11 @@ async function runDiscovery(liveMode: boolean): Promise<any> {
 // Step 2: Intake Filtering - Apply filters to discovered tokens
 async function runIntake(liveMode: boolean, supabase: any): Promise<any> {
   console.log('[Step 2] Running intake filtering, liveMode:', liveMode);
-  
+
   // First get discovered tokens
-  const discovery = await runDiscovery(liveMode);
+  const discovery = await runDiscovery(liveMode, supabase);
   const tokens = discovery.tokens || [];
-  
+
   const passed: any[] = [];
   const rejected: any[] = [];
   const filterBreakdown: Record<string, number> = {
@@ -134,7 +130,7 @@ async function runIntake(liveMode: boolean, supabase: any): Promise<any> {
       .from('pumpfun_watchlist')
       .select('token_mint')
       .in('status', ['watching', 'qualified', 'bought']);
-    
+
     existingMints = new Set((watchlist || []).map((w: any) => w.token_mint));
   }
 
@@ -185,7 +181,7 @@ async function runIntake(liveMode: boolean, supabase: any): Promise<any> {
     rejectedCount: rejected.length,
     filterBreakdown,
     passed,
-    rejected
+    rejected,
   };
 }
 
@@ -519,10 +515,17 @@ serve(async (req) => {
   }
 
   try {
-    const supabase = createClient(
-      Deno.env.get('SUPABASE_URL') ?? '',
-      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
-    );
+    const supabaseUrl = Deno.env.get('SUPABASE_URL');
+    const supabaseKey =
+      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || Deno.env.get('SUPABASE_ANON_KEY');
+
+    if (!supabaseUrl || !supabaseKey) {
+      throw new Error('Missing SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY');
+    }
+
+    const supabase = createClient(supabaseUrl, supabaseKey, {
+      auth: { persistSession: false },
+    });
 
     const { action, liveMode = false } = await req.json();
     console.log('[Pipeline Debugger] Action:', action, 'Live mode:', liveMode);
@@ -530,7 +533,7 @@ serve(async (req) => {
     let result;
     switch (action) {
       case 'run_discovery':
-        result = await runDiscovery(liveMode);
+        result = await runDiscovery(liveMode, supabase);
         break;
       case 'run_intake':
         result = await runIntake(liveMode, supabase);
