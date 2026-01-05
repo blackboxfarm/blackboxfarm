@@ -626,10 +626,10 @@ export default function PipelineDebugger() {
           </div>
         );
 
-      case 5: // Dev Checks
+      case 5: // Dev Checks with enhanced behavior analysis
         return (
           <div className="space-y-4">
-            <div className="grid grid-cols-4 gap-4">
+            <div className="grid grid-cols-5 gap-4">
               <Card className="p-3 border-green-500/30">
                 <p className="text-xs text-muted-foreground">Passed</p>
                 <p className="text-lg font-semibold text-green-500">{data.passedCount || 0}</p>
@@ -646,12 +646,38 @@ export default function PipelineDebugger() {
                 <p className="text-xs text-muted-foreground">Blacklisted</p>
                 <p className="text-lg font-semibold text-red-500">{data.blacklistedCount || 0}</p>
               </Card>
+              <Card className="p-3 border-yellow-500/30">
+                <p className="text-xs text-muted-foreground">High Risk</p>
+                <p className="text-lg font-semibold text-yellow-500">{data.highRiskCount || 0}</p>
+              </Card>
             </div>
+
+            {data.signalScoring && (
+              <div className="p-3 bg-muted/30 rounded-lg">
+                <p className="text-sm font-medium mb-2 flex items-center gap-2">
+                  Signal Scoring Factors
+                  <TooltipProvider>
+                    <Tooltip>
+                      <TooltipTrigger><Info className="h-3 w-3 text-muted-foreground" /></TooltipTrigger>
+                      <TooltipContent className="max-w-xs">Points are summed to determine signal strength: 0-30=weak($2), 31-50=moderate($10), 51-70=strong($20), 71+=very_strong($50)</TooltipContent>
+                    </Tooltip>
+                  </TooltipProvider>
+                </p>
+                <div className="grid grid-cols-4 gap-2 text-xs">
+                  {Object.entries(data.signalScoring).map(([key, factor]: [string, any]) => (
+                    <div key={key} className="p-2 bg-background rounded flex justify-between items-center">
+                      <span className="text-muted-foreground">{factor.description}</span>
+                      <Badge variant="outline">+{factor.points}</Badge>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
 
             {data.passed && data.passed.length > 0 && (
               <div className="space-y-2">
-                <p className="text-sm font-medium text-green-500">Ready for Buy</p>
-                <ScrollArea className="h-[200px] border rounded-lg border-green-500/30">
+                <p className="text-sm font-medium text-green-500">Ready for Buy - Dev Analysis</p>
+                <ScrollArea className="h-[250px] border rounded-lg border-green-500/30">
                   <Table>
                     <TableHeader>
                       <TableRow>
@@ -659,21 +685,100 @@ export default function PipelineDebugger() {
                         <TableHead>Dev Wallet</TableHead>
                         <TableHead>Reputation</TableHead>
                         <TableHead>Trust</TableHead>
-                        <TableHead>History</TableHead>
+                        <TableHead>Pattern</TableHead>
+                        <TableHead>Signal</TableHead>
+                        <TableHead>Socials</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
                       {data.passed.map((token: any, idx: number) => (
-                        <TableRow key={idx}>
+                        <TableRow key={idx} className={token.devDumpedButStable ? 'bg-green-500/10' : ''}>
                           <TableCell className="font-mono">{token.symbol}</TableCell>
-                          <TableCell className="font-mono text-xs">{token.devInfo?.wallet?.slice(0, 8)}...</TableCell>
-                          <TableCell>{token.devInfo?.reputation || 50}</TableCell>
                           <TableCell>
-                            <Badge variant={token.devInfo?.trustLevel === 'trusted' ? 'default' : 'outline'}>
+                            <div className="flex items-center gap-1">
+                              <span className="font-mono text-xs">{token.devInfo?.wallet?.slice(0, 8)}...</span>
+                              <a href={`https://solscan.io/account/${token.devInfo?.wallet}`} target="_blank" rel="noopener noreferrer">
+                                <ExternalLink className="h-3 w-3 text-muted-foreground" />
+                              </a>
+                            </div>
+                          </TableCell>
+                          <TableCell>
+                            <Badge variant={token.devInfo?.reputation >= 70 ? 'default' : token.devInfo?.reputation >= 50 ? 'secondary' : 'destructive'}>
+                              {token.devInfo?.reputation || 50}
+                            </Badge>
+                          </TableCell>
+                          <TableCell>
+                            <Badge variant={token.devInfo?.trustLevel === 'trusted' ? 'default' : token.devInfo?.trustLevel === 'neutral' ? 'secondary' : 'outline'}>
                               {token.devInfo?.trustLevel || 'unknown'}
                             </Badge>
                           </TableCell>
+                          <TableCell>
+                            {token.devDumpedButStable ? (
+                              <Badge className="bg-green-500/20 text-green-500 border-green-500/30">
+                                Stable After Dump ✓
+                              </Badge>
+                            ) : token.devInfo?.tokensStableAfterDump > 0 ? (
+                              <span className="text-xs text-green-500">{token.devInfo.tokensStableAfterDump}x stable pattern</span>
+                            ) : (
+                              <span className="text-xs text-muted-foreground">No pattern</span>
+                            )}
+                          </TableCell>
+                          <TableCell>
+                            <TooltipProvider>
+                              <Tooltip>
+                                <TooltipTrigger>
+                                  <Badge variant={token.devInfo?.signalStrength === 'very_strong' ? 'default' : token.devInfo?.signalStrength === 'strong' ? 'secondary' : 'outline'}>
+                                    {token.devInfo?.signalScore || 0}pts
+                                  </Badge>
+                                </TooltipTrigger>
+                                <TooltipContent className="max-w-xs">
+                                  <div className="space-y-1">
+                                    {(token.devInfo?.scoreFactors || []).map((f: any, i: number) => (
+                                      <div key={i} className="text-xs">{f.factor}: +{f.points}</div>
+                                    ))}
+                                  </div>
+                                </TooltipContent>
+                              </Tooltip>
+                            </TooltipProvider>
+                          </TableCell>
                           <TableCell className="text-xs">
+                            <div className="flex gap-1">
+                              {token.devInfo?.twitterAccounts?.length > 0 && (
+                                <Badge variant="outline" className="text-[10px]">X: {token.devInfo.twitterAccounts[0]}</Badge>
+                              )}
+                              {token.devInfo?.telegramGroups?.length > 0 && (
+                                <Badge variant="outline" className="text-[10px]">TG: {token.devInfo.telegramGroups[0]}</Badge>
+                              )}
+                            </div>
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </ScrollArea>
+              </div>
+            )}
+
+            {data.failed && data.failed.length > 0 && (
+              <div className="space-y-2">
+                <p className="text-sm font-medium text-red-500">Failed Dev Checks</p>
+                <ScrollArea className="h-[150px] border rounded-lg border-red-500/30">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Symbol</TableHead>
+                        <TableHead>Reason</TableHead>
+                        <TableHead>Reputation</TableHead>
+                        <TableHead>History</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {data.failed.map((token: any, idx: number) => (
+                        <TableRow key={idx}>
+                          <TableCell className="font-mono">{token.symbol}</TableCell>
+                          <TableCell className="text-red-400 text-xs">{token.reason}</TableCell>
+                          <TableCell>{token.devInfo?.reputation || 50}</TableCell>
+                          <TableCell className="text-xs text-muted-foreground">
                             {token.devInfo?.tokensLaunched || 0} launched, {token.devInfo?.tokensRugged || 0} rugs
                           </TableCell>
                         </TableRow>
@@ -686,7 +791,7 @@ export default function PipelineDebugger() {
           </div>
         );
 
-      case 6: // Buy Queue
+      case 6: // Buy Queue with signal scoring
         return (
           <div className="space-y-4">
             <div className="grid grid-cols-4 gap-4">
@@ -710,13 +815,19 @@ export default function PipelineDebugger() {
 
             {data.buyTiers && (
               <div className="p-3 bg-muted/30 rounded-lg">
-                <p className="text-sm font-medium mb-2">Tiered Buy Amounts (Signal → USD)</p>
+                <p className="text-sm font-medium mb-2">Tiered Buy Amounts (Signal Score → USD)</p>
                 <div className="grid grid-cols-4 gap-2 text-xs">
                   {Object.entries(data.buyTiers).map(([signal, tier]: [string, any]) => (
-                    <div key={signal} className="text-center p-2 bg-background rounded">
+                    <div key={signal} className="text-center p-2 bg-background rounded border">
                       <p className="font-semibold capitalize">{signal.replace('_', ' ')}</p>
                       <p className="text-lg text-primary">${tier.amount_usd}</p>
                       <p className="text-muted-foreground text-[10px]">{tier.description}</p>
+                      <p className="text-[10px] mt-1">
+                        {signal === 'weak' && '0-30 pts'}
+                        {signal === 'moderate' && '31-50 pts'}
+                        {signal === 'strong' && '51-70 pts'}
+                        {signal === 'very_strong' && '71+ pts'}
+                      </p>
                     </div>
                   ))}
                 </div>
@@ -725,30 +836,82 @@ export default function PipelineDebugger() {
 
             {data.queue && data.queue.length > 0 && (
               <div className="space-y-2">
-                <p className="text-sm font-medium">Buy Queue</p>
-                <ScrollArea className="h-[200px] border rounded-lg">
+                <p className="text-sm font-medium">Buy Queue (sorted by signal score)</p>
+                <ScrollArea className="h-[300px] border rounded-lg">
                   <Table>
                     <TableHeader>
                       <TableRow>
                         <TableHead>Symbol</TableHead>
                         <TableHead>Price (USD)</TableHead>
-                        <TableHead>On Curve</TableHead>
-                        <TableHead>Signal</TableHead>
+                        <TableHead>Dev Rep</TableHead>
+                        <TableHead>Signal Score</TableHead>
+                        <TableHead>Tier</TableHead>
                         <TableHead>Buy Amount</TableHead>
+                        <TableHead>Factors</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
                       {data.queue.map((token: any, idx: number) => (
-                        <TableRow key={idx}>
-                          <TableCell className="font-mono">{token.symbol}</TableCell>
+                        <TableRow key={idx} className={token.devDumpedButStable ? 'bg-green-500/10' : ''}>
+                          <TableCell className="font-mono">
+                            <div className="flex items-center gap-1">
+                              {token.symbol}
+                              <a href={`https://pump.fun/coin/${token.mint}`} target="_blank" rel="noopener noreferrer">
+                                <ExternalLink className="h-3 w-3 text-muted-foreground" />
+                              </a>
+                            </div>
+                          </TableCell>
                           <TableCell>${token.priceUsd?.toFixed(8)}</TableCell>
-                          <TableCell>{token.onCurve ? 'Yes' : 'No'}</TableCell>
                           <TableCell>
-                            <Badge variant={token.signalStrength === 'strong' || token.signalStrength === 'very_strong' ? 'default' : 'outline'}>
+                            <Badge variant={token.devReputation >= 70 ? 'default' : token.devReputation >= 50 ? 'secondary' : 'outline'}>
+                              {token.devReputation}
+                            </Badge>
+                          </TableCell>
+                          <TableCell>
+                            <div className="flex items-center gap-1">
+                              <span className="font-semibold">{token.signalScore}</span>
+                              {token.devDumpedButStable && (
+                                <TooltipProvider>
+                                  <Tooltip>
+                                    <TooltipTrigger>
+                                      <Zap className="h-3 w-3 text-yellow-500" />
+                                    </TooltipTrigger>
+                                    <TooltipContent>Dev dumped but token stable - HIGH SIGNAL</TooltipContent>
+                                  </Tooltip>
+                                </TooltipProvider>
+                              )}
+                            </div>
+                          </TableCell>
+                          <TableCell>
+                            <Badge variant={token.signalStrength === 'very_strong' ? 'default' : token.signalStrength === 'strong' ? 'secondary' : 'outline'}>
                               {token.signalStrength}
                             </Badge>
                           </TableCell>
                           <TableCell className="font-semibold text-primary">${token.buyAmountUsd}</TableCell>
+                          <TableCell>
+                            <TooltipProvider>
+                              <Tooltip>
+                                <TooltipTrigger>
+                                  <Badge variant="outline" className="text-[10px]">
+                                    {token.scoreFactors?.length || 0} factors
+                                  </Badge>
+                                </TooltipTrigger>
+                                <TooltipContent className="max-w-xs">
+                                  <div className="space-y-1">
+                                    {(token.scoreFactors || []).map((f: any, i: number) => (
+                                      <div key={i} className="text-xs flex justify-between gap-2">
+                                        <span>{f.factor.replace(/_/g, ' ')}</span>
+                                        <span className="text-primary">+{f.points}</span>
+                                      </div>
+                                    ))}
+                                    {(!token.scoreFactors || token.scoreFactors.length === 0) && (
+                                      <span className="text-muted-foreground">No factors matched</span>
+                                    )}
+                                  </div>
+                                </TooltipContent>
+                              </Tooltip>
+                            </TooltipProvider>
+                          </TableCell>
                         </TableRow>
                       ))}
                     </TableBody>

@@ -288,6 +288,41 @@ async function monitorPositions(supabase: any): Promise<MonitorStats> {
               stats.moonbagsCreated++;
               
               console.log(`💰 SOLD 90%: ${position.token_symbol} | ${sellResult.amountSol?.toFixed(4)} SOL | Sig: ${sellResult.signature?.slice(0, 20)}...`);
+
+              // Update dev reputation on successful trade
+              if (position.creator_wallet) {
+                console.log(`📊 Updating dev reputation for: ${position.creator_wallet}`);
+                try {
+                  await supabase.functions.invoke('pumpfun-dev-tracker', {
+                    body: {
+                      action: 'update_on_success',
+                      devWallet: position.creator_wallet,
+                      tokenMint: position.token_mint,
+                    }
+                  });
+                  
+                  // Also link social accounts if available
+                  const twitterUrl = position.twitter_url || position.metadata?.twitter_url;
+                  const telegramUrl = position.telegram_url || position.metadata?.telegram_url;
+                  
+                  if (twitterUrl || telegramUrl) {
+                    // Extract handle from URL
+                    const twitterHandle = twitterUrl ? twitterUrl.split('/').pop()?.replace('@', '') : null;
+                    const telegramGroup = telegramUrl ? telegramUrl.split('/').pop() : null;
+                    
+                    await supabase.functions.invoke('pumpfun-dev-tracker', {
+                      body: {
+                        action: 'link_social_accounts',
+                        devWallet: position.creator_wallet,
+                        twitterHandle,
+                        telegramGroup,
+                      }
+                    });
+                  }
+                } catch (devErr) {
+                  console.error('Dev tracker update error:', devErr);
+                }
+              }
             } else {
               stats.errors.push(`Sell failed for ${position.token_symbol}: ${sellResult.error}`);
               console.error(`❌ Sell failed: ${sellResult.error}`);
