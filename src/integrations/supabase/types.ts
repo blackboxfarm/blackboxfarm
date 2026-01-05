@@ -14,6 +14,33 @@ export type Database = {
   }
   public: {
     Tables: {
+      abused_tickers: {
+        Row: {
+          abuse_count: number | null
+          first_seen_at: string | null
+          is_permanent_block: boolean | null
+          last_seen_at: string | null
+          notes: string | null
+          symbol: string
+        }
+        Insert: {
+          abuse_count?: number | null
+          first_seen_at?: string | null
+          is_permanent_block?: boolean | null
+          last_seen_at?: string | null
+          notes?: string | null
+          symbol: string
+        }
+        Update: {
+          abuse_count?: number | null
+          first_seen_at?: string | null
+          is_permanent_block?: boolean | null
+          last_seen_at?: string | null
+          notes?: string | null
+          symbol?: string
+        }
+        Relationships: []
+      }
       access_passwords: {
         Row: {
           created_at: string

@@ -15,6 +15,13 @@ const MAX_TOKEN_AGE_MINUTES = 30;
 // Standard pump.fun token supply (1 billion with 6 decimals)
 const STANDARD_PUMPFUN_SUPPLY = 1000000000000000;
 
+// Known abused/spam tickers (static list for fast lookup)
+const KNOWN_ABUSED_TICKERS = new Set([
+  'TEST', 'READ', 'BONKBALL', 'BADONK', 'OIL', 'MADURO',
+  'BEAST', 'MOON', 'PUMP', 'GEM', 'PEPE', '100X', 'SEND',
+  'TRUMP', 'MAGA', 'ELON', 'DOGE', 'SHIB', 'APE', 'CAT',
+]);
+
 interface NewTokenEvent {
   signature: string;
   mint: string;
@@ -61,15 +68,67 @@ async function getConfig(supabase: any): Promise<IntakeConfig> {
   };
 }
 
-// Check if ticker contains emoji or problematic unicode
-function containsEmojiOrUnicode(text: string): boolean {
-  // Regex to detect emojis and extended unicode (above basic ASCII/Latin)
-  const emojiRegex = /[\u{1F000}-\u{1FFFF}]|[\u{2600}-\u{26FF}]|[\u{2700}-\u{27BF}]|[\u{FE00}-\u{FEFF}]|[\u{1F900}-\u{1F9FF}]/u;
-  // Also reject tickers with unusual unicode characters (keeping basic Latin + numbers)
-  const hasEmoji = emojiRegex.test(text);
-  // Check for non-basic characters (allow A-Z, a-z, 0-9, and common symbols like $)
-  const hasWeirdChars = /[^\x20-\x7E]/.test(text);
-  return hasEmoji || hasWeirdChars;
+// Check if mint address is a pump.fun token
+// pump.fun tokens end with "pump" in their mint address
+function isPumpFunMint(mint: string): boolean {
+  if (!mint) return false;
+  return mint.toLowerCase().endsWith('pump');
+}
+
+// Check if ticker contains BAD emojis (decorative pictographs)
+// ALLOWS: CJK characters (Chinese/Japanese/Korean), Latin extended
+// REJECTS: Emoji pictographs, symbols, dingbats
+function containsBadEmoji(text: string): boolean {
+  if (!text) return false;
+  
+  // Regex to match actual emoji pictographs (hearts, rockets, money bags, etc.)
+  // Does NOT match CJK characters (U+4E00-U+9FFF, U+3040-U+309F, U+30A0-U+30FF, U+AC00-U+D7AF)
+  const emojiRegex = /[\u{1F300}-\u{1F5FF}]|[\u{1F600}-\u{1F64F}]|[\u{1F680}-\u{1F6FF}]|[\u{1F700}-\u{1F77F}]|[\u{1F780}-\u{1F7FF}]|[\u{1F800}-\u{1F8FF}]|[\u{1F900}-\u{1F9FF}]|[\u{1FA00}-\u{1FA6F}]|[\u{1FA70}-\u{1FAFF}]|[\u{2600}-\u{26FF}]|[\u{2700}-\u{27BF}]|[\u{FE00}-\u{FEFF}]|[\u{1F000}-\u{1F02F}]/u;
+  
+  return emojiRegex.test(text);
+}
+
+// Check if ticker is a known abused ticker (dynamically from DB + static list)
+async function isAbusedTicker(supabase: any, symbol: string): Promise<{ abused: boolean; reason?: string }> {
+  if (!symbol) return { abused: false };
+  
+  const upperSymbol = symbol.toUpperCase();
+  
+  // Fast check: static list first
+  if (KNOWN_ABUSED_TICKERS.has(upperSymbol)) {
+    return { abused: true, reason: 'known_abused_ticker' };
+  }
+  
+  // Check dynamic list from database
+  const { data: abusedRecord } = await supabase
+    .from('abused_tickers')
+    .select('symbol, abuse_count, is_permanent_block')
+    .eq('symbol', upperSymbol)
+    .maybeSingle();
+  
+  if (abusedRecord?.is_permanent_block) {
+    return { abused: true, reason: 'permanently_blocked_ticker' };
+  }
+  
+  // Check recent high-frequency usage (5+ times in 24 hours)
+  const { count } = await supabase
+    .from('pumpfun_watchlist')
+    .select('id', { count: 'exact', head: true })
+    .ilike('token_symbol', upperSymbol)
+    .gte('created_at', new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString());
+  
+  if ((count || 0) >= 5) {
+    // Update abuse tracking
+    await supabase.from('abused_tickers').upsert({
+      symbol: upperSymbol,
+      abuse_count: (abusedRecord?.abuse_count || 0) + 1,
+      last_seen_at: new Date().toISOString(),
+    }, { onConflict: 'symbol' });
+    
+    return { abused: true, reason: `high_frequency_ticker:${count}_in_24h` };
+  }
+  
+  return { abused: false };
 }
 
 // Validate token intake - Stage 0 checks
@@ -98,15 +157,15 @@ function validateIntake(
     isPermanent = true;
   }
   
-  // EMOJI/UNICODE CHECK - PERMANENT
-  if (event.symbol && containsEmojiOrUnicode(event.symbol)) {
-    reasons.push('ticker_emoji_unicode');
+  // EMOJI CHECK - Use the improved function that allows CJK
+  if (event.symbol && containsBadEmoji(event.symbol)) {
+    reasons.push('ticker_bad_emoji');
     isPermanent = true;
   }
   
-  // Also check name for emojis (less strict, but flag it)
-  if (event.name && containsEmojiOrUnicode(event.name)) {
-    reasons.push('name_emoji_unicode');
+  // Also check name for bad emojis (soft reject)
+  if (event.name && containsBadEmoji(event.name)) {
+    reasons.push('name_bad_emoji');
     // Name with emoji is soft reject, not permanent
   }
   
@@ -186,6 +245,12 @@ async function processNewToken(
 ): Promise<{ success: boolean; reason?: string }> {
   const { mint, name, symbol, traderPublicKey, marketCapSol, uri, vSolInBondingCurve } = event;
   
+  // PHASE 1: Filter non-pump.fun tokens IMMEDIATELY
+  if (!isPumpFunMint(mint)) {
+    console.log(`   ⏭️ Non-pump.fun token (${mint.slice(-8)}), skipping`);
+    return { success: false, reason: 'non_pumpfun_launchpad' };
+  }
+  
   console.log(`\n🆕 NEW TOKEN: ${symbol} (${name})`);
   console.log(`   Mint: ${mint}`);
   console.log(`   Creator: ${traderPublicKey}`);
@@ -203,8 +268,50 @@ async function processNewToken(
     return { success: false, reason: 'already_exists' };
   }
   
-  // === DUPLICATE TICKER CHECK ===
-  // Check if same ticker already exists in watching/qualified status (reject scam copies)
+  // PHASE 3: Check for abused tickers (smart detection)
+  if (symbol) {
+    const abuseCheck = await isAbusedTicker(supabase, symbol);
+    if (abuseCheck.abused) {
+      console.log(`   🚫 ABUSED TICKER REJECTED: ${symbol} - ${abuseCheck.reason}`);
+      
+      // Fetch metadata for social links and image
+      let metadata: TokenMetadata | null = null;
+      if (uri) {
+        metadata = await fetchTokenMetadata(uri);
+      }
+      
+      const socialsCount = [metadata?.twitter, metadata?.telegram, metadata?.website]
+        .filter(s => s && s.trim() !== '').length;
+      const hasImage = !!(metadata?.image && metadata.image !== '' && !metadata.image.includes('placeholder'));
+      
+      // Insert as rejected (permanent - spam/bot)
+      await supabase.from('pumpfun_watchlist').insert({
+        token_mint: mint,
+        token_name: name,
+        token_symbol: symbol,
+        creator_wallet: traderPublicKey,
+        status: 'rejected',
+        rejection_reason: abuseCheck.reason,
+        rejection_type: 'permanent',
+        rejection_reasons: [abuseCheck.reason, 'bot_spam'],
+        source: 'websocket',
+        created_at_blockchain: new Date().toISOString(),
+        bonding_curve_pct: (vSolInBondingCurve / 85) * 100,
+        market_cap_sol: marketCapSol,
+        has_image: hasImage,
+        socials_count: socialsCount,
+        image_url: metadata?.image || null,
+        twitter_url: metadata?.twitter || null,
+        telegram_url: metadata?.telegram || null,
+        website_url: metadata?.website || null,
+        removal_reason: `Abused ticker: ${abuseCheck.reason}`,
+      });
+      
+      return { success: false, reason: abuseCheck.reason };
+    }
+  }
+  
+  // === DUPLICATE TICKER CHECK (active tokens only) ===
   if (symbol) {
     const { data: duplicateTickers, error: dupError } = await supabase
       .from('pumpfun_watchlist')
@@ -215,7 +322,6 @@ async function processNewToken(
       .limit(5);
     
     if (!dupError && duplicateTickers && duplicateTickers.length > 0) {
-      // There's already a token with this ticker - reject as duplicate
       const originalToken = duplicateTickers[0];
       console.log(`   🚫 DUPLICATE TICKER REJECTED: ${symbol} - already exists as ${originalToken.token_mint.slice(0,8)}... (${originalToken.status}, ${originalToken.holder_count || 0} holders)`);
       
@@ -267,7 +373,7 @@ async function processNewToken(
     .filter(s => s && s.trim() !== '').length;
   const hasImage = !!(metadata?.image && metadata.image !== '' && !metadata.image.includes('placeholder'));
   
-  // STAGE 0: Intake Validation
+  // STAGE 0: Intake Validation (with fixed emoji detection)
   const validation = validateIntake(event, metadata, config);
   
   if (!validation.valid) {
@@ -408,15 +514,12 @@ serve(async (req) => {
     }
 
     if (action === 'listen') {
-      // This action runs a listening session
-      // In production, this would be a long-running connection
-      // For edge function, we do a short burst listen
-      
-      const duration = parseInt(url.searchParams.get('duration') || '30') * 1000; // Default 30s
-      const maxDuration = 55000; // Edge function timeout limit
+      const duration = parseInt(url.searchParams.get('duration') || '30') * 1000;
+      const maxDuration = 55000;
       const listenDuration = Math.min(duration, maxDuration);
       
       console.log(`🎧 Starting PumpPortal WebSocket listener for ${listenDuration/1000}s...`);
+      console.log(`   Filtering: pump.fun tokens ONLY (mint ends with "pump")`);
       
       const stats: ListenerStats = {
         connected: false,
@@ -500,7 +603,7 @@ serve(async (req) => {
           await supabase.from('cache').upsert({
             key: 'pumpfun_websocket_stats',
             value: stats,
-            expires_at: new Date(Date.now() + 3600000).toISOString() // 1 hour
+            expires_at: new Date(Date.now() + 3600000).toISOString()
           }, { onConflict: 'key' });
           
           resolve(new Response(JSON.stringify({
@@ -567,8 +670,8 @@ serve(async (req) => {
         });
       }
       
-      if (containsEmojiOrUnicode(symbol)) {
-        return new Response(JSON.stringify({ error: 'Ticker contains emoji/unicode' }), {
+      if (containsBadEmoji(symbol)) {
+        return new Response(JSON.stringify({ error: 'Ticker contains bad emoji characters' }), {
           status: 400,
           headers: { ...corsHeaders, 'Content-Type': 'application/json' }
         });
@@ -595,7 +698,7 @@ serve(async (req) => {
         holder_count: tokenData.holders || 0,
         market_cap_sol: tokenData.pools?.[0]?.marketCap?.quote || 0,
         has_image: !!tokenData.token?.image,
-        socials_count: 0, // Would need to fetch metadata for this
+        socials_count: 0,
       });
       
       if (error) {

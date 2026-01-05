@@ -209,14 +209,16 @@ async function runIntake(supabase: any): Promise<any> {
 }
 
 // Step 3: Watchlist Monitoring - Get current status with metric details
+// FIXED: Now includes pending_triage tokens and shows proper analysis
 async function getWatchlistStatus(supabase: any): Promise<any> {
   console.log('[Step 3] Getting watchlist status (LIVE)');
 
+  // Get both watching AND pending_triage tokens
   const { data: watchlist, error } = await supabase
     .from('pumpfun_watchlist')
     .select('*')
-    .eq('status', 'watching')
-    .order('last_checked_at', { ascending: false })
+    .in('status', ['watching', 'pending_triage'])
+    .order('created_at', { ascending: false })
     .limit(100);
 
   if (error) {
@@ -225,26 +227,45 @@ async function getWatchlistStatus(supabase: any): Promise<any> {
   }
 
   const tokens = watchlist || [];
+  
+  // Count by status
+  const pendingTriageCount = tokens.filter((t: any) => t.status === 'pending_triage').length;
+  const watchingCount = tokens.filter((t: any) => t.status === 'watching').length;
   const staleCount = tokens.filter((t: any) => t.stale_count >= 3).length;
-  const deadCount = tokens.filter((t: any) => t.status === 'dead' || (t.holder_count !== null && t.holder_count < 3)).length;
-  const healthyCount = tokens.length - staleCount - deadCount;
+  const deadCount = tokens.filter((t: any) => t.holder_count !== null && t.holder_count < 3).length;
+  const healthyCount = watchingCount - staleCount - deadCount;
 
-  const recentUpdates = tokens.slice(0, 20).map((t: any) => {
-    const watchedFor = t.first_seen_at ? Math.floor((Date.now() - new Date(t.first_seen_at).getTime()) / 60000) : 0;
+  const recentUpdates = tokens.slice(0, 30).map((t: any) => {
+    const createdAt = t.created_at_blockchain || t.created_at;
+    const watchedFor = createdAt ? Math.floor((Date.now() - new Date(createdAt).getTime()) / 60000) : 0;
+    
+    // Calculate deltas for watching tokens
+    const holderDelta = (t.holder_count || 0) - (t.holder_count_prev || t.holder_count || 0);
+    const volumeDelta = (t.volume_sol || 0) - (t.volume_sol_prev || t.volume_sol || 0);
+    
     return {
       mint: t.token_mint,
       symbol: t.token_symbol || t.token_mint?.slice(0, 6),
       name: t.token_name,
+      status: t.status,
       holders: t.holder_count || 0,
-      holdersPrev: t.prev_holder_count || t.holder_count || 0,
+      holdersPrev: t.holder_count_prev || t.holder_count || 0,
+      holderDelta,
       volume: t.volume_sol || 0,
-      volumePrev: t.prev_volume_sol || t.volume_sol || 0,
+      volumePrev: t.volume_sol_prev || t.volume_sol || 0,
+      volumeDelta,
       price: t.price_usd || 0,
+      pricePeak: t.price_peak || t.price_usd || 0,
       bondingPct: t.bonding_curve_pct || 0,
       watchedMins: watchedFor,
       lastUpdate: t.last_checked_at,
       staleCount: t.stale_count || 0,
       creatorWallet: t.creator_wallet,
+      insiderPct: t.insider_pct || 0,
+      wasSpikedAndKilled: t.was_spiked_and_killed || false,
+      // Metrics trend analysis
+      trend: holderDelta > 0 ? 'growing' : holderDelta < 0 ? 'declining' : 'stable',
+      isHealthy: (t.holder_count || 0) >= 5 && (t.volume_sol || 0) > 0.01,
     };
   });
 
@@ -253,15 +274,32 @@ async function getWatchlistStatus(supabase: any): Promise<any> {
     volume_sol: { sources: ['pump.fun', 'DexScreener'], purpose: 'Detect trading activity' },
     price_usd: { sources: ['pump.fun', 'DexScreener', 'Jupiter'], purpose: 'Track valuation changes' },
     bonding_curve_pct: { sources: ['pump.fun'], purpose: 'Track graduation progress' },
+    insider_pct: { sources: ['Early trade analysis'], purpose: 'Detect linked wallet holdings' },
   };
 
+  // Summary stats
+  const growingTokens = recentUpdates.filter(t => t.trend === 'growing').length;
+  const decliningTokens = recentUpdates.filter(t => t.trend === 'declining').length;
+  const spikedAndKilledTokens = recentUpdates.filter(t => t.wasSpikedAndKilled).length;
+
   return {
-    totalWatching: tokens.length,
+    totalTokens: tokens.length,
+    pendingTriageCount,
+    watchingCount,
     staleCount,
     deadCount,
     healthyCount,
+    growingTokens,
+    decliningTokens,
+    spikedAndKilledTokens,
     metricsInfo,
     recentUpdates,
+    // Pipeline health check
+    pipelineHealth: {
+      triageBacklog: pendingTriageCount > 20 ? 'warning' : 'ok',
+      watchlistActive: watchingCount > 0 ? 'ok' : 'empty',
+      staleRatio: watchingCount > 0 ? ((staleCount / watchingCount) * 100).toFixed(1) + '%' : '0%',
+    },
   };
 }
 
@@ -519,6 +557,7 @@ function applyBuyGuardrails(token: any, devReputation: any): { passed: boolean; 
 }
 
 // Step 5: Dev Wallet Check with enhanced behavior analysis
+// PHASE 6: Added caching to avoid refetching static dev reputation data
 async function runDevChecks(supabase: any): Promise<any> {
   console.log('[Step 5] Running dev wallet checks (LIVE)');
 
@@ -530,16 +569,42 @@ async function runDevChecks(supabase: any): Promise<any> {
 
   const passed: any[] = [];
   const failed: any[] = [];
+  const now = new Date();
+  const DEV_CHECK_CACHE_MINS = 5; // Only re-check dev every 5 mins
 
   for (const token of (qualified || [])) {
     let devReputation = null;
+    let fromCache = false;
+    
     if (token.creator_wallet) {
-      const { data: rep } = await supabase
-        .from('dev_wallet_reputation')
-        .select('*')
-        .eq('wallet_address', token.creator_wallet)
-        .single();
-      devReputation = rep;
+      // Check if we need to re-fetch dev reputation (caching logic)
+      const lastDevCheck = token.last_dev_check_at ? new Date(token.last_dev_check_at) : null;
+      const needsRefresh = !lastDevCheck || 
+        (now.getTime() - lastDevCheck.getTime() > DEV_CHECK_CACHE_MINS * 60 * 1000);
+      
+      if (needsRefresh) {
+        const { data: rep } = await supabase
+          .from('dev_wallet_reputation')
+          .select('*')
+          .eq('wallet_address', token.creator_wallet)
+          .single();
+        devReputation = rep;
+        
+        // Update last_dev_check_at on the token
+        await supabase
+          .from('pumpfun_watchlist')
+          .update({ last_dev_check_at: now.toISOString() })
+          .eq('id', token.id);
+      } else {
+        // Use cached data from token record if available
+        const { data: rep } = await supabase
+          .from('dev_wallet_reputation')
+          .select('*')
+          .eq('wallet_address', token.creator_wallet)
+          .single();
+        devReputation = rep;
+        fromCache = true;
+      }
     }
 
     // Calculate signal score with patterns

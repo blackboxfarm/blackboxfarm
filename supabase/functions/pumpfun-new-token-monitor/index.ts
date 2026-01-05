@@ -728,6 +728,65 @@ async function rejectCandidate(supabase: any, candidateId: string, reason: strin
   return { success: true };
 }
 
+// PHASE 4: Promote tokens from pending_triage to watching status
+// This fixes the stuck pipeline issue where tokens get stuck in pending_triage
+async function promoteFromTriage(supabase: any): Promise<{ promoted: number; errors: number }> {
+  console.log('📤 Promoting tokens from pending_triage to watching...');
+  
+  const now = new Date();
+  const triageMinAge = 30 * 1000; // 30 seconds minimum age before promotion
+  
+  // Get pending_triage tokens older than 30 seconds
+  const { data: pending, error } = await supabase
+    .from('pumpfun_watchlist')
+    .select('id, token_mint, token_symbol, token_name, created_at')
+    .eq('status', 'pending_triage')
+    .lt('created_at', new Date(now.getTime() - triageMinAge).toISOString())
+    .order('created_at', { ascending: true })
+    .limit(100);
+  
+  if (error) {
+    console.error('Error fetching pending_triage tokens:', error);
+    return { promoted: 0, errors: 1 };
+  }
+  
+  if (!pending || pending.length === 0) {
+    console.log('   No tokens ready for promotion');
+    return { promoted: 0, errors: 0 };
+  }
+  
+  let promoted = 0;
+  let errors = 0;
+  
+  for (const token of pending) {
+    try {
+      const { error: updateError } = await supabase
+        .from('pumpfun_watchlist')
+        .update({
+          status: 'watching',
+          first_seen_at: now.toISOString(),
+          last_checked_at: now.toISOString(),
+          check_count: 1,
+        })
+        .eq('id', token.id);
+      
+      if (updateError) {
+        console.error(`   ❌ Failed to promote ${token.token_symbol}:`, updateError);
+        errors++;
+      } else {
+        console.log(`   ✅ Promoted: ${token.token_symbol} (${token.token_mint.slice(0, 8)}...)`);
+        promoted++;
+      }
+    } catch (e) {
+      console.error(`   ❌ Error promoting ${token.token_symbol}:`, e);
+      errors++;
+    }
+  }
+  
+  console.log(`📤 Promotion complete: ${promoted} promoted, ${errors} errors`);
+  return { promoted, errors };
+}
+
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
@@ -763,7 +822,14 @@ serve(async (req) => {
         });
 
         try {
+          // PHASE 4: First promote pending_triage tokens to watching
+          const triageResult = await promoteFromTriage(supabase);
+          console.log(`📤 Triage promotion: ${triageResult.promoted} tokens promoted`);
+          
           const results = await pollWithWatchlist(supabase, config, pollRunId);
+          
+          // Add triage promotion stats to results
+          (results as any).triagePromoted = triageResult.promoted;
           
           const pollFinishedAt = new Date();
           await supabase.from('pumpfun_poll_runs').update({
@@ -838,6 +904,12 @@ serve(async (req) => {
         const body = await req.json();
         const result = await rejectCandidate(supabase, body.candidateId, body.reason || 'Manually rejected');
         return jsonResponse(result);
+      }
+
+      case 'promote_triage': {
+        // Manually trigger promotion from pending_triage to watching
+        const result = await promoteFromTriage(supabase);
+        return jsonResponse({ success: true, ...result });
       }
 
       default:
