@@ -185,6 +185,19 @@ async function monitorDevWallets(supabase: any): Promise<MonitorStats> {
 
   console.log('🔍 DEV WALLET MONITOR: Starting...');
 
+  // Check if monitor is enabled
+  const { data: config } = await supabase
+    .from('pumpfun_monitor_config')
+    .select('is_enabled')
+    .limit(1)
+    .single();
+
+  if (!config?.is_enabled) {
+    console.log('⏸️ Monitor disabled, skipping');
+    stats.durationMs = Date.now() - startTime;
+    return stats;
+  }
+
   // Get watching/qualified tokens with creator wallets
   // Prioritize recently active tokens
   const { data: tokens, error } = await supabase

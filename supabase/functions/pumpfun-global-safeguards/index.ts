@@ -46,6 +46,18 @@ serve(async (req) => {
       throw new Error(`Failed to fetch config: ${configError?.message}`);
     }
 
+    // Check if monitor is paused (but allow reset_kill_switch even when paused)
+    if (!config.is_enabled && action !== 'reset_kill_switch') {
+      console.log('[SAFEGUARDS] ⏸️ Monitor disabled, skipping');
+      return new Response(JSON.stringify({
+        success: true,
+        paused: true,
+        message: 'Monitor is paused'
+      }), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+      });
+    }
+
     const actions: string[] = [];
     let prunedCount = 0;
 
