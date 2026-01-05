@@ -531,7 +531,129 @@ serve(async (req) => {
       });
     }
 
-    return bad(`Unknown action: ${action}. Use 'scan', 'clean', or 'clean_all'.`);
+    // CONSOLIDATE_ALL: Transfer all SOL from all wallets to FlipIt wallet (no token account cleaning)
+    if (action === 'consolidate_all') {
+      console.log(`\n=== CONSOLIDATE ALL ACTION ===`);
+      
+      // Get the main FlipIt wallet
+      const { data: flipitWallets, error: flipitErr } = await supabase
+        .from('super_admin_wallets')
+        .select('id, pubkey, secret_key_encrypted')
+        .eq('wallet_type', 'flipit')
+        .eq('is_active', true)
+        .order('created_at', { ascending: true })
+        .limit(1);
+
+      const mainFlipItWallet = flipitWallets?.[0];
+      if (!mainFlipItWallet) {
+        return bad("No FlipIt wallet found for consolidation");
+      }
+
+      console.log(`Consolidating all SOL to FlipIt wallet: ${mainFlipItWallet.pubkey}`);
+      
+      const flipItPubkey = new PublicKey(mainFlipItWallet.pubkey);
+      const FEE_BUFFER_LAMPORTS = 5000; // 0.000005 SOL for transaction fee
+      const MIN_TRANSFER_LAMPORTS = 10000; // Minimum 0.00001 SOL to bother transferring
+
+      let totalTransferred = 0;
+      let walletsProcessed = 0;
+      const transferSignatures: string[] = [];
+      const transferErrors: string[] = [];
+
+      for (const wallet of allWallets) {
+        // Skip if this is the FlipIt wallet
+        if (wallet.pubkey === mainFlipItWallet.pubkey) {
+          console.log(`Skipping FlipIt wallet itself`);
+          continue;
+        }
+
+        try {
+          // Decrypt/parse the private key
+          let keypair: Keypair;
+          try {
+            let keyData = wallet.secretKeyEncrypted;
+            
+            if (wallet.encrypted) {
+              keyData = await SecureStorage.decrypt(wallet.secretKeyEncrypted);
+            }
+            
+            keypair = parseSecretKey(keyData, wallet.encrypted);
+          } catch (decryptErr: any) {
+            console.error(`Failed to decrypt wallet ${wallet.pubkey}:`, decryptErr.message);
+            transferErrors.push(`${wallet.pubkey} (${wallet.source}): Decryption failed`);
+            continue;
+          }
+
+          // Get current balance
+          const balance = await connection.getBalance(keypair.publicKey);
+          const transferAmount = balance - FEE_BUFFER_LAMPORTS;
+
+          if (transferAmount < MIN_TRANSFER_LAMPORTS) {
+            console.log(`Wallet ${wallet.pubkey} has insufficient balance (${balance / 1e9} SOL)`);
+            continue;
+          }
+
+          console.log(`Transferring ${transferAmount / 1e9} SOL from ${wallet.pubkey} (${wallet.source})`);
+
+          const transaction = new Transaction().add(
+            SystemProgram.transfer({
+              fromPubkey: keypair.publicKey,
+              toPubkey: flipItPubkey,
+              lamports: transferAmount,
+            })
+          );
+
+          const { blockhash, lastValidBlockHeight } = await connection.getLatestBlockhash();
+          transaction.recentBlockhash = blockhash;
+          transaction.feePayer = keypair.publicKey;
+
+          transaction.sign(keypair);
+          const signature = await connection.sendRawTransaction(transaction.serialize(), {
+            skipPreflight: false,
+            preflightCommitment: 'confirmed',
+          });
+
+          await confirmTransactionPolling(connection, signature, blockhash, lastValidBlockHeight);
+
+          transferSignatures.push(signature);
+          totalTransferred += transferAmount / 1e9;
+          walletsProcessed++;
+
+          console.log(`Transferred ${transferAmount / 1e9} SOL in tx ${signature}`);
+
+          // Small delay between transfers
+          await new Promise(resolve => setTimeout(resolve, 300));
+
+        } catch (err: any) {
+          console.error(`Error consolidating from ${wallet.pubkey}:`, err.message);
+          transferErrors.push(`${wallet.pubkey} (${wallet.source}): ${err.message}`);
+        }
+      }
+
+      // Log the consolidation
+      if (totalTransferred > 0) {
+        await supabase.from('token_account_cleanup_logs').insert({
+          wallet_pubkey: mainFlipItWallet.pubkey,
+          wallet_source: 'Full Consolidation (FlipIt)',
+          accounts_closed: 0,
+          sol_recovered: totalTransferred,
+          transaction_signatures: transferSignatures,
+        });
+      }
+
+      return ok({
+        success: true,
+        action: 'consolidate_all',
+        target_wallet: mainFlipItWallet.pubkey,
+        wallets_scanned: allWallets.length,
+        wallets_processed: walletsProcessed,
+        total_transferred: parseFloat(totalTransferred.toFixed(6)),
+        signatures: transferSignatures,
+        errors: transferErrors,
+      });
+    }
+
+    return bad(`Unknown action: ${action}. Use 'scan', 'clean', 'clean_all', or 'consolidate_all'.`);
 
   } catch (err: any) {
     console.error("Token Account Cleaner error:", err);
