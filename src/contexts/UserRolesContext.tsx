@@ -18,12 +18,14 @@ const UserRolesContext = createContext<UserRolesContextValue | null>(null);
 
 export const UserRolesProvider = ({ children }: { children: ReactNode }) => {
   const { user, isAuthenticated, loading: authLoading } = useAuthContext();
-  const [roles, setRoles] = useState<UserRole[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
   const isPreviewAdmin = usePreviewSuperAdmin();
+  
+  // Initialize with super_admin if preview mode is active - prevents flash
+  const [roles, setRoles] = useState<UserRole[]>(() => isPreviewAdmin ? ['super_admin'] : []);
+  const [isLoading, setIsLoading] = useState(() => !isPreviewAdmin);
 
   const fetchUserRoles = useCallback(async () => {
-    // Preview bypass grants super_admin without requiring auth/session
+    // Preview bypass grants super_admin without requiring auth/session - HIGHEST PRIORITY
     if (isPreviewAdmin) {
       setRoles(['super_admin']);
       setIsLoading(false);
