@@ -32,35 +32,69 @@ serve(async (req) => {
 
     for (const position of positions || []) {
       try {
-        // Fetch metadata from DexScreener
-        const dexResponse = await fetch(
-          `https://api.dexscreener.com/latest/dex/tokens/${position.token_mint}`
-        );
-        
         let tokenImage: string | null = null;
         let twitterUrl: string | null = null;
         let websiteUrl: string | null = null;
         let telegramUrl: string | null = null;
 
-        if (dexResponse.ok) {
-          const dexData = await dexResponse.json();
-          const pair = dexData.pairs?.[0];
-          
-          if (pair) {
-            tokenImage = pair.info?.imageUrl || null;
+        // PRIMARY: For pump.fun tokens, try pump.fun API first (most reliable for socials)
+        if (position.token_mint.endsWith('pump')) {
+          try {
+            console.log(`Trying pump.fun API for ${position.token_mint}`);
+            const pumpRes = await fetch(`https://frontend-api.pump.fun/coins/${position.token_mint}`);
+            if (pumpRes.ok) {
+              const pumpData = await pumpRes.json();
+              tokenImage = pumpData.image_uri || pumpData.metadata?.image || null;
+              twitterUrl = pumpData.twitter || null;
+              websiteUrl = pumpData.website || null;
+              telegramUrl = pumpData.telegram || null;
+              console.log(`pump.fun API socials: twitter=${twitterUrl}, website=${websiteUrl}, telegram=${telegramUrl}`);
+            }
+          } catch (e) {
+            console.log(`pump.fun API failed for ${position.token_mint}:`, e);
+          }
+        }
+
+        // FALLBACK: DexScreener for any missing data
+        if (!tokenImage || !twitterUrl || !websiteUrl || !telegramUrl) {
+          try {
+            const dexResponse = await fetch(
+              `https://api.dexscreener.com/latest/dex/tokens/${position.token_mint}`
+            );
             
-            // Extract socials
-            if (pair.info?.socials) {
-              for (const social of pair.info.socials) {
-                if (social.type === 'twitter') twitterUrl = social.url;
-                else if (social.type === 'telegram') telegramUrl = social.url;
+            if (dexResponse.ok) {
+              const dexData = await dexResponse.json();
+              const pair = dexData.pairs?.[0];
+              
+              if (pair) {
+                if (!tokenImage) tokenImage = pair.info?.imageUrl || null;
+                
+                // Extract socials if missing
+                if (pair.info?.socials) {
+                  for (const social of pair.info.socials) {
+                    if (!twitterUrl && (social.type === 'twitter' || social.url?.includes('twitter.com') || social.url?.includes('x.com'))) {
+                      twitterUrl = social.url;
+                    }
+                    if (!telegramUrl && (social.type === 'telegram' || social.url?.includes('t.me'))) {
+                      telegramUrl = social.url;
+                    }
+                  }
+                }
+                
+                // Extract website if missing (skip launchpad sites)
+                if (!websiteUrl && pair.info?.websites?.length > 0) {
+                  for (const site of pair.info.websites) {
+                    const url = site.url || site;
+                    if (url && !url.includes('pump.fun') && !url.includes('bonk.fun') && !url.includes('bags.fm')) {
+                      websiteUrl = url;
+                      break;
+                    }
+                  }
+                }
               }
             }
-            
-            // Extract website
-            if (pair.info?.websites?.length > 0) {
-              websiteUrl = pair.info.websites[0].url;
-            }
+          } catch (e) {
+            console.log(`DexScreener failed for ${position.token_mint}:`, e);
           }
         }
 

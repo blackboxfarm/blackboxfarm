@@ -1101,6 +1101,9 @@ export function FlipItDashboard() {
       ? parsedAmount * solPrice 
       : parsedAmount;
 
+    // Store the UI price for comparison after buy
+    const uiPriceAtClick = inputToken.price;
+    
     setIsFlipping(true);
     try {
       const { data, error } = await supabase.functions.invoke('flipit-execute', {
@@ -1120,7 +1123,28 @@ export function FlipItDashboard() {
       if (data?.error) {
         toast.error(data.error);
       } else {
-        toast.success(`Flip initiated! ${data?.signature ? 'TX: ' + data.signature.slice(0, 8) + '...' : ''}`);
+        // Show actual entry price used by the backend
+        const entryPrice = data?.entryPrice;
+        const signature = data?.signature;
+        
+        // Check if price moved significantly from UI display
+        if (uiPriceAtClick && entryPrice) {
+          const priceDiff = Math.abs((entryPrice - uiPriceAtClick) / uiPriceAtClick) * 100;
+          if (priceDiff > 5) {
+            toast.warning(`Price moved ${priceDiff.toFixed(1)}% since you checked`, { duration: 5000 });
+          }
+        }
+        
+        // Format entry price for display (remove trailing zeros)
+        const formattedPrice = entryPrice 
+          ? `$${entryPrice.toFixed(10).replace(/\.?0+$/, '')}`
+          : '';
+        
+        toast.success(
+          `Flip initiated at ${formattedPrice} ${signature ? '| TX: ' + signature.slice(0, 8) + '...' : ''}`,
+          { duration: 5000 }
+        );
+        
         setTokenAddress('');
         // Clear input token state
         setInputToken({

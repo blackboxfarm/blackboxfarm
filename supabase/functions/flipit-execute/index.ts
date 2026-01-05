@@ -92,13 +92,50 @@ async function fetchTokenMetadata(tokenMint: string): Promise<{
   website?: string;
   telegram?: string;
 } | null> {
-  // Primary: Jupiter token endpoint
+  let result: { 
+    symbol: string; 
+    name: string;
+    image?: string;
+    twitter?: string;
+    website?: string;
+    telegram?: string;
+  } | null = null;
+
+  // PRIMARY: For pump.fun tokens, try pump.fun API first (has most reliable social data)
+  if (tokenMint.endsWith('pump')) {
+    try {
+      console.log(`Fetching metadata from pump.fun API for ${tokenMint}`);
+      const pumpRes = await fetch(`https://frontend-api.pump.fun/coins/${tokenMint}`);
+      if (pumpRes.ok) {
+        const pumpData = await pumpRes.json();
+        if (pumpData?.symbol) {
+          result = {
+            symbol: pumpData.symbol,
+            name: pumpData.name || pumpData.symbol,
+            image: pumpData.image_uri || pumpData.metadata?.image || null,
+            twitter: pumpData.twitter || null,
+            website: pumpData.website || null,
+            telegram: pumpData.telegram || null,
+          };
+          console.log(`pump.fun API returned socials: twitter=${result.twitter}, website=${result.website}, telegram=${result.telegram}`);
+          // If we got symbol, return immediately - pump.fun is authoritative for pump tokens
+          return result;
+        }
+      } else {
+        console.log("pump.fun API non-200:", pumpRes.status);
+      }
+    } catch (e) {
+      console.log("pump.fun API failed, falling back:", e);
+    }
+  }
+
+  // SECONDARY: Jupiter token endpoint (for symbol/name, but no socials)
   try {
     const res = await fetch(`https://tokens.jup.ag/token/${tokenMint}`);
     if (res.ok) {
       const data = await res.json();
       if (data?.symbol) {
-        return { symbol: String(data.symbol), name: String(data.name || data.symbol) };
+        result = { symbol: String(data.symbol), name: String(data.name || data.symbol) };
       }
     } else {
       console.log("Jupiter token endpoint non-200:", res.status);
@@ -107,44 +144,40 @@ async function fetchTokenMetadata(tokenMint: string): Promise<{
     console.error("Jupiter token endpoint failed:", e);
   }
 
-  // Fallback: DexScreener (includes social links)
+  // FALLBACK: DexScreener (includes social links for graduated tokens)
   try {
     const dexRes = await fetch(`https://api.dexscreener.com/latest/dex/tokens/${tokenMint}`);
     if (dexRes.ok) {
       const dexData = await dexRes.json();
       const pair = dexData?.pairs?.[0];
       if (pair?.baseToken?.symbol) {
-        const result: { 
-          symbol: string; 
-          name: string;
-          image?: string;
-          twitter?: string;
-          website?: string;
-          telegram?: string;
-        } = { 
-          symbol: pair.baseToken.symbol, 
-          name: pair.baseToken.name || pair.baseToken.symbol 
-        };
+        // If we don't have a result yet, use DexScreener for symbol/name
+        if (!result) {
+          result = { 
+            symbol: pair.baseToken.symbol, 
+            name: pair.baseToken.name || pair.baseToken.symbol 
+          };
+        }
         
-        // Extract image
-        if (pair.info?.imageUrl) {
+        // Extract image if missing
+        if (!result.image && pair.info?.imageUrl) {
           result.image = pair.info.imageUrl;
         }
         
-        // Extract social links
+        // Extract social links if missing
         if (pair.info?.socials && Array.isArray(pair.info.socials)) {
           for (const social of pair.info.socials) {
             const url = social.url || social;
-            if (url?.includes('twitter.com') || url?.includes('x.com')) {
+            if (!result.twitter && (url?.includes('twitter.com') || url?.includes('x.com'))) {
               result.twitter = url;
-            } else if (url?.includes('t.me') || url?.includes('telegram')) {
+            } else if (!result.telegram && (url?.includes('t.me') || url?.includes('telegram'))) {
               result.telegram = url;
             }
           }
         }
         
-        // Extract website (skip launchpad sites)
-        if (pair.info?.websites && Array.isArray(pair.info.websites)) {
+        // Extract website (skip launchpad sites) if missing
+        if (!result.website && pair.info?.websites && Array.isArray(pair.info.websites)) {
           for (const site of pair.info.websites) {
             const url = site.url || site;
             if (url && !url.includes('pump.fun') && !url.includes('bonk.fun') && !url.includes('bags.fm') && !url.includes('raydium.io')) {
@@ -153,15 +186,13 @@ async function fetchTokenMetadata(tokenMint: string): Promise<{
             }
           }
         }
-        
-        return result;
       }
     }
   } catch (e) {
     console.error("DexScreener metadata fetch failed:", e);
   }
 
-  return null;
+  return result;
 }
 
 // Lookup creator wallet and create/update developer profile
