@@ -65,26 +65,41 @@ async function runDiscovery(liveMode: boolean): Promise<any> {
     };
   }
 
-  // Live mode - fetch from Solana Tracker API
+  // Live mode - fetch from pumpfun_watchlist (real newly discovered tokens)
   try {
-    const data = await safeFetch(`${SOLANA_TRACKER_API}/tokens/latest?limit=50`);
-    const tokens = (data || []).map((t: any) => ({
-      mint: t.mint || t.address,
-      symbol: t.token?.symbol || t.symbol || '',
-      name: t.token?.name || t.name || '',
-      marketCapSol: t.pools?.[0]?.marketCap?.sol || 0,
+    // Get newest tokens from watchlist that were just added by websocket listener
+    const { data: supabase } = await createClient(
+      Deno.env.get('SUPABASE_URL') ?? '',
+      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
+    );
+    
+    const { data: tokens, error } = await supabase
+      .from('pumpfun_watchlist')
+      .select('token_mint, token_symbol, token_name, market_cap_sol, created_at, status')
+      .order('created_at', { ascending: false })
+      .limit(50);
+    
+    if (error) throw error;
+    
+    const formattedTokens = (tokens || []).map((t: any) => ({
+      mint: t.token_mint,
+      symbol: t.token_symbol || '',
+      name: t.token_name || '',
+      marketCapSol: t.market_cap_sol || 0,
+      status: t.status,
+      createdAt: t.created_at
     }));
 
     return {
-      source: 'Solana Tracker API',
-      fetchedCount: tokens.length,
+      source: 'pumpfun_watchlist (WebSocket)',
+      fetchedCount: formattedTokens.length,
       fetchTimeMs: Date.now() - startTime,
-      tokens
+      tokens: formattedTokens
     };
   } catch (err: any) {
     console.error('[Step 1] Discovery error:', err);
     return {
-      source: 'Solana Tracker API',
+      source: 'pumpfun_watchlist',
       fetchedCount: 0,
       fetchTimeMs: Date.now() - startTime,
       tokens: [],
