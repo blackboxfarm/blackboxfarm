@@ -1723,6 +1723,93 @@ export type Database = {
           },
         ]
       }
+      dev_wallet_reputation: {
+        Row: {
+          avg_peak_mcap_usd: number | null
+          avg_time_before_dump_mins: number | null
+          created_at: string
+          discord_servers: string[] | null
+          downstream_wallets: string[] | null
+          first_seen_at: string | null
+          id: string
+          known_aliases: string[] | null
+          last_activity_at: string | null
+          last_analyzed_at: string | null
+          launches_new_while_active: boolean | null
+          metadata: Json | null
+          notes: string | null
+          reputation_score: number | null
+          telegram_groups: string[] | null
+          tokens_abandoned: number | null
+          tokens_graduated: number | null
+          tokens_rugged: number | null
+          tokens_successful: number | null
+          total_tokens_launched: number | null
+          trust_level: string | null
+          twitter_accounts: string[] | null
+          typical_sell_percentage: number | null
+          updated_at: string
+          upstream_wallets: string[] | null
+          wallet_address: string
+        }
+        Insert: {
+          avg_peak_mcap_usd?: number | null
+          avg_time_before_dump_mins?: number | null
+          created_at?: string
+          discord_servers?: string[] | null
+          downstream_wallets?: string[] | null
+          first_seen_at?: string | null
+          id?: string
+          known_aliases?: string[] | null
+          last_activity_at?: string | null
+          last_analyzed_at?: string | null
+          launches_new_while_active?: boolean | null
+          metadata?: Json | null
+          notes?: string | null
+          reputation_score?: number | null
+          telegram_groups?: string[] | null
+          tokens_abandoned?: number | null
+          tokens_graduated?: number | null
+          tokens_rugged?: number | null
+          tokens_successful?: number | null
+          total_tokens_launched?: number | null
+          trust_level?: string | null
+          twitter_accounts?: string[] | null
+          typical_sell_percentage?: number | null
+          updated_at?: string
+          upstream_wallets?: string[] | null
+          wallet_address: string
+        }
+        Update: {
+          avg_peak_mcap_usd?: number | null
+          avg_time_before_dump_mins?: number | null
+          created_at?: string
+          discord_servers?: string[] | null
+          downstream_wallets?: string[] | null
+          first_seen_at?: string | null
+          id?: string
+          known_aliases?: string[] | null
+          last_activity_at?: string | null
+          last_analyzed_at?: string | null
+          launches_new_while_active?: boolean | null
+          metadata?: Json | null
+          notes?: string | null
+          reputation_score?: number | null
+          telegram_groups?: string[] | null
+          tokens_abandoned?: number | null
+          tokens_graduated?: number | null
+          tokens_rugged?: number | null
+          tokens_successful?: number | null
+          total_tokens_launched?: number | null
+          trust_level?: string | null
+          twitter_accounts?: string[] | null
+          typical_sell_percentage?: number | null
+          updated_at?: string
+          upstream_wallets?: string[] | null
+          wallet_address?: string
+        }
+        Relationships: []
+      }
       developer_alerts: {
         Row: {
           alert_type: string
@@ -6971,6 +7058,84 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      token_lifecycle_tracking: {
+        Row: {
+          created_at: string
+          decision_reason: string | null
+          dev_action: string | null
+          dev_action_detected_at: string | null
+          dev_wallet: string | null
+          final_price: number | null
+          id: string
+          lifespan_mins: number | null
+          lowest_price_after_decision: number | null
+          metadata: Json | null
+          missed_gain_pct: number | null
+          notes: string | null
+          our_decision: string
+          our_decision_at: string
+          outcome_detected_at: string | null
+          outcome_type: string | null
+          peak_price_after_decision: number | null
+          price_at_decision: number | null
+          time_to_death_mins: number | null
+          time_to_spike_mins: number | null
+          token_mint: string
+          updated_at: string
+          was_missed_opportunity: boolean | null
+        }
+        Insert: {
+          created_at?: string
+          decision_reason?: string | null
+          dev_action?: string | null
+          dev_action_detected_at?: string | null
+          dev_wallet?: string | null
+          final_price?: number | null
+          id?: string
+          lifespan_mins?: number | null
+          lowest_price_after_decision?: number | null
+          metadata?: Json | null
+          missed_gain_pct?: number | null
+          notes?: string | null
+          our_decision: string
+          our_decision_at?: string
+          outcome_detected_at?: string | null
+          outcome_type?: string | null
+          peak_price_after_decision?: number | null
+          price_at_decision?: number | null
+          time_to_death_mins?: number | null
+          time_to_spike_mins?: number | null
+          token_mint: string
+          updated_at?: string
+          was_missed_opportunity?: boolean | null
+        }
+        Update: {
+          created_at?: string
+          decision_reason?: string | null
+          dev_action?: string | null
+          dev_action_detected_at?: string | null
+          dev_wallet?: string | null
+          final_price?: number | null
+          id?: string
+          lifespan_mins?: number | null
+          lowest_price_after_decision?: number | null
+          metadata?: Json | null
+          missed_gain_pct?: number | null
+          notes?: string | null
+          our_decision?: string
+          our_decision_at?: string
+          outcome_detected_at?: string | null
+          outcome_type?: string | null
+          peak_price_after_decision?: number | null
+          price_at_decision?: number | null
+          time_to_death_mins?: number | null
+          time_to_spike_mins?: number | null
+          token_mint?: string
+          updated_at?: string
+          was_missed_opportunity?: boolean | null
+        }
+        Relationships: []
       }
       token_metadata: {
         Row: {
