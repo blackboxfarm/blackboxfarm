@@ -319,12 +319,18 @@ serve(async (req) => {
       }
 
       return ok({
+        success: true,
         action: 'scan',
         walletsScanned: allWallets.length,
         walletsWithEmptyAccounts: scanResults.length,
         totalEmptyAccounts,
         totalRecoverableSol: parseFloat(totalRecoverableSol.toFixed(6)),
-        results: scanResults,
+        results: scanResults.map(r => ({
+          wallet_pubkey: r.walletPubkey,
+          source: r.source,
+          empty_accounts: r.accounts,
+          total_recoverable_sol: r.estimatedRecoverySol,
+        })),
       });
     }
 
@@ -516,6 +522,7 @@ serve(async (req) => {
       }
 
       return ok({
+        success: true,
         action,
         walletsProcessed: allWallets.length,
         totalAccountsClosed: totalClosed,
@@ -527,7 +534,15 @@ serve(async (req) => {
           signatures: consolidationSignatures,
           errors: consolidationErrors,
         } : null,
-        results: cleanResults,
+        results: cleanResults.map(r => ({
+          wallet_pubkey: r.walletPubkey,
+          source: r.source,
+          accounts_closed: r.accountsClosed,
+          sol_recovered: r.solRecovered,
+          signatures: r.signatures,
+          errors: r.errors,
+          consolidation_signature: r.consolidationSignature,
+        })),
       });
     }
 
