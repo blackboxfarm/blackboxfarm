@@ -45,14 +45,15 @@ interface MonitorStats {
 }
 
 // Get config - uses same config as fantasy but with live wallet
-async function getConfig(supabase: any): Promise<SellConfig> {
+async function getConfig(supabase: any): Promise<SellConfig & { is_enabled: boolean }> {
   const { data } = await supabase
     .from('pumpfun_monitor_config')
-    .select('fantasy_target_multiplier, fantasy_sell_percentage, fantasy_moonbag_percentage, fantasy_moonbag_drawdown_limit, buy_wallet_id')
+    .select('is_enabled, fantasy_target_multiplier, fantasy_sell_percentage, fantasy_moonbag_percentage, fantasy_moonbag_drawdown_limit, buy_wallet_id')
     .limit(1)
     .single();
 
   return {
+    is_enabled: data?.is_enabled ?? true,
     target_multiplier: data?.fantasy_target_multiplier ?? 1.5,
     sell_percentage: data?.fantasy_sell_percentage ?? 90,
     moonbag_percentage: data?.fantasy_moonbag_percentage ?? 10,
@@ -186,6 +187,12 @@ async function monitorPositions(supabase: any): Promise<MonitorStats> {
   console.log('📊 LIVE SELL MONITOR: Starting monitoring cycle...');
 
   const config = await getConfig(supabase);
+
+  if (!config.is_enabled) {
+    console.log('⏸️ Monitor disabled, skipping');
+    stats.durationMs = Date.now() - startTime;
+    return stats;
+  }
 
   if (!config.buy_wallet_id) {
     console.log('⚠️ No buy_wallet_id configured, skipping live sell monitor');
