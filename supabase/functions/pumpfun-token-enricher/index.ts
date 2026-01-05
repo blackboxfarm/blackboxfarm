@@ -615,6 +615,7 @@ async function getConfig(supabase: any) {
     .maybeSingle();
     
   return {
+    is_enabled: data?.is_enabled ?? true,
     max_bundle_score: data?.max_bundle_score ?? 70,
     min_holder_count: data?.min_holder_count ?? 10,
     max_token_age_minutes: data?.max_token_age_minutes ?? 60,
@@ -978,6 +979,17 @@ serve(async (req) => {
       
       const config = await getConfig(supabase);
       console.log('Config:', config);
+
+      if (!config.is_enabled) {
+        return new Response(JSON.stringify({
+          success: true,
+          paused: true,
+          message: 'Pump.fun monitor is paused (is_enabled=false)',
+          stats: { enriched: 0, promoted: 0, rejected: 0, softRejected: 0 }
+        }), {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        });
+      }
       
       // Get pending_triage tokens
       const { data: pendingTokens, error } = await supabase

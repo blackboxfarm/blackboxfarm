@@ -355,6 +355,7 @@ export function TokenCandidatesDashboard() {
   const [nextPollIn, setNextPollIn] = useState<number | null>(null);
   const pollingTimerRef = useRef<NodeJS.Timeout | null>(null);
   const countdownTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const [isTogglingMonitor, setIsTogglingMonitor] = useState(false);
   
   // Phase 5: Safeguard status
   const [safeguardStatus, setSafeguardStatus] = useState<SafeguardStatus | null>(null);
@@ -426,18 +427,25 @@ export function TokenCandidatesDashboard() {
   // Fetch config
   const fetchConfig = useCallback(async () => {
     try {
-      const { data } = await supabase
+      const { data, error } = await supabase
         .from('pumpfun_monitor_config')
         .select('*')
         .limit(1)
-        .single();
+        .maybeSingle();
 
-      if (data) {
-        setConfig(data);
-        setConfigEdits(data);
+      if (error) throw error;
+
+      if (!data) {
+        setConfig(null);
+        setConfigEdits({});
+        return;
       }
+
+      setConfig(data);
+      setConfigEdits(data);
     } catch (error) {
       console.error('Error fetching config:', error);
+      toast.error('Failed to load Pump.fun monitor config');
     }
   }, []);
 
@@ -728,6 +736,43 @@ export function TokenCandidatesDashboard() {
       toast.error('Failed to save config');
     }
   };
+
+  // Global PAUSE/RESUME (pauses cron-driven activity by flipping config.is_enabled)
+  const toggleMonitorPause = async () => {
+    const currentlyEnabled = config?.is_enabled ?? true;
+    const nextEnabled = !currentlyEnabled;
+
+    if (!nextEnabled) {
+      // Stop UI auto-refresh when backend is paused
+      setContinuousPolling(false);
+    }
+
+    setIsTogglingMonitor(true);
+    // Optimistic UI
+    setConfig(prev => (prev ? { ...prev, is_enabled: nextEnabled } : prev));
+    setConfigEdits(prev => ({ ...prev, is_enabled: nextEnabled }));
+
+    try {
+      const { error } = await supabase
+        .from('pumpfun_monitor_config')
+        .update({ is_enabled: nextEnabled, updated_at: new Date().toISOString() })
+        .not('id', 'is', null);
+
+      if (error) throw error;
+
+      toast.success(nextEnabled ? 'Pump.fun monitor resumed' : 'Pump.fun monitor paused');
+      await fetchConfig();
+    } catch (error) {
+      console.error('Failed to toggle monitor pause:', error);
+      toast.error('Failed to toggle Pump.fun monitor');
+      // revert
+      setConfig(prev => (prev ? { ...prev, is_enabled: currentlyEnabled } : prev));
+      setConfigEdits(prev => ({ ...prev, is_enabled: currentlyEnabled }));
+    } finally {
+      setIsTogglingMonitor(false);
+    }
+  };
+
 
   // Clear all discovery logs
   const clearLogs = async () => {
@@ -1073,6 +1118,33 @@ export function TokenCandidatesDashboard() {
               </SelectContent>
             </Select>
           </div>
+
+          {/* BACKEND CRON PAUSE/RESUME */}
+          <Button
+            variant={(config?.is_enabled ?? true) ? 'destructive' : 'default'}
+            size="sm"
+            onClick={toggleMonitorPause}
+            disabled={isTogglingMonitor}
+            className="min-w-[120px]"
+            title={(config?.is_enabled ?? true) ? 'Pause cron-driven Pump.fun monitor' : 'Resume cron-driven Pump.fun monitor'}
+          >
+            {(config?.is_enabled ?? true) ? (
+              <>
+                <Pause className="h-3 w-3 mr-1" />
+                Pause Cron
+              </>
+            ) : (
+              <>
+                <Play className="h-3 w-3 mr-1" />
+                Resume Cron
+              </>
+            )}
+          </Button>
+          {config?.is_enabled === false && (
+            <Badge variant="destructive" className="text-[11px]">
+              PAUSED
+            </Badge>
+          )}
           
           {/* Auto-poll toggle */}
           <Button 
@@ -1080,6 +1152,7 @@ export function TokenCandidatesDashboard() {
             size="sm" 
             onClick={toggleContinuousPolling}
             className="min-w-[90px]"
+            disabled={config?.is_enabled === false}
           >
             {continuousPolling ? (
               <>
@@ -1095,7 +1168,7 @@ export function TokenCandidatesDashboard() {
           </Button>
           
           {/* Manual poll */}
-          <Button variant="outline" size="sm" onClick={triggerPoll} disabled={polling}>
+          <Button variant="outline" size="sm" onClick={triggerPoll} disabled={polling || config?.is_enabled === false}>
             {polling ? <RefreshCw className="h-4 w-4 animate-spin" /> : <Play className="h-4 w-4" />}
             <span className="ml-1">Poll</span>
           </Button>

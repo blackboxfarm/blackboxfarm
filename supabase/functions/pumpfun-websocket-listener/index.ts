@@ -48,6 +48,7 @@ interface TokenMetadata {
 }
 
 interface IntakeConfig {
+  is_enabled: boolean;
   max_ticker_length: number;
   require_image: boolean;
   min_socials_count: number;
@@ -57,11 +58,12 @@ interface IntakeConfig {
 async function getConfig(supabase: any): Promise<IntakeConfig> {
   const { data } = await supabase
     .from('pumpfun_monitor_config')
-    .select('max_ticker_length, require_image, min_socials_count')
+    .select('is_enabled, max_ticker_length, require_image, min_socials_count')
     .eq('id', 'default')
     .maybeSingle();
     
   return {
+    is_enabled: data?.is_enabled ?? true,
     max_ticker_length: data?.max_ticker_length ?? 10,
     require_image: data?.require_image ?? false,
     min_socials_count: data?.min_socials_count ?? 0,
@@ -625,6 +627,17 @@ serve(async (req) => {
     // Load config
     const config = await getConfig(supabase);
     console.log('📋 Intake Config:', config);
+
+    // Global PAUSE (cron uses this function too). Allow status even when paused.
+    if (!config.is_enabled && action !== 'status') {
+      return new Response(JSON.stringify({
+        success: true,
+        paused: true,
+        message: 'Pump.fun monitor is paused (is_enabled=false)'
+      }), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+      });
+    }
 
     if (action === 'status') {
       // Return current listener status from cache
