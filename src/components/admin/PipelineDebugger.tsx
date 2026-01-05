@@ -692,60 +692,58 @@ export default function PipelineDebugger() {
       </Card>
 
       {/* Step Cards */}
-      <ScrollArea className="h-[calc(100vh-380px)]">
-        <div className="space-y-4 pr-4">
-          {STEP_DEFINITIONS.map((step) => {
-            const result = stepResults.get(step.id);
-            const isExpanded = expandedSteps.has(step.id);
-            const StepIcon = step.icon;
+      <div className="space-y-4">
+        {STEP_DEFINITIONS.map((step) => {
+          const result = stepResults.get(step.id);
+          const isExpanded = expandedSteps.has(step.id);
+          const StepIcon = step.icon;
 
-            return (
-              <Card key={step.id} className={`border transition-colors ${currentStep === step.id ? 'border-primary' : ''}`}>
-                <Collapsible open={isExpanded} onOpenChange={() => toggleStep(step.id)}>
-                  <CardHeader className="pb-3">
-                    <div className="flex items-center justify-between">
-                      <CollapsibleTrigger className="flex items-center gap-3 hover:text-primary transition-colors">
-                        {isExpanded ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
-                        <Badge variant="outline" className="gap-1">
-                          <StepIcon className="h-3 w-3" />
-                          Step {step.id}
-                        </Badge>
-                        <CardTitle className="text-base">{step.name}</CardTitle>
-                        {result?.durationMs && (
-                          <span className="text-xs text-muted-foreground flex items-center gap-1">
-                            <Clock className="h-3 w-3" />
-                            {result.durationMs}ms
-                          </span>
-                        )}
-                      </CollapsibleTrigger>
-                      <Button
-                        size="sm"
-                        onClick={() => runStep(step.id)}
-                        disabled={isRunning}
-                        className="gap-2"
-                      >
-                        {currentStep === step.id ? (
-                          <Loader2 className="h-4 w-4 animate-spin" />
-                        ) : (
-                          <Play className="h-4 w-4" />
-                        )}
-                        Run Step {step.id}
-                      </Button>
-                    </div>
-                    <p className="text-sm text-muted-foreground mt-2 pl-7">{step.description}</p>
-                  </CardHeader>
+          return (
+            <Card key={step.id} className={`border transition-colors ${currentStep === step.id ? 'border-primary' : ''}`}>
+              <Collapsible open={isExpanded} onOpenChange={() => toggleStep(step.id)}>
+                <CardHeader className="pb-3">
+                  <div className="flex items-center justify-between">
+                    <CollapsibleTrigger className="flex items-center gap-3 hover:text-primary transition-colors">
+                      {isExpanded ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
+                      <Badge variant="outline" className="gap-1">
+                        <StepIcon className="h-3 w-3" />
+                        Step {step.id}
+                      </Badge>
+                      <CardTitle className="text-base">{step.name}</CardTitle>
+                      {result?.durationMs && (
+                        <span className="text-xs text-muted-foreground flex items-center gap-1">
+                          <Clock className="h-3 w-3" />
+                          {result.durationMs}ms
+                        </span>
+                      )}
+                    </CollapsibleTrigger>
+                    <Button
+                      size="sm"
+                      onClick={() => runStep(step.id)}
+                      disabled={isRunning}
+                      className="gap-2"
+                    >
+                      {currentStep === step.id ? (
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                      ) : (
+                        <Play className="h-4 w-4" />
+                      )}
+                      Run Step {step.id}
+                    </Button>
+                  </div>
+                  <p className="text-sm text-muted-foreground mt-2 pl-7">{step.description}</p>
+                </CardHeader>
 
-                  <CollapsibleContent>
-                    <CardContent className="pt-0">
-                      {renderStepContent(step.id, result)}
-                    </CardContent>
-                  </CollapsibleContent>
-                </Collapsible>
-              </Card>
-            );
-          })}
-        </div>
-      </ScrollArea>
+                <CollapsibleContent>
+                  <CardContent className="pt-0">
+                    {renderStepContent(step.id, result)}
+                  </CardContent>
+                </CollapsibleContent>
+              </Collapsible>
+            </Card>
+          );
+        })}
+      </div>
     </div>
   );
 }
