@@ -316,7 +316,84 @@ async function runQualification(supabase: any): Promise<any> {
   };
 }
 
-// Step 5: Dev Wallet Check
+// Signal strength scoring factors
+const SIGNAL_SCORING = {
+  dev_reputation_high: { points: 20, threshold: 70, description: 'Dev reputation > 70' },
+  dev_stable_after_dump: { points: 15, description: 'Dev has "stable_after_dump" pattern' },
+  known_good_twitter: { points: 10, description: 'Known good X/Twitter account' },
+  survived_5_mins: { points: 10, description: 'Token survived > 5 mins with volume' },
+  rugcheck_high: { points: 10, threshold: 70, description: 'RugCheck score > 70' },
+  holders_50plus: { points: 10, threshold: 50, description: 'Holders > 50' },
+  bonding_50plus: { points: 10, threshold: 50, description: 'Bonding curve > 50%' },
+  dex_paid_profile: { points: 5, description: 'Has DEX paid profile' },
+};
+
+// Calculate signal strength score
+function calculateSignalScore(token: any, devReputation: any): { score: number; factors: any[] } {
+  let score = 0;
+  const factors: any[] = [];
+
+  // Dev reputation > 70
+  if ((devReputation?.reputation_score || 50) >= SIGNAL_SCORING.dev_reputation_high.threshold) {
+    score += SIGNAL_SCORING.dev_reputation_high.points;
+    factors.push({ factor: 'dev_reputation_high', points: SIGNAL_SCORING.dev_reputation_high.points, value: devReputation?.reputation_score });
+  }
+
+  // Dev has stable_after_dump pattern
+  if ((devReputation?.tokens_stable_after_dump || 0) > 0) {
+    score += SIGNAL_SCORING.dev_stable_after_dump.points;
+    factors.push({ factor: 'dev_stable_after_dump', points: SIGNAL_SCORING.dev_stable_after_dump.points, value: devReputation?.tokens_stable_after_dump });
+  }
+
+  // Known good Twitter account
+  if (devReputation?.twitter_accounts?.length > 0 && devReputation?.trust_level === 'trusted') {
+    score += SIGNAL_SCORING.known_good_twitter.points;
+    factors.push({ factor: 'known_good_twitter', points: SIGNAL_SCORING.known_good_twitter.points, value: devReputation?.twitter_accounts?.[0] });
+  }
+
+  // Token survived > 5 mins with volume
+  const watchedMins = token.first_seen_at ? (Date.now() - new Date(token.first_seen_at).getTime()) / 60000 : 0;
+  if (watchedMins >= 5 && (token.volume_sol || 0) > 0.1) {
+    score += SIGNAL_SCORING.survived_5_mins.points;
+    factors.push({ factor: 'survived_5_mins', points: SIGNAL_SCORING.survived_5_mins.points, value: `${watchedMins.toFixed(1)} mins` });
+  }
+
+  // RugCheck score > 70
+  if ((token.rugcheck_score || 0) >= SIGNAL_SCORING.rugcheck_high.threshold) {
+    score += SIGNAL_SCORING.rugcheck_high.points;
+    factors.push({ factor: 'rugcheck_high', points: SIGNAL_SCORING.rugcheck_high.points, value: token.rugcheck_score });
+  }
+
+  // Holders > 50
+  if ((token.holder_count || 0) >= SIGNAL_SCORING.holders_50plus.threshold) {
+    score += SIGNAL_SCORING.holders_50plus.points;
+    factors.push({ factor: 'holders_50plus', points: SIGNAL_SCORING.holders_50plus.points, value: token.holder_count });
+  }
+
+  // Bonding curve > 50%
+  if ((token.bonding_curve_pct || 0) >= SIGNAL_SCORING.bonding_50plus.threshold) {
+    score += SIGNAL_SCORING.bonding_50plus.points;
+    factors.push({ factor: 'bonding_50plus', points: SIGNAL_SCORING.bonding_50plus.points, value: `${token.bonding_curve_pct}%` });
+  }
+
+  // DEX paid profile
+  if (token.metadata?.dex_paid || token.dex_paid) {
+    score += SIGNAL_SCORING.dex_paid_profile.points;
+    factors.push({ factor: 'dex_paid_profile', points: SIGNAL_SCORING.dex_paid_profile.points, value: true });
+  }
+
+  return { score, factors };
+}
+
+// Map score to signal strength tier
+function scoreToSignalStrength(score: number): string {
+  if (score >= 71) return 'very_strong';
+  if (score >= 51) return 'strong';
+  if (score >= 31) return 'moderate';
+  return 'weak';
+}
+
+// Step 5: Dev Wallet Check with enhanced behavior analysis
 async function runDevChecks(supabase: any): Promise<any> {
   console.log('[Step 5] Running dev wallet checks (LIVE)');
 
@@ -341,12 +418,24 @@ async function runDevChecks(supabase: any): Promise<any> {
       devReputation = rep;
     }
 
+    // Calculate signal score
+    const { score: signalScore, factors: scoreFactors } = calculateSignalScore(token, devReputation);
+    const signalStrength = scoreToSignalStrength(signalScore);
+
     const devInfo = {
       wallet: token.creator_wallet,
       reputation: devReputation?.reputation_score || 50,
       trustLevel: devReputation?.trust_level || 'unknown',
       tokensLaunched: devReputation?.total_tokens_launched || 0,
       tokensRugged: devReputation?.tokens_rugged || 0,
+      tokensSuccessful: devReputation?.tokens_successful || 0,
+      tokensStableAfterDump: devReputation?.tokens_stable_after_dump || 0,
+      twitterAccounts: devReputation?.twitter_accounts || [],
+      telegramGroups: devReputation?.telegram_groups || [],
+      avgDumpThenPumpPct: devReputation?.avg_dump_then_pump_pct || null,
+      signalScore,
+      signalStrength,
+      scoreFactors,
     };
 
     // Check for known bad actors
@@ -358,12 +447,21 @@ async function runDevChecks(supabase: any): Promise<any> {
         reason: `Blacklisted dev: ${devReputation?.tokens_rugged || 0} rugs`,
         devInfo,
       });
-    } else if (token.dev_sold) {
+    } else if (devReputation?.trust_level === 'avoid' && devReputation?.tokens_rugged >= 3) {
       failed.push({
         mint: token.token_mint,
         symbol: token.token_symbol,
         name: token.token_name,
-        reason: 'Dev sold tokens',
+        reason: `High-risk dev: ${devReputation?.tokens_rugged} rugs, score ${devReputation?.reputation_score}`,
+        devInfo,
+      });
+    } else if (token.dev_sold && !devReputation?.tokens_stable_after_dump) {
+      // Dev sold BUT doesn't have stable_after_dump pattern = bad
+      failed.push({
+        mint: token.token_mint,
+        symbol: token.token_symbol,
+        name: token.token_name,
+        reason: 'Dev sold tokens (no stable history)',
         devInfo,
       });
     } else if (token.dev_launched_new) {
@@ -375,11 +473,14 @@ async function runDevChecks(supabase: any): Promise<any> {
         devInfo,
       });
     } else {
+      // PASSED - include signal scoring
       passed.push({
         mint: token.token_mint,
         symbol: token.token_symbol,
         name: token.token_name,
         devInfo,
+        // Special flag: dev sold but has stable_after_dump pattern = HIGH SIGNAL
+        devDumpedButStable: token.dev_sold && (devReputation?.tokens_stable_after_dump || 0) > 0,
       });
     }
   }
@@ -390,12 +491,14 @@ async function runDevChecks(supabase: any): Promise<any> {
     devSoldCount: failed.filter(f => f.reason.includes('sold')).length,
     newLaunchCount: failed.filter(f => f.reason.includes('new token')).length,
     blacklistedCount: failed.filter(f => f.reason.includes('Blacklisted')).length,
+    highRiskCount: failed.filter(f => f.reason.includes('High-risk')).length,
+    signalScoring: SIGNAL_SCORING,
     passed,
     failed,
   };
 }
 
-// Step 6: Get Buy Queue with tiered amounts
+// Step 6: Get Buy Queue with tiered amounts based on signal scoring
 async function getBuyQueue(supabase: any): Promise<any> {
   console.log('[Step 6] Getting buy queue (LIVE)');
 
@@ -421,8 +524,22 @@ async function getBuyQueue(supabase: any): Promise<any> {
     .eq('status', 'bought')
     .gte('bought_at', today);
 
-  const queue = (readyToBuy || []).map((t: any) => {
-    const signalStrength = t.signal_strength || 'moderate';
+  // Process each token with signal scoring
+  const queue = await Promise.all((readyToBuy || []).map(async (t: any) => {
+    // Get dev reputation for scoring
+    let devReputation = null;
+    if (t.creator_wallet) {
+      const { data: rep } = await supabase
+        .from('dev_wallet_reputation')
+        .select('*')
+        .eq('wallet_address', t.creator_wallet)
+        .single();
+      devReputation = rep;
+    }
+
+    // Calculate signal score
+    const { score: signalScore, factors: scoreFactors } = calculateSignalScore(t, devReputation);
+    const signalStrength = scoreToSignalStrength(signalScore);
     const buyTier = BUY_TIERS[signalStrength as keyof typeof BUY_TIERS] || BUY_TIERS.moderate;
     
     return {
@@ -431,12 +548,20 @@ async function getBuyQueue(supabase: any): Promise<any> {
       name: t.token_name,
       priceUsd: t.price_usd || 0,
       onCurve: (t.bonding_curve_pct || 0) < 100,
+      signalScore,
       signalStrength,
+      scoreFactors,
       buyAmountUsd: buyTier.amount_usd,
       tierDescription: buyTier.description,
+      devReputation: devReputation?.reputation_score || 50,
+      devTrustLevel: devReputation?.trust_level || 'unknown',
+      devDumpedButStable: t.dev_sold && (devReputation?.tokens_stable_after_dump || 0) > 0,
       executed: false,
     };
-  });
+  }));
+
+  // Sort by signal score descending
+  queue.sort((a, b) => b.signalScore - a.signalScore);
 
   return {
     fantasyMode: config.fantasy_mode_enabled ?? true,
@@ -444,6 +569,7 @@ async function getBuyQueue(supabase: any): Promise<any> {
     dailyBuys: dailyBuys || 0,
     dailyCap: config.daily_buy_cap || 20,
     buyTiers: BUY_TIERS,
+    signalScoring: SIGNAL_SCORING,
     queue,
   };
 }

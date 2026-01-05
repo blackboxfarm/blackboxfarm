@@ -345,3 +345,9 @@ verify_jwt = true
 
 [functions.pumpfun-pipeline-debugger]
 verify_jwt = false
+
+[functions.pumpfun-dev-tracker]
+verify_jwt = false
+
+[functions.pumpfun-lifecycle-monitor]
+verify_jwt = false

@@ -1725,6 +1725,7 @@ export type Database = {
       }
       dev_wallet_reputation: {
         Row: {
+          avg_dump_then_pump_pct: number | null
           avg_peak_mcap_usd: number | null
           avg_time_before_dump_mins: number | null
           created_at: string
@@ -1738,11 +1739,13 @@ export type Database = {
           launches_new_while_active: boolean | null
           metadata: Json | null
           notes: string | null
+          preferred_dump_window_mins: number | null
           reputation_score: number | null
           telegram_groups: string[] | null
           tokens_abandoned: number | null
           tokens_graduated: number | null
           tokens_rugged: number | null
+          tokens_stable_after_dump: number | null
           tokens_successful: number | null
           total_tokens_launched: number | null
           trust_level: string | null
@@ -1753,6 +1756,7 @@ export type Database = {
           wallet_address: string
         }
         Insert: {
+          avg_dump_then_pump_pct?: number | null
           avg_peak_mcap_usd?: number | null
           avg_time_before_dump_mins?: number | null
           created_at?: string
@@ -1766,11 +1770,13 @@ export type Database = {
           launches_new_while_active?: boolean | null
           metadata?: Json | null
           notes?: string | null
+          preferred_dump_window_mins?: number | null
           reputation_score?: number | null
           telegram_groups?: string[] | null
           tokens_abandoned?: number | null
           tokens_graduated?: number | null
           tokens_rugged?: number | null
+          tokens_stable_after_dump?: number | null
           tokens_successful?: number | null
           total_tokens_launched?: number | null
           trust_level?: string | null
@@ -1781,6 +1787,7 @@ export type Database = {
           wallet_address: string
         }
         Update: {
+          avg_dump_then_pump_pct?: number | null
           avg_peak_mcap_usd?: number | null
           avg_time_before_dump_mins?: number | null
           created_at?: string
@@ -1794,11 +1801,13 @@ export type Database = {
           launches_new_while_active?: boolean | null
           metadata?: Json | null
           notes?: string | null
+          preferred_dump_window_mins?: number | null
           reputation_score?: number | null
           telegram_groups?: string[] | null
           tokens_abandoned?: number | null
           tokens_graduated?: number | null
           tokens_rugged?: number | null
+          tokens_stable_after_dump?: number | null
           tokens_successful?: number | null
           total_tokens_launched?: number | null
           trust_level?: string | null
@@ -7078,8 +7087,12 @@ export type Database = {
           outcome_detected_at: string | null
           outcome_type: string | null
           peak_price_after_decision: number | null
+          price_at_death: number | null
           price_at_decision: number | null
+          price_at_peak: number | null
+          social_accounts: Json | null
           time_to_death_mins: number | null
+          time_to_outcome_mins: number | null
           time_to_spike_mins: number | null
           token_mint: string
           updated_at: string
@@ -7103,8 +7116,12 @@ export type Database = {
           outcome_detected_at?: string | null
           outcome_type?: string | null
           peak_price_after_decision?: number | null
+          price_at_death?: number | null
           price_at_decision?: number | null
+          price_at_peak?: number | null
+          social_accounts?: Json | null
           time_to_death_mins?: number | null
+          time_to_outcome_mins?: number | null
           time_to_spike_mins?: number | null
           token_mint: string
           updated_at?: string
@@ -7128,8 +7145,12 @@ export type Database = {
           outcome_detected_at?: string | null
           outcome_type?: string | null
           peak_price_after_decision?: number | null
+          price_at_death?: number | null
           price_at_decision?: number | null
+          price_at_peak?: number | null
+          social_accounts?: Json | null
           time_to_death_mins?: number | null
+          time_to_outcome_mins?: number | null
           time_to_spike_mins?: number | null
           token_mint?: string
           updated_at?: string
