@@ -5,10 +5,21 @@ import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from '@/components/ui/alert-dialog';
 import { 
   RefreshCw, Search, Wallet, Copy, ExternalLink, ChevronDown, ChevronUp,
   Coins, TrendingUp, TrendingDown, DollarSign, Shield, Zap, Target,
-  AlertTriangle, Users, Bot, Crown, Key, History
+  AlertTriangle, Users, Bot, Crown, Key, History, Flame, Send
 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from '@/hooks/use-toast';
@@ -71,7 +82,111 @@ export function MasterWalletsDashboard() {
   const [activeTab, setActiveTab] = useState('all');
   const [showOnlyWithHistory, setShowOnlyWithHistory] = useState(false);
   const [exportingKey, setExportingKey] = useState<string | null>(null);
+  const [isReclaiming, setIsReclaiming] = useState(false);
+  const [isConsolidating, setIsConsolidating] = useState(false);
   const { price: solPrice } = useSolPrice();
+
+  // Reclaim rent from empty token accounts across all wallets
+  const handleReclaimRent = async () => {
+    setIsReclaiming(true);
+    toast({
+      title: "🔥 Reclaiming Rent...",
+      description: "Scanning all wallets for empty token accounts...",
+    });
+
+    try {
+      // First scan
+      const { data: scanData, error: scanError } = await supabase.functions.invoke('token-account-cleaner', {
+        body: { action: 'scan' }
+      });
+
+      if (scanError) throw scanError;
+      if (!scanData?.success) throw new Error(scanData?.error || 'Scan failed');
+
+      const totalEmptyAccounts = scanData.results?.reduce((sum: number, r: any) => sum + (r.empty_accounts?.length || 0), 0) || 0;
+      const totalRecoverable = scanData.results?.reduce((sum: number, r: any) => sum + (r.total_recoverable_sol || 0), 0) || 0;
+
+      if (totalEmptyAccounts === 0) {
+        toast({
+          title: "✨ All Clean!",
+          description: "No empty token accounts found across any wallets.",
+        });
+        setIsReclaiming(false);
+        return;
+      }
+
+      toast({
+        title: "📊 Found Empty Accounts",
+        description: `${totalEmptyAccounts} empty accounts (~${totalRecoverable.toFixed(4)} SOL). Cleaning now...`,
+      });
+
+      // Now clean
+      const { data: cleanData, error: cleanError } = await supabase.functions.invoke('token-account-cleaner', {
+        body: { action: 'clean_all' }
+      });
+
+      if (cleanError) throw cleanError;
+      if (!cleanData?.success) throw new Error(cleanData?.error || 'Clean failed');
+
+      const totalClosed = cleanData.results?.reduce((sum: number, r: any) => sum + (r.accounts_closed || 0), 0) || 0;
+      const totalRecovered = cleanData.results?.reduce((sum: number, r: any) => sum + (r.sol_recovered || 0), 0) || 0;
+
+      toast({
+        title: "🔥 Rent Reclaimed!",
+        description: `Closed ${totalClosed} accounts, recovered ${totalRecovered.toFixed(4)} SOL to FlipIt wallet.`,
+      });
+
+      // Refresh wallet balances
+      loadAllWallets();
+    } catch (error: any) {
+      console.error('[MasterWallets] Reclaim rent failed:', error);
+      toast({
+        title: "Reclaim Failed",
+        description: error.message,
+        variant: "destructive"
+      });
+    } finally {
+      setIsReclaiming(false);
+    }
+  };
+
+  // Consolidate all SOL from all wallets to FlipIt wallet
+  const handleConsolidateAll = async () => {
+    setIsConsolidating(true);
+    toast({
+      title: "📤 Consolidating SOL...",
+      description: "Transferring all SOL to FlipIt wallet...",
+    });
+
+    try {
+      const { data, error } = await supabase.functions.invoke('token-account-cleaner', {
+        body: { action: 'consolidate_all' }
+      });
+
+      if (error) throw error;
+      if (!data?.success) throw new Error(data?.error || 'Consolidation failed');
+
+      const totalTransferred = data.total_transferred || 0;
+      const walletsProcessed = data.wallets_processed || 0;
+
+      toast({
+        title: "📤 SOL Consolidated!",
+        description: `Transferred ${totalTransferred.toFixed(4)} SOL from ${walletsProcessed} wallets to FlipIt.`,
+      });
+
+      // Refresh wallet balances
+      loadAllWallets();
+    } catch (error: any) {
+      console.error('[MasterWallets] Consolidate failed:', error);
+      toast({
+        title: "Consolidation Failed",
+        description: error.message,
+        variant: "destructive"
+      });
+    } finally {
+      setIsConsolidating(false);
+    }
+  };
 
   // Load wallet balance via edge function (uses Helius API key server-side)
   const loadWalletBalance = useCallback(async (pubkey: string) => {
@@ -436,10 +551,66 @@ export function MasterWalletsDashboard() {
             With Balance ({walletsWithBalance})
           </Button>
         </div>
-        <Button onClick={loadAllWallets} disabled={isLoading}>
-          <RefreshCw className={`h-4 w-4 mr-2 ${isLoading ? 'animate-spin' : ''}`} />
-          Refresh All
-        </Button>
+        <div className="flex gap-2">
+          {/* Reclaim Rent Button */}
+          <AlertDialog>
+            <AlertDialogTrigger asChild>
+              <Button variant="destructive" disabled={isReclaiming || isLoading}>
+                <Flame className={`h-4 w-4 mr-2 ${isReclaiming ? 'animate-pulse' : ''}`} />
+                {isReclaiming ? 'Reclaiming...' : 'Reclaim Rent'}
+              </Button>
+            </AlertDialogTrigger>
+            <AlertDialogContent>
+              <AlertDialogHeader>
+                <AlertDialogTitle>🔥 Reclaim Rent from All Wallets?</AlertDialogTitle>
+                <AlertDialogDescription>
+                  This will scan ALL {wallets.length} wallets for empty token accounts, close them to reclaim ~0.002 SOL each, and send the recovered SOL to the FlipIt treasury wallet.
+                  <br /><br />
+                  <strong>This action cannot be undone.</strong>
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel>Cancel</AlertDialogCancel>
+                <AlertDialogAction onClick={handleReclaimRent} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
+                  🔥 Reclaim All Rent
+                </AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
+
+          {/* Consolidate All SOL Button */}
+          <AlertDialog>
+            <AlertDialogTrigger asChild>
+              <Button variant="outline" disabled={isConsolidating || isLoading}>
+                <Send className={`h-4 w-4 mr-2 ${isConsolidating ? 'animate-pulse' : ''}`} />
+                {isConsolidating ? 'Consolidating...' : 'Consolidate All'}
+              </Button>
+            </AlertDialogTrigger>
+            <AlertDialogContent>
+              <AlertDialogHeader>
+                <AlertDialogTitle>📤 Consolidate All SOL to FlipIt?</AlertDialogTitle>
+                <AlertDialogDescription>
+                  This will transfer ALL SOL (minus transaction fees) from ALL {wallets.length} wallets to the FlipIt treasury wallet.
+                  <br /><br />
+                  Total SOL to consolidate: <strong>{totalSol.toFixed(4)} SOL</strong> (${totalUsd.toFixed(2)})
+                  <br /><br />
+                  <strong className="text-destructive">⚠️ This will empty all wallets! This action cannot be undone.</strong>
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel>Cancel</AlertDialogCancel>
+                <AlertDialogAction onClick={handleConsolidateAll} className="bg-primary text-primary-foreground hover:bg-primary/90">
+                  📤 Consolidate All SOL
+                </AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
+
+          <Button onClick={loadAllWallets} disabled={isLoading}>
+            <RefreshCw className={`h-4 w-4 mr-2 ${isLoading ? 'animate-spin' : ''}`} />
+            Refresh All
+          </Button>
+        </div>
       </div>
 
       {/* Tabs for filtering by source */}
