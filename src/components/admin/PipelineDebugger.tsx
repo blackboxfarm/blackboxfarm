@@ -2,19 +2,16 @@ import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { ScrollArea } from '@/components/ui/scroll-area';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
-import { Switch } from '@/components/ui/switch';
-import { Label } from '@/components/ui/label';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
-import { 
-  Play, 
-  ChevronRight, 
+import {
+  Play,
+  ChevronRight,
   ChevronDown,
-  CheckCircle2, 
-  XCircle, 
+  CheckCircle2,
+  XCircle,
   AlertTriangle,
   Loader2,
   RotateCcw,
@@ -30,7 +27,6 @@ import {
   DollarSign,
   Activity,
   Wifi,
-  WifiOff
 } from 'lucide-react';
 
 // Step definitions for the system-level pipeline
@@ -102,7 +98,7 @@ interface TokenItem {
 }
 
 export default function PipelineDebugger() {
-  const [isLiveMode, setIsLiveMode] = useState(false);
+  const [isLiveMode] = useState(true);
   const [stepResults, setStepResults] = useState<Map<number, StepResult>>(new Map());
   const [expandedSteps, setExpandedSteps] = useState<Set<number>>(new Set([1]));
   const [isRunning, setIsRunning] = useState(false);
@@ -178,6 +174,12 @@ export default function PipelineDebugger() {
       setCurrentStep(0);
     }
   };
+
+  useEffect(() => {
+    // Auto-run discovery so the newest tokens show up immediately
+    void runStep(1);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const runFullPipeline = async () => {
     setIsRunning(true);
@@ -633,16 +635,8 @@ export default function PipelineDebugger() {
             </CardTitle>
             <div className="flex items-center gap-4">
               <div className="flex items-center gap-2">
-                <Switch
-                  id="live-mode"
-                  checked={isLiveMode}
-                  onCheckedChange={setIsLiveMode}
-                  disabled={isRunning}
-                />
-                <Label htmlFor="live-mode" className="flex items-center gap-1 text-sm">
-                  {isLiveMode ? <Wifi className="h-4 w-4 text-green-500" /> : <WifiOff className="h-4 w-4 text-muted-foreground" />}
-                  {isLiveMode ? 'Live' : 'Demo'}
-                </Label>
+                <Wifi className="h-4 w-4 text-green-500" />
+                <span className="text-sm font-medium">Live</span>
               </div>
               <Button 
                 onClick={runFullPipeline}
