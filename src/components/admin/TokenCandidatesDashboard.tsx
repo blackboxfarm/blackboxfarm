@@ -11,6 +11,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Checkbox } from '@/components/ui/checkbox';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { 
@@ -1101,22 +1102,32 @@ export function TokenCandidatesDashboard() {
             {config?.last_poll_at ? formatDistanceToNow(new Date(config.last_poll_at), { addSuffix: true }) : 'Never'}
           </span>
           
-          <Button variant="ghost" size="sm" onClick={() => { fetchWatchlist(); fetchCandidates(); }}>
-            <RefreshCw className="h-4 w-4" />
-          </Button>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button variant="ghost" size="sm" onClick={() => { fetchWatchlist(); fetchCandidates(); }}>
+                <RefreshCw className="h-4 w-4" />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>Refresh watchlist data from database</TooltipContent>
+          </Tooltip>
           
           {/* System Reset */}
-          <Button 
-            variant="outline" 
-            size="sm" 
-            onClick={() => {
-              fetchResetCounts();
-              setShowResetDialog(true);
-            }}
-            className="text-destructive border-destructive/50 hover:bg-destructive/10"
-          >
-            <RotateCcw className="h-4 w-4" />
-          </Button>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button 
+                variant="outline" 
+                size="sm" 
+                onClick={() => {
+                  fetchResetCounts();
+                  setShowResetDialog(true);
+                }}
+                className="text-destructive border-destructive/50 hover:bg-destructive/10"
+              >
+                <RotateCcw className="h-4 w-4" />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>Reset entire monitoring system (delete all data)</TooltipContent>
+          </Tooltip>
         </div>
       </div>
 
