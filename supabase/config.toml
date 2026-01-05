@@ -342,3 +342,6 @@ verify_jwt = false
 
 [functions.token-account-cleaner]
 verify_jwt = true
+
+[functions.pumpfun-pipeline-debugger]
+verify_jwt = false
