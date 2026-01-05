@@ -13,67 +13,63 @@ function jsonResponse(data: unknown, status = 200) {
   });
 }
 
-const SOLANA_TRACKER_API = "https://data.solanatracker.io";
-const PUMP_API = "https://frontend-api.pump.fun";
-const RUGCHECK_API = "https://api.rugcheck.xyz/v1";
+// Filter configuration with explanations
+const FILTER_CONFIG = {
+  mayhem_mode: {
+    order: 1,
+    name: 'Mayhem Mode',
+    description: 'Token flagged as mayhem/spam by pump.fun detection',
+  },
+  null_name_ticker: {
+    order: 2,
+    name: 'Null Name/Ticker',
+    description: 'Token has empty or missing name/ticker - obvious garbage',
+  },
+  duplicate: {
+    order: 3,
+    name: 'Duplicate Ticker',
+    description: 'Token already exists in our watchlist system',
+  },
+  emoji_unicode: {
+    order: 4,
+    name: 'Emoji/Unicode',
+    description: 'Ticker contains non-ASCII characters - common scam signal',
+  },
+  ticker_too_long: {
+    order: 5,
+    name: 'Ticker > 12 chars',
+    description: 'Ticker exceeds 12 characters - unusual for legitimate tokens',
+    threshold: 12,
+  },
+};
 
-// Helper to safely fetch with timeout
-async function safeFetch(url: string, options: RequestInit = {}, timeoutMs = 10000): Promise<any> {
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), timeoutMs);
-  
-  try {
-    const response = await fetch(url, { ...options, signal: controller.signal });
-    if (!response.ok) return null;
-    return await response.json();
-  } catch (err) {
-    console.error(`Fetch error for ${url}:`, err);
-    return null;
-  } finally {
-    clearTimeout(timeout);
-  }
-}
+// Qualification thresholds
+const QUALIFICATION_CONFIG = {
+  min_holders: { value: 20, description: 'Minimum holder count for qualification' },
+  min_volume_sol: { value: 0.5, description: 'Minimum volume in SOL' },
+  min_watch_time_sec: { value: 120, description: 'Minimum seconds on watchlist before qualifying' },
+  min_rugcheck_score: { value: 50, description: 'Minimum RugCheck safety score' },
+};
 
-// Step 1: Token Discovery - Fetch batch of new tokens
-async function runDiscovery(liveMode: boolean, supabase?: any): Promise<any> {
-  console.log('[Step 1] Running token discovery, liveMode:', liveMode);
+// Tiered buy amounts based on signal strength
+const BUY_TIERS = {
+  weak: { amount_usd: 2, description: 'Passed filters but poor metrics' },
+  moderate: { amount_usd: 10, description: 'Good metrics, unknown dev' },
+  strong: { amount_usd: 20, description: 'Strong metrics, neutral dev' },
+  very_strong: { amount_usd: 50, description: 'Known good dev, great metrics' },
+};
+
+// Step 1: Token Discovery - Fetch newest tokens with full data
+async function runDiscovery(supabase: any): Promise<any> {
+  console.log('[Step 1] Running token discovery (LIVE)');
   const startTime = Date.now();
 
-  if (!liveMode) {
-    // Demo mode - return sample data
-    return {
-      source: 'Demo Data',
-      fetchedCount: 15,
-      fetchTimeMs: 150,
-      tokens: [
-        { mint: 'Demo1xxxxxxxxxxxxx', symbol: 'DEMO1', name: 'Demo Token 1', marketCapSol: 0.5 },
-        { mint: 'Demo2xxxxxxxxxxxxx', symbol: 'DEMO2', name: 'Demo Token 2', marketCapSol: 0.8 },
-        { mint: 'Demo3xxxxxxxxxxxxx', symbol: 'PEPE', name: 'Demo Pepe', marketCapSol: 1.2 },
-        { mint: 'Demo4xxxxxxxxxxxxx', symbol: '🚀MOON', name: 'Moon Emoji', marketCapSol: 0.3 },
-        { mint: 'Demo5xxxxxxxxxxxxx', symbol: 'SUPERLONGTICKERNAME', name: 'Long Ticker', marketCapSol: 0.4 },
-        { mint: 'Demo6xxxxxxxxxxxxx', symbol: 'GOOD1', name: 'Good Token 1', marketCapSol: 0.6 },
-        { mint: 'Demo7xxxxxxxxxxxxx', symbol: 'GOOD2', name: 'Good Token 2', marketCapSol: 0.7 },
-        { mint: 'Demo8xxxxxxxxxxxxx', symbol: 'GOOD3', name: 'Good Token 3', marketCapSol: 0.9 },
-        { mint: 'Demo9xxxxxxxxxxxxx', symbol: '', name: '', marketCapSol: 0.2 },
-        { mint: 'Demo10xxxxxxxxxxxx', symbol: 'MAYHEM', name: 'Mayhem Token', marketCapSol: 0.1, isMayhem: true },
-        { mint: 'Demo11xxxxxxxxxxxx', symbol: 'BUNDLE', name: 'Bundled Token', marketCapSol: 0.5, bundleScore: 85 },
-        { mint: 'Demo12xxxxxxxxxxxx', symbol: 'GOOD4', name: 'Good Token 4', marketCapSol: 1.1 },
-        { mint: 'Demo13xxxxxxxxxxxx', symbol: 'GOOD5', name: 'Good Token 5', marketCapSol: 1.3 },
-        { mint: 'Demo14xxxxxxxxxxxx', symbol: 'GOOD6', name: 'Good Token 6', marketCapSol: 0.8 },
-        { mint: 'Demo15xxxxxxxxxxxx', symbol: 'GOOD7', name: 'Good Token 7', marketCapSol: 0.95 },
-      ]
-    };
-  }
-
-  // Live mode - fetch from pumpfun_watchlist (real newly discovered tokens)
   try {
-    if (!supabase) throw new Error('Supabase client not provided');
-
     const { data: tokens, error } = await supabase
       .from('pumpfun_watchlist')
-      .select('token_mint, token_symbol, token_name, market_cap_sol, created_at, status')
+      .select('token_mint, token_symbol, token_name, market_cap_sol, created_at, created_at_blockchain, status, creator_wallet, holder_count, volume_sol')
       .order('created_at', { ascending: false })
-      .limit(50);
+      .limit(100);
 
     if (error) throw error;
 
@@ -84,6 +80,10 @@ async function runDiscovery(liveMode: boolean, supabase?: any): Promise<any> {
       marketCapSol: t.market_cap_sol || 0,
       status: t.status,
       createdAt: t.created_at,
+      createdAtBlockchain: t.created_at_blockchain,
+      creatorWallet: t.creator_wallet,
+      holderCount: t.holder_count,
+      volumeSol: t.volume_sol,
     }));
 
     return {
@@ -104,72 +104,63 @@ async function runDiscovery(liveMode: boolean, supabase?: any): Promise<any> {
   }
 }
 
-// Step 2: Intake Filtering - Apply filters to discovered tokens
-async function runIntake(liveMode: boolean, supabase: any): Promise<any> {
-  console.log('[Step 2] Running intake filtering, liveMode:', liveMode);
+// Step 2: Intake Filtering - Apply filters in priority order
+async function runIntake(supabase: any): Promise<any> {
+  console.log('[Step 2] Running intake filtering (LIVE)');
 
-  // First get discovered tokens
-  const discovery = await runDiscovery(liveMode, supabase);
+  const discovery = await runDiscovery(supabase);
   const tokens = discovery.tokens || [];
 
   const passed: any[] = [];
   const rejected: any[] = [];
-  const filterBreakdown: Record<string, number> = {
-    'null_name_ticker': 0,
-    'ticker_too_long': 0,
-    'emoji_unicode': 0,
-    'mayhem_mode': 0,
-    'high_bundle_score': 0,
-    'duplicate': 0,
-  };
+  
+  // Initialize filter breakdown with order
+  const filterBreakdown: Record<string, { count: number; order: number; description: string }> = {};
+  Object.entries(FILTER_CONFIG).forEach(([key, config]) => {
+    filterBreakdown[key] = { count: 0, order: config.order, description: config.description };
+  });
 
   // Get existing watchlist mints for duplicate check
-  let existingMints = new Set<string>();
-  if (liveMode) {
-    const { data: watchlist } = await supabase
-      .from('pumpfun_watchlist')
-      .select('token_mint')
-      .in('status', ['watching', 'qualified', 'bought']);
+  const { data: watchlist } = await supabase
+    .from('pumpfun_watchlist')
+    .select('token_mint')
+    .in('status', ['watching', 'qualified', 'bought']);
 
-    existingMints = new Set((watchlist || []).map((w: any) => w.token_mint));
-  }
+  const existingMints = new Set((watchlist || []).map((w: any) => w.token_mint));
 
   for (const token of tokens) {
     let rejected_reason = null;
+    let rejected_detail = '';
 
-    // Check null name/ticker
-    if (!token.symbol || !token.name || token.symbol.trim() === '' || token.name.trim() === '') {
-      rejected_reason = 'null_name_ticker';
-      filterBreakdown.null_name_ticker++;
-    }
-    // Check ticker length
-    else if (token.symbol.length > 10) {
-      rejected_reason = 'ticker_too_long';
-      filterBreakdown.ticker_too_long++;
-    }
-    // Check emoji/unicode
-    else if (/[^\x00-\x7F]/.test(token.symbol)) {
-      rejected_reason = 'emoji_unicode';
-      filterBreakdown.emoji_unicode++;
-    }
-    // Check mayhem mode (demo flag or real check)
-    else if (token.isMayhem) {
+    // Filter 1: Mayhem Mode (check if flagged)
+    if (token.isMayhem) {
       rejected_reason = 'mayhem_mode';
-      filterBreakdown.mayhem_mode++;
+      rejected_detail = 'Flagged as mayhem/spam';
     }
-    // Check bundle score
-    else if (token.bundleScore && token.bundleScore > 70) {
-      rejected_reason = 'high_bundle_score';
-      filterBreakdown.high_bundle_score++;
+    // Filter 2: Null name/ticker
+    else if (!token.symbol || !token.name || token.symbol.trim() === '' || token.name.trim() === '') {
+      rejected_reason = 'null_name_ticker';
+      rejected_detail = `Name: "${token.name || 'null'}", Ticker: "${token.symbol || 'null'}"`;
     }
-    // Check duplicate
+    // Filter 3: Duplicate
     else if (existingMints.has(token.mint)) {
       rejected_reason = 'duplicate';
-      filterBreakdown.duplicate++;
+      rejected_detail = 'Already in watchlist';
+    }
+    // Filter 4: Emoji/unicode
+    else if (/[^\x00-\x7F]/.test(token.symbol)) {
+      rejected_reason = 'emoji_unicode';
+      rejected_detail = `Contains non-ASCII: "${token.symbol}"`;
+    }
+    // Filter 5: Ticker too long (> 12 chars)
+    else if (token.symbol.length > FILTER_CONFIG.ticker_too_long.threshold) {
+      rejected_reason = 'ticker_too_long';
+      rejected_detail = `Length: ${token.symbol.length} chars (max: ${FILTER_CONFIG.ticker_too_long.threshold})`;
     }
 
     if (rejected_reason) {
-      rejected.push({ ...token, reason: rejected_reason });
+      filterBreakdown[rejected_reason].count++;
+      rejected.push({ ...token, reason: rejected_reason, detail: rejected_detail });
     } else {
       passed.push(token);
     }
@@ -179,34 +170,17 @@ async function runIntake(liveMode: boolean, supabase: any): Promise<any> {
     inputCount: tokens.length,
     passedCount: passed.length,
     rejectedCount: rejected.length,
+    filterConfig: FILTER_CONFIG,
     filterBreakdown,
     passed,
     rejected,
   };
 }
 
-// Step 3: Watchlist Monitoring - Get current watchlist status
-async function getWatchlistStatus(liveMode: boolean, supabase: any): Promise<any> {
-  console.log('[Step 3] Getting watchlist status, liveMode:', liveMode);
-  
-  if (!liveMode) {
-    // Demo data
-    return {
-      totalWatching: 47,
-      staleCount: 5,
-      deadCount: 3,
-      healthyCount: 39,
-      recentUpdates: [
-        { symbol: 'DEMO1', holders: 25, volume: 1.5, bondingPct: 45.2, lastUpdate: '2 min ago' },
-        { symbol: 'DEMO2', holders: 18, volume: 0.8, bondingPct: 32.1, lastUpdate: '3 min ago' },
-        { symbol: 'DEMO3', holders: 42, volume: 3.2, bondingPct: 78.5, lastUpdate: '1 min ago' },
-        { symbol: 'DEMO4', holders: 12, volume: 0.3, bondingPct: 15.0, lastUpdate: '5 min ago' },
-        { symbol: 'DEMO5', holders: 8, volume: 0.1, bondingPct: 8.2, lastUpdate: '10 min ago' },
-      ]
-    };
-  }
+// Step 3: Watchlist Monitoring - Get current status with metric details
+async function getWatchlistStatus(supabase: any): Promise<any> {
+  console.log('[Step 3] Getting watchlist status (LIVE)');
 
-  // Live data from database
   const { data: watchlist, error } = await supabase
     .from('pumpfun_watchlist')
     .select('*')
@@ -221,53 +195,51 @@ async function getWatchlistStatus(liveMode: boolean, supabase: any): Promise<any
 
   const tokens = watchlist || [];
   const staleCount = tokens.filter((t: any) => t.stale_count >= 3).length;
-  const deadCount = tokens.filter((t: any) => t.status === 'dead' || (t.holder_count < 3)).length;
+  const deadCount = tokens.filter((t: any) => t.status === 'dead' || (t.holder_count !== null && t.holder_count < 3)).length;
   const healthyCount = tokens.length - staleCount - deadCount;
 
-  const recentUpdates = tokens.slice(0, 10).map((t: any) => ({
-    symbol: t.token_symbol || t.token_mint?.slice(0, 6),
-    holders: t.holder_count || 0,
-    volume: t.volume_sol || 0,
-    bondingPct: t.bonding_curve_pct || 0,
-    lastUpdate: t.last_checked_at ? new Date(t.last_checked_at).toLocaleString() : 'Never'
-  }));
+  // Detailed metrics for each token
+  const recentUpdates = tokens.slice(0, 20).map((t: any) => {
+    const watchedFor = t.first_seen_at ? Math.floor((Date.now() - new Date(t.first_seen_at).getTime()) / 60000) : 0;
+    return {
+      mint: t.token_mint,
+      symbol: t.token_symbol || t.token_mint?.slice(0, 6),
+      name: t.token_name,
+      holders: t.holder_count || 0,
+      holdersPrev: t.prev_holder_count || t.holder_count || 0,
+      volume: t.volume_sol || 0,
+      volumePrev: t.prev_volume_sol || t.volume_sol || 0,
+      price: t.price_usd || 0,
+      bondingPct: t.bonding_curve_pct || 0,
+      watchedMins: watchedFor,
+      lastUpdate: t.last_checked_at,
+      staleCount: t.stale_count || 0,
+      creatorWallet: t.creator_wallet,
+    };
+  });
+
+  // Metrics sources info
+  const metricsInfo = {
+    holder_count: { sources: ['pump.fun', 'Helius RPC'], purpose: 'Detect growth/distribution' },
+    volume_sol: { sources: ['pump.fun', 'DexScreener'], purpose: 'Detect trading activity' },
+    price_usd: { sources: ['pump.fun', 'DexScreener', 'Jupiter'], purpose: 'Track valuation changes' },
+    bonding_curve_pct: { sources: ['pump.fun'], purpose: 'Track graduation progress' },
+  };
 
   return {
     totalWatching: tokens.length,
     staleCount,
     deadCount,
     healthyCount,
-    recentUpdates
+    metricsInfo,
+    recentUpdates,
   };
 }
 
-// Step 4: Qualification Gate - Check tokens against criteria
-async function runQualification(liveMode: boolean, supabase: any): Promise<any> {
-  console.log('[Step 4] Running qualification, liveMode:', liveMode);
-  
-  if (!liveMode) {
-    // Demo data
-    return {
-      checkedCount: 47,
-      qualifiedCount: 5,
-      softRejectedCount: 3,
-      stillWatchingCount: 39,
-      qualified: [
-        { mint: 'Qual1xxxxxxxxxxxxx', symbol: 'QUAL1', name: 'Qualified Token 1', holders: 32, volume: 2.1, rugScore: 72 },
-        { mint: 'Qual2xxxxxxxxxxxxx', symbol: 'QUAL2', name: 'Qualified Token 2', holders: 45, volume: 3.5, rugScore: 85 },
-        { mint: 'Qual3xxxxxxxxxxxxx', symbol: 'QUAL3', name: 'Qualified Token 3', holders: 28, volume: 1.8, rugScore: 68 },
-        { mint: 'Qual4xxxxxxxxxxxxx', symbol: 'QUAL4', name: 'Qualified Token 4', holders: 55, volume: 4.2, rugScore: 91 },
-        { mint: 'Qual5xxxxxxxxxxxxx', symbol: 'QUAL5', name: 'Qualified Token 5', holders: 38, volume: 2.8, rugScore: 76 },
-      ],
-      softRejected: [
-        { mint: 'Soft1xxxxxxxxxxxxx', symbol: 'SOFT1', name: 'Soft Rejected 1', reason: 'Low RugCheck score (42)' },
-        { mint: 'Soft2xxxxxxxxxxxxx', symbol: 'SOFT2', name: 'Soft Rejected 2', reason: 'Low RugCheck score (38)' },
-        { mint: 'Soft3xxxxxxxxxxxxx', symbol: 'SOFT3', name: 'Soft Rejected 3', reason: 'Insufficient volume (0.3 SOL)' },
-      ]
-    };
-  }
+// Step 4: Qualification Gate - Check with visible thresholds
+async function runQualification(supabase: any): Promise<any> {
+  console.log('[Step 4] Running qualification (LIVE)');
 
-  // Live qualification check
   const { data: watching } = await supabase
     .from('pumpfun_watchlist')
     .select('*')
@@ -278,43 +250,57 @@ async function runQualification(liveMode: boolean, supabase: any): Promise<any> 
   const softRejected: any[] = [];
   const stillWatching: any[] = [];
 
-  // Get config
+  // Get config from DB or use defaults
   const { data: configData } = await supabase
     .from('pumpfun_monitor_config')
     .select('*')
     .single();
-  
-  const config = configData || {
-    min_holders_to_qualify: 20,
-    min_volume_sol: 0.5,
-    min_watch_time_sec: 120
+
+  const config = {
+    min_holders: configData?.min_holders_to_qualify || QUALIFICATION_CONFIG.min_holders.value,
+    min_volume_sol: configData?.min_volume_sol || QUALIFICATION_CONFIG.min_volume_sol.value,
+    min_watch_time_sec: configData?.min_watch_time_sec || QUALIFICATION_CONFIG.min_watch_time_sec.value,
+    min_rugcheck_score: configData?.min_rugcheck_score || QUALIFICATION_CONFIG.min_rugcheck_score.value,
   };
 
   for (const token of tokens) {
     const watchedFor = token.first_seen_at ? (Date.now() - new Date(token.first_seen_at).getTime()) / 1000 : 0;
-    
-    const meetsHolders = (token.holder_count || 0) >= config.min_holders_to_qualify;
-    const meetsVolume = (token.volume_sol || 0) >= config.min_volume_sol;
-    const meetsTime = watchedFor >= config.min_watch_time_sec;
 
-    if (meetsHolders && meetsVolume && meetsTime) {
+    const checks = {
+      holders: { passed: (token.holder_count || 0) >= config.min_holders, value: token.holder_count || 0, threshold: config.min_holders },
+      volume: { passed: (token.volume_sol || 0) >= config.min_volume_sol, value: token.volume_sol || 0, threshold: config.min_volume_sol },
+      watchTime: { passed: watchedFor >= config.min_watch_time_sec, value: Math.floor(watchedFor), threshold: config.min_watch_time_sec },
+      rugcheck: { passed: !token.rugcheck_score || token.rugcheck_score >= config.min_rugcheck_score, value: token.rugcheck_score || 'N/A', threshold: config.min_rugcheck_score },
+    };
+
+    const allPassed = checks.holders.passed && checks.volume.passed && checks.watchTime.passed && checks.rugcheck.passed;
+    const failedRugcheck = token.rugcheck_score && token.rugcheck_score < config.min_rugcheck_score;
+
+    if (allPassed) {
       qualified.push({
         mint: token.token_mint,
         symbol: token.token_symbol,
         name: token.token_name,
         holders: token.holder_count,
         volume: token.volume_sol,
-        rugScore: token.rugcheck_score
+        rugScore: token.rugcheck_score,
+        checks,
+        signalStrength: token.signal_strength || 'moderate',
       });
-    } else if (token.rugcheck_score && token.rugcheck_score < 50) {
+    } else if (failedRugcheck) {
       softRejected.push({
         mint: token.token_mint,
         symbol: token.token_symbol,
         name: token.token_name,
-        reason: `Low RugCheck score (${token.rugcheck_score})`
+        reason: `Low RugCheck score: ${token.rugcheck_score} (min: ${config.min_rugcheck_score})`,
+        checks,
       });
     } else {
-      stillWatching.push(token);
+      stillWatching.push({
+        mint: token.token_mint,
+        symbol: token.token_symbol,
+        checks,
+      });
     }
   }
 
@@ -323,35 +309,17 @@ async function runQualification(liveMode: boolean, supabase: any): Promise<any> 
     qualifiedCount: qualified.length,
     softRejectedCount: softRejected.length,
     stillWatchingCount: stillWatching.length,
+    thresholds: config,
+    qualificationConfig: QUALIFICATION_CONFIG,
     qualified,
-    softRejected
+    softRejected,
   };
 }
 
 // Step 5: Dev Wallet Check
-async function runDevChecks(liveMode: boolean, supabase: any): Promise<any> {
-  console.log('[Step 5] Running dev wallet checks, liveMode:', liveMode);
-  
-  if (!liveMode) {
-    // Demo data
-    return {
-      checkedCount: 5,
-      passedCount: 3,
-      devSoldCount: 1,
-      newLaunchCount: 1,
-      passed: [
-        { mint: 'Pass1xxxxxxxxxxxxx', symbol: 'PASS1', name: 'Dev Check Passed 1' },
-        { mint: 'Pass2xxxxxxxxxxxxx', symbol: 'PASS2', name: 'Dev Check Passed 2' },
-        { mint: 'Pass3xxxxxxxxxxxxx', symbol: 'PASS3', name: 'Dev Check Passed 3' },
-      ],
-      failed: [
-        { mint: 'Fail1xxxxxxxxxxxxx', symbol: 'FAIL1', name: 'Dev Sold Token', reason: 'Dev sold 50% of holdings' },
-        { mint: 'Fail2xxxxxxxxxxxxx', symbol: 'FAIL2', name: 'New Launch Token', reason: 'Dev launched new token 2 hours later' },
-      ]
-    };
-  }
+async function runDevChecks(supabase: any): Promise<any> {
+  console.log('[Step 5] Running dev wallet checks (LIVE)');
 
-  // Live dev checks would query qualified tokens and check their creators
   const { data: qualified } = await supabase
     .from('pumpfun_watchlist')
     .select('*')
@@ -361,56 +329,83 @@ async function runDevChecks(liveMode: boolean, supabase: any): Promise<any> {
   const passed: any[] = [];
   const failed: any[] = [];
 
+  // Check dev reputation from our new table
   for (const token of (qualified || [])) {
-    // In real implementation, would call pump.fun API for creator info
-    // and Helius for transaction history
-    // For now, pass all in live mode (actual checks happen in monitor function)
-    passed.push({
-      mint: token.token_mint,
-      symbol: token.token_symbol,
-      name: token.token_name
-    });
+    let devReputation = null;
+    if (token.creator_wallet) {
+      const { data: rep } = await supabase
+        .from('dev_wallet_reputation')
+        .select('*')
+        .eq('wallet_address', token.creator_wallet)
+        .single();
+      devReputation = rep;
+    }
+
+    const devInfo = {
+      wallet: token.creator_wallet,
+      reputation: devReputation?.reputation_score || 50,
+      trustLevel: devReputation?.trust_level || 'unknown',
+      tokensLaunched: devReputation?.total_tokens_launched || 0,
+      tokensRugged: devReputation?.tokens_rugged || 0,
+    };
+
+    // Check for known bad actors
+    if (devReputation?.trust_level === 'blacklisted') {
+      failed.push({
+        mint: token.token_mint,
+        symbol: token.token_symbol,
+        name: token.token_name,
+        reason: `Blacklisted dev: ${devReputation?.tokens_rugged || 0} rugs`,
+        devInfo,
+      });
+    } else if (token.dev_sold) {
+      failed.push({
+        mint: token.token_mint,
+        symbol: token.token_symbol,
+        name: token.token_name,
+        reason: 'Dev sold tokens',
+        devInfo,
+      });
+    } else if (token.dev_launched_new) {
+      failed.push({
+        mint: token.token_mint,
+        symbol: token.token_symbol,
+        name: token.token_name,
+        reason: 'Dev launched new token',
+        devInfo,
+      });
+    } else {
+      passed.push({
+        mint: token.token_mint,
+        symbol: token.token_symbol,
+        name: token.token_name,
+        devInfo,
+      });
+    }
   }
 
   return {
     checkedCount: (qualified || []).length,
     passedCount: passed.length,
-    devSoldCount: 0,
-    newLaunchCount: 0,
+    devSoldCount: failed.filter(f => f.reason.includes('sold')).length,
+    newLaunchCount: failed.filter(f => f.reason.includes('new token')).length,
+    blacklistedCount: failed.filter(f => f.reason.includes('Blacklisted')).length,
     passed,
-    failed
+    failed,
   };
 }
 
-// Step 6: Get Buy Queue
-async function getBuyQueue(liveMode: boolean, supabase: any): Promise<any> {
-  console.log('[Step 6] Getting buy queue, liveMode:', liveMode);
-  
-  // Get config
+// Step 6: Get Buy Queue with tiered amounts
+async function getBuyQueue(supabase: any): Promise<any> {
+  console.log('[Step 6] Getting buy queue (LIVE)');
+
   const { data: configData } = await supabase
     .from('pumpfun_monitor_config')
     .select('*')
     .single();
-  
+
   const config = configData || {};
 
-  if (!liveMode) {
-    // Demo data
-    return {
-      fantasyMode: true,
-      queueCount: 3,
-      dailyBuys: 5,
-      dailyCap: config.daily_buy_cap || 20,
-      buyAmountSol: config.buy_amount_sol || 0.05,
-      queue: [
-        { symbol: 'BUY1', priceUsd: 0.00000123, onCurve: true, executed: false },
-        { symbol: 'BUY2', priceUsd: 0.00000456, onCurve: true, executed: false },
-        { symbol: 'BUY3', priceUsd: 0.00000789, onCurve: false, executed: false },
-      ]
-    };
-  }
-
-  // Live data - get tokens ready for buy
   const { data: readyToBuy } = await supabase
     .from('pumpfun_watchlist')
     .select('*')
@@ -426,47 +421,37 @@ async function getBuyQueue(liveMode: boolean, supabase: any): Promise<any> {
     .eq('status', 'bought')
     .gte('bought_at', today);
 
-  const queue = (readyToBuy || []).map((t: any) => ({
-    symbol: t.token_symbol,
-    priceUsd: t.price_usd || 0,
-    onCurve: (t.bonding_curve_pct || 0) < 100,
-    executed: false
-  }));
+  const queue = (readyToBuy || []).map((t: any) => {
+    const signalStrength = t.signal_strength || 'moderate';
+    const buyTier = BUY_TIERS[signalStrength as keyof typeof BUY_TIERS] || BUY_TIERS.moderate;
+    
+    return {
+      mint: t.token_mint,
+      symbol: t.token_symbol,
+      name: t.token_name,
+      priceUsd: t.price_usd || 0,
+      onCurve: (t.bonding_curve_pct || 0) < 100,
+      signalStrength,
+      buyAmountUsd: buyTier.amount_usd,
+      tierDescription: buyTier.description,
+      executed: false,
+    };
+  });
 
   return {
-    fantasyMode: config.fantasy_mode_enabled || true,
+    fantasyMode: config.fantasy_mode_enabled ?? true,
     queueCount: queue.length,
     dailyBuys: dailyBuys || 0,
     dailyCap: config.daily_buy_cap || 20,
-    buyAmountSol: config.buy_amount_sol || 0.05,
-    queue
+    buyTiers: BUY_TIERS,
+    queue,
   };
 }
 
 // Step 7: Get Positions
-async function getPositions(liveMode: boolean, supabase: any): Promise<any> {
-  console.log('[Step 7] Getting positions, liveMode:', liveMode);
-  
-  if (!liveMode) {
-    // Demo data
-    return {
-      positionCount: 4,
-      totalInvested: 0.2,
-      unrealizedPnl: 0.08,
-      positions: [
-        { symbol: 'POS1', entryPrice: 0.00000100, currentPrice: 0.00000180, multiplier: 1.8, pnlPct: 80 },
-        { symbol: 'POS2', entryPrice: 0.00000050, currentPrice: 0.00000045, multiplier: 0.9, pnlPct: -10 },
-        { symbol: 'POS3', entryPrice: 0.00000200, currentPrice: 0.00000350, multiplier: 1.75, pnlPct: 75 },
-        { symbol: 'POS4', entryPrice: 0.00000080, currentPrice: 0.00000095, multiplier: 1.19, pnlPct: 19 },
-      ],
-      moonbags: [
-        { symbol: 'MOON1', soldPrice: 0.00000300, currentPrice: 0.00000450, changeSinceSell: 50 },
-        { symbol: 'MOON2', soldPrice: 0.00000500, currentPrice: 0.00000380, changeSinceSell: -24 },
-      ]
-    };
-  }
+async function getPositions(supabase: any): Promise<any> {
+  console.log('[Step 7] Getting positions (LIVE)');
 
-  // Live data - get fantasy positions
   const { data: positions } = await supabase
     .from('pumpfun_fantasy_positions')
     .select('*')
@@ -474,17 +459,19 @@ async function getPositions(liveMode: boolean, supabase: any): Promise<any> {
     .order('created_at', { ascending: false });
 
   const positionList = (positions || []).map((p: any) => ({
+    mint: p.token_mint,
     symbol: p.token_symbol,
     entryPrice: p.entry_price_usd,
     currentPrice: p.current_price_usd,
     multiplier: p.entry_price_usd > 0 ? p.current_price_usd / p.entry_price_usd : 1,
-    pnlPct: p.entry_price_usd > 0 ? ((p.current_price_usd - p.entry_price_usd) / p.entry_price_usd * 100) : 0
+    pnlPct: p.entry_price_usd > 0 ? ((p.current_price_usd - p.entry_price_usd) / p.entry_price_usd * 100) : 0,
+    investedSol: p.invested_sol,
+    signalStrength: p.signal_strength,
   }));
 
   const totalInvested = (positions || []).reduce((sum: number, p: any) => sum + (p.invested_sol || 0), 0);
   const unrealizedPnl = (positions || []).reduce((sum: number, p: any) => sum + (p.unrealized_pnl_sol || 0), 0);
 
-  // Get moonbags (positions with is_moonbag flag or sold but retained percentage)
   const { data: moonbags } = await supabase
     .from('pumpfun_fantasy_positions')
     .select('*')
@@ -493,10 +480,11 @@ async function getPositions(liveMode: boolean, supabase: any): Promise<any> {
     .limit(10);
 
   const moonbagList = (moonbags || []).map((m: any) => ({
+    mint: m.token_mint,
     symbol: m.token_symbol,
     soldPrice: m.sold_price_usd,
     currentPrice: m.current_price_usd,
-    changeSinceSell: m.sold_price_usd > 0 ? ((m.current_price_usd - m.sold_price_usd) / m.sold_price_usd * 100) : 0
+    changeSinceSell: m.sold_price_usd > 0 ? ((m.current_price_usd - m.sold_price_usd) / m.sold_price_usd * 100) : 0,
   }));
 
   return {
@@ -504,20 +492,54 @@ async function getPositions(liveMode: boolean, supabase: any): Promise<any> {
     totalInvested,
     unrealizedPnl,
     positions: positionList,
-    moonbags: moonbagList
+    moonbags: moonbagList,
   };
 }
 
+// Track token lifecycle for post-rejection analysis
+async function trackLifecycle(supabase: any, tokenMint: string, decision: string, reason: string): Promise<any> {
+  console.log('[Lifecycle] Tracking token:', tokenMint, 'Decision:', decision);
+
+  // Get token info
+  const { data: token } = await supabase
+    .from('pumpfun_watchlist')
+    .select('*')
+    .eq('token_mint', tokenMint)
+    .single();
+
+  if (!token) {
+    return { error: 'Token not found' };
+  }
+
+  // Insert lifecycle record
+  const { data, error } = await supabase
+    .from('token_lifecycle_tracking')
+    .insert({
+      token_mint: tokenMint,
+      our_decision: decision,
+      decision_reason: reason,
+      price_at_decision: token.price_usd,
+      dev_wallet: token.creator_wallet,
+    })
+    .select()
+    .single();
+
+  if (error) {
+    console.error('[Lifecycle] Insert error:', error);
+    return { error: error.message };
+  }
+
+  return { success: true, record: data };
+}
+
 serve(async (req) => {
-  // Handle CORS preflight
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
   }
 
   try {
     const supabaseUrl = Deno.env.get('SUPABASE_URL');
-    const supabaseKey =
-      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || Deno.env.get('SUPABASE_ANON_KEY');
+    const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || Deno.env.get('SUPABASE_ANON_KEY');
 
     if (!supabaseUrl || !supabaseKey) {
       throw new Error('Missing SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY');
@@ -527,31 +549,34 @@ serve(async (req) => {
       auth: { persistSession: false },
     });
 
-    const { action, liveMode = false } = await req.json();
-    console.log('[Pipeline Debugger] Action:', action, 'Live mode:', liveMode);
+    const { action, tokenMint, decision, reason } = await req.json();
+    console.log('[Pipeline Debugger] Action:', action);
 
     let result;
     switch (action) {
       case 'run_discovery':
-        result = await runDiscovery(liveMode, supabase);
+        result = await runDiscovery(supabase);
         break;
       case 'run_intake':
-        result = await runIntake(liveMode, supabase);
+        result = await runIntake(supabase);
         break;
       case 'get_watchlist_status':
-        result = await getWatchlistStatus(liveMode, supabase);
+        result = await getWatchlistStatus(supabase);
         break;
       case 'run_qualification':
-        result = await runQualification(liveMode, supabase);
+        result = await runQualification(supabase);
         break;
       case 'run_dev_checks':
-        result = await runDevChecks(liveMode, supabase);
+        result = await runDevChecks(supabase);
         break;
       case 'get_buy_queue':
-        result = await getBuyQueue(liveMode, supabase);
+        result = await getBuyQueue(supabase);
         break;
       case 'get_positions':
-        result = await getPositions(liveMode, supabase);
+        result = await getPositions(supabase);
+        break;
+      case 'track_lifecycle':
+        result = await trackLifecycle(supabase, tokenMint, decision, reason);
         break;
       default:
         return jsonResponse({ error: `Unknown action: ${action}` }, 400);
