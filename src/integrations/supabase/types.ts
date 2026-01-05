@@ -1726,6 +1726,7 @@ export type Database = {
       dev_wallet_reputation: {
         Row: {
           avg_dump_then_pump_pct: number | null
+          avg_insider_pct: number | null
           avg_peak_mcap_usd: number | null
           avg_time_before_dump_mins: number | null
           created_at: string
@@ -1737,8 +1738,15 @@ export type Database = {
           last_activity_at: string | null
           last_analyzed_at: string | null
           launches_new_while_active: boolean | null
+          linked_wallets: string[] | null
           metadata: Json | null
           notes: string | null
+          pattern_buyback_dev: number | null
+          pattern_diamond_dev: number | null
+          pattern_hidden_whale: number | null
+          pattern_spike_kill: number | null
+          pattern_wallet_washer: number | null
+          pattern_wash_bundler: number | null
           preferred_dump_window_mins: number | null
           reputation_score: number | null
           telegram_groups: string[] | null
@@ -1757,6 +1765,7 @@ export type Database = {
         }
         Insert: {
           avg_dump_then_pump_pct?: number | null
+          avg_insider_pct?: number | null
           avg_peak_mcap_usd?: number | null
           avg_time_before_dump_mins?: number | null
           created_at?: string
@@ -1768,8 +1777,15 @@ export type Database = {
           last_activity_at?: string | null
           last_analyzed_at?: string | null
           launches_new_while_active?: boolean | null
+          linked_wallets?: string[] | null
           metadata?: Json | null
           notes?: string | null
+          pattern_buyback_dev?: number | null
+          pattern_diamond_dev?: number | null
+          pattern_hidden_whale?: number | null
+          pattern_spike_kill?: number | null
+          pattern_wallet_washer?: number | null
+          pattern_wash_bundler?: number | null
           preferred_dump_window_mins?: number | null
           reputation_score?: number | null
           telegram_groups?: string[] | null
@@ -1788,6 +1804,7 @@ export type Database = {
         }
         Update: {
           avg_dump_then_pump_pct?: number | null
+          avg_insider_pct?: number | null
           avg_peak_mcap_usd?: number | null
           avg_time_before_dump_mins?: number | null
           created_at?: string
@@ -1799,8 +1816,15 @@ export type Database = {
           last_activity_at?: string | null
           last_analyzed_at?: string | null
           launches_new_while_active?: boolean | null
+          linked_wallets?: string[] | null
           metadata?: Json | null
           notes?: string | null
+          pattern_buyback_dev?: number | null
+          pattern_diamond_dev?: number | null
+          pattern_hidden_whale?: number | null
+          pattern_spike_kill?: number | null
+          pattern_wallet_washer?: number | null
+          pattern_wash_bundler?: number | null
           preferred_dump_window_mins?: number | null
           reputation_score?: number | null
           telegram_groups?: string[] | null
@@ -5227,14 +5251,20 @@ export type Database = {
           buy_tx_signature: string | null
           check_count: number
           consecutive_stale_checks: number | null
+          crash_detected_at: string | null
           created_at: string
           created_at_blockchain: string | null
           creator_wallet: string | null
           demoted_at: string | null
           demotion_reason: string | null
+          detected_dev_pattern: string | null
+          dev_bought_back: boolean | null
+          dev_holding_pct: number | null
           dev_launched_new: boolean | null
+          dev_secondary_wallets: string[] | null
           dev_sold: boolean | null
           fantasy_position_id: string | null
+          first_10_buys_analyzed: boolean | null
           first_seen_at: string
           freeze_authority_revoked: boolean | null
           fresh_wallet_pct: number | null
@@ -5247,6 +5277,7 @@ export type Database = {
           id: string
           image_url: string | null
           insider_activity_detected: boolean | null
+          insider_pct: number | null
           is_graduated: boolean | null
           last_checked_at: string
           last_dev_check_at: string | null
@@ -5261,7 +5292,10 @@ export type Database = {
           metrics_hash: string | null
           mint_authority_revoked: boolean | null
           permanent_reject: boolean | null
+          price_at_mint: number | null
           price_ath_usd: number | null
+          price_current: number | null
+          price_peak: number | null
           price_start_usd: number | null
           price_usd: number | null
           price_usd_prev: number | null
@@ -5288,9 +5322,11 @@ export type Database = {
           socials_checked_at: string | null
           socials_count: number | null
           source: string | null
+          spike_detected_at: string | null
           status: string
           suspicious_wallet_pct: number | null
           telegram_url: string | null
+          time_to_peak_mins: number | null
           token_mint: string
           token_name: string | null
           token_symbol: string | null
@@ -5300,6 +5336,7 @@ export type Database = {
           volume_5m: number | null
           volume_sol: number | null
           volume_sol_prev: number | null
+          was_spiked_and_killed: boolean | null
           website_url: string | null
         }
         Insert: {
@@ -5316,14 +5353,20 @@ export type Database = {
           buy_tx_signature?: string | null
           check_count?: number
           consecutive_stale_checks?: number | null
+          crash_detected_at?: string | null
           created_at?: string
           created_at_blockchain?: string | null
           creator_wallet?: string | null
           demoted_at?: string | null
           demotion_reason?: string | null
+          detected_dev_pattern?: string | null
+          dev_bought_back?: boolean | null
+          dev_holding_pct?: number | null
           dev_launched_new?: boolean | null
+          dev_secondary_wallets?: string[] | null
           dev_sold?: boolean | null
           fantasy_position_id?: string | null
+          first_10_buys_analyzed?: boolean | null
           first_seen_at?: string
           freeze_authority_revoked?: boolean | null
           fresh_wallet_pct?: number | null
@@ -5336,6 +5379,7 @@ export type Database = {
           id?: string
           image_url?: string | null
           insider_activity_detected?: boolean | null
+          insider_pct?: number | null
           is_graduated?: boolean | null
           last_checked_at?: string
           last_dev_check_at?: string | null
@@ -5350,7 +5394,10 @@ export type Database = {
           metrics_hash?: string | null
           mint_authority_revoked?: boolean | null
           permanent_reject?: boolean | null
+          price_at_mint?: number | null
           price_ath_usd?: number | null
+          price_current?: number | null
+          price_peak?: number | null
           price_start_usd?: number | null
           price_usd?: number | null
           price_usd_prev?: number | null
@@ -5377,9 +5424,11 @@ export type Database = {
           socials_checked_at?: string | null
           socials_count?: number | null
           source?: string | null
+          spike_detected_at?: string | null
           status?: string
           suspicious_wallet_pct?: number | null
           telegram_url?: string | null
+          time_to_peak_mins?: number | null
           token_mint: string
           token_name?: string | null
           token_symbol?: string | null
@@ -5389,6 +5438,7 @@ export type Database = {
           volume_5m?: number | null
           volume_sol?: number | null
           volume_sol_prev?: number | null
+          was_spiked_and_killed?: boolean | null
           website_url?: string | null
         }
         Update: {
@@ -5405,14 +5455,20 @@ export type Database = {
           buy_tx_signature?: string | null
           check_count?: number
           consecutive_stale_checks?: number | null
+          crash_detected_at?: string | null
           created_at?: string
           created_at_blockchain?: string | null
           creator_wallet?: string | null
           demoted_at?: string | null
           demotion_reason?: string | null
+          detected_dev_pattern?: string | null
+          dev_bought_back?: boolean | null
+          dev_holding_pct?: number | null
           dev_launched_new?: boolean | null
+          dev_secondary_wallets?: string[] | null
           dev_sold?: boolean | null
           fantasy_position_id?: string | null
+          first_10_buys_analyzed?: boolean | null
           first_seen_at?: string
           freeze_authority_revoked?: boolean | null
           fresh_wallet_pct?: number | null
@@ -5425,6 +5481,7 @@ export type Database = {
           id?: string
           image_url?: string | null
           insider_activity_detected?: boolean | null
+          insider_pct?: number | null
           is_graduated?: boolean | null
           last_checked_at?: string
           last_dev_check_at?: string | null
@@ -5439,7 +5496,10 @@ export type Database = {
           metrics_hash?: string | null
           mint_authority_revoked?: boolean | null
           permanent_reject?: boolean | null
+          price_at_mint?: number | null
           price_ath_usd?: number | null
+          price_current?: number | null
+          price_peak?: number | null
           price_start_usd?: number | null
           price_usd?: number | null
           price_usd_prev?: number | null
@@ -5466,9 +5526,11 @@ export type Database = {
           socials_checked_at?: string | null
           socials_count?: number | null
           source?: string | null
+          spike_detected_at?: string | null
           status?: string
           suspicious_wallet_pct?: number | null
           telegram_url?: string | null
+          time_to_peak_mins?: number | null
           token_mint?: string
           token_name?: string | null
           token_symbol?: string | null
@@ -5478,6 +5540,7 @@ export type Database = {
           volume_5m?: number | null
           volume_sol?: number | null
           volume_sol_prev?: number | null
+          was_spiked_and_killed?: boolean | null
           website_url?: string | null
         }
         Relationships: [
@@ -6957,6 +7020,57 @@ export type Database = {
           transaction_signatures?: string[] | null
           wallet_pubkey?: string
           wallet_source?: string
+        }
+        Relationships: []
+      }
+      token_early_trades: {
+        Row: {
+          created_at: string
+          funding_source: string | null
+          id: string
+          is_creator: boolean | null
+          is_linked_to_creator: boolean | null
+          pct_supply_bought: number | null
+          signature: string | null
+          sol_amount: number | null
+          timestamp: string
+          token_amount: number | null
+          token_mint: string
+          trade_index: number
+          trade_type: string
+          wallet_address: string
+        }
+        Insert: {
+          created_at?: string
+          funding_source?: string | null
+          id?: string
+          is_creator?: boolean | null
+          is_linked_to_creator?: boolean | null
+          pct_supply_bought?: number | null
+          signature?: string | null
+          sol_amount?: number | null
+          timestamp: string
+          token_amount?: number | null
+          token_mint: string
+          trade_index: number
+          trade_type: string
+          wallet_address: string
+        }
+        Update: {
+          created_at?: string
+          funding_source?: string | null
+          id?: string
+          is_creator?: boolean | null
+          is_linked_to_creator?: boolean | null
+          pct_supply_bought?: number | null
+          signature?: string | null
+          sol_amount?: number | null
+          timestamp?: string
+          token_amount?: number | null
+          token_mint?: string
+          trade_index?: number
+          trade_type?: string
+          wallet_address?: string
         }
         Relationships: []
       }

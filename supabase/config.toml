@@ -351,3 +351,6 @@ verify_jwt = false
 
 [functions.pumpfun-lifecycle-monitor]
 verify_jwt = false
+
+[functions.pumpfun-early-trade-analyzer]
+verify_jwt = false

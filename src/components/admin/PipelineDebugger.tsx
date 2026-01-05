@@ -31,8 +31,30 @@ import {
   ArrowUpRight,
   ArrowDownRight,
   Info,
+  Diamond,
+  RefreshCw,
+  Ghost,
+  Trash2,
+  Skull,
+  AlertTriangle,
+  Shield,
+  ShieldAlert,
+  ShieldCheck,
+  ShieldX,
 } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
+
+// Pattern icons mapping
+const PATTERN_ICONS: Record<string, { icon: React.ElementType; color: string; label: string }> = {
+  diamond_dev: { icon: Diamond, color: 'text-cyan-400', label: 'Diamond Dev' },
+  buyback_dev: { icon: RefreshCw, color: 'text-green-400', label: 'Buyback Dev' },
+  hidden_whale: { icon: Ghost, color: 'text-purple-400', label: 'Hidden Whale' },
+  wash_bundler: { icon: Trash2, color: 'text-orange-400', label: 'Wash Bundler' },
+  wallet_washer: { icon: RefreshCw, color: 'text-yellow-400', label: 'Wallet Washer' },
+  spike_kill: { icon: Skull, color: 'text-red-500', label: 'Spike & Kill' },
+  stable_after_dump: { icon: ShieldCheck, color: 'text-green-500', label: 'Stable After Dump' },
+  potential_diamond_dev: { icon: Diamond, color: 'text-cyan-400/50', label: 'Potential Diamond' },
+};
 
 // Step definitions with logic explanations
 const STEP_DEFINITIONS = [
@@ -68,14 +90,14 @@ const STEP_DEFINITIONS = [
     id: 5,
     name: 'Dev Wallet Check',
     icon: Users,
-    description: 'Analyze developer behavior and reputation',
-    checks: ['Dev reputation score', 'Blacklist check', 'Dev sold?', 'Dev launched new?'],
+    description: 'Analyze developer behavior patterns and apply buy guardrails',
+    checks: ['Dev patterns', 'Reputation score', 'Insider %', 'Price guardrails', 'Spike detection'],
   },
   {
     id: 6,
     name: 'Buy Execution',
     icon: ShoppingCart,
-    description: 'Execute tiered buys based on signal strength',
+    description: 'Execute tiered buys based on signal strength with guardrails',
     logic: ['Weak: $2', 'Moderate: $10', 'Strong: $20', 'Very Strong: $50'],
   },
   {
@@ -109,6 +131,46 @@ const formatTimestamp = (ts: string | null | undefined): { relative: string; abs
     relative: formatDistanceToNow(date, { addSuffix: true }),
     absolute: date.toLocaleString(),
   };
+};
+
+// Render pattern badge
+const PatternBadge = ({ pattern }: { pattern: string | null }) => {
+  if (!pattern) return <span className="text-xs text-muted-foreground">None</span>;
+  
+  const patternInfo = PATTERN_ICONS[pattern];
+  if (!patternInfo) return <Badge variant="outline" className="text-[10px]">{pattern}</Badge>;
+  
+  const Icon = patternInfo.icon;
+  return (
+    <Badge variant="outline" className={`text-[10px] gap-1 ${patternInfo.color}`}>
+      <Icon className="h-3 w-3" />
+      {patternInfo.label}
+    </Badge>
+  );
+};
+
+// Render guardrail status
+const GuardrailStatus = ({ guardrails }: { guardrails: any }) => {
+  if (!guardrails) return null;
+  
+  const { guards, passed, failedGuards } = guardrails;
+  
+  return (
+    <div className="space-y-1">
+      {Object.entries(guards || {}).map(([key, value]) => (
+        <div key={key} className="flex items-center gap-1 text-[10px]">
+          {value ? (
+            <CheckCircle2 className="h-3 w-3 text-green-500" />
+          ) : (
+            <XCircle className="h-3 w-3 text-red-500" />
+          )}
+          <span className={value ? 'text-muted-foreground' : 'text-red-400'}>
+            {key.replace(/([A-Z])/g, ' $1').trim()}
+          </span>
+        </div>
+      ))}
+    </div>
+  );
 };
 
 export default function PipelineDebugger() {
@@ -629,7 +691,7 @@ export default function PipelineDebugger() {
       case 5: // Dev Checks with enhanced behavior analysis
         return (
           <div className="space-y-4">
-            <div className="grid grid-cols-5 gap-4">
+            <div className="grid grid-cols-6 gap-3">
               <Card className="p-3 border-green-500/30">
                 <p className="text-xs text-muted-foreground">Passed</p>
                 <p className="text-lg font-semibold text-green-500">{data.passedCount || 0}</p>
@@ -650,26 +712,36 @@ export default function PipelineDebugger() {
                 <p className="text-xs text-muted-foreground">High Risk</p>
                 <p className="text-lg font-semibold text-yellow-500">{data.highRiskCount || 0}</p>
               </Card>
+              <Card className="p-3 border-orange-500/30">
+                <p className="text-xs text-muted-foreground">Guardrail Fail</p>
+                <p className="text-lg font-semibold text-orange-500">{data.guardrailFailedCount || 0}</p>
+              </Card>
             </div>
 
-            {data.signalScoring && (
+            {/* Buy Guardrails Config */}
+            {data.buyGuardrails && (
               <div className="p-3 bg-muted/30 rounded-lg">
                 <p className="text-sm font-medium mb-2 flex items-center gap-2">
-                  Signal Scoring Factors
-                  <TooltipProvider>
-                    <Tooltip>
-                      <TooltipTrigger><Info className="h-3 w-3 text-muted-foreground" /></TooltipTrigger>
-                      <TooltipContent className="max-w-xs">Points are summed to determine signal strength: 0-30=weak($2), 31-50=moderate($10), 51-70=strong($20), 71+=very_strong($50)</TooltipContent>
-                    </Tooltip>
-                  </TooltipProvider>
+                  <Shield className="h-4 w-4" />
+                  Buy Guardrails Active
                 </p>
                 <div className="grid grid-cols-4 gap-2 text-xs">
-                  {Object.entries(data.signalScoring).map(([key, factor]: [string, any]) => (
-                    <div key={key} className="p-2 bg-background rounded flex justify-between items-center">
-                      <span className="text-muted-foreground">{factor.description}</span>
-                      <Badge variant="outline">+{factor.points}</Badge>
-                    </div>
-                  ))}
+                  <div className="p-2 bg-background rounded">
+                    <span className="text-muted-foreground">Price Range</span>
+                    <p className="font-mono">${data.buyGuardrails.min_price_usd} - ${data.buyGuardrails.max_price_usd}</p>
+                  </div>
+                  <div className="p-2 bg-background rounded">
+                    <span className="text-muted-foreground">Max Spike Ratio</span>
+                    <p className="font-mono">{data.buyGuardrails.max_spike_ratio}x</p>
+                  </div>
+                  <div className="p-2 bg-background rounded">
+                    <span className="text-muted-foreground">Max Crash %</span>
+                    <p className="font-mono">{data.buyGuardrails.max_crash_from_peak_pct}%</p>
+                  </div>
+                  <div className="p-2 bg-background rounded">
+                    <span className="text-muted-foreground">Max Insider %</span>
+                    <p className="font-mono">{data.buyGuardrails.max_insider_pct}%</p>
+                  </div>
                 </div>
               </div>
             )}
@@ -677,26 +749,25 @@ export default function PipelineDebugger() {
             {data.passed && data.passed.length > 0 && (
               <div className="space-y-2">
                 <p className="text-sm font-medium text-green-500">Ready for Buy - Dev Analysis</p>
-                <ScrollArea className="h-[250px] border rounded-lg border-green-500/30">
+                <ScrollArea className="h-[300px] border rounded-lg border-green-500/30">
                   <Table>
                     <TableHeader>
                       <TableRow>
                         <TableHead>Symbol</TableHead>
-                        <TableHead>Dev Wallet</TableHead>
-                        <TableHead>Reputation</TableHead>
+                        <TableHead>Dev Rep</TableHead>
                         <TableHead>Trust</TableHead>
                         <TableHead>Pattern</TableHead>
+                        <TableHead>Insider %</TableHead>
                         <TableHead>Signal</TableHead>
-                        <TableHead>Socials</TableHead>
+                        <TableHead>Guardrails</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
                       {data.passed.map((token: any, idx: number) => (
                         <TableRow key={idx} className={token.devDumpedButStable ? 'bg-green-500/10' : ''}>
-                          <TableCell className="font-mono">{token.symbol}</TableCell>
-                          <TableCell>
+                          <TableCell className="font-mono">
                             <div className="flex items-center gap-1">
-                              <span className="font-mono text-xs">{token.devInfo?.wallet?.slice(0, 8)}...</span>
+                              {token.symbol}
                               <a href={`https://solscan.io/account/${token.devInfo?.wallet}`} target="_blank" rel="noopener noreferrer">
                                 <ExternalLink className="h-3 w-3 text-muted-foreground" />
                               </a>
@@ -713,15 +784,12 @@ export default function PipelineDebugger() {
                             </Badge>
                           </TableCell>
                           <TableCell>
-                            {token.devDumpedButStable ? (
-                              <Badge className="bg-green-500/20 text-green-500 border-green-500/30">
-                                Stable After Dump ✓
-                              </Badge>
-                            ) : token.devInfo?.tokensStableAfterDump > 0 ? (
-                              <span className="text-xs text-green-500">{token.devInfo.tokensStableAfterDump}x stable pattern</span>
-                            ) : (
-                              <span className="text-xs text-muted-foreground">No pattern</span>
-                            )}
+                            <PatternBadge pattern={token.devInfo?.detectedPattern} />
+                          </TableCell>
+                          <TableCell>
+                            <span className={`text-xs ${(token.insiderPct || 0) > 15 ? 'text-red-400' : 'text-muted-foreground'}`}>
+                              {(token.insiderPct || 0).toFixed(1)}%
+                            </span>
                           </TableCell>
                           <TableCell>
                             <TooltipProvider>
@@ -732,24 +800,45 @@ export default function PipelineDebugger() {
                                   </Badge>
                                 </TooltipTrigger>
                                 <TooltipContent className="max-w-xs">
-                                  <div className="space-y-1">
+                                  <div className="space-y-2">
+                                    <p className="font-medium text-green-400">Factors (+)</p>
                                     {(token.devInfo?.scoreFactors || []).map((f: any, i: number) => (
-                                      <div key={i} className="text-xs">{f.factor}: +{f.points}</div>
+                                      <div key={i} className="text-xs flex justify-between gap-2">
+                                        <span>{f.factor.replace(/_/g, ' ')}</span>
+                                        <span className="text-green-400">+{f.points}</span>
+                                      </div>
                                     ))}
+                                    {(token.devInfo?.penalties || []).length > 0 && (
+                                      <>
+                                        <p className="font-medium text-red-400 mt-2">Penalties (-)</p>
+                                        {(token.devInfo?.penalties || []).map((f: any, i: number) => (
+                                          <div key={i} className="text-xs flex justify-between gap-2">
+                                            <span>{f.factor.replace(/_/g, ' ')}</span>
+                                            <span className="text-red-400">{f.points}</span>
+                                          </div>
+                                        ))}
+                                      </>
+                                    )}
                                   </div>
                                 </TooltipContent>
                               </Tooltip>
                             </TooltipProvider>
                           </TableCell>
-                          <TableCell className="text-xs">
-                            <div className="flex gap-1">
-                              {token.devInfo?.twitterAccounts?.length > 0 && (
-                                <Badge variant="outline" className="text-[10px]">X: {token.devInfo.twitterAccounts[0]}</Badge>
-                              )}
-                              {token.devInfo?.telegramGroups?.length > 0 && (
-                                <Badge variant="outline" className="text-[10px]">TG: {token.devInfo.telegramGroups[0]}</Badge>
-                              )}
-                            </div>
+                          <TableCell>
+                            <TooltipProvider>
+                              <Tooltip>
+                                <TooltipTrigger>
+                                  {token.devInfo?.guardrails?.passed ? (
+                                    <ShieldCheck className="h-4 w-4 text-green-500" />
+                                  ) : (
+                                    <ShieldX className="h-4 w-4 text-red-500" />
+                                  )}
+                                </TooltipTrigger>
+                                <TooltipContent>
+                                  <GuardrailStatus guardrails={token.devInfo?.guardrails} />
+                                </TooltipContent>
+                              </Tooltip>
+                            </TooltipProvider>
                           </TableCell>
                         </TableRow>
                       ))}
@@ -762,24 +851,41 @@ export default function PipelineDebugger() {
             {data.failed && data.failed.length > 0 && (
               <div className="space-y-2">
                 <p className="text-sm font-medium text-red-500">Failed Dev Checks</p>
-                <ScrollArea className="h-[150px] border rounded-lg border-red-500/30">
+                <ScrollArea className="h-[200px] border rounded-lg border-red-500/30">
                   <Table>
                     <TableHeader>
                       <TableRow>
                         <TableHead>Symbol</TableHead>
                         <TableHead>Reason</TableHead>
-                        <TableHead>Reputation</TableHead>
-                        <TableHead>History</TableHead>
+                        <TableHead>Pattern</TableHead>
+                        <TableHead>Rep</TableHead>
+                        <TableHead>Guardrails</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
                       {data.failed.map((token: any, idx: number) => (
                         <TableRow key={idx}>
                           <TableCell className="font-mono">{token.symbol}</TableCell>
-                          <TableCell className="text-red-400 text-xs">{token.reason}</TableCell>
+                          <TableCell className="text-red-400 text-xs max-w-[200px]">{token.reason}</TableCell>
+                          <TableCell>
+                            <PatternBadge pattern={token.devInfo?.detectedPattern} />
+                          </TableCell>
                           <TableCell>{token.devInfo?.reputation || 50}</TableCell>
-                          <TableCell className="text-xs text-muted-foreground">
-                            {token.devInfo?.tokensLaunched || 0} launched, {token.devInfo?.tokensRugged || 0} rugs
+                          <TableCell>
+                            {token.devInfo?.guardrails && !token.devInfo.guardrails.passed && (
+                              <TooltipProvider>
+                                <Tooltip>
+                                  <TooltipTrigger>
+                                    <Badge variant="destructive" className="text-[10px]">
+                                      {token.devInfo.guardrails.failedGuards?.length || 0} failed
+                                    </Badge>
+                                  </TooltipTrigger>
+                                  <TooltipContent>
+                                    <GuardrailStatus guardrails={token.devInfo?.guardrails} />
+                                  </TooltipContent>
+                                </Tooltip>
+                              </TooltipProvider>
+                            )}
                           </TableCell>
                         </TableRow>
                       ))}
@@ -791,10 +897,10 @@ export default function PipelineDebugger() {
           </div>
         );
 
-      case 6: // Buy Queue with signal scoring
+      case 6: // Buy Queue with signal scoring and guardrails
         return (
           <div className="space-y-4">
-            <div className="grid grid-cols-4 gap-4">
+            <div className="grid grid-cols-5 gap-3">
               <Card className="p-3">
                 <p className="text-xs text-muted-foreground">Mode</p>
                 <p className="text-lg font-semibold">{data.fantasyMode ? 'Fantasy' : 'Live'}</p>
@@ -803,13 +909,17 @@ export default function PipelineDebugger() {
                 <p className="text-xs text-muted-foreground">In Queue</p>
                 <p className="text-lg font-semibold text-primary">{data.queueCount || 0}</p>
               </Card>
+              <Card className="p-3 border-green-500/30">
+                <p className="text-xs text-muted-foreground">Pass Guards</p>
+                <p className="text-lg font-semibold text-green-500">{data.passedGuardrails || 0}</p>
+              </Card>
+              <Card className="p-3 border-red-500/30">
+                <p className="text-xs text-muted-foreground">Fail Guards</p>
+                <p className="text-lg font-semibold text-red-500">{data.failedGuardrails || 0}</p>
+              </Card>
               <Card className="p-3">
                 <p className="text-xs text-muted-foreground">Daily Buys</p>
                 <p className="text-lg font-semibold">{data.dailyBuys || 0} / {data.dailyCap || 20}</p>
-              </Card>
-              <Card className="p-3">
-                <p className="text-xs text-muted-foreground">Buy Tiers Active</p>
-                <p className="text-lg font-semibold">4</p>
               </Card>
             </div>
 
@@ -836,23 +946,23 @@ export default function PipelineDebugger() {
 
             {data.queue && data.queue.length > 0 && (
               <div className="space-y-2">
-                <p className="text-sm font-medium">Buy Queue (sorted by signal score)</p>
-                <ScrollArea className="h-[300px] border rounded-lg">
+                <p className="text-sm font-medium">Buy Queue (sorted by guardrails + signal score)</p>
+                <ScrollArea className="h-[350px] border rounded-lg">
                   <Table>
                     <TableHeader>
                       <TableRow>
                         <TableHead>Symbol</TableHead>
-                        <TableHead>Price (USD)</TableHead>
+                        <TableHead>Price</TableHead>
+                        <TableHead>Pattern</TableHead>
                         <TableHead>Dev Rep</TableHead>
-                        <TableHead>Signal Score</TableHead>
-                        <TableHead>Tier</TableHead>
-                        <TableHead>Buy Amount</TableHead>
-                        <TableHead>Factors</TableHead>
+                        <TableHead>Signal</TableHead>
+                        <TableHead>Guardrails</TableHead>
+                        <TableHead>Action</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
                       {data.queue.map((token: any, idx: number) => (
-                        <TableRow key={idx} className={token.devDumpedButStable ? 'bg-green-500/10' : ''}>
+                        <TableRow key={idx} className={!token.guardrails?.passed ? 'bg-red-500/5' : token.devDumpedButStable ? 'bg-green-500/10' : ''}>
                           <TableCell className="font-mono">
                             <div className="flex items-center gap-1">
                               {token.symbol}
@@ -861,7 +971,10 @@ export default function PipelineDebugger() {
                               </a>
                             </div>
                           </TableCell>
-                          <TableCell>${token.priceUsd?.toFixed(8)}</TableCell>
+                          <TableCell className="font-mono text-xs">${token.priceUsd?.toFixed(10)}</TableCell>
+                          <TableCell>
+                            <PatternBadge pattern={token.detectedPattern} />
+                          </TableCell>
                           <TableCell>
                             <Badge variant={token.devReputation >= 70 ? 'default' : token.devReputation >= 50 ? 'secondary' : 'outline'}>
                               {token.devReputation}
@@ -869,7 +982,35 @@ export default function PipelineDebugger() {
                           </TableCell>
                           <TableCell>
                             <div className="flex items-center gap-1">
-                              <span className="font-semibold">{token.signalScore}</span>
+                              <TooltipProvider>
+                                <Tooltip>
+                                  <TooltipTrigger>
+                                    <span className="font-semibold">{token.signalScore}</span>
+                                  </TooltipTrigger>
+                                  <TooltipContent className="max-w-xs">
+                                    <div className="space-y-2">
+                                      <p className="font-medium text-green-400">Factors</p>
+                                      {(token.scoreFactors || []).map((f: any, i: number) => (
+                                        <div key={i} className="text-xs flex justify-between gap-2">
+                                          <span>{f.factor.replace(/_/g, ' ')}</span>
+                                          <span className="text-green-400">+{f.points}</span>
+                                        </div>
+                                      ))}
+                                      {(token.penalties || []).length > 0 && (
+                                        <>
+                                          <p className="font-medium text-red-400 mt-2">Penalties</p>
+                                          {(token.penalties || []).map((f: any, i: number) => (
+                                            <div key={i} className="text-xs flex justify-between gap-2">
+                                              <span>{f.factor.replace(/_/g, ' ')}</span>
+                                              <span className="text-red-400">{f.points}</span>
+                                            </div>
+                                          ))}
+                                        </>
+                                      )}
+                                    </div>
+                                  </TooltipContent>
+                                </Tooltip>
+                              </TooltipProvider>
                               {token.devDumpedButStable && (
                                 <TooltipProvider>
                                   <Tooltip>
@@ -880,37 +1021,35 @@ export default function PipelineDebugger() {
                                   </Tooltip>
                                 </TooltipProvider>
                               )}
+                              <Badge variant={token.signalStrength === 'very_strong' ? 'default' : token.signalStrength === 'strong' ? 'secondary' : 'outline'} className="text-[10px]">
+                                {token.signalStrength}
+                              </Badge>
                             </div>
                           </TableCell>
-                          <TableCell>
-                            <Badge variant={token.signalStrength === 'very_strong' ? 'default' : token.signalStrength === 'strong' ? 'secondary' : 'outline'}>
-                              {token.signalStrength}
-                            </Badge>
-                          </TableCell>
-                          <TableCell className="font-semibold text-primary">${token.buyAmountUsd}</TableCell>
                           <TableCell>
                             <TooltipProvider>
                               <Tooltip>
                                 <TooltipTrigger>
-                                  <Badge variant="outline" className="text-[10px]">
-                                    {token.scoreFactors?.length || 0} factors
-                                  </Badge>
+                                  {token.guardrails?.passed ? (
+                                    <ShieldCheck className="h-4 w-4 text-green-500" />
+                                  ) : (
+                                    <ShieldX className="h-4 w-4 text-red-500" />
+                                  )}
                                 </TooltipTrigger>
-                                <TooltipContent className="max-w-xs">
-                                  <div className="space-y-1">
-                                    {(token.scoreFactors || []).map((f: any, i: number) => (
-                                      <div key={i} className="text-xs flex justify-between gap-2">
-                                        <span>{f.factor.replace(/_/g, ' ')}</span>
-                                        <span className="text-primary">+{f.points}</span>
-                                      </div>
-                                    ))}
-                                    {(!token.scoreFactors || token.scoreFactors.length === 0) && (
-                                      <span className="text-muted-foreground">No factors matched</span>
-                                    )}
-                                  </div>
+                                <TooltipContent>
+                                  <GuardrailStatus guardrails={token.guardrails} />
                                 </TooltipContent>
                               </Tooltip>
                             </TooltipProvider>
+                          </TableCell>
+                          <TableCell>
+                            {token.guardrails?.passed ? (
+                              <Badge className="bg-green-600 text-white">
+                                BUY ${token.buyAmountUsd}
+                              </Badge>
+                            ) : (
+                              <Badge variant="destructive">SKIP</Badge>
+                            )}
                           </TableCell>
                         </TableRow>
                       ))}

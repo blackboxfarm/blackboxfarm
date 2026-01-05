@@ -59,6 +59,44 @@ const BUY_TIERS = {
   very_strong: { amount_usd: 50, description: 'Known good dev, great metrics' },
 };
 
+// Buy guardrails configuration
+const BUY_GUARDRAILS = {
+  min_price_usd: 0.000008,
+  max_price_usd: 0.0000125,
+  max_spike_ratio: 5, // Don't buy if already 5x from mint
+  min_time_after_spike_mins: 5, // Wait 5 mins after spike
+  max_crash_from_peak_pct: 60, // Don't buy if crashed >60% from peak
+  max_insider_pct: 20, // Max 20% held by linked wallets
+};
+
+// Enhanced signal scoring with dev patterns
+const SIGNAL_SCORING = {
+  // Positive patterns
+  pattern_diamond_dev: { points: 25, description: 'Dev held through bonding (past tokens)' },
+  pattern_buyback_dev: { points: 20, description: 'Dev recycles creator rewards as buybacks' },
+  dev_reputation_high: { points: 20, threshold: 70, description: 'Dev reputation > 70' },
+  dev_stable_after_dump: { points: 15, description: 'Dev has "stable_after_dump" pattern' },
+  price_in_ideal_range: { points: 15, description: 'Price in $0.000008 - $0.0000125 range' },
+  survived_spike: { points: 10, description: 'Token spiked but stabilized' },
+  low_insider_pct: { points: 10, threshold: 10, description: 'Insider % < 10%' },
+  known_good_twitter: { points: 10, description: 'Known good X/Twitter account' },
+  survived_5_mins: { points: 10, description: 'Token survived > 5 mins with volume' },
+  rugcheck_high: { points: 10, threshold: 70, description: 'RugCheck score > 70' },
+  holders_50plus: { points: 10, threshold: 50, description: 'Holders > 50' },
+  bonding_50plus: { points: 10, threshold: 50, description: 'Bonding curve > 50%' },
+  pattern_hidden_whale_good: { points: 10, description: 'Hidden whale but dev is trusted' },
+  dex_paid_profile: { points: 5, description: 'Has DEX paid profile' },
+  
+  // Negative patterns (penalties)
+  pattern_wash_bundler: { points: -10, description: 'Wash trading / bundling detected' },
+  pattern_wallet_washer: { points: -15, description: 'Dev sells to own wallets' },
+  pattern_hidden_whale_unknown: { points: -15, description: 'Hidden whale, unknown dev' },
+  high_insider_pct: { points: -15, threshold: 20, description: 'Insider % > 20%' },
+  price_already_spiked: { points: -20, description: 'Already >5x from mint' },
+  crashed_from_peak: { points: -25, description: 'Down >60% from peak' },
+  pattern_spike_kill: { points: -30, description: 'Spike & kill pattern (BLACKLIST)', blacklist: true },
+};
+
 // Step 1: Token Discovery - Fetch newest tokens with full data
 async function runDiscovery(supabase: any): Promise<any> {
   console.log('[Step 1] Running token discovery (LIVE)');
@@ -114,13 +152,11 @@ async function runIntake(supabase: any): Promise<any> {
   const passed: any[] = [];
   const rejected: any[] = [];
   
-  // Initialize filter breakdown with order
   const filterBreakdown: Record<string, { count: number; order: number; description: string }> = {};
   Object.entries(FILTER_CONFIG).forEach(([key, config]) => {
     filterBreakdown[key] = { count: 0, order: config.order, description: config.description };
   });
 
-  // Get existing watchlist mints for duplicate check
   const { data: watchlist } = await supabase
     .from('pumpfun_watchlist')
     .select('token_mint')
@@ -132,27 +168,22 @@ async function runIntake(supabase: any): Promise<any> {
     let rejected_reason = null;
     let rejected_detail = '';
 
-    // Filter 1: Mayhem Mode (check if flagged)
     if (token.isMayhem) {
       rejected_reason = 'mayhem_mode';
       rejected_detail = 'Flagged as mayhem/spam';
     }
-    // Filter 2: Null name/ticker
     else if (!token.symbol || !token.name || token.symbol.trim() === '' || token.name.trim() === '') {
       rejected_reason = 'null_name_ticker';
       rejected_detail = `Name: "${token.name || 'null'}", Ticker: "${token.symbol || 'null'}"`;
     }
-    // Filter 3: Duplicate
     else if (existingMints.has(token.mint)) {
       rejected_reason = 'duplicate';
       rejected_detail = 'Already in watchlist';
     }
-    // Filter 4: Emoji/unicode
     else if (/[^\x00-\x7F]/.test(token.symbol)) {
       rejected_reason = 'emoji_unicode';
       rejected_detail = `Contains non-ASCII: "${token.symbol}"`;
     }
-    // Filter 5: Ticker too long (> 12 chars)
     else if (token.symbol.length > FILTER_CONFIG.ticker_too_long.threshold) {
       rejected_reason = 'ticker_too_long';
       rejected_detail = `Length: ${token.symbol.length} chars (max: ${FILTER_CONFIG.ticker_too_long.threshold})`;
@@ -198,7 +229,6 @@ async function getWatchlistStatus(supabase: any): Promise<any> {
   const deadCount = tokens.filter((t: any) => t.status === 'dead' || (t.holder_count !== null && t.holder_count < 3)).length;
   const healthyCount = tokens.length - staleCount - deadCount;
 
-  // Detailed metrics for each token
   const recentUpdates = tokens.slice(0, 20).map((t: any) => {
     const watchedFor = t.first_seen_at ? Math.floor((Date.now() - new Date(t.first_seen_at).getTime()) / 60000) : 0;
     return {
@@ -218,7 +248,6 @@ async function getWatchlistStatus(supabase: any): Promise<any> {
     };
   });
 
-  // Metrics sources info
   const metricsInfo = {
     holder_count: { sources: ['pump.fun', 'Helius RPC'], purpose: 'Detect growth/distribution' },
     volume_sol: { sources: ['pump.fun', 'DexScreener'], purpose: 'Detect trading activity' },
@@ -250,7 +279,6 @@ async function runQualification(supabase: any): Promise<any> {
   const softRejected: any[] = [];
   const stillWatching: any[] = [];
 
-  // Get config from DB or use defaults
   const { data: configData } = await supabase
     .from('pumpfun_monitor_config')
     .select('*')
@@ -316,22 +344,11 @@ async function runQualification(supabase: any): Promise<any> {
   };
 }
 
-// Signal strength scoring factors
-const SIGNAL_SCORING = {
-  dev_reputation_high: { points: 20, threshold: 70, description: 'Dev reputation > 70' },
-  dev_stable_after_dump: { points: 15, description: 'Dev has "stable_after_dump" pattern' },
-  known_good_twitter: { points: 10, description: 'Known good X/Twitter account' },
-  survived_5_mins: { points: 10, description: 'Token survived > 5 mins with volume' },
-  rugcheck_high: { points: 10, threshold: 70, description: 'RugCheck score > 70' },
-  holders_50plus: { points: 10, threshold: 50, description: 'Holders > 50' },
-  bonding_50plus: { points: 10, threshold: 50, description: 'Bonding curve > 50%' },
-  dex_paid_profile: { points: 5, description: 'Has DEX paid profile' },
-};
-
-// Calculate signal strength score
-function calculateSignalScore(token: any, devReputation: any): { score: number; factors: any[] } {
+// Calculate signal strength score with patterns and guardrails
+function calculateSignalScore(token: any, devReputation: any): { score: number; factors: any[]; penalties: any[] } {
   let score = 0;
   const factors: any[] = [];
+  const penalties: any[] = [];
 
   // Dev reputation > 70
   if ((devReputation?.reputation_score || 50) >= SIGNAL_SCORING.dev_reputation_high.threshold) {
@@ -339,10 +356,36 @@ function calculateSignalScore(token: any, devReputation: any): { score: number; 
     factors.push({ factor: 'dev_reputation_high', points: SIGNAL_SCORING.dev_reputation_high.points, value: devReputation?.reputation_score });
   }
 
+  // Pattern: Diamond Dev
+  if ((devReputation?.pattern_diamond_dev || 0) > 0) {
+    score += SIGNAL_SCORING.pattern_diamond_dev.points;
+    factors.push({ factor: 'pattern_diamond_dev', points: SIGNAL_SCORING.pattern_diamond_dev.points, value: devReputation?.pattern_diamond_dev });
+  }
+
+  // Pattern: Buyback Dev
+  if ((devReputation?.pattern_buyback_dev || 0) > 0) {
+    score += SIGNAL_SCORING.pattern_buyback_dev.points;
+    factors.push({ factor: 'pattern_buyback_dev', points: SIGNAL_SCORING.pattern_buyback_dev.points, value: devReputation?.pattern_buyback_dev });
+  }
+
   // Dev has stable_after_dump pattern
   if ((devReputation?.tokens_stable_after_dump || 0) > 0) {
     score += SIGNAL_SCORING.dev_stable_after_dump.points;
     factors.push({ factor: 'dev_stable_after_dump', points: SIGNAL_SCORING.dev_stable_after_dump.points, value: devReputation?.tokens_stable_after_dump });
+  }
+
+  // Price in ideal range
+  const priceUsd = token.price_usd || 0;
+  if (priceUsd >= BUY_GUARDRAILS.min_price_usd && priceUsd <= BUY_GUARDRAILS.max_price_usd) {
+    score += SIGNAL_SCORING.price_in_ideal_range.points;
+    factors.push({ factor: 'price_in_ideal_range', points: SIGNAL_SCORING.price_in_ideal_range.points, value: `$${priceUsd.toFixed(10)}` });
+  }
+
+  // Low insider %
+  const insiderPct = token.insider_pct || 0;
+  if (insiderPct < SIGNAL_SCORING.low_insider_pct.threshold) {
+    score += SIGNAL_SCORING.low_insider_pct.points;
+    factors.push({ factor: 'low_insider_pct', points: SIGNAL_SCORING.low_insider_pct.points, value: `${insiderPct.toFixed(1)}%` });
   }
 
   // Known good Twitter account
@@ -356,6 +399,12 @@ function calculateSignalScore(token: any, devReputation: any): { score: number; 
   if (watchedMins >= 5 && (token.volume_sol || 0) > 0.1) {
     score += SIGNAL_SCORING.survived_5_mins.points;
     factors.push({ factor: 'survived_5_mins', points: SIGNAL_SCORING.survived_5_mins.points, value: `${watchedMins.toFixed(1)} mins` });
+  }
+
+  // Survived spike
+  if (token.spike_detected_at && !token.was_spiked_and_killed) {
+    score += SIGNAL_SCORING.survived_spike.points;
+    factors.push({ factor: 'survived_spike', points: SIGNAL_SCORING.survived_spike.points, value: 'Token stabilized after spike' });
   }
 
   // RugCheck score > 70
@@ -376,13 +425,64 @@ function calculateSignalScore(token: any, devReputation: any): { score: number; 
     factors.push({ factor: 'bonding_50plus', points: SIGNAL_SCORING.bonding_50plus.points, value: `${token.bonding_curve_pct}%` });
   }
 
+  // Pattern: Hidden Whale (good if trusted dev)
+  if ((devReputation?.pattern_hidden_whale || 0) > 0) {
+    if (devReputation?.trust_level === 'trusted') {
+      score += SIGNAL_SCORING.pattern_hidden_whale_good.points;
+      factors.push({ factor: 'pattern_hidden_whale_good', points: SIGNAL_SCORING.pattern_hidden_whale_good.points, value: 'Trusted dev with secondary wallets' });
+    } else {
+      score += SIGNAL_SCORING.pattern_hidden_whale_unknown.points;
+      penalties.push({ factor: 'pattern_hidden_whale_unknown', points: SIGNAL_SCORING.pattern_hidden_whale_unknown.points, value: 'Unknown dev with secondary wallets' });
+    }
+  }
+
   // DEX paid profile
   if (token.metadata?.dex_paid || token.dex_paid) {
     score += SIGNAL_SCORING.dex_paid_profile.points;
     factors.push({ factor: 'dex_paid_profile', points: SIGNAL_SCORING.dex_paid_profile.points, value: true });
   }
 
-  return { score, factors };
+  // PENALTIES
+
+  // Pattern: Wash Bundler
+  if ((devReputation?.pattern_wash_bundler || 0) > 0) {
+    score += SIGNAL_SCORING.pattern_wash_bundler.points;
+    penalties.push({ factor: 'pattern_wash_bundler', points: SIGNAL_SCORING.pattern_wash_bundler.points, value: devReputation?.pattern_wash_bundler });
+  }
+
+  // Pattern: Wallet Washer
+  if ((devReputation?.pattern_wallet_washer || 0) > 0) {
+    score += SIGNAL_SCORING.pattern_wallet_washer.points;
+    penalties.push({ factor: 'pattern_wallet_washer', points: SIGNAL_SCORING.pattern_wallet_washer.points, value: devReputation?.pattern_wallet_washer });
+  }
+
+  // High insider %
+  if (insiderPct >= SIGNAL_SCORING.high_insider_pct.threshold) {
+    score += SIGNAL_SCORING.high_insider_pct.points;
+    penalties.push({ factor: 'high_insider_pct', points: SIGNAL_SCORING.high_insider_pct.points, value: `${insiderPct.toFixed(1)}%` });
+  }
+
+  // Price already spiked (>5x from mint)
+  const priceAtMint = token.price_at_mint || 0;
+  if (priceAtMint > 0 && priceUsd / priceAtMint >= BUY_GUARDRAILS.max_spike_ratio) {
+    score += SIGNAL_SCORING.price_already_spiked.points;
+    penalties.push({ factor: 'price_already_spiked', points: SIGNAL_SCORING.price_already_spiked.points, value: `${(priceUsd / priceAtMint).toFixed(1)}x from mint` });
+  }
+
+  // Crashed from peak
+  const pricePeak = token.price_peak || priceUsd;
+  if (pricePeak > 0 && priceUsd / pricePeak < (1 - BUY_GUARDRAILS.max_crash_from_peak_pct / 100)) {
+    score += SIGNAL_SCORING.crashed_from_peak.points;
+    penalties.push({ factor: 'crashed_from_peak', points: SIGNAL_SCORING.crashed_from_peak.points, value: `Down ${((1 - priceUsd / pricePeak) * 100).toFixed(0)}% from peak` });
+  }
+
+  // Pattern: Spike & Kill (BLACKLIST)
+  if ((devReputation?.pattern_spike_kill || 0) > 0 || token.was_spiked_and_killed) {
+    score += SIGNAL_SCORING.pattern_spike_kill.points;
+    penalties.push({ factor: 'pattern_spike_kill', points: SIGNAL_SCORING.pattern_spike_kill.points, value: 'BLACKLISTED', blacklist: true });
+  }
+
+  return { score: Math.max(0, score), factors, penalties };
 }
 
 // Map score to signal strength tier
@@ -391,6 +491,31 @@ function scoreToSignalStrength(score: number): string {
   if (score >= 51) return 'strong';
   if (score >= 31) return 'moderate';
   return 'weak';
+}
+
+// Apply buy guardrails
+function applyBuyGuardrails(token: any, devReputation: any): { passed: boolean; guards: any; failedGuards: string[] } {
+  const priceUsd = token.price_usd || 0;
+  const priceAtMint = token.price_at_mint || 0;
+  const pricePeak = token.price_peak || priceUsd;
+  const insiderPct = token.insider_pct || 0;
+
+  const guards = {
+    priceInRange: priceUsd >= BUY_GUARDRAILS.min_price_usd && priceUsd <= BUY_GUARDRAILS.max_price_usd,
+    notSpikeThenKill: !token.was_spiked_and_killed,
+    insiderPctOk: insiderPct < BUY_GUARDRAILS.max_insider_pct,
+    notCrashedFromPeak: pricePeak <= 0 || (priceUsd / pricePeak) > (1 - BUY_GUARDRAILS.max_crash_from_peak_pct / 100),
+    devNotBlacklisted: devReputation?.trust_level !== 'blacklisted' && (devReputation?.pattern_spike_kill || 0) === 0,
+    notAlreadySpiked: priceAtMint <= 0 || (priceUsd / priceAtMint) < BUY_GUARDRAILS.max_spike_ratio,
+    stableAfterSpike: !token.spike_detected_at || 
+      (Date.now() - new Date(token.spike_detected_at).getTime() > BUY_GUARDRAILS.min_time_after_spike_mins * 60000),
+  };
+
+  const failedGuards = Object.entries(guards)
+    .filter(([_, v]) => !v)
+    .map(([k]) => k);
+
+  return { passed: failedGuards.length === 0, guards, failedGuards };
 }
 
 // Step 5: Dev Wallet Check with enhanced behavior analysis
@@ -406,7 +531,6 @@ async function runDevChecks(supabase: any): Promise<any> {
   const passed: any[] = [];
   const failed: any[] = [];
 
-  // Check dev reputation from our new table
   for (const token of (qualified || [])) {
     let devReputation = null;
     if (token.creator_wallet) {
@@ -418,9 +542,23 @@ async function runDevChecks(supabase: any): Promise<any> {
       devReputation = rep;
     }
 
-    // Calculate signal score
-    const { score: signalScore, factors: scoreFactors } = calculateSignalScore(token, devReputation);
+    // Calculate signal score with patterns
+    const { score: signalScore, factors: scoreFactors, penalties } = calculateSignalScore(token, devReputation);
     const signalStrength = scoreToSignalStrength(signalScore);
+
+    // Apply guardrails
+    const guardrailResult = applyBuyGuardrails(token, devReputation);
+
+    // Detect primary pattern
+    let detectedPattern = token.detected_dev_pattern || null;
+    if (!detectedPattern && devReputation) {
+      if (devReputation.pattern_diamond_dev > 0) detectedPattern = 'diamond_dev';
+      else if (devReputation.pattern_buyback_dev > 0) detectedPattern = 'buyback_dev';
+      else if (devReputation.pattern_hidden_whale > 0) detectedPattern = 'hidden_whale';
+      else if (devReputation.pattern_wash_bundler > 0) detectedPattern = 'wash_bundler';
+      else if (devReputation.pattern_wallet_washer > 0) detectedPattern = 'wallet_washer';
+      else if (devReputation.pattern_spike_kill > 0) detectedPattern = 'spike_kill';
+    }
 
     const devInfo = {
       wallet: token.creator_wallet,
@@ -432,19 +570,30 @@ async function runDevChecks(supabase: any): Promise<any> {
       tokensStableAfterDump: devReputation?.tokens_stable_after_dump || 0,
       twitterAccounts: devReputation?.twitter_accounts || [],
       telegramGroups: devReputation?.telegram_groups || [],
-      avgDumpThenPumpPct: devReputation?.avg_dump_then_pump_pct || null,
+      linkedWallets: devReputation?.linked_wallets || token.dev_secondary_wallets || [],
+      patterns: {
+        diamondDev: devReputation?.pattern_diamond_dev || 0,
+        buybackDev: devReputation?.pattern_buyback_dev || 0,
+        hiddenWhale: devReputation?.pattern_hidden_whale || 0,
+        washBundler: devReputation?.pattern_wash_bundler || 0,
+        walletWasher: devReputation?.pattern_wallet_washer || 0,
+        spikeKill: devReputation?.pattern_spike_kill || 0,
+      },
+      detectedPattern,
       signalScore,
       signalStrength,
       scoreFactors,
+      penalties,
+      guardrails: guardrailResult,
     };
 
-    // Check for known bad actors
-    if (devReputation?.trust_level === 'blacklisted') {
+    // Check for blacklist/failure conditions
+    if (devReputation?.trust_level === 'blacklisted' || (devReputation?.pattern_spike_kill || 0) > 0) {
       failed.push({
         mint: token.token_mint,
         symbol: token.token_symbol,
         name: token.token_name,
-        reason: `Blacklisted dev: ${devReputation?.tokens_rugged || 0} rugs`,
+        reason: `Blacklisted dev: ${devReputation?.pattern_spike_kill || 0} spike/kills, ${devReputation?.tokens_rugged || 0} rugs`,
         devInfo,
       });
     } else if (devReputation?.trust_level === 'avoid' && devReputation?.tokens_rugged >= 3) {
@@ -455,8 +604,15 @@ async function runDevChecks(supabase: any): Promise<any> {
         reason: `High-risk dev: ${devReputation?.tokens_rugged} rugs, score ${devReputation?.reputation_score}`,
         devInfo,
       });
+    } else if (!guardrailResult.passed) {
+      failed.push({
+        mint: token.token_mint,
+        symbol: token.token_symbol,
+        name: token.token_name,
+        reason: `Guardrail failed: ${guardrailResult.failedGuards.join(', ')}`,
+        devInfo,
+      });
     } else if (token.dev_sold && !devReputation?.tokens_stable_after_dump) {
-      // Dev sold BUT doesn't have stable_after_dump pattern = bad
       failed.push({
         mint: token.token_mint,
         symbol: token.token_symbol,
@@ -473,14 +629,14 @@ async function runDevChecks(supabase: any): Promise<any> {
         devInfo,
       });
     } else {
-      // PASSED - include signal scoring
       passed.push({
         mint: token.token_mint,
         symbol: token.token_symbol,
         name: token.token_name,
         devInfo,
-        // Special flag: dev sold but has stable_after_dump pattern = HIGH SIGNAL
         devDumpedButStable: token.dev_sold && (devReputation?.tokens_stable_after_dump || 0) > 0,
+        insiderPct: token.insider_pct || 0,
+        priceUsd: token.price_usd,
       });
     }
   }
@@ -492,13 +648,15 @@ async function runDevChecks(supabase: any): Promise<any> {
     newLaunchCount: failed.filter(f => f.reason.includes('new token')).length,
     blacklistedCount: failed.filter(f => f.reason.includes('Blacklisted')).length,
     highRiskCount: failed.filter(f => f.reason.includes('High-risk')).length,
+    guardrailFailedCount: failed.filter(f => f.reason.includes('Guardrail')).length,
     signalScoring: SIGNAL_SCORING,
+    buyGuardrails: BUY_GUARDRAILS,
     passed,
     failed,
   };
 }
 
-// Step 6: Get Buy Queue with tiered amounts based on signal scoring
+// Step 6: Get Buy Queue with tiered amounts and guardrails
 async function getBuyQueue(supabase: any): Promise<any> {
   console.log('[Step 6] Getting buy queue (LIVE)');
 
@@ -516,7 +674,6 @@ async function getBuyQueue(supabase: any): Promise<any> {
     .eq('dev_check_passed', true)
     .limit(20);
 
-  // Get today's buy count
   const today = new Date().toISOString().split('T')[0];
   const { count: dailyBuys } = await supabase
     .from('pumpfun_watchlist')
@@ -524,9 +681,7 @@ async function getBuyQueue(supabase: any): Promise<any> {
     .eq('status', 'bought')
     .gte('bought_at', today);
 
-  // Process each token with signal scoring
   const queue = await Promise.all((readyToBuy || []).map(async (t: any) => {
-    // Get dev reputation for scoring
     let devReputation = null;
     if (t.creator_wallet) {
       const { data: rep } = await supabase
@@ -537,11 +692,19 @@ async function getBuyQueue(supabase: any): Promise<any> {
       devReputation = rep;
     }
 
-    // Calculate signal score
-    const { score: signalScore, factors: scoreFactors } = calculateSignalScore(t, devReputation);
+    const { score: signalScore, factors: scoreFactors, penalties } = calculateSignalScore(t, devReputation);
     const signalStrength = scoreToSignalStrength(signalScore);
     const buyTier = BUY_TIERS[signalStrength as keyof typeof BUY_TIERS] || BUY_TIERS.moderate;
-    
+    const guardrailResult = applyBuyGuardrails(t, devReputation);
+
+    // Detect primary pattern
+    let detectedPattern = t.detected_dev_pattern || null;
+    if (!detectedPattern && devReputation) {
+      if (devReputation.pattern_diamond_dev > 0) detectedPattern = 'diamond_dev';
+      else if (devReputation.pattern_buyback_dev > 0) detectedPattern = 'buyback_dev';
+      else if (devReputation.tokens_stable_after_dump > 0) detectedPattern = 'stable_after_dump';
+    }
+
     return {
       mint: t.token_mint,
       symbol: t.token_symbol,
@@ -551,24 +714,36 @@ async function getBuyQueue(supabase: any): Promise<any> {
       signalScore,
       signalStrength,
       scoreFactors,
+      penalties,
       buyAmountUsd: buyTier.amount_usd,
       tierDescription: buyTier.description,
       devReputation: devReputation?.reputation_score || 50,
       devTrustLevel: devReputation?.trust_level || 'unknown',
       devDumpedButStable: t.dev_sold && (devReputation?.tokens_stable_after_dump || 0) > 0,
+      detectedPattern,
+      insiderPct: t.insider_pct || 0,
+      guardrails: guardrailResult,
+      recommendedAction: guardrailResult.passed ? `BUY $${buyTier.amount_usd}` : 'SKIP',
       executed: false,
     };
   }));
 
-  // Sort by signal score descending
-  queue.sort((a, b) => b.signalScore - a.signalScore);
+  // Sort by signal score descending, guardrail-passed first
+  queue.sort((a, b) => {
+    if (a.guardrails.passed && !b.guardrails.passed) return -1;
+    if (!a.guardrails.passed && b.guardrails.passed) return 1;
+    return b.signalScore - a.signalScore;
+  });
 
   return {
     fantasyMode: config.fantasy_mode_enabled ?? true,
     queueCount: queue.length,
+    passedGuardrails: queue.filter(q => q.guardrails.passed).length,
+    failedGuardrails: queue.filter(q => !q.guardrails.passed).length,
     dailyBuys: dailyBuys || 0,
     dailyCap: config.daily_buy_cap || 20,
     buyTiers: BUY_TIERS,
+    buyGuardrails: BUY_GUARDRAILS,
     signalScoring: SIGNAL_SCORING,
     queue,
   };
@@ -626,7 +801,6 @@ async function getPositions(supabase: any): Promise<any> {
 async function trackLifecycle(supabase: any, tokenMint: string, decision: string, reason: string): Promise<any> {
   console.log('[Lifecycle] Tracking token:', tokenMint, 'Decision:', decision);
 
-  // Get token info
   const { data: token } = await supabase
     .from('pumpfun_watchlist')
     .select('*')
@@ -637,7 +811,6 @@ async function trackLifecycle(supabase: any, tokenMint: string, decision: string
     return { error: 'Token not found' };
   }
 
-  // Insert lifecycle record
   const { data, error } = await supabase
     .from('token_lifecycle_tracking')
     .insert({
