@@ -110,24 +110,7 @@ async function isAbusedTicker(supabase: any, symbol: string): Promise<{ abused: 
     return { abused: true, reason: 'permanently_blocked_ticker' };
   }
   
-// Check if ANY active token with this ticker already exists (no duplicates allowed)
-  const { count } = await supabase
-    .from('pumpfun_watchlist')
-    .select('id', { count: 'exact', head: true })
-    .ilike('token_symbol', upperSymbol)
-    .in('status', ['new', 'watching', 'passed', 'active']);
-  
-  if ((count || 0) >= 1) {
-    // Update abuse tracking
-    await supabase.from('abused_tickers').upsert({
-      symbol: upperSymbol,
-      abuse_count: (abusedRecord?.abuse_count || 0) + 1,
-      last_seen_at: new Date().toISOString(),
-    }, { onConflict: 'symbol' });
-    
-    return { abused: true, reason: `duplicate_ticker:already_exists_${count}_active` };
-  }
-  
+  // Duplicates are handled separately (so we can reject with a clear "duplicate_ticker" reason)
   return { abused: false };
 }
 
@@ -380,7 +363,7 @@ async function processNewToken(
       .from('pumpfun_watchlist')
       .select('id, token_mint, token_symbol, status, first_seen_at, holder_count')
       .ilike('token_symbol', symbol) // Case-insensitive match
-      .in('status', ['watching', 'qualified', 'buy_now', 'pending_triage'])
+      .in('status', ['pending_triage', 'watching', 'qualified', 'buy_now', 'new', 'passed', 'active'])
       .order('first_seen_at', { ascending: true })
       .limit(5);
     
@@ -565,6 +548,47 @@ async function processNewToken(
   });
   
   if (error) {
+    const code = (error as any)?.code;
+    const msg = (error as any)?.message || '';
+
+    // If our DB-level uniqueness rule fired, it means another same-ticker token won the race.
+    if (code === '23505' && msg.includes('pumpfun_watchlist_unique_live_symbol')) {
+      const { data: original } = await supabase
+        .from('pumpfun_watchlist')
+        .select('token_mint, status')
+        .ilike('token_symbol', symbol)
+        .in('status', ['pending_triage', 'watching', 'qualified', 'buy_now', 'new', 'passed', 'active'])
+        .order('created_at', { ascending: true })
+        .limit(1)
+        .maybeSingle();
+
+      await supabase.from('pumpfun_watchlist').insert({
+        token_mint: mint,
+        token_name: name,
+        token_symbol: symbol,
+        creator_wallet: traderPublicKey,
+        status: 'rejected',
+        rejection_reason: `duplicate_ticker:${(original?.token_mint || 'unknown').slice(0, 8)}`,
+        rejection_type: 'permanent',
+        rejection_reasons: ['duplicate_ticker', 'race_condition'],
+        source: 'websocket',
+        created_at_blockchain: new Date().toISOString(),
+        bonding_curve_pct: bondingCurvePercent,
+        market_cap_sol: marketCapSol,
+        twitter_url: metadata?.twitter || null,
+        telegram_url: metadata?.telegram || null,
+        website_url: metadata?.website || null,
+        image_url: metadata?.image || null,
+        has_image: hasImage,
+        socials_count: socialsCount,
+        holder_count: 1,
+        volume_5m: event.initialBuy || 0,
+        removal_reason: 'Duplicate ticker blocked (DB unique)',
+      });
+
+      return { success: false, reason: 'duplicate_ticker' };
+    }
+
     console.error(`   ❌ Failed to insert:`, error);
     return { success: false, reason: 'insert_error' };
   }
@@ -808,7 +832,17 @@ serve(async (req) => {
       });
       
       if (error) {
-        return new Response(JSON.stringify({ error: error.message }), {
+        const code = (error as any)?.code;
+        const msg = (error as any)?.message || '';
+
+        if (code === '23505' && msg.includes('pumpfun_watchlist_unique_live_symbol')) {
+          return new Response(JSON.stringify({ error: 'Duplicate ticker already exists (live queue)' }), {
+            status: 409,
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+          });
+        }
+
+        return new Response(JSON.stringify({ error: msg }), {
           status: 500,
           headers: { ...corsHeaders, 'Content-Type': 'application/json' }
         });
