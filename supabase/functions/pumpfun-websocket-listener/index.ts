@@ -110,14 +110,14 @@ async function isAbusedTicker(supabase: any, symbol: string): Promise<{ abused: 
     return { abused: true, reason: 'permanently_blocked_ticker' };
   }
   
-  // Check recent high-frequency usage (3+ times in 24 hours = abuse)
+// Check if ANY active token with this ticker already exists (no duplicates allowed)
   const { count } = await supabase
     .from('pumpfun_watchlist')
     .select('id', { count: 'exact', head: true })
     .ilike('token_symbol', upperSymbol)
-    .gte('created_at', new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString());
+    .in('status', ['new', 'watching', 'passed', 'active']);
   
-  if ((count || 0) >= 3) {
+  if ((count || 0) >= 1) {
     // Update abuse tracking
     await supabase.from('abused_tickers').upsert({
       symbol: upperSymbol,
@@ -125,7 +125,7 @@ async function isAbusedTicker(supabase: any, symbol: string): Promise<{ abused: 
       last_seen_at: new Date().toISOString(),
     }, { onConflict: 'symbol' });
     
-    return { abused: true, reason: `high_frequency_ticker:${count}_in_24h` };
+    return { abused: true, reason: `duplicate_ticker:already_exists_${count}_active` };
   }
   
   return { abused: false };
@@ -158,8 +158,8 @@ async function checkDevWalletHistory(creatorWallet: string): Promise<{ isSerialS
       };
     }
     
-    // Check if they create same name/symbol repeatedly (copy-paste scam)
-    if (Array.isArray(coins) && coins.length >= 3) {
+    // Check if they create same name/symbol more than once (copy-paste scam)
+    if (Array.isArray(coins) && coins.length >= 2) {
       const names = coins.map((c: any) => c.name?.toLowerCase()).filter(Boolean);
       const symbols = coins.map((c: any) => c.symbol?.toUpperCase()).filter(Boolean);
       
@@ -177,8 +177,8 @@ async function checkDevWalletHistory(creatorWallet: string): Promise<{ isSerialS
       const maxNameDupes = Math.max(...Object.values(nameCounts), 0);
       const maxSymbolDupes = Math.max(...Object.values(symbolCounts), 0);
       
-      // If same name/symbol used 3+ times, it's a copy-paste scam
-      if (maxNameDupes >= 3 || maxSymbolDupes >= 3) {
+      // If same name/symbol used more than once (2+), it's a copy-paste scam
+      if (maxNameDupes >= 2 || maxSymbolDupes >= 2) {
         return {
           isSerialScammer: true,
           tokenCount,
