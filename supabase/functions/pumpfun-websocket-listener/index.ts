@@ -110,14 +110,14 @@ async function isAbusedTicker(supabase: any, symbol: string): Promise<{ abused: 
     return { abused: true, reason: 'permanently_blocked_ticker' };
   }
   
-  // Check recent high-frequency usage (5+ times in 24 hours)
+  // Check recent high-frequency usage (3+ times in 24 hours = abuse)
   const { count } = await supabase
     .from('pumpfun_watchlist')
     .select('id', { count: 'exact', head: true })
     .ilike('token_symbol', upperSymbol)
     .gte('created_at', new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString());
   
-  if ((count || 0) >= 5) {
+  if ((count || 0) >= 3) {
     // Update abuse tracking
     await supabase.from('abused_tickers').upsert({
       symbol: upperSymbol,
@@ -129,6 +129,69 @@ async function isAbusedTicker(supabase: any, symbol: string): Promise<{ abused: 
   }
   
   return { abused: false };
+}
+
+// Check dev wallet history on pump.fun - reject serial scammers
+async function checkDevWalletHistory(creatorWallet: string): Promise<{ isSerialScammer: boolean; tokenCount: number; reason?: string }> {
+  try {
+    // Query pump.fun API for creator's token history
+    const response = await fetch(`https://frontend-api.pump.fun/coins/user-created-coins/${creatorWallet}?limit=50&offset=0`);
+    
+    if (!response.ok) {
+      console.log(`   ⚠️ Could not fetch dev history for ${creatorWallet.slice(0,8)}...`);
+      return { isSerialScammer: false, tokenCount: 0 };
+    }
+    
+    const coins = await response.json();
+    const tokenCount = Array.isArray(coins) ? coins.length : 0;
+    
+    console.log(`   👤 Dev ${creatorWallet.slice(0,8)}... has created ${tokenCount} tokens on pump.fun`);
+    
+    // Serial scammer thresholds:
+    // - 5+ tokens created = suspicious
+    // - 10+ tokens created = definite serial scammer
+    if (tokenCount >= 10) {
+      return { 
+        isSerialScammer: true, 
+        tokenCount, 
+        reason: `serial_scammer:${tokenCount}_tokens_created` 
+      };
+    }
+    
+    // Check if they create same name/symbol repeatedly (copy-paste scam)
+    if (Array.isArray(coins) && coins.length >= 3) {
+      const names = coins.map((c: any) => c.name?.toLowerCase()).filter(Boolean);
+      const symbols = coins.map((c: any) => c.symbol?.toUpperCase()).filter(Boolean);
+      
+      // Count duplicates
+      const nameCounts = names.reduce((acc: Record<string, number>, name: string) => {
+        acc[name] = (acc[name] || 0) + 1;
+        return acc;
+      }, {});
+      
+      const symbolCounts = symbols.reduce((acc: Record<string, number>, sym: string) => {
+        acc[sym] = (acc[sym] || 0) + 1;
+        return acc;
+      }, {});
+      
+      const maxNameDupes = Math.max(...Object.values(nameCounts), 0);
+      const maxSymbolDupes = Math.max(...Object.values(symbolCounts), 0);
+      
+      // If same name/symbol used 3+ times, it's a copy-paste scam
+      if (maxNameDupes >= 3 || maxSymbolDupes >= 3) {
+        return {
+          isSerialScammer: true,
+          tokenCount,
+          reason: `copy_paste_scam:${maxNameDupes}_same_name,${maxSymbolDupes}_same_symbol`
+        };
+      }
+    }
+    
+    return { isSerialScammer: false, tokenCount };
+  } catch (error) {
+    console.error(`Error checking dev wallet history:`, error);
+    return { isSerialScammer: false, tokenCount: 0 };
+  }
 }
 
 // Validate token intake - Stage 0 checks
@@ -311,12 +374,12 @@ async function processNewToken(
     }
   }
   
-  // === DUPLICATE TICKER CHECK (active tokens only) ===
+  // === DUPLICATE TICKER CHECK (active tokens only) - case-insensitive ===
   if (symbol) {
     const { data: duplicateTickers, error: dupError } = await supabase
       .from('pumpfun_watchlist')
       .select('id, token_mint, token_symbol, status, first_seen_at, holder_count')
-      .eq('token_symbol', symbol.toUpperCase())
+      .ilike('token_symbol', symbol) // Case-insensitive match
       .in('status', ['watching', 'qualified', 'buy_now', 'pending_triage'])
       .order('first_seen_at', { ascending: true })
       .limit(5);
@@ -359,6 +422,49 @@ async function processNewToken(
       });
       
       return { success: false, reason: 'duplicate_ticker' };
+    }
+  }
+  
+  // === DEV WALLET HISTORY CHECK - reject serial scammers ===
+  if (traderPublicKey) {
+    const devCheck = await checkDevWalletHistory(traderPublicKey);
+    if (devCheck.isSerialScammer) {
+      console.log(`   🚫 SERIAL SCAMMER REJECTED: ${traderPublicKey.slice(0,8)}... - ${devCheck.reason}`);
+      
+      // Fetch metadata for social links and image
+      let metadata: TokenMetadata | null = null;
+      if (uri) {
+        metadata = await fetchTokenMetadata(uri);
+      }
+      
+      const socialsCount = [metadata?.twitter, metadata?.telegram, metadata?.website]
+        .filter(s => s && s.trim() !== '').length;
+      const hasImage = !!(metadata?.image && metadata.image !== '' && !metadata.image.includes('placeholder'));
+      
+      // Insert as rejected (permanent - serial scammer)
+      await supabase.from('pumpfun_watchlist').insert({
+        token_mint: mint,
+        token_name: name,
+        token_symbol: symbol,
+        creator_wallet: traderPublicKey,
+        status: 'rejected',
+        rejection_reason: devCheck.reason,
+        rejection_type: 'permanent',
+        rejection_reasons: ['serial_scammer', devCheck.reason],
+        source: 'websocket',
+        created_at_blockchain: new Date().toISOString(),
+        bonding_curve_pct: (vSolInBondingCurve / 85) * 100,
+        market_cap_sol: marketCapSol,
+        has_image: hasImage,
+        socials_count: socialsCount,
+        image_url: metadata?.image || null,
+        twitter_url: metadata?.twitter || null,
+        telegram_url: metadata?.telegram || null,
+        website_url: metadata?.website || null,
+        removal_reason: `Serial scammer dev: ${devCheck.tokenCount} tokens created`,
+      });
+      
+      return { success: false, reason: devCheck.reason };
     }
   }
   
