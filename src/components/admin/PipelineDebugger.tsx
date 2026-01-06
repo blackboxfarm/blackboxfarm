@@ -185,6 +185,8 @@ export default function PipelineDebugger() {
   const [expandedSteps, setExpandedSteps] = useState<Set<number>>(new Set([1]));
   const [isRunning, setIsRunning] = useState(false);
   const [currentStep, setCurrentStep] = useState<number>(0);
+  const [monitorEnabled, setMonitorEnabled] = useState<boolean | null>(null);
+  const [togglingMonitor, setTogglingMonitor] = useState(false);
   
   // Polling loop states
   const [discoveryLoopActive, setDiscoveryLoopActive] = useState(false);
@@ -200,6 +202,39 @@ export default function PipelineDebugger() {
   const discoveryIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const monitorIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const qualificationIntervalRef = useRef<NodeJS.Timeout | null>(null);
+
+  // Fetch monitor status on mount
+  useEffect(() => {
+    const fetchMonitorStatus = async () => {
+      const { data } = await supabase
+        .from('pumpfun_monitor_config')
+        .select('is_enabled')
+        .limit(1)
+        .single();
+      setMonitorEnabled(data?.is_enabled ?? false);
+    };
+    fetchMonitorStatus();
+  }, []);
+
+  // Toggle monitor enabled
+  const toggleMonitorEnabled = async () => {
+    setTogglingMonitor(true);
+    try {
+      const newValue = !monitorEnabled;
+      const { error } = await supabase
+        .from('pumpfun_monitor_config')
+        .update({ is_enabled: newValue })
+        .eq('id', (await supabase.from('pumpfun_monitor_config').select('id').limit(1).single()).data?.id);
+      
+      if (error) throw error;
+      setMonitorEnabled(newValue);
+      toast.success(`Monitor ${newValue ? 'ENABLED' : 'DISABLED'}`);
+    } catch (err: any) {
+      toast.error(`Failed to toggle: ${err.message}`);
+    } finally {
+      setTogglingMonitor(false);
+    }
+  };
 
   const toggleStep = (stepId: number) => {
     setExpandedSteps(prev => {
@@ -508,20 +543,29 @@ export default function PipelineDebugger() {
       case 1: // Discovery
         return (
           <div className="space-y-4">
-            {/* Monitor Status Banner */}
-            {data.monitorEnabled === false && (
-              <div className="p-3 rounded-lg bg-destructive/20 border border-destructive/40 text-destructive flex items-center gap-2">
-                <AlertTriangle className="h-5 w-5" />
-                <span className="font-medium">Backend Monitor DISABLED</span>
-                <span className="text-sm">- Enable in pumpfun_monitor_config to process tokens</span>
+            {/* Monitor Status Banner with Toggle */}
+            <div className={`p-3 rounded-lg border flex items-center justify-between ${
+              monitorEnabled ? 'bg-green-500/20 border-green-500/40' : 'bg-destructive/20 border-destructive/40'
+            }`}>
+              <div className="flex items-center gap-2">
+                {monitorEnabled ? (
+                  <CheckCircle2 className="h-5 w-5 text-green-400" />
+                ) : (
+                  <AlertTriangle className="h-5 w-5 text-destructive" />
+                )}
+                <span className={`font-medium ${monitorEnabled ? 'text-green-400' : 'text-destructive'}`}>
+                  Backend Monitor {monitorEnabled ? 'ENABLED' : 'DISABLED'}
+                </span>
               </div>
-            )}
-            {data.monitorEnabled === true && (
-              <div className="p-2 rounded-lg bg-green-500/20 border border-green-500/40 text-green-400 flex items-center gap-2">
-                <CheckCircle2 className="h-4 w-4" />
-                <span className="text-sm font-medium">Monitor ENABLED</span>
-              </div>
-            )}
+              <Button
+                variant={monitorEnabled ? 'outline' : 'default'}
+                size="sm"
+                onClick={toggleMonitorEnabled}
+                disabled={togglingMonitor}
+              >
+                {togglingMonitor ? <Loader2 className="h-4 w-4 animate-spin" /> : (monitorEnabled ? 'Disable' : 'Enable Monitor')}
+              </Button>
+            </div>
             
             <div className="grid grid-cols-4 gap-4">
               <Card className="p-3">
@@ -566,13 +610,29 @@ export default function PipelineDebugger() {
       case 2: // Intake
         return (
           <div className="space-y-4">
-            {/* Monitor Status Banner */}
-            {data.monitorEnabled === false && (
-              <div className="p-3 rounded-lg bg-destructive/20 border border-destructive/40 text-destructive flex items-center gap-2">
-                <AlertTriangle className="h-5 w-5" />
-                <span className="font-medium">Backend Monitor DISABLED</span>
+            {/* Monitor Status Banner with Toggle */}
+            <div className={`p-3 rounded-lg border flex items-center justify-between ${
+              monitorEnabled ? 'bg-green-500/20 border-green-500/40' : 'bg-destructive/20 border-destructive/40'
+            }`}>
+              <div className="flex items-center gap-2">
+                {monitorEnabled ? (
+                  <CheckCircle2 className="h-5 w-5 text-green-400" />
+                ) : (
+                  <AlertTriangle className="h-5 w-5 text-destructive" />
+                )}
+                <span className={`font-medium ${monitorEnabled ? 'text-green-400' : 'text-destructive'}`}>
+                  Backend Monitor {monitorEnabled ? 'ENABLED' : 'DISABLED'}
+                </span>
               </div>
-            )}
+              <Button
+                variant={monitorEnabled ? 'outline' : 'default'}
+                size="sm"
+                onClick={toggleMonitorEnabled}
+                disabled={togglingMonitor}
+              >
+                {togglingMonitor ? <Loader2 className="h-4 w-4 animate-spin" /> : (monitorEnabled ? 'Disable' : 'Enable Monitor')}
+              </Button>
+            </div>
             
             <div className="grid grid-cols-4 gap-4">
               <Card className="p-3 border-green-500/30">
