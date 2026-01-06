@@ -46,8 +46,9 @@ import {
 } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
 
-// Polling intervals
-const DISCOVERY_POLL_INTERVAL = 30000; // 30 seconds for Step 1+2
+// Polling interval options (in seconds)
+const INTERVAL_OPTIONS = [30, 60, 120, 300] as const; // 30s, 1m, 2m, 5m
+const DEFAULT_DISCOVERY_INTERVAL = 60; // Default to 1 minute
 const MONITOR_POLL_INTERVAL = 30000; // 30 seconds for Step 3
 const QUALIFICATION_POLL_INTERVAL = 60000; // 60 seconds for Step 4
 
@@ -201,6 +202,13 @@ export default function PipelineDebugger() {
   const [monitorPollCount, setMonitorPollCount] = useState(0);
   const [qualificationPollCount, setQualificationPollCount] = useState(0);
   
+  // Configurable interval for discovery loop (SolanaTracker API budget)
+  const [discoveryIntervalSec, setDiscoveryIntervalSec] = useState(DEFAULT_DISCOVERY_INTERVAL);
+  
+  // SolanaTracker API call tracker
+  const [solanaTrackerCalls, setSolanaTrackerCalls] = useState(0);
+  const [sessionStartTime] = useState(() => new Date());
+  
   // Refs for interval cleanup
   const discoveryIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const monitorIntervalRef = useRef<NodeJS.Timeout | null>(null);
@@ -345,6 +353,7 @@ export default function PipelineDebugger() {
   const runDiscoveryLoop = useCallback(async () => {
     console.log('🔄 Discovery loop tick (combined discovery + intake)');
     setDiscoveryPollCount(c => c + 1);
+    setSolanaTrackerCalls(c => c + 1); // Track SolanaTracker API usage
     
     // Set both steps to running
     setStepResults(prev => {
@@ -427,8 +436,20 @@ export default function PipelineDebugger() {
       setDiscoveryLoopActive(true);
       setDiscoveryPollCount(0);
       runDiscoveryLoop();
-      discoveryIntervalRef.current = setInterval(runDiscoveryLoop, DISCOVERY_POLL_INTERVAL);
-      toast.success(`Discovery loop started (every ${DISCOVERY_POLL_INTERVAL / 1000}s)`);
+      const intervalMs = discoveryIntervalSec * 1000;
+      discoveryIntervalRef.current = setInterval(runDiscoveryLoop, intervalMs);
+      toast.success(`Discovery loop started (every ${discoveryIntervalSec}s)`);
+    }
+  }, [discoveryLoopActive, runDiscoveryLoop, discoveryIntervalSec]);
+  
+  // Change discovery interval (restarts loop if active)
+  const changeDiscoveryInterval = useCallback((newIntervalSec: number) => {
+    setDiscoveryIntervalSec(newIntervalSec);
+    if (discoveryLoopActive && discoveryIntervalRef.current) {
+      clearInterval(discoveryIntervalRef.current);
+      const intervalMs = newIntervalSec * 1000;
+      discoveryIntervalRef.current = setInterval(runDiscoveryLoop, intervalMs);
+      toast.info(`Interval changed to ${newIntervalSec}s`);
     }
   }, [discoveryLoopActive, runDiscoveryLoop]);
 
@@ -1412,7 +1433,7 @@ export default function PipelineDebugger() {
                       </TableRow>
                     </TableHeader>
                   </Table>
-                  <ScrollArea className="max-h-[60vh]">
+                  <ScrollArea className="h-[calc(100vh-200px)] max-h-[800px]">
                     <Table>
                       <TableBody>
                         {[...data.positions]
@@ -1500,6 +1521,35 @@ export default function PipelineDebugger() {
               System Pipeline Debugger
             </CardTitle>
             <div className="flex items-center gap-4">
+              {/* SolanaTracker API Budget Tracker */}
+              <div className="flex items-center gap-2 px-3 py-1 bg-muted rounded-md">
+                <Globe className="h-4 w-4 text-orange-500" />
+                <div className="text-xs">
+                  <span className="font-medium">{solanaTrackerCalls}</span>
+                  <span className="text-muted-foreground"> / 10k calls</span>
+                </div>
+                <div className="text-[10px] text-muted-foreground">
+                  ~{Math.round((solanaTrackerCalls / ((Date.now() - sessionStartTime.getTime()) / 3600000)) || 0)}/hr
+                </div>
+              </div>
+              
+              {/* Discovery Interval Selector */}
+              <div className="flex items-center gap-1 px-2 py-1 bg-muted rounded-md">
+                <Clock className="h-3 w-3 text-muted-foreground" />
+                <span className="text-xs text-muted-foreground">Discovery:</span>
+                {INTERVAL_OPTIONS.map((sec) => (
+                  <Button
+                    key={sec}
+                    size="sm"
+                    variant={discoveryIntervalSec === sec ? 'default' : 'ghost'}
+                    className="h-5 px-1.5 text-[10px]"
+                    onClick={() => changeDiscoveryInterval(sec)}
+                  >
+                    {sec < 60 ? `${sec}s` : `${sec / 60}m`}
+                  </Button>
+                ))}
+              </div>
+              
               <div className="flex items-center gap-2">
                 <Wifi className="h-4 w-4 text-green-500" />
                 <span className="text-sm font-medium">Live</span>
@@ -1555,7 +1605,7 @@ export default function PipelineDebugger() {
           const toggleLoop = step.id === 1 ? toggleDiscoveryLoop : 
                              step.id === 3 ? toggleMonitorLoop : 
                              step.id === 4 ? toggleQualificationLoop : () => {};
-          const intervalSec = step.id === 1 ? DISCOVERY_POLL_INTERVAL / 1000 : 
+          const intervalSec = step.id === 1 ? discoveryIntervalSec : 
                               step.id === 3 ? MONITOR_POLL_INTERVAL / 1000 : 
                               step.id === 4 ? QUALIFICATION_POLL_INTERVAL / 1000 : 0;
 
