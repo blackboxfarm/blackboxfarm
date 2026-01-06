@@ -59,7 +59,7 @@ async function getConfig(supabase: any): Promise<IntakeConfig> {
   const { data } = await supabase
     .from('pumpfun_monitor_config')
     .select('is_enabled, max_ticker_length, require_image, min_socials_count')
-    .eq('id', 'default')
+    .limit(1)
     .maybeSingle();
     
   return {
