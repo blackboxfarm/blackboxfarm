@@ -78,16 +78,37 @@ function isPumpFunMint(mint: string): boolean {
 }
 
 // Check if ticker contains BAD emojis (decorative pictographs)
-// ALLOWS: CJK characters (Chinese/Japanese/Korean), Latin extended
-// REJECTS: Emoji pictographs, symbols, dingbats
+// ALLOWS: CJK characters (Chinese/Japanese/Korean - 鯉, 한글, ひらがな, カタカナ), Latin extended
+// REJECTS: Emoji pictographs only (💰, 🚀, ❤️, etc.)
 function containsBadEmoji(text: string): boolean {
   if (!text) return false;
   
-  // Regex to match actual emoji pictographs (hearts, rockets, money bags, etc.)
-  // Does NOT match CJK characters (U+4E00-U+9FFF, U+3040-U+309F, U+30A0-U+30FF, U+AC00-U+D7AF)
-  const emojiRegex = /[\u{1F300}-\u{1F5FF}]|[\u{1F600}-\u{1F64F}]|[\u{1F680}-\u{1F6FF}]|[\u{1F700}-\u{1F77F}]|[\u{1F780}-\u{1F7FF}]|[\u{1F800}-\u{1F8FF}]|[\u{1F900}-\u{1F9FF}]|[\u{1FA00}-\u{1FA6F}]|[\u{1FA70}-\u{1FAFF}]|[\u{2600}-\u{26FF}]|[\u{2700}-\u{27BF}]|[\u{FE00}-\u{FEFF}]|[\u{1F000}-\u{1F02F}]/u;
+  // Only match actual pictograph emojis - NOT CJK/Asian characters
+  // CJK Unified Ideographs: U+4E00-U+9FFF (Chinese, Japanese Kanji, Korean Hanja) ✅ ALLOWED
+  // Hiragana: U+3040-U+309F ✅ ALLOWED
+  // Katakana: U+30A0-U+30FF ✅ ALLOWED
+  // Hangul Syllables: U+AC00-U+D7AF (Korean) ✅ ALLOWED
+  // CJK Extension A: U+3400-U+4DBF ✅ ALLOWED
+  // CJK Extension B-F: U+20000-U+2CEAF ✅ ALLOWED
+  //
+  // REJECTED emoji ranges (decorative pictographs only):
+  const badEmojiRegex = new RegExp([
+    '[\u{1F300}-\u{1F5FF}]', // Misc Symbols & Pictographs (🌀-🗿)
+    '[\u{1F600}-\u{1F64F}]', // Emoticons (😀-🙏)
+    '[\u{1F680}-\u{1F6FF}]', // Transport & Map Symbols (🚀-🛿)
+    '[\u{1F700}-\u{1F77F}]', // Alchemical Symbols
+    '[\u{1F780}-\u{1F7FF}]', // Geometric Shapes Extended
+    '[\u{1F800}-\u{1F8FF}]', // Supplemental Arrows-C
+    '[\u{1F900}-\u{1F9FF}]', // Supplemental Symbols & Pictographs (🤀-🧿)
+    '[\u{1FA00}-\u{1FA6F}]', // Chess Symbols
+    '[\u{1FA70}-\u{1FAFF}]', // Symbols & Pictographs Extended-A (🩰-🫿)
+    '[\u{2600}-\u{26FF}]',   // Misc Symbols (☀-⛿) 
+    '[\u{2700}-\u{27BF}]',   // Dingbats (✀-➿)
+    '[\u{1F000}-\u{1F02F}]', // Mahjong/Domino tiles
+    '[\u{FE00}-\u{FE0F}]',   // Variation Selectors (emoji modifiers)
+  ].join('|'), 'u');
   
-  return emojiRegex.test(text);
+  return badEmojiRegex.test(text);
 }
 
 // Check if ticker is a known abused ticker (dynamically from DB + static list)
