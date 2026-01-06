@@ -194,6 +194,8 @@ const SIGNAL_SCORING = {
 async function fetchLatestPumpfunTokens(limit = 100): Promise<any[]> {
   const apiKey = Deno.env.get('SOLANA_TRACKER_API_KEY');
   
+  console.log(`[SolanaTracker] API key present: ${!!apiKey}, length: ${apiKey?.length || 0}`);
+  
   try {
     const response = await fetch(
       `https://data.solanatracker.io/tokens/latest?market=pumpfun&limit=${limit}`,
@@ -206,11 +208,13 @@ async function fetchLatestPumpfunTokens(limit = 100): Promise<any[]> {
     );
 
     if (!response.ok) {
-      console.error(`Solana Tracker API error: ${response.status}`);
+      const errorText = await response.text();
+      console.error(`Solana Tracker API error: ${response.status} - ${errorText}`);
       return [];
     }
 
     const data = await response.json();
+    console.log(`[SolanaTracker] Got ${Array.isArray(data) ? data.length : 0} tokens`);
     return Array.isArray(data) ? data : [];
   } catch (error) {
     console.error('Error fetching tokens:', error);
