@@ -13,6 +13,80 @@ function jsonResponse(data: unknown, status = 200) {
   });
 }
 
+// Unicode policy for tickers (symbols):
+// - ✅ Allow: ASCII + CJK scripts (Chinese/Japanese/Korean) and common CJK punctuation/fullwidth forms
+// - ❌ Reject: Emoji pictographs + other non-ASCII scripts
+function containsBadEmoji(text: string): boolean {
+  if (!text) return false;
+
+  const badEmojiRegex = new RegExp([
+    '[\u{1F300}-\u{1F5FF}]', // Misc Symbols & Pictographs
+    '[\u{1F600}-\u{1F64F}]', // Emoticons
+    '[\u{1F680}-\u{1F6FF}]', // Transport & Map Symbols
+    '[\u{1F700}-\u{1F77F}]', // Alchemical Symbols
+    '[\u{1F780}-\u{1F7FF}]', // Geometric Shapes Extended
+    '[\u{1F800}-\u{1F8FF}]', // Supplemental Arrows-C
+    '[\u{1F900}-\u{1F9FF}]', // Supplemental Symbols & Pictographs
+    '[\u{1FA00}-\u{1FA6F}]', // Chess Symbols
+    '[\u{1FA70}-\u{1FAFF}]', // Symbols & Pictographs Extended-A
+    '[\u{2600}-\u{26FF}]',   // Misc Symbols
+    '[\u{2700}-\u{27BF}]',   // Dingbats
+    '[\u{1F000}-\u{1F02F}]', // Mahjong/Domino tiles
+    '[\u{FE00}-\u{FE0F}]',   // Variation Selectors
+    '[\u{E0100}-\u{E01EF}]', // Variation Selectors Supplement
+  ].join('|'), 'u');
+
+  return badEmojiRegex.test(text);
+}
+
+function isAllowedNonAsciiTickerChar(cp: number): boolean {
+  // CJK & friends
+  if (cp >= 0x3000 && cp <= 0x303F) return true; // CJK Symbols & Punctuation
+  if (cp >= 0x3040 && cp <= 0x30FF) return true; // Hiragana + Katakana
+  if (cp >= 0x31F0 && cp <= 0x31FF) return true; // Katakana Phonetic Extensions
+  if (cp >= 0x31C0 && cp <= 0x31EF) return true; // CJK Strokes
+  if (cp >= 0x3400 && cp <= 0x4DBF) return true; // CJK Unified Ideographs Ext A
+  if (cp >= 0x4E00 && cp <= 0x9FFF) return true; // CJK Unified Ideographs
+  if (cp >= 0xF900 && cp <= 0xFAFF) return true; // CJK Compatibility Ideographs
+  if (cp >= 0x2E80 && cp <= 0x2FDF) return true; // CJK Radicals/Kangxi
+  if (cp >= 0x3200 && cp <= 0x32FF) return true; // Enclosed CJK Letters & Months
+  if (cp >= 0xFF00 && cp <= 0xFFEF) return true; // Halfwidth & Fullwidth Forms
+
+  // Hangul
+  if (cp >= 0x1100 && cp <= 0x11FF) return true; // Hangul Jamo
+  if (cp >= 0x3130 && cp <= 0x318F) return true; // Hangul Compatibility Jamo
+  if (cp >= 0xAC00 && cp <= 0xD7AF) return true; // Hangul Syllables
+
+  // CJK extensions beyond BMP
+  if (cp >= 0x20000 && cp <= 0x2CEAF) return true; // CJK Ext B-F
+
+  return false;
+}
+
+function containsDisallowedTickerUnicode(text: string): boolean {
+  if (!text) return false;
+
+  // Fast path: reject obvious emoji ranges
+  if (containsBadEmoji(text)) return true;
+
+  // Reject any non-ASCII characters outside our allowlist
+  for (const ch of text) {
+    const cp = ch.codePointAt(0) ?? 0;
+
+    // ASCII OK
+    if (cp <= 0x7f) continue;
+
+    // Emoji joiners/modifiers should never appear in a ticker
+    if (cp === 0x200d) return true; // ZWJ
+    if (cp >= 0xfe00 && cp <= 0xfe0f) return true; // VS
+    if (cp >= 0xe0100 && cp <= 0xe01ef) return true; // VS supplement
+
+    if (!isAllowedNonAsciiTickerChar(cp)) return true;
+  }
+
+  return false;
+}
+
 // Filter configuration with explanations
 const FILTER_CONFIG = {
   mayhem_mode: {
@@ -33,7 +107,7 @@ const FILTER_CONFIG = {
   emoji_unicode: {
     order: 4,
     name: 'Emoji/Unicode',
-    description: 'Ticker contains non-ASCII characters - common scam signal',
+    description: 'Ticker contains disallowed emoji/unicode (CJK OK)',
   },
   ticker_too_long: {
     order: 5,
@@ -180,9 +254,9 @@ async function runIntake(supabase: any): Promise<any> {
       rejected_reason = 'duplicate';
       rejected_detail = 'Already in watchlist';
     }
-    else if (/[^\x00-\x7F]/.test(token.symbol)) {
+    else if (containsDisallowedTickerUnicode(token.symbol)) {
       rejected_reason = 'emoji_unicode';
-      rejected_detail = `Contains non-ASCII: "${token.symbol}"`;
+      rejected_detail = `Contains disallowed emoji/unicode: "${token.symbol}"`;
     }
     else if (token.symbol.length > FILTER_CONFIG.ticker_too_long.threshold) {
       rejected_reason = 'ticker_too_long';
