@@ -78,20 +78,12 @@ function isPumpFunMint(mint: string): boolean {
 }
 
 // Check if ticker contains BAD emojis (decorative pictographs)
-// ALLOWS: CJK characters (Chinese/Japanese/Korean - 鯉, 한글, ひらがな, カタカナ), Latin extended
+// ALLOWS: CJK characters, Latin extended with accents (ó, ō, ñ, etc.)
 // REJECTS: Emoji pictographs only (💰, 🚀, ❤️, etc.)
 function containsBadEmoji(text: string): boolean {
   if (!text) return false;
   
-  // Only match actual pictograph emojis - NOT CJK/Asian characters
-  // CJK Unified Ideographs: U+4E00-U+9FFF (Chinese, Japanese Kanji, Korean Hanja) ✅ ALLOWED
-  // Hiragana: U+3040-U+309F ✅ ALLOWED
-  // Katakana: U+30A0-U+30FF ✅ ALLOWED
-  // Hangul Syllables: U+AC00-U+D7AF (Korean) ✅ ALLOWED
-  // CJK Extension A: U+3400-U+4DBF ✅ ALLOWED
-  // CJK Extension B-F: U+20000-U+2CEAF ✅ ALLOWED
-  //
-  // REJECTED emoji ranges (decorative pictographs only):
+  // Only match actual pictograph emojis - NOT language characters
   const badEmojiRegex = new RegExp([
     '[\u{1F300}-\u{1F5FF}]', // Misc Symbols & Pictographs (🌀-🗿)
     '[\u{1F600}-\u{1F64F}]', // Emoticons (😀-🙏)
@@ -109,6 +101,74 @@ function containsBadEmoji(text: string): boolean {
   ].join('|'), 'u');
   
   return badEmojiRegex.test(text);
+}
+
+// Check if a codepoint is an allowed non-ASCII character (CJK + Latin extended)
+function isAllowedNonAsciiChar(cp: number): boolean {
+  // Latin Extended-A: U+0100-U+017F (ā, ă, ą, ć, ĉ, etc.)
+  if (cp >= 0x0100 && cp <= 0x017F) return true;
+  // Latin Extended-B: U+0180-U+024F (ƀ, ƃ, etc.)
+  if (cp >= 0x0180 && cp <= 0x024F) return true;
+  // Latin Extended Additional: U+1E00-U+1EFF (ḀḁḂḃ, etc.)
+  if (cp >= 0x1E00 && cp <= 0x1EFF) return true;
+  // Latin Extended-C/D/E: U+2C60-U+2C7F, U+A720-U+A7FF, U+AB30-U+AB6F
+  if (cp >= 0x2C60 && cp <= 0x2C7F) return true;
+  if (cp >= 0xA720 && cp <= 0xA7FF) return true;
+  if (cp >= 0xAB30 && cp <= 0xAB6F) return true;
+  // Combining Diacritical Marks: U+0300-U+036F (accents that combine)
+  if (cp >= 0x0300 && cp <= 0x036F) return true;
+  // Latin-1 Supplement: U+00C0-U+00FF (À, Á, Â, Ã, Ä, Å, etc.)
+  if (cp >= 0x00C0 && cp <= 0x00FF) return true;
+  // Greek and Coptic: U+0370-U+03FF
+  if (cp >= 0x0370 && cp <= 0x03FF) return true;
+  // Cyrillic: U+0400-U+04FF
+  if (cp >= 0x0400 && cp <= 0x04FF) return true;
+  
+  // CJK & friends
+  if (cp >= 0x3000 && cp <= 0x303F) return true; // CJK Symbols & Punctuation
+  if (cp >= 0x3040 && cp <= 0x30FF) return true; // Hiragana + Katakana
+  if (cp >= 0x31F0 && cp <= 0x31FF) return true; // Katakana Phonetic Extensions
+  if (cp >= 0x31C0 && cp <= 0x31EF) return true; // CJK Strokes
+  if (cp >= 0x3400 && cp <= 0x4DBF) return true; // CJK Unified Ideographs Ext A
+  if (cp >= 0x4E00 && cp <= 0x9FFF) return true; // CJK Unified Ideographs
+  if (cp >= 0xF900 && cp <= 0xFAFF) return true; // CJK Compatibility Ideographs
+  if (cp >= 0x2E80 && cp <= 0x2FDF) return true; // CJK Radicals/Kangxi
+  if (cp >= 0x3200 && cp <= 0x32FF) return true; // Enclosed CJK Letters & Months
+  if (cp >= 0xFF00 && cp <= 0xFFEF) return true; // Halfwidth & Fullwidth Forms
+  // Hangul
+  if (cp >= 0x1100 && cp <= 0x11FF) return true; // Hangul Jamo
+  if (cp >= 0x3130 && cp <= 0x318F) return true; // Hangul Compatibility Jamo
+  if (cp >= 0xAC00 && cp <= 0xD7AF) return true; // Hangul Syllables
+  // CJK extensions beyond BMP
+  if (cp >= 0x20000 && cp <= 0x2CEAF) return true; // CJK Ext B-F
+
+  return false;
+}
+
+// Check if ticker contains disallowed unicode (emoji or non-language symbols)
+function containsDisallowedTickerUnicode(text: string): boolean {
+  if (!text) return false;
+  
+  // Fast path: reject obvious emoji ranges
+  if (containsBadEmoji(text)) return true;
+  
+  // Check each character
+  for (const ch of text) {
+    const cp = ch.codePointAt(0) ?? 0;
+    
+    // ASCII is always OK
+    if (cp <= 0x7F) continue;
+    
+    // Emoji joiners/modifiers should never appear in a ticker
+    if (cp === 0x200D) return true; // ZWJ
+    if (cp >= 0xFE00 && cp <= 0xFE0F) return true; // VS
+    if (cp >= 0xE0100 && cp <= 0xE01EF) return true; // VS supplement
+    
+    // If not in our allowlist, reject
+    if (!isAllowedNonAsciiChar(cp)) return true;
+  }
+  
+  return false;
 }
 
 // Check if ticker is a known abused ticker (dynamically from DB + static list)
@@ -226,8 +286,8 @@ function validateIntake(
     isPermanent = true;
   }
   
-  // EMOJI CHECK - Use the improved function that allows CJK
-  if (event.symbol && containsBadEmoji(event.symbol)) {
+  // EMOJI/UNICODE CHECK - Use the improved function that allows CJK + Latin accents
+  if (event.symbol && containsDisallowedTickerUnicode(event.symbol)) {
     reasons.push('ticker_bad_emoji');
     isPermanent = true;
   }

@@ -40,6 +40,25 @@ function containsBadEmoji(text: string): boolean {
 }
 
 function isAllowedNonAsciiTickerChar(cp: number): boolean {
+  // Latin Extended-A: U+0100-U+017F (ā, ă, ą, ć, ĉ, etc.)
+  if (cp >= 0x0100 && cp <= 0x017F) return true;
+  // Latin Extended-B: U+0180-U+024F (ƀ, ƃ, etc.)
+  if (cp >= 0x0180 && cp <= 0x024F) return true;
+  // Latin Extended Additional: U+1E00-U+1EFF (ḀḁḂḃ, etc.)
+  if (cp >= 0x1E00 && cp <= 0x1EFF) return true;
+  // Latin Extended-C/D/E: U+2C60-U+2C7F, U+A720-U+A7FF, U+AB30-U+AB6F
+  if (cp >= 0x2C60 && cp <= 0x2C7F) return true;
+  if (cp >= 0xA720 && cp <= 0xA7FF) return true;
+  if (cp >= 0xAB30 && cp <= 0xAB6F) return true;
+  // Combining Diacritical Marks: U+0300-U+036F (accents that combine)
+  if (cp >= 0x0300 && cp <= 0x036F) return true;
+  // Latin-1 Supplement: U+00C0-U+00FF (À, Á, Â, Ã, Ä, Å, ó, ō, etc.)
+  if (cp >= 0x00C0 && cp <= 0x00FF) return true;
+  // Greek and Coptic: U+0370-U+03FF
+  if (cp >= 0x0370 && cp <= 0x03FF) return true;
+  // Cyrillic: U+0400-U+04FF
+  if (cp >= 0x0400 && cp <= 0x04FF) return true;
+  
   // CJK & friends
   if (cp >= 0x3000 && cp <= 0x303F) return true; // CJK Symbols & Punctuation
   if (cp >= 0x3040 && cp <= 0x30FF) return true; // Hiragana + Katakana
@@ -217,6 +236,7 @@ async function runDiscovery(supabase: any): Promise<any> {
 }
 
 // Step 2: Intake Filtering - Apply filters in priority order
+// IMPROVED: Duplicate detection now removes ALL case-insensitive duplicates including first occurrence
 async function runIntake(supabase: any): Promise<any> {
   console.log('[Step 2] Running intake filtering (LIVE)');
 
@@ -231,16 +251,37 @@ async function runIntake(supabase: any): Promise<any> {
     filterBreakdown[key] = { count: 0, order: config.order, description: config.description };
   });
 
+  // Get existing tokens from DB (already curated) - case-insensitive symbol lookup
   const { data: watchlist } = await supabase
     .from('pumpfun_watchlist')
-    .select('token_mint')
-    .in('status', ['watching', 'qualified', 'bought']);
+    .select('token_mint, token_symbol')
+    .in('status', ['watching', 'qualified', 'bought', 'pending_triage']);
 
   const existingMints = new Set((watchlist || []).map((w: any) => w.token_mint));
+  // Build case-insensitive set of existing symbols
+  const existingSymbolsLower = new Set((watchlist || []).map((w: any) => (w.token_symbol || '').toLowerCase()));
+
+  // STEP 1: Find ALL duplicate tickers within the batch (case-insensitive)
+  // Count occurrences of each ticker (case-insensitive)
+  const tickerCounts: Record<string, number> = {};
+  for (const token of tokens) {
+    if (token.symbol) {
+      const lowerSymbol = token.symbol.toLowerCase();
+      tickerCounts[lowerSymbol] = (tickerCounts[lowerSymbol] || 0) + 1;
+    }
+  }
+  
+  // Identify which tickers have duplicates within the batch (count > 1)
+  const duplicatedTickersInBatch = new Set(
+    Object.entries(tickerCounts)
+      .filter(([_, count]) => count > 1)
+      .map(([ticker]) => ticker)
+  );
 
   for (const token of tokens) {
     let rejected_reason = null;
     let rejected_detail = '';
+    const lowerSymbol = (token.symbol || '').toLowerCase();
 
     if (token.isMayhem) {
       rejected_reason = 'mayhem_mode';
@@ -250,9 +291,19 @@ async function runIntake(supabase: any): Promise<any> {
       rejected_reason = 'null_name_ticker';
       rejected_detail = `Name: "${token.name || 'null'}", Ticker: "${token.symbol || 'null'}"`;
     }
+    // Check if this ticker exists in DB already (case-insensitive)
+    else if (existingSymbolsLower.has(lowerSymbol)) {
+      rejected_reason = 'duplicate';
+      rejected_detail = `Already exists in watchlist (case-insensitive match)`;
+    }
+    // Check if this token's ticker appears multiple times in THIS batch - reject ALL of them
+    else if (duplicatedTickersInBatch.has(lowerSymbol)) {
+      rejected_reason = 'duplicate';
+      rejected_detail = `Multiple tokens with same ticker "${token.symbol}" in batch - ALL removed`;
+    }
     else if (existingMints.has(token.mint)) {
       rejected_reason = 'duplicate';
-      rejected_detail = 'Already in watchlist';
+      rejected_detail = 'Exact mint already in watchlist';
     }
     else if (containsDisallowedTickerUnicode(token.symbol)) {
       rejected_reason = 'emoji_unicode';
