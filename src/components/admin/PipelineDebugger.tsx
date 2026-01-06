@@ -180,6 +180,8 @@ const GuardrailStatus = ({ guardrails }: { guardrails: any }) => {
   );
 };
 
+type PositionSortOption = 'created' | 'best_buy' | 'worst' | 'pnl_high' | 'pnl_low';
+
 export default function PipelineDebugger() {
   const [stepResults, setStepResults] = useState<Map<number, StepResult>>(new Map());
   const [expandedSteps, setExpandedSteps] = useState<Set<number>>(new Set([1]));
@@ -187,6 +189,7 @@ export default function PipelineDebugger() {
   const [currentStep, setCurrentStep] = useState<number>(0);
   const [monitorEnabled, setMonitorEnabled] = useState<boolean | null>(null);
   const [togglingMonitor, setTogglingMonitor] = useState(false);
+  const [positionSort, setPositionSort] = useState<PositionSortOption>('best_buy');
   
   // Polling loop states
   const [discoveryLoopActive, setDiscoveryLoopActive] = useState(false);
@@ -1377,10 +1380,29 @@ export default function PipelineDebugger() {
 
             {data.positions && data.positions.length > 0 && (
               <div className="space-y-2">
-                <p className="text-sm font-medium">Open Positions ({data.positions.length})</p>
-                <ScrollArea className="max-h-[70vh] min-h-[200px] border rounded-lg">
+                <div className="flex items-center justify-between">
+                  <p className="text-sm font-medium">Open Positions ({data.positions.length})</p>
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs text-muted-foreground">Sort:</span>
+                    {(['created', 'best_buy', 'worst', 'pnl_high', 'pnl_low'] as PositionSortOption[]).map((opt) => (
+                      <Button
+                        key={opt}
+                        size="sm"
+                        variant={positionSort === opt ? 'default' : 'outline'}
+                        className="h-6 px-2 text-xs"
+                        onClick={() => setPositionSort(opt)}
+                      >
+                        {opt === 'created' ? 'As Created' : 
+                         opt === 'best_buy' ? 'Best Buy' : 
+                         opt === 'worst' ? 'Worst' :
+                         opt === 'pnl_high' ? 'P/L High' : 'P/L Low'}
+                      </Button>
+                    ))}
+                  </div>
+                </div>
+                <div className="border rounded-lg overflow-hidden">
                   <Table>
-                    <TableHeader>
+                    <TableHeader className="sticky top-0 bg-background z-10">
                       <TableRow>
                         <TableHead>Symbol</TableHead>
                         <TableHead>Entry</TableHead>
@@ -1389,25 +1411,45 @@ export default function PipelineDebugger() {
                         <TableHead>P/L</TableHead>
                       </TableRow>
                     </TableHeader>
-                    <TableBody>
-                      {data.positions.map((pos: any, idx: number) => (
-                        <TableRow key={idx}>
-                          <TableCell className="font-mono">{pos.symbol}</TableCell>
-                          <TableCell>${pos.entryPrice?.toFixed(8)}</TableCell>
-                          <TableCell>${pos.currentPrice?.toFixed(8)}</TableCell>
-                          <TableCell>
-                            <Badge variant={pos.multiplier >= 1.5 ? 'default' : 'outline'}>
-                              {pos.multiplier?.toFixed(2)}x
-                            </Badge>
-                          </TableCell>
-                          <TableCell className={pos.pnlPct >= 0 ? 'text-green-500' : 'text-red-500'}>
-                            {pos.pnlPct >= 0 ? '+' : ''}{pos.pnlPct?.toFixed(1)}%
-                          </TableCell>
-                        </TableRow>
-                      ))}
-                    </TableBody>
                   </Table>
-                </ScrollArea>
+                  <ScrollArea className="max-h-[60vh]">
+                    <Table>
+                      <TableBody>
+                        {[...data.positions]
+                          .sort((a: any, b: any) => {
+                            switch (positionSort) {
+                              case 'best_buy': // Nearest to 1.5x target (highest multiplier first)
+                                return (b.multiplier || 0) - (a.multiplier || 0);
+                              case 'worst': // Lowest multiplier first
+                                return (a.multiplier || 0) - (b.multiplier || 0);
+                              case 'pnl_high':
+                                return (b.pnlPct || 0) - (a.pnlPct || 0);
+                              case 'pnl_low':
+                                return (a.pnlPct || 0) - (b.pnlPct || 0);
+                              case 'created':
+                              default:
+                                return 0; // Keep original order
+                            }
+                          })
+                          .map((pos: any, idx: number) => (
+                          <TableRow key={idx}>
+                            <TableCell className="font-mono">{pos.symbol}</TableCell>
+                            <TableCell>${pos.entryPrice?.toFixed(8)}</TableCell>
+                            <TableCell>${pos.currentPrice?.toFixed(8)}</TableCell>
+                            <TableCell>
+                              <Badge variant={pos.multiplier >= 1.5 ? 'default' : 'outline'}>
+                                {pos.multiplier?.toFixed(2)}x
+                              </Badge>
+                            </TableCell>
+                            <TableCell className={pos.pnlPct >= 0 ? 'text-green-500' : 'text-red-500'}>
+                              {pos.pnlPct >= 0 ? '+' : ''}{pos.pnlPct?.toFixed(1)}%
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </ScrollArea>
+                </div>
               </div>
             )}
 
