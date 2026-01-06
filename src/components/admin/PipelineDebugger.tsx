@@ -250,6 +250,10 @@ export default function PipelineDebugger() {
 
   // Silent run step (no toasts, for loop polling)
   const runStepSilent = useCallback(async (stepId: number, showToast = true) => {
+    if (showToast) {
+      toast.info(`Running step ${stepId}...`);
+    }
+    
     setStepResults(prev => new Map(prev).set(stepId, {
       step: stepId,
       status: 'running',
@@ -1373,8 +1377,8 @@ export default function PipelineDebugger() {
 
             {data.positions && data.positions.length > 0 && (
               <div className="space-y-2">
-                <p className="text-sm font-medium">Open Positions</p>
-                <ScrollArea className="h-[200px] border rounded-lg">
+                <p className="text-sm font-medium">Open Positions ({data.positions.length})</p>
+                <ScrollArea className="max-h-[70vh] min-h-[200px] border rounded-lg">
                   <Table>
                     <TableHeader>
                       <TableRow>
