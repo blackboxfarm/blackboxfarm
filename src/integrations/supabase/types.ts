@@ -2832,6 +2832,66 @@ export type Database = {
         }
         Relationships: []
       }
+      flipit_tweet_quota: {
+        Row: {
+          created_at: string | null
+          date: string
+          id: string
+          last_tweet_at: string | null
+          tweet_count: number | null
+          updated_at: string | null
+        }
+        Insert: {
+          created_at?: string | null
+          date: string
+          id?: string
+          last_tweet_at?: string | null
+          tweet_count?: number | null
+          updated_at?: string | null
+        }
+        Update: {
+          created_at?: string | null
+          date?: string
+          id?: string
+          last_tweet_at?: string | null
+          tweet_count?: number | null
+          updated_at?: string | null
+        }
+        Relationships: []
+      }
+      flipit_tweet_settings: {
+        Row: {
+          created_at: string | null
+          daily_tweet_limit: number | null
+          id: string
+          min_profit_to_tweet: number | null
+          skip_rebuy_tweets: boolean | null
+          tweet_cooldown_minutes: number | null
+          tweets_enabled: boolean | null
+          updated_at: string | null
+        }
+        Insert: {
+          created_at?: string | null
+          daily_tweet_limit?: number | null
+          id?: string
+          min_profit_to_tweet?: number | null
+          skip_rebuy_tweets?: boolean | null
+          tweet_cooldown_minutes?: number | null
+          tweets_enabled?: boolean | null
+          updated_at?: string | null
+        }
+        Update: {
+          created_at?: string | null
+          daily_tweet_limit?: number | null
+          id?: string
+          min_profit_to_tweet?: number | null
+          skip_rebuy_tweets?: boolean | null
+          tweet_cooldown_minutes?: number | null
+          tweets_enabled?: boolean | null
+          updated_at?: string | null
+        }
+        Relationships: []
+      }
       flipit_tweet_templates: {
         Row: {
           created_at: string

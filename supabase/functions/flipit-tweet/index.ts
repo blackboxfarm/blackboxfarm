@@ -85,6 +85,23 @@ interface TweetRequest {
   amountSol?: number;
   txSignature?: string;
   positionId?: string;
+  forceTweet?: boolean; // Bypass rate limiting for important tweets
+}
+
+interface TweetSettings {
+  daily_tweet_limit: number;
+  min_profit_to_tweet: number;
+  tweet_cooldown_minutes: number;
+  tweets_enabled: boolean;
+  skip_rebuy_tweets: boolean;
+}
+
+interface QuotaCheck {
+  canTweet: boolean;
+  reason?: string;
+  currentCount?: number;
+  limit?: number;
+  minutesSinceLastTweet?: number;
 }
 
 // Default templates (fallback if DB not available)
@@ -118,6 +135,144 @@ Back in for another round! 🎰
 #Solana #{{TOKEN_SYMBOL}} #FlipIt`,
 };
 
+const DEFAULT_SETTINGS: TweetSettings = {
+  daily_tweet_limit: 40,
+  min_profit_to_tweet: 20,
+  tweet_cooldown_minutes: 30,
+  tweets_enabled: true,
+  skip_rebuy_tweets: true,
+};
+
+async function getTweetSettings(supabase: any): Promise<TweetSettings> {
+  try {
+    const { data, error } = await supabase
+      .from("flipit_tweet_settings")
+      .select("*")
+      .limit(1)
+      .single();
+
+    if (error || !data) {
+      console.log("Using default tweet settings");
+      return DEFAULT_SETTINGS;
+    }
+
+    return {
+      daily_tweet_limit: data.daily_tweet_limit ?? DEFAULT_SETTINGS.daily_tweet_limit,
+      min_profit_to_tweet: data.min_profit_to_tweet ?? DEFAULT_SETTINGS.min_profit_to_tweet,
+      tweet_cooldown_minutes: data.tweet_cooldown_minutes ?? DEFAULT_SETTINGS.tweet_cooldown_minutes,
+      tweets_enabled: data.tweets_enabled ?? DEFAULT_SETTINGS.tweets_enabled,
+      skip_rebuy_tweets: data.skip_rebuy_tweets ?? DEFAULT_SETTINGS.skip_rebuy_tweets,
+    };
+  } catch (e) {
+    console.error("Failed to fetch tweet settings:", e);
+    return DEFAULT_SETTINGS;
+  }
+}
+
+async function checkQuota(supabase: any, settings: TweetSettings): Promise<QuotaCheck> {
+  const today = new Date().toISOString().split('T')[0]; // YYYY-MM-DD
+
+  try {
+    // Get or create today's quota record
+    let { data: quotaData, error } = await supabase
+      .from("flipit_tweet_quota")
+      .select("*")
+      .eq("date", today)
+      .single();
+
+    if (error && error.code === 'PGRST116') {
+      // No record for today, create one
+      const { data: newQuota, error: insertError } = await supabase
+        .from("flipit_tweet_quota")
+        .insert({ date: today, tweet_count: 0 })
+        .select()
+        .single();
+
+      if (insertError) {
+        console.error("Failed to create quota record:", insertError);
+        return { canTweet: true }; // Fail open if DB issue
+      }
+      quotaData = newQuota;
+    } else if (error) {
+      console.error("Failed to check quota:", error);
+      return { canTweet: true }; // Fail open if DB issue
+    }
+
+    const currentCount = quotaData.tweet_count || 0;
+    const lastTweetAt = quotaData.last_tweet_at ? new Date(quotaData.last_tweet_at) : null;
+
+    // Check daily limit
+    if (currentCount >= settings.daily_tweet_limit) {
+      return {
+        canTweet: false,
+        reason: `Daily limit reached (${currentCount}/${settings.daily_tweet_limit})`,
+        currentCount,
+        limit: settings.daily_tweet_limit,
+      };
+    }
+
+    // Check cooldown
+    if (lastTweetAt && settings.tweet_cooldown_minutes > 0) {
+      const minutesSinceLastTweet = (Date.now() - lastTweetAt.getTime()) / (1000 * 60);
+      if (minutesSinceLastTweet < settings.tweet_cooldown_minutes) {
+        return {
+          canTweet: false,
+          reason: `Cooldown active (${Math.ceil(settings.tweet_cooldown_minutes - minutesSinceLastTweet)} mins remaining)`,
+          currentCount,
+          limit: settings.daily_tweet_limit,
+          minutesSinceLastTweet: Math.floor(minutesSinceLastTweet),
+        };
+      }
+    }
+
+    return { canTweet: true, currentCount, limit: settings.daily_tweet_limit };
+  } catch (e) {
+    console.error("Quota check failed:", e);
+    return { canTweet: true }; // Fail open
+  }
+}
+
+async function incrementQuota(supabase: any): Promise<void> {
+  const today = new Date().toISOString().split('T')[0];
+  const now = new Date().toISOString();
+
+  try {
+    // Upsert: increment count and update last_tweet_at
+    const { error } = await supabase
+      .from("flipit_tweet_quota")
+      .upsert(
+        { 
+          date: today, 
+          tweet_count: 1, 
+          last_tweet_at: now,
+          updated_at: now 
+        },
+        { 
+          onConflict: 'date',
+          ignoreDuplicates: false 
+        }
+      );
+
+    if (error) {
+      // Fallback: try update with increment
+      await supabase.rpc('increment_tweet_quota', { target_date: today });
+    }
+    
+    // Also try direct SQL increment as final fallback
+    await supabase
+      .from("flipit_tweet_quota")
+      .update({ 
+        tweet_count: supabase.raw('tweet_count + 1'),
+        last_tweet_at: now,
+        updated_at: now
+      })
+      .eq("date", today);
+
+  } catch (e) {
+    console.error("Failed to increment quota:", e);
+  }
+}
+
 async function getTemplate(supabase: any, templateType: string): Promise<{ text: string; enabled: boolean }> {
   try {
     const { data, error } = await supabase
@@ -140,12 +295,10 @@ async function getTemplate(supabase: any, templateType: string): Promise<{ text:
 
 function sanitizeSymbol(input: string | undefined): string {
   const s = (input || "").trim();
-  // Keep it hashtag-friendly and predictable
   return s.replace(/[^A-Za-z0-9_]/g, "").slice(0, 16);
 }
 
 async function fetchTokenInfo(tokenMint: string): Promise<{ symbol: string; name?: string } | null> {
-  // Primary: Jupiter token endpoint
   try {
     const res = await fetch(`https://tokens.jup.ag/token/${tokenMint}`);
     if (res.ok) {
@@ -156,7 +309,6 @@ async function fetchTokenInfo(tokenMint: string): Promise<{ symbol: string; name
     console.error("Jupiter token lookup failed:", e);
   }
 
-  // Fallback: DexScreener
   try {
     const res = await fetch(`https://api.dexscreener.com/latest/dex/tokens/${tokenMint}`);
     if (res.ok) {
@@ -262,92 +414,156 @@ Deno.serve(async (req) => {
     const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
     
-     let body: TweetRequest = await req.json();
-     console.log("Tweet request:", JSON.stringify(body));
-     
-     // Normalize: accept either 'type' or 'eventType', and 'entryPrice' or 'buyPriceUsd'
-     const tweetType = body.type || body.eventType || 'buy';
-     const entryPrice = body.entryPrice ?? body.buyPriceUsd;
-     const exitPrice = body.exitPrice ?? body.sellPriceUsd;
+    let body: TweetRequest = await req.json();
+    console.log("Tweet request:", JSON.stringify(body));
     
-     // Get template from database
-     const { text: template, enabled } = await getTemplate(supabase, tweetType);
-     
-     if (!enabled) {
-       console.log(`Tweeting disabled for ${tweetType}`);
-       return new Response(JSON.stringify({ 
-         success: false, 
-         skipped: true,
-         reason: `${tweetType} tweets are disabled`
-       }), {
-         headers: { ...corsHeaders, "Content-Type": "application/json" },
-       });
-     }
-
-     // Resolve token symbol/name if missing
-     let rawSymbol = (body.tokenSymbol || "").trim();
-     let needsLookup = !rawSymbol || rawSymbol === "TOKEN" || rawSymbol === "UNKNOWN";
-
-     // First: use DB (we already store token_symbol/token_name/twitter_url on the position)
-     if (needsLookup && body.txSignature) {
-       const { data, error } = await supabase
-         .from("flip_positions")
-         .select("token_symbol, token_name, twitter_url, token_mint")
-         .or(`buy_signature.eq.${body.txSignature},sell_signature.eq.${body.txSignature}`)
-         .order("created_at", { ascending: false })
-         .limit(1)
-         .maybeSingle();
-
-       if (error) {
-         console.warn("DB symbol lookup failed:", error);
-       } else if (data) {
-         if (data.token_symbol) body.tokenSymbol = data.token_symbol;
-         if (data.token_name) body.tokenName = body.tokenName || data.token_name;
-         if (data.twitter_url) body.twitterUrl = data.twitter_url;
-         if (data.token_mint) body.tokenMint = body.tokenMint || data.token_mint;
-         console.log("Resolved token info from DB:", { symbol: body.tokenSymbol, twitterUrl: body.twitterUrl, tokenMint: body.tokenMint });
-       }
-
-       rawSymbol = (body.tokenSymbol || "").trim();
-       needsLookup = !rawSymbol || rawSymbol === "TOKEN" || rawSymbol === "UNKNOWN";
-     }
-     
-     // Also try to fetch position data by positionId if provided
-     if (body.positionId && (!body.twitterUrl || !body.tokenMint)) {
-       const { data: posData } = await supabase
-         .from("flip_positions")
-         .select("token_symbol, token_name, twitter_url, token_mint")
-         .eq("id", body.positionId)
-         .single();
-       
-       if (posData) {
-         if (!body.tokenSymbol && posData.token_symbol) body.tokenSymbol = posData.token_symbol;
-         if (!body.tokenName && posData.token_name) body.tokenName = posData.token_name;
-         if (!body.twitterUrl && posData.twitter_url) body.twitterUrl = posData.twitter_url;
-         if (!body.tokenMint && posData.token_mint) body.tokenMint = posData.token_mint;
-         console.log("Resolved token info from positionId:", { twitterUrl: body.twitterUrl, tokenMint: body.tokenMint });
-       }
-     }
-
-     // Fallback: external lookup by mint
-     if (needsLookup && body.tokenMint) {
-       const meta = await fetchTokenInfo(body.tokenMint);
-       if (meta?.symbol) {
-         body.tokenSymbol = meta.symbol;
-         body.tokenName = body.tokenName || meta.name;
-         console.log("Resolved token info:", { tokenMint: body.tokenMint, symbol: body.tokenSymbol });
-       }
-     }
-     
-     // Merge normalized values back into body for buildTweetText
-     body.type = tweetType;
-     body.entryPrice = entryPrice;
-     body.exitPrice = exitPrice;
-     
-     const tweetText = buildTweetText(template, body);
-     console.log("Generated tweet text:", tweetText);
+    // Normalize: accept either 'type' or 'eventType', and 'entryPrice' or 'buyPriceUsd'
+    const tweetType = body.type || body.eventType || 'buy';
+    const entryPrice = body.entryPrice ?? body.buyPriceUsd;
+    const exitPrice = body.exitPrice ?? body.sellPriceUsd;
     
+    // Get tweet settings
+    const settings = await getTweetSettings(supabase);
+    console.log("Tweet settings:", settings);
+    
+    // Check if tweets are globally enabled
+    if (!settings.tweets_enabled) {
+      console.log("Tweets are globally disabled");
+      return new Response(JSON.stringify({ 
+        success: false, 
+        skipped: true,
+        reason: "Tweets are globally disabled"
+      }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+    
+    // Skip rebuy tweets if configured
+    if (tweetType === 'rebuy' && settings.skip_rebuy_tweets) {
+      console.log("Rebuy tweets are disabled");
+      return new Response(JSON.stringify({ 
+        success: false, 
+        skipped: true,
+        reason: "Rebuy tweets are disabled"
+      }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+    
+    // For sells, check minimum profit threshold
+    if (tweetType === 'sell' && !body.forceTweet) {
+      const profitPct = body.profitPercent || 0;
+      // Only tweet if profit exceeds threshold OR if it's a significant loss (< -50%)
+      if (profitPct < settings.min_profit_to_tweet && profitPct > -50) {
+        console.log(`Profit ${profitPct}% below threshold ${settings.min_profit_to_tweet}%`);
+        return new Response(JSON.stringify({ 
+          success: false, 
+          skipped: true,
+          reason: `Profit ${profitPct.toFixed(1)}% below minimum ${settings.min_profit_to_tweet}% threshold`
+        }), {
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+    }
+    
+    // Check quota (rate limiting) unless forceTweet is set
+    if (!body.forceTweet) {
+      const quotaCheck = await checkQuota(supabase, settings);
+      if (!quotaCheck.canTweet) {
+        console.log(`Tweet skipped: ${quotaCheck.reason}`);
+        return new Response(JSON.stringify({ 
+          success: false, 
+          skipped: true,
+          reason: quotaCheck.reason,
+          currentCount: quotaCheck.currentCount,
+          limit: quotaCheck.limit
+        }), {
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+    }
+   
+    // Get template from database
+    const { text: template, enabled } = await getTemplate(supabase, tweetType);
+    
+    if (!enabled) {
+      console.log(`Tweeting disabled for ${tweetType}`);
+      return new Response(JSON.stringify({ 
+        success: false, 
+        skipped: true,
+        reason: `${tweetType} tweets are disabled`
+      }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    // Resolve token symbol/name if missing
+    let rawSymbol = (body.tokenSymbol || "").trim();
+    let needsLookup = !rawSymbol || rawSymbol === "TOKEN" || rawSymbol === "UNKNOWN";
+
+    // First: use DB (we already store token_symbol/token_name/twitter_url on the position)
+    if (needsLookup && body.txSignature) {
+      const { data, error } = await supabase
+        .from("flip_positions")
+        .select("token_symbol, token_name, twitter_url, token_mint")
+        .or(`buy_signature.eq.${body.txSignature},sell_signature.eq.${body.txSignature}`)
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      if (error) {
+        console.warn("DB symbol lookup failed:", error);
+      } else if (data) {
+        if (data.token_symbol) body.tokenSymbol = data.token_symbol;
+        if (data.token_name) body.tokenName = body.tokenName || data.token_name;
+        if (data.twitter_url) body.twitterUrl = data.twitter_url;
+        if (data.token_mint) body.tokenMint = body.tokenMint || data.token_mint;
+        console.log("Resolved token info from DB:", { symbol: body.tokenSymbol, twitterUrl: body.twitterUrl, tokenMint: body.tokenMint });
+      }
+
+      rawSymbol = (body.tokenSymbol || "").trim();
+      needsLookup = !rawSymbol || rawSymbol === "TOKEN" || rawSymbol === "UNKNOWN";
+    }
+    
+    // Also try to fetch position data by positionId if provided
+    if (body.positionId && (!body.twitterUrl || !body.tokenMint)) {
+      const { data: posData } = await supabase
+        .from("flip_positions")
+        .select("token_symbol, token_name, twitter_url, token_mint")
+        .eq("id", body.positionId)
+        .single();
+      
+      if (posData) {
+        if (!body.tokenSymbol && posData.token_symbol) body.tokenSymbol = posData.token_symbol;
+        if (!body.tokenName && posData.token_name) body.tokenName = posData.token_name;
+        if (!body.twitterUrl && posData.twitter_url) body.twitterUrl = posData.twitter_url;
+        if (!body.tokenMint && posData.token_mint) body.tokenMint = posData.token_mint;
+        console.log("Resolved token info from positionId:", { twitterUrl: body.twitterUrl, tokenMint: body.tokenMint });
+      }
+    }
+
+    // Fallback: external lookup by mint
+    if (needsLookup && body.tokenMint) {
+      const meta = await fetchTokenInfo(body.tokenMint);
+      if (meta?.symbol) {
+        body.tokenSymbol = meta.symbol;
+        body.tokenName = body.tokenName || meta.name;
+        console.log("Resolved token info:", { tokenMint: body.tokenMint, symbol: body.tokenSymbol });
+      }
+    }
+    
+    // Merge normalized values back into body for buildTweetText
+    body.type = tweetType;
+    body.entryPrice = entryPrice;
+    body.exitPrice = exitPrice;
+    
+    const tweetText = buildTweetText(template, body);
+    console.log("Generated tweet text:", tweetText);
+   
     const result = await sendTweet(tweetText);
+    
+    // Increment quota after successful tweet
+    await incrementQuota(supabase);
     
     return new Response(JSON.stringify({ 
       success: true, 
