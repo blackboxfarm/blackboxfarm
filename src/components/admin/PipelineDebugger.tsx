@@ -260,20 +260,45 @@ export default function PipelineDebugger() {
 
     try {
       const actionMap: Record<number, string> = {
-        1: 'run_discovery',
-        2: 'run_intake',
+        1: 'run_discovery_and_intake', // Step 1 now triggers combined discovery+intake
+        2: 'run_discovery_and_intake', // Step 2 also uses combined action
         3: 'get_watchlist_status',
         4: 'run_qualification',
         5: 'run_dev_checks',
         6: 'get_buy_queue',
         7: 'get_positions'
       };
+      
+      const action = actionMap[stepId];
 
       const { data, error } = await supabase.functions.invoke('pumpfun-pipeline-debugger', {
-        body: { action: actionMap[stepId] }
+        body: { action }
       });
 
       if (error) throw error;
+      
+      // Handle combined discovery+intake response
+      if (action === 'run_discovery_and_intake' && data.discovery && data.intake) {
+        // Update both steps
+        setStepResults(prev => {
+          const next = new Map(prev);
+          next.set(1, {
+            step: 1,
+            status: 'completed',
+            data: data.discovery,
+            durationMs: Date.now() - startTime
+          });
+          next.set(2, {
+            step: 2,
+            status: 'completed',
+            data: data.intake,
+            durationMs: Date.now() - startTime
+          });
+          return next;
+        });
+        setExpandedSteps(prev => new Set([...prev, 1, 2]));
+        return data;
+      }
 
       setStepResults(prev => new Map(prev).set(stepId, {
         step: stepId,
@@ -309,17 +334,62 @@ export default function PipelineDebugger() {
     setCurrentStep(0);
   }, [runStepSilent]);
 
-  // Discovery loop: Step 1 + Step 2 combined
+  // Discovery loop: Combined Step 1 + Step 2 in single call
   const runDiscoveryLoop = useCallback(async () => {
-    console.log('🔄 Discovery loop tick');
+    console.log('🔄 Discovery loop tick (combined discovery + intake)');
     setDiscoveryPollCount(c => c + 1);
     
-    // Run discovery (step 1)
-    await runStepSilent(1, false);
+    // Set both steps to running
+    setStepResults(prev => {
+      const next = new Map(prev);
+      next.set(1, { step: 1, status: 'running', data: prev.get(1)?.data || null });
+      next.set(2, { step: 2, status: 'running', data: prev.get(2)?.data || null });
+      return next;
+    });
     
-    // Immediately run intake (step 2) to process discovered tokens
-    await runStepSilent(2, false);
-  }, [runStepSilent]);
+    const startTime = Date.now();
+    
+    try {
+      // Call combined endpoint
+      const { data, error } = await supabase.functions.invoke('pumpfun-pipeline-debugger', {
+        body: { action: 'run_discovery_and_intake' }
+      });
+      
+      if (error) throw error;
+      
+      const duration = Date.now() - startTime;
+      
+      // Update both steps with their respective data
+      setStepResults(prev => {
+        const next = new Map(prev);
+        next.set(1, {
+          step: 1,
+          status: 'completed',
+          data: data.discovery,
+          durationMs: duration
+        });
+        next.set(2, {
+          step: 2,
+          status: 'completed',
+          data: data.intake,
+          durationMs: duration
+        });
+        return next;
+      });
+      
+      // Expand both steps
+      setExpandedSteps(prev => new Set([...prev, 1, 2]));
+    } catch (err: any) {
+      console.error('Discovery+Intake error:', err);
+      const duration = Date.now() - startTime;
+      setStepResults(prev => {
+        const next = new Map(prev);
+        next.set(1, { step: 1, status: 'error', data: prev.get(1)?.data || null, error: err.message, durationMs: duration });
+        next.set(2, { step: 2, status: 'error', data: prev.get(2)?.data || null, error: err.message, durationMs: duration });
+        return next;
+      });
+    }
+  }, []);
 
   // Monitor loop: Step 3
   const runMonitorLoop = useCallback(async () => {
