@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -6,10 +6,12 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/component
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
+import { Switch } from '@/components/ui/switch';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import {
   Play,
+  Pause,
   ChevronRight,
   ChevronDown,
   CheckCircle2,
@@ -43,6 +45,11 @@ import {
   ShieldX,
 } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
+
+// Polling intervals
+const DISCOVERY_POLL_INTERVAL = 30000; // 30 seconds for Step 1+2
+const MONITOR_POLL_INTERVAL = 30000; // 30 seconds for Step 3
+const QUALIFICATION_POLL_INTERVAL = 60000; // 60 seconds for Step 4
 
 // Pattern icons mapping
 const PATTERN_ICONS: Record<string, { icon: React.ElementType; color: string; label: string }> = {
@@ -178,6 +185,21 @@ export default function PipelineDebugger() {
   const [expandedSteps, setExpandedSteps] = useState<Set<number>>(new Set([1]));
   const [isRunning, setIsRunning] = useState(false);
   const [currentStep, setCurrentStep] = useState<number>(0);
+  
+  // Polling loop states
+  const [discoveryLoopActive, setDiscoveryLoopActive] = useState(false);
+  const [monitorLoopActive, setMonitorLoopActive] = useState(false);
+  const [qualificationLoopActive, setQualificationLoopActive] = useState(false);
+  
+  // Poll counters for UI
+  const [discoveryPollCount, setDiscoveryPollCount] = useState(0);
+  const [monitorPollCount, setMonitorPollCount] = useState(0);
+  const [qualificationPollCount, setQualificationPollCount] = useState(0);
+  
+  // Refs for interval cleanup
+  const discoveryIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const monitorIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const qualificationIntervalRef = useRef<NodeJS.Timeout | null>(null);
 
   const toggleStep = (stepId: number) => {
     setExpandedSteps(prev => {
@@ -191,14 +213,12 @@ export default function PipelineDebugger() {
     });
   };
 
-  const runStep = useCallback(async (stepId: number) => {
-    setIsRunning(true);
-    setCurrentStep(stepId);
-
+  // Silent run step (no toasts, for loop polling)
+  const runStepSilent = useCallback(async (stepId: number, showToast = true) => {
     setStepResults(prev => new Map(prev).set(stepId, {
       step: stepId,
       status: 'running',
-      data: null
+      data: prev.get(stepId)?.data || null // Keep previous data while loading
     }));
 
     const startTime = Date.now();
@@ -228,26 +248,127 @@ export default function PipelineDebugger() {
       }));
 
       setExpandedSteps(prev => new Set(prev).add(stepId));
-      toast.success(`Step ${stepId} completed`);
+      return data;
     } catch (err: any) {
       console.error(`Step ${stepId} error:`, err);
       setStepResults(prev => new Map(prev).set(stepId, {
         step: stepId,
         status: 'error',
-        data: null,
+        data: prev.get(stepId)?.data || null,
         error: err.message,
         durationMs: Date.now() - startTime
       }));
-      toast.error(`Step ${stepId} failed: ${err.message}`);
-    } finally {
-      setIsRunning(false);
-      setCurrentStep(0);
+      if (showToast) {
+        toast.error(`Step ${stepId} failed: ${err.message}`);
+      }
+      return null;
     }
   }, []);
 
+  const runStep = useCallback(async (stepId: number) => {
+    setIsRunning(true);
+    setCurrentStep(stepId);
+    await runStepSilent(stepId, true);
+    toast.success(`Step ${stepId} completed`);
+    setIsRunning(false);
+    setCurrentStep(0);
+  }, [runStepSilent]);
+
+  // Discovery loop: Step 1 + Step 2 combined
+  const runDiscoveryLoop = useCallback(async () => {
+    console.log('🔄 Discovery loop tick');
+    setDiscoveryPollCount(c => c + 1);
+    
+    // Run discovery (step 1)
+    await runStepSilent(1, false);
+    
+    // Immediately run intake (step 2) to process discovered tokens
+    await runStepSilent(2, false);
+  }, [runStepSilent]);
+
+  // Monitor loop: Step 3
+  const runMonitorLoop = useCallback(async () => {
+    console.log('🔄 Monitor loop tick');
+    setMonitorPollCount(c => c + 1);
+    await runStepSilent(3, false);
+  }, [runStepSilent]);
+
+  // Qualification loop: Step 4
+  const runQualificationLoop = useCallback(async () => {
+    console.log('🔄 Qualification loop tick');
+    setQualificationPollCount(c => c + 1);
+    await runStepSilent(4, false);
+  }, [runStepSilent]);
+
+  // Toggle discovery loop (Step 1+2)
+  const toggleDiscoveryLoop = useCallback(() => {
+    if (discoveryLoopActive) {
+      // Stop
+      if (discoveryIntervalRef.current) {
+        clearInterval(discoveryIntervalRef.current);
+        discoveryIntervalRef.current = null;
+      }
+      setDiscoveryLoopActive(false);
+      toast.info('Discovery loop stopped');
+    } else {
+      // Start - run immediately then set interval
+      setDiscoveryLoopActive(true);
+      setDiscoveryPollCount(0);
+      runDiscoveryLoop();
+      discoveryIntervalRef.current = setInterval(runDiscoveryLoop, DISCOVERY_POLL_INTERVAL);
+      toast.success(`Discovery loop started (every ${DISCOVERY_POLL_INTERVAL / 1000}s)`);
+    }
+  }, [discoveryLoopActive, runDiscoveryLoop]);
+
+  // Toggle monitor loop (Step 3)
+  const toggleMonitorLoop = useCallback(() => {
+    if (monitorLoopActive) {
+      if (monitorIntervalRef.current) {
+        clearInterval(monitorIntervalRef.current);
+        monitorIntervalRef.current = null;
+      }
+      setMonitorLoopActive(false);
+      toast.info('Monitor loop stopped');
+    } else {
+      setMonitorLoopActive(true);
+      setMonitorPollCount(0);
+      runMonitorLoop();
+      monitorIntervalRef.current = setInterval(runMonitorLoop, MONITOR_POLL_INTERVAL);
+      toast.success(`Monitor loop started (every ${MONITOR_POLL_INTERVAL / 1000}s)`);
+    }
+  }, [monitorLoopActive, runMonitorLoop]);
+
+  // Toggle qualification loop (Step 4)
+  const toggleQualificationLoop = useCallback(() => {
+    if (qualificationLoopActive) {
+      if (qualificationIntervalRef.current) {
+        clearInterval(qualificationIntervalRef.current);
+        qualificationIntervalRef.current = null;
+      }
+      setQualificationLoopActive(false);
+      toast.info('Qualification loop stopped');
+    } else {
+      setQualificationLoopActive(true);
+      setQualificationPollCount(0);
+      runQualificationLoop();
+      qualificationIntervalRef.current = setInterval(runQualificationLoop, QUALIFICATION_POLL_INTERVAL);
+      toast.success(`Qualification loop started (every ${QUALIFICATION_POLL_INTERVAL / 1000}s)`);
+    }
+  }, [qualificationLoopActive, runQualificationLoop]);
+
+  // Cleanup on unmount
   useEffect(() => {
-    void runStep(1);
-  }, [runStep]);
+    return () => {
+      if (discoveryIntervalRef.current) clearInterval(discoveryIntervalRef.current);
+      if (monitorIntervalRef.current) clearInterval(monitorIntervalRef.current);
+      if (qualificationIntervalRef.current) clearInterval(qualificationIntervalRef.current);
+    };
+  }, []);
+
+  // Initial load
+  useEffect(() => {
+    void runStepSilent(1, false);
+  }, [runStepSilent]);
 
   const runFullPipeline = async () => {
     setIsRunning(true);
@@ -1212,8 +1333,23 @@ export default function PipelineDebugger() {
           const isExpanded = expandedSteps.has(step.id);
           const StepIcon = step.icon;
 
+          // Determine if this step has a loop toggle
+          const hasLoopToggle = step.id === 1 || step.id === 3 || step.id === 4;
+          const isLoopActive = step.id === 1 ? discoveryLoopActive : 
+                               step.id === 3 ? monitorLoopActive : 
+                               step.id === 4 ? qualificationLoopActive : false;
+          const pollCount = step.id === 1 ? discoveryPollCount : 
+                            step.id === 3 ? monitorPollCount : 
+                            step.id === 4 ? qualificationPollCount : 0;
+          const toggleLoop = step.id === 1 ? toggleDiscoveryLoop : 
+                             step.id === 3 ? toggleMonitorLoop : 
+                             step.id === 4 ? toggleQualificationLoop : () => {};
+          const intervalSec = step.id === 1 ? DISCOVERY_POLL_INTERVAL / 1000 : 
+                              step.id === 3 ? MONITOR_POLL_INTERVAL / 1000 : 
+                              step.id === 4 ? QUALIFICATION_POLL_INTERVAL / 1000 : 0;
+
           return (
-            <Card key={step.id} className={`border transition-colors ${currentStep === step.id ? 'border-primary' : ''}`}>
+            <Card key={step.id} className={`border transition-colors ${currentStep === step.id ? 'border-primary' : ''} ${isLoopActive ? 'border-green-500/50 bg-green-500/5' : ''}`}>
               <Collapsible open={isExpanded} onOpenChange={() => toggleStep(step.id)}>
                 <CardHeader className="pb-3">
                   <div className="flex items-center justify-between">
@@ -1230,13 +1366,40 @@ export default function PipelineDebugger() {
                           {result.durationMs}ms
                         </span>
                       )}
+                      {isLoopActive && (
+                        <Badge variant="default" className="bg-green-500 text-white gap-1 animate-pulse">
+                          <RefreshCw className="h-3 w-3 animate-spin" />
+                          Polling #{pollCount}
+                        </Badge>
+                      )}
                     </CollapsibleTrigger>
-                    <Button size="sm" onClick={() => runStep(step.id)} disabled={isRunning} className="gap-2">
-                      {currentStep === step.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <Play className="h-4 w-4" />}
-                      Run Step {step.id}
-                    </Button>
+                    <div className="flex items-center gap-2">
+                      {hasLoopToggle && (
+                        <div className="flex items-center gap-2 mr-2">
+                          <span className="text-xs text-muted-foreground">{intervalSec}s loop</span>
+                          <Switch
+                            checked={isLoopActive}
+                            onCheckedChange={toggleLoop}
+                            className="data-[state=checked]:bg-green-500"
+                          />
+                        </div>
+                      )}
+                      <Button 
+                        size="sm" 
+                        variant={isLoopActive ? "outline" : "default"}
+                        onClick={() => runStep(step.id)} 
+                        disabled={isRunning || isLoopActive} 
+                        className="gap-2"
+                      >
+                        {result?.status === 'running' ? <Loader2 className="h-4 w-4 animate-spin" /> : <Play className="h-4 w-4" />}
+                        {step.id === 1 ? 'Run Once' : `Run Step ${step.id}`}
+                      </Button>
+                    </div>
                   </div>
-                  <p className="text-sm text-muted-foreground mt-2 pl-7">{step.description}</p>
+                  <p className="text-sm text-muted-foreground mt-2 pl-7">
+                    {step.description}
+                    {step.id === 1 && ' (includes Step 2 Intake when looping)'}
+                  </p>
                 </CardHeader>
 
                 <CollapsibleContent>
