@@ -315,12 +315,25 @@ async function runDiscovery(supabase: any): Promise<any> {
 
 // Step 2: Intake Filtering - Apply filters + DURABLE REJECTION MEMORY
 // IMPROVED: Duplicate detection now uses pumpfun_seen_symbols table and records all rejects
-async function runIntake(supabase: any): Promise<any> {
+// Can optionally receive pre-discovered tokens to avoid re-running discovery
+async function runIntake(supabase: any, preDiscoveredTokens?: any[], preBatchId?: string): Promise<any> {
   console.log('[Step 2] Running intake filtering with DURABLE REJECTION MEMORY');
 
-  const discovery = await runDiscovery(supabase);
-  const tokens = discovery.tokens || [];
-  const batchId = discovery.batchId || `batch_${Date.now()}`;
+  // Use pre-discovered tokens if provided, otherwise run discovery
+  let tokens: any[];
+  let batchId: string;
+  let discoveryResult: any = null;
+  
+  if (preDiscoveredTokens && preDiscoveredTokens.length > 0) {
+    console.log(`[Step 2] Using ${preDiscoveredTokens.length} pre-discovered tokens`);
+    tokens = preDiscoveredTokens;
+    batchId = preBatchId || `batch_${Date.now()}`;
+  } else {
+    console.log('[Step 2] No pre-discovered tokens, running discovery first');
+    discoveryResult = await runDiscovery(supabase);
+    tokens = discoveryResult.tokens || [];
+    batchId = discoveryResult.batchId || `batch_${Date.now()}`;
+  }
 
   const passed: any[] = [];
   const rejected: any[] = [];
@@ -509,8 +522,17 @@ async function runIntake(supabase: any): Promise<any> {
     await supabase.from('pumpfun_rejection_events').insert(rejectionsToInsert);
   }
 
+  // Get monitor status
+  let monitorEnabled = false;
+  if (discoveryResult) {
+    monitorEnabled = discoveryResult.monitorEnabled;
+  } else {
+    const { data: cfg } = await supabase.from('pumpfun_monitor_config').select('is_enabled').limit(1).single();
+    monitorEnabled = cfg?.is_enabled ?? false;
+  }
+
   return {
-    monitorEnabled: discovery.monitorEnabled,
+    monitorEnabled,
     inputCount: tokens.length,
     passedCount: passed.length,
     rejectedCount: rejected.length,
@@ -521,6 +543,24 @@ async function runIntake(supabase: any): Promise<any> {
     passed,
     rejected,
     batchId,
+  };
+}
+
+// Combined Step 1+2: Discovery + Intake in one call to avoid race conditions
+async function runDiscoveryAndIntake(supabase: any): Promise<any> {
+  console.log('[Step 1+2] Running combined discovery and intake');
+  
+  // Step 1: Run discovery
+  const discoveryResult = await runDiscovery(supabase);
+  const tokens = discoveryResult.tokens || [];
+  const batchId = discoveryResult.batchId;
+  
+  // Step 2: Run intake with the discovered tokens (avoiding re-discovery)
+  const intakeResult = await runIntake(supabase, tokens, batchId);
+  
+  return {
+    discovery: discoveryResult,
+    intake: intakeResult,
   };
 }
 
@@ -1391,6 +1431,9 @@ serve(async (req) => {
         break;
       case 'run_intake':
         result = await runIntake(supabase);
+        break;
+      case 'run_discovery_and_intake':
+        result = await runDiscoveryAndIntake(supabase);
         break;
       case 'get_watchlist_status':
         result = await getWatchlistStatus(supabase);
