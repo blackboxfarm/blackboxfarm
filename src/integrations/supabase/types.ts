@@ -4976,6 +4976,51 @@ export type Database = {
         }
         Relationships: []
       }
+      pumpfun_metric_snapshots: {
+        Row: {
+          bonding_curve_pct: number | null
+          buys: number | null
+          captured_at: string
+          holder_count: number | null
+          id: string
+          liquidity_usd: number | null
+          market_cap_usd: number | null
+          price_usd: number | null
+          sells: number | null
+          token_mint: string
+          tx_count: number | null
+          volume_sol: number | null
+        }
+        Insert: {
+          bonding_curve_pct?: number | null
+          buys?: number | null
+          captured_at?: string
+          holder_count?: number | null
+          id?: string
+          liquidity_usd?: number | null
+          market_cap_usd?: number | null
+          price_usd?: number | null
+          sells?: number | null
+          token_mint: string
+          tx_count?: number | null
+          volume_sol?: number | null
+        }
+        Update: {
+          bonding_curve_pct?: number | null
+          buys?: number | null
+          captured_at?: string
+          holder_count?: number | null
+          id?: string
+          liquidity_usd?: number | null
+          market_cap_usd?: number | null
+          price_usd?: number | null
+          sells?: number | null
+          token_mint?: string
+          tx_count?: number | null
+          volume_sol?: number | null
+        }
+        Relationships: []
+      }
       pumpfun_monitor_config: {
         Row: {
           active_watchdog_count: number | null
@@ -5225,6 +5270,87 @@ export type Database = {
         }
         Relationships: []
       }
+      pumpfun_rejection_events: {
+        Row: {
+          batch_id: string | null
+          creator_wallet: string | null
+          detail: string | null
+          detected_at: string
+          id: string
+          reason: string
+          source: string | null
+          symbol_lower: string | null
+          symbol_original: string | null
+          token_mint: string
+          token_name: string | null
+        }
+        Insert: {
+          batch_id?: string | null
+          creator_wallet?: string | null
+          detail?: string | null
+          detected_at?: string
+          id?: string
+          reason: string
+          source?: string | null
+          symbol_lower?: string | null
+          symbol_original?: string | null
+          token_mint: string
+          token_name?: string | null
+        }
+        Update: {
+          batch_id?: string | null
+          creator_wallet?: string | null
+          detail?: string | null
+          detected_at?: string
+          id?: string
+          reason?: string
+          source?: string | null
+          symbol_lower?: string | null
+          symbol_original?: string | null
+          token_mint?: string
+          token_name?: string | null
+        }
+        Relationships: []
+      }
+      pumpfun_seen_symbols: {
+        Row: {
+          block_reason: string | null
+          created_at: string
+          first_seen_at: string
+          first_token_mint: string | null
+          id: string
+          last_seen_at: string
+          seen_count: number
+          status: string
+          symbol_lower: string
+          symbol_original: string
+        }
+        Insert: {
+          block_reason?: string | null
+          created_at?: string
+          first_seen_at?: string
+          first_token_mint?: string | null
+          id?: string
+          last_seen_at?: string
+          seen_count?: number
+          status?: string
+          symbol_lower: string
+          symbol_original: string
+        }
+        Update: {
+          block_reason?: string | null
+          created_at?: string
+          first_seen_at?: string
+          first_token_mint?: string | null
+          id?: string
+          last_seen_at?: string
+          seen_count?: number
+          status?: string
+          symbol_lower?: string
+          symbol_original?: string
+        }
+        Relationships: []
+      }
       pumpfun_trade_learnings: {
         Row: {
           ai_insights: string | null
@@ -5335,6 +5461,7 @@ export type Database = {
           buy_attempted_at: string | null
           buy_error: string | null
           buy_executed_at: string | null
+          buy_pressure_3m: number | null
           buy_tx_signature: string | null
           check_count: number
           consecutive_stale_checks: number | null
@@ -5350,6 +5477,7 @@ export type Database = {
           dev_launched_new: boolean | null
           dev_secondary_wallets: string[] | null
           dev_sold: boolean | null
+          dump_from_ath_pct: number | null
           fantasy_position_id: string | null
           first_10_buys_analyzed: boolean | null
           first_seen_at: string
@@ -5361,6 +5489,8 @@ export type Database = {
           holder_count: number | null
           holder_count_peak: number | null
           holder_count_prev: number | null
+          holders_delta_15m: number | null
+          holders_delta_3m: number | null
           id: string
           image_url: string | null
           insider_activity_detected: boolean | null
@@ -5369,6 +5499,7 @@ export type Database = {
           last_checked_at: string
           last_dev_check_at: string | null
           last_processor: string | null
+          last_snapshot_at: string | null
           linked_wallet_count: number | null
           liquidity_usd: number | null
           market_cap_sol: number | null
@@ -5381,6 +5512,8 @@ export type Database = {
           permanent_reject: boolean | null
           price_at_mint: number | null
           price_ath_usd: number | null
+          price_change_pct_15m: number | null
+          price_change_pct_3m: number | null
           price_current: number | null
           price_peak: number | null
           price_start_usd: number | null
@@ -5417,10 +5550,13 @@ export type Database = {
           token_mint: string
           token_name: string | null
           token_symbol: string | null
+          trend_status: string | null
           twitter_url: string | null
           tx_count: number | null
           updated_at: string
           volume_5m: number | null
+          volume_delta_15m: number | null
+          volume_delta_3m: number | null
           volume_sol: number | null
           volume_sol_prev: number | null
           was_spiked_and_killed: boolean | null
@@ -5437,6 +5573,7 @@ export type Database = {
           buy_attempted_at?: string | null
           buy_error?: string | null
           buy_executed_at?: string | null
+          buy_pressure_3m?: number | null
           buy_tx_signature?: string | null
           check_count?: number
           consecutive_stale_checks?: number | null
@@ -5452,6 +5589,7 @@ export type Database = {
           dev_launched_new?: boolean | null
           dev_secondary_wallets?: string[] | null
           dev_sold?: boolean | null
+          dump_from_ath_pct?: number | null
           fantasy_position_id?: string | null
           first_10_buys_analyzed?: boolean | null
           first_seen_at?: string
@@ -5463,6 +5601,8 @@ export type Database = {
           holder_count?: number | null
           holder_count_peak?: number | null
           holder_count_prev?: number | null
+          holders_delta_15m?: number | null
+          holders_delta_3m?: number | null
           id?: string
           image_url?: string | null
           insider_activity_detected?: boolean | null
@@ -5471,6 +5611,7 @@ export type Database = {
           last_checked_at?: string
           last_dev_check_at?: string | null
           last_processor?: string | null
+          last_snapshot_at?: string | null
           linked_wallet_count?: number | null
           liquidity_usd?: number | null
           market_cap_sol?: number | null
@@ -5483,6 +5624,8 @@ export type Database = {
           permanent_reject?: boolean | null
           price_at_mint?: number | null
           price_ath_usd?: number | null
+          price_change_pct_15m?: number | null
+          price_change_pct_3m?: number | null
           price_current?: number | null
           price_peak?: number | null
           price_start_usd?: number | null
@@ -5519,10 +5662,13 @@ export type Database = {
           token_mint: string
           token_name?: string | null
           token_symbol?: string | null
+          trend_status?: string | null
           twitter_url?: string | null
           tx_count?: number | null
           updated_at?: string
           volume_5m?: number | null
+          volume_delta_15m?: number | null
+          volume_delta_3m?: number | null
           volume_sol?: number | null
           volume_sol_prev?: number | null
           was_spiked_and_killed?: boolean | null
@@ -5539,6 +5685,7 @@ export type Database = {
           buy_attempted_at?: string | null
           buy_error?: string | null
           buy_executed_at?: string | null
+          buy_pressure_3m?: number | null
           buy_tx_signature?: string | null
           check_count?: number
           consecutive_stale_checks?: number | null
@@ -5554,6 +5701,7 @@ export type Database = {
           dev_launched_new?: boolean | null
           dev_secondary_wallets?: string[] | null
           dev_sold?: boolean | null
+          dump_from_ath_pct?: number | null
           fantasy_position_id?: string | null
           first_10_buys_analyzed?: boolean | null
           first_seen_at?: string
@@ -5565,6 +5713,8 @@ export type Database = {
           holder_count?: number | null
           holder_count_peak?: number | null
           holder_count_prev?: number | null
+          holders_delta_15m?: number | null
+          holders_delta_3m?: number | null
           id?: string
           image_url?: string | null
           insider_activity_detected?: boolean | null
@@ -5573,6 +5723,7 @@ export type Database = {
           last_checked_at?: string
           last_dev_check_at?: string | null
           last_processor?: string | null
+          last_snapshot_at?: string | null
           linked_wallet_count?: number | null
           liquidity_usd?: number | null
           market_cap_sol?: number | null
@@ -5585,6 +5736,8 @@ export type Database = {
           permanent_reject?: boolean | null
           price_at_mint?: number | null
           price_ath_usd?: number | null
+          price_change_pct_15m?: number | null
+          price_change_pct_3m?: number | null
           price_current?: number | null
           price_peak?: number | null
           price_start_usd?: number | null
@@ -5621,10 +5774,13 @@ export type Database = {
           token_mint?: string
           token_name?: string | null
           token_symbol?: string | null
+          trend_status?: string | null
           twitter_url?: string | null
           tx_count?: number | null
           updated_at?: string
           volume_5m?: number | null
+          volume_delta_15m?: number | null
+          volume_delta_3m?: number | null
           volume_sol?: number | null
           volume_sol_prev?: number | null
           was_spiked_and_killed?: boolean | null

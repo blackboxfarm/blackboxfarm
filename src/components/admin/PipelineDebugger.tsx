@@ -508,23 +508,42 @@ export default function PipelineDebugger() {
       case 1: // Discovery
         return (
           <div className="space-y-4">
-            <div className="grid grid-cols-3 gap-4">
+            {/* Monitor Status Banner */}
+            {data.monitorEnabled === false && (
+              <div className="p-3 rounded-lg bg-destructive/20 border border-destructive/40 text-destructive flex items-center gap-2">
+                <AlertTriangle className="h-5 w-5" />
+                <span className="font-medium">Backend Monitor DISABLED</span>
+                <span className="text-sm">- Enable in pumpfun_monitor_config to process tokens</span>
+              </div>
+            )}
+            {data.monitorEnabled === true && (
+              <div className="p-2 rounded-lg bg-green-500/20 border border-green-500/40 text-green-400 flex items-center gap-2">
+                <CheckCircle2 className="h-4 w-4" />
+                <span className="text-sm font-medium">Monitor ENABLED</span>
+              </div>
+            )}
+            
+            <div className="grid grid-cols-4 gap-4">
               <Card className="p-3">
                 <p className="text-xs text-muted-foreground">Source</p>
                 <p className="text-lg font-semibold">{data.source || 'API'}</p>
               </Card>
               <Card className="p-3">
-                <p className="text-xs text-muted-foreground">Tokens Fetched</p>
-                <p className="text-lg font-semibold text-primary">{data.fetchedCount || 0}</p>
+                <p className="text-xs text-muted-foreground">Fetched from API</p>
+                <p className="text-lg font-semibold">{data.fetchedCount || 0}</p>
+              </Card>
+              <Card className="p-3 border-green-500/30">
+                <p className="text-xs text-muted-foreground">NEW Tokens</p>
+                <p className="text-lg font-semibold text-green-500">{data.newCount || 0}</p>
               </Card>
               <Card className="p-3">
-                <p className="text-xs text-muted-foreground">Fetch Time</p>
-                <p className="text-lg font-semibold">{data.fetchTimeMs || 0}ms</p>
+                <p className="text-xs text-muted-foreground">Already Known</p>
+                <p className="text-lg font-semibold text-muted-foreground">{data.alreadyKnownCount || 0}</p>
               </Card>
             </div>
 
             <div className="space-y-2">
-              <p className="text-sm font-medium">Raw Tokens Discovered ({data.tokens?.length || 0})</p>
+              <p className="text-sm font-medium">NEW Tokens Discovered ({data.tokens?.length || 0})</p>
               <ScrollArea className="h-[400px] border rounded-lg">
                 <Table>
                   <TableHeader>
@@ -547,7 +566,15 @@ export default function PipelineDebugger() {
       case 2: // Intake
         return (
           <div className="space-y-4">
-            <div className="grid grid-cols-2 gap-4">
+            {/* Monitor Status Banner */}
+            {data.monitorEnabled === false && (
+              <div className="p-3 rounded-lg bg-destructive/20 border border-destructive/40 text-destructive flex items-center gap-2">
+                <AlertTriangle className="h-5 w-5" />
+                <span className="font-medium">Backend Monitor DISABLED</span>
+              </div>
+            )}
+            
+            <div className="grid grid-cols-4 gap-4">
               <Card className="p-3 border-green-500/30">
                 <p className="text-xs text-muted-foreground">Passed</p>
                 <p className="text-lg font-semibold text-green-500">{data.passedCount || 0}</p>
@@ -555,6 +582,14 @@ export default function PipelineDebugger() {
               <Card className="p-3 border-red-500/30">
                 <p className="text-xs text-muted-foreground">Rejected</p>
                 <p className="text-lg font-semibold text-red-500">{data.rejectedCount || 0}</p>
+              </Card>
+              <Card className="p-3 border-primary/30">
+                <p className="text-xs text-muted-foreground">Inserted to DB</p>
+                <p className="text-lg font-semibold text-primary">{data.insertedToWatchlist || 0}</p>
+              </Card>
+              <Card className="p-3 border-orange-500/30">
+                <p className="text-xs text-muted-foreground">Duplicate Nukes</p>
+                <p className="text-lg font-semibold text-orange-500">{data.duplicateNukes?.length || 0}</p>
               </Card>
             </div>
 

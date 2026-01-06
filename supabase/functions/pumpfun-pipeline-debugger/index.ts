@@ -190,44 +190,118 @@ const SIGNAL_SCORING = {
   pattern_spike_kill: { points: -30, description: 'Spike & kill pattern (BLACKLIST)', blacklist: true },
 };
 
-// Step 1: Token Discovery - Fetch newest tokens with full data
+// Fetch latest tokens from Solana Tracker API (REAL DISCOVERY)
+async function fetchLatestPumpfunTokens(limit = 100): Promise<any[]> {
+  const apiKey = Deno.env.get('SOLANA_TRACKER_API_KEY');
+  
+  try {
+    const response = await fetch(
+      `https://data.solanatracker.io/tokens/latest?market=pumpfun&limit=${limit}`,
+      {
+        headers: {
+          'x-api-key': apiKey || '',
+          'Accept': 'application/json',
+        },
+      }
+    );
+
+    if (!response.ok) {
+      console.error(`Solana Tracker API error: ${response.status}`);
+      return [];
+    }
+
+    const data = await response.json();
+    return Array.isArray(data) ? data : [];
+  } catch (error) {
+    console.error('Error fetching tokens:', error);
+    return [];
+  }
+}
+
+// Step 1: Token Discovery - REAL fetch from Solana Tracker API
 async function runDiscovery(supabase: any): Promise<any> {
-  console.log('[Step 1] Running token discovery (LIVE)');
+  console.log('[Step 1] Running REAL token discovery from Solana Tracker');
   const startTime = Date.now();
+  const batchId = `batch_${Date.now()}`;
 
   try {
-    const { data: tokens, error } = await supabase
+    // Check monitor status
+    const { data: config } = await supabase
+      .from('pumpfun_monitor_config')
+      .select('is_enabled')
+      .single();
+    
+    const isEnabled = config?.is_enabled ?? false;
+
+    // Fetch NEW tokens from Solana Tracker API
+    const apiTokens = await fetchLatestPumpfunTokens(100);
+    console.log(`[Step 1] Fetched ${apiTokens.length} tokens from API`);
+
+    if (apiTokens.length === 0) {
+      return {
+        source: 'SolanaTracker API',
+        monitorEnabled: isEnabled,
+        fetchedCount: 0,
+        newCount: 0,
+        alreadyKnownCount: 0,
+        fetchTimeMs: Date.now() - startTime,
+        tokens: [],
+        batchId,
+      };
+    }
+
+    // Get mints from API
+    const apiMints = apiTokens.map(t => t.token?.mint).filter(Boolean) as string[];
+
+    // Check which ones we already know about
+    const { data: existingTokens } = await supabase
       .from('pumpfun_watchlist')
-      .select('token_mint, token_symbol, token_name, market_cap_sol, created_at, created_at_blockchain, status, creator_wallet, holder_count, volume_sol')
-      .order('created_at', { ascending: false })
-      .limit(100);
+      .select('token_mint')
+      .in('token_mint', apiMints);
 
-    if (error) throw error;
+    const existingMints = new Set((existingTokens || []).map((t: any) => t.token_mint));
+    const alreadyKnownCount = existingMints.size;
 
-    const formattedTokens = (tokens || []).map((t: any) => ({
-      mint: t.token_mint,
-      symbol: t.token_symbol || '',
-      name: t.token_name || '',
-      marketCapSol: t.market_cap_sol || 0,
-      status: t.status,
-      createdAt: t.created_at,
-      createdAtBlockchain: t.created_at_blockchain,
-      creatorWallet: t.creator_wallet,
-      holderCount: t.holder_count,
-      volumeSol: t.volume_sol,
+    // Filter to only NEW tokens
+    const newApiTokens = apiTokens.filter(t => t.token?.mint && !existingMints.has(t.token.mint));
+    console.log(`[Step 1] Found ${newApiTokens.length} NEW tokens (${alreadyKnownCount} already known)`);
+
+    const formattedTokens = newApiTokens.map((t: any) => ({
+      mint: t.token?.mint,
+      symbol: t.token?.symbol || '',
+      name: t.token?.name || '',
+      marketCapSol: 0,
+      status: 'new',
+      createdAt: new Date().toISOString(),
+      createdAtBlockchain: t.events?.createdAt ? new Date(t.events.createdAt * 1000).toISOString() : null,
+      creatorWallet: t.creator,
+      holderCount: t.holders || 0,
+      volumeSol: t.pools?.[0]?.volume?.h24 || 0,
+      priceUsd: t.pools?.[0]?.price?.usd,
+      liquidityUsd: t.pools?.[0]?.liquidity?.usd,
+      buys: t.buys || 0,
+      sells: t.sells || 0,
+      isNew: true,
     }));
 
     return {
-      source: 'pumpfun_watchlist (WebSocket)',
-      fetchedCount: formattedTokens.length,
+      source: 'SolanaTracker API',
+      monitorEnabled: isEnabled,
+      fetchedCount: apiTokens.length,
+      newCount: newApiTokens.length,
+      alreadyKnownCount,
       fetchTimeMs: Date.now() - startTime,
       tokens: formattedTokens,
+      batchId,
     };
   } catch (err: any) {
     console.error('[Step 1] Discovery error:', err);
     return {
-      source: 'pumpfun_watchlist',
+      source: 'SolanaTracker API',
+      monitorEnabled: false,
       fetchedCount: 0,
+      newCount: 0,
+      alreadyKnownCount: 0,
       fetchTimeMs: Date.now() - startTime,
       tokens: [],
       error: err?.message ?? String(err),
@@ -235,21 +309,31 @@ async function runDiscovery(supabase: any): Promise<any> {
   }
 }
 
-// Step 2: Intake Filtering - Apply filters in priority order
-// IMPROVED: Duplicate detection now removes ALL case-insensitive duplicates including first occurrence
+// Step 2: Intake Filtering - Apply filters + DURABLE REJECTION MEMORY
+// IMPROVED: Duplicate detection now uses pumpfun_seen_symbols table and records all rejects
 async function runIntake(supabase: any): Promise<any> {
-  console.log('[Step 2] Running intake filtering (LIVE)');
+  console.log('[Step 2] Running intake filtering with DURABLE REJECTION MEMORY');
 
   const discovery = await runDiscovery(supabase);
   const tokens = discovery.tokens || [];
+  const batchId = discovery.batchId || `batch_${Date.now()}`;
 
   const passed: any[] = [];
   const rejected: any[] = [];
+  const duplicateNukes: string[] = [];
+  let insertedCount = 0;
   
   const filterBreakdown: Record<string, { count: number; order: number; description: string }> = {};
   Object.entries(FILTER_CONFIG).forEach(([key, config]) => {
     filterBreakdown[key] = { count: 0, order: config.order, description: config.description };
   });
+
+  // Get existing symbols from durable memory (pumpfun_seen_symbols)
+  const { data: seenSymbols } = await supabase
+    .from('pumpfun_seen_symbols')
+    .select('symbol_lower, status, block_reason');
+  
+  const seenSymbolsMap = new Map((seenSymbols || []).map((s: any) => [s.symbol_lower, s]));
 
   // Get existing tokens from DB (already curated) - case-insensitive symbol lookup
   const { data: watchlist } = await supabase
@@ -258,11 +342,9 @@ async function runIntake(supabase: any): Promise<any> {
     .in('status', ['watching', 'qualified', 'bought', 'pending_triage']);
 
   const existingMints = new Set((watchlist || []).map((w: any) => w.token_mint));
-  // Build case-insensitive set of existing symbols
   const existingSymbolsLower = new Set((watchlist || []).map((w: any) => (w.token_symbol || '').toLowerCase()));
 
   // STEP 1: Find ALL duplicate tickers within the batch (case-insensitive)
-  // Count occurrences of each ticker (case-insensitive)
   const tickerCounts: Record<string, number> = {};
   for (const token of tokens) {
     if (token.symbol) {
@@ -278,6 +360,10 @@ async function runIntake(supabase: any): Promise<any> {
       .map(([ticker]) => ticker)
   );
 
+  // Track symbols to add to seen_symbols table
+  const symbolsToUpsert: any[] = [];
+  const rejectionsToInsert: any[] = [];
+
   for (const token of tokens) {
     let rejected_reason = null;
     let rejected_detail = '';
@@ -291,15 +377,23 @@ async function runIntake(supabase: any): Promise<any> {
       rejected_reason = 'null_name_ticker';
       rejected_detail = `Name: "${token.name || 'null'}", Ticker: "${token.symbol || 'null'}"`;
     }
+    // Check durable seen_symbols table for blocked symbols
+    else if (seenSymbolsMap.has(lowerSymbol) && seenSymbolsMap.get(lowerSymbol).status === 'blocked') {
+      rejected_reason = 'duplicate';
+      rejected_detail = `Previously blocked: ${seenSymbolsMap.get(lowerSymbol).block_reason || 'duplicate'}`;
+    }
     // Check if this ticker exists in DB already (case-insensitive)
     else if (existingSymbolsLower.has(lowerSymbol)) {
       rejected_reason = 'duplicate';
       rejected_detail = `Already exists in watchlist (case-insensitive match)`;
+      // NUKE: Block this symbol permanently
+      duplicateNukes.push(lowerSymbol);
     }
     // Check if this token's ticker appears multiple times in THIS batch - reject ALL of them
     else if (duplicatedTickersInBatch.has(lowerSymbol)) {
       rejected_reason = 'duplicate';
       rejected_detail = `Multiple tokens with same ticker "${token.symbol}" in batch - ALL removed`;
+      duplicateNukes.push(lowerSymbol);
     }
     else if (existingMints.has(token.mint)) {
       rejected_reason = 'duplicate';
@@ -317,26 +411,160 @@ async function runIntake(supabase: any): Promise<any> {
     if (rejected_reason) {
       filterBreakdown[rejected_reason].count++;
       rejected.push({ ...token, reason: rejected_reason, detail: rejected_detail });
+      
+      // Record rejection event
+      rejectionsToInsert.push({
+        token_mint: token.mint,
+        symbol_original: token.symbol,
+        symbol_lower: lowerSymbol,
+        token_name: token.name,
+        reason: rejected_reason,
+        detail: rejected_detail,
+        source: 'intake_step2',
+        batch_id: batchId,
+        creator_wallet: token.creatorWallet,
+      });
     } else {
       passed.push(token);
+      
+      // Track this symbol as seen
+      symbolsToUpsert.push({
+        symbol_lower: lowerSymbol,
+        symbol_original: token.symbol,
+        first_token_mint: token.mint,
+        status: 'allowed',
+      });
     }
   }
 
+  // Insert passed tokens into watchlist
+  if (passed.length > 0) {
+    const now = new Date().toISOString();
+    const inserts = passed.map((t: any) => ({
+      token_mint: t.mint,
+      token_symbol: t.symbol,
+      token_name: t.name,
+      first_seen_at: now,
+      last_checked_at: now,
+      status: 'watching',
+      check_count: 1,
+      holder_count: t.holderCount || 0,
+      holder_count_prev: 0,
+      volume_sol: t.volumeSol || 0,
+      volume_sol_prev: 0,
+      price_usd: t.priceUsd,
+      price_ath_usd: t.priceUsd,
+      creator_wallet: t.creatorWallet,
+      metadata: { source: 'pipeline_debugger', batch_id: batchId },
+      last_processor: 'pipeline-debugger-intake',
+    }));
+
+    const { data: insertedData, error: insertError } = await supabase
+      .from('pumpfun_watchlist')
+      .insert(inserts)
+      .select('id');
+    
+    if (insertError) {
+      console.error('[Step 2] Insert error:', insertError);
+    } else {
+      insertedCount = insertedData?.length || 0;
+      console.log(`[Step 2] Inserted ${insertedCount} tokens into watchlist`);
+    }
+  }
+
+  // NUKE duplicates: Block all duplicate symbols permanently
+  for (const nukedSymbol of [...new Set(duplicateNukes)]) {
+    await supabase
+      .from('pumpfun_seen_symbols')
+      .upsert({
+        symbol_lower: nukedSymbol,
+        symbol_original: nukedSymbol.toUpperCase(),
+        status: 'blocked',
+        block_reason: 'duplicate_nuke',
+        last_seen_at: new Date().toISOString(),
+      }, { onConflict: 'symbol_lower' });
+  }
+
+  // Upsert seen symbols
+  if (symbolsToUpsert.length > 0) {
+    for (const sym of symbolsToUpsert) {
+      await supabase
+        .from('pumpfun_seen_symbols')
+        .upsert({
+          symbol_lower: sym.symbol_lower,
+          symbol_original: sym.symbol_original,
+          first_token_mint: sym.first_token_mint,
+          status: sym.status,
+          last_seen_at: new Date().toISOString(),
+        }, { onConflict: 'symbol_lower' });
+    }
+  }
+
+  // Insert rejection events
+  if (rejectionsToInsert.length > 0) {
+    await supabase.from('pumpfun_rejection_events').insert(rejectionsToInsert);
+  }
+
   return {
+    monitorEnabled: discovery.monitorEnabled,
     inputCount: tokens.length,
     passedCount: passed.length,
     rejectedCount: rejected.length,
+    insertedToWatchlist: insertedCount,
+    duplicateNukes: [...new Set(duplicateNukes)],
     filterConfig: FILTER_CONFIG,
     filterBreakdown,
     passed,
     rejected,
+    batchId,
   };
 }
 
-// Step 3: Watchlist Monitoring - Get current status with metric details
-// FIXED: Now includes pending_triage tokens and shows proper analysis
+// Fetch token metrics from pump.fun for real-time updates
+async function fetchPumpFunMetrics(mint: string): Promise<any | null> {
+  try {
+    const response = await fetch(`https://frontend-api.pump.fun/coins/${mint}`, {
+      headers: { 'Accept': 'application/json' },
+    });
+    
+    if (!response.ok) return null;
+    
+    const data = await response.json();
+    if (!data) return null;
+    
+    const virtualSolReserves = data.virtual_sol_reserves || 0;
+    const virtualTokenReserves = data.virtual_token_reserves || 1;
+    const totalSupply = data.total_supply || 1_000_000_000_000_000;
+    const bondingCurvePct = totalSupply > 0 
+      ? ((totalSupply - virtualTokenReserves) / totalSupply) * 100 
+      : 0;
+    
+    return {
+      holders: null, // pump.fun doesn't return holder count directly
+      volume24hSol: 0,
+      priceUsd: data.usd_market_cap ? data.usd_market_cap / 1_000_000_000 : null,
+      liquidityUsd: null,
+      marketCapUsd: data.usd_market_cap || null,
+      bondingCurvePct: Math.min(100, bondingCurvePct),
+      buys: 0,
+      sells: 0,
+    };
+  } catch {
+    return null;
+  }
+}
+
+// Step 3: Watchlist Monitoring - REAL metric refresh with snapshots and deltas
 async function getWatchlistStatus(supabase: any): Promise<any> {
-  console.log('[Step 3] Getting watchlist status (LIVE)');
+  console.log('[Step 3] Getting watchlist status with REAL metric refresh');
+  const startTime = Date.now();
+
+  // Check monitor enabled
+  const { data: config } = await supabase
+    .from('pumpfun_monitor_config')
+    .select('is_enabled')
+    .single();
+  const monitorEnabled = config?.is_enabled ?? false;
 
   // Get both watching AND pending_triage tokens
   const { data: watchlist, error } = await supabase
@@ -344,7 +572,7 @@ async function getWatchlistStatus(supabase: any): Promise<any> {
     .select('*')
     .in('status', ['watching', 'pending_triage'])
     .order('created_at', { ascending: false })
-    .limit(100);
+    .limit(50);
 
   if (error) {
     console.error('[Step 3] Watchlist fetch error:', error);
@@ -352,21 +580,121 @@ async function getWatchlistStatus(supabase: any): Promise<any> {
   }
 
   const tokens = watchlist || [];
+  let metricsRefreshed = 0;
+  let snapshotsSaved = 0;
+  const refreshErrors: string[] = [];
+
+  // Refresh metrics for top 10 watching tokens (rate-limited)
+  const tokensToRefresh = tokens.filter((t: any) => t.status === 'watching').slice(0, 10);
+  
+  for (const token of tokensToRefresh) {
+    try {
+      // Fetch fresh metrics from pump.fun
+      const metrics = await fetchPumpFunMetrics(token.token_mint);
+      
+      if (metrics) {
+        const now = new Date().toISOString();
+        
+        // Get 3-minute-ago snapshot for delta calculation
+        const threeMinAgo = new Date(Date.now() - 3 * 60 * 1000).toISOString();
+        const { data: snapshot3m } = await supabase
+          .from('pumpfun_metric_snapshots')
+          .select('holder_count, volume_sol, price_usd')
+          .eq('token_mint', token.token_mint)
+          .lt('captured_at', threeMinAgo)
+          .order('captured_at', { ascending: false })
+          .limit(1)
+          .single();
+
+        // Calculate deltas
+        const currentHolders = metrics.holders || token.holder_count || 0;
+        const currentVolume = token.volume_sol || 0;
+        const currentPrice = metrics.priceUsd || token.price_usd || 0;
+        
+        const holdersDelta3m = snapshot3m ? currentHolders - (snapshot3m.holder_count || 0) : 0;
+        const volumeDelta3m = snapshot3m ? currentVolume - (snapshot3m.volume_sol || 0) : 0;
+        const priceChange3m = snapshot3m?.price_usd > 0 
+          ? ((currentPrice - snapshot3m.price_usd) / snapshot3m.price_usd) * 100 
+          : 0;
+
+        // Calculate dump from ATH
+        const priceAth = Math.max(token.price_ath_usd || 0, currentPrice);
+        const dumpFromAth = priceAth > 0 ? ((priceAth - currentPrice) / priceAth) * 100 : 0;
+
+        // Determine trend status
+        let trendStatus = 'stable';
+        if (holdersDelta3m >= 3 || volumeDelta3m > 0.1) trendStatus = 'surging';
+        else if (holdersDelta3m <= -2 || dumpFromAth > 30) trendStatus = 'dumping';
+        else if (holdersDelta3m > 0) trendStatus = 'growing';
+        else if (holdersDelta3m < 0) trendStatus = 'declining';
+
+        // Update token with fresh metrics and deltas
+        await supabase
+          .from('pumpfun_watchlist')
+          .update({
+            price_usd: metrics.priceUsd || token.price_usd,
+            price_ath_usd: priceAth,
+            bonding_curve_pct: metrics.bondingCurvePct || token.bonding_curve_pct,
+            market_cap_usd: metrics.marketCapUsd || token.market_cap_usd,
+            holder_count_prev: token.holder_count,
+            volume_sol_prev: token.volume_sol,
+            holders_delta_3m: holdersDelta3m,
+            volume_delta_3m: volumeDelta3m,
+            price_change_pct_3m: priceChange3m,
+            dump_from_ath_pct: dumpFromAth,
+            trend_status: trendStatus,
+            last_checked_at: now,
+            last_snapshot_at: now,
+          })
+          .eq('id', token.id);
+
+        // Save metric snapshot
+        await supabase.from('pumpfun_metric_snapshots').insert({
+          token_mint: token.token_mint,
+          captured_at: now,
+          holder_count: currentHolders,
+          volume_sol: currentVolume,
+          price_usd: currentPrice,
+          market_cap_usd: metrics.marketCapUsd,
+          liquidity_usd: metrics.liquidityUsd,
+          bonding_curve_pct: metrics.bondingCurvePct,
+        });
+
+        metricsRefreshed++;
+        snapshotsSaved++;
+      }
+      
+      // Rate limit: 100ms between calls
+      await new Promise(r => setTimeout(r, 100));
+    } catch (err: any) {
+      refreshErrors.push(`${token.token_symbol}: ${err.message}`);
+    }
+  }
+
+  // Re-fetch updated tokens for display
+  const { data: updatedWatchlist } = await supabase
+    .from('pumpfun_watchlist')
+    .select('*')
+    .in('status', ['watching', 'pending_triage'])
+    .order('created_at', { ascending: false })
+    .limit(50);
+
+  const updatedTokens = updatedWatchlist || [];
   
   // Count by status
-  const pendingTriageCount = tokens.filter((t: any) => t.status === 'pending_triage').length;
-  const watchingCount = tokens.filter((t: any) => t.status === 'watching').length;
-  const staleCount = tokens.filter((t: any) => t.stale_count >= 3).length;
-  const deadCount = tokens.filter((t: any) => t.holder_count !== null && t.holder_count < 3).length;
+  const pendingTriageCount = updatedTokens.filter((t: any) => t.status === 'pending_triage').length;
+  const watchingCount = updatedTokens.filter((t: any) => t.status === 'watching').length;
+  const staleCount = updatedTokens.filter((t: any) => (t.stale_count || 0) >= 3).length;
+  const deadCount = updatedTokens.filter((t: any) => t.holder_count !== null && t.holder_count < 3).length;
   const healthyCount = watchingCount - staleCount - deadCount;
 
-  const recentUpdates = tokens.slice(0, 30).map((t: any) => {
+  const recentUpdates = updatedTokens.slice(0, 30).map((t: any) => {
     const createdAt = t.created_at_blockchain || t.created_at;
     const watchedFor = createdAt ? Math.floor((Date.now() - new Date(createdAt).getTime()) / 60000) : 0;
     
-    // Calculate deltas for watching tokens
-    const holderDelta = (t.holder_count || 0) - (t.holder_count_prev || t.holder_count || 0);
-    const volumeDelta = (t.volume_sol || 0) - (t.volume_sol_prev || t.volume_sol || 0);
+    // Use stored deltas
+    const holderDelta = t.holders_delta_3m || ((t.holder_count || 0) - (t.holder_count_prev || t.holder_count || 0));
+    const volumeDelta = t.volume_delta_3m || ((t.volume_sol || 0) - (t.volume_sol_prev || t.volume_sol || 0));
     
     return {
       mint: t.token_mint,
@@ -376,21 +704,29 @@ async function getWatchlistStatus(supabase: any): Promise<any> {
       holders: t.holder_count || 0,
       holdersPrev: t.holder_count_prev || t.holder_count || 0,
       holderDelta,
+      holdersDelta3m: t.holders_delta_3m || 0,
       volume: t.volume_sol || 0,
       volumePrev: t.volume_sol_prev || t.volume_sol || 0,
       volumeDelta,
+      volumeDelta3m: t.volume_delta_3m || 0,
       price: t.price_usd || 0,
-      pricePeak: t.price_peak || t.price_usd || 0,
+      priceAth: t.price_ath_usd || t.price_usd || 0,
+      priceChange3m: t.price_change_pct_3m || 0,
+      dumpFromAth: t.dump_from_ath_pct || 0,
       bondingPct: t.bonding_curve_pct || 0,
       watchedMins: watchedFor,
       lastUpdate: t.last_checked_at,
+      lastSnapshot: t.last_snapshot_at,
       staleCount: t.stale_count || 0,
       creatorWallet: t.creator_wallet,
       insiderPct: t.insider_pct || 0,
       wasSpikedAndKilled: t.was_spiked_and_killed || false,
-      // Metrics trend analysis
-      trend: holderDelta > 0 ? 'growing' : holderDelta < 0 ? 'declining' : 'stable',
+      // Enhanced trend analysis
+      trend: t.trend_status || (holderDelta > 0 ? 'growing' : holderDelta < 0 ? 'declining' : 'stable'),
+      trendStatus: t.trend_status || 'stable',
       isHealthy: (t.holder_count || 0) >= 5 && (t.volume_sol || 0) > 0.01,
+      isSurging: t.trend_status === 'surging',
+      isDumping: t.trend_status === 'dumping',
     };
   });
 
@@ -403,12 +739,15 @@ async function getWatchlistStatus(supabase: any): Promise<any> {
   };
 
   // Summary stats
-  const growingTokens = recentUpdates.filter(t => t.trend === 'growing').length;
-  const decliningTokens = recentUpdates.filter(t => t.trend === 'declining').length;
+  const growingTokens = recentUpdates.filter(t => t.trend === 'growing' || t.trend === 'surging').length;
+  const decliningTokens = recentUpdates.filter(t => t.trend === 'declining' || t.trend === 'dumping').length;
+  const surgingTokens = recentUpdates.filter(t => t.isSurging).length;
+  const dumpingTokens = recentUpdates.filter(t => t.isDumping).length;
   const spikedAndKilledTokens = recentUpdates.filter(t => t.wasSpikedAndKilled).length;
 
   return {
-    totalTokens: tokens.length,
+    monitorEnabled,
+    totalTokens: updatedTokens.length,
     pendingTriageCount,
     watchingCount,
     staleCount,
