@@ -29,10 +29,12 @@ import {
   Trash2,
   Trophy,
   Users,
-  Send
+  Send,
+  Crown,
+  Zap
 } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
-import { FantasyPortfolioDashboard, CallerLeaderboard, ChannelManagement, TelegramTargetManager, TradingTiersManager } from './telegram';
+import { FantasyPortfolioDashboard, CallerLeaderboard, ChannelManagement, TelegramTargetManager, TradingTiersManager, KingOfTheHill, WhosOnFirst } from './telegram';
 import type { TelegramTarget } from './telegram';
 
 interface ChannelConfig {
@@ -878,6 +880,12 @@ export default function TelegramChannelMonitor() {
           <TabsTrigger value="callers" className="flex items-center gap-1">
             <Trophy className="w-3 h-3" /> Caller Leaderboard
           </TabsTrigger>
+          <TabsTrigger value="koth" className="flex items-center gap-1">
+            <Crown className="w-3 h-3 text-yellow-500" /> KOTH
+          </TabsTrigger>
+          <TabsTrigger value="first" className="flex items-center gap-1">
+            <Zap className="w-3 h-3 text-yellow-500" /> Who's First
+          </TabsTrigger>
           <TabsTrigger value="calls">Recent Calls</TabsTrigger>
           <TabsTrigger value="channels" className="flex items-center gap-1">
             <Users className="w-3 h-3" /> Channel Config
@@ -963,6 +971,16 @@ export default function TelegramChannelMonitor() {
         {/* Caller Leaderboard */}
         <TabsContent value="callers" className="space-y-4">
           <CallerLeaderboard />
+        </TabsContent>
+
+        {/* King of the Hill */}
+        <TabsContent value="koth" className="space-y-4">
+          <KingOfTheHill />
+        </TabsContent>
+
+        {/* Who's on First */}
+        <TabsContent value="first" className="space-y-4">
+          <WhosOnFirst />
         </TabsContent>
 
         {/* Recent Calls Tab */}

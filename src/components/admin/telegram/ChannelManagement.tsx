@@ -33,7 +33,9 @@ import {
   Target,
   Percent,
   FlaskConical,
-  Wallet
+  Wallet,
+  Crown,
+  Zap
 } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
 import { ChannelScanLogs } from './ChannelScanLogs';
@@ -94,6 +96,9 @@ interface ChannelConfig {
   scalp_sell_slippage_bps?: number;
   scalp_buy_priority_fee?: string;
   scalp_sell_priority_fee?: string;
+  // Analytics opt-in
+  koth_enabled?: boolean;
+  first_enabled?: boolean;
 }
 
 interface FlipItWallet {
@@ -1371,6 +1376,26 @@ with TelegramClient(StringSession(), api_id, api_hash) as client:
                       Enable for structured scalp trades with pre-buy validation and moon bag exits.
                     </p>
                   )}
+                </div>
+
+                {/* Analytics Opt-in Toggles */}
+                <div className="flex items-center gap-4 p-2 bg-muted/30 rounded-lg">
+                  <div className="flex items-center gap-2">
+                    <Crown className="h-4 w-4 text-yellow-500" />
+                    <span className="text-xs">KOTH</span>
+                    <Switch
+                      checked={channel.koth_enabled !== false}
+                      onCheckedChange={(checked) => updateScalpSettings(channel.id, 'koth_enabled', checked)}
+                    />
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Zap className="h-4 w-4 text-yellow-500" />
+                    <span className="text-xs">FIRST</span>
+                    <Switch
+                      checked={channel.first_enabled !== false}
+                      onCheckedChange={(checked) => updateScalpSettings(channel.id, 'first_enabled', checked)}
+                    />
+                  </div>
                 </div>
 
                 {channel.last_check_at && (
