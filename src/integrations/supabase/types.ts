@@ -1756,11 +1756,16 @@ export type Database = {
           avg_insider_pct: number | null
           avg_peak_mcap_usd: number | null
           avg_time_before_dump_mins: number | null
+          avg_token_lifespan_mins: number | null
           created_at: string
+          dev_pattern: string | null
           discord_servers: string[] | null
           downstream_wallets: string[] | null
           first_seen_at: string | null
           id: string
+          is_legitimate_builder: boolean | null
+          is_serial_spammer: boolean | null
+          is_test_launcher: boolean | null
           known_aliases: string[] | null
           last_activity_at: string | null
           last_analyzed_at: string | null
@@ -1776,12 +1781,14 @@ export type Database = {
           pattern_wash_bundler: number | null
           preferred_dump_window_mins: number | null
           reputation_score: number | null
+          success_rate_pct: number | null
           telegram_groups: string[] | null
           tokens_abandoned: number | null
           tokens_graduated: number | null
           tokens_rugged: number | null
           tokens_stable_after_dump: number | null
           tokens_successful: number | null
+          total_same_name_tokens: number | null
           total_tokens_launched: number | null
           trust_level: string | null
           twitter_accounts: string[] | null
@@ -1795,11 +1802,16 @@ export type Database = {
           avg_insider_pct?: number | null
           avg_peak_mcap_usd?: number | null
           avg_time_before_dump_mins?: number | null
+          avg_token_lifespan_mins?: number | null
           created_at?: string
+          dev_pattern?: string | null
           discord_servers?: string[] | null
           downstream_wallets?: string[] | null
           first_seen_at?: string | null
           id?: string
+          is_legitimate_builder?: boolean | null
+          is_serial_spammer?: boolean | null
+          is_test_launcher?: boolean | null
           known_aliases?: string[] | null
           last_activity_at?: string | null
           last_analyzed_at?: string | null
@@ -1815,12 +1827,14 @@ export type Database = {
           pattern_wash_bundler?: number | null
           preferred_dump_window_mins?: number | null
           reputation_score?: number | null
+          success_rate_pct?: number | null
           telegram_groups?: string[] | null
           tokens_abandoned?: number | null
           tokens_graduated?: number | null
           tokens_rugged?: number | null
           tokens_stable_after_dump?: number | null
           tokens_successful?: number | null
+          total_same_name_tokens?: number | null
           total_tokens_launched?: number | null
           trust_level?: string | null
           twitter_accounts?: string[] | null
@@ -1834,11 +1848,16 @@ export type Database = {
           avg_insider_pct?: number | null
           avg_peak_mcap_usd?: number | null
           avg_time_before_dump_mins?: number | null
+          avg_token_lifespan_mins?: number | null
           created_at?: string
+          dev_pattern?: string | null
           discord_servers?: string[] | null
           downstream_wallets?: string[] | null
           first_seen_at?: string | null
           id?: string
+          is_legitimate_builder?: boolean | null
+          is_serial_spammer?: boolean | null
+          is_test_launcher?: boolean | null
           known_aliases?: string[] | null
           last_activity_at?: string | null
           last_analyzed_at?: string | null
@@ -1854,12 +1873,14 @@ export type Database = {
           pattern_wash_bundler?: number | null
           preferred_dump_window_mins?: number | null
           reputation_score?: number | null
+          success_rate_pct?: number | null
           telegram_groups?: string[] | null
           tokens_abandoned?: number | null
           tokens_graduated?: number | null
           tokens_rugged?: number | null
           tokens_stable_after_dump?: number | null
           tokens_successful?: number | null
+          total_same_name_tokens?: number | null
           total_tokens_launched?: number | null
           trust_level?: string | null
           twitter_accounts?: string[] | null
@@ -5316,38 +5337,53 @@ export type Database = {
         Row: {
           block_reason: string | null
           created_at: string
+          creator_wallet: string | null
           first_seen_at: string
           first_token_mint: string | null
           id: string
+          is_test_launch: boolean | null
           last_seen_at: string
+          lifespan_mins: number | null
+          peak_mcap_usd: number | null
           seen_count: number
           status: string
           symbol_lower: string
           symbol_original: string
+          token_outcome: string | null
         }
         Insert: {
           block_reason?: string | null
           created_at?: string
+          creator_wallet?: string | null
           first_seen_at?: string
           first_token_mint?: string | null
           id?: string
+          is_test_launch?: boolean | null
           last_seen_at?: string
+          lifespan_mins?: number | null
+          peak_mcap_usd?: number | null
           seen_count?: number
           status?: string
           symbol_lower: string
           symbol_original: string
+          token_outcome?: string | null
         }
         Update: {
           block_reason?: string | null
           created_at?: string
+          creator_wallet?: string | null
           first_seen_at?: string
           first_token_mint?: string | null
           id?: string
+          is_test_launch?: boolean | null
           last_seen_at?: string
+          lifespan_mins?: number | null
+          peak_mcap_usd?: number | null
           seen_count?: number
           status?: string
           symbol_lower?: string
           symbol_original?: string
+          token_outcome?: string | null
         }
         Relationships: []
       }
