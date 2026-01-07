@@ -357,3 +357,6 @@ verify_jwt = false
 
 [functions.pumpfun-dev-analyzer]
 verify_jwt = false
+
+[functions.pumpfun-curve-analyzer]
+verify_jwt = false
