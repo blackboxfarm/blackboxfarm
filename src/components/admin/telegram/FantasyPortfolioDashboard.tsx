@@ -38,6 +38,7 @@ import {
   Radio
 } from 'lucide-react';
 import { TokenChartModal } from './TokenChartModal';
+import { FantasyDataCleanup } from './FantasyDataCleanup';
 import { formatDistanceToNow } from 'date-fns';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 
@@ -1401,6 +1402,9 @@ export function FantasyPortfolioDashboard() {
           </CardContent>
         </Card>
       )}
+
+      {/* Data Cleanup Utility */}
+      <FantasyDataCleanup />
     </div>
   );
 }
