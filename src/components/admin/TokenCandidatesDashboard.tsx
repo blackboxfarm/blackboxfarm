@@ -46,7 +46,8 @@ import {
   Moon,
   SearchCheck,
   Binoculars,
-  RotateCcw
+  RotateCcw,
+  Users
 } from 'lucide-react';
 import {
   AlertDialog,
@@ -371,6 +372,12 @@ export function TokenCandidatesDashboard() {
   const [isResetting, setIsResetting] = useState(false);
   const [resetCounts, setResetCounts] = useState<Record<string, number>>({});
   const [keepLearnings, setKeepLearnings] = useState(true);
+  const keepLearningsRef = useRef(keepLearnings);
+  
+  // Keep ref in sync with state to avoid stale closure in handleSystemReset
+  useEffect(() => {
+    keepLearningsRef.current = keepLearnings;
+  }, [keepLearnings]);
 
   // Fetch watchlist
   const fetchWatchlist = useCallback(async () => {
@@ -817,26 +824,30 @@ export function TokenCandidatesDashboard() {
     }
   };
 
-  // System reset - delete all Pump.fun monitoring data (preserves discovery logs)
+  // System reset - delete all Pump.fun monitoring data (preserves discovery logs & historical data)
   const handleSystemReset = async () => {
+    // Capture current value of keepLearnings via ref to avoid stale closure
+    const shouldKeepLearnings = keepLearningsRef.current;
+    
     setIsResetting(true);
     try {
       // Delete in order for foreign key constraints
-      // Note: pumpfun_discovery_logs is NEVER deleted - used for historical reference & duplicate ticker detection
+      // NEVER DELETED: pumpfun_discovery_logs, developer_profiles, developer_tokens, developer_wallets, 
+      // dev_wallet_reputation, abused_tickers - these are historical reference data
       await supabase.from('pumpfun_fantasy_positions').delete().neq('id', '00000000-0000-0000-0000-000000000000');
       await supabase.from('pumpfun_fantasy_stats').delete().neq('id', '00000000-0000-0000-0000-000000000000');
       await supabase.from('pumpfun_buy_candidates').delete().neq('id', '00000000-0000-0000-0000-000000000000');
       await supabase.from('pumpfun_poll_runs').delete().neq('id', '00000000-0000-0000-0000-000000000000');
       await supabase.from('pumpfun_daily_stats').delete().neq('id', '00000000-0000-0000-0000-000000000000');
       
-      // Conditionally delete trade learnings based on user preference
-      if (!keepLearnings) {
+      // Conditionally delete trade learnings based on user preference (using ref value)
+      if (!shouldKeepLearnings) {
         await supabase.from('pumpfun_trade_learnings').delete().neq('id', '00000000-0000-0000-0000-000000000000');
       }
       
       await supabase.from('pumpfun_watchlist').delete().neq('id', '00000000-0000-0000-0000-000000000000');
       
-      const learningsMsg = keepLearnings ? ' (learnings preserved)' : '';
+      const learningsMsg = shouldKeepLearnings ? ' (learnings preserved)' : '';
       toast.success(`System reset complete!${learningsMsg} Starting fresh.`);
       
       // Refresh all data
@@ -2140,11 +2151,11 @@ export function TokenCandidatesDashboard() {
                 
                 {/* Preserved data section */}
                 <div className="border-t border-border pt-3 space-y-2">
-                  <p className="text-sm font-medium text-green-500">✓ Data preserved:</p>
+                  <p className="text-sm font-medium text-green-500">✓ Data always preserved:</p>
                   <ul className="space-y-1 text-sm text-muted-foreground">
                     <li className="flex items-center gap-2">
                       <FileText className="h-4 w-4" />
-                      <span>{resetCounts.logs || 0} discovery logs (for duplicate ticker detection)</span>
+                      <span>{resetCounts.logs || 0} discovery logs (duplicate ticker detection)</span>
                     </li>
                     {keepLearnings && (
                       <li className="flex items-center gap-2">
@@ -2155,6 +2166,14 @@ export function TokenCandidatesDashboard() {
                     <li className="flex items-center gap-2">
                       <Shield className="h-4 w-4" />
                       <span>Configuration settings</span>
+                    </li>
+                    <li className="flex items-center gap-2">
+                      <Users className="h-4 w-4" />
+                      <span>Developer profiles, wallets &amp; token genealogy</span>
+                    </li>
+                    <li className="flex items-center gap-2">
+                      <AlertTriangle className="h-4 w-4" />
+                      <span>Abused tickers blacklist &amp; dev reputation</span>
                     </li>
                   </ul>
                 </div>
