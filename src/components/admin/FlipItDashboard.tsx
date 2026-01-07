@@ -2100,7 +2100,10 @@ export function FlipItDashboard() {
               
               {/* Momentum Indicator only */}
               {tokenAddress.trim().length >= 32 && (
-                <MomentumIndicator tokenMint={tokenAddress.trim()} />
+                <MomentumIndicator 
+                  tokenMint={tokenAddress.trim()} 
+                  onRefresh={() => fetchInputTokenData(tokenAddress.trim(), true)}
+                />
               )}
             </div>
 
