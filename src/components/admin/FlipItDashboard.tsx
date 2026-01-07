@@ -80,6 +80,12 @@ interface FlipPosition {
   emergency_sell_price_usd: number | null;
   emergency_sell_status: string | null;
   emergency_sell_executed_at: string | null;
+  // Moonbag fields
+  moon_bag_enabled: boolean | null;
+  moon_bag_percent: number | null;
+  moon_bag_quantity_tokens: number | null;
+  moon_bag_peak_price_usd: number | null;
+  moon_bag_dump_threshold_pct: number | null;
   // DEX paid status
   dex_paid_status: DexPaidStatus | null;
 }
@@ -194,6 +200,9 @@ export function FlipItDashboard() {
   const [lastEmergencyCheck, setLastEmergencyCheck] = useState<string | null>(null);
   const [isEmergencyMonitoring, setIsEmergencyMonitoring] = useState(false);
   const [emergencyEditing, setEmergencyEditing] = useState<Record<string, { enabled: boolean; price: string }>>({});
+
+  // Moonbag editing state
+  const [moonbagEditing, setMoonbagEditing] = useState<Record<string, { enabled: boolean; percent: string }>>({});
 
   // Limit Order mode state
   const [limitOrderMode, setLimitOrderMode] = useState(false);
@@ -1062,6 +1071,36 @@ export function FlipItDashboard() {
     }
   };
 
+  // Handle moonbag toggle/save
+  const handleMoonbagUpdate = async (positionId: string, enabled: boolean, percent: number | null) => {
+    try {
+      const updateData: any = {
+        moon_bag_enabled: enabled,
+        moon_bag_percent: percent,
+        moon_bag_dump_threshold_pct: enabled ? 30 : null, // Default 30% drawdown from peak triggers moonbag sell
+      };
+
+      const { error } = await supabase
+        .from('flip_positions')
+        .update(updateData)
+        .eq('id', positionId);
+
+      if (error) throw error;
+
+      toast.success(enabled ? `Moonbag set to ${percent}% of position` : 'Moonbag disabled');
+      loadPositions();
+      
+      // Clear editing state
+      setMoonbagEditing(prev => {
+        const newState = { ...prev };
+        delete newState[positionId];
+        return newState;
+      });
+    } catch (err: any) {
+      toast.error(err.message || 'Failed to update moonbag');
+    }
+  };
+
   // Delete a flip position from the database
   const handleDeletePosition = async (positionId: string, tokenSymbol: string | null) => {
     try {
@@ -1727,6 +1766,27 @@ export function FlipItDashboard() {
                 <Label className="flex items-center gap-1 text-sm">
                   <Zap className="h-4 w-4" />
                   Priority Fee (Gas)
+                  <Popover>
+                    <PopoverTrigger asChild>
+                      <Button variant="ghost" size="sm" className="h-5 w-5 p-0 ml-1 text-muted-foreground hover:text-foreground">
+                        <DollarSign className="h-3 w-3" />
+                      </Button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-64 p-3" align="start">
+                      <div className="space-y-2">
+                        <p className="text-xs font-medium">Approximate USD Fees</p>
+                        <p className="text-[10px] text-muted-foreground">Based on SOL @ ${solPrice?.toFixed(2) || '...'}</p>
+                        <div className="space-y-1 text-xs">
+                          <div className="flex justify-between"><span>Low:</span><span className="font-mono">{solPrice ? `~${(0.0001 * solPrice * 100).toFixed(1)}¢` : '...'}</span></div>
+                          <div className="flex justify-between"><span>Medium:</span><span className="font-mono">{solPrice ? `~${(0.0005 * solPrice * 100).toFixed(1)}¢` : '...'}</span></div>
+                          <div className="flex justify-between"><span>High:</span><span className="font-mono">{solPrice ? `~${(0.001 * solPrice * 100).toFixed(1)}¢` : '...'}</span></div>
+                          <div className="flex justify-between"><span>Turbo:</span><span className="font-mono">{solPrice ? `~${(0.0075 * solPrice * 100).toFixed(0)}¢` : '...'}</span></div>
+                          <div className="flex justify-between"><span>Ultra:</span><span className="font-mono">{solPrice ? `~${(0.009 * solPrice * 100).toFixed(0)}¢` : '...'}</span></div>
+                        </div>
+                        <p className="text-[10px] text-muted-foreground mt-2">Same fee used for buy & sell</p>
+                      </div>
+                    </PopoverContent>
+                  </Popover>
                 </Label>
                 <Select value={priorityFeeMode} onValueChange={(v: 'low' | 'medium' | 'high' | 'turbo' | 'ultra') => setPriorityFeeMode(v)}>
                   <SelectTrigger>
@@ -1858,22 +1918,6 @@ export function FlipItDashboard() {
               </div>
             )}
           </div>
-
-          {/* Tweet Templates Section */}
-          <Collapsible className="mb-6">
-            <CollapsibleTrigger asChild>
-              <Button variant="outline" className="w-full justify-between mb-2">
-                <span className="flex items-center gap-2">
-                  <Twitter className="h-4 w-4" />
-                  Tweet Templates
-                </span>
-                <ChevronDown className="h-4 w-4" />
-              </Button>
-            </CollapsibleTrigger>
-            <CollapsibleContent>
-              <TweetTemplateEditor />
-            </CollapsibleContent>
-          </Collapsible>
 
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
 
@@ -2286,6 +2330,8 @@ export function FlipItDashboard() {
                   <TableHead className="px-2 py-1">Target Value</TableHead>
                   <TableHead className="px-2 py-1">Progress</TableHead>
                   <TableHead className="px-2 py-1">Action</TableHead>
+                  <TableHead className="px-2 py-1 text-center">🌙 MOONBAG</TableHead>
+                  <TableHead className="px-2 py-1">MB %</TableHead>
                   <TableHead className="px-2 py-1 text-center">STOP-LOSS</TableHead>
                   <TableHead className="px-2 py-1">SL Price</TableHead>
                   <TableHead className="px-2 py-1 text-center">REBUY</TableHead>
@@ -2559,6 +2605,81 @@ export function FlipItDashboard() {
                           >
                             Sell Now
                           </Button>
+                        )}
+                      </TableCell>
+                      {/* Moonbag Toggle */}
+                      <TableCell className="px-2 py-1 text-center">
+                        {position.status === 'holding' && (
+                          <Switch
+                            checked={
+                              moonbagEditing[position.id]?.enabled ?? 
+                              (position.moon_bag_enabled || false)
+                            }
+                            onCheckedChange={(checked) => {
+                              if (checked) {
+                                setMoonbagEditing(prev => ({
+                                  ...prev,
+                                  [position.id]: { enabled: true, percent: '10' }
+                                }));
+                              } else {
+                                handleMoonbagUpdate(position.id, false, null);
+                              }
+                            }}
+                          />
+                        )}
+                        {position.moon_bag_quantity_tokens && (
+                          <Badge variant="secondary" className="text-[9px] px-1 py-0 mt-1 gap-0.5 bg-purple-500/20 text-purple-400">
+                            🌙 ACTIVE
+                          </Badge>
+                        )}
+                      </TableCell>
+                      {/* Moonbag Percent Input */}
+                      <TableCell className="px-2 py-1">
+                        {position.status === 'holding' && (
+                          <div className="flex flex-col gap-0.5">
+                            {moonbagEditing[position.id]?.enabled || position.moon_bag_enabled ? (
+                              <div className="flex items-center gap-1">
+                                <Input
+                                  type="number"
+                                  min="1"
+                                  max="50"
+                                  className="h-6 w-14 text-[10px] font-mono"
+                                  placeholder="10"
+                                  value={
+                                    moonbagEditing[position.id]?.percent ?? 
+                                    (position.moon_bag_percent?.toString() || '10')
+                                  }
+                                  onChange={(e) => {
+                                    setMoonbagEditing(prev => ({
+                                      ...prev,
+                                      [position.id]: { 
+                                        enabled: true, 
+                                        percent: e.target.value 
+                                      }
+                                    }));
+                                  }}
+                                />
+                                <span className="text-[10px] text-muted-foreground">%</span>
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  className="h-6 px-1.5"
+                                  onClick={() => {
+                                    const pctVal = parseFloat(moonbagEditing[position.id]?.percent || position.moon_bag_percent?.toString() || '10');
+                                    if (pctVal > 0 && pctVal <= 50) {
+                                      handleMoonbagUpdate(position.id, true, pctVal);
+                                    } else {
+                                      toast.error('Moonbag must be 1-50%');
+                                    }
+                                  }}
+                                >
+                                  <CheckCircle2 className="h-2.5 w-2.5" />
+                                </Button>
+                              </div>
+                            ) : (
+                              <span className="text-[10px] text-muted-foreground">-</span>
+                            )}
+                          </div>
                         )}
                       </TableCell>
                       {/* Stop-Loss Toggle */}
@@ -2920,6 +3041,22 @@ export function FlipItDashboard() {
           </CardContent>
         </Card>
       )}
+
+      {/* Tweet Templates Section - moved below Active Flips */}
+      <Collapsible className="mb-6">
+        <CollapsibleTrigger asChild>
+          <Button variant="outline" className="w-full justify-between mb-2">
+            <span className="flex items-center gap-2">
+              <Twitter className="h-4 w-4" />
+              Tweet Templates
+            </span>
+            <ChevronDown className="h-4 w-4" />
+          </Button>
+        </CollapsibleTrigger>
+        <CollapsibleContent>
+          <TweetTemplateEditor />
+        </CollapsibleContent>
+      </Collapsible>
 
       {/* Fee Calculator Widget - moved under Active Flips */}
       {buyAmount && parseFloat(buyAmount) > 0 && solPrice && (
