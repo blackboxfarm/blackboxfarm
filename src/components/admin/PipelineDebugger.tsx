@@ -547,47 +547,51 @@ export default function PipelineDebugger() {
     };
   }, []);
 
-  // AUTO-STOP all loops when monitor is globally paused
-  useEffect(() => {
-    if (monitorEnabled === false) {
-      // Stop discovery loop
-      if (discoveryIntervalRef.current) {
-        clearInterval(discoveryIntervalRef.current);
-        discoveryIntervalRef.current = null;
-      }
-      if (discoveryLoopActive) {
-        setDiscoveryLoopActive(false);
-        toast.warning('Discovery loop stopped - Monitor paused globally');
-      }
-      
-      // Stop monitor loop
-      if (monitorIntervalRef.current) {
-        clearInterval(monitorIntervalRef.current);
-        monitorIntervalRef.current = null;
-      }
-      if (monitorLoopActive) {
-        setMonitorLoopActive(false);
-        toast.warning('Monitor loop stopped - Monitor paused globally');
-      }
-      
-      // Stop qualification loop
-      if (qualificationIntervalRef.current) {
-        clearInterval(qualificationIntervalRef.current);
-        qualificationIntervalRef.current = null;
-      }
-      if (qualificationLoopActive) {
-        setQualificationLoopActive(false);
-        toast.warning('Qualification loop stopped - Monitor paused globally');
-      }
+  // Stop all pipeline loops - independent from main monitor
+  const stopAllPipelineLoops = useCallback(() => {
+    let stoppedAny = false;
+    
+    if (discoveryIntervalRef.current) {
+      clearInterval(discoveryIntervalRef.current);
+      discoveryIntervalRef.current = null;
     }
-  }, [monitorEnabled, discoveryLoopActive, monitorLoopActive, qualificationLoopActive]);
+    if (discoveryLoopActive) {
+      setDiscoveryLoopActive(false);
+      stoppedAny = true;
+    }
+    
+    if (monitorIntervalRef.current) {
+      clearInterval(monitorIntervalRef.current);
+      monitorIntervalRef.current = null;
+    }
+    if (monitorLoopActive) {
+      setMonitorLoopActive(false);
+      stoppedAny = true;
+    }
+    
+    if (qualificationIntervalRef.current) {
+      clearInterval(qualificationIntervalRef.current);
+      qualificationIntervalRef.current = null;
+    }
+    if (qualificationLoopActive) {
+      setQualificationLoopActive(false);
+      stoppedAny = true;
+    }
+    
+    if (stoppedAny) {
+      toast.success('All pipeline loops stopped');
+    } else {
+      toast.info('No active loops to stop');
+    }
+  }, [discoveryLoopActive, monitorLoopActive, qualificationLoopActive]);
 
-  // Initial load - only if not paused
+  // Check if any loop is active
+  const anyLoopActive = discoveryLoopActive || monitorLoopActive || qualificationLoopActive;
+
+  // Initial load
   useEffect(() => {
-    if (monitorEnabled !== false) {
-      void runStepSilent(1, false);
-    }
-  }, [runStepSilent, monitorEnabled]);
+    void runStepSilent(1, false);
+  }, [runStepSilent]);
 
   const runFullPipeline = async () => {
     setIsRunning(true);
@@ -1728,24 +1732,22 @@ export default function PipelineDebugger() {
           </div>
         </CardHeader>
         <CardContent>
-          {/* Global Paused Banner */}
-          {monitorEnabled === false && (
-            <div className="mb-4 p-4 rounded-lg border-2 border-amber-500 bg-amber-500/10 flex items-center gap-4">
-              <Pause className="h-8 w-8 text-amber-400" />
-              <div className="flex-1">
-                <p className="text-amber-200 font-semibold text-lg">Monitor Paused Globally</p>
-                <p className="text-amber-200/70 text-sm">
-                  All loops are disabled and API calls are skipped. Enable the monitor from the toggle above or from the Token Candidates Dashboard to resume operations.
-                </p>
+          {/* Stop All Button when loops are running */}
+          {anyLoopActive && (
+            <div className="mb-4 p-3 rounded-lg border border-red-500/50 bg-red-500/10 flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <Activity className="h-5 w-5 text-green-400 animate-pulse" />
+                <span className="text-sm text-muted-foreground">
+                  Pipeline loops active: {[discoveryLoopActive && 'Discovery', monitorLoopActive && 'Monitor', qualificationLoopActive && 'Qualification'].filter(Boolean).join(', ')}
+                </span>
               </div>
               <Button
-                variant="default"
-                onClick={toggleMonitorEnabled}
-                disabled={togglingMonitor}
-                className="bg-amber-500 hover:bg-amber-600 text-black font-semibold"
+                variant="destructive"
+                size="sm"
+                onClick={stopAllPipelineLoops}
               >
-                {togglingMonitor ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Play className="h-4 w-4 mr-2" />}
-                Resume Monitor
+                <Pause className="h-4 w-4 mr-2" />
+                Stop All Pipeline Loops
               </Button>
             </div>
           )}
