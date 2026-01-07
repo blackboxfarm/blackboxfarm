@@ -202,6 +202,16 @@ export default function PipelineDebugger() {
   const [monitorPollCount, setMonitorPollCount] = useState(0);
   const [qualificationPollCount, setQualificationPollCount] = useState(0);
   
+  // Countdown timers for next tick
+  const [discoveryCountdown, setDiscoveryCountdown] = useState(0);
+  const [monitorCountdown, setMonitorCountdown] = useState(0);
+  const [qualificationCountdown, setQualificationCountdown] = useState(0);
+  
+  // Last tick timestamps for each loop
+  const [discoveryLastTick, setDiscoveryLastTick] = useState<Date | null>(null);
+  const [monitorLastTick, setMonitorLastTick] = useState<Date | null>(null);
+  const [qualificationLastTick, setQualificationLastTick] = useState<Date | null>(null);
+  
   // Configurable interval for discovery loop (SolanaTracker API budget)
   const [discoveryIntervalSec, setDiscoveryIntervalSec] = useState(DEFAULT_DISCOVERY_INTERVAL);
   
@@ -213,6 +223,7 @@ export default function PipelineDebugger() {
   const discoveryIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const monitorIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const qualificationIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const countdownIntervalRef = useRef<NodeJS.Timeout | null>(null);
 
   // Fetch monitor status on mount
   useEffect(() => {
@@ -354,6 +365,8 @@ export default function PipelineDebugger() {
     console.log('🔄 Discovery loop tick (combined discovery + intake)');
     setDiscoveryPollCount(c => c + 1);
     setSolanaTrackerCalls(c => c + 1); // Track SolanaTracker API usage
+    setDiscoveryLastTick(new Date()); // Record tick time for countdown
+    setDiscoveryCountdown(discoveryIntervalSec); // Reset countdown
     
     // Set both steps to running
     setStepResults(prev => {
@@ -405,12 +418,14 @@ export default function PipelineDebugger() {
         return next;
       });
     }
-  }, []);
+  }, [discoveryIntervalSec]);
 
   // Monitor loop: Step 3
   const runMonitorLoop = useCallback(async () => {
     console.log('🔄 Monitor loop tick');
     setMonitorPollCount(c => c + 1);
+    setMonitorLastTick(new Date());
+    setMonitorCountdown(MONITOR_POLL_INTERVAL / 1000);
     await runStepSilent(3, false);
   }, [runStepSilent]);
 
@@ -418,6 +433,8 @@ export default function PipelineDebugger() {
   const runQualificationLoop = useCallback(async () => {
     console.log('🔄 Qualification loop tick');
     setQualificationPollCount(c => c + 1);
+    setQualificationLastTick(new Date());
+    setQualificationCountdown(QUALIFICATION_POLL_INTERVAL / 1000);
     await runStepSilent(4, false);
   }, [runStepSilent]);
 
@@ -489,12 +506,44 @@ export default function PipelineDebugger() {
     }
   }, [qualificationLoopActive, runQualificationLoop]);
 
+  // Countdown timer effect - updates every second when any loop is active
+  useEffect(() => {
+    if (discoveryLoopActive || monitorLoopActive || qualificationLoopActive) {
+      countdownIntervalRef.current = setInterval(() => {
+        const now = Date.now();
+        
+        if (discoveryLoopActive && discoveryLastTick) {
+          const elapsed = (now - discoveryLastTick.getTime()) / 1000;
+          const remaining = Math.max(0, discoveryIntervalSec - elapsed);
+          setDiscoveryCountdown(Math.ceil(remaining));
+        }
+        
+        if (monitorLoopActive && monitorLastTick) {
+          const elapsed = (now - monitorLastTick.getTime()) / 1000;
+          const remaining = Math.max(0, (MONITOR_POLL_INTERVAL / 1000) - elapsed);
+          setMonitorCountdown(Math.ceil(remaining));
+        }
+        
+        if (qualificationLoopActive && qualificationLastTick) {
+          const elapsed = (now - qualificationLastTick.getTime()) / 1000;
+          const remaining = Math.max(0, (QUALIFICATION_POLL_INTERVAL / 1000) - elapsed);
+          setQualificationCountdown(Math.ceil(remaining));
+        }
+      }, 1000);
+    }
+    
+    return () => {
+      if (countdownIntervalRef.current) clearInterval(countdownIntervalRef.current);
+    };
+  }, [discoveryLoopActive, monitorLoopActive, qualificationLoopActive, discoveryLastTick, monitorLastTick, qualificationLastTick, discoveryIntervalSec]);
+
   // Cleanup on unmount
   useEffect(() => {
     return () => {
       if (discoveryIntervalRef.current) clearInterval(discoveryIntervalRef.current);
       if (monitorIntervalRef.current) clearInterval(monitorIntervalRef.current);
       if (qualificationIntervalRef.current) clearInterval(qualificationIntervalRef.current);
+      if (countdownIntervalRef.current) clearInterval(countdownIntervalRef.current);
     };
   }, []);
 
@@ -538,21 +587,93 @@ export default function PipelineDebugger() {
     toast.success('Debug report exported');
   };
 
+  // Get loop state for a step
+  const getStepLoopState = (stepId: number): { isLooping: boolean; isWaiting: boolean; countdown: number } => {
+    if (stepId === 1 || stepId === 2) {
+      return { 
+        isLooping: discoveryLoopActive, 
+        isWaiting: discoveryLoopActive && stepResults.get(stepId)?.status === 'completed',
+        countdown: discoveryCountdown 
+      };
+    }
+    if (stepId === 3) {
+      return { 
+        isLooping: monitorLoopActive, 
+        isWaiting: monitorLoopActive && stepResults.get(stepId)?.status === 'completed',
+        countdown: monitorCountdown 
+      };
+    }
+    if (stepId === 4) {
+      return { 
+        isLooping: qualificationLoopActive, 
+        isWaiting: qualificationLoopActive && stepResults.get(stepId)?.status === 'completed',
+        countdown: qualificationCountdown 
+      };
+    }
+    return { isLooping: false, isWaiting: false, countdown: 0 };
+  };
+
   const getStepStatusIcon = (stepId: number) => {
     const result = stepResults.get(stepId);
-    if (!result || result.status === 'pending') {
-      return <div className="h-6 w-6 rounded-full border-2 border-muted-foreground/30 flex items-center justify-center text-xs text-muted-foreground">{stepId}</div>;
+    const loopState = getStepLoopState(stepId);
+    
+    // Base classes for the status circle
+    const baseCircle = "h-8 w-8 rounded-full flex items-center justify-center text-xs font-bold relative";
+    
+    // Running state - bright green with pulse
+    if (result?.status === 'running') {
+      return (
+        <div className={`${baseCircle} bg-green-500/20 border-2 border-green-500 text-green-400`}>
+          <div className="absolute inset-0 rounded-full bg-green-500/40 animate-ping" />
+          <Loader2 className="h-4 w-4 animate-spin relative z-10" />
+        </div>
+      );
     }
-    switch (result.status) {
-      case 'running':
-        return <Loader2 className="h-6 w-6 text-primary animate-spin" />;
-      case 'completed':
-        return <CheckCircle2 className="h-6 w-6 text-green-500" />;
-      case 'error':
-        return <XCircle className="h-6 w-6 text-red-500" />;
-      default:
-        return <div className="h-6 w-6 rounded-full border-2 border-muted-foreground/30" />;
+    
+    // Error state - red with single pulse
+    if (result?.status === 'error') {
+      return (
+        <div className={`${baseCircle} bg-red-500/20 border-2 border-red-500 text-red-400`}>
+          <div className="absolute inset-0 rounded-full bg-red-500/30 animate-pulse" />
+          <XCircle className="h-4 w-4 relative z-10" />
+        </div>
+      );
     }
+    
+    // Completed + looping (waiting for next tick) - yellow/amber glow
+    if (result?.status === 'completed' && loopState.isWaiting) {
+      return (
+        <div className={`${baseCircle} bg-amber-500/20 border-2 border-amber-500 text-amber-400`}>
+          <div className="absolute inset-0 rounded-full bg-amber-500/20 animate-pulse" style={{ animationDuration: '2s' }} />
+          <Clock className="h-4 w-4 relative z-10" />
+        </div>
+      );
+    }
+    
+    // Completed (not looping) - stays orange/completed
+    if (result?.status === 'completed') {
+      return (
+        <div className={`${baseCircle} bg-orange-500/20 border-2 border-orange-500 text-orange-400`}>
+          <CheckCircle2 className="h-4 w-4" />
+        </div>
+      );
+    }
+    
+    // Pending (not yet run)
+    return (
+      <div className={`${baseCircle} border-2 border-muted-foreground/30 text-muted-foreground`}>
+        {stepId}
+      </div>
+    );
+  };
+  
+  // Format countdown to readable string
+  const formatCountdown = (seconds: number): string => {
+    if (seconds <= 0) return '--';
+    if (seconds < 60) return `${seconds}s`;
+    const mins = Math.floor(seconds / 60);
+    const secs = seconds % 60;
+    return `${mins}m ${secs}s`;
   };
 
   // Render token row with links and copy
@@ -1571,19 +1692,28 @@ export default function PipelineDebugger() {
         </CardHeader>
         <CardContent>
           <div className="flex items-center justify-between py-2">
-            {STEP_DEFINITIONS.map((step, idx) => (
-              <React.Fragment key={step.id}>
-                <div className="flex flex-col items-center">
-                  <div className={`p-1 rounded-full transition-all ${currentStep === step.id ? 'ring-2 ring-primary ring-offset-2 ring-offset-background' : ''}`}>
-                    {getStepStatusIcon(step.id)}
+            {STEP_DEFINITIONS.map((step, idx) => {
+              const loopState = getStepLoopState(step.id);
+              return (
+                <React.Fragment key={step.id}>
+                  <div className="flex flex-col items-center">
+                    <div className={`p-1 rounded-full transition-all ${currentStep === step.id ? 'ring-2 ring-primary ring-offset-2 ring-offset-background' : ''}`}>
+                      {getStepStatusIcon(step.id)}
+                    </div>
+                    <span className="text-xs text-muted-foreground mt-1 text-center max-w-[80px]">{step.name}</span>
+                    {/* Countdown timer for looping steps */}
+                    {loopState.isLooping && loopState.countdown > 0 && (
+                      <span className="text-[10px] font-mono text-amber-400 mt-0.5 animate-pulse">
+                        {formatCountdown(loopState.countdown)}
+                      </span>
+                    )}
                   </div>
-                  <span className="text-xs text-muted-foreground mt-1 text-center max-w-[80px]">{step.name}</span>
-                </div>
-                {idx < STEP_DEFINITIONS.length - 1 && (
-                  <ChevronRight className="h-4 w-4 text-muted-foreground/50 flex-shrink-0" />
-                )}
-              </React.Fragment>
-            ))}
+                  {idx < STEP_DEFINITIONS.length - 1 && (
+                    <ChevronRight className="h-4 w-4 text-muted-foreground/50 flex-shrink-0" />
+                  )}
+                </React.Fragment>
+              );
+            })}
           </div>
         </CardContent>
       </Card>
@@ -1631,6 +1761,25 @@ export default function PipelineDebugger() {
                         <Badge variant="default" className="bg-green-500 text-white gap-1 animate-pulse">
                           <RefreshCw className="h-3 w-3 animate-spin" />
                           Polling #{pollCount}
+                        </Badge>
+                      )}
+                      {/* Show countdown in header when looping */}
+                      {isLoopActive && step.id === 1 && discoveryCountdown > 0 && (
+                        <Badge variant="outline" className="border-amber-500 text-amber-400 gap-1">
+                          <Clock className="h-3 w-3" />
+                          Next: {formatCountdown(discoveryCountdown)}
+                        </Badge>
+                      )}
+                      {isLoopActive && step.id === 3 && monitorCountdown > 0 && (
+                        <Badge variant="outline" className="border-amber-500 text-amber-400 gap-1">
+                          <Clock className="h-3 w-3" />
+                          Next: {formatCountdown(monitorCountdown)}
+                        </Badge>
+                      )}
+                      {isLoopActive && step.id === 4 && qualificationCountdown > 0 && (
+                        <Badge variant="outline" className="border-amber-500 text-amber-400 gap-1">
+                          <Clock className="h-3 w-3" />
+                          Next: {formatCountdown(qualificationCountdown)}
                         </Badge>
                       )}
                     </CollapsibleTrigger>
