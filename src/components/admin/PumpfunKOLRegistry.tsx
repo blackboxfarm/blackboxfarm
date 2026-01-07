@@ -10,7 +10,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
-import { RefreshCw, Plus, Shield, ShieldAlert, ShieldCheck, Crown, Users, TrendingUp, TrendingDown, Search, Trash2 } from "lucide-react";
+import { RefreshCw, Plus, Shield, ShieldAlert, ShieldCheck, Crown, Users, TrendingUp, TrendingDown, Search, Trash2, ExternalLink } from "lucide-react";
+import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 
 interface KOL {
   id: string;
@@ -286,33 +287,62 @@ export default function PumpfunKOLRegistry() {
               <TableHeader>
                 <TableRow>
                   <TableHead className="w-[50px]">#</TableHead>
+                  <TableHead className="w-[50px]">Avatar</TableHead>
+                  <TableHead>Name</TableHead>
                   <TableHead>Wallet</TableHead>
                   <TableHead>Twitter</TableHead>
                   <TableHead>Tier</TableHead>
                   <TableHead>Trust</TableHead>
                   <TableHead className="text-right">Kills</TableHead>
                   <TableHead className="text-right">Pumps</TableHead>
-                  <TableHead className="text-right">Trades</TableHead>
                   <TableHead>Actions</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {isLoading ? (
-                  <TableRow><TableCell colSpan={9} className="text-center py-8 text-muted-foreground">Loading...</TableCell></TableRow>
+                  <TableRow><TableCell colSpan={10} className="text-center py-8 text-muted-foreground">Loading...</TableCell></TableRow>
                 ) : filteredKOLs?.length === 0 ? (
-                  <TableRow><TableCell colSpan={9} className="text-center py-8 text-muted-foreground">No KOLs found</TableCell></TableRow>
+                  <TableRow><TableCell colSpan={10} className="text-center py-8 text-muted-foreground">No KOLs found</TableCell></TableRow>
                 ) : filteredKOLs?.map((kol, idx) => (
                   <TableRow key={kol.id} className="hover:bg-muted/30">
                     <TableCell className="font-mono text-muted-foreground">{kol.kolscan_rank || idx + 1}</TableCell>
                     <TableCell>
-                      <div className="flex flex-col">
-                        <span className="font-mono text-xs">{kol.wallet_address.slice(0, 8)}...{kol.wallet_address.slice(-6)}</span>
-                        {kol.display_name && <span className="text-xs text-muted-foreground">{kol.display_name}</span>}
-                      </div>
+                      <Avatar className="h-8 w-8">
+                        {kol.twitter_handle ? (
+                          <AvatarImage src={`https://unavatar.io/twitter/${kol.twitter_handle}`} alt={kol.display_name || kol.twitter_handle} />
+                        ) : null}
+                        <AvatarFallback className="text-xs">{(kol.display_name || kol.wallet_address.slice(0, 2)).slice(0, 2).toUpperCase()}</AvatarFallback>
+                      </Avatar>
+                    </TableCell>
+                    <TableCell>
+                      <a 
+                        href={`https://kolscan.io/account/${kol.wallet_address}`} 
+                        target="_blank" 
+                        rel="noopener noreferrer" 
+                        className="text-primary hover:underline font-medium flex items-center gap-1"
+                      >
+                        {kol.display_name || 'Unknown'}
+                        <ExternalLink className="h-3 w-3 opacity-50" />
+                      </a>
+                    </TableCell>
+                    <TableCell>
+                      <a 
+                        href={`https://solscan.io/account/${kol.wallet_address}`} 
+                        target="_blank" 
+                        rel="noopener noreferrer" 
+                        className="font-mono text-xs text-muted-foreground hover:text-primary hover:underline"
+                      >
+                        {kol.wallet_address.slice(0, 6)}...{kol.wallet_address.slice(-4)}
+                      </a>
                     </TableCell>
                     <TableCell>
                       {kol.twitter_handle ? (
-                        <a href={`https://twitter.com/${kol.twitter_handle}`} target="_blank" rel="noopener noreferrer" className="text-blue-400 hover:underline text-sm">
+                        <a 
+                          href={`https://x.com/${kol.twitter_handle}`} 
+                          target="_blank" 
+                          rel="noopener noreferrer" 
+                          className="text-blue-400 hover:underline text-sm"
+                        >
                           @{kol.twitter_handle}
                         </a>
                       ) : '-'}
@@ -321,7 +351,6 @@ export default function PumpfunKOLRegistry() {
                     <TableCell>{getTrustBadge(kol.manual_trust_level, kol.trust_score)}</TableCell>
                     <TableCell className="text-right font-mono text-red-400">{kol.chart_kills}</TableCell>
                     <TableCell className="text-right font-mono text-green-400">{kol.successful_pumps}</TableCell>
-                    <TableCell className="text-right font-mono">{kol.total_trades}</TableCell>
                     <TableCell>
                       <div className="flex gap-1">
                         <Button size="sm" variant="ghost" onClick={() => { setSelectedKOL(kol); setShowOverrideDialog(true); }}>
