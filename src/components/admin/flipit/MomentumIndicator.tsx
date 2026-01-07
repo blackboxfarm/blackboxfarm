@@ -57,9 +57,10 @@ interface MomentumAnalysis {
 interface MomentumIndicatorProps {
   tokenMint: string;
   onMomentumData?: (analysis: MomentumAnalysis | null) => void;
+  onRefresh?: () => void;
 }
 
-export function MomentumIndicator({ tokenMint, onMomentumData }: MomentumIndicatorProps) {
+export function MomentumIndicator({ tokenMint, onMomentumData, onRefresh }: MomentumIndicatorProps) {
   const [analysis, setAnalysis] = useState<MomentumAnalysis | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [lastFetched, setLastFetched] = useState<string | null>(null);
@@ -204,7 +205,16 @@ export function MomentumIndicator({ tokenMint, onMomentumData }: MomentumIndicat
           </div>
         </div>
         
-        <Button size="sm" variant="ghost" onClick={fetchMomentum} disabled={isLoading} className="h-8">
+        <Button 
+          size="sm" 
+          variant="ghost" 
+          onClick={() => {
+            fetchMomentum();
+            onRefresh?.();
+          }} 
+          disabled={isLoading} 
+          className="h-8"
+        >
           <RefreshCw className={`h-3 w-3 mr-1 ${isLoading ? 'animate-spin' : ''}`} />
           {isLoading ? 'Analyzing' : 'Refresh'}
         </Button>
