@@ -5069,6 +5069,263 @@ export type Database = {
         }
         Relationships: []
       }
+      pumpfun_kol_activity: {
+        Row: {
+          action: string
+          amount_sol: number | null
+          amount_tokens: number | null
+          bonding_curve_pct: number | null
+          buy_zone: string | null
+          chart_killed: boolean | null
+          detected_at: string | null
+          hold_time_mins: number | null
+          id: string
+          kol_id: string | null
+          kol_wallet: string
+          market_cap_at_trade: number | null
+          price_at_trade: number | null
+          profit_pct: number | null
+          profit_sol: number | null
+          sold_at_ath: boolean | null
+          sold_before_ath: boolean | null
+          time_since_mint_mins: number | null
+          token_mint: string
+          token_symbol: string | null
+          tx_signature: string | null
+        }
+        Insert: {
+          action: string
+          amount_sol?: number | null
+          amount_tokens?: number | null
+          bonding_curve_pct?: number | null
+          buy_zone?: string | null
+          chart_killed?: boolean | null
+          detected_at?: string | null
+          hold_time_mins?: number | null
+          id?: string
+          kol_id?: string | null
+          kol_wallet: string
+          market_cap_at_trade?: number | null
+          price_at_trade?: number | null
+          profit_pct?: number | null
+          profit_sol?: number | null
+          sold_at_ath?: boolean | null
+          sold_before_ath?: boolean | null
+          time_since_mint_mins?: number | null
+          token_mint: string
+          token_symbol?: string | null
+          tx_signature?: string | null
+        }
+        Update: {
+          action?: string
+          amount_sol?: number | null
+          amount_tokens?: number | null
+          bonding_curve_pct?: number | null
+          buy_zone?: string | null
+          chart_killed?: boolean | null
+          detected_at?: string | null
+          hold_time_mins?: number | null
+          id?: string
+          kol_id?: string | null
+          kol_wallet?: string
+          market_cap_at_trade?: number | null
+          price_at_trade?: number | null
+          profit_pct?: number | null
+          profit_sol?: number | null
+          sold_at_ath?: boolean | null
+          sold_before_ath?: boolean | null
+          time_since_mint_mins?: number | null
+          token_mint?: string
+          token_symbol?: string | null
+          tx_signature?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "pumpfun_kol_activity_kol_id_fkey"
+            columns: ["kol_id"]
+            isOneToOne: false
+            referencedRelation: "pumpfun_kol_registry"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      pumpfun_kol_cabals: {
+        Row: {
+          avg_entry_delta_secs: number | null
+          avg_exit_delta_secs: number | null
+          cabal_description: string | null
+          cabal_name: string | null
+          cabal_trust_score: number | null
+          coordination_score: number | null
+          created_at: string | null
+          detected_at: string | null
+          evidence_notes: string | null
+          id: string
+          is_active: boolean | null
+          is_predatory: boolean | null
+          last_activity_at: string | null
+          linked_mint_wallets: string[] | null
+          linked_telegram_groups: string[] | null
+          linked_twitter_accounts: string[] | null
+          member_kol_ids: string[] | null
+          member_wallets: string[] | null
+          predatory_evidence: string | null
+          sample_token_mints: string[] | null
+          suspected_hustle_wallets: string[] | null
+          tokens_coordinated: number | null
+          total_extracted_sol: number | null
+          total_victim_wallets: number | null
+          updated_at: string | null
+        }
+        Insert: {
+          avg_entry_delta_secs?: number | null
+          avg_exit_delta_secs?: number | null
+          cabal_description?: string | null
+          cabal_name?: string | null
+          cabal_trust_score?: number | null
+          coordination_score?: number | null
+          created_at?: string | null
+          detected_at?: string | null
+          evidence_notes?: string | null
+          id?: string
+          is_active?: boolean | null
+          is_predatory?: boolean | null
+          last_activity_at?: string | null
+          linked_mint_wallets?: string[] | null
+          linked_telegram_groups?: string[] | null
+          linked_twitter_accounts?: string[] | null
+          member_kol_ids?: string[] | null
+          member_wallets?: string[] | null
+          predatory_evidence?: string | null
+          sample_token_mints?: string[] | null
+          suspected_hustle_wallets?: string[] | null
+          tokens_coordinated?: number | null
+          total_extracted_sol?: number | null
+          total_victim_wallets?: number | null
+          updated_at?: string | null
+        }
+        Update: {
+          avg_entry_delta_secs?: number | null
+          avg_exit_delta_secs?: number | null
+          cabal_description?: string | null
+          cabal_name?: string | null
+          cabal_trust_score?: number | null
+          coordination_score?: number | null
+          created_at?: string | null
+          detected_at?: string | null
+          evidence_notes?: string | null
+          id?: string
+          is_active?: boolean | null
+          is_predatory?: boolean | null
+          last_activity_at?: string | null
+          linked_mint_wallets?: string[] | null
+          linked_telegram_groups?: string[] | null
+          linked_twitter_accounts?: string[] | null
+          member_kol_ids?: string[] | null
+          member_wallets?: string[] | null
+          predatory_evidence?: string | null
+          sample_token_mints?: string[] | null
+          suspected_hustle_wallets?: string[] | null
+          tokens_coordinated?: number | null
+          total_extracted_sol?: number | null
+          total_victim_wallets?: number | null
+          updated_at?: string | null
+        }
+        Relationships: []
+      }
+      pumpfun_kol_registry: {
+        Row: {
+          avg_hold_time_mins: number | null
+          avg_profit_pct: number | null
+          chart_kills: number | null
+          created_at: string | null
+          display_name: string | null
+          first_seen_at: string | null
+          id: string
+          is_active: boolean | null
+          is_verified: boolean | null
+          kol_tier: string | null
+          kolscan_last_rank: number | null
+          kolscan_rank: number | null
+          kolscan_weekly_score: number | null
+          last_activity_at: string | null
+          last_refreshed_at: string | null
+          manual_override_at: string | null
+          manual_override_by: string | null
+          manual_override_reason: string | null
+          manual_trust_level: string | null
+          source: string | null
+          successful_pumps: number | null
+          total_trades: number | null
+          total_volume_sol: number | null
+          trust_score: number | null
+          twitter_followers: number | null
+          twitter_handle: string | null
+          updated_at: string | null
+          wallet_address: string
+        }
+        Insert: {
+          avg_hold_time_mins?: number | null
+          avg_profit_pct?: number | null
+          chart_kills?: number | null
+          created_at?: string | null
+          display_name?: string | null
+          first_seen_at?: string | null
+          id?: string
+          is_active?: boolean | null
+          is_verified?: boolean | null
+          kol_tier?: string | null
+          kolscan_last_rank?: number | null
+          kolscan_rank?: number | null
+          kolscan_weekly_score?: number | null
+          last_activity_at?: string | null
+          last_refreshed_at?: string | null
+          manual_override_at?: string | null
+          manual_override_by?: string | null
+          manual_override_reason?: string | null
+          manual_trust_level?: string | null
+          source?: string | null
+          successful_pumps?: number | null
+          total_trades?: number | null
+          total_volume_sol?: number | null
+          trust_score?: number | null
+          twitter_followers?: number | null
+          twitter_handle?: string | null
+          updated_at?: string | null
+          wallet_address: string
+        }
+        Update: {
+          avg_hold_time_mins?: number | null
+          avg_profit_pct?: number | null
+          chart_kills?: number | null
+          created_at?: string | null
+          display_name?: string | null
+          first_seen_at?: string | null
+          id?: string
+          is_active?: boolean | null
+          is_verified?: boolean | null
+          kol_tier?: string | null
+          kolscan_last_rank?: number | null
+          kolscan_rank?: number | null
+          kolscan_weekly_score?: number | null
+          last_activity_at?: string | null
+          last_refreshed_at?: string | null
+          manual_override_at?: string | null
+          manual_override_by?: string | null
+          manual_override_reason?: string | null
+          manual_trust_level?: string | null
+          source?: string | null
+          successful_pumps?: number | null
+          total_trades?: number | null
+          total_volume_sol?: number | null
+          trust_score?: number | null
+          twitter_followers?: number | null
+          twitter_handle?: string | null
+          updated_at?: string | null
+          wallet_address?: string
+        }
+        Relationships: []
+      }
       pumpfun_metric_snapshots: {
         Row: {
           bonding_curve_pct: number | null
