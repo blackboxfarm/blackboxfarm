@@ -2102,7 +2102,10 @@ export function FlipItDashboard() {
               {tokenAddress.trim().length >= 32 && (
                 <MomentumIndicator 
                   tokenMint={tokenAddress.trim()} 
-                  onRefresh={() => fetchInputTokenData(tokenAddress.trim(), true)}
+                  onRefresh={() => {
+                    fetchInputTokenData(tokenAddress.trim(), true);
+                    holderQuality.checkQuality(tokenAddress.trim());
+                  }}
                 />
               )}
             </div>
