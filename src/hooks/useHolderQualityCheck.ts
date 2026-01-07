@@ -3,6 +3,14 @@ import { supabase } from '@/integrations/supabase/client';
 
 export type HolderQuality = 'good' | 'neutral' | 'bad' | null;
 
+export interface TierBreakdown {
+  over1k: number;       // $1000+
+  mid250to500: number;  // $250-$500
+  mid50to249: number;   // $50-$249
+  low20to49: number;    // $20-$49
+  dust: number;         // <$5
+}
+
 export interface HolderQualityResult {
   quality: HolderQuality;
   totalHolders: number;
@@ -11,6 +19,7 @@ export interface HolderQualityResult {
   realBuyersCount: number; // wallets with $5+ value
   whaleCount: number; // baby whales + true whales
   summary: string;
+  tierBreakdown: TierBreakdown; // New: percentage breakdown by tier
   isLoading: boolean;
   error: string | null;
 }
@@ -18,15 +27,15 @@ export interface HolderQualityResult {
 interface HoldersReportResponse {
   totalHolders: number;
   dustWallets: number;
-  smallWallets: number;
-  mediumWallets: number;
-  largeWallets: number;
-  realWallets: number;
-  bossWallets: number;
-  kingpinWallets: number;
-  superBossWallets: number;
-  babyWhaleWallets: number;
-  trueWhaleWallets: number;
+  smallWallets: number;    // $1-$5
+  mediumWallets: number;   // $5-$20
+  largeWallets: number;    // $20-$50
+  realWallets: number;     // $50-$250
+  bossWallets: number;     // $250-$500
+  kingpinWallets: number;  // $500-$1k
+  superBossWallets: number; // $1k-$5k
+  babyWhaleWallets: number; // $5k-$25k
+  trueWhaleWallets: number; // $25k+
 }
 
 /**
@@ -42,6 +51,7 @@ export function useHolderQualityCheck() {
     realBuyersCount: 0,
     whaleCount: 0,
     summary: '',
+    tierBreakdown: { over1k: 0, mid250to500: 0, mid50to249: 0, low20to49: 0, dust: 0 },
     isLoading: false,
     error: null,
   });
@@ -100,6 +110,23 @@ export function useHolderQualityCheck() {
       
       const whaleCount = (report.babyWhaleWallets || 0) + (report.trueWhaleWallets || 0);
       
+      // Calculate tier percentages for display
+      const tierBreakdown: TierBreakdown = {
+        over1k: totalHolders > 0 
+          ? (((report.superBossWallets || 0) + (report.babyWhaleWallets || 0) + (report.trueWhaleWallets || 0)) / totalHolders) * 100 
+          : 0,
+        mid250to500: totalHolders > 0 
+          ? (((report.bossWallets || 0) + (report.kingpinWallets || 0)) / totalHolders) * 100 
+          : 0,
+        mid50to249: totalHolders > 0 
+          ? ((report.realWallets || 0) / totalHolders) * 100 
+          : 0,
+        low20to49: totalHolders > 0 
+          ? ((report.largeWallets || 0) / totalHolders) * 100 
+          : 0,
+        dust: dustPercent,
+      };
+      
       // Determine quality:
       // GREEN: <40% dust AND >20 real buyers
       // RED: >70% dust OR <5 real buyers  
@@ -128,6 +155,7 @@ export function useHolderQualityCheck() {
         realBuyersCount,
         whaleCount,
         summary,
+        tierBreakdown,
         isLoading: false,
         error: null,
       };
@@ -156,6 +184,7 @@ export function useHolderQualityCheck() {
       realBuyersCount: 0,
       whaleCount: 0,
       summary: '',
+      tierBreakdown: { over1k: 0, mid250to500: 0, mid50to249: 0, low20to49: 0, dust: 0 },
       isLoading: false,
       error: null,
     });
