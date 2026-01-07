@@ -4403,6 +4403,78 @@ export type Database = {
         }
         Relationships: []
       }
+      pumpfun_blacklist: {
+        Row: {
+          added_by: string | null
+          blacklist_reason: string | null
+          created_at: string
+          entry_type: string
+          evidence_notes: string | null
+          first_seen_at: string | null
+          id: string
+          identifier: string
+          is_active: boolean | null
+          linked_pumpfun_accounts: string[] | null
+          linked_telegram: string[] | null
+          linked_token_mints: string[] | null
+          linked_twitter: string[] | null
+          linked_wallets: string[] | null
+          risk_level: string
+          source: string | null
+          tags: string[] | null
+          tokens_rugged: number | null
+          total_stolen_sol: number | null
+          total_victims: number | null
+          updated_at: string
+        }
+        Insert: {
+          added_by?: string | null
+          blacklist_reason?: string | null
+          created_at?: string
+          entry_type: string
+          evidence_notes?: string | null
+          first_seen_at?: string | null
+          id?: string
+          identifier: string
+          is_active?: boolean | null
+          linked_pumpfun_accounts?: string[] | null
+          linked_telegram?: string[] | null
+          linked_token_mints?: string[] | null
+          linked_twitter?: string[] | null
+          linked_wallets?: string[] | null
+          risk_level?: string
+          source?: string | null
+          tags?: string[] | null
+          tokens_rugged?: number | null
+          total_stolen_sol?: number | null
+          total_victims?: number | null
+          updated_at?: string
+        }
+        Update: {
+          added_by?: string | null
+          blacklist_reason?: string | null
+          created_at?: string
+          entry_type?: string
+          evidence_notes?: string | null
+          first_seen_at?: string | null
+          id?: string
+          identifier?: string
+          is_active?: boolean | null
+          linked_pumpfun_accounts?: string[] | null
+          linked_telegram?: string[] | null
+          linked_token_mints?: string[] | null
+          linked_twitter?: string[] | null
+          linked_wallets?: string[] | null
+          risk_level?: string
+          source?: string | null
+          tags?: string[] | null
+          tokens_rugged?: number | null
+          total_stolen_sol?: number | null
+          total_victims?: number | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
       pumpfun_buy_candidates: {
         Row: {
           auto_buy_enabled: boolean | null
