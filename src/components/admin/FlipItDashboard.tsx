@@ -14,8 +14,10 @@ import { toast } from 'sonner';
 import { Flame, RefreshCw, TrendingUp, DollarSign, Wallet, Clock, CheckCircle2, XCircle, Loader2, Plus, Copy, ArrowUpRight, Key, Settings, Zap, Activity, Radio, Pencil, ChevronDown, Coins, Eye, EyeOff, RotateCcw, AlertTriangle, Twitter, Trash2, Globe, Send, Rocket, Megaphone, Users, Shield, ClipboardPaste, FlaskConical } from 'lucide-react';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { useSolPrice } from '@/hooks/useSolPrice';
+import { useHolderQualityCheck } from '@/hooks/useHolderQualityCheck';
 import { FlipItFeeCalculator } from './flipit/FlipItFeeCalculator';
 import { MomentumIndicator } from './flipit/MomentumIndicator';
+import { HolderQualityIndicator } from './flipit/HolderQualityIndicator';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { WalletTokenManager } from '@/components/blackbox/WalletTokenManager';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
@@ -171,6 +173,9 @@ export function FlipItDashboard() {
   
   // SOL price for USD conversion
   const { price: solPrice, isLoading: solPriceLoading } = useSolPrice();
+  
+  // Holder quality check hook
+  const holderQuality = useHolderQualityCheck();
   
   // Settings
   const [slippageBps, setSlippageBps] = useState(500); // 5% default
@@ -679,7 +684,16 @@ export function FlipItDashboard() {
     };
   }, [tokenAddress, fetchInputTokenData]);
 
-  // Manual refresh button handler
+  // Trigger holder quality check when token price is loaded
+  useEffect(() => {
+    if (inputToken.mint && inputToken.price !== null && !isLoadingInputToken) {
+      // Token loaded with price, check holder quality
+      holderQuality.checkQuality(inputToken.mint);
+    } else if (!inputToken.mint) {
+      // Token cleared, reset quality
+      holderQuality.reset();
+    }
+  }, [inputToken.mint, inputToken.price, isLoadingInputToken]);
   const handleCheckPrice = () => {
     if (!tokenAddress.trim() || tokenAddress.trim().length < 32) {
       toast.error('Enter a valid token address');
@@ -1989,9 +2003,21 @@ export function FlipItDashboard() {
                 </p>
               )}
               
-              {/* Momentum Indicator */}
+              {/* Momentum Indicator + Holder Quality */}
               {tokenAddress.trim().length >= 32 && (
-                <MomentumIndicator tokenMint={tokenAddress.trim()} />
+                <div className="flex items-center gap-3 flex-wrap">
+                  <MomentumIndicator tokenMint={tokenAddress.trim()} />
+                  <HolderQualityIndicator 
+                    quality={holderQuality.quality}
+                    isLoading={holderQuality.isLoading}
+                    summary={holderQuality.summary}
+                    totalHolders={holderQuality.totalHolders}
+                    realBuyersCount={holderQuality.realBuyersCount}
+                    dustPercent={holderQuality.dustPercent}
+                    whaleCount={holderQuality.whaleCount}
+                    error={holderQuality.error}
+                  />
+                </div>
               )}
             </div>
             <div className="space-y-2">
