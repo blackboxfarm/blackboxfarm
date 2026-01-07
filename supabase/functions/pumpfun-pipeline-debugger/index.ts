@@ -229,13 +229,30 @@ async function runDiscovery(supabase: any): Promise<any> {
   const batchId = `batch_${Date.now()}`;
 
   try {
-    // Check monitor status
+    // Check monitor status FIRST - exit early if paused
     const { data: config } = await supabase
       .from('pumpfun_monitor_config')
       .select('is_enabled')
       .single();
     
     const isEnabled = config?.is_enabled ?? false;
+
+    // EXIT EARLY IF PAUSED - don't waste API calls
+    if (!isEnabled) {
+      console.log('[Step 1] Monitor is PAUSED - skipping API calls');
+      return {
+        source: 'SolanaTracker API',
+        monitorEnabled: false,
+        paused: true,
+        message: 'Monitor is paused - skipping API calls',
+        fetchedCount: 0,
+        newCount: 0,
+        alreadyKnownCount: 0,
+        fetchTimeMs: Date.now() - startTime,
+        tokens: [],
+        batchId,
+      };
+    }
 
     // Fetch NEW tokens from Solana Tracker API
     const apiTokens = await fetchLatestPumpfunTokens(100);
@@ -550,8 +567,26 @@ async function runIntake(supabase: any, preDiscoveredTokens?: any[], preBatchId?
 async function runDiscoveryAndIntake(supabase: any): Promise<any> {
   console.log('[Step 1+2] Running combined discovery and intake');
   
-  // Step 1: Run discovery
+  // Step 1: Run discovery (will check pause state and exit early if paused)
   const discoveryResult = await runDiscovery(supabase);
+  
+  // If paused, skip intake entirely and return pause status
+  if (discoveryResult.paused) {
+    console.log('[Step 1+2] Monitor is PAUSED - skipping intake');
+    return {
+      discovery: discoveryResult,
+      intake: {
+        paused: true,
+        message: 'Monitor is paused - skipping intake',
+        monitorEnabled: false,
+        inputCount: 0,
+        passedCount: 0,
+        rejectedCount: 0,
+        insertedToWatchlist: 0,
+      },
+    };
+  }
+  
   const tokens = discoveryResult.tokens || [];
   const batchId = discoveryResult.batchId;
   

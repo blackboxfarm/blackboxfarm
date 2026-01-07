@@ -547,10 +547,47 @@ export default function PipelineDebugger() {
     };
   }, []);
 
-  // Initial load
+  // AUTO-STOP all loops when monitor is globally paused
   useEffect(() => {
-    void runStepSilent(1, false);
-  }, [runStepSilent]);
+    if (monitorEnabled === false) {
+      // Stop discovery loop
+      if (discoveryIntervalRef.current) {
+        clearInterval(discoveryIntervalRef.current);
+        discoveryIntervalRef.current = null;
+      }
+      if (discoveryLoopActive) {
+        setDiscoveryLoopActive(false);
+        toast.warning('Discovery loop stopped - Monitor paused globally');
+      }
+      
+      // Stop monitor loop
+      if (monitorIntervalRef.current) {
+        clearInterval(monitorIntervalRef.current);
+        monitorIntervalRef.current = null;
+      }
+      if (monitorLoopActive) {
+        setMonitorLoopActive(false);
+        toast.warning('Monitor loop stopped - Monitor paused globally');
+      }
+      
+      // Stop qualification loop
+      if (qualificationIntervalRef.current) {
+        clearInterval(qualificationIntervalRef.current);
+        qualificationIntervalRef.current = null;
+      }
+      if (qualificationLoopActive) {
+        setQualificationLoopActive(false);
+        toast.warning('Qualification loop stopped - Monitor paused globally');
+      }
+    }
+  }, [monitorEnabled, discoveryLoopActive, monitorLoopActive, qualificationLoopActive]);
+
+  // Initial load - only if not paused
+  useEffect(() => {
+    if (monitorEnabled !== false) {
+      void runStepSilent(1, false);
+    }
+  }, [runStepSilent, monitorEnabled]);
 
   const runFullPipeline = async () => {
     setIsRunning(true);
@@ -1691,6 +1728,28 @@ export default function PipelineDebugger() {
           </div>
         </CardHeader>
         <CardContent>
+          {/* Global Paused Banner */}
+          {monitorEnabled === false && (
+            <div className="mb-4 p-4 rounded-lg border-2 border-amber-500 bg-amber-500/10 flex items-center gap-4">
+              <Pause className="h-8 w-8 text-amber-400" />
+              <div className="flex-1">
+                <p className="text-amber-200 font-semibold text-lg">Monitor Paused Globally</p>
+                <p className="text-amber-200/70 text-sm">
+                  All loops are disabled and API calls are skipped. Enable the monitor from the toggle above or from the Token Candidates Dashboard to resume operations.
+                </p>
+              </div>
+              <Button
+                variant="default"
+                onClick={toggleMonitorEnabled}
+                disabled={togglingMonitor}
+                className="bg-amber-500 hover:bg-amber-600 text-black font-semibold"
+              >
+                {togglingMonitor ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Play className="h-4 w-4 mr-2" />}
+                Resume Monitor
+              </Button>
+            </div>
+          )}
+          
           <div className="flex items-center justify-between py-2">
             {STEP_DEFINITIONS.map((step, idx) => {
               const loopState = getStepLoopState(step.id);
@@ -1786,11 +1845,14 @@ export default function PipelineDebugger() {
                     <div className="flex items-center gap-2">
                       {hasLoopToggle && (
                         <div className="flex items-center gap-2 mr-2">
-                          <span className="text-xs text-muted-foreground">{intervalSec}s loop</span>
+                          <span className="text-xs text-muted-foreground">
+                            {monitorEnabled === false ? 'Paused' : `${intervalSec}s loop`}
+                          </span>
                           <Switch
                             checked={isLoopActive}
                             onCheckedChange={toggleLoop}
-                            className="data-[state=checked]:bg-green-500"
+                            disabled={monitorEnabled === false}
+                            className="data-[state=checked]:bg-green-500 disabled:opacity-50 disabled:cursor-not-allowed"
                           />
                         </div>
                       )}
