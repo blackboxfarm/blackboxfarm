@@ -144,6 +144,9 @@ export function FantasyPortfolioDashboard() {
   const [backfillingCalls, setBackfillingCalls] = useState(false);
   const [backfillingRugcheck, setBackfillingRugcheck] = useState(false);
   const [autoRefresh, setAutoRefresh] = useState(false);
+  const [maintainOnClose, setMaintainOnClose] = useState(() => {
+    return localStorage.getItem('fantasy_maintain_on_close') === 'true';
+  });
   const [filter, setFilter] = useState<'all' | 'active' | 'inactive'>('active');
   const [channelFilter, setChannelFilter] = useState<string>('all');
   const [lastUpdate, setLastUpdate] = useState<Date | null>(null);
@@ -851,7 +854,7 @@ export function FantasyPortfolioDashboard() {
             </Select>
           </div>
 
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-3 flex-wrap">
             {/* Auto-refresh toggle */}
             <div className="flex items-center gap-2">
               <Switch
@@ -873,6 +876,50 @@ export function FantasyPortfolioDashboard() {
                 )}
               </label>
             </div>
+            
+            {/* Maintain on Close toggle */}
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <div className="flex items-center gap-2">
+                    <Switch
+                      checked={maintainOnClose}
+                      onCheckedChange={async (checked) => {
+                        setMaintainOnClose(checked);
+                        localStorage.setItem('fantasy_maintain_on_close', checked.toString());
+                        
+                        // Update database flag for cron job
+                        try {
+                          await supabase
+                            .from('telegram_channel_config')
+                            .update({ persistent_monitoring: checked } as any)
+                            .eq('is_active', true);
+                          
+                          toast.success(checked 
+                            ? '🔄 Persistent monitoring enabled - prices update even when tab is closed' 
+                            : 'Persistent monitoring disabled');
+                        } catch (err) {
+                          console.error('Error updating persistent monitoring:', err);
+                        }
+                      }}
+                      id="maintain-on-close"
+                    />
+                    <label htmlFor="maintain-on-close" className="text-sm flex items-center gap-1 cursor-pointer">
+                      <Radio className={`h-3 w-3 ${maintainOnClose ? 'text-cyan-500' : ''}`} />
+                      <span className={maintainOnClose ? 'text-cyan-500' : ''}>
+                        {maintainOnClose ? 'Persistent' : 'Maintain on Close'}
+                      </span>
+                    </label>
+                  </div>
+                </TooltipTrigger>
+                <TooltipContent>
+                  <p className="max-w-xs text-xs">
+                    When enabled, price monitoring continues via server cron even when this tab is closed.
+                    Auto-sell orders will still execute.
+                  </p>
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
 
             {lastUpdate && (
               <span className="text-xs text-muted-foreground">
