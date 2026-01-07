@@ -48,6 +48,7 @@ const PumpfunKOLRegistry = lazy(() => import("@/components/admin/PumpfunKOLRegis
 const PumpfunKOLActivity = lazy(() => import("@/components/admin/PumpfunKOLActivity"));
 const PumpfunKOLCabals = lazy(() => import("@/components/admin/PumpfunKOLCabals"));
 const PumpfunKOLTwitter = lazy(() => import("@/components/admin/PumpfunKOLTwitter"));
+const PumpfunTokenRetrace = lazy(() => import("@/components/admin/PumpfunTokenRetrace"));
 
 export default function SuperAdmin() {
   const [activeTab, setActiveTab] = useState("fuckoff");
@@ -342,7 +343,14 @@ export default function SuperAdmin() {
 
           <TabsContent value="pumpfun-monitor">
             <ActiveTabOnly activeTab={activeTab} tabValue="pumpfun-monitor">
-              <TokenCandidatesDashboard />
+              <Tabs defaultValue="candidates" className="space-y-4">
+                <TabsList>
+                  <TabsTrigger value="candidates">📊 Candidates</TabsTrigger>
+                  <TabsTrigger value="retrace">🔍 Retrace</TabsTrigger>
+                </TabsList>
+                <TabsContent value="candidates"><TokenCandidatesDashboard /></TabsContent>
+                <TabsContent value="retrace"><PumpfunTokenRetrace /></TabsContent>
+              </Tabs>
             </ActiveTabOnly>
           </TabsContent>
 

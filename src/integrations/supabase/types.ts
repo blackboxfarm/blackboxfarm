@@ -5821,6 +5821,165 @@ export type Database = {
         }
         Relationships: []
       }
+      pumpfun_token_retraces: {
+        Row: {
+          analysis_completed_at: string | null
+          analysis_notes: string | null
+          analysis_started_at: string | null
+          analysis_status: string | null
+          community_sentiment: string | null
+          created_at: string | null
+          current_market_cap_usd: number | null
+          developer_id: string | null
+          developer_success_rate: number | null
+          developer_total_tokens: number | null
+          developer_trust_level: string | null
+          dexscreener_telegram: string | null
+          dexscreener_twitter: string | null
+          dexscreener_website: string | null
+          error_message: string | null
+          funding_cex_name: string | null
+          funding_source_type: string | null
+          graduated_at: string | null
+          grandparent_wallet: string | null
+          id: string
+          is_cto_detected: boolean | null
+          is_graduated: boolean | null
+          kol_buy_count: number | null
+          kol_sell_count: number | null
+          kol_timeline: Json | null
+          kols_involved: string[] | null
+          launched_at: string | null
+          livestream_detected: boolean | null
+          mint_wallet: string
+          original_team_socials: Json | null
+          parent_wallet: string | null
+          peak_market_cap_usd: number | null
+          pumpfun_description: string | null
+          pumpfun_telegram: string | null
+          pumpfun_twitter: string | null
+          pumpfun_website: string | null
+          socials_changed: boolean | null
+          token_image: string | null
+          token_mint: string
+          token_name: string | null
+          token_symbol: string | null
+          total_replies: number | null
+          twitter_account_id: string | null
+          twitter_bio: string | null
+          twitter_created_at: string | null
+          twitter_followers: number | null
+          twitter_verified: boolean | null
+          updated_at: string | null
+          wallet_genealogy_depth: number | null
+          wallet_genealogy_json: Json | null
+        }
+        Insert: {
+          analysis_completed_at?: string | null
+          analysis_notes?: string | null
+          analysis_started_at?: string | null
+          analysis_status?: string | null
+          community_sentiment?: string | null
+          created_at?: string | null
+          current_market_cap_usd?: number | null
+          developer_id?: string | null
+          developer_success_rate?: number | null
+          developer_total_tokens?: number | null
+          developer_trust_level?: string | null
+          dexscreener_telegram?: string | null
+          dexscreener_twitter?: string | null
+          dexscreener_website?: string | null
+          error_message?: string | null
+          funding_cex_name?: string | null
+          funding_source_type?: string | null
+          graduated_at?: string | null
+          grandparent_wallet?: string | null
+          id?: string
+          is_cto_detected?: boolean | null
+          is_graduated?: boolean | null
+          kol_buy_count?: number | null
+          kol_sell_count?: number | null
+          kol_timeline?: Json | null
+          kols_involved?: string[] | null
+          launched_at?: string | null
+          livestream_detected?: boolean | null
+          mint_wallet: string
+          original_team_socials?: Json | null
+          parent_wallet?: string | null
+          peak_market_cap_usd?: number | null
+          pumpfun_description?: string | null
+          pumpfun_telegram?: string | null
+          pumpfun_twitter?: string | null
+          pumpfun_website?: string | null
+          socials_changed?: boolean | null
+          token_image?: string | null
+          token_mint: string
+          token_name?: string | null
+          token_symbol?: string | null
+          total_replies?: number | null
+          twitter_account_id?: string | null
+          twitter_bio?: string | null
+          twitter_created_at?: string | null
+          twitter_followers?: number | null
+          twitter_verified?: boolean | null
+          updated_at?: string | null
+          wallet_genealogy_depth?: number | null
+          wallet_genealogy_json?: Json | null
+        }
+        Update: {
+          analysis_completed_at?: string | null
+          analysis_notes?: string | null
+          analysis_started_at?: string | null
+          analysis_status?: string | null
+          community_sentiment?: string | null
+          created_at?: string | null
+          current_market_cap_usd?: number | null
+          developer_id?: string | null
+          developer_success_rate?: number | null
+          developer_total_tokens?: number | null
+          developer_trust_level?: string | null
+          dexscreener_telegram?: string | null
+          dexscreener_twitter?: string | null
+          dexscreener_website?: string | null
+          error_message?: string | null
+          funding_cex_name?: string | null
+          funding_source_type?: string | null
+          graduated_at?: string | null
+          grandparent_wallet?: string | null
+          id?: string
+          is_cto_detected?: boolean | null
+          is_graduated?: boolean | null
+          kol_buy_count?: number | null
+          kol_sell_count?: number | null
+          kol_timeline?: Json | null
+          kols_involved?: string[] | null
+          launched_at?: string | null
+          livestream_detected?: boolean | null
+          mint_wallet?: string
+          original_team_socials?: Json | null
+          parent_wallet?: string | null
+          peak_market_cap_usd?: number | null
+          pumpfun_description?: string | null
+          pumpfun_telegram?: string | null
+          pumpfun_twitter?: string | null
+          pumpfun_website?: string | null
+          socials_changed?: boolean | null
+          token_image?: string | null
+          token_mint?: string
+          token_name?: string | null
+          token_symbol?: string | null
+          total_replies?: number | null
+          twitter_account_id?: string | null
+          twitter_bio?: string | null
+          twitter_created_at?: string | null
+          twitter_followers?: number | null
+          twitter_verified?: boolean | null
+          updated_at?: string | null
+          wallet_genealogy_depth?: number | null
+          wallet_genealogy_json?: Json | null
+        }
+        Relationships: []
+      }
       pumpfun_trade_learnings: {
         Row: {
           ai_insights: string | null
