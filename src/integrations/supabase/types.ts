@@ -5256,11 +5256,15 @@ export type Database = {
           manual_trust_level: string | null
           source: string | null
           successful_pumps: number | null
+          total_token_mentions: number | null
           total_trades: number | null
+          total_tweets_scanned: number | null
           total_volume_sol: number | null
           trust_score: number | null
           twitter_followers: number | null
           twitter_handle: string | null
+          twitter_last_scanned_at: string | null
+          twitter_scan_enabled: boolean | null
           updated_at: string | null
           wallet_address: string
         }
@@ -5286,11 +5290,15 @@ export type Database = {
           manual_trust_level?: string | null
           source?: string | null
           successful_pumps?: number | null
+          total_token_mentions?: number | null
           total_trades?: number | null
+          total_tweets_scanned?: number | null
           total_volume_sol?: number | null
           trust_score?: number | null
           twitter_followers?: number | null
           twitter_handle?: string | null
+          twitter_last_scanned_at?: string | null
+          twitter_scan_enabled?: boolean | null
           updated_at?: string | null
           wallet_address: string
         }
@@ -5316,15 +5324,112 @@ export type Database = {
           manual_trust_level?: string | null
           source?: string | null
           successful_pumps?: number | null
+          total_token_mentions?: number | null
           total_trades?: number | null
+          total_tweets_scanned?: number | null
           total_volume_sol?: number | null
           trust_score?: number | null
           twitter_followers?: number | null
           twitter_handle?: string | null
+          twitter_last_scanned_at?: string | null
+          twitter_scan_enabled?: boolean | null
           updated_at?: string | null
           wallet_address?: string
         }
         Relationships: []
+      }
+      pumpfun_kol_tweets: {
+        Row: {
+          correlated_activity_id: string | null
+          correlation_delta_mins: number | null
+          correlation_type: string | null
+          created_at: string | null
+          detected_contracts: string[] | null
+          detected_tickers: string[] | null
+          detected_token_names: string[] | null
+          id: string
+          is_token_promotion: boolean | null
+          kol_id: string | null
+          kol_wallet: string
+          likes_count: number | null
+          posted_at: string
+          replies_count: number | null
+          retweets_count: number | null
+          scanned_at: string | null
+          sentiment_score: number | null
+          tweet_id: string
+          tweet_text: string
+          tweet_type: string | null
+          tweet_url: string | null
+          twitter_handle: string
+          views_count: number | null
+        }
+        Insert: {
+          correlated_activity_id?: string | null
+          correlation_delta_mins?: number | null
+          correlation_type?: string | null
+          created_at?: string | null
+          detected_contracts?: string[] | null
+          detected_tickers?: string[] | null
+          detected_token_names?: string[] | null
+          id?: string
+          is_token_promotion?: boolean | null
+          kol_id?: string | null
+          kol_wallet: string
+          likes_count?: number | null
+          posted_at: string
+          replies_count?: number | null
+          retweets_count?: number | null
+          scanned_at?: string | null
+          sentiment_score?: number | null
+          tweet_id: string
+          tweet_text: string
+          tweet_type?: string | null
+          tweet_url?: string | null
+          twitter_handle: string
+          views_count?: number | null
+        }
+        Update: {
+          correlated_activity_id?: string | null
+          correlation_delta_mins?: number | null
+          correlation_type?: string | null
+          created_at?: string | null
+          detected_contracts?: string[] | null
+          detected_tickers?: string[] | null
+          detected_token_names?: string[] | null
+          id?: string
+          is_token_promotion?: boolean | null
+          kol_id?: string | null
+          kol_wallet?: string
+          likes_count?: number | null
+          posted_at?: string
+          replies_count?: number | null
+          retweets_count?: number | null
+          scanned_at?: string | null
+          sentiment_score?: number | null
+          tweet_id?: string
+          tweet_text?: string
+          tweet_type?: string | null
+          tweet_url?: string | null
+          twitter_handle?: string
+          views_count?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "pumpfun_kol_tweets_correlated_activity_id_fkey"
+            columns: ["correlated_activity_id"]
+            isOneToOne: false
+            referencedRelation: "pumpfun_kol_activity"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "pumpfun_kol_tweets_kol_id_fkey"
+            columns: ["kol_id"]
+            isOneToOne: false
+            referencedRelation: "pumpfun_kol_registry"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       pumpfun_metric_snapshots: {
         Row: {
