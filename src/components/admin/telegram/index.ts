@@ -5,5 +5,7 @@ export { ChannelScanLogs } from './ChannelScanLogs';
 export { TradingKeywordsManager } from './TradingKeywordsManager';
 export { TradingRulesManager } from './TradingRulesManager';
 export { TradingTiersManager } from './TradingTiersManager';
+export { KingOfTheHill } from './KingOfTheHill';
+export { WhosOnFirst } from './WhosOnFirst';
 export { default as TelegramTargetManager } from './TelegramTargetManager';
 export type { TelegramTarget } from './TelegramTargetManager';

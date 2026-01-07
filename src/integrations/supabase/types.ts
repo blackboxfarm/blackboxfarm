@@ -7320,6 +7320,7 @@ export type Database = {
           entity_access_hash: string | null
           fantasy_buy_amount_usd: number | null
           fantasy_mode: boolean | null
+          first_enabled: boolean | null
           flipit_buy_amount_sol: number | null
           flipit_buy_amount_usd: number | null
           flipit_enabled: boolean | null
@@ -7328,6 +7329,7 @@ export type Database = {
           flipit_wallet_id: string | null
           id: string
           is_active: boolean | null
+          koth_enabled: boolean | null
           large_buy_amount_usd: number | null
           large_sell_multiplier: number | null
           last_check_at: string | null
@@ -7373,6 +7375,7 @@ export type Database = {
           entity_access_hash?: string | null
           fantasy_buy_amount_usd?: number | null
           fantasy_mode?: boolean | null
+          first_enabled?: boolean | null
           flipit_buy_amount_sol?: number | null
           flipit_buy_amount_usd?: number | null
           flipit_enabled?: boolean | null
@@ -7381,6 +7384,7 @@ export type Database = {
           flipit_wallet_id?: string | null
           id?: string
           is_active?: boolean | null
+          koth_enabled?: boolean | null
           large_buy_amount_usd?: number | null
           large_sell_multiplier?: number | null
           last_check_at?: string | null
@@ -7426,6 +7430,7 @@ export type Database = {
           entity_access_hash?: string | null
           fantasy_buy_amount_usd?: number | null
           fantasy_mode?: boolean | null
+          first_enabled?: boolean | null
           flipit_buy_amount_sol?: number | null
           flipit_buy_amount_usd?: number | null
           flipit_enabled?: boolean | null
@@ -7434,6 +7439,7 @@ export type Database = {
           flipit_wallet_id?: string | null
           id?: string
           is_active?: boolean | null
+          koth_enabled?: boolean | null
           large_buy_amount_usd?: number | null
           large_sell_multiplier?: number | null
           last_check_at?: string | null
