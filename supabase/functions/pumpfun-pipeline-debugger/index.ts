@@ -118,21 +118,38 @@ const FILTER_CONFIG = {
     name: 'Null Name/Ticker',
     description: 'Token has empty or missing name/ticker - obvious garbage',
   },
-  duplicate: {
+  duplicate_copycat: {
     order: 3,
-    name: 'Duplicate Ticker',
-    description: 'Token already exists in our watchlist system',
+    name: 'Copycat Token',
+    description: 'Different dev copying name of successful/active token',
+  },
+  duplicate_batch: {
+    order: 4,
+    name: 'Batch Duplicate',
+    description: 'Multiple same-name tokens in batch (spam attack)',
+  },
+  serial_spammer: {
+    order: 5,
+    name: 'Serial Spammer',
+    description: 'Dev has 50+ tokens with <5% success rate',
   },
   emoji_unicode: {
-    order: 4,
+    order: 6,
     name: 'Emoji/Unicode',
     description: 'Ticker contains disallowed emoji/unicode (CJK OK)',
   },
   ticker_too_long: {
-    order: 5,
+    order: 7,
     name: 'Ticker > 12 chars',
     description: 'Ticker exceeds 12 characters - unusual for legitimate tokens',
     threshold: 12,
+  },
+  // ALLOWED scenarios (tracked separately):
+  same_dev_relaunch: {
+    order: 99,
+    name: 'Same Dev Relaunch',
+    description: 'Same dev re-using name after test/failed launch - ALLOWED',
+    isAllowReason: true,
   },
 };
 
@@ -164,11 +181,14 @@ const BUY_GUARDRAILS = {
 
 // Enhanced signal scoring with dev patterns
 const SIGNAL_SCORING = {
-  // Positive patterns
+  // Positive patterns - Developer Intelligence
+  dev_legitimate_builder: { points: 30, description: 'Dev is a proven legitimate builder' },
+  dev_test_launcher: { points: 15, description: 'Dev shows test-before-launch pattern' },
   pattern_diamond_dev: { points: 25, description: 'Dev held through bonding (past tokens)' },
   pattern_buyback_dev: { points: 20, description: 'Dev recycles creator rewards as buybacks' },
   dev_reputation_high: { points: 20, threshold: 70, description: 'Dev reputation > 70' },
   dev_stable_after_dump: { points: 15, description: 'Dev has "stable_after_dump" pattern' },
+  dev_graduated_before: { points: 15, description: 'Dev has graduated tokens before' },
   price_in_ideal_range: { points: 15, description: 'Price in $0.000008 - $0.0000125 range' },
   survived_spike: { points: 10, description: 'Token spiked but stabilized' },
   low_insider_pct: { points: 10, threshold: 10, description: 'Insider % < 10%' },
@@ -180,7 +200,10 @@ const SIGNAL_SCORING = {
   pattern_hidden_whale_good: { points: 10, description: 'Hidden whale but dev is trusted' },
   dex_paid_profile: { points: 5, description: 'Has DEX paid profile' },
   
-  // Negative patterns (penalties)
+  // Negative patterns (penalties) - Developer Intelligence
+  dev_serial_spammer: { points: -50, description: 'Dev has 50+ tokens, <5% success (AUTO-REJECT)', autoReject: true },
+  dev_fee_farmer: { points: -30, description: 'Dev pattern: quick launches, no investment' },
+  dev_reputation_low: { points: -20, threshold: 30, description: 'Dev reputation < 30' },
   pattern_wash_bundler: { points: -10, description: 'Wash trading / bundling detected' },
   pattern_wallet_washer: { points: -15, description: 'Dev sells to own wallets' },
   pattern_hidden_whale_unknown: { points: -15, description: 'Hidden whale, unknown dev' },
@@ -337,88 +360,185 @@ async function runIntake(supabase: any, preDiscoveredTokens?: any[], preBatchId?
     filterBreakdown[key] = { count: 0, order: config.order, description: config.description };
   });
 
-  // Get existing symbols from durable memory (pumpfun_seen_symbols)
+  // Get existing symbols from durable memory (pumpfun_seen_symbols) with creator info
   const { data: seenSymbols } = await supabase
     .from('pumpfun_seen_symbols')
-    .select('symbol_lower, status, block_reason');
+    .select('symbol_lower, status, block_reason, creator_wallet, peak_mcap_usd, lifespan_mins, is_test_launch, token_outcome');
   
   const seenSymbolsMap = new Map((seenSymbols || []).map((s: any) => [s.symbol_lower, s]));
 
-  // Get existing tokens from DB (already curated) - case-insensitive symbol lookup
+  // Get existing tokens from DB (already curated) - with creator info
   const { data: watchlist } = await supabase
     .from('pumpfun_watchlist')
-    .select('token_mint, token_symbol')
+    .select('token_mint, token_symbol, creator_wallet, status')
     .in('status', ['watching', 'qualified', 'bought', 'pending_triage']);
 
   const existingMints = new Set((watchlist || []).map((w: any) => w.token_mint));
-  const existingSymbolsLower = new Set((watchlist || []).map((w: any) => (w.token_symbol || '').toLowerCase()));
+  
+  // Build map of existing symbols with their creators
+  const existingSymbolsMap = new Map<string, { mint: string; creator: string; status: string }>();
+  for (const w of (watchlist || [])) {
+    const lowerSym = (w.token_symbol || '').toLowerCase();
+    if (!existingSymbolsMap.has(lowerSym)) {
+      existingSymbolsMap.set(lowerSym, { mint: w.token_mint, creator: w.creator_wallet, status: w.status });
+    }
+  }
 
-  // STEP 1: Find ALL duplicate tickers within the batch (case-insensitive)
-  const tickerCounts: Record<string, number> = {};
+  // Get dev reputation for quick lookup
+  const creatorWallets = [...new Set(tokens.map(t => t.creatorWallet).filter(Boolean))];
+  const { data: devReputations } = await supabase
+    .from('dev_wallet_reputation')
+    .select('wallet_address, is_serial_spammer, is_test_launcher, is_legitimate_builder, reputation_score, trust_level, dev_pattern')
+    .in('wallet_address', creatorWallets);
+  
+  const devRepMap = new Map((devReputations || []).map((d: any) => [d.wallet_address, d]));
+
+  // STEP 1: Find ALL duplicate tickers within the batch (case-insensitive) but GROUP BY CREATOR
+  const tickerCreatorCounts: Record<string, Set<string>> = {};
   for (const token of tokens) {
     if (token.symbol) {
       const lowerSymbol = token.symbol.toLowerCase();
-      tickerCounts[lowerSymbol] = (tickerCounts[lowerSymbol] || 0) + 1;
+      if (!tickerCreatorCounts[lowerSymbol]) {
+        tickerCreatorCounts[lowerSymbol] = new Set();
+      }
+      if (token.creatorWallet) {
+        tickerCreatorCounts[lowerSymbol].add(token.creatorWallet);
+      }
     }
   }
   
-  // Identify which tickers have duplicates within the batch (count > 1)
-  const duplicatedTickersInBatch = new Set(
-    Object.entries(tickerCounts)
-      .filter(([_, count]) => count > 1)
+  // Identify batch duplicates: same ticker from DIFFERENT creators (spam attack)
+  const batchDuplicatesMultiCreator = new Set(
+    Object.entries(tickerCreatorCounts)
+      .filter(([_, creators]) => creators.size > 1) // Different creators with same name
       .map(([ticker]) => ticker)
   );
 
   // Track symbols to add to seen_symbols table
   const symbolsToUpsert: any[] = [];
   const rejectionsToInsert: any[] = [];
+  const allowedDuplicates: any[] = []; // Track same-dev relaunches that were allowed
 
   for (const token of tokens) {
-    let rejected_reason = null;
+    let rejected_reason: string | null = null;
     let rejected_detail = '';
+    let allow_reason: string | null = null;
     const lowerSymbol = (token.symbol || '').toLowerCase();
+    const creatorWallet = token.creatorWallet || '';
 
+    // Get dev reputation
+    const devRep = devRepMap.get(creatorWallet);
+
+    // Priority 1: Mayhem mode
     if (token.isMayhem) {
       rejected_reason = 'mayhem_mode';
       rejected_detail = 'Flagged as mayhem/spam';
     }
+    // Priority 2: Null name/ticker
     else if (!token.symbol || !token.name || token.symbol.trim() === '' || token.name.trim() === '') {
       rejected_reason = 'null_name_ticker';
       rejected_detail = `Name: "${token.name || 'null'}", Ticker: "${token.symbol || 'null'}"`;
     }
-    // Check durable seen_symbols table for blocked symbols
-    else if (seenSymbolsMap.has(lowerSymbol) && seenSymbolsMap.get(lowerSymbol).status === 'blocked') {
-      rejected_reason = 'duplicate';
-      rejected_detail = `Previously blocked: ${seenSymbolsMap.get(lowerSymbol).block_reason || 'duplicate'}`;
+    // Priority 3: Serial spammer dev - auto-reject
+    else if (devRep?.is_serial_spammer) {
+      rejected_reason = 'serial_spammer';
+      rejected_detail = `Dev ${creatorWallet.slice(0, 8)}... is a serial spammer (pattern: ${devRep.dev_pattern})`;
     }
-    // Check if this ticker exists in DB already (case-insensitive)
-    else if (existingSymbolsLower.has(lowerSymbol)) {
-      rejected_reason = 'duplicate';
-      rejected_detail = `Already exists in watchlist (case-insensitive match)`;
-      // NUKE: Block this symbol permanently
+    // Priority 4: Batch duplicates from DIFFERENT creators (spam attack)
+    else if (batchDuplicatesMultiCreator.has(lowerSymbol)) {
+      rejected_reason = 'duplicate_batch';
+      rejected_detail = `Multiple tokens "${token.symbol}" from different creators in batch - spam attack`;
       duplicateNukes.push(lowerSymbol);
     }
-    // Check if this token's ticker appears multiple times in THIS batch - reject ALL of them
-    else if (duplicatedTickersInBatch.has(lowerSymbol)) {
-      rejected_reason = 'duplicate';
-      rejected_detail = `Multiple tokens with same ticker "${token.symbol}" in batch - ALL removed`;
-      duplicateNukes.push(lowerSymbol);
+    // Priority 5: Check seen_symbols for historical duplicates (SMART CHECK)
+    else if (seenSymbolsMap.has(lowerSymbol)) {
+      const seenRecord = seenSymbolsMap.get(lowerSymbol);
+      
+      // If permanently blocked, reject
+      if (seenRecord.status === 'blocked') {
+        rejected_reason = 'duplicate_copycat';
+        rejected_detail = `Previously blocked: ${seenRecord.block_reason || 'duplicate'}`;
+      }
+      // SMART CHECK: Same creator re-using name?
+      else if (seenRecord.creator_wallet === creatorWallet) {
+        // Same dev! Check if previous was a test launch
+        if (seenRecord.is_test_launch || seenRecord.token_outcome === 'test' || seenRecord.token_outcome === 'failed') {
+          // ALLOW: Same dev re-launching after test/fail
+          allow_reason = 'same_dev_relaunch_after_test';
+          allowedDuplicates.push({
+            symbol: token.symbol,
+            creator: creatorWallet,
+            previousOutcome: seenRecord.token_outcome,
+          });
+        } else if (seenRecord.peak_mcap_usd > 50000) {
+          // Previous was successful - don't let them re-use
+          rejected_reason = 'duplicate_copycat';
+          rejected_detail = `Same dev already had successful token with this name (peak: $${seenRecord.peak_mcap_usd?.toFixed(0)})`;
+        } else {
+          // Previous was mid-tier, allow retry
+          allow_reason = 'same_dev_retry';
+          allowedDuplicates.push({
+            symbol: token.symbol,
+            creator: creatorWallet,
+            previousOutcome: 'mid_tier_retry',
+          });
+        }
+      }
+      // Different creator - check if original was successful
+      else if (seenRecord.peak_mcap_usd > 10000 || seenRecord.token_outcome === 'successful' || seenRecord.token_outcome === 'graduated') {
+        rejected_reason = 'duplicate_copycat';
+        rejected_detail = `Copycat of successful token by ${seenRecord.creator_wallet?.slice(0, 8)}... (peak: $${seenRecord.peak_mcap_usd?.toFixed(0) || '?'})`;
+      }
+      // Different creator but original failed - allow
+      else {
+        allow_reason = 'previous_failed';
+      }
     }
+    // Priority 6: Check current watchlist (SMART CHECK)
+    else if (existingSymbolsMap.has(lowerSymbol)) {
+      const existingToken = existingSymbolsMap.get(lowerSymbol)!;
+      
+      // Same creator?
+      if (existingToken.creator === creatorWallet) {
+        // Allow if dev is a known test-launcher
+        if (devRep?.is_test_launcher) {
+          allow_reason = 'test_launcher_dev_relaunch';
+          allowedDuplicates.push({
+            symbol: token.symbol,
+            creator: creatorWallet,
+            previousOutcome: 'test_launcher_pattern',
+          });
+        } else {
+          // Same dev, not known test-launcher, reject as potential confusion
+          rejected_reason = 'duplicate_copycat';
+          rejected_detail = `Already in watchlist with same creator (may cause confusion)`;
+        }
+      } else {
+        // Different creator copying active token
+        rejected_reason = 'duplicate_copycat';
+        rejected_detail = `Copycat of active watchlist token "${existingToken.mint.slice(0, 8)}..." (status: ${existingToken.status})`;
+      }
+    }
+    // Priority 7: Exact mint duplicate
     else if (existingMints.has(token.mint)) {
-      rejected_reason = 'duplicate';
+      rejected_reason = 'duplicate_copycat';
       rejected_detail = 'Exact mint already in watchlist';
     }
+    // Priority 8: Emoji/unicode check
     else if (containsDisallowedTickerUnicode(token.symbol)) {
       rejected_reason = 'emoji_unicode';
       rejected_detail = `Contains disallowed emoji/unicode: "${token.symbol}"`;
     }
+    // Priority 9: Ticker length check
     else if (token.symbol.length > FILTER_CONFIG.ticker_too_long.threshold) {
       rejected_reason = 'ticker_too_long';
       rejected_detail = `Length: ${token.symbol.length} chars (max: ${FILTER_CONFIG.ticker_too_long.threshold})`;
     }
 
     if (rejected_reason) {
-      filterBreakdown[rejected_reason].count++;
+      if (filterBreakdown[rejected_reason]) {
+        filterBreakdown[rejected_reason].count++;
+      }
       rejected.push({ ...token, reason: rejected_reason, detail: rejected_detail });
       
       // Record rejection event
@@ -431,17 +551,19 @@ async function runIntake(supabase: any, preDiscoveredTokens?: any[], preBatchId?
         detail: rejected_detail,
         source: 'intake_step2',
         batch_id: batchId,
-        creator_wallet: token.creatorWallet,
+        creator_wallet: creatorWallet,
       });
     } else {
-      passed.push(token);
+      passed.push({ ...token, allowReason: allow_reason });
       
-      // Track this symbol as seen
+      // Track this symbol as seen with creator info
       symbolsToUpsert.push({
         symbol_lower: lowerSymbol,
         symbol_original: token.symbol,
         first_token_mint: token.mint,
+        creator_wallet: creatorWallet,
         status: 'allowed',
+        token_outcome: 'unknown',
       });
     }
   }
