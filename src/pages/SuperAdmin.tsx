@@ -43,6 +43,7 @@ const TokenCandidatesDashboard = lazy(() => import("@/components/admin/TokenCand
 const RugInvestigator = lazy(() => import("@/components/admin/RugInvestigator"));
 const TokenAccountCleaner = lazy(() => import("@/components/admin/TokenAccountCleaner").then(m => ({ default: m.TokenAccountCleaner })));
 const PumpfunBlacklist = lazy(() => import("@/components/admin/PumpfunBlacklist").then(m => ({ default: m.PumpfunBlacklist })));
+const PumpfunWhitelist = lazy(() => import("@/components/admin/PumpfunWhitelist").then(m => ({ default: m.PumpfunWhitelist })));
 
 export default function SuperAdmin() {
   const [activeTab, setActiveTab] = useState("fuckoff");
@@ -138,6 +139,7 @@ export default function SuperAdmin() {
             <TabsTrigger value="rug-investigator" className="flex-shrink-0 data-[state=active]:bg-gradient-to-r data-[state=active]:from-red-500/30 data-[state=active]:to-rose-500/20">🔍 Rug Investigator</TabsTrigger>
             <TabsTrigger value="rent-reclaimer" className="flex-shrink-0 data-[state=active]:bg-gradient-to-r data-[state=active]:from-orange-500/30 data-[state=active]:to-amber-500/20">🔥 Rent Reclaimer</TabsTrigger>
             <TabsTrigger value="pumpfun-blacklist" className="flex-shrink-0 data-[state=active]:bg-gradient-to-r data-[state=active]:from-red-600/30 data-[state=active]:to-red-500/20">🚫 Blacklist Mesh</TabsTrigger>
+            <TabsTrigger value="pumpfun-whitelist" className="flex-shrink-0 data-[state=active]:bg-gradient-to-r data-[state=active]:from-green-600/30 data-[state=active]:to-emerald-500/20">✅ Whitelist Mesh</TabsTrigger>
           </TabsList>
           
           <TabsContent value="fuckoff">
@@ -354,6 +356,12 @@ export default function SuperAdmin() {
           <TabsContent value="pumpfun-blacklist">
             <ActiveTabOnly activeTab={activeTab} tabValue="pumpfun-blacklist">
               <PumpfunBlacklist />
+            </ActiveTabOnly>
+          </TabsContent>
+
+          <TabsContent value="pumpfun-whitelist">
+            <ActiveTabOnly activeTab={activeTab} tabValue="pumpfun-whitelist">
+              <PumpfunWhitelist />
             </ActiveTabOnly>
           </TabsContent>
         </Tabs>

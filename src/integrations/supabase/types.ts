@@ -5904,6 +5904,81 @@ export type Database = {
           },
         ]
       }
+      pumpfun_whitelist: {
+        Row: {
+          added_by: string | null
+          avg_token_lifespan_hours: number | null
+          created_at: string | null
+          entry_type: string
+          evidence_notes: string | null
+          first_seen_at: string | null
+          id: string
+          identifier: string
+          is_active: boolean | null
+          linked_pumpfun_accounts: string[] | null
+          linked_telegram: string[] | null
+          linked_token_mints: string[] | null
+          linked_twitter: string[] | null
+          linked_wallets: string[] | null
+          source: string | null
+          tags: string[] | null
+          tokens_launched: number | null
+          tokens_successful: number | null
+          total_volume_sol: number | null
+          trust_level: string
+          updated_at: string | null
+          whitelist_reason: string | null
+        }
+        Insert: {
+          added_by?: string | null
+          avg_token_lifespan_hours?: number | null
+          created_at?: string | null
+          entry_type: string
+          evidence_notes?: string | null
+          first_seen_at?: string | null
+          id?: string
+          identifier: string
+          is_active?: boolean | null
+          linked_pumpfun_accounts?: string[] | null
+          linked_telegram?: string[] | null
+          linked_token_mints?: string[] | null
+          linked_twitter?: string[] | null
+          linked_wallets?: string[] | null
+          source?: string | null
+          tags?: string[] | null
+          tokens_launched?: number | null
+          tokens_successful?: number | null
+          total_volume_sol?: number | null
+          trust_level?: string
+          updated_at?: string | null
+          whitelist_reason?: string | null
+        }
+        Update: {
+          added_by?: string | null
+          avg_token_lifespan_hours?: number | null
+          created_at?: string | null
+          entry_type?: string
+          evidence_notes?: string | null
+          first_seen_at?: string | null
+          id?: string
+          identifier?: string
+          is_active?: boolean | null
+          linked_pumpfun_accounts?: string[] | null
+          linked_telegram?: string[] | null
+          linked_token_mints?: string[] | null
+          linked_twitter?: string[] | null
+          linked_wallets?: string[] | null
+          source?: string | null
+          tags?: string[] | null
+          tokens_launched?: number | null
+          tokens_successful?: number | null
+          total_volume_sol?: number | null
+          trust_level?: string
+          updated_at?: string | null
+          whitelist_reason?: string | null
+        }
+        Relationships: []
+      }
       rate_limits: {
         Row: {
           action_type: string
