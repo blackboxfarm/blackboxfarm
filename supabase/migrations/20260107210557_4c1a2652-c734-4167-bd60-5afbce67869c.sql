@@ -1,0 +1,32 @@
+-- Insert all Telegram channels/groups from screenshots with specified defaults
+INSERT INTO telegram_channel_config (
+  channel_id,
+  channel_name,
+  is_active,
+  fantasy_mode,
+  max_mint_age_minutes,
+  scan_window_minutes,
+  trading_mode,
+  flipit_enabled,
+  scalp_mode_enabled,
+  koth_enabled,
+  first_enabled
+) VALUES
+  ('-1002463331541', 'Solana Plays', false, false, 10080, 1440, 'simple', false, false, true, true),
+  ('-1002304553491', 'Sol Trending', false, false, 10080, 1440, 'simple', false, false, true, true),
+  ('-1002313276501', 'KOTH KING | Pump Kings', false, false, 10080, 1440, 'simple', false, false, true, true),
+  ('-1002349476729', 'Sol Trending 2', false, false, 10080, 1440, 'simple', false, false, true, true),
+  ('-1001925316025', 'Moontok Crypto Calls', false, false, 10080, 1440, 'simple', false, false, true, true),
+  ('-1002385555908', 'Snipers Nest', false, false, 10080, 1440, 'simple', false, false, true, true),
+  ('-1002500632395', 'Pump Fun KOTH Tracker', false, false, 10080, 1440, 'simple', false, false, true, true),
+  ('-1002399006450', 'Channel 2399006450', false, false, 10080, 1440, 'simple', false, false, true, true),
+  ('-1002456972413', 'Pump.Fun Rising', false, false, 10080, 1440, 'simple', false, false, true, true),
+  ('-1001920503639', 'WHALE Pump.fun', false, false, 10080, 1440, 'simple', false, false, true, true),
+  ('-1002271100212', 'CTO Sniper', false, false, 10080, 1440, 'simple', false, false, true, true),
+  ('-1002341118376', 'Solana Hot', false, false, 10080, 1440, 'simple', false, false, true, true),
+  ('-1002485645879', 'Solana Moon Pump', false, false, 10080, 1440, 'simple', false, false, true, true),
+  ('-1002368667411', 'Pump Alpha 1', false, false, 10080, 1440, 'simple', false, false, true, true),
+  ('-1002405629251', 'Channel 2405629251', false, false, 10080, 1440, 'simple', false, false, true, true),
+  ('-1002366920006', 'Solana Pump Calls', false, false, 10080, 1440, 'simple', false, false, true, true),
+  ('-1002291695890', 'Crypto Flip Calls', false, false, 10080, 1440, 'simple', false, false, true, true),
+  ('-1002480971025', 'CTO.Fun Signals', false, false, 10080, 1440, 'simple', false, false, true, true);
