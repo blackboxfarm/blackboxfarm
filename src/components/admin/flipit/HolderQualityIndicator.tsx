@@ -1,6 +1,6 @@
 import React from 'react';
 import { Loader2, Users, AlertTriangle, CheckCircle2, MinusCircle } from 'lucide-react';
-import { HolderQuality } from '@/hooks/useHolderQualityCheck';
+import { HolderQuality, TierBreakdown } from '@/hooks/useHolderQualityCheck';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { cn } from '@/lib/utils';
 
@@ -12,6 +12,7 @@ interface HolderQualityIndicatorProps {
   realBuyersCount: number;
   dustPercent: number;
   whaleCount: number;
+  tierBreakdown: TierBreakdown;
   error: string | null;
   className?: string;
 }
@@ -24,6 +25,7 @@ export function HolderQualityIndicator({
   realBuyersCount,
   dustPercent,
   whaleCount,
+  tierBreakdown,
   error,
   className,
 }: HolderQualityIndicatorProps) {
@@ -74,6 +76,9 @@ export function HolderQualityIndicator({
   };
 
   const config = qualityConfig[quality];
+  
+  // Format tier breakdown as compact string
+  const tierDisplay = `${tierBreakdown.over1k.toFixed(0)}/${tierBreakdown.mid250to500.toFixed(0)}/${tierBreakdown.mid50to249.toFixed(0)}/${tierBreakdown.low20to49.toFixed(0)}/${tierBreakdown.dust.toFixed(0)}%`;
 
   return (
     <TooltipProvider>
@@ -91,6 +96,9 @@ export function HolderQualityIndicator({
             <span className={cn("text-xs font-medium", config.textColor)}>
               {config.label}
             </span>
+            <span className="text-[10px] text-muted-foreground font-mono ml-1">
+              ({tierDisplay})
+            </span>
           </div>
         </TooltipTrigger>
         <TooltipContent side="bottom" className="max-w-xs">
@@ -106,15 +114,28 @@ export function HolderQualityIndicator({
                 <span className="font-mono">{totalHolders.toLocaleString()}</span>
                 <span>Real Buyers ($5+):</span>
                 <span className="font-mono">{realBuyersCount.toLocaleString()}</span>
-                <span>Dust Wallets:</span>
-                <span className="font-mono">{dustPercent.toFixed(0)}%</span>
-                {whaleCount > 0 && (
-                  <>
-                    <span>Whales:</span>
-                    <span className="font-mono">{whaleCount}</span>
-                  </>
-                )}
               </div>
+              <div className="pt-1 border-t border-border/50 text-muted-foreground">
+                <p className="text-[10px] font-medium mb-1">Tier Breakdown (% of holders):</p>
+                <div className="grid grid-cols-2 gap-x-4 gap-y-0.5">
+                  <span>$1k+ whales:</span>
+                  <span className="font-mono text-green-400">{tierBreakdown.over1k.toFixed(1)}%</span>
+                  <span>$250-$500:</span>
+                  <span className="font-mono text-blue-400">{tierBreakdown.mid250to500.toFixed(1)}%</span>
+                  <span>$50-$249:</span>
+                  <span className="font-mono text-cyan-400">{tierBreakdown.mid50to249.toFixed(1)}%</span>
+                  <span>$20-$49:</span>
+                  <span className="font-mono text-amber-400">{tierBreakdown.low20to49.toFixed(1)}%</span>
+                  <span>Dust (&lt;$5):</span>
+                  <span className="font-mono text-red-400">{tierBreakdown.dust.toFixed(1)}%</span>
+                </div>
+              </div>
+              {whaleCount > 0 && (
+                <div className="pt-1 border-t border-border/50 text-muted-foreground">
+                  <span>Total Whales: </span>
+                  <span className="font-mono text-green-400">{whaleCount}</span>
+                </div>
+              )}
             </div>
           </div>
         </TooltipContent>

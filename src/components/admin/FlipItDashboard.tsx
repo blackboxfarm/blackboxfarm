@@ -1933,9 +1933,79 @@ export function FlipItDashboard() {
             )}
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 gap-4">
+            {/* Row 1: Buy Amount, SOL/USD, and Target - stacked above token address */}
+            <div className="flex items-end gap-3 flex-wrap">
+              {/* Buy Amount - compact */}
+              <div className="space-y-1">
+                <Label className="flex items-center gap-1 text-sm">
+                  {buyAmountMode === 'usd' ? <DollarSign className="h-3 w-3" /> : <Wallet className="h-3 w-3" />}
+                  Buy Amount
+                </Label>
+                <div className="flex gap-1">
+                  <Input
+                    type="number"
+                    step="0.001"
+                    min="0"
+                    value={buyAmount}
+                    onChange={(e) => setBuyAmount(e.target.value)}
+                    placeholder={buyAmountMode === 'usd' ? '0.00' : '0.001'}
+                    className="w-24"
+                  />
+                  <Select value={buyAmountMode} onValueChange={(v: 'usd' | 'sol') => setBuyAmountMode(v)}>
+                    <SelectTrigger className="w-16">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="sol">SOL</SelectItem>
+                      <SelectItem value="usd">USD</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                {solPrice && buyAmount && (
+                  <p className="text-xs text-muted-foreground">
+                    {buyAmountMode === 'usd' 
+                      ? `≈ ${(parseFloat(buyAmount) / solPrice).toFixed(4)} SOL`
+                      : `≈ $${(parseFloat(buyAmount) * solPrice).toFixed(2)} USD`
+                    }
+                  </p>
+                )}
+              </div>
 
-            {/* Token Input */}
+              {/* Target Multiplier - compact */}
+              <div className="space-y-1">
+                <Label className="flex items-center gap-1 text-sm">
+                  <TrendingUp className="h-3 w-3" />
+                  Target
+                </Label>
+                <Select value={targetMultiplier.toString()} onValueChange={v => setTargetMultiplier(Number(v))}>
+                  <SelectTrigger className="w-28">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="1.25">1.25x (+25%)</SelectItem>
+                    <SelectItem value="1.30">1.30x (+30%)</SelectItem>
+                    <SelectItem value="1.50">1.50x (+50%)</SelectItem>
+                    <SelectItem value="1.75">1.75x (+75%)</SelectItem>
+                    <SelectItem value="2">2x (+100%)</SelectItem>
+                    <SelectItem value="2.5">2.5x (+150%)</SelectItem>
+                    <SelectItem value="3">3x (+200%)</SelectItem>
+                    <SelectItem value="4">4x (+300%)</SelectItem>
+                    <SelectItem value="5">5x (+400%)</SelectItem>
+                    <SelectItem value="6">6x (+500%)</SelectItem>
+                    <SelectItem value="7">7x (+600%)</SelectItem>
+                    <SelectItem value="8">8x (+700%)</SelectItem>
+                    <SelectItem value="9">9x (+800%)</SelectItem>
+                    <SelectItem value="10">10x (+900%)</SelectItem>
+                    <SelectItem value="15">15x (+1400%)</SelectItem>
+                    <SelectItem value="20">20x (+1900%)</SelectItem>
+                    <SelectItem value="25">25x (+2400%)</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+
+            {/* Row 2: Token Input with Paste + Clear buttons */}
             <div className="space-y-2">
               <Label className="flex items-center justify-between flex-wrap gap-2">
                 <span className="flex items-center gap-2">
@@ -1958,6 +2028,28 @@ export function FlipItDashboard() {
                   >
                     <ClipboardPaste className="h-3 w-3 mr-1" />
                     Paste
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    className="h-5 px-2 text-xs text-muted-foreground hover:text-foreground"
+                    onClick={() => {
+                      setTokenAddress('');
+                      setInputToken({
+                        mint: '',
+                        symbol: null,
+                        name: null,
+                        price: null,
+                        image: null,
+                        lastFetched: null,
+                        source: null
+                      });
+                      holderQuality.reset();
+                      toast.info('Cleared');
+                    }}
+                  >
+                    <XCircle className="h-3 w-3 mr-1" />
+                    Clear
                   </Button>
                   {inputToken.symbol && (
                     <span className="font-bold text-primary">
@@ -2015,76 +2107,11 @@ export function FlipItDashboard() {
                     realBuyersCount={holderQuality.realBuyersCount}
                     dustPercent={holderQuality.dustPercent}
                     whaleCount={holderQuality.whaleCount}
+                    tierBreakdown={holderQuality.tierBreakdown}
                     error={holderQuality.error}
                   />
                 </div>
               )}
-            </div>
-            <div className="space-y-2">
-              <Label className="flex items-center gap-1">
-                {buyAmountMode === 'usd' ? <DollarSign className="h-4 w-4" /> : <Wallet className="h-4 w-4" />}
-                Buy Amount
-              </Label>
-              <div className="flex gap-2">
-                <Input
-                  type="number"
-                  step="0.001"
-                  min="0"
-                  value={buyAmount}
-                  onChange={(e) => setBuyAmount(e.target.value)}
-                  placeholder={buyAmountMode === 'usd' ? '0.00' : '0.001'}
-                  className="flex-1"
-                />
-                <Select value={buyAmountMode} onValueChange={(v: 'usd' | 'sol') => setBuyAmountMode(v)}>
-                  <SelectTrigger className="w-20">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="sol">SOL</SelectItem>
-                    <SelectItem value="usd">USD</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-              {solPrice && buyAmount && (
-                <p className="text-xs text-muted-foreground">
-                  {buyAmountMode === 'usd' 
-                    ? `≈ ${(parseFloat(buyAmount) / solPrice).toFixed(4)} SOL`
-                    : `≈ $${(parseFloat(buyAmount) * solPrice).toFixed(2)} USD`
-                  }
-                </p>
-              )}
-            </div>
-
-            {/* Target Multiplier */}
-            <div className="space-y-2">
-              <Label className="flex items-center gap-1">
-                <TrendingUp className="h-4 w-4" />
-                Target
-              </Label>
-              <Select value={targetMultiplier.toString()} onValueChange={v => setTargetMultiplier(Number(v))}>
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="1.25">1.25x (+25%)</SelectItem>
-                  <SelectItem value="1.30">1.30x (+30%)</SelectItem>
-                  <SelectItem value="1.50">1.50x (+50%)</SelectItem>
-                  <SelectItem value="1.75">1.75x (+75%)</SelectItem>
-                  <SelectItem value="2">2x (+100%)</SelectItem>
-                  <SelectItem value="2.5">2.5x (+150%)</SelectItem>
-                  <SelectItem value="3">3x (+200%)</SelectItem>
-                  <SelectItem value="4">4x (+300%)</SelectItem>
-                  <SelectItem value="5">5x (+400%)</SelectItem>
-                  <SelectItem value="6">6x (+500%)</SelectItem>
-                  <SelectItem value="7">7x (+600%)</SelectItem>
-                  <SelectItem value="8">8x (+700%)</SelectItem>
-                  <SelectItem value="9">9x (+800%)</SelectItem>
-                  <SelectItem value="10">10x (+900%)</SelectItem>
-                  <SelectItem value="15">15x (+1400%)</SelectItem>
-                  <SelectItem value="20">20x (+1900%)</SelectItem>
-                  <SelectItem value="25">25x (+2400%)</SelectItem>
-                </SelectContent>
-              </Select>
             </div>
           </div>
 
