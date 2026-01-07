@@ -144,6 +144,27 @@ const FILTER_CONFIG = {
     description: 'Ticker exceeds 12 characters - unusual for legitimate tokens',
     threshold: 12,
   },
+  // Lifecycle filters - detect graduated/missed tokens
+  already_graduated: {
+    order: 8,
+    name: 'Already Graduated',
+    description: 'Token already graduated from bonding curve - too late',
+  },
+  price_past_window: {
+    order: 9,
+    name: 'Price Past Window',
+    description: 'Token price already far above our buy zone - missed the entry',
+  },
+  ath_already_hit: {
+    order: 10,
+    name: 'ATH Already Hit',
+    description: 'Token already hit ATH and dumped - opportunity passed',
+  },
+  token_too_old: {
+    order: 11,
+    name: 'Token Too Old',
+    description: 'Token minted too long ago when first detected - stale discovery',
+  },
   // ALLOWED scenarios (tracked separately):
   same_dev_relaunch: {
     order: 99,
@@ -177,6 +198,21 @@ const BUY_GUARDRAILS = {
   min_time_after_spike_mins: 5, // Wait 5 mins after spike
   max_crash_from_peak_pct: 60, // Don't buy if crashed >60% from peak
   max_insider_pct: 20, // Max 20% held by linked wallets
+};
+
+// CRITICAL: Token lifecycle guardrails - detect graduated/missed tokens
+const LIFECYCLE_GUARDRAILS = {
+  // Graduation detection
+  graduated_mcap_threshold: 100000, // $100K mcap = graduated from bonding
+  graduated_bonding_pct: 99, // 99%+ bonding = about to graduate or graduated
+  max_price_for_watchlist: 0.00015, // Tokens above this price are past our window (15x our max buy price)
+  
+  // ATH detection - if token already hit ATH and crashed, opportunity passed
+  ath_dump_threshold_pct: 40, // If down 40%+ from ATH, likely too late
+  ath_min_threshold_usd: 0.00003, // Only check ATH if price was above this (significant)
+  
+  // Age detection
+  max_age_for_new_entry_mins: 30, // Tokens older than 30 mins when first seen are suspicious
 };
 
 // Enhanced signal scoring with dev patterns
@@ -285,23 +321,36 @@ async function runDiscovery(supabase: any): Promise<any> {
     const newApiTokens = apiTokens.filter(t => t.token?.mint && !existingMints.has(t.token.mint));
     console.log(`[Step 1] Found ${newApiTokens.length} NEW tokens (${alreadyKnownCount} already known)`);
 
-    const formattedTokens = newApiTokens.map((t: any) => ({
-      mint: t.token?.mint,
-      symbol: t.token?.symbol || '',
-      name: t.token?.name || '',
-      marketCapSol: 0,
-      status: 'new',
-      createdAt: new Date().toISOString(),
-      createdAtBlockchain: t.events?.createdAt ? new Date(t.events.createdAt * 1000).toISOString() : null,
-      creatorWallet: t.creator,
-      holderCount: t.holders || 0,
-      volumeSol: t.pools?.[0]?.volume?.h24 || 0,
-      priceUsd: t.pools?.[0]?.price?.usd,
-      liquidityUsd: t.pools?.[0]?.liquidity?.usd,
-      buys: t.buys || 0,
-      sells: t.sells || 0,
-      isNew: true,
-    }));
+    const formattedTokens = newApiTokens.map((t: any) => {
+      const pool = t.pools?.[0];
+      const priceUsd = pool?.price?.usd || 0;
+      const marketCapUsd = pool?.marketCap?.usd || t.market_cap || 0;
+      const liquidityUsd = pool?.liquidity?.usd || 0;
+      
+      // Calculate bonding curve progress: liquidity / 85 SOL threshold (pump.fun graduates at ~85 SOL)
+      const liquiditySol = pool?.liquidity?.quote || 0;
+      const bondingCurvePct = Math.min(100, (liquiditySol / 85) * 100);
+      
+      return {
+        mint: t.token?.mint,
+        symbol: t.token?.symbol || '',
+        name: t.token?.name || '',
+        marketCapSol: 0,
+        marketCapUsd,
+        bondingCurvePct,
+        status: 'new',
+        createdAt: new Date().toISOString(),
+        createdAtBlockchain: t.events?.createdAt ? new Date(t.events.createdAt * 1000).toISOString() : null,
+        creatorWallet: t.creator,
+        holderCount: t.holders || 0,
+        volumeSol: pool?.volume?.h24 || 0,
+        priceUsd,
+        liquidityUsd,
+        buys: t.buys || 0,
+        sells: t.sells || 0,
+        isNew: true,
+      };
+    });
 
     return {
       source: 'SolanaTracker API',
@@ -533,6 +582,30 @@ async function runIntake(supabase: any, preDiscoveredTokens?: any[], preBatchId?
     else if (token.symbol.length > FILTER_CONFIG.ticker_too_long.threshold) {
       rejected_reason = 'ticker_too_long';
       rejected_detail = `Length: ${token.symbol.length} chars (max: ${FILTER_CONFIG.ticker_too_long.threshold})`;
+    }
+    // Priority 10: Already graduated check (market cap too high = graduated from bonding)
+    else if (token.marketCapUsd && token.marketCapUsd >= LIFECYCLE_GUARDRAILS.graduated_mcap_threshold) {
+      rejected_reason = 'already_graduated';
+      rejected_detail = `Market cap $${(token.marketCapUsd / 1000).toFixed(1)}K indicates already graduated from bonding curve`;
+    }
+    // Priority 11: Bonding curve complete
+    else if (token.bondingCurvePct && token.bondingCurvePct >= LIFECYCLE_GUARDRAILS.graduated_bonding_pct) {
+      rejected_reason = 'already_graduated';
+      rejected_detail = `Bonding curve at ${token.bondingCurvePct.toFixed(1)}% - already graduated or about to`;
+    }
+    // Priority 12: Price way above our buy window
+    else if (token.priceUsd && token.priceUsd >= LIFECYCLE_GUARDRAILS.max_price_for_watchlist) {
+      rejected_reason = 'price_past_window';
+      rejected_detail = `Price $${token.priceUsd.toExponential(2)} is ${(token.priceUsd / BUY_GUARDRAILS.max_price_usd).toFixed(0)}x above our max buy price - missed entry`;
+    }
+    // Priority 13: Token is too old (minted long before we discovered it)
+    else if (token.createdAtBlockchain) {
+      const mintTime = new Date(token.createdAtBlockchain).getTime();
+      const ageAtDiscoveryMins = (Date.now() - mintTime) / 60000;
+      if (ageAtDiscoveryMins > LIFECYCLE_GUARDRAILS.max_age_for_new_entry_mins) {
+        rejected_reason = 'token_too_old';
+        rejected_detail = `Token minted ${ageAtDiscoveryMins.toFixed(0)} mins ago - stale discovery (max: ${LIFECYCLE_GUARDRAILS.max_age_for_new_entry_mins} mins)`;
+      }
     }
 
     if (rejected_reason) {
@@ -786,6 +859,52 @@ async function getWatchlistStatus(supabase: any): Promise<any> {
         else if (holdersDelta3m <= -2 || dumpFromAth > 30) trendStatus = 'dumping';
         else if (holdersDelta3m > 0) trendStatus = 'growing';
         else if (holdersDelta3m < 0) trendStatus = 'declining';
+
+        // AUTO-REJECT CHECKS: Detect graduated or missed-opportunity tokens
+        let shouldAutoReject = false;
+        let autoRejectReason = '';
+        
+        // Check 1: Token graduated (market cap too high)
+        if (metrics.marketCapUsd && metrics.marketCapUsd >= LIFECYCLE_GUARDRAILS.graduated_mcap_threshold) {
+          shouldAutoReject = true;
+          autoRejectReason = `already_graduated: mcap $${(metrics.marketCapUsd / 1000).toFixed(1)}K`;
+        }
+        // Check 2: Bonding curve complete
+        else if (metrics.bondingCurvePct && metrics.bondingCurvePct >= LIFECYCLE_GUARDRAILS.graduated_bonding_pct) {
+          shouldAutoReject = true;
+          autoRejectReason = `already_graduated: bonding ${metrics.bondingCurvePct.toFixed(1)}%`;
+        }
+        // Check 3: Price way above our window
+        else if (currentPrice >= LIFECYCLE_GUARDRAILS.max_price_for_watchlist) {
+          shouldAutoReject = true;
+          autoRejectReason = `price_past_window: $${currentPrice.toExponential(2)} (${(currentPrice / BUY_GUARDRAILS.max_price_usd).toFixed(0)}x max)`;
+        }
+        // Check 4: Already hit ATH and dumped significantly (opportunity passed)
+        else if (priceAth >= LIFECYCLE_GUARDRAILS.ath_min_threshold_usd && 
+                 dumpFromAth >= LIFECYCLE_GUARDRAILS.ath_dump_threshold_pct) {
+          shouldAutoReject = true;
+          autoRejectReason = `ath_already_hit: peaked at $${priceAth.toExponential(2)}, down ${dumpFromAth.toFixed(0)}%`;
+        }
+        
+        if (shouldAutoReject) {
+          // Move to rejected status
+          await supabase
+            .from('pumpfun_watchlist')
+            .update({
+              status: 'rejected',
+              rejection_reason: autoRejectReason,
+              price_usd: currentPrice,
+              price_ath_usd: priceAth,
+              market_cap_usd: metrics.marketCapUsd || token.market_cap_usd,
+              bonding_curve_pct: metrics.bondingCurvePct || token.bonding_curve_pct,
+              dump_from_ath_pct: dumpFromAth,
+              last_checked_at: now,
+            })
+            .eq('id', token.id);
+          
+          console.log(`[Step 3] Auto-rejected ${token.token_symbol}: ${autoRejectReason}`);
+          continue; // Skip further processing for this token
+        }
 
         // Update token with fresh metrics and deltas
         await supabase
