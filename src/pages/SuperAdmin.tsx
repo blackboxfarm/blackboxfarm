@@ -47,6 +47,7 @@ const PumpfunWhitelist = lazy(() => import("@/components/admin/PumpfunWhitelist"
 const PumpfunKOLRegistry = lazy(() => import("@/components/admin/PumpfunKOLRegistry"));
 const PumpfunKOLActivity = lazy(() => import("@/components/admin/PumpfunKOLActivity"));
 const PumpfunKOLCabals = lazy(() => import("@/components/admin/PumpfunKOLCabals"));
+const PumpfunKOLTwitter = lazy(() => import("@/components/admin/PumpfunKOLTwitter"));
 
 export default function SuperAdmin() {
   const [activeTab, setActiveTab] = useState("fuckoff");
@@ -375,10 +376,12 @@ export default function SuperAdmin() {
                 <TabsList>
                   <TabsTrigger value="registry">👑 KOL Registry</TabsTrigger>
                   <TabsTrigger value="activity">📊 Activity</TabsTrigger>
+                  <TabsTrigger value="twitter">🐦 Twitter</TabsTrigger>
                   <TabsTrigger value="cabals">🕸️ Cabals</TabsTrigger>
                 </TabsList>
                 <TabsContent value="registry"><PumpfunKOLRegistry /></TabsContent>
                 <TabsContent value="activity"><PumpfunKOLActivity /></TabsContent>
+                <TabsContent value="twitter"><PumpfunKOLTwitter /></TabsContent>
                 <TabsContent value="cabals"><PumpfunKOLCabals /></TabsContent>
               </Tabs>
             </ActiveTabOnly>
