@@ -1934,7 +1934,7 @@ export function FlipItDashboard() {
           </div>
 
           <div className="grid grid-cols-1 gap-4">
-            {/* Row 1: Buy Amount, SOL/USD, and Target - stacked above token address */}
+            {/* Row 1: Buy Amount + SOL/USD + Target all on same line */}
             <div className="flex items-end gap-3 flex-wrap">
               {/* Buy Amount - compact */}
               <div className="space-y-1">
@@ -1942,7 +1942,7 @@ export function FlipItDashboard() {
                   {buyAmountMode === 'usd' ? <DollarSign className="h-3 w-3" /> : <Wallet className="h-3 w-3" />}
                   Buy Amount
                 </Label>
-                <div className="flex gap-1">
+                <div className="flex gap-1 items-center">
                   <Input
                     type="number"
                     step="0.001"
@@ -1972,7 +1972,7 @@ export function FlipItDashboard() {
                 )}
               </div>
 
-              {/* Target Multiplier - compact */}
+              {/* Target Multiplier - compact, same line */}
               <div className="space-y-1">
                 <Label className="flex items-center gap-1 text-sm">
                   <TrendingUp className="h-3 w-3" />
@@ -2007,9 +2007,9 @@ export function FlipItDashboard() {
 
             {/* Row 2: Token Input with Paste + Clear buttons */}
             <div className="space-y-2">
-              <Label className="flex items-center justify-between flex-wrap gap-2">
+              <Label className="flex items-center gap-2">
                 <span className="flex items-center gap-2">
-                  Token Address
+                  TOKEN
                   <Button
                     size="sm"
                     variant="outline"
@@ -2062,6 +2062,14 @@ export function FlipItDashboard() {
                     <Loader2 className="h-3 w-3 animate-spin" /> Fetching...
                   </span>
                 )}
+              </Label>
+              <Input
+                placeholder="Paste token address..."
+                value={tokenAddress}
+                onChange={e => setTokenAddress(e.target.value)}
+              />
+              {/* Price info below input - left aligned */}
+              <div className="flex items-center gap-2 flex-wrap">
                 {!isLoadingInputToken && inputToken.price !== null && (
                   <span className="text-sm font-bold text-green-400">
                     ${inputToken.price.toFixed(10).replace(/\.?0+$/, '')}
@@ -2072,47 +2080,46 @@ export function FlipItDashboard() {
                     )}
                   </span>
                 )}
-              </Label>
-              <Input
-                placeholder="Paste token address..."
-                value={tokenAddress}
-                onChange={e => setTokenAddress(e.target.value)}
-              />
-              {inputToken.price !== null && buyAmount && (
-                <p className="text-xs text-muted-foreground">
-                  Entry: ~{(() => {
-                    const amt = parseFloat(buyAmount);
-                    if (isNaN(amt) || amt <= 0) return '—';
-                    const usdAmount = buyAmountMode === 'sol' && solPrice ? amt * solPrice : amt;
-                    const tokens = usdAmount / inputToken.price!;
-                    return `${tokens.toLocaleString(undefined, { maximumFractionDigits: 0 })} tokens`;
-                  })()}
-                  {inputToken.lastFetched && (
-                    <span className="ml-2 text-muted-foreground/70">
-                      • {new Date(inputToken.lastFetched).toLocaleTimeString()}
-                    </span>
-                  )}
-                </p>
-              )}
+                {inputToken.price !== null && buyAmount && (
+                  <span className="text-xs text-muted-foreground">
+                    Entry: ~{(() => {
+                      const amt = parseFloat(buyAmount);
+                      if (isNaN(amt) || amt <= 0) return '—';
+                      const usdAmount = buyAmountMode === 'sol' && solPrice ? amt * solPrice : amt;
+                      const tokens = usdAmount / inputToken.price!;
+                      return `${tokens.toLocaleString(undefined, { maximumFractionDigits: 0 })} tokens`;
+                    })()}
+                    {inputToken.lastFetched && (
+                      <span className="ml-2 text-muted-foreground/70">
+                        • {new Date(inputToken.lastFetched).toLocaleTimeString()}
+                      </span>
+                    )}
+                  </span>
+                )}
+              </div>
               
-              {/* Momentum Indicator + Holder Quality */}
+              {/* Momentum Indicator only */}
               {tokenAddress.trim().length >= 32 && (
-                <div className="flex items-center gap-3 flex-wrap">
-                  <MomentumIndicator tokenMint={tokenAddress.trim()} />
-                  <HolderQualityIndicator 
-                    quality={holderQuality.quality}
-                    isLoading={holderQuality.isLoading}
-                    summary={holderQuality.summary}
-                    totalHolders={holderQuality.totalHolders}
-                    realBuyersCount={holderQuality.realBuyersCount}
-                    dustPercent={holderQuality.dustPercent}
-                    whaleCount={holderQuality.whaleCount}
-                    tierBreakdown={holderQuality.tierBreakdown}
-                    error={holderQuality.error}
-                  />
-                </div>
+                <MomentumIndicator tokenMint={tokenAddress.trim()} />
               )}
             </div>
+
+            {/* Holder Quality - just above FLIP IT button */}
+            {tokenAddress.trim().length >= 32 && (
+              <div className="flex items-center">
+                <HolderQualityIndicator 
+                  quality={holderQuality.quality}
+                  isLoading={holderQuality.isLoading}
+                  summary={holderQuality.summary}
+                  totalHolders={holderQuality.totalHolders}
+                  realBuyersCount={holderQuality.realBuyersCount}
+                  dustPercent={holderQuality.dustPercent}
+                  whaleCount={holderQuality.whaleCount}
+                  tierBreakdown={holderQuality.tierBreakdown}
+                  error={holderQuality.error}
+                />
+              </div>
+            )}
           </div>
 
           <div className="flex gap-2 mt-4">
