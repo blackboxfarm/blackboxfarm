@@ -31,8 +31,20 @@ import {
   Users,
   Send,
   Crown,
-  Zap
+  Zap,
+  RotateCcw
 } from 'lucide-react';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
 import { formatDistanceToNow } from 'date-fns';
 import { FantasyPortfolioDashboard, CallerLeaderboard, ChannelManagement, TelegramTargetManager, TradingTiersManager, KingOfTheHill, WhosOnFirst } from './telegram';
 import type { TelegramTarget } from './telegram';
@@ -186,6 +198,9 @@ export default function TelegramChannelMonitor() {
   const [editWalletId, setEditWalletId] = useState('');
   const [editUsername, setEditUsername] = useState('');
   const [isSavingEdit, setIsSavingEdit] = useState(false);
+  
+  // Reset state
+  const [isResettingStats, setIsResettingStats] = useState(false);
 
   useEffect(() => {
     loadData();
@@ -675,6 +690,28 @@ export default function TelegramChannelMonitor() {
     }
   };
 
+  // Reset all Telegram stats
+  const resetAllStats = async () => {
+    setIsResettingStats(true);
+    try {
+      // Delete from each table using properly typed queries
+      await supabase.from('telegram_fantasy_positions').delete().neq('id', '00000000-0000-0000-0000-000000000000');
+      await supabase.from('telegram_message_interpretations').delete().neq('id', '00000000-0000-0000-0000-000000000000');
+      await supabase.from('telegram_channel_calls').delete().neq('id', '00000000-0000-0000-0000-000000000000');
+      await supabase.from('telegram_callers').delete().neq('id', '00000000-0000-0000-0000-000000000000');
+      await supabase.from('pumpfun_fantasy_positions').delete().neq('id', '00000000-0000-0000-0000-000000000000');
+      await supabase.from('pumpfun_fantasy_stats').delete().neq('id', '00000000-0000-0000-0000-000000000000');
+      
+      toast.success('All Telegram stats reset successfully');
+      loadData(); // Refresh data
+    } catch (error) {
+      console.error('Error resetting stats:', error);
+      toast.error('Failed to reset stats');
+    } finally {
+      setIsResettingStats(false);
+    }
+  };
+
   // Calculate fantasy portfolio stats
   const openPositions = fantasyPositions.filter(p => p.status === 'open');
   const totalPnl = openPositions.reduce((sum, p) => sum + (p.unrealized_pnl_usd || 0), 0);
@@ -704,6 +741,36 @@ export default function TelegramChannelMonitor() {
           </p>
         </div>
         <div className="flex gap-2">
+          <AlertDialog>
+            <AlertDialogTrigger asChild>
+              <Button variant="destructive" size="sm" disabled={isResettingStats}>
+                {isResettingStats ? <Loader2 className="w-4 h-4 animate-spin mr-1" /> : <RotateCcw className="w-4 h-4 mr-1" />}
+                Reset All Stats
+              </Button>
+            </AlertDialogTrigger>
+            <AlertDialogContent>
+              <AlertDialogHeader>
+                <AlertDialogTitle>Reset All Telegram Stats?</AlertDialogTitle>
+                <AlertDialogDescription className="space-y-2">
+                  <p>This will permanently delete:</p>
+                  <ul className="list-disc list-inside text-sm">
+                    <li>All AI message interpretations</li>
+                    <li>All channel calls history</li>
+                    <li>All caller leaderboard stats</li>
+                    <li>All fantasy positions & P/L</li>
+                    <li>All KOTH & trophy data</li>
+                  </ul>
+                  <p className="font-semibold text-destructive">This cannot be undone!</p>
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel>Cancel</AlertDialogCancel>
+                <AlertDialogAction onClick={resetAllStats} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
+                  Yes, Reset Everything
+                </AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
           <Button variant="outline" onClick={testBot} disabled={isTestingBot}>
             {isTestingBot ? <Loader2 className="w-4 h-4 animate-spin" /> : <Bot className="w-4 h-4" />}
             Test Bot
