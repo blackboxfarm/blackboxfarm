@@ -78,6 +78,10 @@ interface ChannelConfig {
   flipit_sell_multiplier: number;
   flipit_max_daily_positions: number;
   flipit_wallet_id: string | null;
+  // FlipIt moonbag settings
+  flipit_moonbag_enabled?: boolean;
+  flipit_moonbag_sell_pct?: number;
+  flipit_moonbag_keep_pct?: number;
   // Scalp Mode settings
   scalp_mode_enabled?: boolean;
   scalp_test_mode?: boolean;
@@ -385,7 +389,7 @@ export function ChannelManagement() {
     }
   };
 
-  const updateFlipitSettings = async (channelId: string, field: string, value: number | string | null) => {
+  const updateFlipitSettings = async (channelId: string, field: string, value: number | string | boolean | null) => {
     try {
       const { error } = await supabase
         .from('telegram_channel_config')
@@ -1200,6 +1204,63 @@ with TelegramClient(StringSession(), api_id, api_hash) as client:
                             className="h-8 text-sm"
                           />
                         </div>
+                      </div>
+
+                      {/* Moonbag Settings */}
+                      <div className={`p-2 rounded border ${
+                        channel.flipit_moonbag_enabled !== false 
+                          ? 'bg-emerald-500/10 border-emerald-500/30' 
+                          : 'bg-muted/30 border-border/50'
+                      }`}>
+                        <div className="flex items-center justify-between mb-2">
+                          <div className="flex items-center gap-2">
+                            <span className="text-sm">🌙</span>
+                            <span className="text-sm font-medium">Moonbag</span>
+                            {channel.flipit_moonbag_enabled !== false && (
+                              <Badge variant="outline" className="bg-emerald-500/10 text-emerald-400 border-emerald-500/30 text-xs">
+                                Active
+                              </Badge>
+                            )}
+                          </div>
+                          <Switch
+                            checked={channel.flipit_moonbag_enabled !== false}
+                            onCheckedChange={(checked) => updateFlipitSettings(channel.id, 'flipit_moonbag_enabled', checked)}
+                          />
+                        </div>
+                        {channel.flipit_moonbag_enabled !== false && (
+                          <div className="space-y-2">
+                            <p className="text-xs text-muted-foreground">
+                              At {channel.flipit_sell_multiplier || 2}x: Sell {channel.flipit_moonbag_sell_pct || 90}%, keep {channel.flipit_moonbag_keep_pct || 10}% moonbag
+                            </p>
+                            <div className="grid grid-cols-2 gap-2">
+                              <div>
+                                <Label className="text-xs text-muted-foreground">Sell %</Label>
+                                <Input
+                                  type="number"
+                                  step="5"
+                                  min="50"
+                                  max="99"
+                                  value={channel.flipit_moonbag_sell_pct || 90}
+                                  onChange={(e) => {
+                                    const sellPct = Math.min(99, Math.max(50, Number(e.target.value)));
+                                    updateFlipitSettings(channel.id, 'flipit_moonbag_sell_pct', sellPct);
+                                    updateFlipitSettings(channel.id, 'flipit_moonbag_keep_pct', 100 - sellPct);
+                                  }}
+                                  className="h-8 text-sm"
+                                />
+                              </div>
+                              <div>
+                                <Label className="text-xs text-muted-foreground">Keep %</Label>
+                                <Input
+                                  type="number"
+                                  disabled
+                                  value={channel.flipit_moonbag_keep_pct || 10}
+                                  className="h-8 text-sm bg-muted/50"
+                                />
+                              </div>
+                            </div>
+                          </div>
+                        )}
                       </div>
                     </div>
                   ) : (

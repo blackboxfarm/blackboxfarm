@@ -413,7 +413,7 @@ serve(async (req) => {
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
     const body = await req.json();
-    const { action, tokenMint, walletId, buyAmountUsd, targetMultiplier, positionId, slippageBps, priorityFeeMode, source, sourceChannelId, isScalpPosition, scalpTakeProfitPct, scalpMoonBagPct, scalpStopLossPct } = body;
+    const { action, tokenMint, walletId, buyAmountUsd, targetMultiplier, positionId, slippageBps, priorityFeeMode, source, sourceChannelId, isScalpPosition, scalpTakeProfitPct, scalpMoonBagPct, scalpStopLossPct, moonbagEnabled, moonbagSellPct, moonbagKeepPct } = body;
 
     // Default slippage 5% (500 bps), configurable
     const effectiveSlippage = slippageBps || 500;
@@ -542,6 +542,13 @@ serve(async (req) => {
         positionData.scalp_stop_loss_pct = scalpStopLossPct || 35;
         positionData.scalp_stage = 'initial';
         console.log("Creating SCALP position with TP:", scalpTakeProfitPct, "%, Moon Bag:", scalpMoonBagPct, "%");
+      }
+      // Add FlipIt moonbag fields for non-scalp positions
+      else if (moonbagEnabled) {
+        positionData.moon_bag_enabled = true;
+        positionData.moon_bag_percent = moonbagKeepPct || 10;
+        positionData.flipit_moonbag_sell_pct = moonbagSellPct || 90;
+        console.log("Creating FlipIt position with MOONBAG: Sell", moonbagSellPct || 90, "%, Keep", moonbagKeepPct || 10, "%");
       }
 
       const { data: position, error: posError } = await supabase
