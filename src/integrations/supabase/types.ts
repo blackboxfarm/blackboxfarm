@@ -7639,6 +7639,9 @@ export type Database = {
           unrealized_pnl_usd: number | null
           updated_at: string
           user_id: string | null
+          was_first_whale: boolean | null
+          whale_call_sequence: number | null
+          whale_name: string | null
         }
         Insert: {
           adjusted_by_dev_risk?: boolean | null
@@ -7705,6 +7708,9 @@ export type Database = {
           unrealized_pnl_usd?: number | null
           updated_at?: string
           user_id?: string | null
+          was_first_whale?: boolean | null
+          whale_call_sequence?: number | null
+          whale_name?: string | null
         }
         Update: {
           adjusted_by_dev_risk?: boolean | null
@@ -7771,6 +7777,9 @@ export type Database = {
           unrealized_pnl_usd?: number | null
           updated_at?: string
           user_id?: string | null
+          was_first_whale?: boolean | null
+          whale_call_sequence?: number | null
+          whale_name?: string | null
         }
         Relationships: [
           {
@@ -7821,6 +7830,7 @@ export type Database = {
         Row: {
           ai_interpretation: string
           ai_summary: string
+          bonding_graduated: boolean | null
           call_sequence: number | null
           caller_display_name: string | null
           caller_username: string | null
@@ -7828,6 +7838,7 @@ export type Database = {
           channel_id: string
           confidence_score: number | null
           created_at: string
+          curve_percent_at_call: number | null
           decision: string
           decision_reasoning: string
           extracted_tokens: string[] | null
@@ -7845,6 +7856,7 @@ export type Database = {
         Insert: {
           ai_interpretation: string
           ai_summary: string
+          bonding_graduated?: boolean | null
           call_sequence?: number | null
           caller_display_name?: string | null
           caller_username?: string | null
@@ -7852,6 +7864,7 @@ export type Database = {
           channel_id: string
           confidence_score?: number | null
           created_at?: string
+          curve_percent_at_call?: number | null
           decision: string
           decision_reasoning: string
           extracted_tokens?: string[] | null
@@ -7869,6 +7882,7 @@ export type Database = {
         Update: {
           ai_interpretation?: string
           ai_summary?: string
+          bonding_graduated?: boolean | null
           call_sequence?: number | null
           caller_display_name?: string | null
           caller_username?: string | null
@@ -7876,6 +7890,7 @@ export type Database = {
           channel_id?: string
           confidence_score?: number | null
           created_at?: string
+          curve_percent_at_call?: number | null
           decision?: string
           decision_reasoning?: string
           extracted_tokens?: string[] | null
@@ -8120,6 +8135,86 @@ export type Database = {
           worst_call_roi?: number | null
         }
         Relationships: []
+      }
+      telegram_whale_stats: {
+        Row: {
+          avg_entry_curve_percent: number | null
+          avg_exit_multiplier: number | null
+          avg_time_to_peak_minutes: number | null
+          best_call_pnl_percent: number | null
+          best_call_token: string | null
+          channel_config_id: string | null
+          created_at: string | null
+          dead_tokens: number | null
+          first_calls: number | null
+          first_seen_at: string | null
+          graduated_tokens: number | null
+          id: string
+          last_call_at: string | null
+          losing_calls: number | null
+          total_calls: number | null
+          total_pnl_usd: number | null
+          updated_at: string | null
+          whale_name: string
+          winning_calls: number | null
+          worst_call_pnl_percent: number | null
+          worst_call_token: string | null
+        }
+        Insert: {
+          avg_entry_curve_percent?: number | null
+          avg_exit_multiplier?: number | null
+          avg_time_to_peak_minutes?: number | null
+          best_call_pnl_percent?: number | null
+          best_call_token?: string | null
+          channel_config_id?: string | null
+          created_at?: string | null
+          dead_tokens?: number | null
+          first_calls?: number | null
+          first_seen_at?: string | null
+          graduated_tokens?: number | null
+          id?: string
+          last_call_at?: string | null
+          losing_calls?: number | null
+          total_calls?: number | null
+          total_pnl_usd?: number | null
+          updated_at?: string | null
+          whale_name: string
+          winning_calls?: number | null
+          worst_call_pnl_percent?: number | null
+          worst_call_token?: string | null
+        }
+        Update: {
+          avg_entry_curve_percent?: number | null
+          avg_exit_multiplier?: number | null
+          avg_time_to_peak_minutes?: number | null
+          best_call_pnl_percent?: number | null
+          best_call_token?: string | null
+          channel_config_id?: string | null
+          created_at?: string | null
+          dead_tokens?: number | null
+          first_calls?: number | null
+          first_seen_at?: string | null
+          graduated_tokens?: number | null
+          id?: string
+          last_call_at?: string | null
+          losing_calls?: number | null
+          total_calls?: number | null
+          total_pnl_usd?: number | null
+          updated_at?: string | null
+          whale_name?: string
+          winning_calls?: number | null
+          worst_call_pnl_percent?: number | null
+          worst_call_token?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "telegram_whale_stats_channel_config_id_fkey"
+            columns: ["channel_config_id"]
+            isOneToOne: false
+            referencedRelation: "telegram_channel_config"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       token_account_cleanup_logs: {
         Row: {

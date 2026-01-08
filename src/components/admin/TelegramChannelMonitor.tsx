@@ -46,7 +46,7 @@ import {
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 import { formatDistanceToNow } from 'date-fns';
-import { FantasyPortfolioDashboard, CallerLeaderboard, ChannelManagement, TelegramTargetManager, TradingTiersManager, KingOfTheHill, WhosOnFirst, SignalAnalysisDashboard } from './telegram';
+import { FantasyPortfolioDashboard, CallerLeaderboard, ChannelManagement, TelegramTargetManager, TradingTiersManager, KingOfTheHill, WhosOnFirst, SignalAnalysisDashboard, WhaleLeaderboard } from './telegram';
 import type { TelegramTarget } from './telegram';
 
 interface ChannelConfig {
@@ -954,6 +954,9 @@ export default function TelegramChannelMonitor() {
           <TabsTrigger value="callers" className="flex items-center gap-1">
             <Trophy className="w-3 h-3" /> Caller Leaderboard
           </TabsTrigger>
+          <TabsTrigger value="whales" className="flex items-center gap-1">
+            🐋 Whale Tracker
+          </TabsTrigger>
           <TabsTrigger value="koth" className="flex items-center gap-1">
             <Crown className="w-3 h-3 text-yellow-500" /> KOTH
           </TabsTrigger>
@@ -1050,6 +1053,11 @@ export default function TelegramChannelMonitor() {
         {/* Caller Leaderboard */}
         <TabsContent value="callers" className="space-y-4">
           <CallerLeaderboard />
+        </TabsContent>
+
+        {/* Whale Tracker */}
+        <TabsContent value="whales" className="space-y-4">
+          <WhaleLeaderboard />
         </TabsContent>
 
         {/* King of the Hill */}
