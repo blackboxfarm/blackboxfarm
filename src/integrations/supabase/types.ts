@@ -7349,6 +7349,7 @@ export type Database = {
           channel_username: string | null
           created_at: string
           email_notifications: boolean | null
+          emergency_buy_multiplier: number | null
           entity_access_hash: string | null
           fantasy_buy_amount_usd: number | null
           fantasy_mode: boolean | null
@@ -7362,6 +7363,7 @@ export type Database = {
           flipit_moonbag_sell_pct: number | null
           flipit_sell_multiplier: number | null
           flipit_wallet_id: string | null
+          fresh_discovery_buy_multiplier: number | null
           id: string
           is_active: boolean | null
           kingkong_diamond_amount_usd: number | null
@@ -7379,9 +7381,11 @@ export type Database = {
           max_mint_age_minutes: number | null
           max_price_threshold: number | null
           min_price_threshold: number | null
+          momentum_buy_multiplier: number | null
           notification_email: string | null
           persistent_monitoring: boolean | null
           polling_interval_seconds: number | null
+          recommendation_buy_multiplier: number | null
           scalp_buy_amount_sol: number | null
           scalp_buy_amount_usd: number | null
           scalp_buy_priority_fee: string | null
@@ -7399,6 +7403,7 @@ export type Database = {
           scalp_take_profit_pct: number | null
           scalp_test_mode: boolean | null
           scan_window_minutes: number | null
+          signal_classification_enabled: boolean | null
           standard_buy_amount_usd: number | null
           standard_sell_multiplier: number | null
           total_buys_executed: number | null
@@ -7406,6 +7411,7 @@ export type Database = {
           trading_mode: string | null
           updated_at: string
           user_id: string | null
+          watch_mode_fantasy_only: boolean | null
         }
         Insert: {
           ape_keyword_enabled?: boolean | null
@@ -7416,6 +7422,7 @@ export type Database = {
           channel_username?: string | null
           created_at?: string
           email_notifications?: boolean | null
+          emergency_buy_multiplier?: number | null
           entity_access_hash?: string | null
           fantasy_buy_amount_usd?: number | null
           fantasy_mode?: boolean | null
@@ -7429,6 +7436,7 @@ export type Database = {
           flipit_moonbag_sell_pct?: number | null
           flipit_sell_multiplier?: number | null
           flipit_wallet_id?: string | null
+          fresh_discovery_buy_multiplier?: number | null
           id?: string
           is_active?: boolean | null
           kingkong_diamond_amount_usd?: number | null
@@ -7446,9 +7454,11 @@ export type Database = {
           max_mint_age_minutes?: number | null
           max_price_threshold?: number | null
           min_price_threshold?: number | null
+          momentum_buy_multiplier?: number | null
           notification_email?: string | null
           persistent_monitoring?: boolean | null
           polling_interval_seconds?: number | null
+          recommendation_buy_multiplier?: number | null
           scalp_buy_amount_sol?: number | null
           scalp_buy_amount_usd?: number | null
           scalp_buy_priority_fee?: string | null
@@ -7466,6 +7476,7 @@ export type Database = {
           scalp_take_profit_pct?: number | null
           scalp_test_mode?: boolean | null
           scan_window_minutes?: number | null
+          signal_classification_enabled?: boolean | null
           standard_buy_amount_usd?: number | null
           standard_sell_multiplier?: number | null
           total_buys_executed?: number | null
@@ -7473,6 +7484,7 @@ export type Database = {
           trading_mode?: string | null
           updated_at?: string
           user_id?: string | null
+          watch_mode_fantasy_only?: boolean | null
         }
         Update: {
           ape_keyword_enabled?: boolean | null
@@ -7483,6 +7495,7 @@ export type Database = {
           channel_username?: string | null
           created_at?: string
           email_notifications?: boolean | null
+          emergency_buy_multiplier?: number | null
           entity_access_hash?: string | null
           fantasy_buy_amount_usd?: number | null
           fantasy_mode?: boolean | null
@@ -7496,6 +7509,7 @@ export type Database = {
           flipit_moonbag_sell_pct?: number | null
           flipit_sell_multiplier?: number | null
           flipit_wallet_id?: string | null
+          fresh_discovery_buy_multiplier?: number | null
           id?: string
           is_active?: boolean | null
           kingkong_diamond_amount_usd?: number | null
@@ -7513,9 +7527,11 @@ export type Database = {
           max_mint_age_minutes?: number | null
           max_price_threshold?: number | null
           min_price_threshold?: number | null
+          momentum_buy_multiplier?: number | null
           notification_email?: string | null
           persistent_monitoring?: boolean | null
           polling_interval_seconds?: number | null
+          recommendation_buy_multiplier?: number | null
           scalp_buy_amount_sol?: number | null
           scalp_buy_amount_usd?: number | null
           scalp_buy_priority_fee?: string | null
@@ -7533,6 +7549,7 @@ export type Database = {
           scalp_take_profit_pct?: number | null
           scalp_test_mode?: boolean | null
           scan_window_minutes?: number | null
+          signal_classification_enabled?: boolean | null
           standard_buy_amount_usd?: number | null
           standard_sell_multiplier?: number | null
           total_buys_executed?: number | null
@@ -7540,6 +7557,7 @@ export type Database = {
           trading_mode?: string | null
           updated_at?: string
           user_id?: string | null
+          watch_mode_fantasy_only?: boolean | null
         }
         Relationships: []
       }
@@ -7782,6 +7800,7 @@ export type Database = {
         Row: {
           ai_interpretation: string
           ai_summary: string
+          call_sequence: number | null
           caller_display_name: string | null
           caller_username: string | null
           channel_config_id: string | null
@@ -7795,12 +7814,17 @@ export type Database = {
           message_id: number
           price_at_detection: number | null
           raw_message: string | null
+          signal_type: string | null
           token_mint: string | null
           token_symbol: string | null
+          urgency_score: number | null
+          whale_consensus_count: number | null
+          whale_name: string | null
         }
         Insert: {
           ai_interpretation: string
           ai_summary: string
+          call_sequence?: number | null
           caller_display_name?: string | null
           caller_username?: string | null
           channel_config_id?: string | null
@@ -7814,12 +7838,17 @@ export type Database = {
           message_id: number
           price_at_detection?: number | null
           raw_message?: string | null
+          signal_type?: string | null
           token_mint?: string | null
           token_symbol?: string | null
+          urgency_score?: number | null
+          whale_consensus_count?: number | null
+          whale_name?: string | null
         }
         Update: {
           ai_interpretation?: string
           ai_summary?: string
+          call_sequence?: number | null
           caller_display_name?: string | null
           caller_username?: string | null
           channel_config_id?: string | null
@@ -7833,8 +7862,12 @@ export type Database = {
           message_id?: number
           price_at_detection?: number | null
           raw_message?: string | null
+          signal_type?: string | null
           token_mint?: string | null
           token_symbol?: string | null
+          urgency_score?: number | null
+          whale_consensus_count?: number | null
+          whale_name?: string | null
         }
         Relationships: [
           {
@@ -8015,6 +8048,57 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      telegram_whale_profiles: {
+        Row: {
+          avg_roi: number | null
+          best_call_roi: number | null
+          created_at: string | null
+          first_seen_at: string | null
+          id: string
+          last_seen_at: string | null
+          priority_tier: string | null
+          profitable_calls: number | null
+          success_rate: number | null
+          total_calls: number | null
+          total_pnl_usd: number | null
+          updated_at: string | null
+          whale_name: string
+          worst_call_roi: number | null
+        }
+        Insert: {
+          avg_roi?: number | null
+          best_call_roi?: number | null
+          created_at?: string | null
+          first_seen_at?: string | null
+          id?: string
+          last_seen_at?: string | null
+          priority_tier?: string | null
+          profitable_calls?: number | null
+          success_rate?: number | null
+          total_calls?: number | null
+          total_pnl_usd?: number | null
+          updated_at?: string | null
+          whale_name: string
+          worst_call_roi?: number | null
+        }
+        Update: {
+          avg_roi?: number | null
+          best_call_roi?: number | null
+          created_at?: string | null
+          first_seen_at?: string | null
+          id?: string
+          last_seen_at?: string | null
+          priority_tier?: string | null
+          profitable_calls?: number | null
+          success_rate?: number | null
+          total_calls?: number | null
+          total_pnl_usd?: number | null
+          updated_at?: string | null
+          whale_name?: string
+          worst_call_roi?: number | null
+        }
+        Relationships: []
       }
       token_account_cleanup_logs: {
         Row: {
