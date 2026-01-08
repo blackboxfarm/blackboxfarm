@@ -106,6 +106,9 @@ interface FantasyPosition {
   // Exclusion from stats fields
   exclude_from_stats: boolean | null;
   exclusion_reason: string | null;
+  // Whale tracking
+  whale_name: string | null;
+  was_first_whale: boolean | null;
 }
 
 interface PortfolioStats {
@@ -1231,13 +1234,26 @@ export function FantasyPortfolioDashboard() {
                       </TableCell>
                       <TableCell compact>
                         <div>
-                          <span className="text-xs font-medium">
-                            {pos.channel_name || 'Unknown'}
-                          </span>
-                          {pos.caller_display_name && pos.caller_display_name !== pos.channel_name && (
-                            <p className="text-[10px] text-muted-foreground truncate max-w-[100px]">
-                              via {pos.caller_display_name}
-                            </p>
+                          {pos.whale_name ? (
+                            <>
+                              <span className="text-xs font-bold text-cyan-400">
+                                🐋 {pos.whale_name}
+                              </span>
+                              <p className="text-[10px] text-muted-foreground truncate max-w-[100px]">
+                                {pos.channel_name}
+                              </p>
+                            </>
+                          ) : (
+                            <>
+                              <span className="text-xs font-medium">
+                                {pos.channel_name || 'Unknown'}
+                              </span>
+                              {pos.caller_display_name && pos.caller_display_name !== pos.channel_name && (
+                                <p className="text-[10px] text-muted-foreground truncate max-w-[100px]">
+                                  via {pos.caller_display_name}
+                                </p>
+                              )}
+                            </>
                           )}
                         </div>
                       </TableCell>
@@ -1476,13 +1492,26 @@ export function FantasyPortfolioDashboard() {
                       </TableCell>
                       <TableCell>
                         <div>
-                          <span className="text-sm font-medium">
-                            {pos.channel_name || 'Unknown Channel'}
-                          </span>
-                          {pos.caller_display_name && pos.caller_display_name !== pos.channel_name && (
-                            <p className="text-xs text-muted-foreground truncate max-w-[120px]">
-                              via {pos.caller_display_name}
-                            </p>
+                          {pos.whale_name ? (
+                            <>
+                              <span className="text-sm font-bold text-cyan-400">
+                                🐋 {pos.whale_name}
+                              </span>
+                              <p className="text-xs text-muted-foreground truncate max-w-[120px]">
+                                {pos.channel_name}
+                              </p>
+                            </>
+                          ) : (
+                            <>
+                              <span className="text-sm font-medium">
+                                {pos.channel_name || 'Unknown Channel'}
+                              </span>
+                              {pos.caller_display_name && pos.caller_display_name !== pos.channel_name && (
+                                <p className="text-xs text-muted-foreground truncate max-w-[120px]">
+                                  via {pos.caller_display_name}
+                                </p>
+                              )}
+                            </>
                           )}
                         </div>
                       </TableCell>
@@ -1583,7 +1612,11 @@ export function FantasyPortfolioDashboard() {
                         </a>
                       </TableCell>
                       <TableCell compact>
-                        <span className="text-xs">{pos.channel_name || 'Unknown'}</span>
+                        {pos.whale_name ? (
+                          <span className="text-xs font-bold text-cyan-400">🐋 {pos.whale_name}</span>
+                        ) : (
+                          <span className="text-xs">{pos.channel_name || 'Unknown'}</span>
+                        )}
                       </TableCell>
                       <TableCell compact>
                         <span className="text-xs">${pos.entry_price_usd?.toFixed(8) || '0'}</span>
@@ -1654,13 +1687,26 @@ export function FantasyPortfolioDashboard() {
                       </TableCell>
                       <TableCell>
                         <div>
-                          <span className="text-sm font-medium">
-                            {pos.channel_name || 'Unknown Channel'}
-                          </span>
-                          {pos.caller_display_name && pos.caller_display_name !== pos.channel_name && (
-                            <p className="text-xs text-muted-foreground truncate max-w-[120px]">
-                              via {pos.caller_display_name}
-                            </p>
+                          {pos.whale_name ? (
+                            <>
+                              <span className="text-sm font-bold text-cyan-400">
+                                🐋 {pos.whale_name}
+                              </span>
+                              <p className="text-xs text-muted-foreground truncate max-w-[120px]">
+                                {pos.channel_name}
+                              </p>
+                            </>
+                          ) : (
+                            <>
+                              <span className="text-sm font-medium">
+                                {pos.channel_name || 'Unknown Channel'}
+                              </span>
+                              {pos.caller_display_name && pos.caller_display_name !== pos.channel_name && (
+                                <p className="text-xs text-muted-foreground truncate max-w-[120px]">
+                                  via {pos.caller_display_name}
+                                </p>
+                              )}
+                            </>
                           )}
                         </div>
                       </TableCell>
