@@ -230,9 +230,10 @@ export function ChannelManagement() {
         .from('telegram_channel_config')
         .insert({
           user_id: userData.user.id,
-          channel_id: channelIdentifier.toLowerCase().replace('@', ''),
+          channel_id: (selectedTarget?.chat_id || channelIdentifier).toString().toLowerCase().replace('@', ''),
           channel_name: channelName,
-          channel_username: (selectedTarget?.chat_username || formData.channel_username || channelIdentifier).toLowerCase().replace('@', ''),
+          // For groups with only chat_id (no username), store the chat_id as channel_username for MTProto
+          channel_username: (selectedTarget?.chat_username || formData.channel_username || selectedTarget?.chat_id?.toString() || channelIdentifier).toLowerCase().replace('@', ''),
           channel_type: formData.channel_type,
           is_active: true,
           fantasy_mode: formData.fantasy_mode,
