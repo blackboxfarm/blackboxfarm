@@ -2138,7 +2138,11 @@ serve(async (req) => {
                         buyAmountUsd: flipitBuyAmount,
                         targetMultiplier: flipitSellMultiplier,
                         source: 'telegram',
-                        sourceChannelId: config.id
+                        sourceChannelId: config.id,
+                        // Moonbag settings - enabled by default when FlipIt is active
+                        moonbagEnabled: config.flipit_moonbag_enabled !== false,
+                        moonbagSellPct: config.flipit_moonbag_sell_pct ?? 90,
+                        moonbagKeepPct: config.flipit_moonbag_keep_pct ?? 10
                       };
 
                       const { data: buyData, error: buyErr } = await supabase.functions.invoke('flipit-execute', {

@@ -566,6 +566,63 @@ serve(async (req) => {
       // REGULAR (NON-SCALP) TARGET LOGIC
       // ============================================
       if (currentPrice >= targetPrice) {
+        // Check if this position has moonbag enabled (FlipIt moonbag mode)
+        const hasMoonbag = position.moon_bag_enabled && position.moon_bag_percent > 0 && !position.is_scalp_position;
+        const moonbagSellPct = position.flipit_moonbag_sell_pct || (100 - (position.moon_bag_percent || 10));
+        const moonbagKeepPct = position.moon_bag_percent || 10;
+
+        if (hasMoonbag) {
+          console.log(`TARGET HIT for ${position.token_mint}! Executing ${moonbagSellPct}% sell, keeping ${moonbagKeepPct}% moonbag...`);
+
+          try {
+            // Execute partial sell via flipit-execute
+            const { data: partialResult, error: partialError } = await supabase.functions.invoke("flipit-execute", {
+              body: {
+                action: "partial_sell",
+                positionId: position.id,
+                sellPercent: moonbagSellPct,
+                reason: "flipit_target_moonbag",
+                slippageBps: effectiveSlippage,
+                priorityFeeMode: priorityFeeMode || "medium",
+              }
+            });
+
+            if (!partialError && partialResult?.success) {
+              console.log(`FlipIt moonbag: Sold ${moonbagSellPct}% of ${position.token_mint}, keeping ${moonbagKeepPct}% moonbag`);
+              
+              executed.push({
+                positionId: position.id,
+                action: 'flipit_moonbag_target',
+                tokenMint: position.token_mint,
+                priceChangePercent,
+                soldPercent: moonbagSellPct,
+                signature: partialResult.signature,
+              });
+
+              // Send email notification
+              try {
+                await supabase.functions.invoke("send-email-notification", {
+                  body: {
+                    to: "wilsondavid@live.ca",
+                    subject: `🎯 FlipIt Target Hit: ${position.token_symbol || position.token_mint.slice(0, 8)} +${priceChangePercent.toFixed(0)}%`,
+                    title: "FlipIt Target Hit - Moonbag Active!",
+                    message: `Sold ${moonbagSellPct}% at +${priceChangePercent.toFixed(1)}%, keeping ${moonbagKeepPct}% moonbag for potential further gains.`,
+                    type: "success"
+                  }
+                });
+              } catch (e) {
+                console.error("Email notification failed:", e);
+              }
+            } else {
+              console.error(`FlipIt moonbag sell failed for ${position.id}:`, partialError || partialResult?.error);
+            }
+          } catch (e) {
+            console.error(`FlipIt moonbag sell failed for ${position.id}:`, e);
+          }
+          continue;
+        }
+
+        // Standard full sell (no moonbag)
         console.log(`TARGET HIT for ${position.token_mint}! Executing sell...`);
 
         try {
