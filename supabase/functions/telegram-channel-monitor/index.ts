@@ -114,6 +114,35 @@ interface RuleEvaluationResult {
 // HELPER FUNCTIONS
 // ============================================================================
 
+// Quick holder count check using DexScreener (fast, ~100ms)
+async function getQuickHolderCount(tokenMint: string): Promise<number | null> {
+  try {
+    // Use DexScreener for quick holder estimate
+    const response = await fetch(`https://api.dexscreener.com/latest/dex/tokens/${tokenMint}`);
+    if (!response.ok) return null;
+    
+    const data = await response.json();
+    const pair = data.pairs?.[0];
+    
+    if (!pair) return null;
+    
+    // DexScreener provides txns.h24.buys as a proxy for unique buyers
+    // This is a fast approximation - not exact holder count
+    const uniqueBuyers = pair.txns?.h24?.buys || 0;
+    
+    // Also try to get from the info object if available
+    if (pair.info?.holders) {
+      return pair.info.holders;
+    }
+    
+    // Fallback: use unique 24h buyers as minimum holder estimate
+    return uniqueBuyers > 0 ? uniqueBuyers : null;
+  } catch (error) {
+    console.warn(`[telegram-channel-monitor] Failed to get holder count for ${tokenMint}:`, error);
+    return null;
+  }
+}
+
 function extractSolanaAddresses(text: string): string[] {
   const matches = text.match(SOLANA_ADDRESS_REGEX) || [];
   return matches.filter(addr => {
@@ -1708,8 +1737,38 @@ serve(async (req) => {
                     })
                     .eq('id', callId);
                   
-                  totalSkipped++;
+                totalSkipped++;
                   continue; // Skip to next token
+                }
+                
+                // ============== PRE-FILTER: MINIMUM HOLDER COUNT CHECK ==============
+                // Skip tokens with too few holders (pump-and-dump protection)
+                let holderCount: number | null = null;
+                if (config.holder_check_enabled !== false) {
+                  const minHolders = config.min_holder_count || 15;
+                  holderCount = await getQuickHolderCount(tokenMint);
+                  
+                  if (holderCount !== null && holderCount < minHolders) {
+                    const action = config.holder_check_action || 'skip';
+                    
+                    if (action === 'skip') {
+                      console.log(`[telegram-channel-monitor] SKIPPING ${tokenMint} - Only ${holderCount} holders (min: ${minHolders})`);
+                      
+                      await supabase
+                        .from('telegram_channel_calls')
+                        .update({ 
+                          status: 'skipped', 
+                          skip_reason: `Low holder count: ${holderCount} (minimum: ${minHolders})`
+                        })
+                        .eq('id', callId);
+                      
+                      totalSkipped++;
+                      continue; // Skip to next token
+                    } else if (action === 'warn_only') {
+                      console.log(`[telegram-channel-monitor] WARNING: ${tokenMint} has only ${holderCount} holders (min: ${minHolders}) - proceeding anyway`);
+                    }
+                    // 'watchlist' action would go here if we add a watchlist table
+                  }
                 }
                 
 
@@ -1802,7 +1861,8 @@ serve(async (req) => {
                     stop_loss_pct: currentRuleResult.stopLossEnabled ? currentRuleResult.stopLoss : null,
                     is_active: true,
                     stop_loss_enabled: currentRuleResult.stopLossEnabled || false,
-                    trail_tracking_enabled: true
+                    trail_tracking_enabled: true,
+                    holder_count_at_entry: holderCount
                   };
 
                   // Add developer enrichment data if available
