@@ -153,6 +153,7 @@ export function FantasyPortfolioDashboard() {
   const [filter, setFilter] = useState<'all' | 'active' | 'inactive'>('active');
   const [channelFilter, setChannelFilter] = useState<string>('all');
   const [lastUpdate, setLastUpdate] = useState<Date | null>(null);
+  const [serverLastUpdate, setServerLastUpdate] = useState<Date | null>(null);
   const intervalRef = useRef<NodeJS.Timeout | null>(null);
 
   // Get unique channel names for filter
@@ -290,6 +291,8 @@ export function FantasyPortfolioDashboard() {
 
   useEffect(() => {
     loadPositions();
+    loadAutoMonitorState();
+    loadServerLastUpdate();
     
     // Set up realtime subscription
     const channel = supabase
@@ -300,6 +303,7 @@ export function FantasyPortfolioDashboard() {
         table: 'telegram_fantasy_positions'
       }, () => {
         loadPositions();
+        loadServerLastUpdate();
       })
       .subscribe();
 
@@ -307,6 +311,56 @@ export function FantasyPortfolioDashboard() {
       supabase.removeChannel(channel);
     };
   }, []);
+
+  // Load persisted auto-monitor state from database
+  const loadAutoMonitorState = async () => {
+    try {
+      const { data } = await supabase
+        .from('telegram_channel_config')
+        .select('auto_monitor_enabled')
+        .eq('is_active', true)
+        .limit(1)
+        .single();
+      
+      if (data?.auto_monitor_enabled) {
+        setAutoRefresh(true);
+      }
+    } catch (err) {
+      // Ignore errors, default to false
+    }
+  };
+
+  // Load the most recent position update time (from server cron)
+  const loadServerLastUpdate = async () => {
+    try {
+      const { data } = await supabase
+        .from('telegram_fantasy_positions')
+        .select('updated_at')
+        .eq('status', 'open')
+        .order('updated_at', { ascending: false })
+        .limit(1)
+        .single();
+      
+      if (data?.updated_at) {
+        setServerLastUpdate(new Date(data.updated_at));
+      }
+    } catch (err) {
+      // Ignore errors
+    }
+  };
+
+  // Save auto-monitor state to database
+  const handleAutoRefreshChange = async (checked: boolean) => {
+    setAutoRefresh(checked);
+    try {
+      await supabase
+        .from('telegram_channel_config')
+        .update({ auto_monitor_enabled: checked } as any)
+        .eq('is_active', true);
+    } catch (err) {
+      console.error('Error saving auto-monitor state:', err);
+    }
+  };
 
   // Auto-refresh effect
   useEffect(() => {
@@ -884,29 +938,62 @@ export function FantasyPortfolioDashboard() {
           </div>
 
           <div className="flex items-center gap-3 flex-wrap">
-            {/* Auto-refresh toggle */}
-            <div className="flex items-center gap-2">
-              <Switch
-                checked={autoRefresh}
-                onCheckedChange={setAutoRefresh}
-                id="auto-refresh"
-              />
-              <label htmlFor="auto-refresh" className="text-sm flex items-center gap-1">
-                {autoRefresh ? (
-                  <>
-                    <Activity className="h-3 w-3 text-green-500 animate-pulse" />
-                    <span className="text-green-500">Monitoring (5s)</span>
-                  </>
-                ) : (
-                  <>
-                    <Activity className="h-3 w-3" />
-                    <span>Auto-Monitor</span>
-                  </>
-                )}
-              </label>
-            </div>
+            {/* Server cron status indicator */}
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <div className="flex items-center gap-1.5 px-2 py-1 rounded-md bg-green-500/10 border border-green-500/30">
+                    <span className="relative flex h-2 w-2">
+                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>
+                      <span className="relative inline-flex rounded-full h-2 w-2 bg-green-500"></span>
+                    </span>
+                    <span className="text-xs text-green-500 font-medium">
+                      Server: {serverLastUpdate ? formatDistanceToNow(serverLastUpdate, { addSuffix: true }) : 'Active'}
+                    </span>
+                  </div>
+                </TooltipTrigger>
+                <TooltipContent>
+                  <p className="max-w-xs text-xs">
+                    Server cron runs every minute, updating prices and triggering auto-sells even when your browser is closed.
+                  </p>
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+
+            {/* Browser refresh toggle */}
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <div className="flex items-center gap-2">
+                    <Switch
+                      checked={autoRefresh}
+                      onCheckedChange={handleAutoRefreshChange}
+                      id="auto-refresh"
+                    />
+                    <label htmlFor="auto-refresh" className="text-sm flex items-center gap-1 cursor-pointer">
+                      {autoRefresh ? (
+                        <>
+                          <Activity className="h-3 w-3 text-green-500 animate-pulse" />
+                          <span className="text-green-500">Browser (5s)</span>
+                        </>
+                      ) : (
+                        <>
+                          <Activity className="h-3 w-3" />
+                          <span>Browser Refresh</span>
+                        </>
+                      )}
+                    </label>
+                  </div>
+                </TooltipTrigger>
+                <TooltipContent>
+                  <p className="max-w-xs text-xs">
+                    Additional browser-side refresh every 5 seconds. State is saved across page loads.
+                  </p>
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
             
-            {/* Maintain on Close toggle */}
+            {/* Persistent cron toggle */}
             <TooltipProvider>
               <Tooltip>
                 <TooltipTrigger asChild>
@@ -925,8 +1012,8 @@ export function FantasyPortfolioDashboard() {
                             .eq('is_active', true);
                           
                           toast.success(checked 
-                            ? '🔄 Persistent monitoring enabled - prices update even when tab is closed' 
-                            : 'Persistent monitoring disabled');
+                            ? '🔄 Server cron enabled - prices update even when tab is closed' 
+                            : 'Server cron disabled');
                         } catch (err) {
                           console.error('Error updating persistent monitoring:', err);
                         }
@@ -936,15 +1023,14 @@ export function FantasyPortfolioDashboard() {
                     <label htmlFor="maintain-on-close" className="text-sm flex items-center gap-1 cursor-pointer">
                       <Radio className={`h-3 w-3 ${maintainOnClose ? 'text-cyan-500' : ''}`} />
                       <span className={maintainOnClose ? 'text-cyan-500' : ''}>
-                        {maintainOnClose ? 'Persistent' : 'Maintain on Close'}
+                        Server Cron
                       </span>
                     </label>
                   </div>
                 </TooltipTrigger>
                 <TooltipContent>
                   <p className="max-w-xs text-xs">
-                    When enabled, price monitoring continues via server cron even when this tab is closed.
-                    Auto-sell orders will still execute.
+                    When enabled, server cron updates prices every minute even when this tab is closed. Auto-sells will still execute.
                   </p>
                 </TooltipContent>
               </Tooltip>
@@ -952,7 +1038,7 @@ export function FantasyPortfolioDashboard() {
 
             {lastUpdate && (
               <span className="text-xs text-muted-foreground">
-                Updated {formatDistanceToNow(lastUpdate, { addSuffix: true })}
+                Browser: {formatDistanceToNow(lastUpdate, { addSuffix: true })}
               </span>
             )}
             
