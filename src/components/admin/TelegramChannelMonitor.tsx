@@ -445,7 +445,11 @@ export default function TelegramChannelMonitor() {
         body: { action: 'scan' }
       });
       if (error) throw error;
-      toast.success(`Scan complete: ${data.processed} tokens, ${data.fantasyBuysExecuted || 0} fantasy buys`);
+      const channels = data.channels?.length || 0;
+      const messages = data.rawMessagesRetrieved || 0;
+      const tokens = data.processed || 0;
+      const buys = data.fantasyBuysExecuted || 0;
+      toast.success(`Scan: ${channels} channels, ${messages} msgs, ${tokens} tokens, ${buys} buys`);
       loadData();
     } catch (error: any) {
       toast.error(error.message || 'Scan failed');
