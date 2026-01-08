@@ -509,6 +509,7 @@ export function ChannelManagement() {
       console.error('Error updating KingKong settings:', err);
       toast.error('Failed to update KingKong settings');
     }
+  };
 
   const deleteChannel = async (channelId: string) => {
     if (!confirm('Are you sure you want to delete this channel?')) return;
