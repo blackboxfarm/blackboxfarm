@@ -285,16 +285,28 @@ export function ChannelManagement() {
   };
 
   const toggleChannel = async (channel: ChannelConfig) => {
+    const newValue = !channel.is_active;
+    
+    // Optimistic update - update local state immediately
+    setChannels(prev => prev.map(c => 
+      c.id === channel.id ? { ...c, is_active: newValue } : c
+    ));
+    
     try {
       const { error } = await supabase
         .from('telegram_channel_config')
-        .update({ is_active: !channel.is_active })
+        .update({ is_active: newValue })
         .eq('id', channel.id);
 
-      if (error) throw error;
+      if (error) {
+        // Revert on error
+        setChannels(prev => prev.map(c => 
+          c.id === channel.id ? { ...c, is_active: !newValue } : c
+        ));
+        throw error;
+      }
 
-      toast.success(`Channel ${channel.is_active ? 'paused' : 'activated'}`);
-      loadChannels();
+      toast.success(`Channel ${newValue ? 'activated' : 'paused'}`);
     } catch (err) {
       console.error('Error toggling channel:', err);
       toast.error('Failed to toggle channel');
@@ -374,14 +386,33 @@ export function ChannelManagement() {
   };
 
   const updateScalpSettings = async (channelId: string, field: string, value: number | string | boolean | null) => {
+    // Optimistic update for boolean fields (toggles)
+    if (typeof value === 'boolean') {
+      setChannels(prev => prev.map(c => 
+        c.id === channelId ? { ...c, [field]: value } : c
+      ));
+    }
+    
     try {
       const { error } = await supabase
         .from('telegram_channel_config')
         .update({ [field]: value })
         .eq('id', channelId);
 
-      if (error) throw error;
-      loadChannels();
+      if (error) {
+        // Revert on error for boolean fields
+        if (typeof value === 'boolean') {
+          setChannels(prev => prev.map(c => 
+            c.id === channelId ? { ...c, [field]: !value } : c
+          ));
+        }
+        throw error;
+      }
+      
+      // Only reload for non-boolean fields
+      if (typeof value !== 'boolean') {
+        loadChannels();
+      }
     } catch (err) {
       console.error('Error updating Scalp settings:', err);
       toast.error('Failed to update Scalp settings');
@@ -863,25 +894,56 @@ with TelegramClient(StringSession(), api_id, api_hash) as client:
     </div>
   );
 
+  // Bulk enable all channels + KOTH + FIRST
+  const enableAllChannels = async () => {
+    try {
+      const { error } = await supabase
+        .from('telegram_channel_config')
+        .update({ 
+          is_active: true, 
+          koth_enabled: true, 
+          first_enabled: true 
+        })
+        .neq('id', '00000000-0000-0000-0000-000000000000');
+      
+      if (error) throw error;
+      toast.success('All channels activated with KOTH + FIRST enabled!');
+      loadChannels();
+    } catch (err) {
+      console.error('Error enabling all channels:', err);
+      toast.error('Failed to enable all channels');
+    }
+  };
+
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between flex-wrap gap-2">
         <h2 className="text-xl font-semibold">Channel Management</h2>
-        <Dialog open={showAddDialog} onOpenChange={setShowAddDialog}>
-          <DialogTrigger asChild>
-            <Button>
-              <Plus className="h-4 w-4 mr-2" />
-              Add Channel
-            </Button>
-          </DialogTrigger>
-          <DialogContent className="max-h-[85vh] overflow-y-auto">
-            <DialogHeader>
-              <DialogTitle>Add Telegram Channel</DialogTitle>
-            </DialogHeader>
-            {renderChannelForm(false)}
-          </DialogContent>
-        </Dialog>
+        <div className="flex gap-2">
+          <Button 
+            variant="outline" 
+            onClick={enableAllChannels}
+            className="border-green-500/30 text-green-400 hover:bg-green-500/10"
+          >
+            <Play className="h-4 w-4 mr-2" />
+            Enable ALL + KOTH + FIRST
+          </Button>
+          <Dialog open={showAddDialog} onOpenChange={setShowAddDialog}>
+            <DialogTrigger asChild>
+              <Button>
+                <Plus className="h-4 w-4 mr-2" />
+                Add Channel
+              </Button>
+            </DialogTrigger>
+            <DialogContent className="max-h-[85vh] overflow-y-auto">
+              <DialogHeader>
+                <DialogTitle>Add Telegram Channel</DialogTitle>
+              </DialogHeader>
+              {renderChannelForm(false)}
+            </DialogContent>
+          </Dialog>
+        </div>
       </div>
 
       {/* Channel Cards */}
@@ -1384,6 +1446,7 @@ with TelegramClient(StringSession(), api_id, api_hash) as client:
                     <Crown className="h-4 w-4 text-yellow-500" />
                     <span className="text-xs">KOTH</span>
                     <Switch
+                      id={`koth-${channel.id}`}
                       checked={channel.koth_enabled !== false}
                       onCheckedChange={(checked) => updateScalpSettings(channel.id, 'koth_enabled', checked)}
                     />
@@ -1392,6 +1455,7 @@ with TelegramClient(StringSession(), api_id, api_hash) as client:
                     <Zap className="h-4 w-4 text-yellow-500" />
                     <span className="text-xs">FIRST</span>
                     <Switch
+                      id={`first-${channel.id}`}
                       checked={channel.first_enabled !== false}
                       onCheckedChange={(checked) => updateScalpSettings(channel.id, 'first_enabled', checked)}
                     />
