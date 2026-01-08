@@ -35,7 +35,8 @@ import {
   Filter,
   Twitter,
   LineChart,
-  Radio
+  Radio,
+  Frown
 } from 'lucide-react';
 import { TokenChartModal } from './TokenChartModal';
 import { FantasyDataCleanup } from './FantasyDataCleanup';
@@ -119,6 +120,8 @@ interface PortfolioStats {
   missedOpportunities: number;
   trophyWins: number;
   trophyPnl: number;
+  toiletLosses: number;
+  toiletPnl: number;
 }
 
 const SELL_MULTIPLIERS = [
@@ -356,6 +359,11 @@ export function FantasyPortfolioDashboard() {
     const trophyWins = trophyWinsArr.length;
     const trophyPnl = trophyWinsArr.reduce((sum, p) => sum + (p.realized_pnl_usd || 0), 0);
     
+    // Toilet losses: sold at loss OR open with significant loss (>50% down)
+    const toiletLossesArr = closed.filter(p => (p.realized_pnl_usd || 0) < 0);
+    const toiletLosses = toiletLossesArr.length;
+    const toiletPnl = toiletLossesArr.reduce((sum, p) => sum + (p.realized_pnl_usd || 0), 0);
+    
     const totalInvested = positions.reduce((sum, p) => sum + (p.entry_amount_usd || 0), 0);
     const totalUnrealized = open.reduce((sum, p) => sum + (p.unrealized_pnl_usd || 0), 0);
     const totalRealized = closed.reduce((sum, p) => sum + (p.realized_pnl_usd || 0), 0);
@@ -406,7 +414,9 @@ export function FantasyPortfolioDashboard() {
       nearTargetCount,
       missedOpportunities,
       trophyWins,
-      trophyPnl
+      trophyPnl,
+      toiletLosses,
+      toiletPnl
     });
   };
 
@@ -667,8 +677,15 @@ export function FantasyPortfolioDashboard() {
   const trophyPositions = allClosedPositions.filter(p => 
     p.auto_sell_triggered && (p.realized_pnl_usd || 0) > 0
   );
+  
+  // Toilet positions: sold at loss
+  const toiletPositions = allClosedPositions.filter(p => 
+    (p.realized_pnl_usd || 0) < 0
+  );
+  
+  // Other closed: manual sells that didn't lose money
   const otherClosedPositions = allClosedPositions.filter(p => 
-    !p.auto_sell_triggered || (p.realized_pnl_usd || 0) <= 0
+    !p.auto_sell_triggered && (p.realized_pnl_usd || 0) >= 0
   );
   
   // Filter open positions based on active/inactive filter AND channel filter
@@ -684,100 +701,112 @@ export function FantasyPortfolioDashboard() {
   return (
     <div className="space-y-6">
       {/* Stats Cards */}
-      <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-8 gap-4">
+      <div className="grid grid-cols-2 md:grid-cols-5 lg:grid-cols-10 gap-3">
         {/* Trophy Wins Card */}
         <Card className={stats?.trophyWins ? 'border-amber-500/50 bg-gradient-to-br from-amber-500/10 to-yellow-500/5' : ''}>
-          <CardContent className="p-4">
-            <div className="flex items-center gap-2">
-              <Trophy className="h-4 w-4 text-amber-500" />
-              <span className="text-sm text-muted-foreground">Trophy Wins</span>
+          <CardContent className="p-3">
+            <div className="flex items-center gap-1">
+              <Trophy className="h-3 w-3 text-amber-500" />
+              <span className="text-xs text-muted-foreground">Trophies</span>
             </div>
-            <p className="text-2xl font-bold text-amber-500">{stats?.trophyWins || 0}</p>
+            <p className="text-lg font-bold text-amber-500">{stats?.trophyWins || 0}</p>
             <p className="text-xs text-green-500">+${stats?.trophyPnl?.toFixed(2) || '0.00'}</p>
           </CardContent>
         </Card>
-        <Card>
-          <CardContent className="p-4">
-            <div className="flex items-center gap-2">
-              <Wallet className="h-4 w-4 text-muted-foreground" />
-              <span className="text-sm text-muted-foreground">Total Invested</span>
+        
+        {/* Toilet Case Card */}
+        <Card className={stats?.toiletLosses ? 'border-red-500/50 bg-gradient-to-br from-red-500/10 to-red-900/5' : ''}>
+          <CardContent className="p-3">
+            <div className="flex items-center gap-1">
+              <Frown className="h-3 w-3 text-red-500" />
+              <span className="text-xs text-muted-foreground">Toilet</span>
             </div>
-            <p className="text-2xl font-bold">${stats?.totalInvested.toFixed(2) || '0.00'}</p>
+            <p className="text-lg font-bold text-red-500">{stats?.toiletLosses || 0}</p>
+            <p className="text-xs text-red-500">${stats?.toiletPnl?.toFixed(2) || '0.00'}</p>
+          </CardContent>
+        </Card>
+        
+        <Card>
+          <CardContent className="p-3">
+            <div className="flex items-center gap-1">
+              <Wallet className="h-3 w-3 text-muted-foreground" />
+              <span className="text-xs text-muted-foreground">Invested</span>
+            </div>
+            <p className="text-lg font-bold">${stats?.totalInvested.toFixed(2) || '0.00'}</p>
           </CardContent>
         </Card>
 
         <Card>
-          <CardContent className="p-4">
-            <div className="flex items-center gap-2">
-              <Activity className="h-4 w-4 text-green-500" />
-              <span className="text-sm text-muted-foreground">Active Monitoring</span>
+          <CardContent className="p-3">
+            <div className="flex items-center gap-1">
+              <Activity className="h-3 w-3 text-green-500" />
+              <span className="text-xs text-muted-foreground">Monitoring</span>
             </div>
-            <p className="text-2xl font-bold text-green-500">{stats?.activePositions || 0}</p>
+            <p className="text-lg font-bold text-green-500">{stats?.activePositions || 0}</p>
           </CardContent>
         </Card>
 
         <Card>
-          <CardContent className="p-4">
-            <div className="flex items-center gap-2">
-              <Target className="h-4 w-4 text-muted-foreground" />
-              <span className="text-sm text-muted-foreground">Open Positions</span>
+          <CardContent className="p-3">
+            <div className="flex items-center gap-1">
+              <Target className="h-3 w-3 text-muted-foreground" />
+              <span className="text-xs text-muted-foreground">Open</span>
             </div>
-            <p className="text-2xl font-bold">{stats?.openPositions || 0}</p>
+            <p className="text-lg font-bold">{stats?.openPositions || 0}</p>
           </CardContent>
         </Card>
 
         <Card>
-          <CardContent className="p-4">
-            <div className="flex items-center gap-2">
-              <BarChart3 className="h-4 w-4 text-muted-foreground" />
-              <span className="text-sm text-muted-foreground">Unrealized P&L</span>
+          <CardContent className="p-3">
+            <div className="flex items-center gap-1">
+              <BarChart3 className="h-3 w-3 text-muted-foreground" />
+              <span className="text-xs text-muted-foreground">Unrealized</span>
             </div>
-            <p className={`text-2xl font-bold ${(stats?.totalUnrealizedPnl || 0) >= 0 ? 'text-green-500' : 'text-red-500'}`}>
+            <p className={`text-lg font-bold ${(stats?.totalUnrealizedPnl || 0) >= 0 ? 'text-green-500' : 'text-red-500'}`}>
               {(stats?.totalUnrealizedPnl || 0) >= 0 ? '+' : ''}${stats?.totalUnrealizedPnl?.toFixed(2) || '0.00'}
             </p>
           </CardContent>
         </Card>
 
         <Card>
-          <CardContent className="p-4">
-            <div className="flex items-center gap-2">
-              <DollarSign className="h-4 w-4 text-muted-foreground" />
-              <span className="text-sm text-muted-foreground">Realized P&L</span>
+          <CardContent className="p-3">
+            <div className="flex items-center gap-1">
+              <DollarSign className="h-3 w-3 text-muted-foreground" />
+              <span className="text-xs text-muted-foreground">Realized</span>
             </div>
-            <p className={`text-2xl font-bold ${(stats?.totalRealizedPnl || 0) >= 0 ? 'text-green-500' : 'text-red-500'}`}>
+            <p className={`text-lg font-bold ${(stats?.totalRealizedPnl || 0) >= 0 ? 'text-green-500' : 'text-red-500'}`}>
               {(stats?.totalRealizedPnl || 0) >= 0 ? '+' : ''}${stats?.totalRealizedPnl?.toFixed(2) || '0.00'}
             </p>
           </CardContent>
         </Card>
 
         <Card>
-          <CardContent className="p-4">
-            <div className="flex items-center gap-2">
-              <Trophy className="h-4 w-4 text-muted-foreground" />
-              <span className="text-sm text-muted-foreground">Win Rate</span>
+          <CardContent className="p-3">
+            <div className="flex items-center gap-1">
+              <Trophy className="h-3 w-3 text-muted-foreground" />
+              <span className="text-xs text-muted-foreground">Win Rate</span>
             </div>
-            <p className="text-2xl font-bold">{stats?.winRate.toFixed(1) || 0}%</p>
+            <p className="text-lg font-bold">{stats?.winRate.toFixed(1) || 0}%</p>
           </CardContent>
         </Card>
 
         <Card className={stats?.nearTargetCount ? 'border-yellow-500/50 bg-yellow-500/5' : ''}>
-          <CardContent className="p-4">
-            <div className="flex items-center gap-2">
-              <Zap className="h-4 w-4 text-yellow-500" />
-              <span className="text-sm text-muted-foreground">Near Target</span>
+          <CardContent className="p-3">
+            <div className="flex items-center gap-1">
+              <Zap className="h-3 w-3 text-yellow-500" />
+              <span className="text-xs text-muted-foreground">Near Target</span>
             </div>
-            <p className="text-2xl font-bold text-yellow-500">{stats?.nearTargetCount || 0}</p>
+            <p className="text-lg font-bold text-yellow-500">{stats?.nearTargetCount || 0}</p>
           </CardContent>
         </Card>
 
         <Card className={stats?.missedOpportunities ? 'border-amber-500/50 bg-amber-500/5' : ''}>
-          <CardContent className="p-4">
-            <div className="flex items-center gap-2">
-              <Trophy className="h-4 w-4 text-amber-500" />
-              <span className="text-sm text-muted-foreground">Missed Sells</span>
+          <CardContent className="p-3">
+            <div className="flex items-center gap-1">
+              <Trophy className="h-3 w-3 text-amber-500" />
+              <span className="text-xs text-muted-foreground">Missed</span>
             </div>
-            <p className="text-2xl font-bold text-amber-500">{stats?.missedOpportunities || 0}</p>
-            <p className="text-xs text-muted-foreground">Already hit target</p>
+            <p className="text-lg font-bold text-amber-500">{stats?.missedOpportunities || 0}</p>
           </CardContent>
         </Card>
       </div>
@@ -1016,18 +1045,18 @@ export function FantasyPortfolioDashboard() {
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead className="w-12">Active</TableHead>
-                  <TableHead>Token</TableHead>
-                  <TableHead>Channel</TableHead>
-                  <TableHead>Heard</TableHead>
-                  <TableHead>Entry</TableHead>
-                  <TableHead>Current</TableHead>
-                  <TableHead>Peak 🏆</TableHead>
-                  <TableHead>ATH</TableHead>
-                  <TableHead>Target</TableHead>
-                  <TableHead className="w-32">Progress</TableHead>
-                  <TableHead>P&L</TableHead>
-                  <TableHead>Actions</TableHead>
+                  <TableHead compact className="w-10">Active</TableHead>
+                  <TableHead compact>Token</TableHead>
+                  <TableHead compact>Channel</TableHead>
+                  <TableHead compact>Heard</TableHead>
+                  <TableHead compact>Entry</TableHead>
+                  <TableHead compact>Current</TableHead>
+                  <TableHead compact>Peak 🏆</TableHead>
+                  <TableHead compact>ATH</TableHead>
+                  <TableHead compact>Target</TableHead>
+                  <TableHead compact className="w-24">Progress</TableHead>
+                  <TableHead compact>P&L</TableHead>
+                  <TableHead compact>Actions</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -1039,60 +1068,58 @@ export function FantasyPortfolioDashboard() {
                   
                     return (
                       <TableRow key={pos.id} className={pos.is_active === false ? 'opacity-60' : ''}>
-                        <TableCell>
+                        <TableCell compact>
                           <Checkbox
                             checked={pos.is_active !== false}
                             onCheckedChange={(checked) => toggleActive(pos.id, !!checked)}
+                            className="h-3 w-3"
                           />
                         </TableCell>
-                      <TableCell>
-                        <div className="space-y-1">
-                          <div className="flex items-center gap-2">
+                      <TableCell compact>
+                        <div className="space-y-0.5">
+                          <div className="flex items-center gap-1">
                             <a 
                               href={getDexScreenerUrl(pos.token_mint)} 
                               target="_blank" 
                               rel="noopener noreferrer"
-                              className="font-medium text-primary hover:underline inline-flex items-center gap-1"
+                              className="font-medium text-primary hover:underline inline-flex items-center gap-0.5 text-xs"
                             >
                             {pos.token_symbol || 'Unknown'}
-                              <ExternalLink className="h-3 w-3" />
+                              <ExternalLink className="h-2.5 w-2.5" />
                             </a>
                             <DevRiskBadge pos={pos} />
                             <RugCheckBadge pos={pos} />
                           </div>
-                          <p className="text-xs text-muted-foreground truncate max-w-[100px]">
+                          <p className="text-[10px] text-muted-foreground truncate max-w-[80px]">
                             {pos.token_mint?.slice(0, 6)}...
                           </p>
                         </div>
                       </TableCell>
-                      <TableCell>
+                      <TableCell compact>
                         <div>
-                          <span className="text-sm font-medium">
-                            {pos.channel_name || 'Unknown Channel'}
+                          <span className="text-xs font-medium">
+                            {pos.channel_name || 'Unknown'}
                           </span>
                           {pos.caller_display_name && pos.caller_display_name !== pos.channel_name && (
-                            <p className="text-xs text-muted-foreground truncate max-w-[120px]">
+                            <p className="text-[10px] text-muted-foreground truncate max-w-[100px]">
                               via {pos.caller_display_name}
                             </p>
                           )}
                         </div>
                       </TableCell>
-                      <TableCell>
+                      <TableCell compact>
                         <TooltipProvider>
                           <Tooltip>
                             <TooltipTrigger>
-                              <div className="text-xs">
-                                <div className="flex items-center gap-1">
-                                  <Radio className="h-3 w-3 text-cyan-500" />
+                              <div className="text-[10px]">
+                                <div className="flex items-center gap-0.5">
+                                  <Radio className="h-2.5 w-2.5 text-cyan-500" />
                                   <span className="text-cyan-500 font-medium">
                                     {pos.message_received_at 
                                       ? formatDistanceToNow(new Date(pos.message_received_at), { addSuffix: true })
                                       : formatDistanceToNow(new Date(pos.created_at), { addSuffix: true })}
                                   </span>
                                 </div>
-                                <p className="text-muted-foreground">
-                                  Bought: {formatDistanceToNow(new Date(pos.created_at), { addSuffix: true })}
-                                </p>
                               </div>
                             </TooltipTrigger>
                             <TooltipContent>
@@ -1106,45 +1133,45 @@ export function FantasyPortfolioDashboard() {
                           </Tooltip>
                         </TooltipProvider>
                       </TableCell>
-                      <TableCell>
+                      <TableCell compact>
                         <div>
-                          <span className="text-xs">${pos.entry_price_usd?.toFixed(8) || '0'}</span>
-                          <p className="text-xs text-muted-foreground">${pos.entry_amount_usd}</p>
+                          <span className="text-[10px]">${pos.entry_price_usd?.toFixed(8) || '0'}</span>
+                          <p className="text-[10px] text-muted-foreground">${pos.entry_amount_usd}</p>
                         </div>
                       </TableCell>
-                      <TableCell>
+                      <TableCell compact>
                         <div>
-                          <span className="text-xs">${pos.current_price_usd?.toFixed(8) || 'N/A'}</span>
-                          <p className="text-xs text-muted-foreground">
+                          <span className="text-[10px]">${pos.current_price_usd?.toFixed(8) || 'N/A'}</span>
+                          <p className="text-[10px] text-muted-foreground">
                             {currentMult > 0 ? `${currentMult.toFixed(2)}x` : '-'}
                           </p>
                         </div>
                       </TableCell>
-                      <TableCell>
+                      <TableCell compact>
                         {pos.peak_multiplier ? (
                           <div className={pos.peak_multiplier >= (pos.target_sell_multiplier || 2) ? 'text-amber-500' : 'text-muted-foreground'}>
-                            <div className="flex items-center gap-1">
+                            <div className="flex items-center gap-0.5">
                               {pos.peak_multiplier >= (pos.target_sell_multiplier || 2) && (
-                                <Trophy className="h-3 w-3" />
+                                <Trophy className="h-2.5 w-2.5" />
                               )}
-                              <span className="font-medium text-xs">{pos.peak_multiplier.toFixed(2)}x</span>
+                              <span className="font-medium text-[10px]">{pos.peak_multiplier.toFixed(2)}x</span>
                             </div>
-                            <p className="text-xs">
+                            <p className="text-[10px]">
                               {formatPeakDate(pos.peak_price_at)}
                             </p>
                           </div>
                         ) : (
-                          <span className="text-xs text-muted-foreground">-</span>
+                          <span className="text-[10px] text-muted-foreground">-</span>
                         )}
                       </TableCell>
-                      <TableCell>
+                      <TableCell compact>
                         {pos.ath_multiplier ? (
                           <TooltipProvider>
                             <Tooltip>
                               <TooltipTrigger>
                                 <div className="text-purple-500">
-                                  <span className="font-medium text-xs">{pos.ath_multiplier.toFixed(2)}x</span>
-                                  <p className="text-xs">${pos.ath_price_usd?.toFixed(8)}</p>
+                                  <span className="font-medium text-[10px]">{pos.ath_multiplier.toFixed(2)}x</span>
+                                  <p className="text-[10px]">${pos.ath_price_usd?.toFixed(6)}</p>
                                 </div>
                               </TooltipTrigger>
                               <TooltipContent>
@@ -1157,49 +1184,49 @@ export function FantasyPortfolioDashboard() {
                             </Tooltip>
                           </TooltipProvider>
                         ) : (
-                          <span className="text-xs text-muted-foreground">-</span>
+                          <span className="text-[10px] text-muted-foreground">-</span>
                         )}
                       </TableCell>
-                      <TableCell>
+                      <TableCell compact>
                         <Select
                           value={String(pos.target_sell_multiplier || 2)}
                           onValueChange={(v) => updateMultiplier(pos.id, parseFloat(v))}
                         >
-                          <SelectTrigger className="h-8 w-24">
+                          <SelectTrigger className="h-6 w-20 text-[10px]">
                             <SelectValue />
                           </SelectTrigger>
                           <SelectContent>
                             {SELL_MULTIPLIERS.map(m => (
-                              <SelectItem key={m.value} value={String(m.value)}>
+                              <SelectItem key={m.value} value={String(m.value)} className="text-xs">
                                 {m.label}
                               </SelectItem>
                             ))}
                           </SelectContent>
                         </Select>
                       </TableCell>
-                      <TableCell>
+                      <TableCell compact>
                         <div className="w-full">
                           <Progress 
                             value={progress} 
-                            className={`h-2 ${progress >= 80 ? 'bg-yellow-200' : ''}`}
+                            className={`h-1.5 ${progress >= 80 ? 'bg-yellow-200' : ''}`}
                           />
-                          <span className="text-xs text-muted-foreground">
+                          <span className="text-[10px] text-muted-foreground">
                             {progress.toFixed(0)}%
                           </span>
                         </div>
                       </TableCell>
-                      <TableCell>
+                      <TableCell compact>
                         <div className={pnl >= 0 ? 'text-green-500' : 'text-red-500'}>
-                          <span className="font-medium text-sm">
+                          <span className="font-medium text-xs">
                             {pnl >= 0 ? '+' : ''}${pnl.toFixed(2)}
                           </span>
-                          <p className="text-xs">
+                          <p className="text-[10px]">
                             {pnlPercent >= 0 ? '+' : ''}{pnlPercent.toFixed(1)}%
                           </p>
                         </div>
                       </TableCell>
-                      <TableCell>
-                        <div className="flex items-center gap-1">
+                      <TableCell compact>
+                        <div className="flex items-center gap-0.5">
                           <TokenChartModal 
                             tokenMint={pos.token_mint} 
                             tokenSymbol={pos.token_symbol} 
@@ -1209,25 +1236,25 @@ export function FantasyPortfolioDashboard() {
                             variant="ghost"
                             onClick={() => window.open(`/token-analysis?token=${pos.token_mint}`, '_blank')}
                             title="Trace Creator"
-                            className="h-7"
+                            className="h-6 w-6 p-0"
                           >
-                            <GitBranch className="h-3 w-3" />
+                            <GitBranch className="h-2.5 w-2.5" />
                           </Button>
                           <Button
                             size="sm"
                             variant="outline"
                             onClick={() => sellPosition(pos.id)}
-                            className="h-7 text-xs"
+                            className="h-6 text-[10px] px-1.5"
                           >
                             Sell
                           </Button>
                           <Button
                             size="sm"
                             variant="ghost"
-                            className="text-destructive hover:text-destructive h-7"
+                            className="text-destructive hover:text-destructive h-6 w-6 p-0"
                             onClick={() => deletePosition(pos.id)}
                           >
-                            <Trash2 className="h-3 w-3" />
+                            <Trash2 className="h-2.5 w-2.5" />
                           </Button>
                         </div>
                       </TableCell>
@@ -1344,6 +1371,84 @@ export function FantasyPortfolioDashboard() {
                       <TableCell>
                         {pos.sold_at && (
                           <span className="text-sm text-muted-foreground">
+                            {formatDistanceToNow(new Date(pos.sold_at), { addSuffix: true })}
+                          </span>
+                        )}
+                      </TableCell>
+                    </TableRow>
+                  );
+                })}
+              </TableBody>
+            </Table>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Toilet Case - Losses */}
+      {toiletPositions.length > 0 && (
+        <Card className="border-red-500/30 bg-gradient-to-r from-red-500/5 to-red-900/5">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 text-red-500">
+              <Frown className="h-5 w-5" />
+              Toilet Case ({toiletPositions.length})
+            </CardTitle>
+            <p className="text-sm text-muted-foreground">
+              Positions sold at a loss
+            </p>
+          </CardHeader>
+          <CardContent>
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead compact>💩</TableHead>
+                  <TableHead compact>Token</TableHead>
+                  <TableHead compact>Channel</TableHead>
+                  <TableHead compact>Entry</TableHead>
+                  <TableHead compact>Sold At</TableHead>
+                  <TableHead compact>Loss</TableHead>
+                  <TableHead compact>Sold Date</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {toiletPositions.map((pos) => {
+                  const pnl = pos.realized_pnl_usd || 0;
+                  const pnlPercent = pos.realized_pnl_percent || 0;
+                  const soldPrice = pos.sold_price_usd || pos.current_price_usd || 0;
+                  
+                  return (
+                    <TableRow key={pos.id} className="bg-red-500/5">
+                      <TableCell compact>
+                        <Frown className="h-4 w-4 text-red-500" />
+                      </TableCell>
+                      <TableCell compact>
+                        <a 
+                          href={getDexScreenerUrl(pos.token_mint)} 
+                          target="_blank" 
+                          rel="noopener noreferrer"
+                          className="font-medium text-red-500 hover:underline inline-flex items-center gap-1 text-xs"
+                        >
+                          {pos.token_symbol || 'Unknown'}
+                          <ExternalLink className="h-2.5 w-2.5" />
+                        </a>
+                      </TableCell>
+                      <TableCell compact>
+                        <span className="text-xs">{pos.channel_name || 'Unknown'}</span>
+                      </TableCell>
+                      <TableCell compact>
+                        <span className="text-xs">${pos.entry_price_usd?.toFixed(8) || '0'}</span>
+                      </TableCell>
+                      <TableCell compact>
+                        <span className="text-xs">${soldPrice?.toFixed(8) || 'N/A'}</span>
+                      </TableCell>
+                      <TableCell compact>
+                        <div className="text-red-500">
+                          <span className="font-bold text-xs">${pnl.toFixed(2)}</span>
+                          <p className="text-[10px]">{pnlPercent.toFixed(1)}%</p>
+                        </div>
+                      </TableCell>
+                      <TableCell compact>
+                        {pos.sold_at && (
+                          <span className="text-xs text-muted-foreground">
                             {formatDistanceToNow(new Date(pos.sold_at), { addSuffix: true })}
                           </span>
                         )}
