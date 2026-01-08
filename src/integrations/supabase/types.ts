@@ -7584,6 +7584,8 @@ export type Database = {
           developer_warning: string | null
           entry_amount_usd: number
           entry_price_usd: number
+          exclude_from_stats: boolean | null
+          exclusion_reason: string | null
           id: string
           interpretation_id: string | null
           is_active: boolean | null
@@ -7647,6 +7649,8 @@ export type Database = {
           developer_warning?: string | null
           entry_amount_usd?: number
           entry_price_usd: number
+          exclude_from_stats?: boolean | null
+          exclusion_reason?: string | null
           id?: string
           interpretation_id?: string | null
           is_active?: boolean | null
@@ -7710,6 +7714,8 @@ export type Database = {
           developer_warning?: string | null
           entry_amount_usd?: number
           entry_price_usd?: number
+          exclude_from_stats?: boolean | null
+          exclusion_reason?: string | null
           id?: string
           interpretation_id?: string | null
           is_active?: boolean | null

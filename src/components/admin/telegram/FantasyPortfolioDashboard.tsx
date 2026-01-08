@@ -98,11 +98,14 @@ interface FantasyPosition {
   rugcheck_passed: boolean | null;
   rugcheck_checked_at: string | null;
   skip_reason: string | null;
-  // NEW: Timestamp and ATH fields
+  // Timestamp and ATH fields
   message_received_at: string | null;
   ath_price_usd: number | null;
   ath_at: string | null;
   ath_multiplier: number | null;
+  // Exclusion from stats fields
+  exclude_from_stats: boolean | null;
+  exclusion_reason: string | null;
 }
 
 interface PortfolioStats {
@@ -404,8 +407,11 @@ export function FantasyPortfolioDashboard() {
   };
 
   const calculateStats = (positions: FantasyPosition[]) => {
-    const open = positions.filter(p => p.status === 'open');
-    const closed = positions.filter(p => p.status === 'closed' || p.status === 'sold');
+    // Filter out excluded positions for stats calculations
+    const statsPositions = positions.filter(p => !p.exclude_from_stats);
+    
+    const open = statsPositions.filter(p => p.status === 'open');
+    const closed = statsPositions.filter(p => p.status === 'closed' || p.status === 'sold');
     const active = open.filter(p => p.is_active !== false); // null treated as active
     
     // Trophy wins: auto-sold with profit
@@ -418,7 +424,7 @@ export function FantasyPortfolioDashboard() {
     const toiletLosses = toiletLossesArr.length;
     const toiletPnl = toiletLossesArr.reduce((sum, p) => sum + (p.realized_pnl_usd || 0), 0);
     
-    const totalInvested = positions.reduce((sum, p) => sum + (p.entry_amount_usd || 0), 0);
+    const totalInvested = statsPositions.reduce((sum, p) => sum + (p.entry_amount_usd || 0), 0);
     const totalUnrealized = open.reduce((sum, p) => sum + (p.unrealized_pnl_usd || 0), 0);
     const totalRealized = closed.reduce((sum, p) => sum + (p.realized_pnl_usd || 0), 0);
     
@@ -439,7 +445,7 @@ export function FantasyPortfolioDashboard() {
       }
     });
 
-    // Count positions near target (>80% progress)
+    // Count positions near target (>80% progress) - exclude excluded positions
     const nearTargetCount = open.filter(p => {
       if (!p.current_price_usd || !p.entry_price_usd) return false;
       const multiplier = p.current_price_usd / p.entry_price_usd;
@@ -447,7 +453,7 @@ export function FantasyPortfolioDashboard() {
       return (multiplier / target) >= 0.8;
     }).length;
 
-    // Count missed opportunities - positions where peak exceeded target
+    // Count missed opportunities - positions where peak exceeded target (excluding excluded)
     const missedOpportunities = open.filter(p => {
       const peakMult = p.peak_multiplier || 0;
       const targetMult = p.target_sell_multiplier || 2;
@@ -455,7 +461,7 @@ export function FantasyPortfolioDashboard() {
     }).length;
 
     setStats({
-      totalPositions: positions.length,
+      totalPositions: statsPositions.length,
       openPositions: open.length,
       closedPositions: closed.length,
       activePositions: active.length,
@@ -605,6 +611,30 @@ export function FantasyPortfolioDashboard() {
     } catch (err) {
       console.error('Error deleting position:', err);
       toast.error('Failed to delete position');
+    }
+  };
+
+  const toggleExcludeFromStats = async (positionId: string, exclude: boolean, reason?: string) => {
+    try {
+      const position = positions.find(p => p.id === positionId);
+      const { error } = await supabase
+        .from('telegram_fantasy_positions')
+        .update({ 
+          exclude_from_stats: exclude,
+          exclusion_reason: exclude ? (reason || 'Manually excluded from stats') : null
+        })
+        .eq('id', positionId);
+
+      if (error) throw error;
+      
+      toast.success(exclude 
+        ? `${position?.token_symbol} excluded from stats` 
+        : `${position?.token_symbol} included in stats`
+      );
+      await loadPositions();
+    } catch (err) {
+      console.error('Error toggling exclusion:', err);
+      toast.error('Failed to update position');
     }
   };
 
@@ -1153,7 +1183,10 @@ export function FantasyPortfolioDashboard() {
                   const currentMult = getCurrentMultiplier(pos);
                   
                     return (
-                      <TableRow key={pos.id} className={pos.is_active === false ? 'opacity-60' : ''}>
+                      <TableRow 
+                        key={pos.id} 
+                        className={`${pos.is_active === false ? 'opacity-60' : ''} ${pos.exclude_from_stats ? 'bg-muted/30 line-through decoration-muted-foreground/30' : ''}`}
+                      >
                         <TableCell compact>
                           <Checkbox
                             checked={pos.is_active !== false}
@@ -1168,13 +1201,28 @@ export function FantasyPortfolioDashboard() {
                               href={getDexScreenerUrl(pos.token_mint)} 
                               target="_blank" 
                               rel="noopener noreferrer"
-                              className="font-medium text-primary hover:underline inline-flex items-center gap-0.5 text-xs"
+                              className={`font-medium hover:underline inline-flex items-center gap-0.5 text-xs ${pos.exclude_from_stats ? 'text-muted-foreground' : 'text-primary'}`}
                             >
                             {pos.token_symbol || 'Unknown'}
                               <ExternalLink className="h-2.5 w-2.5" />
                             </a>
                             <DevRiskBadge pos={pos} />
                             <RugCheckBadge pos={pos} />
+                            {pos.exclude_from_stats && (
+                              <TooltipProvider>
+                                <Tooltip>
+                                  <TooltipTrigger>
+                                    <Badge variant="outline" className="gap-0.5 text-[10px] px-1 py-0 text-muted-foreground bg-muted/50 border-muted-foreground/30">
+                                      <Ban className="h-2 w-2" />
+                                      Excluded
+                                    </Badge>
+                                  </TooltipTrigger>
+                                  <TooltipContent>
+                                    <p className="text-xs max-w-xs">{pos.exclusion_reason || 'Excluded from statistics'}</p>
+                                  </TooltipContent>
+                                </Tooltip>
+                              </TooltipProvider>
+                            )}
                           </div>
                           <p className="text-[10px] text-muted-foreground truncate max-w-[80px]">
                             {pos.token_mint?.slice(0, 6)}...
@@ -1326,6 +1374,23 @@ export function FantasyPortfolioDashboard() {
                           >
                             <GitBranch className="h-2.5 w-2.5" />
                           </Button>
+                          <TooltipProvider>
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <Button
+                                  size="sm"
+                                  variant="ghost"
+                                  onClick={() => toggleExcludeFromStats(pos.id, !pos.exclude_from_stats)}
+                                  className={`h-6 w-6 p-0 ${pos.exclude_from_stats ? 'text-amber-500' : 'text-muted-foreground'}`}
+                                >
+                                  {pos.exclude_from_stats ? <Eye className="h-2.5 w-2.5" /> : <EyeOff className="h-2.5 w-2.5" />}
+                                </Button>
+                              </TooltipTrigger>
+                              <TooltipContent>
+                                {pos.exclude_from_stats ? 'Include in stats' : 'Exclude from stats'}
+                              </TooltipContent>
+                            </Tooltip>
+                          </TooltipProvider>
                           <Button
                             size="sm"
                             variant="outline"
