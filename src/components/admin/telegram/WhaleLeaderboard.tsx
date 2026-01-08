@@ -326,7 +326,7 @@ export function WhaleLeaderboard() {
                       <TableCell>
                         <div className="flex items-center gap-2">
                           {getWhaleEmoji(whale)}
-                          <span className="font-medium">{whale.whale_name}</span>
+                          <span className="font-medium">INSIDER WALLET TRACKING : [{whale.whale_name}]</span>
                         </div>
                       </TableCell>
                       <TableCell className="text-center">
