@@ -2189,6 +2189,119 @@ serve(async (req) => {
                   }
                 }
               }
+            }
+            
+            // ============================================
+            // KINGKONG CALLER MODE: Dual-position execution
+            // ============================================
+            if (config.kingkong_mode_enabled && !config.scalp_mode_enabled) {
+              console.log(`[telegram-channel-monitor] KingKong Mode: Triggering dual-position for ${currentTokenData?.symbol || tokenMint}`);
+              
+              // Get wallet for KingKong trades
+              let walletId = config.flipit_wallet_id as string | null;
+
+              if (!walletId) {
+                const { data: flipitWallets } = await supabase
+                  .from('super_admin_wallets')
+                  .select('id')
+                  .eq('wallet_type', 'flipit')
+                  .eq('is_active', true)
+                  .limit(1);
+
+                walletId = flipitWallets?.[0]?.id ?? null;
+              }
+
+              if (walletId) {
+                const quickAmount = config.kingkong_quick_amount_usd || 25;
+                const quickMultiplier = config.kingkong_quick_multiplier || 2;
+                const diamondAmount = config.kingkong_diamond_amount_usd || 100;
+                const diamondTrailingStop = config.kingkong_diamond_trailing_stop_pct || 25;
+                const diamondMinPeakX = config.kingkong_diamond_min_peak_x || 5;
+                const diamondMaxHoldHours = config.kingkong_diamond_max_hold_hours || 24;
+
+                // POSITION 1: Quick Flip
+                const quickFlipRequest = {
+                  walletId,
+                  action: 'buy',
+                  tokenMint,
+                  buyAmountUsd: quickAmount,
+                  targetMultiplier: quickMultiplier,
+                  source: 'telegram_kingkong_quick',
+                  sourceChannelId: config.id,
+                  positionType: 'quick_flip',
+                  moonbagEnabled: false  // No moonbag on quick flip
+                };
+
+                // POSITION 2: Diamond Hand
+                const diamondHandRequest = {
+                  walletId,
+                  action: 'buy',
+                  tokenMint,
+                  buyAmountUsd: diamondAmount,
+                  targetMultiplier: 999,  // No fixed target - trailing stop only
+                  source: 'telegram_kingkong_diamond',
+                  sourceChannelId: config.id,
+                  positionType: 'diamond_hand',
+                  isDiamondHand: true,
+                  diamondTrailingStopPct: diamondTrailingStop,
+                  diamondMinPeakX: diamondMinPeakX,
+                  diamondMaxHoldHours: diamondMaxHoldHours,
+                  moonbagEnabled: false  // Diamond hand IS the moonbag strategy
+                };
+
+                // Execute both buys in parallel
+                const [quickResult, diamondResult] = await Promise.all([
+                  supabase.functions.invoke('flipit-execute', { body: quickFlipRequest }),
+                  supabase.functions.invoke('flipit-execute', { body: diamondHandRequest })
+                ]);
+
+                const quickSuccess = !quickResult.error && quickResult.data?.success;
+                const diamondSuccess = !diamondResult.error && diamondResult.data?.success;
+
+                console.log(`[telegram-channel-monitor] KingKong Quick Flip: ${quickSuccess ? 'SUCCESS' : 'FAILED'} (sig=${quickResult.data?.signature?.slice(0, 10) || 'none'}...)`);
+                console.log(`[telegram-channel-monitor] KingKong Diamond Hand: ${diamondSuccess ? 'SUCCESS' : 'FAILED'} (sig=${diamondResult.data?.signature?.slice(0, 10) || 'none'}...)`);
+
+                // Link the two positions together
+                if (quickSuccess && diamondSuccess && quickResult.data?.positionId && diamondResult.data?.positionId) {
+                  await supabase.from('flip_positions').update({ paired_position_id: diamondResult.data.positionId }).eq('id', quickResult.data.positionId);
+                  await supabase.from('flip_positions').update({ paired_position_id: quickResult.data.positionId }).eq('id', diamondResult.data.positionId);
+                }
+
+                if (quickSuccess || diamondSuccess) {
+                  totalBuys += (quickSuccess ? 1 : 0) + (diamondSuccess ? 1 : 0);
+                  if (callId) {
+                    await supabase
+                      .from('telegram_channel_calls')
+                      .update({
+                        status: 'executed',
+                        skip_reason: null
+                      })
+                      .eq('id', callId);
+                  }
+                } else {
+                  console.error('[telegram-channel-monitor] KingKong: Both positions failed');
+                  if (callId) {
+                    await supabase
+                      .from('telegram_channel_calls')
+                      .update({
+                        status: 'failed',
+                        skip_reason: `KingKong buy failed: Quick=${quickResult.error?.message || quickResult.data?.error || 'unknown'}, Diamond=${diamondResult.error?.message || diamondResult.data?.error || 'unknown'}`
+                      })
+                      .eq('id', callId);
+                  }
+                }
+              } else {
+                console.log('[telegram-channel-monitor] KingKong: No wallet configured, skipping');
+                if (callId) {
+                  await supabase
+                    .from('telegram_channel_calls')
+                    .update({
+                      status: 'skipped',
+                      skip_reason: 'KingKong blocked: No active wallet configured'
+                    })
+                    .eq('id', callId);
+                }
+              }
             } else if (!isFantasyMode && config.flipit_wallet_id && !config.scalp_mode_enabled) {
               // Legacy: Real trading without flipit_enabled flag
               // CRITICAL: Only buy on FIRST CALL - if this token was mentioned before in ANY channel, skip

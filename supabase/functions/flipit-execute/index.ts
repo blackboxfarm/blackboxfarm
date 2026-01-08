@@ -413,7 +413,7 @@ serve(async (req) => {
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
     const body = await req.json();
-    const { action, tokenMint, walletId, buyAmountUsd, targetMultiplier, positionId, slippageBps, priorityFeeMode, source, sourceChannelId, isScalpPosition, scalpTakeProfitPct, scalpMoonBagPct, scalpStopLossPct, moonbagEnabled, moonbagSellPct, moonbagKeepPct } = body;
+    const { action, tokenMint, walletId, buyAmountUsd, targetMultiplier, positionId, slippageBps, priorityFeeMode, source, sourceChannelId, isScalpPosition, scalpTakeProfitPct, scalpMoonBagPct, scalpStopLossPct, moonbagEnabled, moonbagSellPct, moonbagKeepPct, positionType, isDiamondHand, diamondTrailingStopPct, diamondMinPeakX, diamondMaxHoldHours } = body;
 
     // Default slippage 5% (500 bps), configurable
     const effectiveSlippage = slippageBps || 500;
@@ -549,6 +549,22 @@ serve(async (req) => {
         positionData.moon_bag_percent = moonbagKeepPct || 10;
         positionData.flipit_moonbag_sell_pct = moonbagSellPct || 90;
         console.log("Creating FlipIt position with MOONBAG: Sell", moonbagSellPct || 90, "%, Keep", moonbagKeepPct || 10, "%");
+      }
+
+      // Add Diamond Hand fields for KingKong mode
+      if (positionType === 'diamond_hand' || isDiamondHand) {
+        positionData.position_type = 'diamond_hand';
+        positionData.is_diamond_hand = true;
+        positionData.diamond_trailing_stop_pct = diamondTrailingStopPct || 25;
+        positionData.diamond_min_peak_x = diamondMinPeakX || 5;
+        positionData.diamond_max_hold_hours = diamondMaxHoldHours || 24;
+        positionData.diamond_trailing_active = false;
+        positionData.target_multiplier = 999;
+        console.log(`Creating DIAMOND HAND position: Wait for ${diamondMinPeakX || 5}x, then trail at ${diamondTrailingStopPct || 25}%`);
+      } else if (positionType === 'quick_flip') {
+        positionData.position_type = 'quick_flip';
+        positionData.moon_bag_enabled = false;
+        console.log(`Creating QUICK FLIP position: ${mult}x target, no moonbag`);
       }
 
       const { data: position, error: posError } = await supabase

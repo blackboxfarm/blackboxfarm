@@ -2651,12 +2651,18 @@ export type Database = {
           buy_signature: string | null
           created_at: string | null
           dex_paid_status: Json | null
+          diamond_max_hold_hours: number | null
+          diamond_min_peak_x: number | null
+          diamond_peak_multiplier: number | null
+          diamond_trailing_active: boolean | null
+          diamond_trailing_stop_pct: number | null
           emergency_sell_enabled: boolean | null
           emergency_sell_executed_at: string | null
           emergency_sell_price_usd: number | null
           emergency_sell_status: string | null
           error_message: string | null
           id: string
+          is_diamond_hand: boolean | null
           is_scalp_position: boolean | null
           is_test_position: boolean | null
           moon_bag_dump_threshold_pct: number | null
@@ -2666,7 +2672,9 @@ export type Database = {
           moon_bag_percent: number | null
           moon_bag_quantity_tokens: number | null
           original_quantity_tokens: number | null
+          paired_position_id: string | null
           partial_sells: Json | null
+          position_type: string | null
           profit_usd: number | null
           quantity_tokens: number | null
           rebuy_amount_usd: number | null
@@ -2706,12 +2714,18 @@ export type Database = {
           buy_signature?: string | null
           created_at?: string | null
           dex_paid_status?: Json | null
+          diamond_max_hold_hours?: number | null
+          diamond_min_peak_x?: number | null
+          diamond_peak_multiplier?: number | null
+          diamond_trailing_active?: boolean | null
+          diamond_trailing_stop_pct?: number | null
           emergency_sell_enabled?: boolean | null
           emergency_sell_executed_at?: string | null
           emergency_sell_price_usd?: number | null
           emergency_sell_status?: string | null
           error_message?: string | null
           id?: string
+          is_diamond_hand?: boolean | null
           is_scalp_position?: boolean | null
           is_test_position?: boolean | null
           moon_bag_dump_threshold_pct?: number | null
@@ -2721,7 +2735,9 @@ export type Database = {
           moon_bag_percent?: number | null
           moon_bag_quantity_tokens?: number | null
           original_quantity_tokens?: number | null
+          paired_position_id?: string | null
           partial_sells?: Json | null
+          position_type?: string | null
           profit_usd?: number | null
           quantity_tokens?: number | null
           rebuy_amount_usd?: number | null
@@ -2761,12 +2777,18 @@ export type Database = {
           buy_signature?: string | null
           created_at?: string | null
           dex_paid_status?: Json | null
+          diamond_max_hold_hours?: number | null
+          diamond_min_peak_x?: number | null
+          diamond_peak_multiplier?: number | null
+          diamond_trailing_active?: boolean | null
+          diamond_trailing_stop_pct?: number | null
           emergency_sell_enabled?: boolean | null
           emergency_sell_executed_at?: string | null
           emergency_sell_price_usd?: number | null
           emergency_sell_status?: string | null
           error_message?: string | null
           id?: string
+          is_diamond_hand?: boolean | null
           is_scalp_position?: boolean | null
           is_test_position?: boolean | null
           moon_bag_dump_threshold_pct?: number | null
@@ -2776,7 +2798,9 @@ export type Database = {
           moon_bag_percent?: number | null
           moon_bag_quantity_tokens?: number | null
           original_quantity_tokens?: number | null
+          paired_position_id?: string | null
           partial_sells?: Json | null
+          position_type?: string | null
           profit_usd?: number | null
           quantity_tokens?: number | null
           rebuy_amount_usd?: number | null
@@ -2810,6 +2834,13 @@ export type Database = {
           website_url?: string | null
         }
         Relationships: [
+          {
+            foreignKeyName: "flip_positions_paired_position_id_fkey"
+            columns: ["paired_position_id"]
+            isOneToOne: false
+            referencedRelation: "flip_positions"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "flip_positions_rebuy_position_id_fkey"
             columns: ["rebuy_position_id"]
@@ -7332,6 +7363,13 @@ export type Database = {
           flipit_wallet_id: string | null
           id: string
           is_active: boolean | null
+          kingkong_diamond_amount_usd: number | null
+          kingkong_diamond_max_hold_hours: number | null
+          kingkong_diamond_min_peak_x: number | null
+          kingkong_diamond_trailing_stop_pct: number | null
+          kingkong_mode_enabled: boolean | null
+          kingkong_quick_amount_usd: number | null
+          kingkong_quick_multiplier: number | null
           koth_enabled: boolean | null
           large_buy_amount_usd: number | null
           large_sell_multiplier: number | null
@@ -7390,6 +7428,13 @@ export type Database = {
           flipit_wallet_id?: string | null
           id?: string
           is_active?: boolean | null
+          kingkong_diamond_amount_usd?: number | null
+          kingkong_diamond_max_hold_hours?: number | null
+          kingkong_diamond_min_peak_x?: number | null
+          kingkong_diamond_trailing_stop_pct?: number | null
+          kingkong_mode_enabled?: boolean | null
+          kingkong_quick_amount_usd?: number | null
+          kingkong_quick_multiplier?: number | null
           koth_enabled?: boolean | null
           large_buy_amount_usd?: number | null
           large_sell_multiplier?: number | null
@@ -7448,6 +7493,13 @@ export type Database = {
           flipit_wallet_id?: string | null
           id?: string
           is_active?: boolean | null
+          kingkong_diamond_amount_usd?: number | null
+          kingkong_diamond_max_hold_hours?: number | null
+          kingkong_diamond_min_peak_x?: number | null
+          kingkong_diamond_trailing_stop_pct?: number | null
+          kingkong_mode_enabled?: boolean | null
+          kingkong_quick_amount_usd?: number | null
+          kingkong_quick_multiplier?: number | null
           koth_enabled?: boolean | null
           large_buy_amount_usd?: number | null
           large_sell_multiplier?: number | null
