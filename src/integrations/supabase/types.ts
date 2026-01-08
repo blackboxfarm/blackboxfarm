@@ -7364,6 +7364,8 @@ export type Database = {
           flipit_sell_multiplier: number | null
           flipit_wallet_id: string | null
           fresh_discovery_buy_multiplier: number | null
+          holder_check_action: string | null
+          holder_check_enabled: boolean | null
           id: string
           is_active: boolean | null
           kingkong_diamond_amount_usd: number | null
@@ -7380,6 +7382,7 @@ export type Database = {
           last_message_id: number | null
           max_mint_age_minutes: number | null
           max_price_threshold: number | null
+          min_holder_count: number | null
           min_price_threshold: number | null
           momentum_buy_multiplier: number | null
           notification_email: string | null
@@ -7437,6 +7440,8 @@ export type Database = {
           flipit_sell_multiplier?: number | null
           flipit_wallet_id?: string | null
           fresh_discovery_buy_multiplier?: number | null
+          holder_check_action?: string | null
+          holder_check_enabled?: boolean | null
           id?: string
           is_active?: boolean | null
           kingkong_diamond_amount_usd?: number | null
@@ -7453,6 +7458,7 @@ export type Database = {
           last_message_id?: number | null
           max_mint_age_minutes?: number | null
           max_price_threshold?: number | null
+          min_holder_count?: number | null
           min_price_threshold?: number | null
           momentum_buy_multiplier?: number | null
           notification_email?: string | null
@@ -7510,6 +7516,8 @@ export type Database = {
           flipit_sell_multiplier?: number | null
           flipit_wallet_id?: string | null
           fresh_discovery_buy_multiplier?: number | null
+          holder_check_action?: string | null
+          holder_check_enabled?: boolean | null
           id?: string
           is_active?: boolean | null
           kingkong_diamond_amount_usd?: number | null
@@ -7526,6 +7534,7 @@ export type Database = {
           last_message_id?: number | null
           max_mint_age_minutes?: number | null
           max_price_threshold?: number | null
+          min_holder_count?: number | null
           min_price_threshold?: number | null
           momentum_buy_multiplier?: number | null
           notification_email?: string | null
@@ -7586,6 +7595,7 @@ export type Database = {
           entry_price_usd: number
           exclude_from_stats: boolean | null
           exclusion_reason: string | null
+          holder_count_at_entry: number | null
           id: string
           interpretation_id: string | null
           is_active: boolean | null
@@ -7651,6 +7661,7 @@ export type Database = {
           entry_price_usd: number
           exclude_from_stats?: boolean | null
           exclusion_reason?: string | null
+          holder_count_at_entry?: number | null
           id?: string
           interpretation_id?: string | null
           is_active?: boolean | null
@@ -7716,6 +7727,7 @@ export type Database = {
           entry_price_usd?: number
           exclude_from_stats?: boolean | null
           exclusion_reason?: string | null
+          holder_count_at_entry?: number | null
           id?: string
           interpretation_id?: string | null
           is_active?: boolean | null

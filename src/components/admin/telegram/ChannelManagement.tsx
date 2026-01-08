@@ -35,7 +35,8 @@ import {
   FlaskConical,
   Wallet,
   Crown,
-  Zap
+  Zap,
+  Users
 } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
 import { ChannelScanLogs } from './ChannelScanLogs';
@@ -113,6 +114,10 @@ interface ChannelConfig {
   kingkong_diamond_max_hold_hours?: number;
   // Polling settings
   polling_interval_seconds?: number | null;
+  // Holder count filter settings
+  min_holder_count?: number;
+  holder_check_enabled?: boolean;
+  holder_check_action?: 'skip' | 'watchlist' | 'warn_only';
 }
 
 interface FlipItWallet {
@@ -1184,6 +1189,67 @@ with TelegramClient(StringSession(), api_id, api_hash) as client:
                   ) : (
                     <p className="text-xs text-muted-foreground">
                       Uses basic APE keyword detection with fixed thresholds.
+                    </p>
+                  )}
+                </div>
+
+                {/* Holder Count Filter Section */}
+                <div className="p-3 bg-muted/30 rounded-lg border border-border/50">
+                  <div className="flex items-center justify-between mb-2">
+                    <div className="flex items-center gap-2">
+                      <Users className="h-4 w-4 text-blue-500" />
+                      <span className="text-sm font-medium">Holder Filter</span>
+                      {channel.holder_check_enabled !== false && (
+                        <Badge variant="outline" className="bg-blue-500/10 text-blue-400 border-blue-500/30 text-xs">
+                          Active
+                        </Badge>
+                      )}
+                    </div>
+                    <Switch
+                      checked={channel.holder_check_enabled !== false}
+                      onCheckedChange={(checked) => updateFlipitSettings(channel.id, 'holder_check_enabled', checked)}
+                    />
+                  </div>
+                  
+                  {channel.holder_check_enabled !== false ? (
+                    <div className="space-y-3">
+                      <p className="text-xs text-muted-foreground">
+                        Skip tokens with fewer than <span className="font-medium text-foreground">{channel.min_holder_count || 15}</span> holders to avoid pump-and-dump schemes.
+                      </p>
+                      
+                      <div className="grid grid-cols-2 gap-2">
+                        <div>
+                          <Label className="text-xs text-muted-foreground">Min Holders</Label>
+                          <Input
+                            type="number"
+                            step="5"
+                            min="1"
+                            max="100"
+                            value={channel.min_holder_count || 15}
+                            onChange={(e) => updateFlipitSettings(channel.id, 'min_holder_count', Number(e.target.value))}
+                            className="h-8 text-sm"
+                          />
+                        </div>
+                        <div>
+                          <Label className="text-xs text-muted-foreground">Action</Label>
+                          <Select
+                            value={channel.holder_check_action || 'skip'}
+                            onValueChange={(value) => updateFlipitSettings(channel.id, 'holder_check_action', value)}
+                          >
+                            <SelectTrigger className="h-8 text-sm">
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent className="bg-popover border border-border">
+                              <SelectItem value="skip">Skip (Don't Buy)</SelectItem>
+                              <SelectItem value="warn_only">Warn Only</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
+                      </div>
+                    </div>
+                  ) : (
+                    <p className="text-xs text-muted-foreground">
+                      Enable to filter out low-holder tokens (pump-and-dump protection).
                     </p>
                   )}
                 </div>
