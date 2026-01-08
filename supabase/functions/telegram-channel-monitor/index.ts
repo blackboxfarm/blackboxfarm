@@ -1312,8 +1312,8 @@ serve(async (req) => {
         const IGNORED_USERNAMES = ['system_reset'];
         let totalSkipped = 0;
         
-        // STRICT MESSAGE AGE: Only process messages less than 10 minutes old
-        const MAX_MESSAGE_AGE_MINUTES = 10;
+        // Use config's scan_window_minutes for message age limit (default 60 min for real-time scanning)
+        const MAX_MESSAGE_AGE_MINUTES = config.scan_window_minutes || 60;
         
         for (const msg of channelMessages) {
           if (!msg.text) continue;
@@ -1324,10 +1324,13 @@ serve(async (req) => {
           const callerUsername = msg.callerUsername;
           const callerDisplayName = msg.callerDisplayName;
 
-          // STRICT FRESHNESS CHECK: Skip any message older than 10 minutes
+          // Skip messages older than scan window
           const messageAgeMinutes = (Date.now() - messageDate.getTime()) / 60000;
           if (messageAgeMinutes > MAX_MESSAGE_AGE_MINUTES) {
-            console.log(`[telegram-channel-monitor] Skipping OLD message (${messageAgeMinutes.toFixed(1)} min old, max ${MAX_MESSAGE_AGE_MINUTES}): msg_id=${messageId}`);
+            // Only log first few skips to avoid log spam
+            if (totalSkipped < 3) {
+              console.log(`[telegram-channel-monitor] Skipping OLD message (${messageAgeMinutes.toFixed(1)} min old, max ${MAX_MESSAGE_AGE_MINUTES}): msg_id=${messageId}`);
+            }
             totalSkipped++;
             continue;
           }
