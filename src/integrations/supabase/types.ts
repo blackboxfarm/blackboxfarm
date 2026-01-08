@@ -7371,6 +7371,7 @@ export type Database = {
           kingkong_diamond_amount_usd: number | null
           kingkong_diamond_max_hold_hours: number | null
           kingkong_diamond_min_peak_x: number | null
+          kingkong_diamond_stop_urgency: string | null
           kingkong_diamond_trailing_stop_pct: number | null
           kingkong_mode_enabled: boolean | null
           kingkong_quick_amount_usd: number | null
@@ -7449,6 +7450,7 @@ export type Database = {
           kingkong_diamond_amount_usd?: number | null
           kingkong_diamond_max_hold_hours?: number | null
           kingkong_diamond_min_peak_x?: number | null
+          kingkong_diamond_stop_urgency?: string | null
           kingkong_diamond_trailing_stop_pct?: number | null
           kingkong_mode_enabled?: boolean | null
           kingkong_quick_amount_usd?: number | null
@@ -7527,6 +7529,7 @@ export type Database = {
           kingkong_diamond_amount_usd?: number | null
           kingkong_diamond_max_hold_hours?: number | null
           kingkong_diamond_min_peak_x?: number | null
+          kingkong_diamond_stop_urgency?: string | null
           kingkong_diamond_trailing_stop_pct?: number | null
           kingkong_mode_enabled?: boolean | null
           kingkong_quick_amount_usd?: number | null

@@ -113,6 +113,7 @@ interface ChannelConfig {
   kingkong_diamond_trailing_stop_pct?: number;
   kingkong_diamond_min_peak_x?: number;
   kingkong_diamond_max_hold_hours?: number;
+  kingkong_diamond_stop_urgency?: 'normal' | 'aggressive' | 'max';
   // Polling settings
   polling_interval_seconds?: number | null;
   price_monitor_interval_seconds?: number | null;
@@ -1838,6 +1839,22 @@ with TelegramClient(StringSession(), api_id, api_hash) as client:
                               className="h-8 text-sm"
                             />
                           </div>
+                        </div>
+                        <div className="mt-2">
+                          <Label className="text-xs text-muted-foreground">Stop Loss Urgency</Label>
+                          <Select
+                            value={channel.kingkong_diamond_stop_urgency || 'normal'}
+                            onValueChange={(val) => updateKingKongSettings(channel.id, 'kingkong_diamond_stop_urgency', val)}
+                          >
+                            <SelectTrigger className="h-8 text-sm">
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="normal">🐢 Normal (0.0001 SOL, 10% slip)</SelectItem>
+                              <SelectItem value="aggressive">⚡ Aggressive (0.001 SOL, 25% slip)</SelectItem>
+                              <SelectItem value="max">🚀 Max Priority (0.01 SOL, 50% slip)</SelectItem>
+                            </SelectContent>
+                          </Select>
                         </div>
                         <p className="text-[10px] text-muted-foreground mt-1">
                           Trail at {channel.kingkong_diamond_trailing_stop_pct || 25}% after {channel.kingkong_diamond_min_peak_x || 5}x, max {channel.kingkong_diamond_max_hold_hours || 24}h hold
