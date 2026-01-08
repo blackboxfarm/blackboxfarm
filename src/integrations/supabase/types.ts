@@ -7380,6 +7380,7 @@ export type Database = {
           min_price_threshold: number | null
           notification_email: string | null
           persistent_monitoring: boolean | null
+          polling_interval_seconds: number | null
           scalp_buy_amount_sol: number | null
           scalp_buy_amount_usd: number | null
           scalp_buy_priority_fee: string | null
@@ -7445,6 +7446,7 @@ export type Database = {
           min_price_threshold?: number | null
           notification_email?: string | null
           persistent_monitoring?: boolean | null
+          polling_interval_seconds?: number | null
           scalp_buy_amount_sol?: number | null
           scalp_buy_amount_usd?: number | null
           scalp_buy_priority_fee?: string | null
@@ -7510,6 +7512,7 @@ export type Database = {
           min_price_threshold?: number | null
           notification_email?: string | null
           persistent_monitoring?: boolean | null
+          polling_interval_seconds?: number | null
           scalp_buy_amount_sol?: number | null
           scalp_buy_amount_usd?: number | null
           scalp_buy_priority_fee?: string | null

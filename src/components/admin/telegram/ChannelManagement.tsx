@@ -111,6 +111,8 @@ interface ChannelConfig {
   kingkong_diamond_trailing_stop_pct?: number;
   kingkong_diamond_min_peak_x?: number;
   kingkong_diamond_max_hold_hours?: number;
+  // Polling settings
+  polling_interval_seconds?: number | null;
 }
 
 interface FlipItWallet {
@@ -1085,7 +1087,7 @@ with TelegramClient(StringSession(), api_id, api_hash) as client:
                   @{channel.channel_username}
                 </p>
                 
-                <div className="grid grid-cols-3 gap-2 text-center">
+                <div className="grid grid-cols-4 gap-2 text-center">
                   <div className="p-2 bg-muted/50 rounded">
                     <p className="text-lg font-bold">{channel.total_calls_detected || 0}</p>
                     <p className="text-xs text-muted-foreground">Calls</p>
@@ -1097,6 +1099,28 @@ with TelegramClient(StringSession(), api_id, api_hash) as client:
                   <div className="p-2 bg-muted/50 rounded">
                     <p className="text-lg font-bold">${channel.fantasy_buy_amount_usd}</p>
                     <p className="text-xs text-muted-foreground">Buy Size</p>
+                  </div>
+                  <div className="p-2 bg-muted/50 rounded">
+                    <Select
+                      value={channel.polling_interval_seconds?.toString() || 'default'}
+                      onValueChange={(value) => {
+                        const intervalValue = value === 'default' ? null : Number(value);
+                        updateFlipitSettings(channel.id, 'polling_interval_seconds', intervalValue);
+                      }}
+                    >
+                      <SelectTrigger className="h-6 text-xs border-0 bg-transparent p-0 justify-center">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent className="bg-popover border border-border">
+                        <SelectItem value="default">Default</SelectItem>
+                        <SelectItem value="15">15s ⚡</SelectItem>
+                        <SelectItem value="30">30s</SelectItem>
+                        <SelectItem value="60">60s</SelectItem>
+                        <SelectItem value="120">2min</SelectItem>
+                        <SelectItem value="300">5min</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <p className="text-xs text-muted-foreground">Poll Rate</p>
                   </div>
                 </div>
 
