@@ -7388,6 +7388,7 @@ export type Database = {
           notification_email: string | null
           persistent_monitoring: boolean | null
           polling_interval_seconds: number | null
+          price_monitor_interval_seconds: number | null
           recommendation_buy_multiplier: number | null
           scalp_buy_amount_sol: number | null
           scalp_buy_amount_usd: number | null
@@ -7464,6 +7465,7 @@ export type Database = {
           notification_email?: string | null
           persistent_monitoring?: boolean | null
           polling_interval_seconds?: number | null
+          price_monitor_interval_seconds?: number | null
           recommendation_buy_multiplier?: number | null
           scalp_buy_amount_sol?: number | null
           scalp_buy_amount_usd?: number | null
@@ -7540,6 +7542,7 @@ export type Database = {
           notification_email?: string | null
           persistent_monitoring?: boolean | null
           polling_interval_seconds?: number | null
+          price_monitor_interval_seconds?: number | null
           recommendation_buy_multiplier?: number | null
           scalp_buy_amount_sol?: number | null
           scalp_buy_amount_usd?: number | null

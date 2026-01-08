@@ -114,6 +114,7 @@ interface ChannelConfig {
   kingkong_diamond_max_hold_hours?: number;
   // Polling settings
   polling_interval_seconds?: number | null;
+  price_monitor_interval_seconds?: number | null;
   // Holder count filter settings
   min_holder_count?: number;
   holder_check_enabled?: boolean;
@@ -1118,6 +1119,7 @@ with TelegramClient(StringSession(), api_id, api_hash) as client:
                       </SelectTrigger>
                       <SelectContent className="bg-popover border border-border">
                         <SelectItem value="default">Default</SelectItem>
+                        <SelectItem value="10">10s ⚡⚡</SelectItem>
                         <SelectItem value="15">15s ⚡</SelectItem>
                         <SelectItem value="30">30s</SelectItem>
                         <SelectItem value="60">60s</SelectItem>
@@ -1125,7 +1127,29 @@ with TelegramClient(StringSession(), api_id, api_hash) as client:
                         <SelectItem value="300">5min</SelectItem>
                       </SelectContent>
                     </Select>
-                    <p className="text-xs text-muted-foreground">Poll Rate</p>
+                    <p className="text-xs text-muted-foreground">Msg Poll</p>
+                  </div>
+                  <div className="p-2 bg-muted/50 rounded">
+                    <Select
+                      value={channel.price_monitor_interval_seconds?.toString() || 'default'}
+                      onValueChange={(value) => {
+                        const intervalValue = value === 'default' ? null : Number(value);
+                        updateFlipitSettings(channel.id, 'price_monitor_interval_seconds', intervalValue);
+                      }}
+                    >
+                      <SelectTrigger className="h-6 text-xs border-0 bg-transparent p-0 justify-center">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent className="bg-popover border border-border">
+                        <SelectItem value="default">Default</SelectItem>
+                        <SelectItem value="15">15s ⚡⚡</SelectItem>
+                        <SelectItem value="30">30s ⚡</SelectItem>
+                        <SelectItem value="60">60s</SelectItem>
+                        <SelectItem value="120">2min</SelectItem>
+                        <SelectItem value="300">5min</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <p className="text-xs text-muted-foreground">Price Poll</p>
                   </div>
                 </div>
 
