@@ -1312,20 +1312,22 @@ serve(async (req) => {
           continue;
         }
 
-        // FIRST SCAN INITIALIZATION: If no last_message_id, set it to max and skip all messages
-        if (!config.last_message_id && channelMessages.length > 0) {
+        // FIRST SCAN INITIALIZATION:
+        // By default we "arm" a new channel by setting last_message_id to the current max and skipping history.
+        // If deepScan/resetMessageId is requested, we intentionally process history for debugging.
+        if (!deepScan && !resetMessageId && !config.last_message_id && channelMessages.length > 0) {
           const maxId = Math.max(...channelMessages.map(m => parseInt(m.messageId) || 0));
           console.log(`[telegram-channel-monitor] FIRST SCAN for ${config.channel_name} - initializing last_message_id to ${maxId}, skipping all ${channelMessages.length} existing messages (NO BUYS)`);
-          
+
           const { error: initError } = await supabase
             .from('telegram_channel_config')
             .update({ last_message_id: maxId.toString() })
             .eq('id', config.id);
-          
+
           if (initError) {
             console.error(`[telegram-channel-monitor] Failed to initialize last_message_id:`, initError);
           }
-          
+
           results.push({
             channel: config.channel_name || channelUsername || channelId,
             channelType,
@@ -1340,9 +1342,10 @@ serve(async (req) => {
         // Usernames to ignore (owner's messages)
         const IGNORED_USERNAMES = ['system_reset'];
         let totalSkipped = 0;
-        
+
         // Use config's scan_window_minutes for message age limit (default 60 min for real-time scanning)
-        const MAX_MESSAGE_AGE_MINUTES = config.scan_window_minutes || 60;
+        // Deep scan ignores age limits.
+        const MAX_MESSAGE_AGE_MINUTES = deepScan ? (60 * 24 * 365) : (config.scan_window_minutes || 60);
         
         for (const msg of channelMessages) {
           if (!msg.text) continue;
