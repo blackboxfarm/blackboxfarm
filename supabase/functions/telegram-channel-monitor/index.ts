@@ -1169,13 +1169,42 @@ serve(async (req) => {
       }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
 
+    // Dedupe configs so we don't double-scan the same channel/group if the DB has duplicates
+    const cleanHandle = (value: string) => value.trim().replace(/^@/, '').replace(/^https?:\/\/t\.me\//, '').replace(/^t\.me\//, '').toLowerCase();
+    const isNumericChatId = (value: string) => /^-?\d+$/.test(value);
+    const configKey = (cfg: any) => {
+      const id = (cfg.channel_id ?? '').toString().trim();
+      const uname = (cfg.channel_username ?? '').toString().trim();
+      if (id && isNumericChatId(id)) return id;
+      if (uname && isNumericChatId(uname)) return uname;
+      if (uname) return cleanHandle(uname);
+      if (id) return cleanHandle(id);
+      return cfg.id;
+    };
+    const cfgSortKey = (cfg: any) => (cfg.updated_at ?? cfg.created_at ?? '').toString();
+
+    const cfgMap = new Map<string, any>();
+    for (const cfg of configs) {
+      const key = configKey(cfg);
+      const existing = cfgMap.get(key);
+      if (!existing || cfgSortKey(cfg) > cfgSortKey(existing)) {
+        cfgMap.set(key, cfg);
+      }
+    }
+
+    const dedupedConfigs = Array.from(cfgMap.values());
+    const duplicatesRemoved = configs.length - dedupedConfigs.length;
+    if (duplicatesRemoved > 0) {
+      console.log(`[telegram-channel-monitor] Deduped ${duplicatesRemoved} duplicate telegram_channel_config rows (kept ${dedupedConfigs.length}/${configs.length})`);
+    }
+
     const results: any[] = [];
     let totalProcessed = 0;
     let totalBuys = 0;
     let totalFantasyBuys = 0;
     let totalRawMessages = 0;
 
-    for (const config of configs) {
+    for (const config of dedupedConfigs) {
       const channelId = requestChannelId || config.channel_id;
       const channelUsername = config.channel_username;
       const channelType = config.channel_type || 'channel';

@@ -108,6 +108,39 @@ interface FlipItWallet {
   is_active: boolean;
 }
 
+const cleanTelegramHandle = (value: string) =>
+  value
+    .trim()
+    .replace(/^@/, '')
+    .replace(/^https?:\/\/t\.me\//, '')
+    .replace(/^t\.me\//, '')
+    .toLowerCase();
+
+const isNumericChatId = (value: string) => /^-?\d+$/.test(value);
+
+const getChannelKey = (row: Pick<ChannelConfig, 'channel_id' | 'channel_username'>) => {
+  const id = (row.channel_id ?? '').toString().trim();
+  const uname = (row.channel_username ?? '').toString().trim();
+  if (id && isNumericChatId(id)) return id;
+  if (uname && isNumericChatId(uname)) return uname;
+  if (uname) return cleanTelegramHandle(uname);
+  if (id) return cleanTelegramHandle(id);
+  return '';
+};
+
+const dedupeChannelConfigs = (rows: ChannelConfig[]) => {
+  const sortKey = (r: any) => (r.updated_at ?? r.created_at ?? '').toString();
+  const map = new Map<string, ChannelConfig>();
+  for (const row of rows) {
+    const key = getChannelKey(row) || (row as any).id;
+    const existing = map.get(key);
+    if (!existing || sortKey(row) > sortKey(existing)) {
+      map.set(key, row);
+    }
+  }
+  return Array.from(map.values()).sort((a: any, b: any) => sortKey(b).localeCompare(sortKey(a)));
+};
+
 export function ChannelManagement() {
   const [channels, setChannels] = useState<ChannelConfig[]>([]);
   const [telegramTargets, setTelegramTargets] = useState<TelegramTarget[]>([]);
@@ -194,7 +227,9 @@ export function ChannelManagement() {
         .order('created_at', { ascending: false });
 
       if (error) throw error;
-      setChannels((data || []) as ChannelConfig[]);
+      const rows = (data || []) as ChannelConfig[];
+      const deduped = dedupeChannelConfigs(rows);
+      setChannels(deduped);
     } catch (err) {
       console.error('Error loading channels:', err);
       toast.error('Failed to load channels');
