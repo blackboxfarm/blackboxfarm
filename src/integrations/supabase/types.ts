@@ -7342,6 +7342,7 @@ export type Database = {
       telegram_channel_config: {
         Row: {
           ape_keyword_enabled: boolean | null
+          auto_monitor_enabled: boolean | null
           channel_id: string
           channel_name: string | null
           channel_type: string | null
@@ -7408,6 +7409,7 @@ export type Database = {
         }
         Insert: {
           ape_keyword_enabled?: boolean | null
+          auto_monitor_enabled?: boolean | null
           channel_id: string
           channel_name?: string | null
           channel_type?: string | null
@@ -7474,6 +7476,7 @@ export type Database = {
         }
         Update: {
           ape_keyword_enabled?: boolean | null
+          auto_monitor_enabled?: boolean | null
           channel_id?: string
           channel_name?: string | null
           channel_type?: string | null
