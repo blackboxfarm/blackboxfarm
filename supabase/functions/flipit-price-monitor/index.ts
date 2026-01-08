@@ -174,11 +174,11 @@ serve(async (req) => {
 
     console.log("FlipIt price monitor:", { action, slippageBps: effectiveSlippage, priorityFeeMode });
 
-    // Get all holding positions
+    // Get all holding positions (including diamond hand)
     const { data: positions, error: posErr } = await supabase
       .from("flip_positions")
       .select("*, super_admin_wallets!flip_positions_wallet_id_fkey(secret_key_encrypted)")
-      .eq("status", "holding");
+      .in("status", ["holding", "moonbag"]);
 
     if (posErr) {
       console.error("Failed to fetch positions:", posErr);
@@ -560,6 +560,70 @@ serve(async (req) => {
 
         // Scalp positions handled - skip regular target logic
         continue;
+      }
+
+      // ============================================
+      // DIAMOND HAND POSITION LOGIC (KingKong mode)
+      // ============================================
+      if (position.is_diamond_hand) {
+        const currentMultiplier = currentPrice / entryPrice;
+        const peakMultiplier = position.diamond_peak_multiplier || currentMultiplier;
+        const minPeakX = position.diamond_min_peak_x || 5;
+        const trailingStopPct = position.diamond_trailing_stop_pct || 25;
+        const maxHoldHours = position.diamond_max_hold_hours || 24;
+
+        console.log(`Diamond Hand ${position.id}: ${currentMultiplier.toFixed(2)}x (peak: ${peakMultiplier.toFixed(2)}x, trailing: ${position.diamond_trailing_active})`);
+
+        // Update peak if new high
+        if (currentMultiplier > peakMultiplier) {
+          const updateData: any = { diamond_peak_multiplier: currentMultiplier, moon_bag_peak_price_usd: currentPrice };
+          
+          // Activate trailing stop if we've hit min peak
+          if (!position.diamond_trailing_active && currentMultiplier >= minPeakX) {
+            updateData.diamond_trailing_active = true;
+            console.log(`Diamond Hand ${position.id}: Trailing ACTIVATED at ${currentMultiplier.toFixed(1)}x`);
+          }
+          
+          await supabase.from('flip_positions').update(updateData).eq('id', position.id);
+          continue;
+        }
+
+        // Check exit conditions only if trailing is active
+        if (position.diamond_trailing_active) {
+          const drawdownFromPeak = ((peakMultiplier - currentMultiplier) / peakMultiplier) * 100;
+          
+          if (drawdownFromPeak >= trailingStopPct) {
+            console.log(`Diamond Hand EXIT: ${position.token_symbol} dropped ${drawdownFromPeak.toFixed(1)}% from ${peakMultiplier.toFixed(1)}x peak`);
+            
+            const { data: sellResult } = await supabase.functions.invoke("flipit-execute", {
+              body: { action: "sell", positionId: position.id, slippageBps: effectiveSlippage, priorityFeeMode: priorityFeeMode || "high" }
+            });
+
+            if (sellResult?.success) {
+              executed.push({ positionId: position.id, action: 'diamond_trailing_stop', tokenMint: position.token_mint, peakMultiplier, exitMultiplier: currentMultiplier, signature: sellResult.signature });
+            }
+            continue;
+          }
+        }
+
+        // Check max hold time
+        if (maxHoldHours > 0) {
+          const holdHours = (Date.now() - new Date(position.buy_executed_at).getTime()) / (1000 * 60 * 60);
+          if (holdHours >= maxHoldHours) {
+            console.log(`Diamond Hand EXIT: ${position.token_symbol} max hold time (${maxHoldHours}h) exceeded`);
+            
+            const { data: sellResult } = await supabase.functions.invoke("flipit-execute", {
+              body: { action: "sell", positionId: position.id, slippageBps: effectiveSlippage, priorityFeeMode: priorityFeeMode || "medium" }
+            });
+
+            if (sellResult?.success) {
+              executed.push({ positionId: position.id, action: 'diamond_max_hold', tokenMint: position.token_mint, signature: sellResult.signature });
+            }
+            continue;
+          }
+        }
+        
+        continue; // Diamond hand - no regular target check
       }
 
       // ============================================

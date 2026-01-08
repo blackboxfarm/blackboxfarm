@@ -103,6 +103,14 @@ interface ChannelConfig {
   // Analytics opt-in
   koth_enabled?: boolean;
   first_enabled?: boolean;
+  // KingKong Caller Mode settings
+  kingkong_mode_enabled?: boolean;
+  kingkong_quick_amount_usd?: number;
+  kingkong_quick_multiplier?: number;
+  kingkong_diamond_amount_usd?: number;
+  kingkong_diamond_trailing_stop_pct?: number;
+  kingkong_diamond_min_peak_x?: number;
+  kingkong_diamond_max_hold_hours?: number;
 }
 
 interface FlipItWallet {
@@ -458,6 +466,49 @@ export function ChannelManagement() {
       toast.error('Failed to update Scalp settings');
     }
   };
+
+  const toggleKingKongMode = async (channel: ChannelConfig) => {
+    const newValue = !channel.kingkong_mode_enabled;
+    
+    // Optimistic update
+    setChannels(prev => prev.map(c => 
+      c.id === channel.id ? { ...c, kingkong_mode_enabled: newValue } : c
+    ));
+    
+    try {
+      const { error } = await supabase
+        .from('telegram_channel_config')
+        .update({ kingkong_mode_enabled: newValue })
+        .eq('id', channel.id);
+
+      if (error) {
+        // Revert on error
+        setChannels(prev => prev.map(c => 
+          c.id === channel.id ? { ...c, kingkong_mode_enabled: !newValue } : c
+        ));
+        throw error;
+      }
+
+      toast.success(`KingKong Caller Mode ${newValue ? 'enabled' : 'disabled'}`);
+    } catch (err) {
+      console.error('Error toggling KingKong mode:', err);
+      toast.error('Failed to toggle KingKong mode');
+    }
+  };
+
+  const updateKingKongSettings = async (channelId: string, field: string, value: number | boolean) => {
+    try {
+      const { error } = await supabase
+        .from('telegram_channel_config')
+        .update({ [field]: value })
+        .eq('id', channelId);
+
+      if (error) throw error;
+      loadChannels();
+    } catch (err) {
+      console.error('Error updating KingKong settings:', err);
+      toast.error('Failed to update KingKong settings');
+    }
 
   const deleteChannel = async (channelId: string) => {
     if (!confirm('Are you sure you want to delete this channel?')) return;
@@ -1533,6 +1584,131 @@ with TelegramClient(StringSession(), api_id, api_hash) as client:
                   ) : (
                     <p className="text-xs text-muted-foreground">
                       Enable for structured scalp trades with pre-buy validation and moon bag exits.
+                    </p>
+                  )}
+                </div>
+
+                {/* KingKong Caller Mode Section */}
+                <div className="p-3 bg-muted/30 rounded-lg border border-border/50">
+                  <div className="flex items-center justify-between mb-2">
+                    <div className="flex items-center gap-2">
+                      <span className="text-lg">👑</span>
+                      <span className="text-sm font-medium">KingKong Caller</span>
+                      {channel.kingkong_mode_enabled && (
+                        <Badge variant="outline" className="bg-yellow-500/10 text-yellow-400 border-yellow-500/30 text-xs">
+                          Active
+                        </Badge>
+                      )}
+                    </div>
+                    <Switch
+                      checked={channel.kingkong_mode_enabled || false}
+                      onCheckedChange={() => toggleKingKongMode(channel)}
+                    />
+                  </div>
+                  
+                  {channel.kingkong_mode_enabled ? (
+                    <div className="space-y-3">
+                      <p className="text-xs text-muted-foreground">
+                        Dual-position mode: executes Quick Flip + Diamond Hand simultaneously.
+                      </p>
+                      
+                      {/* Quick Flip Settings */}
+                      <div className="p-2 rounded border bg-blue-500/5 border-blue-500/20">
+                        <div className="flex items-center gap-2 mb-2">
+                          <span className="text-sm">🏃</span>
+                          <span className="text-sm font-medium">Quick Flip</span>
+                          <Badge variant="outline" className="bg-blue-500/10 text-blue-400 border-blue-500/30 text-xs">
+                            ${channel.kingkong_quick_amount_usd || 25}
+                          </Badge>
+                        </div>
+                        <div className="grid grid-cols-2 gap-2">
+                          <div>
+                            <Label className="text-xs text-muted-foreground">Buy Amount (USD)</Label>
+                            <Input
+                              type="number"
+                              step="5"
+                              value={channel.kingkong_quick_amount_usd || 25}
+                              onChange={(e) => updateKingKongSettings(channel.id, 'kingkong_quick_amount_usd', Number(e.target.value))}
+                              className="h-8 text-sm"
+                            />
+                          </div>
+                          <div>
+                            <Label className="text-xs text-muted-foreground">Target (X)</Label>
+                            <Input
+                              type="number"
+                              step="0.5"
+                              value={channel.kingkong_quick_multiplier || 2}
+                              onChange={(e) => updateKingKongSettings(channel.id, 'kingkong_quick_multiplier', Number(e.target.value))}
+                              className="h-8 text-sm"
+                            />
+                          </div>
+                        </div>
+                        <p className="text-[10px] text-muted-foreground mt-1">
+                          Fast exit at {channel.kingkong_quick_multiplier || 2}x, no moonbag
+                        </p>
+                      </div>
+                      
+                      {/* Diamond Hand Settings */}
+                      <div className="p-2 rounded border bg-purple-500/5 border-purple-500/20">
+                        <div className="flex items-center gap-2 mb-2">
+                          <span className="text-sm">💎</span>
+                          <span className="text-sm font-medium">Diamond Hand</span>
+                          <Badge variant="outline" className="bg-purple-500/10 text-purple-400 border-purple-500/30 text-xs">
+                            ${channel.kingkong_diamond_amount_usd || 100}
+                          </Badge>
+                        </div>
+                        <div className="grid grid-cols-2 gap-2">
+                          <div>
+                            <Label className="text-xs text-muted-foreground">Buy Amount (USD)</Label>
+                            <Input
+                              type="number"
+                              step="10"
+                              value={channel.kingkong_diamond_amount_usd || 100}
+                              onChange={(e) => updateKingKongSettings(channel.id, 'kingkong_diamond_amount_usd', Number(e.target.value))}
+                              className="h-8 text-sm"
+                            />
+                          </div>
+                          <div>
+                            <Label className="text-xs text-muted-foreground">Min Peak (X)</Label>
+                            <Input
+                              type="number"
+                              step="1"
+                              value={channel.kingkong_diamond_min_peak_x || 5}
+                              onChange={(e) => updateKingKongSettings(channel.id, 'kingkong_diamond_min_peak_x', Number(e.target.value))}
+                              className="h-8 text-sm"
+                            />
+                          </div>
+                        </div>
+                        <div className="grid grid-cols-2 gap-2 mt-2">
+                          <div>
+                            <Label className="text-xs text-muted-foreground">Trailing Stop (%)</Label>
+                            <Input
+                              type="number"
+                              step="5"
+                              value={channel.kingkong_diamond_trailing_stop_pct || 25}
+                              onChange={(e) => updateKingKongSettings(channel.id, 'kingkong_diamond_trailing_stop_pct', Number(e.target.value))}
+                              className="h-8 text-sm"
+                            />
+                          </div>
+                          <div>
+                            <Label className="text-xs text-muted-foreground">Max Hold (hours)</Label>
+                            <Input
+                              type="number"
+                              step="1"
+                              value={channel.kingkong_diamond_max_hold_hours || 24}
+                              onChange={(e) => updateKingKongSettings(channel.id, 'kingkong_diamond_max_hold_hours', Number(e.target.value))}
+                              className="h-8 text-sm"
+                            />
+                          </div>
+                        </div>
+                        <p className="text-[10px] text-muted-foreground mt-1">
+                          Trail at {channel.kingkong_diamond_trailing_stop_pct || 25}% after {channel.kingkong_diamond_min_peak_x || 5}x, max {channel.kingkong_diamond_max_hold_hours || 24}h hold
+                        </p>
+                      </div>
+                    </div>
+                  ) : (
+                    <p className="text-xs text-muted-foreground">
+                      Enable for dual-position trades: quick profit + diamond hand runner.
                     </p>
                   )}
                 </div>
