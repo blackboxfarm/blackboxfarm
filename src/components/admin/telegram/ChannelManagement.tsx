@@ -106,6 +106,7 @@ interface ChannelConfig {
   first_enabled?: boolean;
   // KingKong Caller Mode settings
   kingkong_mode_enabled?: boolean;
+  kingkong_trigger_source?: 'whale_name' | 'username';
   kingkong_quick_amount_usd?: number;
   kingkong_quick_multiplier?: number;
   kingkong_diamond_amount_usd?: number;
@@ -504,7 +505,7 @@ export function ChannelManagement() {
     }
   };
 
-  const updateKingKongSettings = async (channelId: string, field: string, value: number | boolean) => {
+  const updateKingKongSettings = async (channelId: string, field: string, value: number | boolean | string) => {
     try {
       const { error } = await supabase
         .from('telegram_channel_config')
@@ -1726,6 +1727,28 @@ with TelegramClient(StringSession(), api_id, api_hash) as client:
                       <p className="text-xs text-muted-foreground">
                         Dual-position mode: executes Quick Flip + Diamond Hand simultaneously.
                       </p>
+                      
+                      {/* Trigger Source Selector */}
+                      <div className="p-2 rounded border bg-yellow-500/5 border-yellow-500/20">
+                        <Label className="text-xs text-muted-foreground mb-1.5 block">Trigger Source</Label>
+                        <Select
+                          value={channel.kingkong_trigger_source || 'whale_name'}
+                          onValueChange={(value) => updateKingKongSettings(channel.id, 'kingkong_trigger_source', value)}
+                        >
+                          <SelectTrigger className="h-8 text-sm">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="whale_name">🐋 Whale Nickname (AI detected)</SelectItem>
+                            <SelectItem value="username">👤 Message Username</SelectItem>
+                          </SelectContent>
+                        </Select>
+                        <p className="text-[10px] text-muted-foreground mt-1">
+                          {channel.kingkong_trigger_source === 'username' 
+                            ? 'Triggers when specific usernames post calls'
+                            : 'Triggers when AI detects whale nicknames in messages'}
+                        </p>
+                      </div>
                       
                       {/* Quick Flip Settings */}
                       <div className="p-2 rounded border bg-blue-500/5 border-blue-500/20">

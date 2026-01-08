@@ -7375,6 +7375,7 @@ export type Database = {
           kingkong_mode_enabled: boolean | null
           kingkong_quick_amount_usd: number | null
           kingkong_quick_multiplier: number | null
+          kingkong_trigger_source: string | null
           koth_enabled: boolean | null
           large_buy_amount_usd: number | null
           large_sell_multiplier: number | null
@@ -7452,6 +7453,7 @@ export type Database = {
           kingkong_mode_enabled?: boolean | null
           kingkong_quick_amount_usd?: number | null
           kingkong_quick_multiplier?: number | null
+          kingkong_trigger_source?: string | null
           koth_enabled?: boolean | null
           large_buy_amount_usd?: number | null
           large_sell_multiplier?: number | null
@@ -7529,6 +7531,7 @@ export type Database = {
           kingkong_mode_enabled?: boolean | null
           kingkong_quick_amount_usd?: number | null
           kingkong_quick_multiplier?: number | null
+          kingkong_trigger_source?: string | null
           koth_enabled?: boolean | null
           large_buy_amount_usd?: number | null
           large_sell_multiplier?: number | null
