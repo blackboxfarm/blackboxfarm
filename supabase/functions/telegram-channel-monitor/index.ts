@@ -1182,20 +1182,32 @@ serve(async (req) => {
       const isFantasyMode = config.fantasy_mode ?? true;
       const tradingMode = config.trading_mode || 'simple';
       
-      console.log(`[telegram-channel-monitor] Processing: ${channelUsername || channelId} (${config.channel_name || 'unnamed'}) - Type: ${channelType} - Mode: ${tradingMode} - Fantasy: ${isFantasyMode}`);
+      // Check if channel_id is a numeric chat_id (private channel/group)
+      const isChannelIdNumeric = channelId && /^-?\d+$/.test(channelId.toString());
+      
+      // For groups or private channels (numeric ID), we can use channel_id if username is missing
+      // For public channels, we need the username for scraping
+      const effectiveIdentifier = channelUsername || (isChannelIdNumeric ? channelId : null);
+      
+      // Detect if this needs MTProto (groups or any numeric chat_id)
+      const needsMtproto = channelType === 'group' || isChannelIdNumeric;
+      
+      console.log(`[telegram-channel-monitor] Processing: ${effectiveIdentifier || 'NO_IDENTIFIER'} (${config.channel_name || 'unnamed'}) - Type: ${channelType} - Mode: ${tradingMode} - Fantasy: ${isFantasyMode} - MTProto: ${needsMtproto}`);
 
       try {
         let channelMessages: Array<{ messageId: string; text: string; date: Date; callerUsername?: string; callerDisplayName?: string }> = [];
         let groupWarning: string | null = null;
         
-        // Fetch messages
-        if (!channelUsername) {
-          groupWarning = 'Missing channel username in config';
-        } else if (channelType === 'group') {
-          // MTProto for groups
+        // Fetch messages - for groups/private channels use MTProto, for public channels use web scraping
+        if (!effectiveIdentifier) {
+          groupWarning = needsMtproto 
+            ? 'Missing channel username or chat_id in config' 
+            : 'Missing channel username in config';
+        } else if (needsMtproto) {
+          // MTProto for groups - can use username or chat_id
           try {
             const { data: mtData, error: mtError } = await supabase.functions.invoke('telegram-mtproto-auth', {
-              body: { action: 'fetch_recent_messages', channelUsername, limit: 50 }
+              body: { action: 'fetch_recent_messages', channelUsername: effectiveIdentifier, limit: 50 }
             });
 
             if (mtError) throw mtError;
@@ -1252,7 +1264,8 @@ serve(async (req) => {
             }
           }
         } else {
-          channelMessages = await scrapePublicChannel(channelUsername);
+          // Public channel - use username for web scraping
+          channelMessages = await scrapePublicChannel(effectiveIdentifier!);
         }
 
         totalRawMessages += channelMessages.length;
