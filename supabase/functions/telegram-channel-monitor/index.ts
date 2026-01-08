@@ -114,10 +114,42 @@ interface RuleEvaluationResult {
 // HELPER FUNCTIONS
 // ============================================================================
 
-// Quick holder count check using DexScreener (fast, ~100ms)
+// Quick holder count check using Helius RPC for accurate count
 async function getQuickHolderCount(tokenMint: string): Promise<number | null> {
+  const heliusApiKey = Deno.env.get('HELIUS_API_KEY');
+  
+  // PRIORITY 1: Use Helius RPC for accurate holder count
+  if (heliusApiKey) {
+    try {
+      const response = await fetch(`https://mainnet.helius-rpc.com/?api-key=${heliusApiKey}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          jsonrpc: '2.0',
+          id: 'holder-check',
+          method: 'getTokenLargestAccounts',
+          params: [tokenMint]
+        })
+      });
+      
+      if (response.ok) {
+        const data = await response.json();
+        const accounts = data.result?.value || [];
+        
+        // This returns up to 20 largest holders
+        // If we get accounts, this is accurate (up to 20)
+        if (accounts.length > 0) {
+          console.log(`[telegram-channel-monitor] Helius holder count for ${tokenMint}: ${accounts.length} (actual token accounts)`);
+          return accounts.length;
+        }
+      }
+    } catch (error) {
+      console.warn(`[telegram-channel-monitor] Helius holder check failed for ${tokenMint}:`, error);
+    }
+  }
+  
+  // PRIORITY 2: DexScreener - check for actual holders field or makers count
   try {
-    // Use DexScreener for quick holder estimate
     const response = await fetch(`https://api.dexscreener.com/latest/dex/tokens/${tokenMint}`);
     if (!response.ok) return null;
     
@@ -126,17 +158,24 @@ async function getQuickHolderCount(tokenMint: string): Promise<number | null> {
     
     if (!pair) return null;
     
-    // DexScreener provides txns.h24.buys as a proxy for unique buyers
-    // This is a fast approximation - not exact holder count
-    const uniqueBuyers = pair.txns?.h24?.buys || 0;
-    
-    // Also try to get from the info object if available
-    if (pair.info?.holders) {
+    // Check for actual holders field first
+    if (pair.info?.holders && typeof pair.info.holders === 'number') {
+      console.log(`[telegram-channel-monitor] DexScreener holders field for ${tokenMint}: ${pair.info.holders}`);
       return pair.info.holders;
     }
     
-    // Fallback: use unique 24h buyers as minimum holder estimate
-    return uniqueBuyers > 0 ? uniqueBuyers : null;
+    // Use MAKERS count (unique wallets) NOT BUYS (transaction count)
+    // Makers is more accurate as it counts unique addresses
+    const makers = pair.txns?.h24?.makers;
+    if (makers && typeof makers === 'number' && makers > 0) {
+      console.log(`[telegram-channel-monitor] DexScreener makers count for ${tokenMint}: ${makers} (unique wallets)`);
+      return makers;
+    }
+    
+    // DO NOT use buys count - it's transaction count, not holder count!
+    // Return null instead of an inflated number
+    console.warn(`[telegram-channel-monitor] No reliable holder count available for ${tokenMint} - returning null`);
+    return null;
   } catch (error) {
     console.warn(`[telegram-channel-monitor] Failed to get holder count for ${tokenMint}:`, error);
     return null;
