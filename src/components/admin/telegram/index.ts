@@ -8,5 +8,6 @@ export { TradingTiersManager } from './TradingTiersManager';
 export { KingOfTheHill } from './KingOfTheHill';
 export { WhosOnFirst } from './WhosOnFirst';
 export { SignalAnalysisDashboard } from './SignalAnalysisDashboard';
+export { WhaleLeaderboard } from './WhaleLeaderboard';
 export { default as TelegramTargetManager } from './TelegramTargetManager';
 export type { TelegramTarget } from './TelegramTargetManager';

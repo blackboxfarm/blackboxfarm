@@ -1862,7 +1862,11 @@ serve(async (req) => {
                     is_active: true,
                     stop_loss_enabled: currentRuleResult.stopLossEnabled || false,
                     trail_tracking_enabled: true,
-                    holder_count_at_entry: holderCount
+                    holder_count_at_entry: holderCount,
+                    // Whale tracking
+                    whale_name: whaleName,
+                    whale_call_sequence: callSequence,
+                    was_first_whale: callSequence === 1 && !!whaleName
                   };
 
                   // Add developer enrichment data if available
