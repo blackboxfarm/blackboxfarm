@@ -7,5 +7,6 @@ export { TradingRulesManager } from './TradingRulesManager';
 export { TradingTiersManager } from './TradingTiersManager';
 export { KingOfTheHill } from './KingOfTheHill';
 export { WhosOnFirst } from './WhosOnFirst';
+export { SignalAnalysisDashboard } from './SignalAnalysisDashboard';
 export { default as TelegramTargetManager } from './TelegramTargetManager';
 export type { TelegramTarget } from './TelegramTargetManager';

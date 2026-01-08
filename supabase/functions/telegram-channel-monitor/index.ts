@@ -1427,7 +1427,77 @@ serve(async (req) => {
           // Generate AI interpretation
           const aiResult = generateAIInterpretation(messageText, addresses, keywordResult, tokenData, ruleResult);
 
-          // Log interpretation
+          // ============================================================================
+          // SIGNAL CLASSIFICATION (INSIDER WALLET TRACKING analysis)
+          // ============================================================================
+          
+          // Extract whale name from [brackets] in message
+          const whaleMatch = messageText.match(/\[([^\]]+)\]/);
+          const whaleName = whaleMatch?.[1] || null;
+          
+          // Check if this is a [recommendation] signal (highest priority)
+          const isRecommendation = whaleName?.toLowerCase() === 'recommendation';
+          
+          // Count unique whales that called this token in last 30 minutes
+          let whaleConsensusCount = 1;
+          if (firstToken) {
+            const { data: recentCalls } = await supabase
+              .from('telegram_message_interpretations')
+              .select('whale_name')
+              .eq('token_mint', firstToken)
+              .eq('channel_id', channelId)
+              .gte('created_at', new Date(Date.now() - 30 * 60 * 1000).toISOString());
+            
+            const uniqueWhales = new Set(recentCalls?.map((c: any) => c.whale_name).filter(Boolean));
+            if (whaleName) uniqueWhales.add(whaleName);
+            whaleConsensusCount = uniqueWhales.size;
+          }
+          
+          // Determine call sequence (1st, 2nd, 3rd announcement for this token)
+          let callSequence = 1;
+          if (firstToken) {
+            const { count: previousCalls } = await supabase
+              .from('telegram_message_interpretations')
+              .select('*', { count: 'exact', head: true })
+              .eq('token_mint', firstToken)
+              .eq('channel_id', channelId);
+            callSequence = (previousCalls || 0) + 1;
+          }
+          
+          // Classify signal type and urgency
+          let signalType: string;
+          let urgencyScore: number;
+          let signalReasoning: string;
+          
+          if (isRecommendation) {
+            signalType = 'RECOMMENDATION';
+            urgencyScore = 0.9;
+            signalReasoning = '🌟 Bot recommendation signal - highest priority';
+          } else if (whaleConsensusCount >= 3) {
+            signalType = 'EMERGENCY';
+            urgencyScore = 1.0;
+            signalReasoning = `🚨 ${whaleConsensusCount} whales consensus - immediate action`;
+          } else if (callSequence >= 2) {
+            signalType = 'MOMENTUM';
+            urgencyScore = 0.75;
+            signalReasoning = `📈 Call #${callSequence} - token gaining momentum`;
+          } else if (whaleConsensusCount === 1 && callSequence === 1 && whaleName) {
+            signalType = 'FRESH_DISCOVERY';
+            urgencyScore = 0.5;
+            signalReasoning = `🔍 Fresh discovery by [${whaleName}] - evaluate first`;
+          } else if (whaleName) {
+            signalType = 'WATCH';
+            urgencyScore = 0.3;
+            signalReasoning = '👀 Monitor mode - wait for confirmation';
+          } else {
+            signalType = 'STANDARD';
+            urgencyScore = 0.5;
+            signalReasoning = '📊 Standard signal - no whale tag detected';
+          }
+          
+          console.log(`[telegram-channel-monitor] Signal: ${signalType} | Whale: ${whaleName || 'none'} | Consensus: ${whaleConsensusCount} | Sequence: #${callSequence} | Urgency: ${(urgencyScore * 100).toFixed(0)}%`);
+
+          // Log interpretation with signal classification
           const { data: interpretationRow, error: interpretationError } = await supabase
             .from('telegram_message_interpretations')
             .insert({
@@ -1439,13 +1509,19 @@ serve(async (req) => {
               ai_interpretation: aiResult.interpretation,
               extracted_tokens: addresses,
               decision: ruleResult.decision,
-              decision_reasoning: ruleResult.reasoning,
+              decision_reasoning: `${signalReasoning} | ${ruleResult.reasoning}`,
               confidence_score: aiResult.confidence,
               token_mint: firstToken || null,
               token_symbol: tokenData?.symbol || null,
               price_at_detection: tokenData?.price || null,
               caller_username: callerUsername || null,
-              caller_display_name: callerDisplayName || null
+              caller_display_name: callerDisplayName || null,
+              // New signal classification fields
+              signal_type: signalType,
+              whale_name: whaleName,
+              whale_consensus_count: whaleConsensusCount,
+              call_sequence: callSequence,
+              urgency_score: urgencyScore
             })
             .select('id')
             .single();

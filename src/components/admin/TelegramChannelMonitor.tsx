@@ -46,7 +46,7 @@ import {
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 import { formatDistanceToNow } from 'date-fns';
-import { FantasyPortfolioDashboard, CallerLeaderboard, ChannelManagement, TelegramTargetManager, TradingTiersManager, KingOfTheHill, WhosOnFirst } from './telegram';
+import { FantasyPortfolioDashboard, CallerLeaderboard, ChannelManagement, TelegramTargetManager, TradingTiersManager, KingOfTheHill, WhosOnFirst, SignalAnalysisDashboard } from './telegram';
 import type { TelegramTarget } from './telegram';
 
 interface ChannelConfig {
@@ -167,7 +167,7 @@ export default function TelegramChannelMonitor() {
   const [isScanning, setIsScanning] = useState(false);
   const [isTestingBot, setIsTestingBot] = useState(false);
   const [isUpdatingPrices, setIsUpdatingPrices] = useState(false);
-  const [activeTab, setActiveTab] = useState('ai-log');
+  const [activeTab, setActiveTab] = useState('signals');
 
   // MTProto authentication state
   const [isSendingCode, setIsSendingCode] = useState(false);
@@ -946,6 +946,9 @@ export default function TelegramChannelMonitor() {
 
       <Tabs value={activeTab} onValueChange={setActiveTab}>
         <TabsList className="flex flex-wrap">
+          <TabsTrigger value="signals" className="flex items-center gap-1">
+            <AlertCircle className="w-3 h-3 text-red-500" /> Signal Analysis
+          </TabsTrigger>
           <TabsTrigger value="ai-log">🤖 AI Interpretation Log</TabsTrigger>
           <TabsTrigger value="fantasy">💫 Fantasy Portfolio</TabsTrigger>
           <TabsTrigger value="callers" className="flex items-center gap-1">
@@ -963,6 +966,11 @@ export default function TelegramChannelMonitor() {
           </TabsTrigger>
           <TabsTrigger value="settings">Trading Rules</TabsTrigger>
         </TabsList>
+
+        {/* Signal Analysis - New! */}
+        <TabsContent value="signals" className="space-y-4">
+          <SignalAnalysisDashboard />
+        </TabsContent>
 
         {/* AI Interpretation Log */}
         <TabsContent value="ai-log" className="space-y-4">
