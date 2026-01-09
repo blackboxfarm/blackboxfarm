@@ -88,6 +88,7 @@ serve(async (req) => {
     const apiIdRaw = Deno.env.get('TELEGRAM_API_ID');
     const apiHash = Deno.env.get('TELEGRAM_API_HASH');
     const phoneNumber = Deno.env.get('TELEGRAM_PHONE_NUMBER');
+    const sessionStringFromEnv = Deno.env.get('TELEGRAM_SESSION_STRING');
 
     if (!apiIdRaw || !apiHash) {
       throw new Error('Telegram API credentials not configured. Need TELEGRAM_API_ID and TELEGRAM_API_HASH');
@@ -102,11 +103,23 @@ serve(async (req) => {
     const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
     const supabase = createClient(supabaseUrl, supabaseKey);
 
-    const { data: existingSession } = await supabase
-      .from('telegram_mtproto_session')
-      .select('*')
-      .eq('is_active', true)
-      .single();
+    // Prefer session from environment variable (secrets), fall back to database
+    let existingSession: { id?: string; session_string?: string; phone_number?: string; last_used_at?: string } | null = null;
+    
+    if (sessionStringFromEnv) {
+      console.log('[telegram-mtproto-auth] Using session string from TELEGRAM_SESSION_STRING secret');
+      existingSession = {
+        session_string: sessionStringFromEnv,
+        phone_number: phoneNumber,
+      };
+    } else {
+      const { data: dbSession } = await supabase
+        .from('telegram_mtproto_session')
+        .select('*')
+        .eq('is_active', true)
+        .single();
+      existingSession = dbSession;
+    }
 
     if (action === 'status') {
       return new Response(JSON.stringify({
