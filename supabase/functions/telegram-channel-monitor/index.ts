@@ -6,6 +6,73 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
+// ============================================================================
+// DISTRIBUTED LOCK FOR MTPROTO - Prevents AUTH_KEY_DUPLICATED errors
+// ============================================================================
+
+const LOCK_TIMEOUT_MS = 120000; // 2 minutes max lock duration
+
+async function acquireMtprotoLock(supabase: any, lockerId: string): Promise<boolean> {
+  const now = new Date();
+  const expiresAt = new Date(now.getTime() + LOCK_TIMEOUT_MS);
+  
+  // Try to acquire lock - only succeeds if lock is free or expired
+  const { data, error } = await supabase
+    .from('telegram_monitor_lock')
+    .update({
+      locked_by: lockerId,
+      locked_at: now.toISOString(),
+      expires_at: expiresAt.toISOString()
+    })
+    .eq('id', 'singleton')
+    .or(`locked_by.is.null,expires_at.lt.${now.toISOString()}`)
+    .select()
+    .single();
+  
+  if (error || !data) {
+    console.log(`[telegram-channel-monitor] Lock acquisition failed - another instance is running`);
+    return false;
+  }
+  
+  console.log(`[telegram-channel-monitor] Acquired MTProto lock (${lockerId})`);
+  return true;
+}
+
+async function releaseMtprotoLock(supabase: any, lockerId: string): Promise<void> {
+  const { error } = await supabase
+    .from('telegram_monitor_lock')
+    .update({
+      locked_by: null,
+      locked_at: null,
+      expires_at: null
+    })
+    .eq('id', 'singleton')
+    .eq('locked_by', lockerId);
+  
+  if (error) {
+    console.warn(`[telegram-channel-monitor] Failed to release lock:`, error);
+  } else {
+    console.log(`[telegram-channel-monitor] Released MTProto lock (${lockerId})`);
+  }
+}
+
+async function markSessionInvalid(supabase: any, errorMessage: string): Promise<void> {
+  await supabase
+    .from('telegram_mtproto_session')
+    .update({
+      session_valid: false,
+      last_error: errorMessage,
+      last_error_at: new Date().toISOString(),
+      error_count: supabase.rpc ? undefined : 1 // Increment if possible
+    })
+    .eq('is_active', true);
+  
+  // Try to increment error count
+  await supabase.rpc('increment_session_error_count').catch(() => {});
+  
+  console.error(`[telegram-channel-monitor] MTProto session marked invalid: ${errorMessage}`);
+}
+
 // Solana address regex - matches base58 addresses 32-44 chars
 const SOLANA_ADDRESS_REGEX = /[1-9A-HJ-NP-Za-km-z]{32,44}/g;
 
@@ -1198,6 +1265,10 @@ serve(async (req) => {
     return new Response(null, { headers: corsHeaders });
   }
 
+  // Generate unique lock ID for this invocation
+  const lockerId = `monitor-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+  let lockAcquired = false;
+  
   try {
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
     const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
@@ -1207,6 +1278,33 @@ serve(async (req) => {
     const { action, channelId: requestChannelId, singleChannel, deepScan, resetMessageId } = body;
 
     console.log(`[telegram-channel-monitor] Action: ${action || 'scan'}, singleChannel: ${singleChannel}, channelId: ${requestChannelId}, deepScan: ${deepScan}`);
+    
+    // Check if MTProto session is valid before proceeding
+    const { data: sessionData } = await supabase
+      .from('telegram_mtproto_session')
+      .select('session_valid, last_error, error_count')
+      .eq('is_active', true)
+      .single();
+    
+    if (sessionData && sessionData.session_valid === false) {
+      console.error(`[telegram-channel-monitor] MTProto session is invalid: ${sessionData.last_error}`);
+      return new Response(JSON.stringify({
+        success: false,
+        error: `MTProto session invalid: ${sessionData.last_error}. Please regenerate your Telegram session.`,
+        sessionInvalid: true,
+        errorCount: sessionData.error_count
+      }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 503 });
+    }
+    
+    // Acquire lock before any MTProto operations
+    lockAcquired = await acquireMtprotoLock(supabase, lockerId);
+    if (!lockAcquired) {
+      return new Response(JSON.stringify({
+        success: false,
+        error: 'Another monitor instance is currently running. Skipping to prevent session conflicts.',
+        skipped: true
+      }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 429 });
+    }
 
     // Build query for channel configurations
     let query = supabase.from('telegram_channel_config').select('*');
@@ -1322,7 +1420,16 @@ serve(async (req) => {
               groupWarning = mtData?.error || 'MTProto returned no messages';
             }
           } catch (e: any) {
-            groupWarning = `MTProto error: ${e?.message || 'unknown error'}`;
+            const errorMsg = e?.message || 'unknown error';
+            groupWarning = `MTProto error: ${errorMsg}`;
+            
+            // Check for session invalidation errors
+            if (errorMsg.includes('AUTH_KEY_DUPLICATED') || 
+                errorMsg.includes('AUTH_KEY_UNREGISTERED') ||
+                errorMsg.includes('SESSION_REVOKED') ||
+                errorMsg.includes('USER_DEACTIVATED')) {
+              await markSessionInvalid(supabase, errorMsg);
+            }
           }
 
           // Bot API fallback
@@ -2613,5 +2720,13 @@ serve(async (req) => {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       status: 500
     });
+  } finally {
+    // Always release the lock when done
+    if (lockAcquired) {
+      const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
+      const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+      const supabase = createClient(supabaseUrl, supabaseKey);
+      await releaseMtprotoLock(supabase, lockerId);
+    }
   }
 });
