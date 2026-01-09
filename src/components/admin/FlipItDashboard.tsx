@@ -8,6 +8,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { Separator } from '@/components/ui/separator';
 import { Switch } from '@/components/ui/switch';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
@@ -2608,15 +2609,26 @@ export function FlipItDashboard() {
                       <TableCell className="px-2 py-1">
                         <div className="flex items-center gap-1">
                           <div>
-                            <span className="font-medium text-xs">${targetValue.toFixed(2)}</span>
-                            <span className="text-muted-foreground text-[10px] ml-1">({position.target_multiplier}x)</span>
-                            <div className="text-green-500 text-[10px]">
-                              +${targetProfit.toFixed(2)} profit
-                            </div>
-                            {position.target_price_usd && (
-                              <div className="text-[10px] text-muted-foreground">
-                                Target: ${position.target_price_usd.toFixed(8)}
-                              </div>
+                            {position.target_multiplier === 0 ? (
+                              <>
+                                <span className="font-medium text-xs text-orange-400">Auto-sell disabled</span>
+                                <div className="text-muted-foreground text-[10px]">
+                                  Manual sell only
+                                </div>
+                              </>
+                            ) : (
+                              <>
+                                <span className="font-medium text-xs">${targetValue.toFixed(2)}</span>
+                                <span className="text-muted-foreground text-[10px] ml-1">({position.target_multiplier}x)</span>
+                                <div className="text-green-500 text-[10px]">
+                                  +${targetProfit.toFixed(2)} profit
+                                </div>
+                                {position.target_price_usd && (
+                                  <div className="text-[10px] text-muted-foreground">
+                                    Target: ${position.target_price_usd.toFixed(8)}
+                                  </div>
+                                )}
+                              </>
                             )}
                           </div>
                           {position.status === 'holding' && position.buy_price_usd && (
@@ -2629,6 +2641,16 @@ export function FlipItDashboard() {
                               <PopoverContent className="w-56 p-2" align="start">
                                 <div className="space-y-1 max-h-64 overflow-y-auto">
                                   <p className="text-xs text-muted-foreground mb-2">Change target:</p>
+                                  <Button
+                                    variant={position.target_multiplier === 0 ? "default" : "ghost"}
+                                    size="sm"
+                                    className="w-full justify-between text-orange-400"
+                                    onClick={() => handleUpdateTarget(position.id, 0, position.buy_price_usd!)}
+                                  >
+                                    <span>Disabled</span>
+                                    <span className="text-muted-foreground text-xs">No auto-sell</span>
+                                  </Button>
+                                  <Separator className="my-1" />
                                   {[1.25, 1.30, 1.50, 1.75, 2, 2.5, 3, 4, 5, 6, 7, 8, 9, 10, 15, 20, 25, 30, 35, 40, 45, 50, 75, 100].map(mult => (
                                     <Button
                                       key={mult}
