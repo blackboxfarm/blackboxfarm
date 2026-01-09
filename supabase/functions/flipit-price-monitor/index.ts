@@ -727,6 +727,13 @@ serve(async (req) => {
       // ============================================
       // REGULAR (NON-SCALP) TARGET LOGIC
       // ============================================
+      
+      // Skip auto-sell if target multiplier is disabled (0)
+      if (position.target_multiplier === 0 || !position.target_multiplier) {
+        console.log(`Position ${position.id} (${position.token_symbol}): Auto-sell disabled, skipping target check`);
+        continue;
+      }
+      
       if (currentPrice >= targetPrice) {
         // Check if this position has moonbag enabled (FlipIt moonbag mode)
         const hasMoonbag = position.moon_bag_enabled && position.moon_bag_percent > 0 && !position.is_scalp_position;
