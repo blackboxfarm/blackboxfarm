@@ -32,8 +32,18 @@ import {
   Send,
   Crown,
   Zap,
-  RotateCcw
+  RotateCcw,
+  Key,
+  Copy
 } from 'lucide-react';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -203,6 +213,36 @@ export default function TelegramChannelMonitor() {
   const [editUsername, setEditUsername] = useState('');
   const [isSavingEdit, setIsSavingEdit] = useState(false);
   
+  // Session generator state
+  const [showSessionGenerator, setShowSessionGenerator] = useState(false);
+  const [credentials, setCredentials] = useState<{ apiId: string; apiHash: string; phone: string } | null>(null);
+  const [loadingCredentials, setLoadingCredentials] = useState(false);
+
+  const fetchCredentials = async () => {
+    setLoadingCredentials(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('telegram-session-generator', {
+        body: { action: 'check_status' }
+      });
+      if (error) throw error;
+      setCredentials({
+        apiId: data.api_id || 'Not configured',
+        apiHash: data.api_hash || 'Not configured',
+        phone: data.phone || 'Not configured'
+      });
+      setShowSessionGenerator(true);
+    } catch (error) {
+      toast.error('Failed to fetch credentials');
+    } finally {
+      setLoadingCredentials(false);
+    }
+  };
+
+  const copyToClipboard = (text: string, label: string) => {
+    navigator.clipboard.writeText(text);
+    toast.success(`${label} copied to clipboard`);
+  };
+
   // Reset state
   const [isResettingStats, setIsResettingStats] = useState(false);
 
@@ -849,11 +889,96 @@ export default function TelegramChannelMonitor() {
             </div>
             <div className="flex flex-col gap-2">
               {mtprotoStatus?.sessionValid === false && (
+                <Dialog open={showSessionGenerator} onOpenChange={setShowSessionGenerator}>
+                  <DialogTrigger asChild>
+                    <Button 
+                      size="sm" 
+                      variant="outline"
+                      onClick={fetchCredentials}
+                      disabled={loadingCredentials}
+                    >
+                      {loadingCredentials ? <Loader2 className="w-4 h-4 animate-spin mr-1" /> : <Key className="w-4 h-4 mr-1" />}
+                      Generate Session
+                    </Button>
+                  </DialogTrigger>
+                  <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
+                    <DialogHeader>
+                      <DialogTitle>Generate New Telegram Session</DialogTitle>
+                      <DialogDescription>
+                        Use these credentials to generate a new session string with Python
+                      </DialogDescription>
+                    </DialogHeader>
+                    {credentials && (
+                      <div className="space-y-4">
+                        <div className="grid gap-3">
+                          <div className="flex items-center justify-between p-3 bg-muted rounded-lg">
+                            <div>
+                              <p className="text-xs text-muted-foreground">API ID</p>
+                              <p className="font-mono font-bold">{credentials.apiId}</p>
+                            </div>
+                            <Button size="sm" variant="ghost" onClick={() => copyToClipboard(credentials.apiId, 'API ID')}>
+                              <Copy className="w-4 h-4" />
+                            </Button>
+                          </div>
+                          <div className="flex items-center justify-between p-3 bg-muted rounded-lg">
+                            <div>
+                              <p className="text-xs text-muted-foreground">API Hash</p>
+                              <p className="font-mono font-bold">{credentials.apiHash}</p>
+                            </div>
+                            <Button size="sm" variant="ghost" onClick={() => copyToClipboard(credentials.apiHash, 'API Hash')}>
+                              <Copy className="w-4 h-4" />
+                            </Button>
+                          </div>
+                          <div className="flex items-center justify-between p-3 bg-muted rounded-lg">
+                            <div>
+                              <p className="text-xs text-muted-foreground">Phone Number</p>
+                              <p className="font-mono font-bold">{credentials.phone}</p>
+                            </div>
+                            <Button size="sm" variant="ghost" onClick={() => copyToClipboard(credentials.phone, 'Phone')}>
+                              <Copy className="w-4 h-4" />
+                            </Button>
+                          </div>
+                        </div>
+                        <div className="p-4 bg-muted/50 rounded-lg">
+                          <p className="text-sm font-medium mb-2">Python Script:</p>
+                          <pre className="text-xs bg-background p-3 rounded overflow-x-auto whitespace-pre-wrap">
+{`pip install telethon
+
+from telethon.sync import TelegramClient
+from telethon.sessions import StringSession
+
+api_id = ${credentials.apiId}
+api_hash = "${credentials.apiHash}"
+
+with TelegramClient(StringSession(), api_id, api_hash) as client:
+    print("Session string:")
+    print(client.session.save())`}
+                          </pre>
+                          <Button 
+                            size="sm" 
+                            className="mt-2" 
+                            variant="outline"
+                            onClick={() => copyToClipboard(`pip install telethon\n\nfrom telethon.sync import TelegramClient\nfrom telethon.sessions import StringSession\n\napi_id = ${credentials.apiId}\napi_hash = "${credentials.apiHash}"\n\nwith TelegramClient(StringSession(), api_id, api_hash) as client:\n    print("Session string:")\n    print(client.session.save())`, 'Script')}
+                          >
+                            <Copy className="w-4 h-4 mr-1" /> Copy Script
+                          </Button>
+                        </div>
+                        <div className="p-4 bg-yellow-500/10 border border-yellow-500/30 rounded-lg">
+                          <p className="text-sm font-medium text-yellow-500">After generating:</p>
+                          <p className="text-xs text-muted-foreground mt-1">
+                            Update the session in Supabase: telegram_mtproto_session table → session_string column
+                          </p>
+                        </div>
+                      </div>
+                    )}
+                  </DialogContent>
+                </Dialog>
+              )}
+              {mtprotoStatus?.sessionValid === false && (
                 <Button 
                   size="sm" 
                   variant="destructive"
                   onClick={async () => {
-                    // Reset session validity to allow retry after user updates session
                     await supabase
                       .from('telegram_mtproto_session')
                       .update({ 
