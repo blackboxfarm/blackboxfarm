@@ -7996,30 +7996,63 @@ export type Database = {
         }
         Relationships: []
       }
+      telegram_monitor_lock: {
+        Row: {
+          expires_at: string | null
+          id: string
+          locked_at: string | null
+          locked_by: string | null
+        }
+        Insert: {
+          expires_at?: string | null
+          id?: string
+          locked_at?: string | null
+          locked_by?: string | null
+        }
+        Update: {
+          expires_at?: string | null
+          id?: string
+          locked_at?: string | null
+          locked_by?: string | null
+        }
+        Relationships: []
+      }
       telegram_mtproto_session: {
         Row: {
           created_at: string | null
+          error_count: number | null
           id: string
           is_active: boolean | null
+          last_error: string | null
+          last_error_at: string | null
           last_used_at: string | null
           phone_number: string | null
           session_string: string
+          session_valid: boolean | null
         }
         Insert: {
           created_at?: string | null
+          error_count?: number | null
           id?: string
           is_active?: boolean | null
+          last_error?: string | null
+          last_error_at?: string | null
           last_used_at?: string | null
           phone_number?: string | null
           session_string: string
+          session_valid?: boolean | null
         }
         Update: {
           created_at?: string | null
+          error_count?: number | null
           id?: string
           is_active?: boolean | null
+          last_error?: string | null
+          last_error_at?: string | null
           last_used_at?: string | null
           phone_number?: string | null
           session_string?: string
+          session_valid?: boolean | null
         }
         Relationships: []
       }

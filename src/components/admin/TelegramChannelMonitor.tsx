@@ -147,6 +147,10 @@ interface MTProtoStatus {
   hasSession: boolean;
   phoneNumber?: string;
   lastUsed?: string;
+  sessionValid?: boolean;
+  lastError?: string;
+  lastErrorAt?: string;
+  errorCount?: number;
 }
 
 interface FlipItWallet {
@@ -236,8 +240,22 @@ export default function TelegramChannelMonitor() {
       const { data: mtprotoData } = await supabase.functions.invoke('telegram-mtproto-auth', {
         body: { action: 'status' }
       });
+      
+      // Also fetch session health from DB directly
+      const { data: sessionHealth } = await supabase
+        .from('telegram_mtproto_session')
+        .select('session_valid, last_error, last_error_at, error_count')
+        .eq('is_active', true)
+        .single();
+      
       if (mtprotoData) {
-        setMtprotoStatus(mtprotoData);
+        setMtprotoStatus({
+          ...mtprotoData,
+          sessionValid: sessionHealth?.session_valid ?? true,
+          lastError: sessionHealth?.last_error,
+          lastErrorAt: sessionHealth?.last_error_at,
+          errorCount: sessionHealth?.error_count ?? 0
+        });
       }
 
       // Load configs
@@ -787,25 +805,77 @@ export default function TelegramChannelMonitor() {
       </div>
 
       {/* MTProto Authentication Card */}
-      <Card className={mtprotoStatus?.hasSession ? 'border-green-500/50' : 'border-orange-500/50'}>
+      <Card className={
+        mtprotoStatus?.sessionValid === false 
+          ? 'border-red-500/50 bg-red-500/5' 
+          : mtprotoStatus?.hasSession 
+            ? 'border-green-500/50' 
+            : 'border-orange-500/50'
+      }>
         <CardContent className="pt-6">
           <div className="flex items-center justify-between">
-            <div>
+            <div className="flex-1">
               <p className="text-sm text-muted-foreground">MTProto Session</p>
-              <p className="text-lg font-bold">
-                {mtprotoStatus?.hasSession ? '✅ Authenticated' : '⚠️ Not Connected'}
-              </p>
+              <div className="flex items-center gap-2">
+                <p className="text-lg font-bold">
+                  {mtprotoStatus?.sessionValid === false 
+                    ? '❌ Session Invalid' 
+                    : mtprotoStatus?.hasSession 
+                      ? '✅ Authenticated' 
+                      : '⚠️ Not Connected'}
+                </p>
+                {mtprotoStatus?.errorCount && mtprotoStatus.errorCount > 0 && (
+                  <Badge variant="destructive" className="text-xs">
+                    {mtprotoStatus.errorCount} errors
+                  </Badge>
+                )}
+              </div>
               {mtprotoStatus?.phoneNumber && (
                 <p className="text-xs text-muted-foreground">{mtprotoStatus.phoneNumber}</p>
               )}
+              {mtprotoStatus?.sessionValid === false && mtprotoStatus?.lastError && (
+                <div className="mt-2 p-2 bg-red-500/10 rounded text-sm text-red-400">
+                  <p className="font-medium">Error: {mtprotoStatus.lastError}</p>
+                  {mtprotoStatus.lastErrorAt && (
+                    <p className="text-xs mt-1">
+                      {formatDistanceToNow(new Date(mtprotoStatus.lastErrorAt), { addSuffix: true })}
+                    </p>
+                  )}
+                  <p className="text-xs mt-2 text-muted-foreground">
+                    You need to regenerate your Telegram session string and update the database.
+                  </p>
+                </div>
+              )}
             </div>
             <div className="flex flex-col gap-2">
+              {mtprotoStatus?.sessionValid === false && (
+                <Button 
+                  size="sm" 
+                  variant="destructive"
+                  onClick={async () => {
+                    // Reset session validity to allow retry after user updates session
+                    await supabase
+                      .from('telegram_mtproto_session')
+                      .update({ 
+                        session_valid: true, 
+                        error_count: 0,
+                        last_error: null,
+                        last_error_at: null
+                      })
+                      .eq('is_active', true);
+                    toast.success('Session validity reset - update your session string and try again');
+                    loadData();
+                  }}
+                >
+                  Reset Status
+                </Button>
+              )}
               {!mtprotoStatus?.hasSession && !showCodeInput && (
                 <Button size="sm" onClick={sendMTProtoCode} disabled={isSendingCode}>
                   {isSendingCode ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Connect'}
                 </Button>
               )}
-              {mtprotoStatus?.hasSession && (
+              {mtprotoStatus?.hasSession && mtprotoStatus?.sessionValid !== false && (
                 <Button size="sm" variant="outline" onClick={testMTProtoSession}>Test</Button>
               )}
             </div>
