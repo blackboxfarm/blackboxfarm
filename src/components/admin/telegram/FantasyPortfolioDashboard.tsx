@@ -103,6 +103,15 @@ interface FantasyPosition {
   ath_price_usd: number | null;
   ath_at: string | null;
   ath_multiplier: number | null;
+  ath_source: string | null;
+  // Near miss and close enough tracking
+  near_miss_logged: boolean | null;
+  near_miss_multiplier: number | null;
+  near_miss_at: string | null;
+  close_enough_triggered: boolean | null;
+  peak_trailing_stop_enabled: boolean | null;
+  peak_trailing_stop_pct: number | null;
+  peak_trailing_stop_triggered: boolean | null;
   // Exclusion from stats fields
   exclude_from_stats: boolean | null;
   exclusion_reason: string | null;
@@ -128,6 +137,12 @@ interface PortfolioStats {
   trophyPnl: number;
   toiletLosses: number;
   toiletPnl: number;
+  // New metrics
+  avgPeakMultiplier: number;
+  avgTargetProximity: number;
+  nearMissCount: number;
+  closeEnoughSells: number;
+  trailingStopSells: number;
 }
 
 const SELL_MULTIPLIERS = [
@@ -463,6 +478,28 @@ export function FantasyPortfolioDashboard() {
       return peakMult >= targetMult;
     }).length;
 
+    // NEW METRICS: Average peak multiplier across all positions with peaks
+    const positionsWithPeaks = statsPositions.filter(p => p.peak_multiplier && p.peak_multiplier > 0);
+    const avgPeakMultiplier = positionsWithPeaks.length > 0 
+      ? positionsWithPeaks.reduce((sum, p) => sum + (p.peak_multiplier || 0), 0) / positionsWithPeaks.length 
+      : 0;
+
+    // Average target proximity (how close positions got to target as %)
+    const positionsWithProgress = statsPositions.filter(p => p.peak_multiplier && p.target_sell_multiplier);
+    const avgTargetProximity = positionsWithProgress.length > 0
+      ? positionsWithProgress.reduce((sum, p) => {
+          const proximity = ((p.peak_multiplier || 0) / (p.target_sell_multiplier || 2)) * 100;
+          return sum + Math.min(proximity, 100);
+        }, 0) / positionsWithProgress.length
+      : 0;
+
+    // Near misses logged
+    const nearMissCount = statsPositions.filter(p => p.near_miss_logged).length;
+    
+    // Close enough sells and trailing stop sells
+    const closeEnoughSells = closed.filter(p => p.close_enough_triggered).length;
+    const trailingStopSells = closed.filter(p => p.peak_trailing_stop_triggered).length;
+
     setStats({
       totalPositions: statsPositions.length,
       openPositions: open.length,
@@ -479,7 +516,12 @@ export function FantasyPortfolioDashboard() {
       trophyWins,
       trophyPnl,
       toiletLosses,
-      toiletPnl
+      toiletPnl,
+      avgPeakMultiplier,
+      avgTargetProximity,
+      nearMissCount,
+      closeEnoughSells,
+      trailingStopSells
     });
   };
 

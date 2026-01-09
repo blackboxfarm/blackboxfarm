@@ -13,6 +13,14 @@ interface TokenData {
   athAt?: string;
 }
 
+interface ChannelConfig {
+  id: string;
+  close_enough_threshold_pct: number | null;
+  peak_trailing_stop_enabled: boolean | null;
+  peak_trailing_stop_threshold: number | null;
+  peak_trailing_stop_pct: number | null;
+}
+
 interface FantasyPosition {
   id: string;
   token_mint: string;
@@ -36,6 +44,11 @@ interface FantasyPosition {
   ath_price_usd: number | null;
   ath_at: string | null;
   ath_multiplier: number | null;
+  ath_source: string | null;
+  channel_config_id: string | null;
+  near_miss_logged: boolean | null;
+  peak_trailing_stop_enabled: boolean | null;
+  peak_trailing_stop_pct: number | null;
 }
 
 // Fetch token prices and symbols in batch from Jupiter + DexScreener
@@ -90,9 +103,15 @@ async function fetchTokenData(tokenMints: string[]): Promise<Record<string, Toke
   return tokenData;
 }
 
-// Fetch ATH data from GeckoTerminal OHLCV
-async function fetchATHData(tokenMint: string, entryPriceUsd: number): Promise<{ athPrice: number; athAt: string; athMultiplier: number } | null> {
+// Fetch ATH data from GeckoTerminal OHLCV - ONLY after position creation date
+async function fetchATHData(
+  tokenMint: string, 
+  entryPriceUsd: number, 
+  positionCreatedAt: string
+): Promise<{ athPrice: number; athAt: string; athMultiplier: number; athSource: 'observed' | 'historical' } | null> {
   try {
+    const positionDate = new Date(positionCreatedAt);
+    
     // First find pool on GeckoTerminal
     const searchRes = await fetch(`https://api.geckoterminal.com/api/v2/search/pools?query=${tokenMint}&network=solana`);
     const searchData = await searchRes.json();
@@ -106,60 +125,52 @@ async function fetchATHData(tokenMint: string, entryPriceUsd: number): Promise<{
     const poolAddress = pool.attributes?.address || pool.id?.split('_')?.[1];
     if (!poolAddress) return null;
     
-    // Get OHLCV data (1-day candles for the past 30 days to find ATH)
-    const ohlcvRes = await fetch(
-      `https://api.geckoterminal.com/api/v2/networks/solana/pools/${poolAddress}/ohlcv/day?limit=30`
+    // Try hourly first for more precision
+    const hourlyRes = await fetch(
+      `https://api.geckoterminal.com/api/v2/networks/solana/pools/${poolAddress}/ohlcv/hour?limit=168`
     );
-    const ohlcvData = await ohlcvRes.json();
+    const hourlyData = await hourlyRes.json();
     
-    if (!ohlcvData?.data?.attributes?.ohlcv_list?.length) {
-      // Try hourly for newer tokens
-      const hourlyRes = await fetch(
-        `https://api.geckoterminal.com/api/v2/networks/solana/pools/${poolAddress}/ohlcv/hour?limit=168`
+    let candles = hourlyData?.data?.attributes?.ohlcv_list || [];
+    
+    // If no hourly data, try daily
+    if (candles.length === 0) {
+      const ohlcvRes = await fetch(
+        `https://api.geckoterminal.com/api/v2/networks/solana/pools/${poolAddress}/ohlcv/day?limit=30`
       );
-      const hourlyData = await hourlyRes.json();
-      
-      if (!hourlyData?.data?.attributes?.ohlcv_list?.length) return null;
-      
-      const candles = hourlyData.data.attributes.ohlcv_list;
-      let athPrice = 0;
-      let athTimestamp = 0;
-      
-      for (const candle of candles) {
-        const high = parseFloat(candle[2]); // High price
-        if (high > athPrice) {
-          athPrice = high;
-          athTimestamp = candle[0];
-        }
-      }
-      
-      if (athPrice <= 0) return null;
-      
-      return {
-        athPrice,
-        athAt: new Date(athTimestamp * 1000).toISOString(),
-        athMultiplier: entryPriceUsd > 0 ? athPrice / entryPriceUsd : 0
-      };
+      const ohlcvData = await ohlcvRes.json();
+      candles = ohlcvData?.data?.attributes?.ohlcv_list || [];
     }
     
-    const candles = ohlcvData.data.attributes.ohlcv_list;
+    if (candles.length === 0) return null;
+    
     let athPrice = 0;
     let athTimestamp = 0;
+    let foundAfterPosition = false;
     
     for (const candle of candles) {
+      const candleTime = new Date(candle[0] * 1000);
       const high = parseFloat(candle[2]); // High price
-      if (high > athPrice) {
+      
+      // ONLY consider candles AFTER position creation
+      if (candleTime >= positionDate && high > athPrice) {
         athPrice = high;
         athTimestamp = candle[0];
+        foundAfterPosition = true;
       }
     }
     
-    if (athPrice <= 0) return null;
+    // If no candles after position date, this is historical ATH (not useful)
+    if (!foundAfterPosition || athPrice <= 0) {
+      console.log(`[telegram-fantasy-price-monitor] No ATH found after position creation for ${tokenMint}`);
+      return null;
+    }
     
     return {
       athPrice,
       athAt: new Date(athTimestamp * 1000).toISOString(),
-      athMultiplier: entryPriceUsd > 0 ? athPrice / entryPriceUsd : 0
+      athMultiplier: entryPriceUsd > 0 ? athPrice / entryPriceUsd : 0,
+      athSource: 'observed' // We only return data observed after position creation
     };
   } catch (error) {
     console.error(`[telegram-fantasy-price-monitor] Error fetching ATH for ${tokenMint}:`, error);
@@ -182,6 +193,16 @@ serve(async (req) => {
     // Calculate 12-hour cutoff
     const twelveHoursAgo = new Date(Date.now() - 12 * 60 * 60 * 1000).toISOString();
     console.log(`[telegram-fantasy-price-monitor] 12-hour cutoff: ${twelveHoursAgo}`);
+
+    // Fetch channel configs for close-enough and trailing stop settings
+    const { data: channelConfigs } = await supabase
+      .from('telegram_channel_config')
+      .select('id, close_enough_threshold_pct, peak_trailing_stop_enabled, peak_trailing_stop_threshold, peak_trailing_stop_pct');
+    
+    const configMap: Record<string, ChannelConfig> = {};
+    for (const config of (channelConfigs || [])) {
+      configMap[config.id] = config;
+    }
 
     // Get ALL ACTIVE open fantasy positions (we'll filter intelligently)
     const { data: allPositions, error: fetchError } = await supabase
@@ -271,10 +292,14 @@ serve(async (req) => {
     let autoSoldCount = 0;
     let trailsUpdated = 0;
     let athUpdated = 0;
+    let nearMissCount = 0;
+    let closeEnoughSells = 0;
+    let trailingStopSells = 0;
     const autoSells: any[] = [];
     const updates: any[] = [];
     const trailUpdates: any[] = [];
     const athUpdates: any[] = [];
+    const nearMisses: any[] = [];
 
     // Process open positions
     for (const position of allOpenPositions as FantasyPosition[]) {
@@ -293,6 +318,16 @@ serve(async (req) => {
       const targetMultiplier = position.target_sell_multiplier || 2.0;
       const stopLossPct = position.stop_loss_pct || 50;
       const stopLossEnabled = position.stop_loss_enabled !== false;
+      
+      // Get channel config for close-enough and trailing stop settings
+      const channelConfig = position.channel_config_id ? configMap[position.channel_config_id] : null;
+      const closeEnoughThresholdPct = channelConfig?.close_enough_threshold_pct || 95;
+      const closeEnoughMultiplier = targetMultiplier * (closeEnoughThresholdPct / 100);
+      
+      // Peak trailing stop config (from channel or position)
+      const peakTrailingEnabled = position.peak_trailing_stop_enabled || channelConfig?.peak_trailing_stop_enabled || false;
+      const peakTrailingThreshold = channelConfig?.peak_trailing_stop_threshold || 1.5;
+      const peakTrailingStopPct = position.peak_trailing_stop_pct || channelConfig?.peak_trailing_stop_pct || 20;
 
       // Calculate PnL
       const pnlUsd = currentValue - entryAmount;
@@ -332,6 +367,85 @@ serve(async (req) => {
         continue;
       }
 
+      // Check "Close Enough" - sell if within threshold % of target (e.g., 95%)
+      if (currentMultiplier >= closeEnoughMultiplier && closeEnoughThresholdPct < 100) {
+        console.log(`[telegram-fantasy-price-monitor] CLOSE ENOUGH for ${position.token_symbol || position.token_mint}: ${currentMultiplier.toFixed(2)}x >= ${closeEnoughMultiplier.toFixed(2)}x (${closeEnoughThresholdPct}% of ${targetMultiplier}x)`);
+        
+        const { error: sellError } = await supabase
+          .from('telegram_fantasy_positions')
+          .update({
+            status: 'sold',
+            sold_at: new Date().toISOString(),
+            sold_price_usd: data.price,
+            current_price_usd: data.price,
+            realized_pnl_usd: pnlUsd,
+            realized_pnl_percent: pnlPercent,
+            is_active: false,
+            auto_sell_triggered: true,
+            close_enough_triggered: true,
+            token_symbol: data.symbol || position.token_symbol
+          })
+          .eq('id', position.id);
+
+        if (!sellError) {
+          autoSoldCount++;
+          closeEnoughSells++;
+          autoSells.push({
+            id: position.id,
+            token: data.symbol || position.token_symbol || position.token_mint.slice(0, 8),
+            reason: 'close_enough',
+            multiplier: currentMultiplier.toFixed(2),
+            targetMultiplier: targetMultiplier,
+            closeEnoughThreshold: closeEnoughThresholdPct,
+            pnlUsd: pnlUsd.toFixed(2),
+            pnlPercent: pnlPercent.toFixed(2)
+          });
+        }
+        continue;
+      }
+
+      // Check Peak Trailing Stop - if enabled and peak was above threshold, check for drop
+      const peakMultiplier = position.peak_multiplier || 0;
+      if (peakTrailingEnabled && peakMultiplier >= peakTrailingThreshold) {
+        const dropFromPeakPct = ((peakMultiplier - currentMultiplier) / peakMultiplier) * 100;
+        
+        if (dropFromPeakPct >= peakTrailingStopPct) {
+          console.log(`[telegram-fantasy-price-monitor] PEAK TRAILING STOP for ${position.token_symbol || position.token_mint}: dropped ${dropFromPeakPct.toFixed(1)}% from peak ${peakMultiplier.toFixed(2)}x`);
+          
+          const { error: sellError } = await supabase
+            .from('telegram_fantasy_positions')
+            .update({
+              status: 'sold',
+              sold_at: new Date().toISOString(),
+              sold_price_usd: data.price,
+              current_price_usd: data.price,
+              realized_pnl_usd: pnlUsd,
+              realized_pnl_percent: pnlPercent,
+              is_active: false,
+              auto_sell_triggered: true,
+              peak_trailing_stop_triggered: true,
+              token_symbol: data.symbol || position.token_symbol
+            })
+            .eq('id', position.id);
+
+          if (!sellError) {
+            autoSoldCount++;
+            trailingStopSells++;
+            autoSells.push({
+              id: position.id,
+              token: data.symbol || position.token_symbol || position.token_mint.slice(0, 8),
+              reason: 'peak_trailing_stop',
+              multiplier: currentMultiplier.toFixed(2),
+              peakMultiplier: peakMultiplier.toFixed(2),
+              dropFromPeakPct: dropFromPeakPct.toFixed(1),
+              pnlUsd: pnlUsd.toFixed(2),
+              pnlPercent: pnlPercent.toFixed(2)
+            });
+          }
+          continue;
+        }
+      }
+
       // Check stop-loss - AUTO SELL
       if (stopLossEnabled && pnlPercent <= -stopLossPct) {
         console.log(`[telegram-fantasy-price-monitor] STOP LOSS for ${position.token_symbol || position.token_mint}: ${pnlPercent.toFixed(2)}% <= -${stopLossPct}%`);
@@ -347,6 +461,7 @@ serve(async (req) => {
             realized_pnl_percent: pnlPercent,
             is_active: false,
             auto_sell_triggered: true,
+            stop_loss_triggered: true,
             token_symbol: data.symbol || position.token_symbol
           })
           .eq('id', position.id);
@@ -365,12 +480,34 @@ serve(async (req) => {
         continue;
       }
 
+      // Check for near-miss (90%+ of target but not yet hit) - LOG IT
+      const nearMissThresholdPct = 90;
+      const nearMissMultiplier = targetMultiplier * (nearMissThresholdPct / 100);
+      if (currentMultiplier >= nearMissMultiplier && !position.near_miss_logged) {
+        console.log(`[telegram-fantasy-price-monitor] NEAR MISS for ${position.token_symbol || position.token_mint}: ${currentMultiplier.toFixed(2)}x (${((currentMultiplier / targetMultiplier) * 100).toFixed(1)}% of ${targetMultiplier}x target)`);
+        nearMissCount++;
+        nearMisses.push({
+          id: position.id,
+          token: data.symbol || position.token_symbol || position.token_mint.slice(0, 8),
+          currentMultiplier: currentMultiplier.toFixed(2),
+          targetMultiplier: targetMultiplier,
+          percentOfTarget: ((currentMultiplier / targetMultiplier) * 100).toFixed(1)
+        });
+      }
+
       // Regular update - update prices AND track peaks
       const updateObj: Record<string, any> = {
         current_price_usd: data.price,
         unrealized_pnl_usd: pnlUsd,
         unrealized_pnl_percent: pnlPercent
       };
+      
+      // Log near miss
+      if (currentMultiplier >= nearMissMultiplier && !position.near_miss_logged) {
+        updateObj.near_miss_logged = true;
+        updateObj.near_miss_multiplier = currentMultiplier;
+        updateObj.near_miss_at = new Date().toISOString();
+      }
       
       if (data.symbol && !position.token_symbol) {
         updateObj.token_symbol = data.symbol;
@@ -386,21 +523,24 @@ serve(async (req) => {
       }
 
       // Only fetch ATH if not already set (reduces API calls significantly)
+      // Also mark ATH source as 'observed' since we only fetch after position creation
       if (!position.ath_price_usd) {
-        const athData = await fetchATHData(position.token_mint, entryPrice);
+        const athData = await fetchATHData(position.token_mint, entryPrice, position.created_at);
         if (athData) {
           updateObj.ath_price_usd = athData.athPrice;
           updateObj.ath_at = athData.athAt;
           updateObj.ath_multiplier = athData.athMultiplier;
+          updateObj.ath_source = athData.athSource;
           athUpdated++;
           athUpdates.push({
             id: position.id,
             token: data.symbol || position.token_symbol || position.token_mint.slice(0, 8),
             athPrice: athData.athPrice,
             athMultiplier: athData.athMultiplier.toFixed(2),
-            athAt: athData.athAt
+            athAt: athData.athAt,
+            athSource: athData.athSource
           });
-          console.log(`[telegram-fantasy-price-monitor] ATH for ${position.token_symbol || position.token_mint}: $${athData.athPrice} (${athData.athMultiplier.toFixed(2)}x)`);
+          console.log(`[telegram-fantasy-price-monitor] ATH (observed) for ${position.token_symbol || position.token_mint}: $${athData.athPrice} (${athData.athMultiplier.toFixed(2)}x)`);
         }
       }
 
@@ -473,14 +613,17 @@ serve(async (req) => {
       }
     }
 
-    console.log(`[telegram-fantasy-price-monitor] Updated ${updatedCount} open positions, auto-sold ${autoSoldCount}, trails updated ${trailsUpdated}, ATH updated ${athUpdated}, pruned ${prunedCount}`);
+    console.log(`[telegram-fantasy-price-monitor] Updated ${updatedCount} open positions, auto-sold ${autoSoldCount} (close-enough: ${closeEnoughSells}, trailing-stop: ${trailingStopSells}), trails updated ${trailsUpdated}, ATH updated ${athUpdated}, near misses ${nearMissCount}, pruned ${prunedCount}`);
 
     return new Response(JSON.stringify({
       success: true,
       updated: updatedCount,
       autoSold: autoSoldCount,
+      closeEnoughSells,
+      trailingStopSells,
       trailsUpdated: trailsUpdated,
       athUpdated: athUpdated,
+      nearMissCount,
       pruned: prunedCount,
       totalOpenPositions: allOpenPositions.length,
       totalSoldPositions: allSoldPositions.length,
@@ -488,6 +631,7 @@ serve(async (req) => {
       autoSells,
       trailUpdates,
       athUpdates,
+      nearMisses,
       timestamp: new Date().toISOString()
     }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
 
