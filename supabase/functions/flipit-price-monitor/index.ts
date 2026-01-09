@@ -30,14 +30,87 @@ function firstSignature(swapResult: any): string | null {
   return null;
 }
 
-async function fetchSolPrice(): Promise<number> {
-  try {
-    const res = await fetch("https://price.jup.ag/v6/price?ids=SOL");
-    const json = await res.json();
-    return Number(json?.data?.SOL?.price) || 150;
-  } catch {
-    return 150; // fallback
+// Price cache with 3-second TTL for faster repeated lookups
+const priceCache: Map<string, { price: number; timestamp: number }> = new Map();
+const CACHE_TTL_MS = 3000;
+
+function getCachedPrice(mint: string): number | null {
+  const cached = priceCache.get(mint);
+  if (cached && Date.now() - cached.timestamp < CACHE_TTL_MS) {
+    return cached.price;
   }
+  return null;
+}
+
+function setCachedPrice(mint: string, price: number): void {
+  priceCache.set(mint, { price, timestamp: Date.now() });
+}
+
+// Jupiter API endpoints in priority order
+const JUPITER_ENDPOINTS = [
+  'https://api.jup.ag/price/v2',      // v2 API (more reliable)
+  'https://price.jup.ag/v6/price',    // v6 API (legacy)
+];
+
+async function fetchWithTimeout(url: string, timeoutMs = 3000): Promise<Response> {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const res = await fetch(url, { signal: controller.signal });
+    clearTimeout(timeout);
+    return res;
+  } catch (e) {
+    clearTimeout(timeout);
+    throw e;
+  }
+}
+
+async function fetchSolPrice(): Promise<number> {
+  // Check cache first
+  const cached = getCachedPrice('SOL');
+  if (cached) return cached;
+
+  // Try Jupiter endpoints with retry
+  for (const baseUrl of JUPITER_ENDPOINTS) {
+    try {
+      const url = baseUrl.includes('v2') 
+        ? `${baseUrl}?ids=So11111111111111111111111111111111111111112`
+        : `${baseUrl}?ids=SOL`;
+      const res = await fetchWithTimeout(url, 3000);
+      if (!res.ok) continue;
+      
+      const json = await res.json();
+      const price = baseUrl.includes('v2')
+        ? Number(json?.data?.['So11111111111111111111111111111111111111112']?.price)
+        : Number(json?.data?.SOL?.price);
+      
+      if (price && price > 0) {
+        setCachedPrice('SOL', price);
+        console.log(`SOL price from Jupiter: $${price.toFixed(2)}`);
+        return price;
+      }
+    } catch (e) {
+      console.log(`Jupiter endpoint ${baseUrl} failed:`, e instanceof Error ? e.message : String(e));
+    }
+  }
+
+  // Fallback to CoinGecko
+  try {
+    const res = await fetchWithTimeout('https://api.coingecko.com/api/v3/simple/price?ids=solana&vs_currencies=usd', 3000);
+    if (res.ok) {
+      const json = await res.json();
+      const price = Number(json?.solana?.usd);
+      if (price && price > 0) {
+        setCachedPrice('SOL', price);
+        console.log(`SOL price from CoinGecko: $${price.toFixed(2)}`);
+        return price;
+      }
+    }
+  } catch (e) {
+    console.log('CoinGecko fallback failed:', e instanceof Error ? e.message : String(e));
+  }
+
+  return 150; // Ultimate fallback
 }
 
 interface TokenPriceData {
@@ -63,94 +136,119 @@ async function fetchBondingCurveData(tokenMints: string[]): Promise<Record<strin
     "confirmed"
   );
 
-  for (const mintStr of tokenMints) {
+  // Parallelize bonding curve fetches
+  await Promise.all(tokenMints.map(async (mintStr) => {
     try {
       const mint = new PublicKey(mintStr);
-      // Derive bonding curve PDA: seeds = ["bonding-curve", mint]
       const [bondingCurvePda] = PublicKey.findProgramAddressSync(
         [seed, mint.toBuffer()],
         PUMP_PROGRAM_ID
       );
 
       const info = await connection.getAccountInfo(bondingCurvePda);
-      if (!info?.data) continue;
+      if (!info?.data) return;
 
       const data = info.data;
-      // BondingCurveAccount layout:
-      // 0..8   discriminator (u64)
-      // 8..16  virtual_token_reserves (u64)
-      // 16..24 virtual_sol_reserves (u64)
-      // 24..32 real_token_reserves (u64)
-      // 32..40 real_sol_reserves (u64)
-      // 40..48 token_total_supply (u64)
-      // 48     complete (bool)
-      if (data.length < 49) continue;
+      if (data.length < 49) return;
 
       const view = new DataView(data.buffer, data.byteOffset, data.byteLength);
       const realTokenReserves = view.getBigUint64(24, true);
       const complete = data[48] === 1;
 
-      // Skip graduated tokens
-      if (complete) continue;
+      if (complete) return;
 
-      // Pump.fun starts with ~793,100,000 tokens available for sale
-      // Progress = tokens sold / initial tokens = (initial - remaining) / initial
-      const INITIAL_REAL_TOKEN_RESERVES = 793_100_000_000_000n; // 793.1M with 6 decimals
+      const INITIAL_REAL_TOKEN_RESERVES = 793_100_000_000_000n;
       const tokensSold = INITIAL_REAL_TOKEN_RESERVES - realTokenReserves;
       const progress = Math.min(Math.max(Number(tokensSold * 100n / INITIAL_REAL_TOKEN_RESERVES), 0), 100);
 
       curveData[mintStr] = progress;
-      const tokensSoldM = Number(INITIAL_REAL_TOKEN_RESERVES - realTokenReserves) / 1e12;
-      console.log(`Bonding curve for ${mintStr}: ${progress.toFixed(1)}% (${tokensSoldM.toFixed(1)}M tokens sold)`);
     } catch (e) {
       // Not a pump.fun token or invalid - skip silently
     }
-  }
+  }));
 
   return curveData;
 }
 
 async function fetchTokenPrices(tokenMints: string[]): Promise<Record<string, number>> {
   const prices: Record<string, number> = {};
-  
-  // Batch fetch from Jupiter (up to 100 at a time)
-  const chunks = [];
-  for (let i = 0; i < tokenMints.length; i += 100) {
-    chunks.push(tokenMints.slice(i, i + 100));
-  }
+  const uncachedMints: string[] = [];
 
-  for (const chunk of chunks) {
-    try {
-      const ids = chunk.join(",");
-      const res = await fetch(`https://price.jup.ag/v6/price?ids=${ids}`);
-      const json = await res.json();
-      
-      for (const mint of chunk) {
-        const price = json?.data?.[mint]?.price;
-        if (price) {
-          prices[mint] = Number(price);
-        }
-      }
-    } catch (e) {
-      console.error("Jupiter batch price fetch failed:", e);
+  // Check cache first
+  for (const mint of tokenMints) {
+    const cached = getCachedPrice(mint);
+    if (cached) {
+      prices[mint] = cached;
+    } else {
+      uncachedMints.push(mint);
     }
   }
 
-  // For any missing prices, try DexScreener
-  const missing = tokenMints.filter(m => !prices[m]);
-  for (const mint of missing) {
-    try {
-      const res = await fetch(`https://api.dexscreener.com/latest/dex/tokens/${mint}`);
-      if (res.ok) {
-        const data = await res.json();
-        const pair = data?.pairs?.[0];
-        if (pair?.priceUsd) {
-          prices[mint] = Number(pair.priceUsd);
+  if (uncachedMints.length === 0) {
+    console.log(`All ${tokenMints.length} prices served from cache`);
+    return prices;
+  }
+
+  console.log(`Fetching ${uncachedMints.length} prices (${tokenMints.length - uncachedMints.length} cached)`);
+
+  // Try Jupiter v2 API first (more reliable)
+  const chunks: string[][] = [];
+  for (let i = 0; i < uncachedMints.length; i += 100) {
+    chunks.push(uncachedMints.slice(i, i + 100));
+  }
+
+  // Parallel chunk fetches with Jupiter v2
+  await Promise.all(chunks.map(async (chunk) => {
+    const ids = chunk.join(",");
+    
+    for (const baseUrl of JUPITER_ENDPOINTS) {
+      try {
+        const res = await fetchWithTimeout(`${baseUrl}?ids=${ids}`, 5000);
+        if (!res.ok) continue;
+        
+        const json = await res.json();
+        let foundCount = 0;
+        
+        for (const mint of chunk) {
+          const price = Number(json?.data?.[mint]?.price);
+          if (price && price > 0) {
+            prices[mint] = price;
+            setCachedPrice(mint, price);
+            foundCount++;
+          }
         }
+        
+        if (foundCount > 0) {
+          console.log(`Jupiter ${baseUrl.includes('v2') ? 'v2' : 'v6'}: fetched ${foundCount}/${chunk.length} prices`);
+          break; // Success, don't try other endpoints
+        }
+      } catch (e) {
+        console.log(`Jupiter chunk fetch failed:`, e instanceof Error ? e.message : String(e));
       }
-    } catch (e) {
-      console.error(`DexScreener price fetch failed for ${mint}:`, e);
     }
+  }));
+
+  // For any missing prices, try DexScreener in parallel
+  const missing = uncachedMints.filter(m => !prices[m]);
+  if (missing.length > 0) {
+    console.log(`Fetching ${missing.length} missing prices from DexScreener`);
+    
+    await Promise.all(missing.map(async (mint) => {
+      try {
+        const res = await fetchWithTimeout(`https://api.dexscreener.com/latest/dex/tokens/${mint}`, 3000);
+        if (res.ok) {
+          const data = await res.json();
+          const pair = data?.pairs?.[0];
+          if (pair?.priceUsd) {
+            const price = Number(pair.priceUsd);
+            prices[mint] = price;
+            setCachedPrice(mint, price);
+          }
+        }
+      } catch (e) {
+        // Silent fail for individual tokens
+      }
+    }));
   }
 
   return prices;
