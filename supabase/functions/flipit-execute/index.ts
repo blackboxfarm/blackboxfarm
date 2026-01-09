@@ -453,34 +453,60 @@ serve(async (req) => {
       const gasFeeBuffer = 0.005; // 0.005 SOL buffer for gas fees (reduced from 0.01)
       const requiredSol = buyAmountSol + gasFeeBuffer;
       
-      // Always fetch fresh balance from RPC
-      let walletBalance = 0;
-      
-      try {
-        console.log("Fetching fresh wallet balance for:", wallet.pubkey);
-        const rpcUrl = Deno.env.get("HELIUS_API_KEY") 
-          ? `https://mainnet.helius-rpc.com/?api-key=${Deno.env.get("HELIUS_API_KEY")}`
-          : "https://api.mainnet-beta.solana.com";
-        
-        const balanceRes = await fetch(rpcUrl, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            jsonrpc: "2.0",
-            id: 1,
-            method: "getBalance",
-            params: [wallet.pubkey]
-          })
-        });
-        
-        const balanceData = await balanceRes.json();
-        if (balanceData?.result?.value !== undefined) {
-          walletBalance = balanceData.result.value / 1e9; // Convert lamports to SOL
+      // Always fetch fresh balance from RPC (fail closed if RPC errors)
+      let walletBalance: number | null = null;
+
+      const heliusKey = Deno.env.get("HELIUS_API_KEY");
+      const rpcUrls = [
+        ...(heliusKey ? [`https://mainnet.helius-rpc.com/?api-key=${heliusKey}`] : []),
+        "https://api.mainnet-beta.solana.com",
+        "https://rpc.ankr.com/solana",
+      ];
+
+      let lastBalanceErr: unknown = null;
+
+      for (const rpcUrl of rpcUrls) {
+        try {
+          console.log("Fetching fresh wallet balance for:", wallet.pubkey, "via", rpcUrl);
+
+          const balanceRes = await fetch(rpcUrl, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              jsonrpc: "2.0",
+              id: 1,
+              method: "getBalance",
+              params: [wallet.pubkey],
+            }),
+          });
+
+          const raw = await balanceRes.text();
+          if (!balanceRes.ok) {
+            throw new Error(`RPC HTTP ${balanceRes.status}: ${raw.slice(0, 200)}`);
+          }
+
+          const balanceData = JSON.parse(raw);
+          if (balanceData?.error) {
+            throw new Error(`RPC error: ${JSON.stringify(balanceData.error)}`);
+          }
+
+          const lamports = balanceData?.result?.value;
+          if (typeof lamports !== "number") {
+            throw new Error(`Unexpected RPC response: ${raw.slice(0, 200)}`);
+          }
+
+          walletBalance = lamports / 1e9; // Convert lamports to SOL
           console.log("Fresh wallet balance:", walletBalance, "SOL");
+          break;
+        } catch (balanceErr) {
+          lastBalanceErr = balanceErr;
+          console.warn("Balance RPC failed:", rpcUrl, balanceErr);
         }
-      } catch (balanceErr) {
-        console.error("Failed to fetch fresh balance:", balanceErr);
-        return bad("Failed to fetch wallet balance");
+      }
+
+      if (walletBalance === null) {
+        console.error("Failed to fetch wallet balance from all RPC endpoints:", lastBalanceErr);
+        return bad("Failed to fetch wallet balance (RPC error)");
       }
       
       // Check if we have enough funds
