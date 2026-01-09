@@ -962,11 +962,43 @@ with TelegramClient(StringSession(), api_id, api_hash) as client:
                           <Copy className="w-4 h-4 mr-1" /> Copy Script
                         </Button>
                       </div>
-                      <div className="p-4 bg-yellow-500/10 border border-yellow-500/30 rounded-lg">
-                        <p className="text-sm font-medium text-yellow-500">After generating:</p>
-                        <p className="text-xs text-muted-foreground mt-1">
-                          Update the session in Supabase: telegram_mtproto_session table → session_string column
-                        </p>
+                      <div className="p-4 bg-green-500/10 border border-green-500/30 rounded-lg space-y-3">
+                        <p className="text-sm font-medium text-green-500">Paste your session string:</p>
+                        <Input
+                          id="session-string-input"
+                          placeholder="Paste your Telethon session string here..."
+                          className="font-mono text-xs"
+                        />
+                        <Button 
+                          size="sm" 
+                          className="w-full"
+                          onClick={async () => {
+                            const input = document.getElementById('session-string-input') as HTMLInputElement;
+                            const sessionString = input?.value?.trim();
+                            if (!sessionString) {
+                              toast.error('Please paste a session string');
+                              return;
+                            }
+                            try {
+                              // Save session via edge function
+                              const { data, error } = await supabase.functions.invoke('telegram-mtproto-auth', {
+                                body: { action: 'save_session', session_string: sessionString }
+                              });
+                              if (error) throw error;
+                              if (data?.success) {
+                                toast.success('Session string saved successfully!');
+                                setShowSessionGenerator(false);
+                                loadData();
+                              } else {
+                                throw new Error(data?.error || 'Failed to save session');
+                              }
+                            } catch (err: any) {
+                              toast.error(err.message || 'Failed to save session string');
+                            }
+                          }}
+                        >
+                          Save Session String
+                        </Button>
                       </div>
                     </div>
                   )}
