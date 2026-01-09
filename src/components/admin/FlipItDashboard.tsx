@@ -2001,6 +2001,16 @@ export function FlipItDashboard() {
                     <SelectItem value="15">15x (+1400%)</SelectItem>
                     <SelectItem value="20">20x (+1900%)</SelectItem>
                     <SelectItem value="25">25x (+2400%)</SelectItem>
+                    <SelectItem value="50">50x (+4900%)</SelectItem>
+                    <SelectItem value="100">100x (+9900%)</SelectItem>
+                    <SelectItem value="200">200x</SelectItem>
+                    <SelectItem value="300">300x</SelectItem>
+                    <SelectItem value="400">400x</SelectItem>
+                    <SelectItem value="500">500x</SelectItem>
+                    <SelectItem value="600">600x</SelectItem>
+                    <SelectItem value="700">700x</SelectItem>
+                    <SelectItem value="800">800x</SelectItem>
+                    <SelectItem value="900">900x</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
@@ -2651,7 +2661,7 @@ export function FlipItDashboard() {
                                     <span className="text-muted-foreground text-xs">No auto-sell</span>
                                   </Button>
                                   <Separator className="my-1" />
-                                  {[1.25, 1.30, 1.50, 1.75, 2, 2.5, 3, 4, 5, 6, 7, 8, 9, 10, 15, 20, 25, 30, 35, 40, 45, 50, 75, 100].map(mult => (
+                                  {[1.25, 1.30, 1.50, 1.75, 2, 2.5, 3, 4, 5, 6, 7, 8, 9, 10, 15, 20, 25, 30, 35, 40, 45, 50, 75, 100, 200, 300, 400, 500, 600, 700, 800, 900].map(mult => (
                                     <Button
                                       key={mult}
                                       variant={position.target_multiplier === mult ? "default" : "ghost"}
@@ -3079,6 +3089,16 @@ export function FlipItDashboard() {
                                 <SelectItem value="15">15x</SelectItem>
                                 <SelectItem value="20">20x</SelectItem>
                                 <SelectItem value="25">25x</SelectItem>
+                                <SelectItem value="50">50x</SelectItem>
+                                <SelectItem value="100">100x</SelectItem>
+                                <SelectItem value="200">200x</SelectItem>
+                                <SelectItem value="300">300x</SelectItem>
+                                <SelectItem value="400">400x</SelectItem>
+                                <SelectItem value="500">500x</SelectItem>
+                                <SelectItem value="600">600x</SelectItem>
+                                <SelectItem value="700">700x</SelectItem>
+                                <SelectItem value="800">800x</SelectItem>
+                                <SelectItem value="900">900x</SelectItem>
                               </SelectContent>
                             </Select>
                             {/* Loop Mode Toggle */}
@@ -3461,6 +3481,16 @@ export function FlipItDashboard() {
                               <SelectItem value="15">15x</SelectItem>
                               <SelectItem value="20">20x</SelectItem>
                               <SelectItem value="25">25x</SelectItem>
+                              <SelectItem value="50">50x</SelectItem>
+                              <SelectItem value="100">100x</SelectItem>
+                              <SelectItem value="200">200x</SelectItem>
+                              <SelectItem value="300">300x</SelectItem>
+                              <SelectItem value="400">400x</SelectItem>
+                              <SelectItem value="500">500x</SelectItem>
+                              <SelectItem value="600">600x</SelectItem>
+                              <SelectItem value="700">700x</SelectItem>
+                              <SelectItem value="800">800x</SelectItem>
+                              <SelectItem value="900">900x</SelectItem>
                             </SelectContent>
                           </Select>
                           {/* Loop Mode Toggle */}
