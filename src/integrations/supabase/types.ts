@@ -7347,6 +7347,7 @@ export type Database = {
           channel_name: string | null
           channel_type: string | null
           channel_username: string | null
+          close_enough_threshold_pct: number | null
           created_at: string
           email_notifications: boolean | null
           emergency_buy_multiplier: number | null
@@ -7388,6 +7389,9 @@ export type Database = {
           min_price_threshold: number | null
           momentum_buy_multiplier: number | null
           notification_email: string | null
+          peak_trailing_stop_enabled: boolean | null
+          peak_trailing_stop_pct: number | null
+          peak_trailing_stop_threshold: number | null
           persistent_monitoring: boolean | null
           polling_interval_seconds: number | null
           price_monitor_interval_seconds: number | null
@@ -7426,6 +7430,7 @@ export type Database = {
           channel_name?: string | null
           channel_type?: string | null
           channel_username?: string | null
+          close_enough_threshold_pct?: number | null
           created_at?: string
           email_notifications?: boolean | null
           emergency_buy_multiplier?: number | null
@@ -7467,6 +7472,9 @@ export type Database = {
           min_price_threshold?: number | null
           momentum_buy_multiplier?: number | null
           notification_email?: string | null
+          peak_trailing_stop_enabled?: boolean | null
+          peak_trailing_stop_pct?: number | null
+          peak_trailing_stop_threshold?: number | null
           persistent_monitoring?: boolean | null
           polling_interval_seconds?: number | null
           price_monitor_interval_seconds?: number | null
@@ -7505,6 +7513,7 @@ export type Database = {
           channel_name?: string | null
           channel_type?: string | null
           channel_username?: string | null
+          close_enough_threshold_pct?: number | null
           created_at?: string
           email_notifications?: boolean | null
           emergency_buy_multiplier?: number | null
@@ -7546,6 +7555,9 @@ export type Database = {
           min_price_threshold?: number | null
           momentum_buy_multiplier?: number | null
           notification_email?: string | null
+          peak_trailing_stop_enabled?: boolean | null
+          peak_trailing_stop_pct?: number | null
+          peak_trailing_stop_threshold?: number | null
           persistent_monitoring?: boolean | null
           polling_interval_seconds?: number | null
           price_monitor_interval_seconds?: number | null
@@ -7585,12 +7597,14 @@ export type Database = {
           ath_at: string | null
           ath_multiplier: number | null
           ath_price_usd: number | null
+          ath_source: string | null
           auto_sell_triggered: boolean | null
           call_id: string | null
           caller_display_name: string | null
           caller_username: string | null
           channel_config_id: string | null
           channel_name: string | null
+          close_enough_triggered: boolean | null
           created_at: string
           current_price_usd: number | null
           developer_id: string | null
@@ -7609,10 +7623,16 @@ export type Database = {
           interpretation_id: string | null
           is_active: boolean | null
           message_received_at: string | null
+          near_miss_at: string | null
+          near_miss_logged: boolean | null
+          near_miss_multiplier: number | null
           original_sell_multiplier: number | null
           peak_multiplier: number | null
           peak_price_at: string | null
           peak_price_usd: number | null
+          peak_trailing_stop_enabled: boolean | null
+          peak_trailing_stop_pct: number | null
+          peak_trailing_stop_triggered: boolean | null
           realized_pnl_percent: number | null
           realized_pnl_usd: number | null
           rugcheck_checked_at: string | null
@@ -7654,12 +7674,14 @@ export type Database = {
           ath_at?: string | null
           ath_multiplier?: number | null
           ath_price_usd?: number | null
+          ath_source?: string | null
           auto_sell_triggered?: boolean | null
           call_id?: string | null
           caller_display_name?: string | null
           caller_username?: string | null
           channel_config_id?: string | null
           channel_name?: string | null
+          close_enough_triggered?: boolean | null
           created_at?: string
           current_price_usd?: number | null
           developer_id?: string | null
@@ -7678,10 +7700,16 @@ export type Database = {
           interpretation_id?: string | null
           is_active?: boolean | null
           message_received_at?: string | null
+          near_miss_at?: string | null
+          near_miss_logged?: boolean | null
+          near_miss_multiplier?: number | null
           original_sell_multiplier?: number | null
           peak_multiplier?: number | null
           peak_price_at?: string | null
           peak_price_usd?: number | null
+          peak_trailing_stop_enabled?: boolean | null
+          peak_trailing_stop_pct?: number | null
+          peak_trailing_stop_triggered?: boolean | null
           realized_pnl_percent?: number | null
           realized_pnl_usd?: number | null
           rugcheck_checked_at?: string | null
@@ -7723,12 +7751,14 @@ export type Database = {
           ath_at?: string | null
           ath_multiplier?: number | null
           ath_price_usd?: number | null
+          ath_source?: string | null
           auto_sell_triggered?: boolean | null
           call_id?: string | null
           caller_display_name?: string | null
           caller_username?: string | null
           channel_config_id?: string | null
           channel_name?: string | null
+          close_enough_triggered?: boolean | null
           created_at?: string
           current_price_usd?: number | null
           developer_id?: string | null
@@ -7747,10 +7777,16 @@ export type Database = {
           interpretation_id?: string | null
           is_active?: boolean | null
           message_received_at?: string | null
+          near_miss_at?: string | null
+          near_miss_logged?: boolean | null
+          near_miss_multiplier?: number | null
           original_sell_multiplier?: number | null
           peak_multiplier?: number | null
           peak_price_at?: string | null
           peak_price_usd?: number | null
+          peak_trailing_stop_enabled?: boolean | null
+          peak_trailing_stop_pct?: number | null
+          peak_trailing_stop_triggered?: boolean | null
           realized_pnl_percent?: number | null
           realized_pnl_usd?: number | null
           rugcheck_checked_at?: string | null
