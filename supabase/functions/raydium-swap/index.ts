@@ -412,11 +412,48 @@ serve(async (req) => {
       walletId,
     } = body;
 
-    // Use Helius RPC directly - it's the most reliable
+    // Build list of RPC endpoints to try (with fallback)
+    const rpcEndpoints: string[] = [];
     const heliusApiKey = Deno.env.get("HELIUS_API_KEY");
-    let rpcUrl = heliusApiKey 
-      ? `https://mainnet.helius-rpc.com/?api-key=${heliusApiKey}`
-      : (Deno.env.get("SOLANA_RPC_URL") || "https://api.mainnet-beta.solana.com");
+    if (heliusApiKey) {
+      rpcEndpoints.push(`https://mainnet.helius-rpc.com/?api-key=${heliusApiKey}`);
+    }
+    const customRpc = Deno.env.get("SOLANA_RPC_URL");
+    if (customRpc) {
+      rpcEndpoints.push(customRpc);
+    }
+    rpcEndpoints.push("https://api.mainnet-beta.solana.com");
+    
+    // Try each RPC until one works for initial connection test
+    let rpcUrl = rpcEndpoints[0] || "https://api.mainnet-beta.solana.com";
+    let connection = new Connection(rpcUrl, { commitment: "confirmed" });
+    
+    // Quick health check - if Helius is rate limited, fall back immediately
+    try {
+      const testSlot = await Promise.race([
+        connection.getSlot(),
+        new Promise<never>((_, reject) => setTimeout(() => reject(new Error("timeout")), 3000))
+      ]);
+      console.log(`Using RPC: ${rpcUrl.substring(0, 50)}..., slot: ${testSlot}`);
+    } catch (e) {
+      const errMsg = (e as Error).message || "";
+      console.log(`Primary RPC failed (${errMsg}), trying fallbacks...`);
+      
+      for (let i = 1; i < rpcEndpoints.length; i++) {
+        try {
+          rpcUrl = rpcEndpoints[i];
+          connection = new Connection(rpcUrl, { commitment: "confirmed" });
+          const slot = await Promise.race([
+            connection.getSlot(),
+            new Promise<never>((_, reject) => setTimeout(() => reject(new Error("timeout")), 3000))
+          ]);
+          console.log(`Fallback RPC working: ${rpcUrl.substring(0, 50)}..., slot: ${slot}`);
+          break;
+        } catch {
+          console.log(`Fallback RPC ${i} also failed`);
+        }
+      }
+    }
     const bodyOwnerSecret = (body?.ownerSecret ? String(body.ownerSecret) : null);
     const headerSecret = req.headers.get("x-owner-secret");
     const envOwnerSecret = Deno.env.get("TRADER_PRIVATE_KEY") || null;
@@ -512,19 +549,9 @@ serve(async (req) => {
     const confirmPolicy = String(_confirmPolicy ?? "processed").toLowerCase();
     const desiredCommitment = confirmPolicy === "processed" ? "processed" : "confirmed";
 
-    // Build RPC connection. If the configured RPC uses an invalid API key, fall back to public RPC.
-    let connection = new Connection(rpcUrl, { commitment: desiredCommitment as any });
-    try {
-      await connection.getLatestBlockhash(desiredCommitment as any);
-    } catch (e) {
-      const msg = (e as Error)?.message ?? String(e);
-      if (msg.includes("Invalid API key") || msg.includes("401 Unauthorized")) {
-        console.warn("RPC auth failed (Invalid API key). Falling back to public Solana RPC for this request.");
-        rpcUrl = "https://api.mainnet-beta.solana.com";
-        connection = new Connection(rpcUrl, { commitment: desiredCommitment as any });
-      } else {
-        throw e;
-      }
+    // Update connection commitment if needed (connection already created with fallback logic above)
+    if (desiredCommitment !== "confirmed") {
+      connection = new Connection(rpcUrl, { commitment: desiredCommitment as any });
     }
 
     // Prepare mode: pre-create ATAs to speed up first swap
