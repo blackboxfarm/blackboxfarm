@@ -30,19 +30,42 @@ function firstSignature(swapResult: any): string | null {
 }
 
 async function fetchTokenPrice(tokenMint: string): Promise<number | null> {
-  // Try Jupiter first
-  try {
-    const res = await fetch(`https://price.jup.ag/v6/price?ids=${tokenMint}`);
-    const json = await res.json();
-    const price = json?.data?.[tokenMint]?.price;
-    if (price) return Number(price);
-  } catch (e) {
-    console.error("Jupiter price fetch failed:", e);
-  }
+  const isPumpToken = tokenMint.endsWith('pump');
   
-  // Fallback to DexScreener
+  // For pump.fun tokens, try pump.fun API first for freshest price
+  if (isPumpToken) {
+    try {
+      console.log("Fetching fresh price from pump.fun API for:", tokenMint);
+      const pumpRes = await fetch(`https://frontend-api.pump.fun/coins/${tokenMint}`, {
+        headers: { "Accept": "application/json" }
+      });
+      if (pumpRes.ok) {
+        const pumpData = await pumpRes.json();
+        // pump.fun returns usd_market_cap and we can derive price
+        // Or check if they have a direct price field
+        if (pumpData?.usd_market_cap && pumpData?.total_supply) {
+          const price = pumpData.usd_market_cap / (pumpData.total_supply / 1e6); // pump.fun uses 6 decimals
+          console.log("Got price from pump.fun API:", price, "(mcap:", pumpData.usd_market_cap, ")");
+          return price;
+        }
+        // Some pump.fun responses include virtual_sol_reserves and virtual_token_reserves
+        if (pumpData?.virtual_sol_reserves && pumpData?.virtual_token_reserves) {
+          // Price = (SOL reserves / token reserves) * SOL price
+          const solPrice = await fetchSolPrice();
+          const priceInSol = (pumpData.virtual_sol_reserves / 1e9) / (pumpData.virtual_token_reserves / 1e6);
+          const priceUsd = priceInSol * solPrice;
+          console.log("Got price from pump.fun bonding curve:", priceUsd, "USD (", priceInSol, "SOL)");
+          return priceUsd;
+        }
+      }
+    } catch (e) {
+      console.error("pump.fun price fetch failed:", e);
+    }
+  }
+
+  // Try DexScreener (often has fresher prices than Jupiter for new tokens)
   try {
-    console.log("Trying DexScreener fallback for price...");
+    console.log("Trying DexScreener for price...");
     const dexRes = await fetch(`https://api.dexscreener.com/latest/dex/tokens/${tokenMint}`);
     const dexData = await dexRes.json();
     const pair = dexData?.pairs?.[0];
@@ -52,6 +75,19 @@ async function fetchTokenPrice(tokenMint: string): Promise<number | null> {
     }
   } catch (e) {
     console.error("DexScreener price fetch failed:", e);
+  }
+
+  // Try Jupiter (best for graduated/Raydium tokens)
+  try {
+    const res = await fetch(`https://price.jup.ag/v6/price?ids=${tokenMint}`);
+    const json = await res.json();
+    const price = json?.data?.[tokenMint]?.price;
+    if (price) {
+      console.log("Got price from Jupiter:", price);
+      return Number(price);
+    }
+  } catch (e) {
+    console.error("Jupiter price fetch failed:", e);
   }
   
   return null;
