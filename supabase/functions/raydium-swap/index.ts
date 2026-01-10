@@ -910,11 +910,12 @@ serve(async (req) => {
                 needJupiter = true;
                 jupReason = `PumpPortal tx failed: ${txError}`;
               }
-            } else {
-              console.log(`PumpPortal ${side} successful with pool=${pool}:`, sig);
-              return ok({ signatures: [sig], source: "pumpportal", pool: pool });
-            }
-          } else if (pool === 'auto') {
+              } else {
+                console.log(`PumpPortal ${side} successful with pool=${pool}:`, sig);
+                // For PumpPortal, we don't have expected outAmount - caller should verify on-chain
+                return ok({ signatures: [sig], source: "pumpportal", pool: pool, outAmount: null });
+              }
+            } else if (pool === 'auto') {
             // Both specific and auto pools failed - token might have graduated to unsupported DEX
             console.log(`PumpPortal failed for token with all pools, falling back to DEX routing: ${pumpResult.error}`);
             needJupiter = true;
@@ -1123,7 +1124,8 @@ serve(async (req) => {
             sigs.push(sig);
           }
         }
-        return ok({ signatures: sigs });
+        // Jupiter fallback - no outAmount available, caller should verify on-chain
+        return ok({ signatures: sigs, source: "jupiter", outAmount: null });
       } else {
         // Jupiter also failed - try PumpPortal as LAST RESORT for ANY token
         // PumpPortal will quickly fail if the token is not on pump.fun bonding curve
@@ -1201,7 +1203,7 @@ serve(async (req) => {
               }
               
               console.log(`PumpPortal ${side} successful:`, sig);
-              return ok({ signatures: [sig], source: "pumpportal" });
+              return ok({ signatures: [sig], source: "pumpportal", outAmount: null });
             } catch (sendError) {
               console.error("PumpPortal transaction send failed:", (sendError as Error).message);
               return softError(
@@ -1420,7 +1422,11 @@ serve(async (req) => {
       }
     }
 
-    return ok({ signatures: sigs });
+    // Extract expected output amount from Raydium compute response
+    const expectedOutAmount = swapResponse?.data?.outputAmount || swapResponse?.outputAmount || null;
+    console.log("Raydium swap complete, expected outAmount:", expectedOutAmount);
+    
+    return ok({ signatures: sigs, source: "raydium", outAmount: expectedOutAmount });
   } catch (e) {
     console.error("raydium-swap error", e);
     console.error("Error details:", {
