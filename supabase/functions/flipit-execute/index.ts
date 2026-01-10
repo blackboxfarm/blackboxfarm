@@ -674,13 +674,80 @@ serve(async (req) => {
           throw new Error("Swap returned no signature (buy did not confirm)");
         }
 
-        // Update position with buy result
+        // Get estimated outAmount from swap response
+        let quantityTokens = (swapResult as any)?.outAmount ?? null;
+        console.log("Swap outAmount from response:", quantityTokens, "source:", (swapResult as any)?.source);
+
+        // CRITICAL: Verify actual token balance on-chain for accuracy
+        // This catches discrepancies between DEX estimates and actual received tokens
+        const heliusKey = Deno.env.get("HELIUS_API_KEY");
+        const verifyRpcUrl = heliusKey 
+          ? `https://mainnet.helius-rpc.com/?api-key=${heliusKey}`
+          : "https://api.mainnet-beta.solana.com";
+        
+        try {
+          // Wait a moment for the transaction to be indexed
+          await new Promise(resolve => setTimeout(resolve, 2000));
+          
+          console.log("Verifying on-chain token balance for:", wallet.pubkey, "token:", tokenMint);
+          const balanceRes = await fetch(verifyRpcUrl, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              jsonrpc: "2.0",
+              id: 1,
+              method: "getTokenAccountsByOwner",
+              params: [
+                wallet.pubkey,
+                { mint: tokenMint },
+                { encoding: "jsonParsed" }
+              ]
+            }),
+          });
+          
+          if (balanceRes.ok) {
+            const balanceData = await balanceRes.json();
+            const accounts = balanceData?.result?.value || [];
+            
+            if (accounts.length > 0) {
+              // Get the token balance from the parsed account data
+              const tokenAccount = accounts[0];
+              const parsedInfo = tokenAccount?.account?.data?.parsed?.info;
+              const tokenAmount = parsedInfo?.tokenAmount;
+              
+              if (tokenAmount) {
+                const verifiedBalance = tokenAmount.amount; // Raw amount (no decimals applied)
+                const uiAmount = tokenAmount.uiAmount; // Human-readable amount
+                const decimals = tokenAmount.decimals;
+                
+                console.log("On-chain verified balance:", {
+                  rawAmount: verifiedBalance,
+                  uiAmount,
+                  decimals,
+                  previousEstimate: quantityTokens
+                });
+                
+                // Use the verified on-chain balance (this is authoritative)
+                quantityTokens = verifiedBalance;
+              }
+            } else {
+              console.log("No token accounts found on-chain yet - using estimate");
+            }
+          } else {
+            console.warn("Balance verification RPC failed:", balanceRes.status);
+          }
+        } catch (verifyErr) {
+          console.error("On-chain balance verification failed:", verifyErr);
+          // Continue with estimate if verification fails
+        }
+
+        // Update position with buy result (verified or estimated quantity)
         await supabase
           .from("flip_positions")
           .update({
             buy_signature: signature,
             buy_executed_at: new Date().toISOString(),
-            quantity_tokens: (swapResult as any)?.outAmount ?? null,
+            quantity_tokens: quantityTokens,
             status: "holding",
             error_message: null,
           })
@@ -716,6 +783,7 @@ serve(async (req) => {
           entryPrice: currentPrice,
           targetPrice: targetPrice,
           multiplier: mult,
+          quantityTokens: quantityTokens,
         });
 
       } catch (buyErr: any) {

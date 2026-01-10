@@ -360,3 +360,6 @@ verify_jwt = false
 
 [functions.pumpfun-curve-analyzer]
 verify_jwt = false
+
+[functions.flipit-verify-positions]
+verify_jwt = false
