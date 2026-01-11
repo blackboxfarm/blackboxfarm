@@ -17,12 +17,91 @@ function bad(message: string, status = 400) {
   return ok({ error: message }, status);
 }
 
-// Verify token balance on-chain for a given wallet and mint
-async function verifyTokenBalance(
+// Parse a transaction via Helius to get exact token amounts from a swap
+async function parseSwapTransaction(
+  heliusKey: string,
+  signature: string,
+  targetMint: string,
+  walletPubkey: string
+): Promise<string | null> {
+  try {
+    const parseRes = await fetch(`https://api.helius.xyz/v0/transactions/?api-key=${heliusKey}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ transactions: [signature] }),
+    });
+    
+    if (!parseRes.ok) {
+      console.log(`Helius parse failed for ${signature}: ${parseRes.status}`);
+      return null;
+    }
+    
+    const parsedTxs = await parseRes.json();
+    const parsedTx = parsedTxs?.[0];
+    
+    if (!parsedTx) {
+      console.log(`No parsed transaction data for ${signature}`);
+      return null;
+    }
+    
+    console.log(`Parsed tx ${signature.substring(0, 12)}... type=${parsedTx.type} source=${parsedTx.source}`);
+    
+    // Check swap event - most reliable for DEX trades
+    if (parsedTx?.events?.swap) {
+      const swapEvent = parsedTx.events.swap;
+      
+      // Find token output matching our target mint
+      const tokenOutput = swapEvent.tokenOutputs?.find(
+        (out: any) => out.mint === targetMint
+      );
+      
+      if (tokenOutput?.rawTokenAmount?.tokenAmount) {
+        return tokenOutput.rawTokenAmount.tokenAmount;
+      }
+      if (tokenOutput?.tokenAmount) {
+        return String(tokenOutput.tokenAmount);
+      }
+    }
+    
+    // Fallback: tokenTransfers array
+    if (parsedTx?.tokenTransfers?.length > 0) {
+      const inboundTransfer = parsedTx.tokenTransfers.find(
+        (t: any) => t.mint === targetMint && t.toUserAccount === walletPubkey
+      );
+      
+      if (inboundTransfer?.tokenAmount) {
+        return String(inboundTransfer.tokenAmount);
+      }
+    }
+    
+    // Fallback: accountData tokenBalanceChanges
+    if (parsedTx?.accountData?.length > 0) {
+      for (const acct of parsedTx.accountData) {
+        const tokenChange = acct.tokenBalanceChanges?.find(
+          (c: any) => c.mint === targetMint && c.userAccount === walletPubkey
+        );
+        if (tokenChange?.rawTokenAmount?.tokenAmount) {
+          const amount = BigInt(tokenChange.rawTokenAmount.tokenAmount);
+          if (amount > 0n) {
+            return amount.toString();
+          }
+        }
+      }
+    }
+    
+    return null;
+  } catch (e) {
+    console.error(`Error parsing transaction ${signature}:`, e);
+    return null;
+  }
+}
+
+// Get current wallet balance as fallback
+async function getCurrentBalance(
   rpcUrl: string, 
   walletPubkey: string, 
   tokenMint: string
-): Promise<{ rawAmount: string | null; uiAmount: number | null; decimals: number | null }> {
+): Promise<string | null> {
   try {
     const res = await fetch(rpcUrl, {
       method: "POST",
@@ -31,43 +110,21 @@ async function verifyTokenBalance(
         jsonrpc: "2.0",
         id: 1,
         method: "getTokenAccountsByOwner",
-        params: [
-          walletPubkey,
-          { mint: tokenMint },
-          { encoding: "jsonParsed" }
-        ]
+        params: [walletPubkey, { mint: tokenMint }, { encoding: "jsonParsed" }]
       }),
     });
     
-    if (!res.ok) {
-      console.log(`RPC failed for ${tokenMint}: ${res.status}`);
-      return { rawAmount: null, uiAmount: null, decimals: null };
-    }
+    if (!res.ok) return null;
     
     const data = await res.json();
     const accounts = data?.result?.value || [];
     
-    if (accounts.length === 0) {
-      // No token account found - position may have been sold
-      return { rawAmount: "0", uiAmount: 0, decimals: null };
-    }
+    if (accounts.length === 0) return "0";
     
-    const tokenAccount = accounts[0];
-    const parsedInfo = tokenAccount?.account?.data?.parsed?.info;
-    const tokenAmount = parsedInfo?.tokenAmount;
-    
-    if (tokenAmount) {
-      return {
-        rawAmount: tokenAmount.amount,
-        uiAmount: tokenAmount.uiAmount,
-        decimals: tokenAmount.decimals
-      };
-    }
-    
-    return { rawAmount: null, uiAmount: null, decimals: null };
+    return accounts[0]?.account?.data?.parsed?.info?.tokenAmount?.amount || null;
   } catch (e) {
-    console.error(`Error verifying balance for ${tokenMint}:`, e);
-    return { rawAmount: null, uiAmount: null, decimals: null };
+    console.error(`Error getting balance for ${tokenMint}:`, e);
+    return null;
   }
 }
 
@@ -84,19 +141,21 @@ serve(async (req) => {
     const body = await req.json().catch(() => ({}));
     const { action = "verify_all", positionId, dryRun = true } = body;
 
-    // Build RPC URL with Helius as primary
     const heliusKey = Deno.env.get("HELIUS_API_KEY");
     const rpcUrl = heliusKey 
       ? `https://mainnet.helius-rpc.com/?api-key=${heliusKey}`
       : "https://api.mainnet-beta.solana.com";
 
-    console.log(`FlipIt Verify Positions: action=${action}, dryRun=${dryRun}, rpcUrl=${rpcUrl.substring(0, 40)}...`);
+    console.log(`FlipIt Verify: action=${action}, dryRun=${dryRun}, hasHelius=${!!heliusKey}`);
+
+    if (!heliusKey) {
+      return bad("HELIUS_API_KEY required for transaction parsing");
+    }
 
     if (action === "verify_single" && positionId) {
-      // Verify a single position
       const { data: position, error } = await supabase
         .from("flip_positions")
-        .select("id, token_mint, wallet_id, quantity_tokens, status, super_admin_wallets!flip_positions_wallet_id_fkey(pubkey)")
+        .select("id, token_mint, wallet_id, quantity_tokens, buy_signature, status, super_admin_wallets!flip_positions_wallet_id_fkey(pubkey)")
         .eq("id", positionId)
         .single();
 
@@ -109,21 +168,36 @@ serve(async (req) => {
         return bad("Wallet pubkey not found");
       }
 
-      const balance = await verifyTokenBalance(rpcUrl, walletPubkey, position.token_mint);
+      let correctQuantity: string | null = null;
+      
+      // Try to parse the buy transaction to get exact amount
+      if (position.buy_signature) {
+        correctQuantity = await parseSwapTransaction(
+          heliusKey, 
+          position.buy_signature, 
+          position.token_mint,
+          walletPubkey
+        );
+      }
+      
+      // Fallback to current balance only if no buy signature or parsing failed
+      if (!correctQuantity) {
+        correctQuantity = await getCurrentBalance(rpcUrl, walletPubkey, position.token_mint);
+      }
       
       const result = {
         positionId: position.id,
         tokenMint: position.token_mint,
-        walletPubkey,
+        buySignature: position.buy_signature,
         currentDbQuantity: position.quantity_tokens,
-        onChainBalance: balance,
+        parsedQuantity: correctQuantity,
         status: position.status,
       };
 
-      if (!dryRun && balance.rawAmount !== null) {
+      if (!dryRun && correctQuantity !== null) {
         await supabase
           .from("flip_positions")
-          .update({ quantity_tokens: balance.rawAmount })
+          .update({ quantity_tokens: correctQuantity })
           .eq("id", position.id);
         (result as any).updated = true;
       }
@@ -131,18 +205,19 @@ serve(async (req) => {
       return ok(result);
     }
 
-    if (action === "verify_all" || action === "backfill_nulls") {
-      // Get positions with null quantity_tokens that are still holding
+    if (action === "verify_all" || action === "backfill_nulls" || action === "fix_all") {
+      // Get positions - prioritize ones with buy_signature for accurate parsing
       const query = supabase
         .from("flip_positions")
-        .select("id, token_mint, wallet_id, quantity_tokens, status, super_admin_wallets!flip_positions_wallet_id_fkey(pubkey)")
-        .eq("status", "holding");
+        .select("id, token_mint, wallet_id, quantity_tokens, buy_signature, status, super_admin_wallets!flip_positions_wallet_id_fkey(pubkey)")
+        .eq("status", "holding")
+        .order("created_at", { ascending: false });
       
       if (action === "backfill_nulls") {
         query.is("quantity_tokens", null);
       }
 
-      const { data: positions, error } = await query.limit(100);
+      const { data: positions, error } = await query.limit(50);
 
       if (error) {
         return bad(`Failed to fetch positions: ${error.message}`);
@@ -151,7 +226,7 @@ serve(async (req) => {
       const results: any[] = [];
       let updated = 0;
       let verified = 0;
-      let noChange = 0;
+      let skipped = 0;
       let errors = 0;
 
       for (const position of positions || []) {
@@ -163,35 +238,57 @@ serve(async (req) => {
         }
 
         try {
-          const balance = await verifyTokenBalance(rpcUrl, walletPubkey, position.token_mint);
+          let correctQuantity: string | null = null;
+          let source = "unknown";
+          
+          // Prefer parsing the buy signature for exact amount
+          if (position.buy_signature) {
+            correctQuantity = await parseSwapTransaction(
+              heliusKey, 
+              position.buy_signature, 
+              position.token_mint,
+              walletPubkey
+            );
+            if (correctQuantity) source = "helius_parse";
+          }
+          
+          // Only use current balance if we can't parse the transaction
+          // This is a fallback and may be inaccurate for multiple buys
+          if (!correctQuantity) {
+            correctQuantity = await getCurrentBalance(rpcUrl, walletPubkey, position.token_mint);
+            if (correctQuantity) source = "current_balance_fallback";
+          }
+          
           verified++;
 
-          const needsUpdate = balance.rawAmount !== null && 
-            String(balance.rawAmount) !== String(position.quantity_tokens);
+          const needsUpdate = correctQuantity !== null && 
+            String(correctQuantity) !== String(position.quantity_tokens);
 
           const result: any = {
             positionId: position.id,
             tokenMint: position.token_mint.substring(0, 12) + "...",
+            hasBuySig: !!position.buy_signature,
             dbQuantity: position.quantity_tokens,
-            onChainQuantity: balance.rawAmount,
+            correctQuantity,
+            source,
             needsUpdate,
           };
 
           if (needsUpdate && !dryRun) {
             await supabase
               .from("flip_positions")
-              .update({ quantity_tokens: balance.rawAmount })
+              .update({ quantity_tokens: correctQuantity })
               .eq("id", position.id);
             result.updated = true;
             updated++;
           } else if (!needsUpdate) {
-            noChange++;
+            skipped++;
           }
 
           results.push(result);
 
-          // Rate limit - don't hammer the RPC
-          await new Promise(resolve => setTimeout(resolve, 200));
+          // Rate limit - Helius has limits
+          await new Promise(resolve => setTimeout(resolve, 300));
         } catch (e) {
           errors++;
           results.push({ positionId: position.id, error: (e as Error).message });
@@ -203,42 +300,39 @@ serve(async (req) => {
         totalPositions: positions?.length || 0,
         verified,
         updated,
-        noChange,
+        skipped,
         errors,
-        results: results.slice(0, 20), // Only return first 20 for brevity
+        results: results.slice(0, 30),
       });
     }
 
     if (action === "get_stats") {
-      // Get statistics about positions with null quantities
-      const { data: stats, error } = await supabase
-        .rpc("get_flip_position_stats")
-        .single();
+      const { data: holding } = await supabase
+        .from("flip_positions")
+        .select("id", { count: "exact" })
+        .eq("status", "holding");
 
-      if (error) {
-        // Fallback to manual query
-        const { data: holding } = await supabase
-          .from("flip_positions")
-          .select("id", { count: "exact" })
-          .eq("status", "holding");
+      const { data: withSig } = await supabase
+        .from("flip_positions")
+        .select("id", { count: "exact" })
+        .eq("status", "holding")
+        .not("buy_signature", "is", null);
 
-        const { data: nullQuantity } = await supabase
-          .from("flip_positions")
-          .select("id", { count: "exact" })
-          .eq("status", "holding")
-          .is("quantity_tokens", null);
+      const { data: nullQuantity } = await supabase
+        .from("flip_positions")
+        .select("id", { count: "exact" })
+        .eq("status", "holding")
+        .is("quantity_tokens", null);
 
-        return ok({
-          totalHolding: holding?.length || 0,
-          nullQuantityHolding: nullQuantity?.length || 0,
-          needsBackfill: nullQuantity?.length || 0,
-        });
-      }
-
-      return ok(stats);
+      return ok({
+        totalHolding: holding?.length || 0,
+        withBuySignature: withSig?.length || 0,
+        nullQuantityHolding: nullQuantity?.length || 0,
+        canFixAccurately: withSig?.length || 0,
+      });
     }
 
-    return bad("Invalid action. Use: verify_all, backfill_nulls, verify_single, or get_stats");
+    return bad("Invalid action. Use: verify_all, backfill_nulls, fix_all, verify_single, or get_stats");
   } catch (e) {
     console.error("flipit-verify-positions error:", e);
     return bad(`Unexpected error: ${(e as Error).message}`, 500);
