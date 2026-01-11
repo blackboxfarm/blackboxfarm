@@ -683,7 +683,8 @@ async function runIntake(supabase: any, preDiscoveredTokens?: any[], preBatchId?
       }
     }
     // Priority 6: Check current watchlist (SMART CHECK)
-    else if (existingSymbolsMap.has(lowerSymbol)) {
+    // IMPORTANT: Skip if this is the same token (token was fetched FROM watchlist)
+    else if (existingSymbolsMap.has(lowerSymbol) && existingSymbolsMap.get(lowerSymbol)!.mint !== token.mint) {
       const existingToken = existingSymbolsMap.get(lowerSymbol)!;
       
       // Same creator?
@@ -707,11 +708,13 @@ async function runIntake(supabase: any, preDiscoveredTokens?: any[], preBatchId?
         rejected_detail = `Copycat of active watchlist token "${existingToken.mint.slice(0, 8)}..." (status: ${existingToken.status})`;
       }
     }
-    // Priority 7: Exact mint duplicate
-    else if (existingMints.has(token.mint)) {
-      rejected_reason = 'duplicate_copycat';
-      rejected_detail = 'Exact mint already in watchlist';
-    }
+    // Priority 7: Exact mint duplicate - SKIP if token came from watchlist (self-check)
+    // This check is only relevant for tokens from external sources (Solana Tracker API)
+    // Tokens fetched from watchlist will naturally exist in existingMints
+    // else if (existingMints.has(token.mint)) {
+    //   rejected_reason = 'duplicate_copycat';
+    //   rejected_detail = 'Exact mint already in watchlist';
+    // }
     // Priority 8: Emoji/unicode check
     else if (containsDisallowedTickerUnicode(token.symbol)) {
       rejected_reason = 'emoji_unicode';
