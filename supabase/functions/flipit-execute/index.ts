@@ -715,78 +715,137 @@ serve(async (req) => {
           throw new Error("Swap returned no signature (buy did not confirm)");
         }
 
-        // Get estimated outAmount from swap response
+        // Get estimated outAmount from swap response as initial fallback
         let quantityTokens = (swapResult as any)?.outAmount ?? null;
         console.log("Swap outAmount from response:", quantityTokens, "source:", (swapResult as any)?.source);
 
-        // CRITICAL: Calculate the delta (tokens received from THIS buy)
-        // We recorded pre-buy balance earlier, now get post-buy and calculate difference
+        // CRITICAL: Use Helius Parse Transaction API to get EXACT tokens received from THIS swap
+        // This is the only reliable way to know exactly how many tokens this specific buy received
         const heliusKey = Deno.env.get("HELIUS_API_KEY");
-        const verifyRpcUrl = heliusKey 
-          ? `https://mainnet.helius-rpc.com/?api-key=${heliusKey}`
-          : "https://api.mainnet-beta.solana.com";
         
-        try {
-          // Wait for transaction to be indexed
-          await new Promise(resolve => setTimeout(resolve, 2500));
-          
-          console.log("Fetching post-buy token balance for:", wallet.pubkey, "token:", tokenMint);
-          const balanceRes = await fetch(verifyRpcUrl, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              jsonrpc: "2.0",
-              id: 1,
-              method: "getTokenAccountsByOwner",
-              params: [
-                wallet.pubkey,
-                { mint: tokenMint },
-                { encoding: "jsonParsed" }
-              ]
-            }),
-          });
-          
-          if (balanceRes.ok) {
-            const balanceData = await balanceRes.json();
-            const accounts = balanceData?.result?.value || [];
+        if (heliusKey && signature) {
+          try {
+            // Wait for transaction to be indexed by Helius
+            await new Promise(resolve => setTimeout(resolve, 3000));
             
-            if (accounts.length > 0) {
-              const tokenAccount = accounts[0];
-              const parsedInfo = tokenAccount?.account?.data?.parsed?.info;
-              const tokenAmount = parsedInfo?.tokenAmount;
+            console.log("Parsing transaction via Helius to get exact token output:", signature);
+            const parseRes = await fetch(`https://api.helius.xyz/v0/transactions/?api-key=${heliusKey}`, {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ transactions: [signature] }),
+            });
+            
+            if (parseRes.ok) {
+              const parsedTxs = await parseRes.json();
+              const parsedTx = parsedTxs?.[0];
               
-              if (tokenAmount) {
-                const postBuyBalance = BigInt(tokenAmount.amount);
-                const preBuyBalance = BigInt(preBuyTokenBalance || "0");
-                const tokensReceived = postBuyBalance - preBuyBalance;
+              console.log("Helius parsed transaction type:", parsedTx?.type, "source:", parsedTx?.source);
+              
+              // Check for swap event with token outputs - most reliable
+              if (parsedTx?.events?.swap) {
+                const swapEvent = parsedTx.events.swap;
                 
-                console.log("Token balance delta calculation:", {
-                  preBuyBalance: preBuyBalance.toString(),
-                  postBuyBalance: postBuyBalance.toString(),
-                  tokensReceived: tokensReceived.toString(),
-                  decimals: tokenAmount.decimals,
-                  swapEstimate: quantityTokens
-                });
+                // Find token output matching our target token mint
+                const tokenOutput = swapEvent.tokenOutputs?.find(
+                  (out: any) => out.mint === tokenMint
+                );
                 
-                // Use the delta (tokens actually received from THIS transaction)
-                if (tokensReceived > 0n) {
-                  quantityTokens = tokensReceived.toString();
-                } else {
-                  // Fallback: if no pre-buy balance was captured or delta is weird, use total
-                  console.log("Delta calculation issue, using total balance as fallback");
-                  quantityTokens = tokenAmount.amount;
+                if (tokenOutput?.rawTokenAmount?.tokenAmount) {
+                  quantityTokens = tokenOutput.rawTokenAmount.tokenAmount;
+                  console.log("Got exact token quantity from swap event:", quantityTokens);
+                } else if (tokenOutput?.tokenAmount) {
+                  // Some responses use tokenAmount directly
+                  quantityTokens = String(tokenOutput.tokenAmount);
+                  console.log("Got token quantity from tokenAmount:", quantityTokens);
+                }
+              }
+              
+              // Fallback: check tokenTransfers array
+              if (!quantityTokens && parsedTx?.tokenTransfers?.length > 0) {
+                // Find transfer TO our wallet OF the target token
+                const inboundTransfer = parsedTx.tokenTransfers.find(
+                  (t: any) => t.mint === tokenMint && t.toUserAccount === wallet.pubkey
+                );
+                
+                if (inboundTransfer?.tokenAmount) {
+                  quantityTokens = String(inboundTransfer.tokenAmount);
+                  console.log("Got token quantity from tokenTransfers:", quantityTokens);
+                }
+              }
+              
+              // Fallback: check accountData tokenBalanceChanges
+              if (!quantityTokens && parsedTx?.accountData?.length > 0) {
+                for (const acct of parsedTx.accountData) {
+                  const tokenChange = acct.tokenBalanceChanges?.find(
+                    (c: any) => c.mint === tokenMint && c.userAccount === wallet.pubkey
+                  );
+                  if (tokenChange?.rawTokenAmount?.tokenAmount) {
+                    const amount = BigInt(tokenChange.rawTokenAmount.tokenAmount);
+                    // Only use positive changes (tokens received)
+                    if (amount > 0n) {
+                      quantityTokens = amount.toString();
+                      console.log("Got token quantity from accountData balance change:", quantityTokens);
+                      break;
+                    }
+                  }
                 }
               }
             } else {
-              console.log("No token accounts found on-chain yet - using estimate");
+              console.warn("Helius parse transaction failed:", parseRes.status, await parseRes.text());
             }
-          } else {
-            console.warn("Balance verification RPC failed:", balanceRes.status);
+          } catch (parseErr) {
+            console.error("Error parsing transaction with Helius:", parseErr);
           }
-        } catch (verifyErr) {
-          console.error("On-chain balance verification failed:", verifyErr);
-          // Continue with estimate if verification fails
         }
+        
+        // Final fallback: use delta calculation if Helius parsing didn't work
+        if (!quantityTokens) {
+          try {
+            const verifyRpcUrl = heliusKey 
+              ? `https://mainnet.helius-rpc.com/?api-key=${heliusKey}`
+              : "https://api.mainnet-beta.solana.com";
+            
+            console.log("Fallback: calculating delta from pre/post buy balance");
+            const balanceRes = await fetch(verifyRpcUrl, {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                jsonrpc: "2.0",
+                id: 1,
+                method: "getTokenAccountsByOwner",
+                params: [wallet.pubkey, { mint: tokenMint }, { encoding: "jsonParsed" }]
+              }),
+            });
+            
+            if (balanceRes.ok) {
+              const balanceData = await balanceRes.json();
+              const accounts = balanceData?.result?.value || [];
+              
+              if (accounts.length > 0) {
+                const tokenAmount = accounts[0]?.account?.data?.parsed?.info?.tokenAmount;
+                if (tokenAmount) {
+                  const postBuyBalance = BigInt(tokenAmount.amount);
+                  const preBuyBalance = BigInt(preBuyTokenBalance || "0");
+                  const tokensReceived = postBuyBalance - preBuyBalance;
+                  
+                  console.log("Delta fallback:", {
+                    pre: preBuyBalance.toString(),
+                    post: postBuyBalance.toString(),
+                    delta: tokensReceived.toString()
+                  });
+                  
+                  if (tokensReceived > 0n) {
+                    quantityTokens = tokensReceived.toString();
+                  }
+                }
+              }
+            }
+          } catch (fallbackErr) {
+            console.error("Delta fallback failed:", fallbackErr);
+          }
+        }
+        
+        console.log("Final quantity_tokens to store:", quantityTokens);
 
         // Update position with buy result (verified or estimated quantity)
         await supabase
