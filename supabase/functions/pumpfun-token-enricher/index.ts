@@ -14,6 +14,22 @@ const BATCH_DELAY_MS = 2000;
 const STANDARD_PUMPFUN_SUPPLY = 1_000_000_000_000_000;
 const SUPPLY_TOLERANCE = 0.01; // 1% tolerance
 
+// Bump bot detection thresholds
+const BUMP_BOT_CONFIG = {
+  micro_tx_threshold_sol: 0.01, // Transactions below this are considered micro
+  micro_tx_ratio_warning: 0.4, // 40% micro-tx = warning
+  micro_tx_ratio_reject: 0.6, // 60% micro-tx = soft reject
+  min_txs_for_detection: 10, // Need at least 10 txs to detect
+};
+
+// Stagnation detection thresholds
+const STAGNATION_CONFIG = {
+  max_age_mins_for_low_mcap: 15, // Token > 15 mins old with low metrics = stagnant
+  min_mcap_usd: 5000, // $5K minimum mcap to not be considered stagnant
+  min_bonding_pct: 3, // 3% minimum bonding curve progress
+  max_age_for_pruning_mins: 30, // Tokens > 30 mins old with no progress = prune
+};
+
 interface WatchlistToken {
   id: string;
   token_mint: string;
@@ -205,6 +221,76 @@ async function detectBundledBuys(
   } catch (error) {
     console.error(`Error detecting bundled buys for ${mint}:`, error);
     return { bundledCount: existingBundleCount || 0, details: { error: String(error) }, fromCache: false };
+  }
+}
+
+// Detect bump bot activity (micro-transactions used to simulate activity)
+async function detectBumpBotActivity(
+  mint: string
+): Promise<{ detected: boolean; microTxCount: number; microTxRatio: number; details: any }> {
+  const heliusKey = Deno.env.get('HELIUS_API_KEY');
+  if (!heliusKey) {
+    return { detected: false, microTxCount: 0, microTxRatio: 0, details: { error: 'No Helius key' } };
+  }
+  
+  try {
+    // Fetch recent transactions
+    const response = await fetch(`https://api.helius.xyz/v0/addresses/${mint}/transactions?api-key=${heliusKey}&limit=50`);
+    
+    if (!response.ok) {
+      console.log(`   ⚠️ Helius API error for bump bot detection: ${response.status}`);
+      return { detected: false, microTxCount: 0, microTxRatio: 0, details: { error: `API error: ${response.status}` } };
+    }
+    
+    const txs = await response.json();
+    
+    if (!Array.isArray(txs) || txs.length < BUMP_BOT_CONFIG.min_txs_for_detection) {
+      return { detected: false, microTxCount: 0, microTxRatio: 0, details: { reason: 'Not enough txs for detection', txCount: txs?.length || 0 } };
+    }
+    
+    // Count micro-transactions (tiny SOL amounts)
+    let microTxCount = 0;
+    let totalSwapTxs = 0;
+    
+    for (const tx of txs) {
+      // Look for swap-like transactions
+      const nativeTransfers = tx.nativeTransfers || [];
+      const tokenTransfers = tx.tokenTransfers || [];
+      
+      // If this looks like a token swap/buy/sell
+      if (tokenTransfers.length > 0) {
+        totalSwapTxs++;
+        
+        // Check SOL amount - sum of native transfers
+        const totalSolMoved = nativeTransfers.reduce((sum: number, t: any) => {
+          return sum + Math.abs(t.amount || 0);
+        }, 0) / 1e9; // Convert lamports to SOL
+        
+        // Micro-transaction if SOL moved is very small
+        if (totalSolMoved < BUMP_BOT_CONFIG.micro_tx_threshold_sol && totalSolMoved > 0) {
+          microTxCount++;
+        }
+      }
+    }
+    
+    const microTxRatio = totalSwapTxs > 0 ? microTxCount / totalSwapTxs : 0;
+    const detected = microTxRatio >= BUMP_BOT_CONFIG.micro_tx_ratio_warning;
+    
+    console.log(`   🤖 Bump Bot Check: ${microTxCount}/${totalSwapTxs} micro-txs (${(microTxRatio * 100).toFixed(1)}%) - ${detected ? '⚠️ DETECTED' : 'Clean'}`);
+    
+    return {
+      detected,
+      microTxCount,
+      microTxRatio,
+      details: {
+        totalTxsAnalyzed: txs.length,
+        totalSwapTxs,
+        microTxThreshold: BUMP_BOT_CONFIG.micro_tx_threshold_sol,
+      }
+    };
+  } catch (error) {
+    console.error(`Error detecting bump bot for ${mint}:`, error);
+    return { detected: false, microTxCount: 0, microTxRatio: 0, details: { error: String(error) } };
   }
 }
 
@@ -724,6 +810,9 @@ async function enrichTokenBatch(
       token.bundle_checked_at
     );
     
+    // BUMP BOT DETECTION - Detect micro-transaction heartbeat activity
+    const bumpBotResult = await detectBumpBotActivity(token.token_mint);
+    
     // RUGCHECK ANALYSIS - Stage 1 integration
     const rugCheckResult = await fetchRugCheck(token.token_mint, config);
     
@@ -733,6 +822,19 @@ async function enrichTokenBatch(
     const bondingCurve = pumpData?.bonding_curve_progress 
       ? pumpData.bonding_curve_progress * 100 
       : (tokenData?.pools?.[0]?.curvePercentage || token.bonding_curve_pct || 0);
+    
+    // STAGNATION CHECK - Token is old with poor metrics
+    const tokenAgeMinutes = createdAt ? (Date.now() - createdAt * 1000) / 60000 : 0;
+    const isStagnant = tokenAgeMinutes > STAGNATION_CONFIG.max_age_mins_for_low_mcap && 
+      (marketCapUsd || 0) < STAGNATION_CONFIG.min_mcap_usd && 
+      bondingCurve < STAGNATION_CONFIG.min_bonding_pct;
+    const shouldPruneStale = tokenAgeMinutes > STAGNATION_CONFIG.max_age_for_pruning_mins && 
+      (marketCapUsd || 0) < STAGNATION_CONFIG.min_mcap_usd && 
+      bondingCurve < STAGNATION_CONFIG.min_bonding_pct;
+    
+    if (isStagnant) {
+      console.log(`   ⏸️ Stagnation detected: ${tokenAgeMinutes.toFixed(0)}m old, mcap $${(marketCapUsd || 0).toFixed(0)}, bonding ${bondingCurve.toFixed(1)}%`);
+    }
     
     // Check image and socials (use existing if we have them, otherwise fetch)
     const hasImage = token.has_image ?? isValidImage(token.image_url);
@@ -815,6 +917,20 @@ async function enrichTokenBatch(
       rejectionReasons.push('insider_activity_detected');
     }
     
+    // BUMP BOT CHECK - SOFT (artificial activity detection)
+    if (bumpBotResult.detected) {
+      rejectionReasons.push(`bump_bot_detected:${(bumpBotResult.microTxRatio * 100).toFixed(0)}%_micro_txs`);
+      // High ratio is stronger penalty
+      if (bumpBotResult.microTxRatio >= BUMP_BOT_CONFIG.micro_tx_ratio_reject) {
+        rejectionReasons.push('high_bump_bot_ratio');
+      }
+    }
+    
+    // STAGNATION CHECK - SOFT (token is old with no progress)
+    if (shouldPruneStale) {
+      rejectionReasons.push(`stagnant:${tokenAgeMinutes.toFixed(0)}m_old_mcap_$${(marketCapUsd || 0).toFixed(0)}`);
+    }
+    
     // IMAGE CHECK - SOFT (only if required)
     if (config.require_image && !hasImage) {
       rejectionReasons.push('no_image');
@@ -844,6 +960,8 @@ async function enrichTokenBatch(
     console.log(`      Fresh Wallet %: ${holderAnalysis.freshWalletPct.toFixed(1)}% (max: ${config.max_fresh_wallet_pct}%) ${freshPass ? '✅' : '❌'}`);
     console.log(`      Suspicious Wallet %: ${holderAnalysis.suspiciousWalletPct.toFixed(1)}% (max: ${config.max_suspicious_wallet_pct}%) ${suspiciousPass ? '✅' : '❌'}`);
     console.log(`      Insider Activity: ${holderAnalysis.insiderActivityDetected ? '🚨 YES' : 'No'}`);
+    console.log(`      Bump Bot: ${bumpBotResult.detected ? '🤖 DETECTED' : 'Clean'} (${bumpBotResult.microTxCount} micro-txs, ${(bumpBotResult.microTxRatio * 100).toFixed(0)}%)`);
+    console.log(`      Stagnant: ${isStagnant ? '⏸️ YES' : 'No'} (age: ${tokenAgeMinutes.toFixed(0)}m)`);
     console.log(`      Holders: ${holderCount} (min for qual: ${config.min_holder_count})`);
     console.log(`      Bonding Curve: ${bondingCurve.toFixed(1)}% (range: ${config.bonding_curve_min}-${config.bonding_curve_max}%)`);
     console.log(`      Has Image: ${hasImage} (required: ${config.require_image})`);
@@ -890,6 +1008,14 @@ async function enrichTokenBatch(
           rugcheck_risks: rugCheckResult.risks,
           rugcheck_passed: rugCheckResult.passed,
           rugcheck_checked_at: new Date().toISOString(),
+          // Bump bot metrics
+          micro_tx_count: bumpBotResult.microTxCount,
+          micro_tx_ratio: bumpBotResult.microTxRatio,
+          bump_bot_detected: bumpBotResult.detected,
+          // Stagnation tracking
+          is_stagnant: isStagnant,
+          stagnant_reason: isStagnant ? `age:${tokenAgeMinutes.toFixed(0)}m,mcap:$${(marketCapUsd || 0).toFixed(0)},bonding:${bondingCurve.toFixed(1)}%` : null,
+          last_activity_at: new Date().toISOString(),
           // Caching timestamps for Helius optimization
           authority_checked_at: authorityCheck.fromCache ? undefined : new Date().toISOString(),
           bundle_checked_at: holderAnalysis.bundleFromCache ? undefined : new Date().toISOString(),
@@ -940,6 +1066,13 @@ async function enrichTokenBatch(
           rugcheck_risks: rugCheckResult.risks,
           rugcheck_passed: rugCheckResult.passed,
           rugcheck_checked_at: new Date().toISOString(),
+          // Bump bot metrics
+          micro_tx_count: bumpBotResult.microTxCount,
+          micro_tx_ratio: bumpBotResult.microTxRatio,
+          bump_bot_detected: bumpBotResult.detected,
+          // Stagnation tracking
+          is_stagnant: false, // Not stagnant if promoted
+          last_activity_at: new Date().toISOString(),
           // Caching timestamps for Helius optimization
           authority_checked_at: authorityCheck.fromCache ? undefined : new Date().toISOString(),
           bundle_checked_at: holderAnalysis.bundleFromCache ? undefined : new Date().toISOString(),
