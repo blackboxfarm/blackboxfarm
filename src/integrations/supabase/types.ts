@@ -6113,6 +6113,7 @@ export type Database = {
         Row: {
           authority_checked_at: string | null
           bonding_curve_pct: number | null
+          bump_bot_detected: boolean | null
           bundle_checked: boolean | null
           bundle_checked_at: string | null
           bundle_score: number | null
@@ -6156,6 +6157,8 @@ export type Database = {
           insider_activity_detected: boolean | null
           insider_pct: number | null
           is_graduated: boolean | null
+          is_stagnant: boolean | null
+          last_activity_at: string | null
           last_checked_at: string
           last_dev_check_at: string | null
           last_processor: string | null
@@ -6168,6 +6171,8 @@ export type Database = {
           mayhem_checked: boolean | null
           metadata: Json | null
           metrics_hash: string | null
+          micro_tx_count: number | null
+          micro_tx_ratio: number | null
           mint_authority_revoked: boolean | null
           permanent_reject: boolean | null
           price_at_mint: number | null
@@ -6203,6 +6208,7 @@ export type Database = {
           socials_count: number | null
           source: string | null
           spike_detected_at: string | null
+          stagnant_reason: string | null
           status: string
           suspicious_wallet_pct: number | null
           telegram_url: string | null
@@ -6225,6 +6231,7 @@ export type Database = {
         Insert: {
           authority_checked_at?: string | null
           bonding_curve_pct?: number | null
+          bump_bot_detected?: boolean | null
           bundle_checked?: boolean | null
           bundle_checked_at?: string | null
           bundle_score?: number | null
@@ -6268,6 +6275,8 @@ export type Database = {
           insider_activity_detected?: boolean | null
           insider_pct?: number | null
           is_graduated?: boolean | null
+          is_stagnant?: boolean | null
+          last_activity_at?: string | null
           last_checked_at?: string
           last_dev_check_at?: string | null
           last_processor?: string | null
@@ -6280,6 +6289,8 @@ export type Database = {
           mayhem_checked?: boolean | null
           metadata?: Json | null
           metrics_hash?: string | null
+          micro_tx_count?: number | null
+          micro_tx_ratio?: number | null
           mint_authority_revoked?: boolean | null
           permanent_reject?: boolean | null
           price_at_mint?: number | null
@@ -6315,6 +6326,7 @@ export type Database = {
           socials_count?: number | null
           source?: string | null
           spike_detected_at?: string | null
+          stagnant_reason?: string | null
           status?: string
           suspicious_wallet_pct?: number | null
           telegram_url?: string | null
@@ -6337,6 +6349,7 @@ export type Database = {
         Update: {
           authority_checked_at?: string | null
           bonding_curve_pct?: number | null
+          bump_bot_detected?: boolean | null
           bundle_checked?: boolean | null
           bundle_checked_at?: string | null
           bundle_score?: number | null
@@ -6380,6 +6393,8 @@ export type Database = {
           insider_activity_detected?: boolean | null
           insider_pct?: number | null
           is_graduated?: boolean | null
+          is_stagnant?: boolean | null
+          last_activity_at?: string | null
           last_checked_at?: string
           last_dev_check_at?: string | null
           last_processor?: string | null
@@ -6392,6 +6407,8 @@ export type Database = {
           mayhem_checked?: boolean | null
           metadata?: Json | null
           metrics_hash?: string | null
+          micro_tx_count?: number | null
+          micro_tx_ratio?: number | null
           mint_authority_revoked?: boolean | null
           permanent_reject?: boolean | null
           price_at_mint?: number | null
@@ -6427,6 +6444,7 @@ export type Database = {
           socials_count?: number | null
           source?: string | null
           spike_detected_at?: string | null
+          stagnant_reason?: string | null
           status?: string
           suspicious_wallet_pct?: number | null
           telegram_url?: string | null

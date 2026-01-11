@@ -616,27 +616,34 @@ async function runIntake(supabase: any, preDiscoveredTokens?: any[], preBatchId?
 
     // Get dev reputation
     const devRep = devRepMap.get(creatorWallet);
+    
+    // DEBUG: Log each token being evaluated
+    console.log(`   🔍 Evaluating: ${token.symbol} (${token.mint?.slice(0, 8)}...) from ${token._source || 'api'}`);
 
     // Priority 1: Mayhem mode
     if (token.isMayhem) {
       rejected_reason = 'mayhem_mode';
       rejected_detail = 'Flagged as mayhem/spam';
+      console.log(`      ❌ Filter[1]: ${rejected_reason} - ${rejected_detail}`);
     }
     // Priority 2: Null name/ticker
     else if (!token.symbol || !token.name || token.symbol.trim() === '' || token.name.trim() === '') {
       rejected_reason = 'null_name_ticker';
       rejected_detail = `Name: "${token.name || 'null'}", Ticker: "${token.symbol || 'null'}"`;
+      console.log(`      ❌ Filter[2]: ${rejected_reason} - ${rejected_detail}`);
     }
     // Priority 3: Serial spammer dev - auto-reject
     else if (devRep?.is_serial_spammer) {
       rejected_reason = 'serial_spammer';
       rejected_detail = `Dev ${creatorWallet.slice(0, 8)}... is a serial spammer (pattern: ${devRep.dev_pattern})`;
+      console.log(`      ❌ Filter[3]: ${rejected_reason} - ${rejected_detail}`);
     }
     // Priority 4: Batch duplicates from DIFFERENT creators (spam attack)
     else if (batchDuplicatesMultiCreator.has(lowerSymbol)) {
       rejected_reason = 'duplicate_batch';
       rejected_detail = `Multiple tokens "${token.symbol}" from different creators in batch - spam attack`;
       duplicateNukes.push(lowerSymbol);
+      console.log(`      ❌ Filter[4]: ${rejected_reason} - ${rejected_detail}`);
     }
     // Priority 5: Check seen_symbols for historical duplicates (SMART CHECK)
     else if (seenSymbolsMap.has(lowerSymbol)) {
@@ -755,6 +762,7 @@ async function runIntake(supabase: any, preDiscoveredTokens?: any[], preBatchId?
         filterBreakdown[rejected_reason].count++;
       }
       rejected.push({ ...token, reason: rejected_reason, detail: rejected_detail });
+      console.log(`      🚫 REJECTED: ${rejected_reason}`);
       
       // Record rejection event
       rejectionsToInsert.push({
@@ -770,6 +778,7 @@ async function runIntake(supabase: any, preDiscoveredTokens?: any[], preBatchId?
       });
     } else {
       passed.push({ ...token, allowReason: allow_reason });
+      console.log(`      ✅ PASSED${allow_reason ? ` (${allow_reason})` : ''}`);
       
       // Track this symbol as seen with creator info
       symbolsToUpsert.push({
@@ -781,6 +790,14 @@ async function runIntake(supabase: any, preDiscoveredTokens?: any[], preBatchId?
         token_outcome: 'unknown',
       });
     }
+  }
+  
+  // DEBUG: Summary of intake filtering
+  console.log(`\n[Step 2] Intake Summary: ${passed.length} passed, ${rejected.length} rejected`);
+  if (rejected.length > 0) {
+    const reasonCounts: Record<string, number> = {};
+    rejected.forEach(r => { reasonCounts[r.reason] = (reasonCounts[r.reason] || 0) + 1; });
+    console.log(`   Rejection breakdown: ${JSON.stringify(reasonCounts)}`);
   }
 
   // Insert passed tokens into watchlist
@@ -1780,6 +1797,111 @@ async function trackLifecycle(supabase: any, tokenMint: string, decision: string
   return { success: true, record: data };
 }
 
+// Prune dead/stale tokens from watchlist
+async function pruneDeadTokens(supabase: any): Promise<any> {
+  console.log('[Prune] Running dead token cleanup');
+  
+  const now = new Date();
+  const thirtyMinsAgo = new Date(now.getTime() - 30 * 60 * 1000).toISOString();
+  const fortyFiveMinsAgo = new Date(now.getTime() - 45 * 60 * 1000).toISOString();
+  
+  // Criteria for dead tokens:
+  // 1. Tokens > 30 mins old with mcap < $5K and bonding < 5%
+  // 2. Tokens > 45 mins old in watching status with no qualification
+  // 3. Tokens flagged as stagnant
+  
+  // Get tokens to prune
+  const { data: staleCandidates, error: fetchError } = await supabase
+    .from('pumpfun_watchlist')
+    .select('id, token_mint, token_symbol, status, market_cap_usd, bonding_curve_pct, created_at, is_stagnant, bump_bot_detected')
+    .in('status', ['watching', 'pending_triage'])
+    .or(`created_at.lt.${thirtyMinsAgo},is_stagnant.eq.true`)
+    .order('created_at', { ascending: true })
+    .limit(100);
+  
+  if (fetchError) {
+    console.error('[Prune] Fetch error:', fetchError);
+    return { error: fetchError.message };
+  }
+  
+  const tokensToPrune: any[] = [];
+  const tokensKept: any[] = [];
+  
+  for (const token of staleCandidates || []) {
+    const createdAt = new Date(token.created_at);
+    const ageMinutes = (now.getTime() - createdAt.getTime()) / 60000;
+    const mcapUsd = token.market_cap_usd || 0;
+    const bondingPct = token.bonding_curve_pct || 0;
+    
+    let pruneReason: string | null = null;
+    
+    // Check stagnation flag
+    if (token.is_stagnant) {
+      pruneReason = 'stagnant_flagged';
+    }
+    // Check age + poor metrics
+    else if (ageMinutes > 30 && mcapUsd < 5000 && bondingPct < 5) {
+      pruneReason = `stale_low_metrics:${ageMinutes.toFixed(0)}m,mcap$${mcapUsd.toFixed(0)},bond${bondingPct.toFixed(1)}%`;
+    }
+    // Check very old in watching
+    else if (ageMinutes > 45 && token.status === 'watching') {
+      pruneReason = `too_old_no_progress:${ageMinutes.toFixed(0)}m`;
+    }
+    // Bump bot detected tokens get pruned faster
+    else if (token.bump_bot_detected && ageMinutes > 20 && mcapUsd < 10000) {
+      pruneReason = `bump_bot_low_quality:${ageMinutes.toFixed(0)}m`;
+    }
+    
+    if (pruneReason) {
+      tokensToPrune.push({ ...token, pruneReason, ageMinutes });
+    } else {
+      tokensKept.push({ ...token, ageMinutes });
+    }
+  }
+  
+  // Actually prune the tokens
+  if (tokensToPrune.length > 0) {
+    const pruneIds = tokensToPrune.map(t => t.id);
+    
+    const { error: updateError } = await supabase
+      .from('pumpfun_watchlist')
+      .update({
+        status: 'dead',
+        rejection_type: 'soft',
+        rejection_reasons: tokensToPrune.map(t => t.pruneReason),
+        pruned_at: now.toISOString(),
+        prune_reason: 'stale_token_cleanup',
+      })
+      .in('id', pruneIds);
+    
+    if (updateError) {
+      console.error('[Prune] Update error:', updateError);
+      return { error: updateError.message, attempted: tokensToPrune.length };
+    }
+    
+    console.log(`[Prune] Removed ${tokensToPrune.length} dead tokens`);
+  }
+  
+  return {
+    checkedCount: (staleCandidates || []).length,
+    prunedCount: tokensToPrune.length,
+    keptCount: tokensKept.length,
+    pruned: tokensToPrune.map(t => ({
+      symbol: t.token_symbol,
+      mint: t.token_mint?.slice(0, 8),
+      reason: t.pruneReason,
+      ageMins: t.ageMinutes.toFixed(0),
+    })),
+    kept: tokensKept.slice(0, 10).map(t => ({
+      symbol: t.token_symbol,
+      mint: t.token_mint?.slice(0, 8),
+      ageMins: t.ageMinutes.toFixed(0),
+      mcap: t.market_cap_usd || 0,
+      bonding: t.bonding_curve_pct || 0,
+    })),
+  };
+}
+
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
@@ -1828,6 +1950,9 @@ serve(async (req) => {
         break;
       case 'track_lifecycle':
         result = await trackLifecycle(supabase, tokenMint, decision, reason);
+        break;
+      case 'prune_dead_tokens':
+        result = await pruneDeadTokens(supabase);
         break;
       default:
         return jsonResponse({ error: `Unknown action: ${action}` }, 400);
