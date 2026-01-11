@@ -5,7 +5,7 @@ import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog';
-import { RefreshCw, Search, Wallet, Copy, ExternalLink, Coins, DollarSign, Trash2, ArrowLeftRight, Percent, Hash } from 'lucide-react';
+import { RefreshCw, Search, Wallet, Copy, ExternalLink, Coins, DollarSign, Trash2, ArrowLeftRight, Percent, Hash, Flame } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from '@/hooks/use-toast';
 import { useSolPrice } from '@/hooks/useSolPrice';
@@ -39,6 +39,7 @@ export function EnhancedWalletView() {
   const [searchTerm, setSearchTerm] = useState('');
   const [showDebug, setShowDebug] = useState(false);
   const [sellLoading, setSellLoading] = useState<Set<string>>(new Set());
+  const [burnLoading, setBurnLoading] = useState<Set<string>>(new Set());
   const [sellAmounts, setSellAmounts] = useState<Record<string, string>>({});
   const [sellTypes, setSellTypes] = useState<Record<string, 'all' | 'percentage' | 'amount' | 'tokens'>>({});
   const { price: solPrice } = useSolPrice();
@@ -432,6 +433,59 @@ export function EnhancedWalletView() {
     }
   };
 
+  const burnToken = async (wallet: WalletWithTokens, token: TokenBalance) => {
+    const burnKey = `${wallet.id}-${token.mint}`;
+    setBurnLoading(prev => new Set(prev).add(burnKey));
+
+    try {
+      // Map wallet_type to source table
+      const sourceMap: Record<string, string> = {
+        'pool': 'wallet_pools',
+        'blackbox': 'blackbox_wallets',
+        'super_admin': 'super_admin_wallets'
+      };
+      
+      const walletSource = sourceMap[wallet.wallet_type];
+      if (!walletSource) {
+        throw new Error(`Unknown wallet type: ${wallet.wallet_type}`);
+      }
+
+      const { data, error } = await supabase.functions.invoke('burn-token', {
+        body: {
+          wallet_id: wallet.id,
+          wallet_source: walletSource,
+          token_mint: token.mint,
+          close_account: true
+        }
+      });
+
+      if (error) throw error;
+      if (data?.error) throw new Error(data.error);
+
+      toast({
+        title: "Token burned successfully",
+        description: `Burned ${token.uiAmount} ${token.symbol} and closed the account. TX: ${data.signature?.slice(0, 8)}...`,
+      });
+
+      // Refresh wallet tokens
+      await loadWalletTokens(wallet.pubkey);
+
+    } catch (error: any) {
+      console.error("Burn failed:", error);
+      toast({
+        title: "Burn failed",
+        description: error.message,
+        variant: "destructive"
+      });
+    } finally {
+      setBurnLoading(prev => {
+        const next = new Set(prev);
+        next.delete(burnKey);
+        return next;
+      });
+    }
+  };
+
   useEffect(() => {
     loadAllWallets();
   }, []);
@@ -695,6 +749,42 @@ export function EnhancedWalletView() {
                                   )}
                                   {sellTypes[sellKey] === 'all' ? 'Sell All' : 'Sell'}
                                 </Button>
+                                <AlertDialog>
+                                  <AlertDialogTrigger asChild>
+                                    <Button
+                                      variant="outline"
+                                      size="sm"
+                                      disabled={burnLoading.has(sellKey)}
+                                      className="text-orange-500 hover:text-orange-600 hover:bg-orange-50"
+                                    >
+                                      {burnLoading.has(sellKey) ? (
+                                        <RefreshCw className="h-4 w-4 animate-spin" />
+                                      ) : (
+                                        <Flame className="h-4 w-4" />
+                                      )}
+                                    </Button>
+                                  </AlertDialogTrigger>
+                                  <AlertDialogContent>
+                                    <AlertDialogHeader>
+                                      <AlertDialogTitle>Burn {token.symbol}?</AlertDialogTitle>
+                                      <AlertDialogDescription>
+                                        This will permanently burn {token.uiAmount.toFixed(6)} {token.symbol} and close the token account to reclaim ~0.002 SOL rent.
+                                        <br /><br />
+                                        <strong>This action cannot be undone!</strong>
+                                      </AlertDialogDescription>
+                                    </AlertDialogHeader>
+                                    <AlertDialogFooter>
+                                      <AlertDialogCancel>Cancel</AlertDialogCancel>
+                                      <AlertDialogAction
+                                        onClick={() => burnToken(wallet, token)}
+                                        className="bg-orange-500 text-white hover:bg-orange-600"
+                                      >
+                                        <Flame className="h-4 w-4 mr-2" />
+                                        Burn Token
+                                      </AlertDialogAction>
+                                    </AlertDialogFooter>
+                                  </AlertDialogContent>
+                                </AlertDialog>
                                 <Button
                                   variant="outline"
                                   size="sm"
