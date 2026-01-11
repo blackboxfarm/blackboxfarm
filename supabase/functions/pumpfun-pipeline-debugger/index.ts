@@ -249,8 +249,8 @@ const SIGNAL_SCORING = {
   pattern_spike_kill: { points: -30, description: 'Spike & kill pattern (BLACKLIST)', blacklist: true },
 };
 
-// Fetch latest tokens from Solana Tracker API (REAL DISCOVERY)
-async function fetchLatestPumpfunTokens(limit = 100): Promise<any[]> {
+// Fetch latest tokens from Solana Tracker API (FALLBACK)
+async function fetchFromSolanaTrackerAPI(limit = 100): Promise<{ tokens: any[]; success: boolean; error?: string }> {
   const apiKey = Deno.env.get('SOLANA_TRACKER_API_KEY');
   
   console.log(`[SolanaTracker] API key present: ${!!apiKey}, length: ${apiKey?.length || 0}`);
@@ -269,32 +269,149 @@ async function fetchLatestPumpfunTokens(limit = 100): Promise<any[]> {
     if (!response.ok) {
       const errorText = await response.text();
       console.error(`Solana Tracker API error: ${response.status} - ${errorText}`);
-      return [];
+      return { tokens: [], success: false, error: `${response.status}: ${errorText}` };
     }
 
     const data = await response.json();
     console.log(`[SolanaTracker] Got ${Array.isArray(data) ? data.length : 0} tokens`);
-    return Array.isArray(data) ? data : [];
-  } catch (error) {
-    console.error('Error fetching tokens:', error);
-    return [];
+    return { tokens: Array.isArray(data) ? data : [], success: true };
+  } catch (error: any) {
+    console.error('Error fetching from Solana Tracker:', error);
+    return { tokens: [], success: false, error: error?.message || String(error) };
   }
 }
 
-// Step 1: Token Discovery - REAL fetch from Solana Tracker API
+// Fetch latest tokens from pumpfun_watchlist (WebSocket listener data) - PRIMARY SOURCE
+async function fetchFromWatchlistDB(supabase: any, limit = 100): Promise<{ tokens: any[]; success: boolean; error?: string }> {
+  console.log(`[WebSocket DB] Fetching recent tokens from pumpfun_watchlist...`);
+  
+  try {
+    // Get tokens discovered in the last 30 minutes that haven't been fully processed yet
+    const thirtyMinsAgo = new Date(Date.now() - 30 * 60 * 1000).toISOString();
+    
+    const { data: recentTokens, error } = await supabase
+      .from('pumpfun_watchlist')
+      .select(`
+        token_mint,
+        token_symbol,
+        token_name,
+        status,
+        creator_wallet,
+        holder_count,
+        volume_sol,
+        price_usd,
+        bonding_curve_pct,
+        market_cap_sol,
+        market_cap_usd,
+        first_seen_at,
+        created_at,
+        metadata
+      `)
+      .gte('first_seen_at', thirtyMinsAgo)
+      .order('first_seen_at', { ascending: false })
+      .limit(limit);
+    
+    if (error) {
+      console.error('[WebSocket DB] Query error:', error);
+      return { tokens: [], success: false, error: error.message };
+    }
+    
+    console.log(`[WebSocket DB] Got ${recentTokens?.length || 0} recent tokens from watchlist`);
+    
+    // Format tokens to match expected structure
+    const formattedTokens = (recentTokens || []).map((t: any) => ({
+      token: {
+        mint: t.token_mint,
+        symbol: t.token_symbol,
+        name: t.token_name,
+      },
+      creator: t.creator_wallet,
+      holders: t.holder_count || 0,
+      pools: [{
+        price: { usd: t.price_usd || 0 },
+        marketCap: { usd: t.market_cap_usd || 0 },
+        liquidity: { usd: 0, quote: 0 },
+        volume: { h24: t.volume_sol || 0 },
+      }],
+      events: { createdAt: t.first_seen_at ? new Date(t.first_seen_at).getTime() / 1000 : null },
+      buys: 0,
+      sells: 0,
+      _source: 'websocket_db',
+      _status: t.status,
+    }));
+    
+    return { tokens: formattedTokens, success: true };
+  } catch (error: any) {
+    console.error('[WebSocket DB] Error:', error);
+    return { tokens: [], success: false, error: error?.message || String(error) };
+  }
+}
+
+// Unified token fetcher with fallback chain: WebSocket DB → Solana Tracker API
+async function fetchLatestPumpfunTokens(supabase: any, limit = 100): Promise<{ tokens: any[]; source: string; fallbackUsed: boolean; error?: string }> {
+  console.log('[Discovery] Starting token fetch with fallback chain...');
+  
+  // PRIMARY: Try WebSocket DB first (populated by pumpfun-websocket-listener)
+  const wsResult = await fetchFromWatchlistDB(supabase, limit);
+  
+  if (wsResult.success && wsResult.tokens.length > 0) {
+    console.log(`[Discovery] ✅ Using WebSocket DB data: ${wsResult.tokens.length} tokens`);
+    return { 
+      tokens: wsResult.tokens, 
+      source: 'WebSocket Listener (pumpfun_watchlist)', 
+      fallbackUsed: false 
+    };
+  }
+  
+  console.log(`[Discovery] WebSocket DB returned 0 tokens or failed, trying Solana Tracker API...`);
+  
+  // FALLBACK: Try Solana Tracker API
+  const stResult = await fetchFromSolanaTrackerAPI(limit);
+  
+  if (stResult.success && stResult.tokens.length > 0) {
+    console.log(`[Discovery] ✅ Using Solana Tracker API: ${stResult.tokens.length} tokens`);
+    return { 
+      tokens: stResult.tokens, 
+      source: 'Solana Tracker API', 
+      fallbackUsed: true 
+    };
+  }
+  
+  // Both failed
+  const combinedError = [
+    wsResult.error ? `WebSocket DB: ${wsResult.error}` : null,
+    stResult.error ? `Solana Tracker: ${stResult.error}` : null,
+  ].filter(Boolean).join('; ');
+  
+  console.error(`[Discovery] ❌ All sources failed: ${combinedError}`);
+  
+  return { 
+    tokens: [], 
+    source: 'none', 
+    fallbackUsed: true, 
+    error: combinedError || 'All token sources returned empty results'
+  };
+}
+
+// Step 1: Token Discovery - Uses WebSocket DB (primary) with Solana Tracker API fallback
 async function runDiscovery(supabase: any): Promise<any> {
-  console.log('[Step 1] Running REAL token discovery from Solana Tracker');
+  console.log('[Step 1] Running token discovery with fallback chain (WebSocket DB → Solana Tracker)');
   const startTime = Date.now();
   const batchId = `batch_${Date.now()}`;
 
   try {
-    // Fetch NEW tokens from Solana Tracker API
-    const apiTokens = await fetchLatestPumpfunTokens(100);
-    console.log(`[Step 1] Fetched ${apiTokens.length} tokens from API`);
+    // Fetch tokens using unified fetcher with fallback chain
+    const fetchResult = await fetchLatestPumpfunTokens(supabase, 100);
+    const apiTokens = fetchResult.tokens;
+    const dataSource = fetchResult.source;
+    const fallbackUsed = fetchResult.fallbackUsed;
+    
+    console.log(`[Step 1] Fetched ${apiTokens.length} tokens from ${dataSource}${fallbackUsed ? ' (fallback)' : ' (primary)'}`);
 
     if (apiTokens.length === 0) {
       return {
-        source: 'SolanaTracker API',
+        source: dataSource,
+        fallbackUsed,
         monitorEnabled: true,
         fetchedCount: 0,
         newCount: 0,
@@ -302,24 +419,39 @@ async function runDiscovery(supabase: any): Promise<any> {
         fetchTimeMs: Date.now() - startTime,
         tokens: [],
         batchId,
+        error: fetchResult.error,
       };
     }
 
-    // Get mints from API
+    // Get mints from fetched tokens
     const apiMints = apiTokens.map(t => t.token?.mint).filter(Boolean) as string[];
 
-    // Check which ones we already know about
-    const { data: existingTokens } = await supabase
-      .from('pumpfun_watchlist')
-      .select('token_mint')
-      .in('token_mint', apiMints);
+    // For WebSocket DB tokens, they're already in watchlist - check for tokens needing intake processing
+    // For Solana Tracker tokens, check which ones we already know about
+    let existingMints = new Set<string>();
+    let alreadyKnownCount = 0;
+    let newApiTokens = apiTokens;
+    
+    if (dataSource === 'Solana Tracker API') {
+      // Check which ones we already know about
+      const { data: existingTokens } = await supabase
+        .from('pumpfun_watchlist')
+        .select('token_mint')
+        .in('token_mint', apiMints);
 
-    const existingMints = new Set((existingTokens || []).map((t: any) => t.token_mint));
-    const alreadyKnownCount = existingMints.size;
+      existingMints = new Set((existingTokens || []).map((t: any) => t.token_mint));
+      alreadyKnownCount = existingMints.size;
 
-    // Filter to only NEW tokens
-    const newApiTokens = apiTokens.filter(t => t.token?.mint && !existingMints.has(t.token.mint));
-    console.log(`[Step 1] Found ${newApiTokens.length} NEW tokens (${alreadyKnownCount} already known)`);
+      // Filter to only NEW tokens
+      newApiTokens = apiTokens.filter(t => t.token?.mint && !existingMints.has(t.token.mint));
+    } else {
+      // WebSocket DB tokens are already known - we want tokens in 'watching' or 'pending_triage' status
+      // Filter to tokens that need intake processing (not yet fully processed)
+      newApiTokens = apiTokens.filter(t => t._status === 'watching' || t._status === 'pending_triage');
+      alreadyKnownCount = apiTokens.length - newApiTokens.length;
+    }
+    
+    console.log(`[Step 1] Found ${newApiTokens.length} tokens for processing (${alreadyKnownCount} already processed)`);
 
     const formattedTokens = newApiTokens.map((t: any) => {
       const pool = t.pools?.[0];
@@ -348,12 +480,18 @@ async function runDiscovery(supabase: any): Promise<any> {
         liquidityUsd,
         buys: t.buys || 0,
         sells: t.sells || 0,
-        isNew: true,
+        isNew: t._source !== 'websocket_db', // Mark as not new if from WebSocket DB (already in watchlist)
+        _source: t._source || 'api',
       };
     });
 
+    // Get monitor enabled status
+    const { data: cfg } = await supabase.from('pumpfun_monitor_config').select('is_enabled').limit(1).single();
+    const isEnabled = cfg?.is_enabled ?? false;
+
     return {
-      source: 'SolanaTracker API',
+      source: dataSource,
+      fallbackUsed,
       monitorEnabled: isEnabled,
       fetchedCount: apiTokens.length,
       newCount: newApiTokens.length,
@@ -365,7 +503,8 @@ async function runDiscovery(supabase: any): Promise<any> {
   } catch (err: any) {
     console.error('[Step 1] Discovery error:', err);
     return {
-      source: 'SolanaTracker API',
+      source: 'error',
+      fallbackUsed: true,
       monitorEnabled: false,
       fetchedCount: 0,
       newCount: 0,
