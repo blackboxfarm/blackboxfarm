@@ -17,13 +17,20 @@ function bad(message: string, status = 400) {
   return ok({ error: message }, status);
 }
 
-// Parse a transaction via Helius to get exact token amounts from a swap
+interface ParsedSwapResult {
+  tokenAmount: string | null;
+  solInput: number | null; // SOL spent in the swap
+}
+
+// Parse a transaction via Helius to get exact token amounts AND SOL input from a swap
 async function parseSwapTransaction(
   heliusKey: string,
   signature: string,
   targetMint: string,
   walletPubkey: string
-): Promise<string | null> {
+): Promise<ParsedSwapResult> {
+  const result: ParsedSwapResult = { tokenAmount: null, solInput: null };
+  
   try {
     const parseRes = await fetch(`https://api.helius.xyz/v0/transactions/?api-key=${heliusKey}`, {
       method: "POST",
@@ -33,7 +40,7 @@ async function parseSwapTransaction(
     
     if (!parseRes.ok) {
       console.log(`Helius parse failed for ${signature}: ${parseRes.status}`);
-      return null;
+      return result;
     }
     
     const parsedTxs = await parseRes.json();
@@ -41,14 +48,49 @@ async function parseSwapTransaction(
     
     if (!parsedTx) {
       console.log(`No parsed transaction data for ${signature}`);
-      return null;
+      return result;
     }
     
     console.log(`Parsed tx ${signature.substring(0, 12)}... type=${parsedTx.type} source=${parsedTx.source}`);
     
-    // Check swap event - most reliable for DEX trades
+    // Extract SOL input from nativeTransfers (what wallet spent)
+    if (parsedTx.nativeTransfers && Array.isArray(parsedTx.nativeTransfers)) {
+      let totalSolSpent = 0;
+      for (const transfer of parsedTx.nativeTransfers) {
+        // SOL sent FROM our wallet to the AMM/market
+        if (transfer.fromUserAccount === walletPubkey && transfer.amount > 0) {
+          totalSolSpent += transfer.amount / 1e9; // lamports to SOL
+        }
+      }
+      if (totalSolSpent > 0) {
+        result.solInput = totalSolSpent;
+        console.log(`Found SOL input from nativeTransfers: ${totalSolSpent} SOL`);
+      }
+    }
+    
+    // Also check swap event for tokenInputs (native SOL)
     if (parsedTx?.events?.swap) {
       const swapEvent = parsedTx.events.swap;
+      
+      // Check nativeInput (SOL spent)
+      if (swapEvent.nativeInput && result.solInput === null) {
+        const nativeAmount = swapEvent.nativeInput.amount;
+        if (nativeAmount && nativeAmount > 0) {
+          result.solInput = nativeAmount / 1e9;
+          console.log(`Found SOL input from swap.nativeInput: ${result.solInput} SOL`);
+        }
+      }
+      
+      // Also check tokenInputs for WSOL
+      if (swapEvent.tokenInputs && result.solInput === null) {
+        const wsolInput = swapEvent.tokenInputs.find(
+          (inp: any) => inp.mint === "So11111111111111111111111111111111111111112"
+        );
+        if (wsolInput?.rawTokenAmount?.tokenAmount) {
+          result.solInput = Number(wsolInput.rawTokenAmount.tokenAmount) / 1e9;
+          console.log(`Found SOL input from swap.tokenInputs WSOL: ${result.solInput} SOL`);
+        }
+      }
       
       // Find token output matching our target mint
       const tokenOutput = swapEvent.tokenOutputs?.find(
@@ -56,26 +98,38 @@ async function parseSwapTransaction(
       );
       
       if (tokenOutput?.rawTokenAmount?.tokenAmount) {
-        return tokenOutput.rawTokenAmount.tokenAmount;
-      }
-      if (tokenOutput?.tokenAmount) {
-        return String(tokenOutput.tokenAmount);
+        result.tokenAmount = tokenOutput.rawTokenAmount.tokenAmount;
+      } else if (tokenOutput?.tokenAmount) {
+        result.tokenAmount = String(tokenOutput.tokenAmount);
       }
     }
     
-    // Fallback: tokenTransfers array
-    if (parsedTx?.tokenTransfers?.length > 0) {
+    // Fallback: tokenTransfers array for token amount
+    if (!result.tokenAmount && parsedTx?.tokenTransfers?.length > 0) {
+      // Also look for WSOL outbound for solInput
+      if (result.solInput === null) {
+        const wsolTransfer = parsedTx.tokenTransfers.find(
+          (t: any) => 
+            t.mint === "So11111111111111111111111111111111111111112" && 
+            t.fromUserAccount === walletPubkey
+        );
+        if (wsolTransfer?.tokenAmount) {
+          result.solInput = wsolTransfer.tokenAmount;
+          console.log(`Found SOL input from tokenTransfers WSOL: ${result.solInput} SOL`);
+        }
+      }
+      
       const inboundTransfer = parsedTx.tokenTransfers.find(
         (t: any) => t.mint === targetMint && t.toUserAccount === walletPubkey
       );
       
       if (inboundTransfer?.tokenAmount) {
-        return String(inboundTransfer.tokenAmount);
+        result.tokenAmount = String(inboundTransfer.tokenAmount);
       }
     }
     
     // Fallback: accountData tokenBalanceChanges
-    if (parsedTx?.accountData?.length > 0) {
+    if (!result.tokenAmount && parsedTx?.accountData?.length > 0) {
       for (const acct of parsedTx.accountData) {
         const tokenChange = acct.tokenBalanceChanges?.find(
           (c: any) => c.mint === targetMint && c.userAccount === walletPubkey
@@ -83,16 +137,18 @@ async function parseSwapTransaction(
         if (tokenChange?.rawTokenAmount?.tokenAmount) {
           const amount = BigInt(tokenChange.rawTokenAmount.tokenAmount);
           if (amount > 0n) {
-            return amount.toString();
+            result.tokenAmount = amount.toString();
+            break;
           }
         }
       }
     }
     
-    return null;
+    console.log(`Parsed result: tokenAmount=${result.tokenAmount}, solInput=${result.solInput}`);
+    return result;
   } catch (e) {
     console.error(`Error parsing transaction ${signature}:`, e);
-    return null;
+    return result;
   }
 }
 
@@ -128,6 +184,18 @@ async function getCurrentBalance(
   }
 }
 
+// Fetch current SOL price in USD
+async function getSolPrice(): Promise<number> {
+  try {
+    const res = await fetch("https://api.coingecko.com/api/v3/simple/price?ids=solana&vs_currencies=usd");
+    if (!res.ok) return 135; // fallback
+    const data = await res.json();
+    return data?.solana?.usd || 135;
+  } catch {
+    return 135; // fallback
+  }
+}
+
 serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
@@ -152,10 +220,14 @@ serve(async (req) => {
       return bad("HELIUS_API_KEY required for transaction parsing");
     }
 
+    // Get SOL price for USD calculations
+    const solPrice = await getSolPrice();
+    console.log(`Current SOL price: $${solPrice}`);
+
     if (action === "verify_single" && positionId) {
       const { data: position, error } = await supabase
         .from("flip_positions")
-        .select("id, token_mint, wallet_id, quantity_tokens, buy_signature, status, super_admin_wallets!flip_positions_wallet_id_fkey(pubkey)")
+        .select("id, token_mint, wallet_id, quantity_tokens, buy_amount_usd, buy_signature, status, super_admin_wallets!flip_positions_wallet_id_fkey(pubkey)")
         .eq("id", positionId)
         .single();
 
@@ -168,11 +240,11 @@ serve(async (req) => {
         return bad("Wallet pubkey not found");
       }
 
-      let correctQuantity: string | null = null;
+      let parsed: ParsedSwapResult = { tokenAmount: null, solInput: null };
       
-      // Try to parse the buy transaction to get exact amount
+      // Try to parse the buy transaction to get exact amount and SOL spent
       if (position.buy_signature) {
-        correctQuantity = await parseSwapTransaction(
+        parsed = await parseSwapTransaction(
           heliusKey, 
           position.buy_signature, 
           position.token_mint,
@@ -181,25 +253,41 @@ serve(async (req) => {
       }
       
       // Fallback to current balance only if no buy signature or parsing failed
-      if (!correctQuantity) {
-        correctQuantity = await getCurrentBalance(rpcUrl, walletPubkey, position.token_mint);
+      if (!parsed.tokenAmount) {
+        parsed.tokenAmount = await getCurrentBalance(rpcUrl, walletPubkey, position.token_mint);
       }
       
-      const result = {
+      // Calculate correct USD amount from SOL input
+      const correctBuyAmountUsd = parsed.solInput !== null ? parsed.solInput * solPrice : null;
+      
+      const result: any = {
         positionId: position.id,
         tokenMint: position.token_mint,
         buySignature: position.buy_signature,
         currentDbQuantity: position.quantity_tokens,
-        parsedQuantity: correctQuantity,
+        currentDbBuyAmountUsd: position.buy_amount_usd,
+        parsedQuantity: parsed.tokenAmount,
+        parsedSolInput: parsed.solInput,
+        correctBuyAmountUsd,
+        solPriceUsed: solPrice,
         status: position.status,
       };
 
-      if (!dryRun && correctQuantity !== null) {
+      if (!dryRun && (parsed.tokenAmount !== null || correctBuyAmountUsd !== null)) {
+        const updateData: any = {};
+        if (parsed.tokenAmount !== null) {
+          updateData.quantity_tokens = parsed.tokenAmount;
+        }
+        if (correctBuyAmountUsd !== null) {
+          updateData.buy_amount_usd = correctBuyAmountUsd;
+        }
+        
         await supabase
           .from("flip_positions")
-          .update({ quantity_tokens: correctQuantity })
+          .update(updateData)
           .eq("id", position.id);
-        (result as any).updated = true;
+        result.updated = true;
+        result.updateData = updateData;
       }
 
       return ok(result);
@@ -209,7 +297,7 @@ serve(async (req) => {
       // Get positions - prioritize ones with buy_signature for accurate parsing
       const query = supabase
         .from("flip_positions")
-        .select("id, token_mint, wallet_id, quantity_tokens, buy_signature, status, super_admin_wallets!flip_positions_wallet_id_fkey(pubkey)")
+        .select("id, token_mint, wallet_id, quantity_tokens, buy_amount_usd, buy_signature, status, super_admin_wallets!flip_positions_wallet_id_fkey(pubkey)")
         .eq("status", "holding")
         .order("created_at", { ascending: false });
       
@@ -238,49 +326,75 @@ serve(async (req) => {
         }
 
         try {
-          let correctQuantity: string | null = null;
+          let parsed: ParsedSwapResult = { tokenAmount: null, solInput: null };
           let source = "unknown";
           
           // Prefer parsing the buy signature for exact amount
           if (position.buy_signature) {
-            correctQuantity = await parseSwapTransaction(
+            parsed = await parseSwapTransaction(
               heliusKey, 
               position.buy_signature, 
               position.token_mint,
               walletPubkey
             );
-            if (correctQuantity) source = "helius_parse";
+            if (parsed.tokenAmount) source = "helius_parse";
           }
           
           // Only use current balance if we can't parse the transaction
-          // This is a fallback and may be inaccurate for multiple buys
-          if (!correctQuantity) {
-            correctQuantity = await getCurrentBalance(rpcUrl, walletPubkey, position.token_mint);
-            if (correctQuantity) source = "current_balance_fallback";
+          if (!parsed.tokenAmount) {
+            const balance = await getCurrentBalance(rpcUrl, walletPubkey, position.token_mint);
+            if (balance) {
+              parsed.tokenAmount = balance;
+              source = "current_balance_fallback";
+            }
           }
           
           verified++;
 
-          const needsUpdate = correctQuantity !== null && 
-            String(correctQuantity) !== String(position.quantity_tokens);
+          // Calculate correct USD from on-chain SOL spent
+          const correctBuyAmountUsd = parsed.solInput !== null ? parsed.solInput * solPrice : null;
+
+          const quantityNeedsUpdate = parsed.tokenAmount !== null && 
+            String(parsed.tokenAmount) !== String(position.quantity_tokens);
+          
+          // Check if USD amount is significantly different (>5% off)
+          const usdNeedsUpdate = correctBuyAmountUsd !== null && 
+            position.buy_amount_usd !== null &&
+            Math.abs(correctBuyAmountUsd - position.buy_amount_usd) / position.buy_amount_usd > 0.05;
+
+          const needsUpdate = quantityNeedsUpdate || usdNeedsUpdate;
 
           const result: any = {
             positionId: position.id,
             tokenMint: position.token_mint.substring(0, 12) + "...",
             hasBuySig: !!position.buy_signature,
             dbQuantity: position.quantity_tokens,
-            correctQuantity,
+            correctQuantity: parsed.tokenAmount,
+            dbBuyAmountUsd: position.buy_amount_usd,
+            parsedSolInput: parsed.solInput,
+            correctBuyAmountUsd,
             source,
             needsUpdate,
           };
 
           if (needsUpdate && !dryRun) {
-            await supabase
-              .from("flip_positions")
-              .update({ quantity_tokens: correctQuantity })
-              .eq("id", position.id);
-            result.updated = true;
-            updated++;
+            const updateData: any = {};
+            if (quantityNeedsUpdate && parsed.tokenAmount !== null) {
+              updateData.quantity_tokens = parsed.tokenAmount;
+            }
+            if (usdNeedsUpdate && correctBuyAmountUsd !== null) {
+              updateData.buy_amount_usd = correctBuyAmountUsd;
+            }
+            
+            if (Object.keys(updateData).length > 0) {
+              await supabase
+                .from("flip_positions")
+                .update(updateData)
+                .eq("id", position.id);
+              result.updated = true;
+              result.updateData = updateData;
+              updated++;
+            }
           } else if (!needsUpdate) {
             skipped++;
           }
@@ -297,6 +411,7 @@ serve(async (req) => {
 
       return ok({
         dryRun,
+        solPriceUsed: solPrice,
         totalPositions: positions?.length || 0,
         verified,
         updated,
