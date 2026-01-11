@@ -2446,12 +2446,9 @@ export function FlipItDashboard() {
                     Number.isFinite(effectiveQuantityTokens) &&
                     effectiveQuantityTokens > 0;
 
-                  // Entry price that matches the displayed "Invested" and on-chain tokens received.
-                  // (This fixes the common mismatch where buy_price_usd was sourced from an external price API.)
-                  const effectiveEntryPrice =
-                    hasQuantity && position.buy_amount_usd > 0
-                      ? position.buy_amount_usd / effectiveQuantityTokens
-                      : position.buy_price_usd;
+                  // Use the recorded buy_price_usd which is the actual price at the time of purchase.
+                  // Do NOT recalculate from invested/tokens as that introduces rounding errors.
+                  const effectiveEntryPrice = position.buy_price_usd;
 
                   const hasCurrentPrice =
                     typeof currentPrice === 'number' && Number.isFinite(currentPrice) && currentPrice > 0;
