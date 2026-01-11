@@ -363,3 +363,6 @@ verify_jwt = false
 
 [functions.flipit-verify-positions]
 verify_jwt = false
+
+[functions.wallet-genealogy-scanner]
+verify_jwt = false
