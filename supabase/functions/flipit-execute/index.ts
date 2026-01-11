@@ -640,6 +640,47 @@ serve(async (req) => {
         return bad("Failed to create position: " + posError.message);
       }
 
+      // CRITICAL: Capture pre-buy token balance to calculate delta later
+      // This ensures accurate quantity tracking when buying more of a token we already hold
+      let preBuyTokenBalance: string | null = null;
+      try {
+        const heliusKey = Deno.env.get("HELIUS_API_KEY");
+        const preBuyRpcUrl = heliusKey 
+          ? `https://mainnet.helius-rpc.com/?api-key=${heliusKey}`
+          : "https://api.mainnet-beta.solana.com";
+        
+        const preBuyRes = await fetch(preBuyRpcUrl, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            jsonrpc: "2.0",
+            id: 1,
+            method: "getTokenAccountsByOwner",
+            params: [
+              wallet.pubkey,
+              { mint: tokenMint },
+              { encoding: "jsonParsed" }
+            ]
+          }),
+        });
+        
+        if (preBuyRes.ok) {
+          const preBuyData = await preBuyRes.json();
+          const accounts = preBuyData?.result?.value || [];
+          if (accounts.length > 0) {
+            const tokenAmount = accounts[0]?.account?.data?.parsed?.info?.tokenAmount;
+            preBuyTokenBalance = tokenAmount?.amount || "0";
+            console.log("Pre-buy token balance captured:", preBuyTokenBalance);
+          } else {
+            preBuyTokenBalance = "0";
+            console.log("No existing token account, pre-buy balance is 0");
+          }
+        }
+      } catch (preBuyErr) {
+        console.warn("Failed to capture pre-buy balance:", preBuyErr);
+        preBuyTokenBalance = "0";
+      }
+
       // Execute the buy via raydium-swap
       try {
         const solPrice = await fetchSolPrice();
@@ -678,18 +719,18 @@ serve(async (req) => {
         let quantityTokens = (swapResult as any)?.outAmount ?? null;
         console.log("Swap outAmount from response:", quantityTokens, "source:", (swapResult as any)?.source);
 
-        // CRITICAL: Verify actual token balance on-chain for accuracy
-        // This catches discrepancies between DEX estimates and actual received tokens
+        // CRITICAL: Calculate the delta (tokens received from THIS buy)
+        // We recorded pre-buy balance earlier, now get post-buy and calculate difference
         const heliusKey = Deno.env.get("HELIUS_API_KEY");
         const verifyRpcUrl = heliusKey 
           ? `https://mainnet.helius-rpc.com/?api-key=${heliusKey}`
           : "https://api.mainnet-beta.solana.com";
         
         try {
-          // Wait a moment for the transaction to be indexed
-          await new Promise(resolve => setTimeout(resolve, 2000));
+          // Wait for transaction to be indexed
+          await new Promise(resolve => setTimeout(resolve, 2500));
           
-          console.log("Verifying on-chain token balance for:", wallet.pubkey, "token:", tokenMint);
+          console.log("Fetching post-buy token balance for:", wallet.pubkey, "token:", tokenMint);
           const balanceRes = await fetch(verifyRpcUrl, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
@@ -710,25 +751,31 @@ serve(async (req) => {
             const accounts = balanceData?.result?.value || [];
             
             if (accounts.length > 0) {
-              // Get the token balance from the parsed account data
               const tokenAccount = accounts[0];
               const parsedInfo = tokenAccount?.account?.data?.parsed?.info;
               const tokenAmount = parsedInfo?.tokenAmount;
               
               if (tokenAmount) {
-                const verifiedBalance = tokenAmount.amount; // Raw amount (no decimals applied)
-                const uiAmount = tokenAmount.uiAmount; // Human-readable amount
-                const decimals = tokenAmount.decimals;
+                const postBuyBalance = BigInt(tokenAmount.amount);
+                const preBuyBalance = BigInt(preBuyTokenBalance || "0");
+                const tokensReceived = postBuyBalance - preBuyBalance;
                 
-                console.log("On-chain verified balance:", {
-                  rawAmount: verifiedBalance,
-                  uiAmount,
-                  decimals,
-                  previousEstimate: quantityTokens
+                console.log("Token balance delta calculation:", {
+                  preBuyBalance: preBuyBalance.toString(),
+                  postBuyBalance: postBuyBalance.toString(),
+                  tokensReceived: tokensReceived.toString(),
+                  decimals: tokenAmount.decimals,
+                  swapEstimate: quantityTokens
                 });
                 
-                // Use the verified on-chain balance (this is authoritative)
-                quantityTokens = verifiedBalance;
+                // Use the delta (tokens actually received from THIS transaction)
+                if (tokensReceived > 0n) {
+                  quantityTokens = tokensReceived.toString();
+                } else {
+                  // Fallback: if no pre-buy balance was captured or delta is weird, use total
+                  console.log("Delta calculation issue, using total balance as fallback");
+                  quantityTokens = tokenAmount.amount;
+                }
               }
             } else {
               console.log("No token accounts found on-chain yet - using estimate");
