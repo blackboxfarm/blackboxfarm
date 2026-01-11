@@ -1546,10 +1546,21 @@ export function FlipItDashboard() {
   };
 
   const calculateProgress = (position: FlipPosition) => {
-    if (!position.buy_price_usd || position.status !== 'holding') return 0;
-    const currentPrice = currentPrices[position.token_mint] || position.buy_price_usd;
-    const targetPrice = position.buy_price_usd * position.target_multiplier;
-    const progress = ((currentPrice - position.buy_price_usd) / (targetPrice - position.buy_price_usd)) * 100;
+    if (position.status !== 'holding') return 0;
+
+    // Use an on-chain consistent entry price when we have quantity:
+    // entryPrice = invested_usd / tokens_received
+    const entryPrice =
+      typeof position.quantity_tokens === 'number' && position.quantity_tokens > 0 && position.buy_amount_usd > 0
+        ? position.buy_amount_usd / position.quantity_tokens
+        : position.buy_price_usd;
+
+    if (typeof entryPrice !== 'number' || !Number.isFinite(entryPrice) || entryPrice <= 0) return 0;
+
+    const currentPrice = currentPrices[position.token_mint] ?? entryPrice;
+    const targetPrice = entryPrice * position.target_multiplier;
+
+    const progress = ((currentPrice - entryPrice) / (targetPrice - entryPrice)) * 100;
     // Clamp: 0% minimum (no negative progress), 100% max
     return Math.min(Math.max(progress, 0), 100);
   };
@@ -2425,11 +2436,27 @@ export function FlipItDashboard() {
                   const currentPrice = currentPrices[position.token_mint];
 
                   // Quantity is sometimes not persisted; derive it from buy_amount_usd / buy_price_usd when needed.
+                  // NOTE: For correct on-chain math, we prefer the persisted quantity_tokens from the buy signature.
                   const effectiveQuantityTokens =
                     position.quantity_tokens ??
                     (position.buy_price_usd ? position.buy_amount_usd / position.buy_price_usd : null);
 
-                  const currentValue = effectiveQuantityTokens !== null && currentPrice
+                  const hasQuantity =
+                    typeof effectiveQuantityTokens === 'number' &&
+                    Number.isFinite(effectiveQuantityTokens) &&
+                    effectiveQuantityTokens > 0;
+
+                  // Entry price that matches the displayed "Invested" and on-chain tokens received.
+                  // (This fixes the common mismatch where buy_price_usd was sourced from an external price API.)
+                  const effectiveEntryPrice =
+                    hasQuantity && position.buy_amount_usd > 0
+                      ? position.buy_amount_usd / effectiveQuantityTokens
+                      : position.buy_price_usd;
+
+                  const hasCurrentPrice =
+                    typeof currentPrice === 'number' && Number.isFinite(currentPrice) && currentPrice > 0;
+
+                  const currentValue = hasQuantity && hasCurrentPrice
                     ? effectiveQuantityTokens * currentPrice
                     : null;
 
@@ -2565,7 +2592,10 @@ export function FlipItDashboard() {
                             <Copy className="h-2 w-2 opacity-50" />
                           </button>
                           <div className="text-[10px] text-muted-foreground">
-                            Entry: ${position.buy_price_usd?.toFixed(8) || '-'}
+                            Entry: $
+                            {typeof effectiveEntryPrice === 'number' && Number.isFinite(effectiveEntryPrice)
+                              ? effectiveEntryPrice.toFixed(8)
+                              : '-'}
                           </div>
                         </div>
                       </TableCell>
@@ -2578,7 +2608,7 @@ export function FlipItDashboard() {
                         )}
                       </TableCell>
                       <TableCell className="px-2 py-1">
-                        {currentPrice ? (
+                        {hasCurrentPrice ? (
                           <div>
                             {currentValue !== null ? (
                               <div>
