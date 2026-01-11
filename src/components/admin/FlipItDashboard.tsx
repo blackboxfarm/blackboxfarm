@@ -2423,9 +2423,6 @@ export function FlipItDashboard() {
                 {activePositions.map(position => {
                   const progress = calculateProgress(position);
                   const currentPrice = currentPrices[position.token_mint];
-                  const pnlPercent = position.buy_price_usd && currentPrice
-                    ? ((currentPrice - position.buy_price_usd) / position.buy_price_usd) * 100
-                    : null;
 
                   // Quantity is sometimes not persisted; derive it from buy_amount_usd / buy_price_usd when needed.
                   const effectiveQuantityTokens =
@@ -2438,6 +2435,11 @@ export function FlipItDashboard() {
 
                   const pnlUsd = currentValue !== null
                     ? currentValue - position.buy_amount_usd
+                    : null;
+
+                  // P&L percent based on actual value change, not price change
+                  const pnlPercent = pnlUsd !== null && position.buy_amount_usd > 0
+                    ? (pnlUsd / position.buy_amount_usd) * 100
                     : null;
 
                   // Target value
