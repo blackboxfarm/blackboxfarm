@@ -126,6 +126,18 @@ interface InputTokenData {
   name: string | null;
   price: number | null;
   image: string | null;
+  marketCap: number | null;
+  liquidity: number | null;
+  holders: number | null;
+  dexStatus: {
+    hasPaidProfile?: boolean;
+    hasCTO?: boolean;
+    activeBoosts?: number;
+    hasActiveAds?: boolean;
+  } | null;
+  twitterUrl: string | null;
+  websiteUrl: string | null;
+  telegramUrl: string | null;
   lastFetched: string | null;
   source: 'token-metadata' | 'raydium-quote' | 'dexscreener' | null;
 }
@@ -167,11 +179,36 @@ export function FlipItDashboard() {
     name: null,
     price: null,
     image: null,
+    marketCap: null,
+    liquidity: null,
+    holders: null,
+    dexStatus: null,
+    twitterUrl: null,
+    websiteUrl: null,
+    telegramUrl: null,
     lastFetched: null,
     source: null
   });
   const [isLoadingInputToken, setIsLoadingInputToken] = useState(false);
   const inputFetchTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  
+  // Helper for empty input token state
+  const getEmptyInputToken = (): InputTokenData => ({
+    mint: '',
+    symbol: null,
+    name: null,
+    price: null,
+    image: null,
+    marketCap: null,
+    liquidity: null,
+    holders: null,
+    dexStatus: null,
+    twitterUrl: null,
+    websiteUrl: null,
+    telegramUrl: null,
+    lastFetched: null,
+    source: null
+  });
   
   // SOL price for USD conversion
   const { price: solPrice, isLoading: solPriceLoading } = useSolPrice();
@@ -631,7 +668,7 @@ export function FlipItDashboard() {
   const fetchInputTokenData = useCallback(async (tokenMint: string, forceRefresh = false): Promise<boolean> => {
     const mint = tokenMint.trim();
     if (!mint || mint.length < 32) {
-      setInputToken(prev => ({ ...prev, mint: '', symbol: null, name: null, price: null, image: null, lastFetched: null, source: null }));
+      setInputToken(getEmptyInputToken());
       return false;
     }
 
@@ -664,6 +701,13 @@ export function FlipItDashboard() {
           name: meta.name || null,
           price: priceInfo?.priceUsd ?? null,
           image: meta.image || meta.logoURI || null,
+          marketCap: priceInfo?.marketCap ?? null,
+          liquidity: priceInfo?.liquidity ?? null,
+          holders: null, // Will be populated separately if available
+          dexStatus: null, // Not available from token-metadata directly
+          twitterUrl: meta.socialLinks?.twitter ?? null,
+          websiteUrl: meta.socialLinks?.website ?? null,
+          telegramUrl: meta.socialLinks?.telegram ?? null,
           lastFetched: new Date().toISOString(),
           source: 'token-metadata'
         });
@@ -723,11 +767,9 @@ export function FlipItDashboard() {
         const priceData = await response.json();
         if (priceData?.priceUSD) {
           setInputToken({
+            ...getEmptyInputToken(),
             mint: mint,
-            symbol: null,
-            name: null,
             price: priceData.priceUSD,
-            image: null,
             lastFetched: new Date().toISOString(),
             source: 'raydium-quote'
           });
@@ -755,7 +797,7 @@ export function FlipItDashboard() {
     
     const mint = tokenAddress.trim();
     if (!mint || mint.length < 32) {
-      setInputToken(prev => ({ ...prev, mint: '', symbol: null, name: null, price: null, image: null, lastFetched: null, source: null }));
+      setInputToken(getEmptyInputToken());
       return;
     }
 
@@ -1323,15 +1365,7 @@ export function FlipItDashboard() {
         
         setTokenAddress('');
         // Clear input token state
-        setInputToken({
-          mint: '',
-          symbol: null,
-          name: null,
-          price: null,
-          image: null,
-          lastFetched: null,
-          source: null
-        });
+        setInputToken(getEmptyInputToken());
         loadPositions();
         refreshWalletBalance(); // Auto-refresh wallet balance after buy
       }
@@ -1411,7 +1445,7 @@ export function FlipItDashboard() {
       setTokenAddress('');
       setLimitPriceMin('');
       setLimitPriceMax('');
-      setInputToken({ mint: '', symbol: null, name: null, price: null, image: null, lastFetched: null, source: null });
+      setInputToken(getEmptyInputToken());
       loadLimitOrders();
     } catch (err: any) {
       toast.error(err.message || 'Failed to create limit order');
@@ -2179,15 +2213,7 @@ export function FlipItDashboard() {
                     className="h-5 px-2 text-xs text-muted-foreground hover:text-foreground"
                     onClick={() => {
                       setTokenAddress('');
-                      setInputToken({
-                        mint: '',
-                        symbol: null,
-                        name: null,
-                        price: null,
-                        image: null,
-                        lastFetched: null,
-                        source: null
-                      });
+                      setInputToken(getEmptyInputToken());
                       holderQuality.reset();
                       toast.info('Cleared');
                     }}
@@ -2250,6 +2276,13 @@ export function FlipItDashboard() {
                   name={inputToken.name}
                   image={inputToken.image}
                   price={inputToken.price}
+                  marketCap={inputToken.marketCap}
+                  liquidity={inputToken.liquidity}
+                  holders={inputToken.holders}
+                  dexStatus={inputToken.dexStatus}
+                  twitterUrl={inputToken.twitterUrl}
+                  websiteUrl={inputToken.websiteUrl}
+                  telegramUrl={inputToken.telegramUrl}
                   isLoading={isLoadingInputToken}
                 />
               )}
