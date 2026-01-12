@@ -1,6 +1,11 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { Connection, PublicKey } from "npm:@solana/web3.js@1.95.3";
+import { 
+  resolvePrice, 
+  resolvePricesBulk, 
+  fetchSolPrice,
+  type PriceResult 
+} from "../_shared/price-resolver.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -30,228 +35,30 @@ function firstSignature(swapResult: any): string | null {
   return null;
 }
 
-// Price cache with 3-second TTL for faster repeated lookups
-const priceCache: Map<string, { price: number; timestamp: number }> = new Map();
-const CACHE_TTL_MS = 3000;
-
-function getCachedPrice(mint: string): number | null {
-  const cached = priceCache.get(mint);
-  if (cached && Date.now() - cached.timestamp < CACHE_TTL_MS) {
-    return cached.price;
+/**
+ * PRICE FETCHING - Now uses centralized price resolver
+ * 
+ * API Truth Table:
+ * - Pre-Raydium (on bonding curve): pump.fun API -> bonding curve math
+ * - Post-Raydium (graduated): DexScreener -> Jupiter fallback
+ */
+async function fetchTokenPricesWithMetadata(
+  tokenMints: string[],
+  heliusApiKey?: string
+): Promise<{ prices: Record<string, number>; metadata: Record<string, PriceResult> }> {
+  console.log(`Fetching ${tokenMints.length} prices via centralized resolver`);
+  
+  const result = await resolvePricesBulk(tokenMints, {
+    heliusApiKey,
+    concurrency: 5
+  });
+  
+  // Log price sources for debugging
+  for (const [mint, meta] of Object.entries(result.metadata)) {
+    console.log(`[${mint.slice(0, 8)}] $${meta.price.toFixed(10)} from ${meta.source}${meta.isOnCurve ? ` (curve ${meta.bondingCurveProgress?.toFixed(1)}%)` : ''}`);
   }
-  return null;
-}
-
-function setCachedPrice(mint: string, price: number): void {
-  priceCache.set(mint, { price, timestamp: Date.now() });
-}
-
-// Jupiter API endpoints in priority order
-const JUPITER_ENDPOINTS = [
-  'https://api.jup.ag/price/v2',      // v2 API (more reliable)
-  'https://price.jup.ag/v6/price',    // v6 API (legacy)
-];
-
-async function fetchWithTimeout(url: string, timeoutMs = 3000): Promise<Response> {
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), timeoutMs);
-  try {
-    const res = await fetch(url, { signal: controller.signal });
-    clearTimeout(timeout);
-    return res;
-  } catch (e) {
-    clearTimeout(timeout);
-    throw e;
-  }
-}
-
-async function fetchSolPrice(): Promise<number> {
-  // Check cache first
-  const cached = getCachedPrice('SOL');
-  if (cached) return cached;
-
-  // Try Jupiter endpoints with retry
-  for (const baseUrl of JUPITER_ENDPOINTS) {
-    try {
-      const url = baseUrl.includes('v2') 
-        ? `${baseUrl}?ids=So11111111111111111111111111111111111111112`
-        : `${baseUrl}?ids=SOL`;
-      const res = await fetchWithTimeout(url, 3000);
-      if (!res.ok) continue;
-      
-      const json = await res.json();
-      const price = baseUrl.includes('v2')
-        ? Number(json?.data?.['So11111111111111111111111111111111111111112']?.price)
-        : Number(json?.data?.SOL?.price);
-      
-      if (price && price > 0) {
-        setCachedPrice('SOL', price);
-        console.log(`SOL price from Jupiter: $${price.toFixed(2)}`);
-        return price;
-      }
-    } catch (e) {
-      console.log(`Jupiter endpoint ${baseUrl} failed:`, e instanceof Error ? e.message : String(e));
-    }
-  }
-
-  // Fallback to CoinGecko
-  try {
-    const res = await fetchWithTimeout('https://api.coingecko.com/api/v3/simple/price?ids=solana&vs_currencies=usd', 3000);
-    if (res.ok) {
-      const json = await res.json();
-      const price = Number(json?.solana?.usd);
-      if (price && price > 0) {
-        setCachedPrice('SOL', price);
-        console.log(`SOL price from CoinGecko: $${price.toFixed(2)}`);
-        return price;
-      }
-    }
-  } catch (e) {
-    console.log('CoinGecko fallback failed:', e instanceof Error ? e.message : String(e));
-  }
-
-  return 150; // Ultimate fallback
-}
-
-interface TokenPriceData {
-  price: number;
-  bondingCurvePercent?: number; // 0-100, only for pump.fun tokens still on curve
-}
-
-async function fetchBondingCurveData(tokenMints: string[]): Promise<Record<string, number>> {
-  const curveData: Record<string, number> = {};
-  const heliusApiKey = Deno.env.get("HELIUS_API_KEY");
-
-  if (!heliusApiKey) {
-    console.log("No Helius API key, skipping bonding curve fetch");
-    return curveData;
-  }
-
-  // Pump.fun program ID
-  const PUMP_PROGRAM_ID = new PublicKey("6EF8rrecthR5Dkzon8Nwu78hRvfCKubJ14M5uBEwF6P");
-  const seed = new TextEncoder().encode("bonding-curve");
-
-  const connection = new Connection(
-    `https://mainnet.helius-rpc.com/?api-key=${heliusApiKey}`,
-    "confirmed"
-  );
-
-  // Parallelize bonding curve fetches
-  await Promise.all(tokenMints.map(async (mintStr) => {
-    try {
-      const mint = new PublicKey(mintStr);
-      const [bondingCurvePda] = PublicKey.findProgramAddressSync(
-        [seed, mint.toBuffer()],
-        PUMP_PROGRAM_ID
-      );
-
-      const info = await connection.getAccountInfo(bondingCurvePda);
-      if (!info?.data) return;
-
-      const data = info.data;
-      if (data.length < 49) return;
-
-      const view = new DataView(data.buffer, data.byteOffset, data.byteLength);
-      const realTokenReserves = view.getBigUint64(24, true);
-      const complete = data[48] === 1;
-
-      if (complete) return;
-
-      const INITIAL_REAL_TOKEN_RESERVES = 793_100_000_000_000n;
-      const tokensSold = INITIAL_REAL_TOKEN_RESERVES - realTokenReserves;
-      const progress = Math.min(Math.max(Number(tokensSold * 100n / INITIAL_REAL_TOKEN_RESERVES), 0), 100);
-
-      curveData[mintStr] = progress;
-    } catch (e) {
-      // Not a pump.fun token or invalid - skip silently
-    }
-  }));
-
-  return curveData;
-}
-
-async function fetchTokenPrices(tokenMints: string[]): Promise<Record<string, number>> {
-  const prices: Record<string, number> = {};
-  const uncachedMints: string[] = [];
-
-  // Check cache first
-  for (const mint of tokenMints) {
-    const cached = getCachedPrice(mint);
-    if (cached) {
-      prices[mint] = cached;
-    } else {
-      uncachedMints.push(mint);
-    }
-  }
-
-  if (uncachedMints.length === 0) {
-    console.log(`All ${tokenMints.length} prices served from cache`);
-    return prices;
-  }
-
-  console.log(`Fetching ${uncachedMints.length} prices (${tokenMints.length - uncachedMints.length} cached)`);
-
-  // Try Jupiter v2 API first (more reliable)
-  const chunks: string[][] = [];
-  for (let i = 0; i < uncachedMints.length; i += 100) {
-    chunks.push(uncachedMints.slice(i, i + 100));
-  }
-
-  // Parallel chunk fetches with Jupiter v2
-  await Promise.all(chunks.map(async (chunk) => {
-    const ids = chunk.join(",");
-    
-    for (const baseUrl of JUPITER_ENDPOINTS) {
-      try {
-        const res = await fetchWithTimeout(`${baseUrl}?ids=${ids}`, 5000);
-        if (!res.ok) continue;
-        
-        const json = await res.json();
-        let foundCount = 0;
-        
-        for (const mint of chunk) {
-          const price = Number(json?.data?.[mint]?.price);
-          if (price && price > 0) {
-            prices[mint] = price;
-            setCachedPrice(mint, price);
-            foundCount++;
-          }
-        }
-        
-        if (foundCount > 0) {
-          console.log(`Jupiter ${baseUrl.includes('v2') ? 'v2' : 'v6'}: fetched ${foundCount}/${chunk.length} prices`);
-          break; // Success, don't try other endpoints
-        }
-      } catch (e) {
-        console.log(`Jupiter chunk fetch failed:`, e instanceof Error ? e.message : String(e));
-      }
-    }
-  }));
-
-  // For any missing prices, try DexScreener in parallel
-  const missing = uncachedMints.filter(m => !prices[m]);
-  if (missing.length > 0) {
-    console.log(`Fetching ${missing.length} missing prices from DexScreener`);
-    
-    await Promise.all(missing.map(async (mint) => {
-      try {
-        const res = await fetchWithTimeout(`https://api.dexscreener.com/latest/dex/tokens/${mint}`, 3000);
-        if (res.ok) {
-          const data = await res.json();
-          const pair = data?.pairs?.[0];
-          if (pair?.priceUsd) {
-            const price = Number(pair.priceUsd);
-            prices[mint] = price;
-            setCachedPrice(mint, price);
-          }
-        }
-      } catch (e) {
-        // Silent fail for individual tokens
-      }
-    }));
-  }
-
-  return prices;
+  
+  return result;
 }
 
 serve(async (req) => {
@@ -292,16 +99,37 @@ serve(async (req) => {
     // Get unique token mints
     const tokenMints = [...new Set(positions.map(p => p.token_mint))];
 
-    // Fetch all prices and bonding curve data in parallel
-    const [prices, bondingCurveData] = await Promise.all([
-      fetchTokenPrices(tokenMints),
-      fetchBondingCurveData(tokenMints)
-    ]);
-    console.log("Fetched prices:", prices);
-    console.log("Fetched bonding curve data:", bondingCurveData);
+    // Fetch all prices using centralized resolver (handles pump.fun vs DexScreener routing)
+    const heliusApiKey = Deno.env.get("HELIUS_API_KEY");
+    const { prices, metadata: priceMetadata } = await fetchTokenPricesWithMetadata(tokenMints, heliusApiKey);
+    
+    // Extract bonding curve data from price metadata
+    const bondingCurveData: Record<string, number> = {};
+    for (const [mint, meta] of Object.entries(priceMetadata)) {
+      if (meta.bondingCurveProgress !== undefined) {
+        bondingCurveData[mint] = meta.bondingCurveProgress;
+      }
+    }
+    
+    console.log("Fetched prices:", Object.keys(prices).length);
+    console.log("Bonding curve tokens:", Object.keys(bondingCurveData).length);
 
     const executed: any[] = [];
     const solPrice = await fetchSolPrice();
+
+    // Update position price metadata in DB (for UI transparency)
+    for (const position of positions) {
+      const meta = priceMetadata[position.token_mint];
+      if (meta) {
+        // Update price source and curve status (fire-and-forget, don't block monitoring)
+        supabase.from("flip_positions").update({
+          price_source: meta.source,
+          price_fetched_at: meta.fetchedAt,
+          is_on_curve: meta.isOnCurve,
+          bonding_curve_progress: meta.bondingCurveProgress ?? null
+        }).eq("id", position.id).then(() => {}).catch(() => {});
+      }
+    }
 
     // Check each position for target hit
     for (const position of positions) {

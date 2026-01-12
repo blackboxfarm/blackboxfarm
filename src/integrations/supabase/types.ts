@@ -2645,8 +2645,11 @@ export type Database = {
       }
       flip_positions: {
         Row: {
+          bonding_curve_progress: number | null
+          buy_amount_sol: number | null
           buy_amount_usd: number | null
           buy_executed_at: string | null
+          buy_fee_sol: number | null
           buy_price_usd: number | null
           buy_signature: string | null
           created_at: string | null
@@ -2660,9 +2663,12 @@ export type Database = {
           emergency_sell_executed_at: string | null
           emergency_sell_price_usd: number | null
           emergency_sell_status: string | null
+          entry_verified: boolean | null
+          entry_verified_at: string | null
           error_message: string | null
           id: string
           is_diamond_hand: boolean | null
+          is_on_curve: boolean | null
           is_scalp_position: boolean | null
           is_test_position: boolean | null
           moon_bag_dump_threshold_pct: number | null
@@ -2675,6 +2681,8 @@ export type Database = {
           paired_position_id: string | null
           partial_sells: Json | null
           position_type: string | null
+          price_fetched_at: string | null
+          price_source: string | null
           profit_usd: number | null
           quantity_tokens: number | null
           rebuy_amount_usd: number | null
@@ -2708,8 +2716,11 @@ export type Database = {
           website_url: string | null
         }
         Insert: {
+          bonding_curve_progress?: number | null
+          buy_amount_sol?: number | null
           buy_amount_usd?: number | null
           buy_executed_at?: string | null
+          buy_fee_sol?: number | null
           buy_price_usd?: number | null
           buy_signature?: string | null
           created_at?: string | null
@@ -2723,9 +2734,12 @@ export type Database = {
           emergency_sell_executed_at?: string | null
           emergency_sell_price_usd?: number | null
           emergency_sell_status?: string | null
+          entry_verified?: boolean | null
+          entry_verified_at?: string | null
           error_message?: string | null
           id?: string
           is_diamond_hand?: boolean | null
+          is_on_curve?: boolean | null
           is_scalp_position?: boolean | null
           is_test_position?: boolean | null
           moon_bag_dump_threshold_pct?: number | null
@@ -2738,6 +2752,8 @@ export type Database = {
           paired_position_id?: string | null
           partial_sells?: Json | null
           position_type?: string | null
+          price_fetched_at?: string | null
+          price_source?: string | null
           profit_usd?: number | null
           quantity_tokens?: number | null
           rebuy_amount_usd?: number | null
@@ -2771,8 +2787,11 @@ export type Database = {
           website_url?: string | null
         }
         Update: {
+          bonding_curve_progress?: number | null
+          buy_amount_sol?: number | null
           buy_amount_usd?: number | null
           buy_executed_at?: string | null
+          buy_fee_sol?: number | null
           buy_price_usd?: number | null
           buy_signature?: string | null
           created_at?: string | null
@@ -2786,9 +2805,12 @@ export type Database = {
           emergency_sell_executed_at?: string | null
           emergency_sell_price_usd?: number | null
           emergency_sell_status?: string | null
+          entry_verified?: boolean | null
+          entry_verified_at?: string | null
           error_message?: string | null
           id?: string
           is_diamond_hand?: boolean | null
+          is_on_curve?: boolean | null
           is_scalp_position?: boolean | null
           is_test_position?: boolean | null
           moon_bag_dump_threshold_pct?: number | null
@@ -2801,6 +2823,8 @@ export type Database = {
           paired_position_id?: string | null
           partial_sells?: Json | null
           position_type?: string | null
+          price_fetched_at?: string | null
+          price_source?: string | null
           profit_usd?: number | null
           quantity_tokens?: number | null
           rebuy_amount_usd?: number | null
