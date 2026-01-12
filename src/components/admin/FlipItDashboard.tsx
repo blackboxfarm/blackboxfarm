@@ -1722,6 +1722,8 @@ export function FlipItDashboard() {
   };
 
   const activePositions = positions.filter(p => ['pending_buy', 'holding', 'pending_sell'].includes(p.status));
+  // Check if any active position has rebuy enabled (to conditionally show rebuy columns)
+  const hasActiveRebuy = activePositions.some(p => p.rebuy_enabled || Object.keys(rebuyEditing).some(id => rebuyEditing[id]?.enabled && activePositions.some(ap => ap.id === id)));
   // Only show completed flips that have rebuy enabled - normal sells are not kept on display
   const completedPositions = positions.filter(p => ['sold', 'failed'].includes(p.status) && p.rebuy_enabled === true);
 
@@ -2589,11 +2591,15 @@ export function FlipItDashboard() {
                   <TableHead className="px-2 py-1">MB %</TableHead>
                   <TableHead className="px-2 py-1 text-center">STOP-LOSS</TableHead>
                   <TableHead className="px-2 py-1">SL Price</TableHead>
-                  <TableHead className="px-2 py-1 text-center">REBUY</TableHead>
-                  <TableHead className="px-2 py-1">Rebuy Low</TableHead>
-                  <TableHead className="px-2 py-1">Rebuy High</TableHead>
-                  <TableHead className="px-2 py-1">Rebuy Amt</TableHead>
-                  <TableHead className="px-2 py-1">Rebuy Target</TableHead>
+                  {hasActiveRebuy && (
+                    <>
+                      <TableHead className="px-2 py-1 text-center">REBUY</TableHead>
+                      <TableHead className="px-2 py-1">Rebuy Low</TableHead>
+                      <TableHead className="px-2 py-1">Rebuy High</TableHead>
+                      <TableHead className="px-2 py-1">Rebuy Amt</TableHead>
+                      <TableHead className="px-2 py-1">Rebuy Target</TableHead>
+                    </>
+                  )}
                   <TableHead className="px-2 py-1">Status</TableHead>
                   <TableHead className="px-2 py-1 w-8"></TableHead>
                 </TableRow>
@@ -3062,6 +3068,9 @@ export function FlipItDashboard() {
                         )}
                       </TableCell>
                       
+                      {/* Rebuy Columns - only show if any position has rebuy */}
+                      {hasActiveRebuy && (
+                        <>
                       {/* Rebuy Toggle */}
                       <TableCell className="px-2 py-1 text-center">
                         {position.status === 'holding' && (
@@ -3334,6 +3343,8 @@ export function FlipItDashboard() {
                           </div>
                         )}
                       </TableCell>
+                        </>
+                      )}
                       
                       <TableCell>
                         <div className="flex flex-col gap-1">
