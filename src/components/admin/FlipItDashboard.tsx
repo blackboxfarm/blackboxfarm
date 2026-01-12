@@ -18,6 +18,7 @@ import { useSolPrice } from '@/hooks/useSolPrice';
 import { useHolderQualityCheck } from '@/hooks/useHolderQualityCheck';
 import { FlipItFeeCalculator } from './flipit/FlipItFeeCalculator';
 import { MomentumIndicator } from './flipit/MomentumIndicator';
+import { TokenPreviewCard } from './flipit/TokenPreviewCard';
 import { HolderQualityIndicator } from './flipit/HolderQualityIndicator';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { WalletTokenManager } from '@/components/blackbox/WalletTokenManager';
@@ -2240,6 +2241,18 @@ export function FlipItDashboard() {
                   </span>
                 )}
               </div>
+              
+              {/* Token Preview Card */}
+              {tokenAddress.trim().length >= 32 && inputToken.mint && (
+                <TokenPreviewCard
+                  mint={tokenAddress.trim()}
+                  symbol={inputToken.symbol}
+                  name={inputToken.name}
+                  image={inputToken.image}
+                  price={inputToken.price}
+                  isLoading={isLoadingInputToken}
+                />
+              )}
               
               {/* Momentum Indicator only */}
               {tokenAddress.trim().length >= 32 && (

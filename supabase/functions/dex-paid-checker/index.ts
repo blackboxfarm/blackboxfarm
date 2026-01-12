@@ -18,6 +18,12 @@ interface DexPaidStatus {
     paymentTimestamp?: number;
   }>;
   checkedAt: string;
+  // Socials from DexScreener (synced when DEX is paid)
+  socials?: {
+    twitter?: string;
+    website?: string;
+    telegram?: string;
+  };
 }
 
 interface DexScreenerOrder {
@@ -55,7 +61,7 @@ async function fetchDexScreenerOrders(tokenMint: string): Promise<DexScreenerOrd
   }
 }
 
-async function fetchDexScreenerBoosts(tokenMint: string): Promise<number> {
+async function fetchDexScreenerData(tokenMint: string): Promise<{ boosts: number; socials?: { twitter?: string; website?: string; telegram?: string } }> {
   try {
     const response = await fetch(`https://api.dexscreener.com/latest/dex/tokens/${tokenMint}`, {
       headers: {
@@ -66,36 +72,55 @@ async function fetchDexScreenerBoosts(tokenMint: string): Promise<number> {
     
     if (!response.ok) {
       console.log(`DexScreener tokens API returned ${response.status} for ${tokenMint}`);
-      return 0;
+      return { boosts: 0 };
     }
     
     const data = await response.json();
     
-    // Get the max boost count across all pairs
+    // Get the max boost count and socials from the first pair with info
     let maxBoosts = 0;
+    let socials: { twitter?: string; website?: string; telegram?: string } | undefined;
+    
     if (data.pairs && Array.isArray(data.pairs)) {
       for (const pair of data.pairs) {
         const pairBoosts = pair.boosts?.active || 0;
         if (pairBoosts > maxBoosts) {
           maxBoosts = pairBoosts;
         }
+        
+        // Extract socials from pair info (DexScreener provides these when DEX is paid)
+        if (pair.info?.socials && !socials) {
+          const socialArray = pair.info.socials;
+          socials = {};
+          for (const s of socialArray) {
+            if (s.type === 'twitter' && s.url) socials.twitter = s.url;
+            if (s.type === 'telegram' && s.url) socials.telegram = s.url;
+          }
+        }
+        if (pair.info?.websites && !socials?.website) {
+          const websites = pair.info.websites;
+          if (websites.length > 0 && websites[0].url) {
+            socials = socials || {};
+            socials.website = websites[0].url;
+          }
+        }
       }
     }
     
-    return maxBoosts;
+    return { boosts: maxBoosts, socials };
   } catch (error) {
-    console.error(`Error fetching DexScreener boosts for ${tokenMint}:`, error);
-    return 0;
+    console.error(`Error fetching DexScreener data for ${tokenMint}:`, error);
+    return { boosts: 0 };
   }
 }
 
 async function checkDexPaidStatus(tokenMint: string): Promise<DexPaidStatus> {
   console.log(`Checking DEX paid status for ${tokenMint}`);
   
-  // Fetch orders and boosts in parallel
-  const [orders, activeBoosts] = await Promise.all([
+  // Fetch orders and token data (boosts + socials) in parallel
+  const [orders, dexData] = await Promise.all([
     fetchDexScreenerOrders(tokenMint),
-    fetchDexScreenerBoosts(tokenMint)
+    fetchDexScreenerData(tokenMint)
   ]);
   
   // Analyze orders
@@ -107,7 +132,7 @@ async function checkDexPaidStatus(tokenMint: string): Promise<DexPaidStatus> {
   
   const result: DexPaidStatus = {
     tokenMint,
-    activeBoosts,
+    activeBoosts: dexData.boosts,
     hasPaidProfile,
     hasActiveAds,
     hasCTO,
@@ -116,10 +141,12 @@ async function checkDexPaidStatus(tokenMint: string): Promise<DexPaidStatus> {
       status: o.status,
       paymentTimestamp: o.paymentTimestamp
     })),
-    checkedAt: new Date().toISOString()
+    checkedAt: new Date().toISOString(),
+    // Include socials if DEX is paid (they're only visible/updated when paid)
+    socials: hasPaidProfile ? dexData.socials : undefined
   };
   
-  console.log(`DEX status for ${tokenMint}: boosts=${activeBoosts}, paid=${hasPaidProfile}, ads=${hasActiveAds}, cto=${hasCTO}`);
+  console.log(`DEX status for ${tokenMint}: boosts=${dexData.boosts}, paid=${hasPaidProfile}, ads=${hasActiveAds}, cto=${hasCTO}, socials=${JSON.stringify(dexData.socials)}`);
   
   return result;
 }
@@ -184,11 +211,22 @@ serve(async (req) => {
     // Update database if requested
     if (updateDb) {
       for (const status of results) {
+        // Build update object with DEX status
+        const updateData: Record<string, unknown> = { 
+          dex_paid_status: status 
+        };
+        
+        // If DEX is paid and we have socials, update the social links
+        if (status.hasPaidProfile && status.socials) {
+          if (status.socials.twitter) updateData.twitter_url = status.socials.twitter;
+          if (status.socials.website) updateData.website_url = status.socials.website;
+          if (status.socials.telegram) updateData.telegram_url = status.socials.telegram;
+          console.log(`Syncing socials for ${status.tokenMint} from DexScreener:`, status.socials);
+        }
+        
         const { error } = await supabase
           .from('flip_positions')
-          .update({ 
-            dex_paid_status: status 
-          })
+          .update(updateData)
           .eq('token_mint', status.tokenMint)
           .in('status', ['holding', 'buying']); // Only update active positions
         
