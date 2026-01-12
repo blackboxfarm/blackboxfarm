@@ -2595,6 +2595,7 @@ export function FlipItDashboard() {
                   <TableHead className="px-2 py-1">Rebuy Amt</TableHead>
                   <TableHead className="px-2 py-1">Rebuy Target</TableHead>
                   <TableHead className="px-2 py-1">Status</TableHead>
+                  <TableHead className="px-2 py-1 w-8"></TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -3344,6 +3345,19 @@ export function FlipItDashboard() {
                           )}
                           {getStatusBadge(position.status)}
                         </div>
+                      </TableCell>
+                      
+                      {/* Delete Column */}
+                      <TableCell className="px-2 py-1">
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          className="h-6 w-6 p-0 text-muted-foreground hover:text-destructive"
+                          onClick={() => handleDeletePosition(position.id, position.token_symbol)}
+                          title="Delete entry from database"
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </Button>
                       </TableCell>
                     </TableRow>
                   );
