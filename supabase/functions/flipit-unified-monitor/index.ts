@@ -94,7 +94,46 @@ serve(async (req) => {
       rebuyMonitor: { checked: 0, executed: [] as string[] },
       emergencyMonitor: { checked: 0, executed: [] as string[] },
       limitOrderMonitor: { checked: 0, executed: [] as string[], expired: 0 },
+      stuckRecovery: { checked: 0, reset: [] as string[] },
     };
+
+    // 0. STUCK POSITION RECOVERY - Reset positions stuck in pending_sell/pending_buy for > 3 minutes
+    const stuckThreshold = new Date(Date.now() - 3 * 60 * 1000).toISOString(); // 3 minutes ago
+    
+    const { data: stuckPositions, error: stuckErr } = await supabase
+      .from('flip_positions')
+      .select('id, status, token_symbol, updated_at')
+      .in('status', ['pending_sell', 'pending_buy'])
+      .lt('updated_at', stuckThreshold);
+
+    if (stuckErr) {
+      console.error('Failed to fetch stuck positions:', stuckErr);
+    }
+
+    results.stuckRecovery.checked = stuckPositions?.length || 0;
+
+    for (const stuck of stuckPositions || []) {
+      console.log(`[Unified] Resetting stuck position ${stuck.id} (${stuck.token_symbol}) from ${stuck.status} - stuck since ${stuck.updated_at}`);
+      
+      // Reset pending_sell back to holding, pending_buy to failed
+      const newStatus = stuck.status === 'pending_sell' ? 'holding' : 'failed';
+      
+      const { error: resetErr } = await supabase
+        .from('flip_positions')
+        .update({ 
+          status: newStatus,
+          updated_at: new Date().toISOString(),
+          notes: `Auto-reset from ${stuck.status} after timeout at ${new Date().toISOString()}`
+        })
+        .eq('id', stuck.id)
+        .eq('status', stuck.status); // Only update if still in same status
+
+      if (!resetErr) {
+        results.stuckRecovery.reset.push(`${stuck.id} (${stuck.token_symbol}): ${stuck.status} → ${newStatus}`);
+      } else {
+        console.error(`Failed to reset stuck position ${stuck.id}:`, resetErr);
+      }
+    }
 
     // 1. Fetch all holding positions
     const { data: holdingPositions, error: posErr } = await supabase
@@ -234,6 +273,7 @@ serve(async (req) => {
         holdingPositions: holdingPositions?.length || 0,
         rebuyWatching: rebuyPositions?.length || 0,
         limitOrdersActive: limitOrders?.length || 0,
+        stuckPositionsReset: results.stuckRecovery.reset.length,
         solPrice,
       }
     });
