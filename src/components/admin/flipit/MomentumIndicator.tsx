@@ -64,47 +64,86 @@ export function MomentumIndicator({ tokenMint, onMomentumData, onRefresh }: Mome
   const [analysis, setAnalysis] = useState<MomentumAnalysis | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [lastFetched, setLastFetched] = useState<string | null>(null);
+  const [fetchError, setFetchError] = useState<string | null>(null);
+  const abortControllerRef = React.useRef<AbortController | null>(null);
+  const isFetchingRef = React.useRef(false);
 
   const fetchMomentum = useCallback(async () => {
     if (!tokenMint || tokenMint.length < 32) {
       setAnalysis(null);
+      setFetchError(null);
       onMomentumData?.(null);
       return;
     }
 
+    // Prevent concurrent fetches
+    if (isFetchingRef.current) {
+      console.log('[Momentum] Skipping - already fetching');
+      return;
+    }
+
+    // Abort any previous request
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+    }
+
+    abortControllerRef.current = new AbortController();
+    isFetchingRef.current = true;
     setIsLoading(true);
+    setFetchError(null);
+
+    // 10 second timeout
+    const timeoutId = setTimeout(() => {
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort();
+      }
+    }, 10000);
+
     try {
       const { data, error } = await supabase.functions.invoke('token-momentum-analyzer', {
         body: { tokenMint }
       });
 
+      clearTimeout(timeoutId);
+
       if (error) throw error;
 
       setAnalysis(data as MomentumAnalysis);
       setLastFetched(new Date().toISOString());
+      setFetchError(null);
       onMomentumData?.(data as MomentumAnalysis);
     } catch (err: any) {
-      console.error('Momentum fetch error:', err);
-      toast.error('Failed to analyze momentum');
+      clearTimeout(timeoutId);
+      
+      if (err.name === 'AbortError') {
+        console.log('[Momentum] Request aborted/timed out');
+        setFetchError('Request timed out');
+      } else {
+        console.error('[Momentum] Fetch error:', err);
+        setFetchError(err.message || 'Failed to analyze');
+      }
       setAnalysis(null);
       onMomentumData?.(null);
     } finally {
       setIsLoading(false);
+      isFetchingRef.current = false;
     }
   }, [tokenMint, onMomentumData]);
 
-  // Auto-fetch when tokenMint changes (with debounce)
+  // Only fetch when user explicitly triggers or on initial valid token (with debounce)
   useEffect(() => {
     if (!tokenMint || tokenMint.length < 32) {
       setAnalysis(null);
+      setFetchError(null);
       return;
     }
 
-    const timeout = setTimeout(() => {
-      fetchMomentum();
-    }, 800);
-
-    return () => clearTimeout(timeout);
+    // Cleanup on unmount
+    return () => {
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort();
+      }
+    };
   }, [tokenMint]);
 
   if (!tokenMint || tokenMint.length < 32) {
@@ -114,9 +153,39 @@ export function MomentumIndicator({ tokenMint, onMomentumData, onRefresh }: Mome
   if (isLoading && !analysis) {
     return (
       <Card className="p-3 bg-muted/30 border-border/50">
-        <div className="flex items-center gap-2 text-muted-foreground">
-          <Loader2 className="h-4 w-4 animate-spin" />
-          <span className="text-sm">Analyzing momentum...</span>
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2 text-muted-foreground">
+            <Loader2 className="h-4 w-4 animate-spin" />
+            <span className="text-sm">Analyzing momentum...</span>
+          </div>
+          <Button 
+            size="sm" 
+            variant="ghost" 
+            onClick={() => {
+              if (abortControllerRef.current) {
+                abortControllerRef.current.abort();
+              }
+              setIsLoading(false);
+              isFetchingRef.current = false;
+            }}
+            className="text-xs text-muted-foreground hover:text-destructive"
+          >
+            Cancel
+          </Button>
+        </div>
+      </Card>
+    );
+  }
+
+  if (fetchError) {
+    return (
+      <Card className="p-3 bg-destructive/10 border-destructive/30">
+        <div className="flex items-center justify-between">
+          <span className="text-sm text-destructive">{fetchError}</span>
+          <Button size="sm" variant="ghost" onClick={fetchMomentum} disabled={isLoading}>
+            <RefreshCw className={`h-3 w-3 mr-1 ${isLoading ? 'animate-spin' : ''}`} />
+            Retry
+          </Button>
         </div>
       </Card>
     );
@@ -126,9 +195,10 @@ export function MomentumIndicator({ tokenMint, onMomentumData, onRefresh }: Mome
     return (
       <Card className="p-3 bg-muted/30 border-border/50">
         <div className="flex items-center justify-between">
-          <span className="text-sm text-muted-foreground">Momentum data unavailable</span>
-          <Button size="sm" variant="ghost" onClick={fetchMomentum} disabled={isLoading}>
-            <RefreshCw className={`h-3 w-3 ${isLoading ? 'animate-spin' : ''}`} />
+          <span className="text-sm text-muted-foreground">Click to analyze momentum</span>
+          <Button size="sm" variant="outline" onClick={fetchMomentum} disabled={isLoading}>
+            <Activity className={`h-3 w-3 mr-1`} />
+            Analyze
           </Button>
         </div>
       </Card>
