@@ -2711,12 +2711,19 @@ export function FlipItDashboard() {
                             {position.token_mint.slice(0, 6)}...{position.token_mint.slice(-4)}
                             <Copy className="h-2 w-2 opacity-50" />
                           </button>
-                          <div className="text-[10px] text-muted-foreground">
-                            Entry: $
-                            {typeof effectiveEntryPrice === 'number' && Number.isFinite(effectiveEntryPrice)
-                              ? effectiveEntryPrice.toFixed(8)
-                              : '-'}
-                          </div>
+                          <a
+                            href={`https://trade.padre.gg/trade/solana/${position.token_mint}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="flex items-center gap-1 hover:opacity-80 transition-opacity"
+                          >
+                            <img src="https://trade.padre.gg/logo.svg" alt="Padre" className="h-3 w-3" />
+                            <span className="text-[10px] text-muted-foreground">
+                              ${typeof effectiveEntryPrice === 'number' && Number.isFinite(effectiveEntryPrice)
+                                ? effectiveEntryPrice.toFixed(8)
+                                : '-'}
+                            </span>
+                          </a>
                         </div>
                       </TableCell>
                       <TableCell className="px-2 py-1">
