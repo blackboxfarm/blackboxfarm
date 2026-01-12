@@ -1003,17 +1003,17 @@ export function FlipItDashboard() {
       setPositions(loadedPositions);
       setIsLoading(false);
       
-      // Only fetch metadata for tokens we haven't fetched yet (and throttle to once per 60s)
+      // Only fetch metadata for HOLDING positions missing symbols (not all 100+ historical positions)
       const now = Date.now();
       const timeSinceLastFetch = now - lastMetadataFetchRef.current;
-      const positionsMissingSymbols = loadedPositions.filter(p => !p.token_symbol);
-      const newMints = positionsMissingSymbols
+      const holdingMissingSymbols = loadedPositions.filter(p => p.status === 'holding' && !p.token_symbol);
+      const newMints = holdingMissingSymbols
         .map(p => p.token_mint)
         .filter(mint => !fetchedMetadataRef.current.has(mint));
       
       // Only fetch if: we have NEW mints we haven't seen, OR it's been 60+ seconds
-      if (newMints.length > 0 || (positionsMissingSymbols.length > 0 && timeSinceLastFetch > 60000)) {
-        const mintsToFetch = newMints.length > 0 ? newMints : [...new Set(positionsMissingSymbols.map(p => p.token_mint))];
+      if (newMints.length > 0 || (holdingMissingSymbols.length > 0 && timeSinceLastFetch > 60000)) {
+        const mintsToFetch = newMints.length > 0 ? newMints : [...new Set(holdingMissingSymbols.map(p => p.token_mint))];
         console.log('[FlipIt] Fetching metadata for', mintsToFetch.length, 'tokens');
         lastMetadataFetchRef.current = now;
         
