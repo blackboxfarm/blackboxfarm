@@ -803,8 +803,7 @@ serve(async (req) => {
           })
           .eq("id", position.id);
 
-        // AUTO-VERIFY ENTRY: Use Helius to get verified on-chain entry data
-        const heliusKey = Deno.env.get("HELIUS_API_KEY");
+        // AUTO-VERIFY ENTRY: Use Helius to get verified on-chain entry data (heliusKey already declared above)
         if (heliusKey && signature) {
           verifyBuyFromChain(signature, tokenMint, heliusKey).then(async (verified) => {
             if (verified) {
