@@ -2461,9 +2461,10 @@ export function FlipItDashboard() {
                     ? currentValue - position.buy_amount_usd
                     : null;
 
-                  // P&L percent based on actual value change, not price change
+                  // P&L percent based on actual value change (currentValue - invested) / invested
+                  // This ensures the % matches the dollar PnL shown
                   const pnlPercent = pnlUsd !== null && position.buy_amount_usd > 0
-                    ? (pnlUsd / position.buy_amount_usd) * 100
+                    ? ((currentValue! - position.buy_amount_usd) / position.buy_amount_usd) * 100
                     : null;
 
                   // Target value
