@@ -705,8 +705,15 @@ export function FlipItDashboard() {
 
   const loadWallets = async () => {
     try {
-      // In preview mode, directly query the database
-      if (isPreviewAdmin) {
+      console.log('[FlipIt] loadWallets called, isPreviewAdmin:', isPreviewAdmin, 'isAuthenticated:', isAuthenticated);
+      
+      // Get session for auth header
+      const { data: sessionData } = await supabase.auth.getSession();
+      const accessToken = sessionData.session?.access_token;
+      
+      // Try direct DB query first if we have an authenticated session (RLS will work)
+      if (accessToken) {
+        console.log('[FlipIt] Trying direct DB query with auth session');
         const { data: walletsData, error: dbError } = await supabase
           .from('super_admin_wallets')
           .select('id, label, pubkey, wallet_type, is_active')
@@ -714,43 +721,45 @@ export function FlipItDashboard() {
           .eq('is_active', true)
           .order('created_at', { ascending: false });
 
-        if (dbError) {
-          console.error('Failed to load wallets from DB:', dbError);
-          toast.error(dbError.message || 'Failed to load wallets');
+        if (!dbError && walletsData && walletsData.length > 0) {
+          console.log('[FlipIt] Loaded wallets from DB:', walletsData.length);
+          const flipitWallets = walletsData as SuperAdminWallet[];
+          setWallets(flipitWallets);
+          if (flipitWallets.length > 0 && !selectedWallet) {
+            setSelectedWallet(flipitWallets[0].id);
+          }
           return;
         }
-
-        const flipitWallets = (walletsData || []) as SuperAdminWallet[];
-        setWallets(flipitWallets);
-        if (flipitWallets.length > 0 && !selectedWallet) {
-          setSelectedWallet(flipitWallets[0].id);
+        
+        if (dbError) {
+          console.warn('[FlipIt] Direct DB query failed (RLS?), trying edge function:', dbError.message);
         }
-        return;
       }
 
-      // Normal authenticated flow
-      const { data: sessionData } = await supabase.auth.getSession();
-      const accessToken = sessionData.session?.access_token;
-
+      // Fall back to edge function (uses service role, bypasses RLS)
+      console.log('[FlipIt] Using edge function to load wallets');
       const { data: response, error } = await supabase.functions.invoke('super-admin-wallet-generator', {
         method: 'GET',
         headers: accessToken ? { Authorization: `Bearer ${accessToken}` } : undefined,
       });
 
       if (error) {
+        console.error('[FlipIt] Edge function failed:', error);
         toast.error('Failed to load wallets');
         return;
       }
 
       const allWallets = (response as any)?.data as SuperAdminWallet[] | undefined;
       const flipitWallets = (allWallets || []).filter((w: any) => w.wallet_type === 'flipit' && w.is_active);
+      
+      console.log('[FlipIt] Loaded wallets from edge function:', flipitWallets.length);
 
       setWallets(flipitWallets);
       if (flipitWallets.length > 0 && !selectedWallet) {
         setSelectedWallet(flipitWallets[0].id);
       }
     } catch (err) {
-      console.error('Error loading wallets:', err);
+      console.error('[FlipIt] Error loading wallets:', err);
       toast.error('Failed to load wallets');
     }
   };
