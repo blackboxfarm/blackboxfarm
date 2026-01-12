@@ -2635,8 +2635,8 @@ export function FlipItDashboard() {
                                 href={position.website_url} 
                                 target="_blank" 
                                 rel="noopener noreferrer"
-                                className="text-primary hover:text-primary/80 transition-colors"
-                                title="Visit Website"
+                                className="text-blue-500 hover:text-blue-400 transition-colors"
+                                title={position.website_url}
                               >
                                 <Globe className="h-3 w-3" />
                               </a>
@@ -2680,7 +2680,7 @@ export function FlipItDashboard() {
                             )}
                             {/* DEX Paid Status Badges */}
                             {position.dex_paid_status?.hasPaidProfile && (
-                              <Badge className="text-[9px] px-1 py-0 gap-0.5 bg-blue-900 hover:bg-blue-800">
+                              <Badge className="text-[9px] px-1 py-0 gap-0.5 bg-blue-900 hover:bg-blue-800 text-white">
                                 DEX
                               </Badge>
                             )}
@@ -2697,7 +2697,7 @@ export function FlipItDashboard() {
                               </Badge>
                             )}
                             {position.dex_paid_status?.hasCTO && (
-                              <Badge className="text-[9px] px-1 py-0 gap-0.5 bg-yellow-700 hover:bg-yellow-600">
+                              <Badge className="text-[9px] px-1 py-0 gap-0.5 bg-yellow-700 hover:bg-yellow-600 text-white">
                                 CTO
                               </Badge>
                             )}
@@ -2718,9 +2718,10 @@ export function FlipItDashboard() {
                             href={`https://trade.padre.gg/trade/solana/${position.token_mint}`}
                             target="_blank"
                             rel="noopener noreferrer"
-                            className="flex items-center gap-1 hover:opacity-80 transition-opacity"
+                            className="block hover:opacity-80 transition-opacity"
+                            title="Terminal"
                           >
-                            <img src="https://trade.padre.gg/logo.svg" alt="Padre" className="h-4 w-4" />
+                            <img src="https://trade.padre.gg/logo.svg" alt="Padre Terminal" className="w-full h-auto max-h-6" />
                           </a>
                         </div>
                       </TableCell>
