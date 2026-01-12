@@ -967,7 +967,18 @@ export function FlipItDashboard() {
     setShowPrivateKey(false);
   };
 
+  // Cache for fetched token metadata - prevents repeated API calls
+  const fetchedMetadataRef = useRef<Set<string>>(new Set());
+  const lastMetadataFetchRef = useRef<number>(0);
+
   const loadPositions = async () => {
+    // Prevent concurrent loads
+    if (isLoadingPositionsRef.current) {
+      console.log('[FlipIt] loadPositions skipped - already loading');
+      return;
+    }
+    
+    isLoadingPositionsRef.current = true;
     console.log('[FlipIt] loadPositions called');
     setIsLoading(true);
     
@@ -981,6 +992,7 @@ export function FlipItDashboard() {
         console.error('[FlipIt] Failed to load positions from database:', error);
         toast.error('Failed to load positions');
         setIsLoading(false);
+        isLoadingPositionsRef.current = false;
         return;
       }
 
@@ -991,12 +1003,24 @@ export function FlipItDashboard() {
       setPositions(loadedPositions);
       setIsLoading(false);
       
-      // Fetch metadata in background (non-blocking)
-      const allUniqueMints = [...new Set(loadedPositions.map(p => p.token_mint))];
+      // Only fetch metadata for tokens we haven't fetched yet (and throttle to once per 60s)
+      const now = Date.now();
+      const timeSinceLastFetch = now - lastMetadataFetchRef.current;
+      const positionsMissingSymbols = loadedPositions.filter(p => !p.token_symbol);
+      const newMints = positionsMissingSymbols
+        .map(p => p.token_mint)
+        .filter(mint => !fetchedMetadataRef.current.has(mint));
       
-      if (allUniqueMints.length > 0) {
-        // Fire and forget - don't block UI
-        fetchTokenSymbols(allUniqueMints).then(symbolsMap => {
+      // Only fetch if: we have NEW mints we haven't seen, OR it's been 60+ seconds
+      if (newMints.length > 0 || (positionsMissingSymbols.length > 0 && timeSinceLastFetch > 60000)) {
+        const mintsToFetch = newMints.length > 0 ? newMints : [...new Set(positionsMissingSymbols.map(p => p.token_mint))];
+        console.log('[FlipIt] Fetching metadata for', mintsToFetch.length, 'tokens');
+        lastMetadataFetchRef.current = now;
+        
+        // Mark as fetched immediately to prevent duplicate requests
+        mintsToFetch.forEach(mint => fetchedMetadataRef.current.add(mint));
+        
+        fetchTokenSymbols(mintsToFetch).then(symbolsMap => {
           setPositions(prev => prev.map(p => {
             if (!p.token_symbol && symbolsMap[p.token_mint]) {
               return { ...p, token_symbol: symbolsMap[p.token_mint].symbol, token_name: symbolsMap[p.token_mint].name };
@@ -1005,31 +1029,26 @@ export function FlipItDashboard() {
           }));
           
           // Update the database with missing symbols (fire and forget)
-          const positionsMissingSymbols = loadedPositions.filter(p => !p.token_symbol);
-          for (const mint of [...new Set(positionsMissingSymbols.map(p => p.token_mint))]) {
-            if (symbolsMap[mint]) {
-              supabase
-                .from('flip_positions')
-                .update({ token_symbol: symbolsMap[mint].symbol, token_name: symbolsMap[mint].name })
-                .eq('token_mint', mint)
-                .then(() => {});
-            }
+          for (const mint of Object.keys(symbolsMap)) {
+            supabase
+              .from('flip_positions')
+              .update({ token_symbol: symbolsMap[mint].symbol, token_name: symbolsMap[mint].name })
+              .eq('token_mint', mint)
+              .then(() => {});
           }
         }).catch(err => {
           console.warn('[FlipIt] Token metadata fetch failed (non-critical):', err);
         });
       }
       
-      // Fetch current prices in background
-      const holdingPositions = loadedPositions.filter(p => p.status === 'holding');
-      console.log('[FlipIt] Holding positions for price fetch:', holdingPositions.length);
-      if (holdingPositions.length > 0) {
-        fetchCurrentPrices(holdingPositions.map(p => p.token_mint));
-      }
+      // DON'T fetch prices here - let the unified monitor handle it
+      // This prevents cascading API calls
     } catch (err) {
       console.error('[FlipIt] Failed to load positions:', err);
       toast.error('Failed to load positions');
       setIsLoading(false);
+    } finally {
+      isLoadingPositionsRef.current = false;
     }
   };
 
