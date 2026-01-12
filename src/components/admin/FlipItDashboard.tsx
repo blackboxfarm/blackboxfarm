@@ -262,7 +262,9 @@ export function FlipItDashboard() {
     loadAllData();
   }, [isPreviewAdmin, isAuthenticated, authLoading]);
 
-  // Real-time subscription to flip_positions changes
+  // Debounced real-time subscription to flip_positions changes
+  const realtimeDebounceRef = useRef<NodeJS.Timeout | null>(null);
+  
   useEffect(() => {
     const channel = supabase
       .channel('flip-positions-realtime')
@@ -270,33 +272,150 @@ export function FlipItDashboard() {
         'postgres_changes',
         { event: '*', schema: 'public', table: 'flip_positions' },
         (payload) => {
-          console.log('Position changed:', payload);
-          loadPositions(); // Reload when CRON updates positions
+          console.log('[FlipIt] Position changed (realtime):', payload.eventType);
+          
+          // Debounce: wait 2 seconds before reloading to batch multiple rapid changes
+          if (realtimeDebounceRef.current) {
+            clearTimeout(realtimeDebounceRef.current);
+          }
+          
+          realtimeDebounceRef.current = setTimeout(() => {
+            console.log('[FlipIt] Debounced reload triggered');
+            loadPositions();
+          }, 2000);
         }
       )
       .subscribe();
 
     return () => {
+      if (realtimeDebounceRef.current) {
+        clearTimeout(realtimeDebounceRef.current);
+      }
       supabase.removeChannel(channel);
     };
   }, []);
 
-  // Define handlers BEFORE useEffect hooks that reference them
-  const handleAutoRefresh = useCallback(async () => {
-    // Even if no holding positions, we still fetch if there are ANY positions
-    // This ensures bonding curve data is populated on initial load
-    const holdingPositions = positions.filter(p => p.status === 'holding');
-    
-    console.log('[FlipIt] Auto-refresh triggered, holding positions:', holdingPositions.length);
-    
-    // Allow refresh if we have any positions (not just holding), to populate bonding curve on first load
-    if (positions.length === 0) {
-      console.log('[FlipIt] No positions at all, skipping auto-refresh');
+  // Loading guard refs to prevent concurrent API calls
+  const isAutoRefreshingRef = useRef(false);
+  const isRebuyCheckingRef = useRef(false);
+  const isEmergencyCheckingRef = useRef(false);
+  const isLimitOrderCheckingRef = useRef(false);
+  const isLoadingPositionsRef = useRef(false);
+  
+  // Use refs for data to avoid stale closures in callbacks
+  const positionsRef = useRef(positions);
+  const walletsRef = useRef(wallets);
+  const selectedWalletRef = useRef(selectedWallet);
+  
+  useEffect(() => { positionsRef.current = positions; }, [positions]);
+  useEffect(() => { walletsRef.current = wallets; }, [wallets]);
+  useEffect(() => { selectedWalletRef.current = selectedWallet; }, [selectedWallet]);
+
+  // UNIFIED MONITOR - combines price check, rebuy, emergency, and limit order monitoring
+  const handleUnifiedMonitor = useCallback(async () => {
+    // Guard: prevent concurrent calls
+    if (isAutoRefreshingRef.current) {
+      console.log('[FlipIt] Unified monitor skipped - already running');
       return;
     }
 
+    const currentPositions = positionsRef.current;
+    const hasHoldings = currentPositions.some(p => p.status === 'holding');
+    const hasRebuyWatching = currentPositions.some(p => p.rebuy_status === 'watching');
+    
+    // Skip if nothing to monitor
+    if (!hasHoldings && !hasRebuyWatching && limitOrders.filter(o => o.status === 'watching').length === 0) {
+      console.log('[FlipIt] Nothing to monitor, skipping');
+      return;
+    }
+
+    isAutoRefreshingRef.current = true;
+    console.log('[FlipIt] Unified monitor running...');
+
     try {
-      console.log('[FlipIt] Calling flipit-price-monitor...');
+      // Call the unified monitor edge function
+      const { data, error } = await supabase.functions.invoke('flipit-unified-monitor', {
+        body: { 
+          slippageBps: slippageBps,
+          priorityFeeMode: priorityFeeMode
+        }
+      });
+
+      if (error) {
+        console.error('[FlipIt] Unified monitor error:', error);
+        return;
+      }
+
+      console.log('[FlipIt] Unified monitor response:', {
+        pricesCount: Object.keys(data?.prices || {}).length,
+        summary: data?.summary
+      });
+
+      // Update prices
+      if (data?.prices) {
+        setCurrentPrices(data.prices);
+      }
+      if (data?.bondingCurveData) {
+        setBondingCurveData(prev => ({ ...prev, ...data.bondingCurveData }));
+      }
+      if (data?.checkedAt) {
+        setLastAutoCheck(data.checkedAt);
+        setLastRebuyCheck(data.checkedAt);
+        setLastEmergencyCheck(data.checkedAt);
+        setLastLimitOrderCheck(data.checkedAt);
+      }
+
+      // Handle executed actions
+      if (data?.emergencyMonitor?.executed?.length > 0) {
+        toast.error(`🚨 EMERGENCY SELL: ${data.emergencyMonitor.executed.length} position(s) sold!`, { duration: 10000 });
+        loadPositions();
+      }
+      if (data?.rebuyMonitor?.executed?.length > 0) {
+        toast.success(`Rebuy executed for ${data.rebuyMonitor.executed.length} position(s)!`);
+        loadPositions();
+      }
+      if (data?.limitOrderMonitor?.executed?.length > 0) {
+        toast.success(`Limit order executed for ${data.limitOrderMonitor.executed.length} order(s)!`);
+        loadPositions();
+        loadLimitOrders();
+      }
+      if (data?.limitOrderMonitor?.expired > 0) {
+        loadLimitOrders();
+      }
+
+      // Update wallet balance
+      const currentWallet = walletsRef.current.find(w => w.id === selectedWalletRef.current);
+      if (currentWallet) {
+        try {
+          const { data: balanceData, error: balErr } = await supabase.functions.invoke('get-wallet-balance', {
+            body: { walletAddress: currentWallet.pubkey }
+          });
+          if (!balErr && !balanceData.error) {
+            setWalletBalance(balanceData.balance);
+          }
+        } catch (balanceErr) {
+          console.error('[FlipIt] Balance refresh failed:', balanceErr);
+        }
+      }
+    } catch (err) {
+      console.error('[FlipIt] Unified monitor failed:', err);
+    } finally {
+      isAutoRefreshingRef.current = false;
+    }
+  }, [slippageBps, priorityFeeMode, limitOrders]);
+
+  // Legacy handlers for backward compatibility (used by manual refresh buttons)
+  const handleAutoRefresh = useCallback(async () => {
+    if (isAutoRefreshingRef.current) return;
+    
+    const currentPositions = positionsRef.current;
+    if (currentPositions.length === 0) {
+      console.log('[FlipIt] No positions, skipping auto-refresh');
+      return;
+    }
+
+    isAutoRefreshingRef.current = true;
+    try {
       const { data, error } = await supabase.functions.invoke('flipit-price-monitor', {
         body: { 
           action: 'check',
@@ -305,52 +424,32 @@ export function FlipItDashboard() {
         }
       });
 
-      if (error) {
-        console.error('[FlipIt] Price monitor error:', error);
-        throw error;
-      }
-
-      console.log('[FlipIt] Price monitor response:', { 
-        pricesCount: Object.keys(data?.prices || {}).length,
-        bondingCurveCount: Object.keys(data?.bondingCurveData || {}).length 
-      });
+      if (error) throw error;
 
       if (data?.prices) {
         setCurrentPrices(data.prices);
       }
       if (data?.bondingCurveData) {
-        console.log('[FlipIt] Setting bonding curve data:', data.bondingCurveData);
         setBondingCurveData(prev => ({ ...prev, ...data.bondingCurveData }));
       }
       if (data?.checkedAt) {
         setLastAutoCheck(data.checkedAt);
       }
-      
-      // Auto-refresh wallet balance on every price check
-      if (selectedWallet) {
-        const wallet = wallets.find(w => w.id === selectedWallet);
-        if (wallet) {
-          try {
-            const { data: balanceData, error: balErr } = await supabase.functions.invoke('get-wallet-balance', {
-              body: { walletAddress: wallet.pubkey }
-            });
-            if (!balErr && !balanceData.error) {
-              setWalletBalance(balanceData.balance);
-            }
-          } catch (balanceErr) {
-            console.error('[FlipIt] Balance refresh during price check failed:', balanceErr);
-          }
-        }
-      }
     } catch (err) {
       console.error('[FlipIt] Auto-refresh failed:', err);
+    } finally {
+      isAutoRefreshingRef.current = false;
     }
-  }, [positions, slippageBps, priorityFeeMode, selectedWallet, wallets]);
+  }, [slippageBps, priorityFeeMode]);
 
   const handleRebuyCheck = useCallback(async () => {
-    const watchingPositions = positions.filter(p => p.rebuy_status === 'watching');
-    if (watchingPositions.length === 0 || isRebuyMonitoring) return;
+    if (isRebuyCheckingRef.current) return;
+    
+    const currentPositions = positionsRef.current;
+    const watchingPositions = currentPositions.filter(p => p.rebuy_status === 'watching');
+    if (watchingPositions.length === 0) return;
 
+    isRebuyCheckingRef.current = true;
     setIsRebuyMonitoring(true);
     try {
       const { data, error } = await supabase.functions.invoke('flipit-rebuy-monitor', {
@@ -374,13 +473,18 @@ export function FlipItDashboard() {
       console.error('Rebuy check failed:', err);
     } finally {
       setIsRebuyMonitoring(false);
+      isRebuyCheckingRef.current = false;
     }
-  }, [positions, slippageBps, priorityFeeMode, targetMultiplier, isRebuyMonitoring]);
+  }, [slippageBps, priorityFeeMode, targetMultiplier]);
 
   const handleEmergencyCheck = useCallback(async () => {
-    const watchingPositions = positions.filter(p => p.status === 'holding' && p.emergency_sell_status === 'watching');
-    if (watchingPositions.length === 0 || isEmergencyMonitoring) return;
+    if (isEmergencyCheckingRef.current) return;
+    
+    const currentPositions = positionsRef.current;
+    const watchingPositions = currentPositions.filter(p => p.status === 'holding' && p.emergency_sell_status === 'watching');
+    if (watchingPositions.length === 0) return;
 
+    isEmergencyCheckingRef.current = true;
     setIsEmergencyMonitoring(true);
     try {
       const { data, error } = await supabase.functions.invoke('flipit-emergency-monitor');
@@ -393,9 +497,6 @@ export function FlipItDashboard() {
       if (data?.prices) {
         setCurrentPrices(prev => ({ ...prev, ...data.prices }));
       }
-      if (data?.bondingCurveData) {
-        setBondingCurveData(prev => ({ ...prev, ...data.bondingCurveData }));
-      }
       if (data?.executed?.length > 0) {
         toast.error(`🚨 EMERGENCY SELL: ${data.executed.length} position(s) sold at stop-loss!`, {
           duration: 10000,
@@ -406,67 +507,51 @@ export function FlipItDashboard() {
       console.error('Emergency check failed:', err);
     } finally {
       setIsEmergencyMonitoring(false);
+      isEmergencyCheckingRef.current = false;
     }
-  }, [positions, isEmergencyMonitoring]);
+  }, []);
 
-  // Auto-refresh polling (every 15 seconds)
+  // CONSOLIDATED SINGLE POLLING INTERVAL - replaces 4 separate intervals
   useEffect(() => {
-    if (!autoRefreshEnabled) return;
+    // Only run if at least one monitor type is enabled
+    if (!autoRefreshEnabled && !rebuyMonitorEnabled && !emergencyMonitorEnabled && !limitOrderMonitorEnabled) {
+      return;
+    }
 
-    const hasHoldings = positions.some((p) => p.status === 'holding');
-    if (!hasHoldings) return;
+    const hasHoldings = positions.some(p => p.status === 'holding');
+    const hasRebuyWatching = positions.some(p => p.rebuy_status === 'watching');
+    const hasEmergencyWatching = positions.some(p => p.status === 'holding' && p.emergency_sell_status === 'watching');
+    const hasLimitOrderWatching = limitOrders.some(o => o.status === 'watching');
 
-    setCountdown(15);
-    countdownRef.current = 15;
+    // Skip if nothing to monitor
+    if (!hasHoldings && !hasRebuyWatching && !hasEmergencyWatching && !hasLimitOrderWatching) {
+      console.log('[FlipIt] No active positions/orders to monitor');
+      return;
+    }
 
-    const id = setInterval(() => {
-      void handleAutoRefresh();
-    }, 15000);
-
-    return () => {
-      clearInterval(id);
-    };
-  }, [autoRefreshEnabled, positions, handleAutoRefresh]);
-
-  // Rebuy monitoring poll (every 15 seconds)
-  useEffect(() => {
-    if (!rebuyMonitorEnabled) return;
-
-    const hasWatching = positions.some((p) => p.rebuy_status === 'watching');
-    if (!hasWatching) return;
-
-    setRebuyCountdown(15);
-    rebuyCountdownRef.current = 15;
-
-    const id = setInterval(() => {
-      void handleRebuyCheck();
-    }, 15000);
-
-    return () => {
-      clearInterval(id);
-    };
-  }, [rebuyMonitorEnabled, positions, handleRebuyCheck]);
-
-  // Emergency sell monitoring poll (every 5 seconds)
-  useEffect(() => {
-    if (!emergencyMonitorEnabled) return;
-
-    const hasWatching = positions.some(
-      (p) => p.status === 'holding' && p.emergency_sell_status === 'watching'
-    );
-    if (!hasWatching) return;
-
-    setEmergencyCountdown(5);
-    emergencyCountdownRef.current = 5;
-
-    const id = setInterval(() => {
-      void handleEmergencyCheck();
+    console.log('[FlipIt] Starting unified monitor interval (5s)');
+    
+    // Run immediately on mount
+    handleUnifiedMonitor();
+    
+    // Then run every 5 seconds (compromise between 2s limit orders and 15s price check)
+    const intervalId = setInterval(() => {
+      handleUnifiedMonitor();
     }, 5000);
 
     return () => {
-      clearInterval(id);
+      console.log('[FlipIt] Clearing unified monitor interval');
+      clearInterval(intervalId);
     };
-  }, [emergencyMonitorEnabled, positions, handleEmergencyCheck]);
+  }, [
+    autoRefreshEnabled, 
+    rebuyMonitorEnabled, 
+    emergencyMonitorEnabled, 
+    limitOrderMonitorEnabled,
+    positions.length, // Only re-run effect when position count changes
+    limitOrders.length, // Only re-run effect when order count changes
+    handleUnifiedMonitor
+  ]);
 
   // Limit order monitoring handler
   const handleLimitOrderCheck = useCallback(async () => {
