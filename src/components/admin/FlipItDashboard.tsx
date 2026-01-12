@@ -876,58 +876,66 @@ export function FlipItDashboard() {
   const loadPositions = async () => {
     console.log('[FlipIt] loadPositions called');
     setIsLoading(true);
-    const { data, error } = await supabase
-      .from('flip_positions')
-      .select('*')
-      .order('created_at', { ascending: false });
+    
+    try {
+      const { data, error } = await supabase
+        .from('flip_positions')
+        .select('*')
+        .order('created_at', { ascending: false });
 
-    if (error) {
-      console.error('[FlipIt] Failed to load positions:', error);
+      if (error) {
+        console.error('[FlipIt] Failed to load positions from database:', error);
+        toast.error('Failed to load positions');
+        setIsLoading(false);
+        return;
+      }
+
+      console.log('[FlipIt] Loaded positions:', data?.length || 0);
+      let loadedPositions = (data || []) as unknown as FlipPosition[];
+      
+      // Set positions immediately so UI can render
+      setPositions(loadedPositions);
+      setIsLoading(false);
+      
+      // Fetch metadata in background (non-blocking)
+      const allUniqueMints = [...new Set(loadedPositions.map(p => p.token_mint))];
+      
+      if (allUniqueMints.length > 0) {
+        // Fire and forget - don't block UI
+        fetchTokenSymbols(allUniqueMints).then(symbolsMap => {
+          setPositions(prev => prev.map(p => {
+            if (!p.token_symbol && symbolsMap[p.token_mint]) {
+              return { ...p, token_symbol: symbolsMap[p.token_mint].symbol, token_name: symbolsMap[p.token_mint].name };
+            }
+            return p;
+          }));
+          
+          // Update the database with missing symbols (fire and forget)
+          const positionsMissingSymbols = loadedPositions.filter(p => !p.token_symbol);
+          for (const mint of [...new Set(positionsMissingSymbols.map(p => p.token_mint))]) {
+            if (symbolsMap[mint]) {
+              supabase
+                .from('flip_positions')
+                .update({ token_symbol: symbolsMap[mint].symbol, token_name: symbolsMap[mint].name })
+                .eq('token_mint', mint)
+                .then(() => {});
+            }
+          }
+        }).catch(err => {
+          console.warn('[FlipIt] Token metadata fetch failed (non-critical):', err);
+        });
+      }
+      
+      // Fetch current prices in background
+      const holdingPositions = loadedPositions.filter(p => p.status === 'holding');
+      console.log('[FlipIt] Holding positions for price fetch:', holdingPositions.length);
+      if (holdingPositions.length > 0) {
+        fetchCurrentPrices(holdingPositions.map(p => p.token_mint));
+      }
+    } catch (err) {
+      console.error('[FlipIt] Failed to load positions:', err);
       toast.error('Failed to load positions');
       setIsLoading(false);
-      return;
-    }
-
-    console.log('[FlipIt] Loaded positions:', data?.length || 0);
-    let loadedPositions = (data || []) as unknown as FlipPosition[];
-    
-    // Collect all unique mints to fetch metadata (for symbols and images)
-    const allUniqueMints = [...new Set(loadedPositions.map(p => p.token_mint))];
-    
-    // Fetch token metadata for all positions (to get images and missing symbols)
-    if (allUniqueMints.length > 0) {
-      const symbolsMap = await fetchTokenSymbols(allUniqueMints);
-      
-      // Update positions missing symbols
-      loadedPositions = loadedPositions.map(p => {
-        if (!p.token_symbol && symbolsMap[p.token_mint]) {
-          return { ...p, token_symbol: symbolsMap[p.token_mint].symbol, token_name: symbolsMap[p.token_mint].name };
-        }
-        return p;
-      });
-      
-      // Update the database with the symbols for positions missing them (fire and forget)
-      const positionsMissingSymbols = loadedPositions.filter(p => !p.token_symbol);
-      for (const mint of [...new Set(positionsMissingSymbols.map(p => p.token_mint))]) {
-        if (symbolsMap[mint]) {
-          supabase
-            .from('flip_positions')
-            .update({ token_symbol: symbolsMap[mint].symbol, token_name: symbolsMap[mint].name })
-            .eq('token_mint', mint)
-            .then(() => {});
-        }
-      }
-    }
-    
-    setPositions(loadedPositions);
-    setIsLoading(false);
-    
-    // Fetch current prices and bonding curve data for ALL positions (not just holding)
-    // This ensures bonding curve percentages are always populated
-    const holdingPositions = loadedPositions.filter(p => p.status === 'holding');
-    console.log('[FlipIt] Holding positions for price fetch:', holdingPositions.length);
-    if (holdingPositions.length > 0) {
-      fetchCurrentPrices(holdingPositions.map(p => p.token_mint));
     }
   };
 
