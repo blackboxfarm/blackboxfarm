@@ -61,11 +61,65 @@ interface FetcherStats {
   durationMs: number;
 }
 
-// Fetch latest tokens from Solana Tracker API
+/**
+ * Fetch latest tokens from pump.fun API directly
+ * 
+ * API Truth Table: For new token detection, use pump.fun (source of truth before Raydium)
+ * NOT Solana Tracker (downstream, delayed)
+ */
 async function fetchLatestPumpfunTokens(limit = 200): Promise<TokenData[]> {
+  try {
+    // PRIMARY: Use pump.fun API directly (source of truth)
+    console.log('Fetching latest tokens from pump.fun API...');
+    const pumpResponse = await fetch(
+      `https://frontend-api.pump.fun/coins?sort=created_timestamp&order=DESC&limit=${limit}`,
+      {
+        headers: { 'Accept': 'application/json' },
+        signal: AbortSignal.timeout(10000)
+      }
+    );
+
+    if (pumpResponse.ok) {
+      const pumpData = await pumpResponse.json();
+      if (Array.isArray(pumpData)) {
+        console.log(`Got ${pumpData.length} tokens from pump.fun API`);
+        
+        // Transform pump.fun format to our TokenData format
+        return pumpData.map((coin: any) => ({
+          token: {
+            mint: coin.mint,
+            name: coin.name || 'Unknown',
+            symbol: coin.symbol || 'UNK',
+            decimals: 6, // pump.fun tokens use 6 decimals
+            image: coin.image_uri || coin.metadata?.image,
+          },
+          pools: coin.usd_market_cap ? [{
+            liquidity: { usd: coin.usd_market_cap * 0.1 }, // Estimate
+            price: { usd: coin.usd_market_cap / (coin.total_supply / 1e6) },
+          }] : [],
+          events: { createdAt: coin.created_timestamp },
+          creator: coin.creator,
+          // Include bonding curve data for state tracking
+          bondingCurve: {
+            virtualSolReserves: coin.virtual_sol_reserves,
+            virtualTokenReserves: coin.virtual_token_reserves,
+            realTokenReserves: coin.real_token_reserves,
+            complete: coin.complete === true,
+          }
+        }));
+      }
+    } else {
+      console.log(`pump.fun API returned ${pumpResponse.status}, falling back to Solana Tracker`);
+    }
+  } catch (error) {
+    console.error('pump.fun API failed:', error);
+  }
+
+  // FALLBACK: Solana Tracker (if pump.fun is blocked/down)
   const apiKey = Deno.env.get('SOLANA_TRACKER_API_KEY');
   
   try {
+    console.log('Falling back to Solana Tracker API...');
     const response = await fetch(
       `https://data.solanatracker.io/tokens/latest?market=pumpfun&limit=${limit}`,
       {
@@ -84,7 +138,7 @@ async function fetchLatestPumpfunTokens(limit = 200): Promise<TokenData[]> {
     const data = await response.json();
     return Array.isArray(data) ? data : [];
   } catch (error) {
-    console.error('Error fetching tokens:', error);
+    console.error('Error fetching tokens from Solana Tracker:', error);
     return [];
   }
 }

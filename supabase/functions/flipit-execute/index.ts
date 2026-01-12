@@ -1,5 +1,11 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { 
+  resolvePrice, 
+  fetchSolPrice, 
+  verifyBuyFromChain,
+  type PriceResult 
+} from "../_shared/price-resolver.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -29,95 +35,24 @@ function firstSignature(swapResult: any): string | null {
   return null;
 }
 
-async function fetchTokenPrice(tokenMint: string): Promise<number | null> {
-  const isPumpToken = tokenMint.endsWith('pump');
+/**
+ * PRICE FETCHING - Now uses centralized price resolver
+ * 
+ * API Truth Table:
+ * - Pre-Raydium (on bonding curve): pump.fun API -> bonding curve math  
+ * - Post-Raydium (graduated): DexScreener -> Jupiter fallback
+ */
+async function fetchTokenPrice(tokenMint: string): Promise<{ price: number; metadata: PriceResult } | null> {
+  const heliusApiKey = Deno.env.get("HELIUS_API_KEY");
+  const result = await resolvePrice(tokenMint, { heliusApiKey });
   
-  // For pump.fun tokens, try pump.fun API first for freshest price
-  if (isPumpToken) {
-    try {
-      console.log("Fetching fresh price from pump.fun API for:", tokenMint);
-      const pumpRes = await fetch(`https://frontend-api.pump.fun/coins/${tokenMint}`, {
-        headers: { "Accept": "application/json" }
-      });
-      if (pumpRes.ok) {
-        const pumpData = await pumpRes.json();
-        // pump.fun returns usd_market_cap and we can derive price
-        // Or check if they have a direct price field
-        if (pumpData?.usd_market_cap && pumpData?.total_supply) {
-          const price = pumpData.usd_market_cap / (pumpData.total_supply / 1e6); // pump.fun uses 6 decimals
-          console.log("Got price from pump.fun API:", price, "(mcap:", pumpData.usd_market_cap, ")");
-          return price;
-        }
-        // Some pump.fun responses include virtual_sol_reserves and virtual_token_reserves
-        if (pumpData?.virtual_sol_reserves && pumpData?.virtual_token_reserves) {
-          // Price = (SOL reserves / token reserves) * SOL price
-          const solPrice = await fetchSolPrice();
-          const priceInSol = (pumpData.virtual_sol_reserves / 1e9) / (pumpData.virtual_token_reserves / 1e6);
-          const priceUsd = priceInSol * solPrice;
-          console.log("Got price from pump.fun bonding curve:", priceUsd, "USD (", priceInSol, "SOL)");
-          return priceUsd;
-        }
-      }
-    } catch (e) {
-      console.error("pump.fun price fetch failed:", e);
-    }
-  }
-
-  // Try DexScreener (often has fresher prices than Jupiter for new tokens)
-  try {
-    console.log("Trying DexScreener for price...");
-    const dexRes = await fetch(`https://api.dexscreener.com/latest/dex/tokens/${tokenMint}`);
-    const dexData = await dexRes.json();
-    const pair = dexData?.pairs?.[0];
-    if (pair?.priceUsd) {
-      console.log("Got price from DexScreener:", pair.priceUsd);
-      return Number(pair.priceUsd);
-    }
-  } catch (e) {
-    console.error("DexScreener price fetch failed:", e);
-  }
-
-  // Try Jupiter (best for graduated/Raydium tokens)
-  try {
-    const res = await fetch(`https://price.jup.ag/v6/price?ids=${tokenMint}`);
-    const json = await res.json();
-    const price = json?.data?.[tokenMint]?.price;
-    if (price) {
-      console.log("Got price from Jupiter:", price);
-      return Number(price);
-    }
-  } catch (e) {
-    console.error("Jupiter price fetch failed:", e);
+  if (!result) {
+    return null;
   }
   
-  return null;
-}
-
-async function fetchSolPrice(): Promise<number> {
-  // Try Jupiter first
-  try {
-    const res = await fetch("https://price.jup.ag/v6/price?ids=SOL");
-    const json = await res.json();
-    const price = json?.data?.SOL?.price || json?.data?.wSOL?.price;
-    if (price) return Number(price);
-  } catch (e) {
-    console.error("Jupiter SOL price failed:", e);
-  }
+  console.log(`Price for ${tokenMint.slice(0, 8)}: $${result.price.toFixed(10)} from ${result.source}${result.isOnCurve ? ` (curve ${result.bondingCurveProgress?.toFixed(1)}%)` : ''}`);
   
-  // Fallback to CoinGecko
-  try {
-    console.log("Trying CoinGecko fallback for SOL price...");
-    const cgRes = await fetch("https://api.coingecko.com/api/v3/simple/price?ids=solana&vs_currencies=usd");
-    const cgData = await cgRes.json();
-    if (cgData?.solana?.usd) {
-      console.log("Got SOL price from CoinGecko:", cgData.solana.usd);
-      return Number(cgData.solana.usd);
-    }
-  } catch (e) {
-    console.error("CoinGecko SOL price failed:", e);
-  }
-  
-  return 200; // Default fallback
+  return { price: result.price, metadata: result };
 }
 
 async function fetchTokenMetadata(tokenMint: string): Promise<{ 
@@ -553,11 +488,14 @@ serve(async (req) => {
       
       console.log(`Balance check passed: ${walletBalance.toFixed(4)} SOL >= ${requiredSol.toFixed(4)} SOL required`);
 
-      // Fetch current token price
-      const currentPrice = await fetchTokenPrice(tokenMint);
-      if (!currentPrice) {
+      // Fetch current token price using centralized resolver
+      const priceResult = await fetchTokenPrice(tokenMint);
+      if (!priceResult) {
         return bad("Could not fetch token price");
       }
+      
+      const currentPrice = priceResult.price;
+      const priceMetadata = priceResult.metadata;
 
       // Fetch token metadata
       const metadata = await fetchTokenMetadata(tokenMint);
@@ -576,6 +514,7 @@ serve(async (req) => {
       }
 
       // NOW create position record (only after balance check passes)
+      // Include price source metadata from resolver
       const positionData: any = {
         user_id: userId,
         wallet_id: walletId,
@@ -592,7 +531,12 @@ serve(async (req) => {
         target_price_usd: targetPrice,
         status: "pending_buy",
         source: source || "manual",
-        source_channel_id: sourceChannelId || null
+        source_channel_id: sourceChannelId || null,
+        // New price tracking fields
+        price_source: priceMetadata.source,
+        price_fetched_at: priceMetadata.fetchedAt,
+        is_on_curve: priceMetadata.isOnCurve,
+        bonding_curve_progress: priceMetadata.bondingCurveProgress ?? null,
       };
 
       // Add scalp mode fields if this is a scalp position
@@ -858,6 +802,25 @@ serve(async (req) => {
             error_message: null,
           })
           .eq("id", position.id);
+
+        // AUTO-VERIFY ENTRY: Use Helius to get verified on-chain entry data
+        const heliusKey = Deno.env.get("HELIUS_API_KEY");
+        if (heliusKey && signature) {
+          verifyBuyFromChain(signature, tokenMint, heliusKey).then(async (verified) => {
+            if (verified) {
+              console.log("Entry verified from chain:", verified);
+              await supabase.from("flip_positions").update({
+                quantity_tokens: String(verified.tokensReceived),
+                buy_amount_sol: verified.solSpent,
+                buy_amount_usd: verified.solSpent * solPrice,
+                buy_price_usd: verified.pricePerToken,
+                buy_fee_sol: verified.feePaid,
+                entry_verified: true,
+                entry_verified_at: new Date().toISOString(),
+              }).eq("id", position.id);
+            }
+          }).catch(e => console.error("Auto-verify failed:", e));
+        }
 
         // Calculate SOL amount from USD (reuse solPrice from above)
         const amountSol = (buyAmountUsd || 10) / solPrice;
