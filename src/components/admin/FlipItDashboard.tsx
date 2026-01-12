@@ -2680,9 +2680,8 @@ export function FlipItDashboard() {
                             )}
                             {/* DEX Paid Status Badges */}
                             {position.dex_paid_status?.hasPaidProfile && (
-                              <Badge className="text-[9px] px-1 py-0 gap-0.5 bg-green-600 hover:bg-green-700">
-                                <Shield className="h-2 w-2" />
-                                DEX PAID
+                              <Badge className="text-[9px] px-1 py-0 gap-0.5 bg-blue-900 hover:bg-blue-800">
+                                DEX
                               </Badge>
                             )}
                             {position.dex_paid_status?.activeBoosts > 0 && (
@@ -2698,8 +2697,7 @@ export function FlipItDashboard() {
                               </Badge>
                             )}
                             {position.dex_paid_status?.hasCTO && (
-                              <Badge className="text-[9px] px-1 py-0 gap-0.5 bg-blue-600 hover:bg-blue-700">
-                                <Users className="h-2 w-2" />
+                              <Badge className="text-[9px] px-1 py-0 gap-0.5 bg-yellow-700 hover:bg-yellow-600">
                                 CTO
                               </Badge>
                             )}
@@ -2711,18 +2709,18 @@ export function FlipItDashboard() {
                             {position.token_mint.slice(0, 6)}...{position.token_mint.slice(-4)}
                             <Copy className="h-2 w-2 opacity-50" />
                           </button>
+                          <div className="text-[10px] text-muted-foreground">
+                            ${typeof effectiveEntryPrice === 'number' && Number.isFinite(effectiveEntryPrice)
+                              ? effectiveEntryPrice.toFixed(8)
+                              : '-'}
+                          </div>
                           <a
                             href={`https://trade.padre.gg/trade/solana/${position.token_mint}`}
                             target="_blank"
                             rel="noopener noreferrer"
                             className="flex items-center gap-1 hover:opacity-80 transition-opacity"
                           >
-                            <img src="https://trade.padre.gg/logo.svg" alt="Padre" className="h-3 w-3" />
-                            <span className="text-[10px] text-muted-foreground">
-                              ${typeof effectiveEntryPrice === 'number' && Number.isFinite(effectiveEntryPrice)
-                                ? effectiveEntryPrice.toFixed(8)
-                                : '-'}
-                            </span>
+                            <img src="https://trade.padre.gg/logo.svg" alt="Padre" className="h-4 w-4" />
                           </a>
                         </div>
                       </TableCell>
