@@ -38,17 +38,18 @@ function normalizeMint(mint: string) {
   return t;
 }
 
-async function getPriceUSDFromJup(id: string): Promise<number | null> {
+// Use Jupiter v2 API (current, supported)
+async function getPriceUSDFromJupV2(id: string): Promise<number | null> {
   try {
-    const url = `https://price.jup.ag/v6/price?ids=${encodeURIComponent(id)}&vsToken=USDC`;
-    const r = await fetch(url);
+    const url = `https://api.jup.ag/price/v2?ids=${encodeURIComponent(id)}`;
+    const r = await fetch(url, { signal: AbortSignal.timeout(5000) });
     if (!r.ok) return null;
     const j = await r.json();
     const p = j?.data?.[id]?.price;
     if (typeof p === "number" && isFinite(p) && p > 0) return p;
     return null;
   } catch (e) {
-    console.log("Jupiter price fetch failed, falling back", e);
+    console.log("Jupiter v2 price fetch failed:", e instanceof Error ? e.message : String(e));
     return null;
   }
 }
@@ -56,7 +57,9 @@ async function getPriceUSDFromJup(id: string): Promise<number | null> {
 async function getPriceUSDFromDexScreener(mint: string): Promise<number | null> {
   try {
     const id = normalizeMint(mint);
-    const r = await fetch(`https://api.dexscreener.com/latest/dex/tokens/${encodeURIComponent(id)}`);
+    const r = await fetch(`https://api.dexscreener.com/latest/dex/tokens/${encodeURIComponent(id)}`, {
+      signal: AbortSignal.timeout(5000)
+    });
     if (!r.ok) return null;
     const j = await r.json();
     const pairs = Array.isArray(j?.pairs) ? j.pairs : [];
@@ -70,17 +73,92 @@ async function getPriceUSDFromDexScreener(mint: string): Promise<number | null> 
     if (Number.isFinite(priceUsd) && priceUsd > 0) return priceUsd;
     return null;
   } catch (e) {
-    console.log("DexScreener price fetch failed", e);
+    console.log("DexScreener price fetch failed:", e instanceof Error ? e.message : String(e));
     return null;
   }
 }
 
-async function getPriceUSD(mint: string): Promise<number | null> {
-  // Try Jupiter first
-  const fromJup = await getPriceUSDFromJup(mint);
-  if (fromJup != null) return fromJup;
-  // Fallback to DexScreener
-  return await getPriceUSDFromDexScreener(mint);
+// For pump.fun tokens, try pump.fun API first
+async function getPriceUSDFromPumpFun(mint: string): Promise<number | null> {
+  try {
+    const res = await fetch(`https://frontend-api.pump.fun/coins/${mint}`, {
+      headers: { 'Accept': 'application/json' },
+      signal: AbortSignal.timeout(5000)
+    });
+
+    if (!res.ok) {
+      console.log(`pump.fun API returned ${res.status} for ${mint}`);
+      return null;
+    }
+
+    const data = await res.json();
+
+    // Method 1: Use market cap and supply
+    if (data.usd_market_cap && data.total_supply) {
+      const price = data.usd_market_cap / (data.total_supply / 1e6);
+      return price;
+    }
+
+    // Method 2: Use bonding curve reserves
+    if (data.virtual_sol_reserves && data.virtual_token_reserves) {
+      // Get SOL price
+      const solPrice = await getSolPrice();
+      const priceInSol = (data.virtual_sol_reserves / 1e9) / (data.virtual_token_reserves / 1e6);
+      return priceInSol * solPrice;
+    }
+
+    return null;
+  } catch (e) {
+    console.log("pump.fun API failed:", e instanceof Error ? e.message : String(e));
+    return null;
+  }
+}
+
+// Get SOL price for calculations
+async function getSolPrice(): Promise<number> {
+  try {
+    const res = await fetch('https://api.jup.ag/price/v2?ids=So11111111111111111111111111111111111111112', {
+      signal: AbortSignal.timeout(3000)
+    });
+    if (res.ok) {
+      const json = await res.json();
+      const price = Number(json?.data?.['So11111111111111111111111111111111111111112']?.price);
+      if (price > 0) return price;
+    }
+  } catch (e) {
+    console.log('Jupiter SOL price failed:', e instanceof Error ? e.message : String(e));
+  }
+  return 180; // Fallback
+}
+
+async function getPriceUSD(mint: string): Promise<{ price: number; source: string } | null> {
+  const isPumpToken = mint.toLowerCase().endsWith('pump');
+  
+  // For pump.fun tokens, try pump.fun API first (pre-Raydium tokens)
+  if (isPumpToken) {
+    const fromPump = await getPriceUSDFromPumpFun(mint);
+    if (fromPump != null) {
+      console.log(`Price for ${mint.slice(0, 8)}: $${fromPump} from pump.fun`);
+      return { price: fromPump, source: 'pumpfun' };
+    }
+  }
+  
+  // Try DexScreener (best for graduated tokens)
+  const fromDex = await getPriceUSDFromDexScreener(mint);
+  if (fromDex != null) {
+    console.log(`Price for ${mint.slice(0, 8)}: $${fromDex} from DexScreener`);
+    return { price: fromDex, source: 'dexscreener' };
+  }
+  
+  // Fallback to Jupiter v2
+  const fromJup = await getPriceUSDFromJupV2(mint);
+  if (fromJup != null) {
+    console.log(`Price for ${mint.slice(0, 8)}: $${fromJup} from Jupiter`);
+    return { price: fromJup, source: 'jupiter' };
+  }
+  
+  console.log(`No price found for ${mint.slice(0, 8)} from any source`);
+  return null;
 }
 
 serve(async (req) => {
@@ -103,9 +181,9 @@ serve(async (req) => {
     // Server-side price proxy (avoids CORS/network issues in browser)
     const priceMint = url.searchParams.get("priceMint");
     if (priceMint) {
-      const price = await getPriceUSD(priceMint);
-      if (price == null) return bad("Price fetch failed (all sources)", 502);
-      return ok({ priceUSD: price });
+      const result = await getPriceUSD(priceMint);
+      if (result == null) return bad("Price fetch failed (all sources)", 502);
+      return ok({ priceUSD: result.price, source: result.source });
     }
 
     const body = (await getJson<any>(req)) ?? {};
