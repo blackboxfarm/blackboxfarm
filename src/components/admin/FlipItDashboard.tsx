@@ -179,8 +179,8 @@ export function FlipItDashboard() {
   const holderQuality = useHolderQualityCheck();
   
   // Settings
-  const [slippageBps, setSlippageBps] = useState(500); // 5% default
-  const [priorityFeeMode, setPriorityFeeMode] = useState<'low' | 'medium' | 'high' | 'turbo' | 'ultra'>('medium');
+  const [slippageBps, setSlippageBps] = useState(1500); // 15% default
+  const [priorityFeeMode, setPriorityFeeMode] = useState<'low' | 'medium' | 'high' | 'turbo' | 'ultra'>('low'); // 0.0001 SOL default
   const [autoMonitorEnabled, setAutoMonitorEnabled] = useState(true);
   const [lastAutoCheck, setLastAutoCheck] = useState<string | null>(null);
   
