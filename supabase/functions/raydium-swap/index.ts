@@ -930,6 +930,10 @@ serve(async (req) => {
         pumpAmount = sellAll ? "100%" : String(amount);
       }
       
+      // Use higher slippage for bonding curve tokens (10% minimum) due to high volatility
+      const pumpSlippage = Math.max(Number(slippageBps), 1000); // 10% minimum
+      console.log(`Using ${pumpSlippage} bps slippage for bonding curve token`);
+      
       try {
         // First try with specific pool, then with 'auto' if it fails
         const pools: Array<'pump' | 'bonk' | 'auto'> = [getBondingCurvePool(), 'auto'];
@@ -940,7 +944,7 @@ serve(async (req) => {
             userPublicKey: owner.publicKey.toBase58(),
             action: side as 'buy' | 'sell',
             amount: pumpAmount,
-            slippageBps: Number(slippageBps),
+            slippageBps: pumpSlippage,
             pool: pool,
           });
           
@@ -1101,11 +1105,18 @@ serve(async (req) => {
 
     // Jupiter fallback if Raydium compute failed at compute stage
     if (needJupiter) {
+      // For pump.fun tokens, use higher slippage (10% minimum) due to volatility
+      const isPumpToken = tokenMint?.endsWith?.('pump') || String(outputMint).endsWith('pump') || String(inputMint).endsWith('pump');
+      const baseSlippage = Number(slippageBps);
+      const effectiveSlippage = isPumpToken ? Math.max(baseSlippage, 1000) : baseSlippage; // 10% min for pump tokens
+      
+      console.log(`Jupiter fallback with slippage: ${effectiveSlippage} bps (pump token: ${isPumpToken})`);
+      
       const j = await tryJupiterSwap({
         inputMint: String(inputMint),
         outputMint: String(outputMint),
         amount: amount as any,
-        slippageBps: Number(slippageBps),
+        slippageBps: effectiveSlippage,
         userPublicKey: owner.publicKey.toBase58(),
         computeUnitPriceMicroLamports,
         asLegacy: String(txVersion).toUpperCase() === "LEGACY",
@@ -1127,16 +1138,50 @@ serve(async (req) => {
             const confirmResult = await hardConfirmTransaction(connection, sig, blockhash, lastValidBlockHeight, 30000);
             
             if (!confirmResult.confirmed) {
-              // Retry once with fresh blockhash
-              console.log(`Jupiter Legacy tx failed (${confirmResult.error}), retrying...`);
-              const fresh = await connection.getLatestBlockhash("confirmed");
-              tx.recentBlockhash = fresh.blockhash;
-              tx.sign(owner);
-              sig = await connection.sendRawTransaction(tx.serialize(), { skipPreflight: true, maxRetries: 2 });
+              // Check if it's slippage error - retry with higher slippage
+              const isSlippageError = confirmResult.error?.includes('"Custom":1') || confirmResult.error?.includes('SlippageToleranceExceeded');
+              const retrySlippage = isSlippageError ? Math.min(effectiveSlippage * 2, 2500) : effectiveSlippage; // Double slippage, max 25%
               
-              const retryResult = await hardConfirmTransaction(connection, sig, fresh.blockhash, fresh.lastValidBlockHeight, 30000);
-              if (!retryResult.confirmed) {
-                return softError("SWAP_FAILED", `Jupiter swap failed after retry: ${retryResult.error}`);
+              console.log(`Jupiter Legacy tx failed (${confirmResult.error}), retrying with ${retrySlippage} bps slippage...`);
+              
+              // Re-fetch quote with higher slippage if needed
+              if (isSlippageError && retrySlippage > effectiveSlippage) {
+                const retryJ = await tryJupiterSwap({
+                  inputMint: String(inputMint),
+                  outputMint: String(outputMint),
+                  amount: amount as any,
+                  slippageBps: retrySlippage,
+                  userPublicKey: owner.publicKey.toBase58(),
+                  computeUnitPriceMicroLamports,
+                  asLegacy: true,
+                });
+                
+                if ("txs" in retryJ && retryJ.txs.length > 0) {
+                  const retryU8 = b64ToU8(retryJ.txs[0]);
+                  const retryTx = Transaction.from(retryU8 as any);
+                  const fresh = await connection.getLatestBlockhash("confirmed");
+                  retryTx.recentBlockhash = fresh.blockhash;
+                  if (!retryTx.feePayer) retryTx.feePayer = owner.publicKey;
+                  retryTx.sign(owner);
+                  sig = await connection.sendRawTransaction(retryTx.serialize(), { skipPreflight: true, maxRetries: 2 });
+                  
+                  const retryResult = await hardConfirmTransaction(connection, sig, fresh.blockhash, fresh.lastValidBlockHeight, 30000);
+                  if (!retryResult.confirmed) {
+                    return softError("SWAP_FAILED", `Jupiter swap failed after slippage retry: ${retryResult.error}`);
+                  }
+                } else {
+                  return softError("SWAP_FAILED", `Jupiter swap failed after retry: ${confirmResult.error}`);
+                }
+              } else {
+                const fresh = await connection.getLatestBlockhash("confirmed");
+                tx.recentBlockhash = fresh.blockhash;
+                tx.sign(owner);
+                sig = await connection.sendRawTransaction(tx.serialize(), { skipPreflight: true, maxRetries: 2 });
+                
+                const retryResult = await hardConfirmTransaction(connection, sig, fresh.blockhash, fresh.lastValidBlockHeight, 30000);
+                if (!retryResult.confirmed) {
+                  return softError("SWAP_FAILED", `Jupiter swap failed after retry: ${retryResult.error}`);
+                }
               }
             }
             
@@ -1157,16 +1202,49 @@ serve(async (req) => {
             const confirmResult = await hardConfirmTransaction(connection, sig, fresh.blockhash, fresh.lastValidBlockHeight, 30000);
             
             if (!confirmResult.confirmed) {
-              // Retry once with fresh blockhash
-              console.log(`Jupiter V0 tx failed (${confirmResult.error}), retrying...`);
-              const newer = await connection.getLatestBlockhash("confirmed");
-              (vtx as any).message.recentBlockhash = newer.blockhash;
-              vtx.sign([owner]);
-              sig = await connection.sendTransaction(vtx, { skipPreflight: true, maxRetries: 2 });
+              // Check if it's slippage error - retry with higher slippage
+              const isSlippageError = confirmResult.error?.includes('"Custom":1') || confirmResult.error?.includes('SlippageToleranceExceeded');
+              const retrySlippage = isSlippageError ? Math.min(effectiveSlippage * 2, 2500) : effectiveSlippage; // Double slippage, max 25%
               
-              const retryResult = await hardConfirmTransaction(connection, sig, newer.blockhash, newer.lastValidBlockHeight, 30000);
-              if (!retryResult.confirmed) {
-                return softError("SWAP_FAILED", `Jupiter swap failed after retry: ${retryResult.error}`);
+              console.log(`Jupiter V0 tx failed (${confirmResult.error}), retrying with ${retrySlippage} bps slippage...`);
+              
+              // Re-fetch quote with higher slippage if needed
+              if (isSlippageError && retrySlippage > effectiveSlippage) {
+                const retryJ = await tryJupiterSwap({
+                  inputMint: String(inputMint),
+                  outputMint: String(outputMint),
+                  amount: amount as any,
+                  slippageBps: retrySlippage,
+                  userPublicKey: owner.publicKey.toBase58(),
+                  computeUnitPriceMicroLamports,
+                  asLegacy: false,
+                });
+                
+                if ("txs" in retryJ && retryJ.txs.length > 0) {
+                  const retryU8 = b64ToU8(retryJ.txs[0]);
+                  const retryVtx = VersionedTransaction.deserialize(retryU8);
+                  const newer = await connection.getLatestBlockhash("confirmed");
+                  (retryVtx as any).message.recentBlockhash = newer.blockhash;
+                  retryVtx.sign([owner]);
+                  sig = await connection.sendTransaction(retryVtx, { skipPreflight: true, maxRetries: 2 });
+                  
+                  const retryResult = await hardConfirmTransaction(connection, sig, newer.blockhash, newer.lastValidBlockHeight, 30000);
+                  if (!retryResult.confirmed) {
+                    return softError("SWAP_FAILED", `Jupiter swap failed after slippage retry: ${retryResult.error}`);
+                  }
+                } else {
+                  return softError("SWAP_FAILED", `Jupiter swap failed after retry: ${confirmResult.error}`);
+                }
+              } else {
+                const newer = await connection.getLatestBlockhash("confirmed");
+                (vtx as any).message.recentBlockhash = newer.blockhash;
+                vtx.sign([owner]);
+                sig = await connection.sendTransaction(vtx, { skipPreflight: true, maxRetries: 2 });
+                
+                const retryResult = await hardConfirmTransaction(connection, sig, newer.blockhash, newer.lastValidBlockHeight, 30000);
+                if (!retryResult.confirmed) {
+                  return softError("SWAP_FAILED", `Jupiter swap failed after retry: ${retryResult.error}`);
+                }
               }
             }
             
