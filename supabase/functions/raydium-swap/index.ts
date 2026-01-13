@@ -84,6 +84,101 @@ function softError(code: string, message: string) {
   return ok({ error: message, error_code: code }, 200);
 }
 
+// HARD CONFIRMATION: Ensures transaction actually landed on-chain
+// Returns { confirmed: true, signature } or { confirmed: false, error }
+async function hardConfirmTransaction(
+  connection: Connection,
+  signature: string,
+  blockhash: string,
+  lastValidBlockHeight: number,
+  timeoutMs: number = 30000
+): Promise<{ confirmed: boolean; error?: string }> {
+  const startTime = Date.now();
+  
+  try {
+    // First try the standard confirmTransaction with a timeout
+    const confirmPromise = connection.confirmTransaction(
+      { blockhash, lastValidBlockHeight, signature },
+      "confirmed" as any
+    );
+    
+    const timeoutPromise = new Promise<never>((_, reject) => 
+      setTimeout(() => reject(new Error("CONFIRM_TIMEOUT")), timeoutMs)
+    );
+    
+    const result = await Promise.race([confirmPromise, timeoutPromise]);
+    
+    if (result.value?.err) {
+      return { 
+        confirmed: false, 
+        error: `TX_FAILED_ON_CHAIN: ${JSON.stringify(result.value.err)}` 
+      };
+    }
+    
+    return { confirmed: true };
+  } catch (e) {
+    const errMsg = (e as Error).message || String(e);
+    console.log(`Initial confirmation failed (${errMsg}), checking signature status...`);
+    
+    // Fallback: Poll getSignatureStatuses for definitive answer
+    const pollInterval = 2000;
+    const maxPolls = Math.ceil((timeoutMs - (Date.now() - startTime)) / pollInterval);
+    
+    for (let i = 0; i < Math.max(maxPolls, 3); i++) {
+      try {
+        await new Promise(resolve => setTimeout(resolve, pollInterval));
+        
+        const statusResult = await connection.getSignatureStatuses([signature], {
+          searchTransactionHistory: true
+        });
+        
+        const status = statusResult.value[0];
+        
+        if (status) {
+          if (status.err) {
+            return { 
+              confirmed: false, 
+              error: `TX_FAILED_ON_CHAIN: ${JSON.stringify(status.err)}` 
+            };
+          }
+          
+          // Check if confirmed or finalized
+          if (status.confirmationStatus === "confirmed" || status.confirmationStatus === "finalized") {
+            console.log(`Transaction ${signature.slice(0,8)} confirmed via status poll (${status.confirmationStatus})`);
+            return { confirmed: true };
+          }
+          
+          // Still processing
+          console.log(`Transaction ${signature.slice(0,8)} status: ${status.confirmationStatus}, poll ${i+1}/${maxPolls}`);
+        } else {
+          // Transaction not found in ledger
+          console.log(`Transaction ${signature.slice(0,8)} not found, poll ${i+1}/${maxPolls}`);
+        }
+        
+        // Check if block height exceeded (transaction expired)
+        try {
+          const currentHeight = await connection.getBlockHeight();
+          if (currentHeight > lastValidBlockHeight) {
+            return { 
+              confirmed: false, 
+              error: `TX_EXPIRED: Block height ${currentHeight} > lastValid ${lastValidBlockHeight}. Transaction dropped.` 
+            };
+          }
+        } catch {}
+        
+      } catch (pollErr) {
+        console.log(`Status poll ${i+1} error: ${(pollErr as Error).message}`);
+      }
+    }
+    
+    // After all retries, if we still don't have confirmation, it's a failure
+    return { 
+      confirmed: false, 
+      error: `TX_NOT_CONFIRMED: Transaction ${signature.slice(0,12)} was sent but never confirmed within ${timeoutMs}ms. It may have been dropped.` 
+    };
+  }
+}
+
 function readU64LE(bytes: Uint8Array): number {
   if (bytes.length < 8) return 0;
   const dv = new DataView(bytes.buffer, bytes.byteOffset, 8);
@@ -863,57 +958,32 @@ serve(async (req) => {
             
             const sig = await txRpc.sendTransaction(vtx, { skipPreflight: true, maxRetries: 3 });
             
-            // CRITICAL: Check if transaction actually succeeded on-chain
-            // PumpPortal can return a signature even if the tx will fail (e.g., token graduated to Raydium)
-            let txFailed = false;
-            let txError = "";
+            // CRITICAL: Use hardConfirmTransaction for reliable confirmation
+            const confirmResult = await hardConfirmTransaction(txRpc, sig, blockhash, lastValidBlockHeight, 30000);
             
-            try {
-              const confirmation = await txRpc.confirmTransaction({ blockhash, lastValidBlockHeight, signature: sig }, "confirmed" as any);
+            if (!confirmResult.confirmed) {
+              const txError = confirmResult.error || "Unknown confirmation failure";
+              console.error(`PumpPortal tx failed: ${txError}`);
               
-              if (confirmation.value?.err) {
-                txFailed = true;
-                txError = JSON.stringify(confirmation.value.err);
-                console.error(`PumpPortal tx confirmed but FAILED on-chain: ${txError}`);
-              }
-            } catch (confirmErr) {
-              // Confirmation timed out or failed - check transaction status directly
-              console.log(`Confirmation error, checking tx status: ${(confirmErr as Error).message}`);
-              try {
-                await new Promise(resolve => setTimeout(resolve, 2000)); // Wait a bit
-                const txStatus = await txRpc.getSignatureStatus(sig, { searchTransactionHistory: true });
-                if (txStatus.value?.err) {
-                  txFailed = true;
-                  txError = JSON.stringify(txStatus.value.err);
-                  console.error(`PumpPortal tx failed on-chain (from status): ${txError}`);
-                } else if (!txStatus.value) {
-                  // Transaction not found - might have been dropped
-                  txFailed = true;
-                  txError = "Transaction not found after sending";
-                  console.error(`PumpPortal tx not found: ${sig}`);
-                }
-              } catch (statusErr) {
-                console.error(`Failed to get tx status: ${(statusErr as Error).message}`);
-              }
-            }
-            
-            if (txFailed) {
-              // Don't assume *why* PumpPortal failed; route to DEX aggregators.
-              // 6005 is a common PumpPortal on-chain failure code (often seen after migration).
-              if (txError.includes("6005")) {
-                console.log(`PumpPortal tx failed with custom error 6005; switching to DEX routing (Raydium/Jupiter)...`);
+              // 6005 is a common PumpPortal on-chain failure code (often seen after migration)
+              if (txError.includes("6005") || txError.includes("TX_FAILED_ON_CHAIN")) {
+                console.log(`PumpPortal tx failed, switching to DEX routing (Raydium/Jupiter)...`);
                 needJupiter = true;
-                jupReason = `PumpPortal tx failed (6005): ${txError}`;
+                jupReason = `PumpPortal tx failed: ${txError}`;
                 // Don't return - continue to Jupiter/Raydium routing below
+              } else if (txError.includes("TX_EXPIRED") || txError.includes("TX_NOT_CONFIRMED")) {
+                // Transaction was dropped - this is a hard failure, don't retry with same approach
+                console.log(`PumpPortal tx dropped/expired, switching to DEX routing...`);
+                needJupiter = true;
+                jupReason = txError;
               } else {
-                console.log(`PumpPortal tx failed with: ${txError}, switching to DEX routing...`);
                 needJupiter = true;
                 jupReason = `PumpPortal tx failed: ${txError}`;
               }
-              } else {
-                console.log(`PumpPortal ${side} successful with pool=${pool}:`, sig);
-                // For PumpPortal, we don't have expected outAmount - caller should verify on-chain
-                return ok({ signatures: [sig], source: "pumpportal", pool: pool, outAmount: null });
+            } else {
+              console.log(`PumpPortal ${side} successful with pool=${pool}:`, sig);
+              // For PumpPortal, we don't have expected outAmount - caller should verify on-chain
+              return ok({ signatures: [sig], source: "pumpportal", pool: pool, outAmount: null });
               }
             } else if (pool === 'auto') {
             // Both specific and auto pools failed - token might have graduated to unsupported DEX
@@ -1046,81 +1116,60 @@ serve(async (req) => {
           for (const b64 of j.txs) {
             const u8 = b64ToU8(b64);
             const tx = Transaction.from(u8 as any);
-            // Refresh blockhash BEFORE signing, then confirm using the same pair
+            // Refresh blockhash BEFORE signing
             const { blockhash, lastValidBlockHeight } = await connection.getLatestBlockhash("confirmed");
             tx.recentBlockhash = blockhash;
             if (!tx.feePayer) tx.feePayer = owner.publicKey;
             tx.sign(owner);
             let sig = await connection.sendRawTransaction(tx.serialize(), { skipPreflight: true, maxRetries: 2 });
-            try {
-            if (confirmPolicy !== "none") {
-              if (confirmPolicy === "processed") {
-                await connection.confirmTransaction({ blockhash, lastValidBlockHeight, signature: sig }, "processed" as any);
-                // Background confirmation
-              } else {
-                await connection.confirmTransaction({ blockhash, lastValidBlockHeight, signature: sig }, "confirmed" as any);
-              }
-            }
-          } catch (e) {
-            // Retry once on expired blockhash
-            const msg = String((e as Error)?.message || e);
-            if (msg.includes("expired") || msg.includes("block height exceeded")) {
+            
+            // ALWAYS use hard confirmation for reliability
+            const confirmResult = await hardConfirmTransaction(connection, sig, blockhash, lastValidBlockHeight, 30000);
+            
+            if (!confirmResult.confirmed) {
+              // Retry once with fresh blockhash
+              console.log(`Jupiter Legacy tx failed (${confirmResult.error}), retrying...`);
               const fresh = await connection.getLatestBlockhash("confirmed");
               tx.recentBlockhash = fresh.blockhash;
               tx.sign(owner);
               sig = await connection.sendRawTransaction(tx.serialize(), { skipPreflight: true, maxRetries: 2 });
-              if (confirmPolicy !== "none") {
-                if (confirmPolicy === "processed") {
-                  await connection.confirmTransaction({ blockhash: fresh.blockhash, lastValidBlockHeight: fresh.lastValidBlockHeight, signature: sig }, "processed" as any);
-                  // Background confirmation
-                } else {
-                  await connection.confirmTransaction({ blockhash: fresh.blockhash, lastValidBlockHeight: fresh.lastValidBlockHeight, signature: sig }, "confirmed" as any);
-                }
+              
+              const retryResult = await hardConfirmTransaction(connection, sig, fresh.blockhash, fresh.lastValidBlockHeight, 30000);
+              if (!retryResult.confirmed) {
+                return softError("SWAP_FAILED", `Jupiter swap failed after retry: ${retryResult.error}`);
               }
-            } else {
-              throw e;
             }
-          }
+            
             sigs.push(sig);
           }
         } else {
           for (const b64 of j.txs) {
             const u8 = b64ToU8(b64);
             const vtx = VersionedTransaction.deserialize(u8);
-            // Refresh blockhash BEFORE signing, then confirm using the same pair
+            // Refresh blockhash BEFORE signing
             const fresh = await connection.getLatestBlockhash("confirmed");
             // @ts-ignore - message is mutable in this context
             (vtx as any).message.recentBlockhash = fresh.blockhash;
             vtx.sign([owner]);
             let sig = await connection.sendTransaction(vtx, { skipPreflight: true, maxRetries: 2 });
-            try {
-              if (confirmPolicy !== "none") {
-                if (confirmPolicy === "processed") {
-                  await connection.confirmTransaction({ blockhash: fresh.blockhash, lastValidBlockHeight: fresh.lastValidBlockHeight, signature: sig }, "processed" as any);
-                  // Background confirmation
-                } else {
-                  await connection.confirmTransaction({ blockhash: fresh.blockhash, lastValidBlockHeight: fresh.lastValidBlockHeight, signature: sig }, "confirmed" as any);
-                }
-              }
-            } catch (e) {
-              const msg = String((e as Error)?.message || e);
-              if (msg.includes("expired") || msg.includes("block height exceeded")) {
-                const newer = await connection.getLatestBlockhash("confirmed");
-                (vtx as any).message.recentBlockhash = newer.blockhash;
-                vtx.sign([owner]);
-                sig = await connection.sendTransaction(vtx, { skipPreflight: true, maxRetries: 2 });
-                if (confirmPolicy !== "none") {
-                  if (confirmPolicy === "processed") {
-                    await connection.confirmTransaction({ blockhash: newer.blockhash, lastValidBlockHeight: newer.lastValidBlockHeight, signature: sig }, "processed" as any);
-                    // Background confirmation
-                  } else {
-                    await connection.confirmTransaction({ blockhash: newer.blockhash, lastValidBlockHeight: newer.lastValidBlockHeight, signature: sig }, "confirmed" as any);
-                  }
-                }
-              } else {
-                throw e;
+            
+            // ALWAYS use hard confirmation for reliability
+            const confirmResult = await hardConfirmTransaction(connection, sig, fresh.blockhash, fresh.lastValidBlockHeight, 30000);
+            
+            if (!confirmResult.confirmed) {
+              // Retry once with fresh blockhash
+              console.log(`Jupiter V0 tx failed (${confirmResult.error}), retrying...`);
+              const newer = await connection.getLatestBlockhash("confirmed");
+              (vtx as any).message.recentBlockhash = newer.blockhash;
+              vtx.sign([owner]);
+              sig = await connection.sendTransaction(vtx, { skipPreflight: true, maxRetries: 2 });
+              
+              const retryResult = await hardConfirmTransaction(connection, sig, newer.blockhash, newer.lastValidBlockHeight, 30000);
+              if (!retryResult.confirmed) {
+                return softError("SWAP_FAILED", `Jupiter swap failed after retry: ${retryResult.error}`);
               }
             }
+            
             sigs.push(sig);
           }
         }
@@ -1171,34 +1220,14 @@ serve(async (req) => {
               
               const sig = await txRpc.sendTransaction(vtx, { skipPreflight: true, maxRetries: 3 });
               
-              // CRITICAL: Verify transaction actually succeeded on-chain
-              let txFailed = false;
-              let txError = "";
+              // CRITICAL: Use hardConfirmTransaction for reliable confirmation
+              const confirmResult = await hardConfirmTransaction(txRpc, sig, blockhash, lastValidBlockHeight, 30000);
               
-              try {
-                const confirmation = await txRpc.confirmTransaction({ blockhash, lastValidBlockHeight, signature: sig }, "confirmed" as any);
-                if (confirmation.value?.err) {
-                  txFailed = true;
-                  txError = JSON.stringify(confirmation.value.err);
-                  console.error(`PumpPortal fallback tx FAILED on-chain: ${txError}`);
-                }
-              } catch (confirmErr) {
-                console.log(`Fallback confirmation error, checking status: ${(confirmErr as Error).message}`);
-                try {
-                  await new Promise(resolve => setTimeout(resolve, 2000));
-                  const txStatus = await txRpc.getSignatureStatus(sig, { searchTransactionHistory: true });
-                  if (txStatus.value?.err) {
-                    txFailed = true;
-                    txError = JSON.stringify(txStatus.value.err);
-                  }
-                } catch {}
-              }
-              
-              if (txFailed) {
-                console.error("PumpPortal fallback tx failed:", txError);
+              if (!confirmResult.confirmed) {
+                console.error("PumpPortal fallback tx failed:", confirmResult.error);
                 return softError(
                   "SWAP_FAILED",
-                  `All swap methods failed. Raydium: ${jupReason}; Jupiter: ${j.error}; PumpPortal tx failed on-chain: ${txError}`
+                  `All swap methods failed. Raydium: ${jupReason}; Jupiter: ${j.error}; PumpPortal: ${confirmResult.error}`
                 );
               }
               
@@ -1350,34 +1379,24 @@ serve(async (req) => {
         (vtx as any).message.recentBlockhash = fresh.blockhash;
         vtx.sign([owner]);
         let sig = await connection.sendTransaction(vtx, { skipPreflight: true, maxRetries: 2 });
-        try {
-          if (confirmPolicy !== "none") {
-            if (confirmPolicy === "processed") {
-              await connection.confirmTransaction({ blockhash: fresh.blockhash, lastValidBlockHeight: fresh.lastValidBlockHeight, signature: sig }, "processed" as any);
-              // Background confirmation
-            } else {
-              await connection.confirmTransaction({ blockhash: fresh.blockhash, lastValidBlockHeight: fresh.lastValidBlockHeight, signature: sig }, "confirmed" as any);
-            }
-          }
-        } catch (e) {
-          const msg = String((e as Error)?.message || e);
-          if (msg.includes("expired") || msg.includes("block height exceeded")) {
-            const newer = await connection.getLatestBlockhash("confirmed");
-            (vtx as any).message.recentBlockhash = newer.blockhash;
-            vtx.sign([owner]);
-            sig = await connection.sendTransaction(vtx, { skipPreflight: true, maxRetries: 2 });
-            if (confirmPolicy !== "none") {
-              if (confirmPolicy === "processed") {
-                await connection.confirmTransaction({ blockhash: newer.blockhash, lastValidBlockHeight: newer.lastValidBlockHeight, signature: sig }, "processed" as any);
-                // Background confirmation
-              } else {
-                await connection.confirmTransaction({ blockhash: newer.blockhash, lastValidBlockHeight: newer.lastValidBlockHeight, signature: sig }, "confirmed" as any);
-              }
-            }
-          } else {
-            throw e;
+        
+        // ALWAYS use hard confirmation (ignore confirmPolicy for reliability)
+        const confirmResult = await hardConfirmTransaction(connection, sig, fresh.blockhash, fresh.lastValidBlockHeight, 30000);
+        
+        if (!confirmResult.confirmed) {
+          // Retry once with fresh blockhash
+          console.log(`V0 tx failed (${confirmResult.error}), retrying with fresh blockhash...`);
+          const newer = await connection.getLatestBlockhash("confirmed");
+          (vtx as any).message.recentBlockhash = newer.blockhash;
+          vtx.sign([owner]);
+          sig = await connection.sendTransaction(vtx, { skipPreflight: true, maxRetries: 2 });
+          
+          const retryResult = await hardConfirmTransaction(connection, sig, newer.blockhash, newer.lastValidBlockHeight, 30000);
+          if (!retryResult.confirmed) {
+            return softError("SWAP_FAILED", `Raydium swap failed after retry: ${retryResult.error}`);
           }
         }
+        
         sigs.push(sig);
       }
     } else {
@@ -1390,34 +1409,24 @@ serve(async (req) => {
         if (!tx.feePayer) tx.feePayer = owner.publicKey;
         tx.sign(owner);
         let sig = await connection.sendRawTransaction(tx.serialize(), { skipPreflight: true, maxRetries: 2 });
-        try {
-          if (confirmPolicy !== "none") {
-            if (confirmPolicy === "processed") {
-              await connection.confirmTransaction({ blockhash: fresh.blockhash, lastValidBlockHeight: fresh.lastValidBlockHeight, signature: sig }, "processed" as any);
-              // Background confirmation
-            } else {
-              await connection.confirmTransaction({ blockhash: fresh.blockhash, lastValidBlockHeight: fresh.lastValidBlockHeight, signature: sig }, "confirmed" as any);
-            }
-          }
-        } catch (e) {
-          const msg = String((e as Error)?.message || e);
-          if (msg.includes("expired") || msg.includes("block height exceeded")) {
-            const newer = await connection.getLatestBlockhash("confirmed");
-            tx.recentBlockhash = newer.blockhash;
-            tx.sign(owner);
-            sig = await connection.sendRawTransaction(tx.serialize(), { skipPreflight: true, maxRetries: 2 });
-            if (confirmPolicy !== "none") {
-              if (confirmPolicy === "processed") {
-                await connection.confirmTransaction({ blockhash: newer.blockhash, lastValidBlockHeight: newer.lastValidBlockHeight, signature: sig }, "processed" as any);
-                // Background confirmation
-              } else {
-                await connection.confirmTransaction({ blockhash: newer.blockhash, lastValidBlockHeight: newer.lastValidBlockHeight, signature: sig }, "confirmed" as any);
-              }
-            }
-          } else {
-            throw e;
+        
+        // ALWAYS use hard confirmation (ignore confirmPolicy for reliability)
+        const confirmResult = await hardConfirmTransaction(connection, sig, fresh.blockhash, fresh.lastValidBlockHeight, 30000);
+        
+        if (!confirmResult.confirmed) {
+          // Retry once with fresh blockhash
+          console.log(`Legacy tx failed (${confirmResult.error}), retrying with fresh blockhash...`);
+          const newer = await connection.getLatestBlockhash("confirmed");
+          tx.recentBlockhash = newer.blockhash;
+          tx.sign(owner);
+          sig = await connection.sendRawTransaction(tx.serialize(), { skipPreflight: true, maxRetries: 2 });
+          
+          const retryResult = await hardConfirmTransaction(connection, sig, newer.blockhash, newer.lastValidBlockHeight, 30000);
+          if (!retryResult.confirmed) {
+            return softError("SWAP_FAILED", `Raydium swap failed after retry: ${retryResult.error}`);
           }
         }
+        
         sigs.push(sig);
       }
     }
