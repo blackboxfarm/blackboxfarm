@@ -852,11 +852,26 @@ serve(async (req) => {
           })
           .eq("id", position.id);
 
-        // AUTO-VERIFY ENTRY: Use Helius to get verified on-chain entry data (heliusKey already declared above)
+        // AUTO-VERIFY ENTRY: Use Helius to get verified on-chain entry data
+        // Pass wallet pubkey so verification uses correct balance delta (not nativeTransfers sum)
         if (heliusKey && signature) {
-          verifyBuyFromChain(signature, tokenMint, heliusKey).then(async (verified) => {
+          verifyBuyFromChain(signature, tokenMint, heliusKey, wallet.pubkey).then(async (verified) => {
             if (verified) {
               console.log("Entry verified from chain:", verified);
+              
+              // SANITY CHECK: Don't overwrite with bad data if deviation is too large
+              const quotedSolSpent = (buyAmountUsd || 4) / solPrice;
+              const deviation = Math.abs(verified.solSpent - quotedSolSpent) / quotedSolSpent * 100;
+              
+              if (deviation > 25) {
+                console.error(`VERIFY_MISMATCH: quoted=${quotedSolSpent.toFixed(6)} SOL, verified=${verified.solSpent.toFixed(6)} SOL, deviation=${deviation.toFixed(1)}%`);
+                await supabase.from("flip_positions").update({
+                  entry_verified: false,
+                  error_message: `Entry verification mismatch: ${deviation.toFixed(1)}% deviation from quote`
+                }).eq("id", position.id);
+                return;
+              }
+              
               await supabase.from("flip_positions").update({
                 quantity_tokens: String(verified.tokensReceived),
                 buy_amount_sol: verified.solSpent,
