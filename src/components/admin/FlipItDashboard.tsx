@@ -1610,29 +1610,6 @@ export function FlipItDashboard() {
       setIsMonitoring(false);
     }
   };
-      if (data?.prices) {
-        setCurrentPrices(data.prices);
-      }
-      if (data?.bondingCurveData) {
-        setBondingCurveData(prev => ({ ...prev, ...data.bondingCurveData }));
-      }
-      if (data?.checkedAt) {
-        setLastAutoCheck(data.checkedAt);
-      }
-      if (data?.executed?.length > 0) {
-        toast.success(`Sold ${data.executed.length} position(s) at target!`);
-        loadPositions({ silent: true });
-        refreshWalletBalance();
-      } else {
-        toast.success('Refreshed');
-        refreshWalletBalance();
-      }
-    } catch (err: any) {
-      toast.error(err.message || 'Failed to refresh');
-    } finally {
-      setIsMonitoring(false);
-    }
-  };
 
   const handleForceSell = async (positionId: string) => {
     try {
