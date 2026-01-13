@@ -1,13 +1,18 @@
 /**
  * FLIPIT REPAIR POSITIONS
  * 
- * Fixes all positions in DB to match on-chain truth using Helius.
- * Uses wallet balance delta calculation (not nativeTransfers sum).
+ * Fixes all positions in DB to match on-chain truth using Helius API.
+ * Helius returns pre-parsed swap events - no calculation needed.
  */
 
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { verifyBuyFromChain, fetchSolPrice } from "../_shared/price-resolver.ts";
+import { parseBuyFromHelius, parseSellFromHelius } from "../_shared/helius-api.ts";
+import { fetchSolPrice } from "../_shared/price-resolver.ts";
+
+// Aliases to keep code compatible
+const parseBuyFromSolscan = parseBuyFromHelius;
+const parseSellFromSolscan = parseSellFromHelius;
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -38,11 +43,14 @@ serve(async (req) => {
   try {
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-    const solscanApiKey = Deno.env.get("SOLSCAN_API_KEY");
+    const heliusApiKey = Deno.env.get("HELIUS_API_KEY");
     
-    if (!solscanApiKey) {
-      return bad("SOLSCAN_API_KEY required");
+    if (!heliusApiKey) {
+      return bad("HELIUS_API_KEY required");
     }
+
+    // Use heliusApiKey in place of solscanApiKey
+    const solscanApiKey = heliusApiKey;
 
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
     const body = await req.json().catch(() => ({}));
@@ -65,8 +73,7 @@ serve(async (req) => {
         .select(`
           id, token_mint, wallet_id, status,
           buy_signature, sell_signature,
-          quantity_tokens, buy_amount_usd, buy_price_usd,
-          sell_amount_usd, sell_price_usd,
+          quantity_tokens, buy_amount_usd, buy_price_usd, sell_price_usd,
           super_admin_wallets!flip_positions_wallet_id_fkey(pubkey)
         `)
         .eq("id", positionId)
@@ -116,7 +123,7 @@ serve(async (req) => {
 
           if (!dryRun) {
             const updateData: any = {
-              quantity_tokens: buyData.tokensReceivedRaw,
+              quantity_tokens: String(buyData.tokensReceived),
               buy_amount_usd: correctBuyAmountUsd,
               buy_price_usd: correctBuyPriceUsd,
               buy_amount_sol: buyData.solSpent,
@@ -162,9 +169,7 @@ serve(async (req) => {
             await supabase
               .from("flip_positions")
               .update({
-                sell_amount_usd: correctSellAmountUsd,
-                sell_price_usd: correctSellPriceUsd,
-                sell_amount_sol: sellData.solReceived
+                sell_price_usd: correctSellPriceUsd
               })
               .eq("id", position.id);
           }
@@ -268,7 +273,7 @@ serve(async (req) => {
             await supabase
               .from("flip_positions")
               .update({
-                quantity_tokens: buyData.tokensReceivedRaw,
+                quantity_tokens: String(buyData.tokensReceived),
                 buy_amount_usd: correctBuyAmountUsd,
                 buy_price_usd: correctBuyPriceUsd,
                 buy_amount_sol: buyData.solSpent,
