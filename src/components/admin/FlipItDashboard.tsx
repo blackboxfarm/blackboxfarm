@@ -2688,7 +2688,7 @@ export function FlipItDashboard() {
                     </>
                   )}
                   <TableHead className="px-2 py-1">Status</TableHead>
-                  <TableHead className="px-2 py-1 w-8 sticky right-0 bg-background z-10"></TableHead>
+                  <TableHead className="px-2 py-1 w-8"></TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -3445,8 +3445,8 @@ export function FlipItDashboard() {
                         </div>
                       </TableCell>
                       
-                      {/* Delete Column - sticky so always visible */}
-                      <TableCell className="px-2 py-1 sticky right-0 bg-background z-10 border-l border-border">
+                      {/* Delete Column */}
+                      <TableCell className="px-2 py-1">
                         <Button
                           size="sm"
                           variant="ghost"
