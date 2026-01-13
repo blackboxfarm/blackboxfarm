@@ -3,6 +3,150 @@ import { PublicKey } from 'npm:@solana/web3.js@1.95.3';
 
 const METAPLEX_PROGRAM_ID = new PublicKey('metaqbxxUerdq28cj1RbAWkYQm3ybzjb6a8bt518x1s');
 
+// Detect launchpad from mint address
+function detectLaunchpadFromMint(mintAddress: string): 'pump.fun' | 'bags.fm' | 'bonk.fun' | null {
+  if (mintAddress.endsWith('pump')) return 'pump.fun';
+  if (mintAddress.endsWith('BAGS')) return 'bags.fm';
+  if (mintAddress.endsWith('BONK') || mintAddress.endsWith('bonk')) return 'bonk.fun';
+  return null;
+}
+
+// Bags.fm API helper - fetches token metadata and socials
+async function fetchBagsFmMetadata(mintAddress: string, apiKey?: string): Promise<{
+  name?: string;
+  symbol?: string;
+  image?: string;
+  description?: string;
+  twitter?: string;
+  website?: string;
+  telegram?: string;
+  creator?: { wallet: string; username?: string; twitter?: string };
+} | null> {
+  try {
+    // Try the bags.fm public page first (no API key needed)
+    console.log(`Fetching bags.fm metadata for ${mintAddress}`);
+    
+    // Bags.fm tokens have their metadata on IPFS via Metaplex, but socials are on bags.fm
+    // First try to scrape the public page
+    const pageUrl = `https://bags.fm/${mintAddress}`;
+    
+    // If we have an API key, try the official API
+    if (apiKey) {
+      try {
+        // Try to get token creators endpoint
+        const creatorsResponse = await fetch(
+          `https://public-api-v2.bags.fm/api/v1/analytics/token-creators/${mintAddress}`,
+          {
+            headers: {
+              'Authorization': `Bearer ${apiKey}`,
+              'Accept': 'application/json'
+            },
+            signal: AbortSignal.timeout(5000)
+          }
+        );
+        
+        if (creatorsResponse.ok) {
+          const creatorsData = await creatorsResponse.json();
+          console.log('Bags.fm creators API response:', creatorsData);
+          
+          if (creatorsData.success && creatorsData.response) {
+            const creator = creatorsData.response.find((c: any) => c.isCreator);
+            return {
+              creator: creator ? {
+                wallet: creator.wallet,
+                username: creator.providerUsername || creator.username,
+                twitter: creator.provider === 'twitter' ? `https://x.com/${creator.providerUsername}` : undefined
+              } : undefined
+            };
+          }
+        }
+      } catch (apiError) {
+        console.log('Bags.fm API call failed:', apiError instanceof Error ? apiError.message : String(apiError));
+      }
+    }
+    
+    // Fallback: try to get data from the public page HTML
+    // This is a simplified approach - in production you'd use a proper HTML parser
+    try {
+      const pageResponse = await fetch(pageUrl, {
+        headers: { 'Accept': 'text/html' },
+        signal: AbortSignal.timeout(5000)
+      });
+      
+      if (pageResponse.ok) {
+        const html = await pageResponse.text();
+        
+        // Extract Twitter link from page
+        const twitterMatch = html.match(/href="(https:\/\/(twitter\.com|x\.com)\/[^"]+)"/);
+        const websiteMatch = html.match(/href="(https?:\/\/(?!bags\.fm|twitter\.com|x\.com|t\.me)[^"]+)"[^>]*>website/i);
+        const telegramMatch = html.match(/href="(https:\/\/t\.me\/[^"]+)"/);
+        
+        // Extract name and symbol from meta tags or page content
+        const nameMatch = html.match(/<h1[^>]*>.*?\$([A-Z0-9]+)/i);
+        const titleMatch = html.match(/<h2[^>]*>([^<]+)/);
+        
+        return {
+          symbol: nameMatch?.[1],
+          name: titleMatch?.[1],
+          twitter: twitterMatch?.[1],
+          website: websiteMatch?.[1],
+          telegram: telegramMatch?.[1]
+        };
+      }
+    } catch (scrapeError) {
+      console.log('Bags.fm page scrape failed:', scrapeError instanceof Error ? scrapeError.message : String(scrapeError));
+    }
+    
+    return null;
+  } catch (error) {
+    console.log('Bags.fm metadata fetch failed:', error instanceof Error ? error.message : String(error));
+    return null;
+  }
+}
+
+// Pump.fun API helper - fetches token metadata and socials
+async function fetchPumpFunMetadata(mintAddress: string): Promise<{
+  name?: string;
+  symbol?: string;
+  image?: string;
+  description?: string;
+  twitter?: string;
+  website?: string;
+  telegram?: string;
+  creator?: string;
+  bondingCurveProgress?: number;
+} | null> {
+  try {
+    console.log(`Fetching pump.fun metadata for ${mintAddress}`);
+    const response = await fetch(`https://frontend-api.pump.fun/coins/${mintAddress}`, {
+      headers: { 'Accept': 'application/json' },
+      signal: AbortSignal.timeout(5000)
+    });
+    
+    if (!response.ok) {
+      console.log(`Pump.fun API returned ${response.status}`);
+      return null;
+    }
+    
+    const data = await response.json();
+    
+    return {
+      name: data.name,
+      symbol: data.symbol,
+      image: data.image_uri || data.profile_image,
+      description: data.description,
+      twitter: data.twitter ? `https://x.com/${data.twitter.replace('@', '')}` : undefined,
+      website: data.website,
+      telegram: data.telegram ? `https://t.me/${data.telegram.replace('@', '')}` : undefined,
+      creator: data.creator,
+      bondingCurveProgress: data.bonding_curve_progress
+    };
+  } catch (error) {
+    console.log('Pump.fun metadata fetch failed:', error instanceof Error ? error.message : String(error));
+    return null;
+  }
+}
+
 // Helius helper
 async function fetchHeliusMetadata(mintAddress: string, heliusApiKey: string) {
   try {
@@ -131,32 +275,50 @@ function extractSocialLinks(dexData: any): { twitter?: string; website?: string;
   return socials;
 }
 
-// Launchpad detection
+// Launchpad detection with enhanced bags.fm support
 function detectLaunchpad(mintAddress: string, dexData: any): { name: string; detected: boolean; confidence: string } {
   let launchpad = { name: 'unknown', detected: false, confidence: 'none' };
   
   if (dexData?.pairs?.[0]) {
     const pair = dexData.pairs[0];
     const websites = pair.info?.websites || [];
+    const pairUrl = pair.url || '';
     
-    // High confidence: check websites
+    // High confidence: check websites and URL
     for (const site of websites) {
       const url = site.url || site;
       if (url.includes('pump.fun')) {
         return { name: 'pump.fun', detected: true, confidence: 'high' };
       }
-      if (url.includes('bonk.fun') || url.includes('bonk.bot')) {
+      if (url.includes('bonk.fun') || url.includes('bonk.bot') || url.includes('letsbonk')) {
         return { name: 'bonk.fun', detected: true, confidence: 'high' };
       }
       if (url.includes('bags.fm')) {
         return { name: 'bags.fm', detected: true, confidence: 'high' };
       }
     }
+    
+    // Check pair URL for launchpad detection
+    if (pairUrl.includes('bags.fm')) {
+      return { name: 'bags.fm', detected: true, confidence: 'high' };
+    }
+    if (pairUrl.includes('pump.fun')) {
+      return { name: 'pump.fun', detected: true, confidence: 'high' };
+    }
+    if (pairUrl.includes('bonk.fun') || pairUrl.includes('letsbonk')) {
+      return { name: 'bonk.fun', detected: true, confidence: 'high' };
+    }
   }
   
-  // Low confidence: mint suffix hints
+  // Medium confidence: mint suffix hints
+  if (mintAddress.endsWith('BAGS')) {
+    return { name: 'bags.fm', detected: true, confidence: 'medium' };
+  }
   if (mintAddress.endsWith('pump')) {
-    return { name: 'pump.fun', detected: true, confidence: 'low' };
+    return { name: 'pump.fun', detected: true, confidence: 'medium' };
+  }
+  if (mintAddress.endsWith('BONK') || mintAddress.endsWith('bonk')) {
+    return { name: 'bonk.fun', detected: true, confidence: 'medium' };
   }
   
   return launchpad;
@@ -370,41 +532,89 @@ serve(async (req) => {
     metadata.isPumpFun = launchpad.name === 'pump.fun' && launchpad.detected;
     console.log('Launchpad detection:', launchpad);
 
-    // Step 2.5: Extract social links from DexScreener
+    // Step 2.5: Extract social links from DexScreener as fallback
     const socialLinks = extractSocialLinks(dexData);
     metadata.twitter = socialLinks.twitter;
     metadata.website = socialLinks.website;
     metadata.telegram = socialLinks.telegram;
-    console.log('Social links extracted:', socialLinks);
+    console.log('DexScreener social links:', socialLinks);
+
+    // Step 2.6: Protocol-specific metadata fetching for better socials and creator info
+    let creatorWallet: string | undefined;
+    
+    if (launchpad.name === 'bags.fm' && launchpad.detected) {
+      console.log('Fetching bags.fm specific metadata...');
+      const bagsApiKey = Deno.env.get('BAGS_API_KEY');
+      const bagsMetadata = await fetchBagsFmMetadata(tokenMint, bagsApiKey);
+      
+      if (bagsMetadata) {
+        // Override with bags.fm data (more authoritative for bags tokens)
+        if (bagsMetadata.name) metadata.name = bagsMetadata.name;
+        if (bagsMetadata.symbol) metadata.symbol = bagsMetadata.symbol;
+        if (bagsMetadata.image) {
+          metadata.image = bagsMetadata.image;
+          metadata.logoURI = metadata.logoURI || bagsMetadata.image;
+        }
+        if (bagsMetadata.description) metadata.description = bagsMetadata.description;
+        if (bagsMetadata.twitter) metadata.twitter = bagsMetadata.twitter;
+        if (bagsMetadata.website) metadata.website = bagsMetadata.website;
+        if (bagsMetadata.telegram) metadata.telegram = bagsMetadata.telegram;
+        if (bagsMetadata.creator?.wallet) {
+          creatorWallet = bagsMetadata.creator.wallet;
+        }
+        console.log('Bags.fm metadata merged:', { twitter: metadata.twitter, website: metadata.website, creator: creatorWallet });
+      }
+    } else if (launchpad.name === 'pump.fun' && launchpad.detected) {
+      console.log('Fetching pump.fun specific metadata...');
+      const pumpMetadata = await fetchPumpFunMetadata(tokenMint);
+      
+      if (pumpMetadata) {
+        // Override with pump.fun data (more authoritative for pump tokens)
+        if (pumpMetadata.name) metadata.name = pumpMetadata.name;
+        if (pumpMetadata.symbol) metadata.symbol = pumpMetadata.symbol;
+        if (pumpMetadata.image) {
+          metadata.image = pumpMetadata.image;
+          metadata.logoURI = metadata.logoURI || pumpMetadata.image;
+        }
+        if (pumpMetadata.description) metadata.description = pumpMetadata.description;
+        if (pumpMetadata.twitter) metadata.twitter = pumpMetadata.twitter;
+        if (pumpMetadata.website) metadata.website = pumpMetadata.website;
+        if (pumpMetadata.telegram) metadata.telegram = pumpMetadata.telegram;
+        if (pumpMetadata.creator) {
+          creatorWallet = pumpMetadata.creator;
+        }
+        console.log('Pump.fun metadata merged:', { twitter: metadata.twitter, website: metadata.website, creator: creatorWallet });
+      }
+    }
 
     // Step 3: Resolve Raydium pools
     pools = resolveRaydiumPools(dexData);
     console.log('Raydium pools found:', pools.length);
 
-    // Step 4: Try to get off-chain metadata (image, description)
+    // Step 4: Try to get off-chain metadata (image, description) if still missing
     let offChainMetadata = null;
     
-    if (heliusApiKey) {
+    if (heliusApiKey && (!metadata.image || !metadata.description)) {
       console.log('Trying Helius for off-chain metadata...');
       offChainMetadata = await fetchHeliusMetadata(tokenMint, heliusApiKey);
     }
     
-    if (!offChainMetadata) {
+    if (!offChainMetadata && (!metadata.image || !metadata.description)) {
       console.log('Falling back to Metaplex PDA for off-chain metadata...');
       offChainMetadata = await fetchMetaplexMetadata(tokenMint, rpcUrl);
     }
 
-    // Merge off-chain metadata if found
+    // Merge off-chain metadata if found (only for missing fields)
     if (offChainMetadata) {
-      metadata.name = offChainMetadata.name || metadata.name;
-      metadata.symbol = offChainMetadata.symbol || metadata.symbol;
-      const img = offChainMetadata.image || metadata.image;
+      metadata.name = metadata.name === 'Unknown Token' ? (offChainMetadata.name || metadata.name) : metadata.name;
+      metadata.symbol = metadata.symbol === 'UNK' ? (offChainMetadata.symbol || metadata.symbol) : metadata.symbol;
+      const img = metadata.image || offChainMetadata.image;
       if (img) {
         metadata.image = img;
         metadata.logoURI = metadata.logoURI || img;
       }
-      metadata.description = offChainMetadata.description ?? metadata.description;
-      metadata.uri = offChainMetadata.uri || metadata.uri;
+      metadata.description = metadata.description ?? offChainMetadata.description;
+      metadata.uri = metadata.uri || offChainMetadata.uri;
       console.log('Off-chain metadata merged (image set:', Boolean(img), ')');
     }
 
@@ -412,13 +622,16 @@ serve(async (req) => {
       success: true,
       metadata: {
         ...metadata,
-        launchpad
+        launchpad,
+        creatorWallet
       },
       priceInfo,
       onChainData: {
         decimals: metadata.decimals,
         supply: '0',
-        isPumpFun: metadata.isPumpFun
+        isPumpFun: metadata.isPumpFun,
+        isBagsFm: launchpad.name === 'bags.fm' && launchpad.detected,
+        isBonkFun: launchpad.name === 'bonk.fun' && launchpad.detected
       },
       pools
     };
