@@ -303,7 +303,14 @@ export function FlipItDashboard() {
   // Debounced real-time subscription to flip_positions changes
   const realtimeDebounceRef = useRef<NodeJS.Timeout | null>(null);
   
+  // Only subscribe to real-time changes after auth is confirmed
   useEffect(() => {
+    // Don't subscribe until authenticated to prevent RLS rejections
+    if (!isAuthenticated && !isPreviewAdmin) {
+      console.log('[FlipIt] Real-time subscription skipped - not authenticated');
+      return;
+    }
+    
     const channel = supabase
       .channel('flip-positions-realtime')
       .on(
@@ -331,7 +338,7 @@ export function FlipItDashboard() {
       }
       supabase.removeChannel(channel);
     };
-  }, []);
+  }, [isAuthenticated, isPreviewAdmin]);
 
   // Loading guard refs to prevent concurrent API calls
   const isAutoRefreshingRef = useRef(false);
@@ -339,6 +346,7 @@ export function FlipItDashboard() {
   const isEmergencyCheckingRef = useRef(false);
   const isLimitOrderCheckingRef = useRef(false);
   const isLoadingPositionsRef = useRef(false);
+  const lastErrorToastRef = useRef<number>(0); // Rate limit error toasts
   
   // Use refs for data to avoid stale closures in callbacks
   const positionsRef = useRef(positions);
@@ -1015,6 +1023,12 @@ export function FlipItDashboard() {
   const lastMetadataFetchRef = useRef<number>(0);
 
   const loadPositions = async () => {
+    // Guard: only load if authenticated
+    if (!isAuthenticated && !isPreviewAdmin) {
+      console.log('[FlipIt] loadPositions skipped - not authenticated');
+      return;
+    }
+    
     // Prevent concurrent loads
     if (isLoadingPositionsRef.current) {
       console.log('[FlipIt] loadPositions skipped - already loading');
@@ -1033,7 +1047,12 @@ export function FlipItDashboard() {
 
       if (error) {
         console.error('[FlipIt] Failed to load positions from database:', error);
-        toast.error('Failed to load positions');
+        // Only show error toast once every 10 seconds to prevent spam
+        const now = Date.now();
+        if (now - lastErrorToastRef.current > 10000) {
+          toast.error('Failed to load positions');
+          lastErrorToastRef.current = now;
+        }
         setIsLoading(false);
         isLoadingPositionsRef.current = false;
         return;
