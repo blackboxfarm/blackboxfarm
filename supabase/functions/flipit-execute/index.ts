@@ -3,9 +3,9 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { 
   resolvePrice, 
   fetchSolPrice, 
-  verifyBuyFromChain,
   type PriceResult 
 } from "../_shared/price-resolver.ts";
+import { parseBuyFromSolscan } from "../_shared/solscan-api.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -852,37 +852,52 @@ serve(async (req) => {
           })
           .eq("id", position.id);
 
-        // AUTO-VERIFY ENTRY: Use Helius to get verified on-chain entry data
-        // Pass wallet pubkey so verification uses correct balance delta (not nativeTransfers sum)
-        if (heliusKey && signature) {
-          verifyBuyFromChain(signature, tokenMint, heliusKey, wallet.pubkey).then(async (verified) => {
-            if (verified) {
-              console.log("Entry verified from chain:", verified);
+        // AUTO-VERIFY ENTRY: Use Solscan for accurate on-chain truth (pre-parsed, no calculation needed)
+        const solscanApiKey = Deno.env.get("SOLSCAN_API_KEY");
+        if (solscanApiKey && signature) {
+          // Wait for transaction to be indexed by Solscan (typically 5-10 seconds)
+          setTimeout(async () => {
+            try {
+              console.log("Verifying entry via Solscan API:", signature);
+              const buyData = await parseBuyFromSolscan(signature, tokenMint, wallet.pubkey, solscanApiKey);
               
-              // SANITY CHECK: Don't overwrite with bad data if deviation is too large
-              const quotedSolSpent = (buyAmountUsd || 4) / solPrice;
-              const deviation = Math.abs(verified.solSpent - quotedSolSpent) / quotedSolSpent * 100;
-              
-              if (deviation > 25) {
-                console.error(`VERIFY_MISMATCH: quoted=${quotedSolSpent.toFixed(6)} SOL, verified=${verified.solSpent.toFixed(6)} SOL, deviation=${deviation.toFixed(1)}%`);
+              if (buyData) {
+                console.log("Solscan verified:", buyData);
+                
+                const verifiedBuyAmountUsd = buyData.solSpent * solPrice;
+                const verifiedBuyPriceUsd = verifiedBuyAmountUsd / buyData.tokensReceived;
+                
+                // SANITY CHECK: Don't overwrite with bad data if deviation is too large
+                const quotedSolSpent = (buyAmountUsd || 4) / solPrice;
+                const deviation = Math.abs(buyData.solSpent - quotedSolSpent) / quotedSolSpent * 100;
+                
+                if (deviation > 25) {
+                  console.error(`VERIFY_MISMATCH: quoted=${quotedSolSpent.toFixed(6)} SOL, verified=${buyData.solSpent.toFixed(6)} SOL, deviation=${deviation.toFixed(1)}%`);
+                  await supabase.from("flip_positions").update({
+                    entry_verified: false,
+                    error_message: `Entry verification mismatch: ${deviation.toFixed(1)}% deviation from quote`
+                  }).eq("id", position.id);
+                  return;
+                }
+                
                 await supabase.from("flip_positions").update({
-                  entry_verified: false,
-                  error_message: `Entry verification mismatch: ${deviation.toFixed(1)}% deviation from quote`
+                  quantity_tokens: buyData.tokensReceivedRaw,
+                  buy_amount_sol: buyData.solSpent,
+                  buy_amount_usd: verifiedBuyAmountUsd,
+                  buy_price_usd: verifiedBuyPriceUsd,
+                  buy_fee_sol: buyData.fee,
+                  entry_verified: true,
+                  entry_verified_at: new Date().toISOString(),
                 }).eq("id", position.id);
-                return;
+                
+                console.log(`Entry verified: ${buyData.tokensReceived} tokens for ${buyData.solSpent} SOL = $${verifiedBuyPriceUsd.toFixed(10)}/token`);
+              } else {
+                console.warn("Solscan verification failed - no data returned");
               }
-              
-              await supabase.from("flip_positions").update({
-                quantity_tokens: String(verified.tokensReceived),
-                buy_amount_sol: verified.solSpent,
-                buy_amount_usd: verified.solSpent * solPrice,
-                buy_price_usd: verified.pricePerToken,
-                buy_fee_sol: verified.feePaid,
-                entry_verified: true,
-                entry_verified_at: new Date().toISOString(),
-              }).eq("id", position.id);
+            } catch (e) {
+              console.error("Auto-verify via Solscan failed:", e);
             }
-          }).catch(e => console.error("Auto-verify failed:", e));
+          }, 10000); // Wait 10 seconds for Solscan to index
         }
 
         // Calculate SOL amount from USD (reuse solPrice from above)
