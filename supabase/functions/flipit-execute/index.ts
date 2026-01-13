@@ -520,6 +520,7 @@ serve(async (req) => {
 
       // NOW create position record (only after balance check passes)
       // Include price source metadata from resolver
+      // CRITICAL: Store the actual SOL amount spent, USD is calculated live for display
       const positionData: any = {
         user_id: userId,
         wallet_id: walletId,
@@ -530,7 +531,8 @@ serve(async (req) => {
         twitter_url: metadata?.twitter || null,
         website_url: metadata?.website || null,
         telegram_url: metadata?.telegram || null,
-        buy_amount_usd: buyAmountUsd || 4,
+        buy_amount_sol: buyAmountSol, // Store actual SOL spent
+        buy_amount_usd: buyAmountSol * solPrice, // Calculate USD at time of purchase using live price
         buy_price_usd: currentPrice,
         target_multiplier: mult,
         target_price_usd: targetPrice,
