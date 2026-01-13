@@ -1138,8 +1138,13 @@ export function FlipItDashboard() {
           });
       }
 
-      // DON'T fetch prices here - let the unified monitor handle it
-      // This prevents cascading API calls
+      // Fetch current prices for holding positions to display Current Value column
+      const holdingPositions = loadedPositions.filter(p => p.status === 'holding');
+      if (holdingPositions.length > 0) {
+        const mints = [...new Set(holdingPositions.map(p => p.token_mint))];
+        console.log('[FlipIt] Fetching current prices for', mints.length, 'holding positions');
+        fetchCurrentPrices(mints);
+      }
 
       return loadedPositions;
     } catch (err) {
