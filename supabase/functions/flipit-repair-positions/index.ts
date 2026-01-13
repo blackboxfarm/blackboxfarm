@@ -110,22 +110,20 @@ serve(async (req) => {
         );
 
         if (buyData) {
-          const correctBuyAmountUsd = buyData.solSpent * solPrice;
-          const correctBuyPriceUsd = correctBuyAmountUsd / buyData.tokensReceived;
+          // Only update SOL amount from chain - USD is calculated live in UI
+          // DO NOT use current solPrice for historical USD calculation
 
           result.solscan_buy = {
             tokensReceived: buyData.tokensReceived,
             solSpent: buyData.solSpent,
-            platform: buyData.platform,
-            correctBuyAmountUsd,
-            correctBuyPriceUsd
+            platform: buyData.platform
           };
 
           if (!dryRun) {
+            // Only update on-chain truth: SOL spent and tokens received
+            // USD values are NOT updated - they're calculated live in UI
             const updateData: any = {
               quantity_tokens: String(buyData.tokensReceived),
-              buy_amount_usd: correctBuyAmountUsd,
-              buy_price_usd: correctBuyPriceUsd,
               buy_amount_sol: buyData.solSpent,
               entry_verified: true,
               error_message: null
