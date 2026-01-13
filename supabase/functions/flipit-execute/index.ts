@@ -384,12 +384,12 @@ serve(async (req) => {
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
     const body = await req.json();
-    const { action, tokenMint, walletId, buyAmountUsd, targetMultiplier, positionId, slippageBps, priorityFeeMode, source, sourceChannelId, isScalpPosition, scalpTakeProfitPct, scalpMoonBagPct, scalpStopLossPct, moonbagEnabled, moonbagSellPct, moonbagKeepPct, positionType, isDiamondHand, diamondTrailingStopPct, diamondMinPeakX, diamondMaxHoldHours } = body;
+    const { action, tokenMint, walletId, buyAmountSol: explicitBuyAmountSol, buyAmountUsd, targetMultiplier, positionId, slippageBps, priorityFeeMode, source, sourceChannelId, isScalpPosition, scalpTakeProfitPct, scalpMoonBagPct, scalpStopLossPct, moonbagEnabled, moonbagSellPct, moonbagKeepPct, positionType, isDiamondHand, diamondTrailingStopPct, diamondMinPeakX, diamondMaxHoldHours } = body;
 
     // Default slippage 5% (500 bps), configurable
     const effectiveSlippage = slippageBps || 500;
     
-    console.log("FlipIt execute:", { action, tokenMint, walletId, buyAmountUsd, targetMultiplier, positionId, slippageBps: effectiveSlippage, priorityFeeMode, source, sourceChannelId, isScalpPosition });
+    console.log("FlipIt execute:", { action, tokenMint, walletId, explicitBuyAmountSol, buyAmountUsd, targetMultiplier, positionId, slippageBps: effectiveSlippage, priorityFeeMode, source, sourceChannelId, isScalpPosition });
 
     if (action === "buy") {
       if (!tokenMint || !walletId) {
@@ -420,7 +420,12 @@ serve(async (req) => {
       // CRITICAL: CHECK BALANCE BEFORE ANYTHING ELSE
       // ============================================
       const solPrice = await fetchSolPrice();
-      const buyAmountSol = (buyAmountUsd || 4) / solPrice;
+      // If user specified SOL directly, use it. Otherwise convert USD.
+      const buyAmountSol = explicitBuyAmountSol 
+        ? explicitBuyAmountSol                    // User said 1.0 SOL → execute 1.0 SOL
+        : ((buyAmountUsd || 4) / solPrice);       // USD mode: convert to SOL
+      
+      console.log("Buy amount calculation:", { explicitBuyAmountSol, buyAmountUsd, solPrice, finalBuyAmountSol: buyAmountSol });
       const gasFeeBuffer = 0.005; // 0.005 SOL buffer for gas fees (reduced from 0.01)
       const requiredSol = buyAmountSol + gasFeeBuffer;
       

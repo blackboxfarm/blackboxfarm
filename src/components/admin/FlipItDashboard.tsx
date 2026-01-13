@@ -1314,22 +1314,20 @@ export function FlipItDashboard() {
       return;
     }
 
-    // Convert to USD if in SOL mode
-    const buyAmountUsd = buyAmountMode === 'sol' && solPrice 
-      ? parsedAmount * solPrice 
-      : parsedAmount;
-
     // Store the UI price for comparison after buy
     const uiPriceAtClick = inputToken.price;
     
     setIsFlipping(true);
     try {
+      // Send raw amount in user's chosen denomination - NO CONVERSION
       const { data, error } = await supabase.functions.invoke('flipit-execute', {
         body: {
           action: 'buy',
           tokenMint: tokenAddress.trim(),
           walletId: selectedWallet,
-          buyAmountUsd: buyAmountUsd,
+          // Pass raw amount in user's chosen denomination
+          buyAmountSol: buyAmountMode === 'sol' ? parsedAmount : undefined,
+          buyAmountUsd: buyAmountMode === 'usd' ? parsedAmount : undefined,
           targetMultiplier: targetMultiplier,
           slippageBps: slippageBps,
           priorityFeeMode: priorityFeeMode
