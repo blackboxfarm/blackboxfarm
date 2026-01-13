@@ -919,9 +919,9 @@ serve(async (req) => {
     // For bonding curve tokens (pump.fun/bonk.fun/bags.fm), try PumpPortal FIRST
     // These tokens typically don't have Raydium/Jupiter liquidity until graduation
     if (isBondingCurveToken && tokenMint && side) {
-      const platform = isBagsToken ? 'bags.fm' : (isBonkToken ? 'bonk.fun' : 'pump.fun');
+      const platform = isBagsToken ? "bags.fm" : (isBonkToken ? "bonk.fun" : "pump.fun");
       console.log(`Bonding curve token detected (${platform}), trying PumpPortal first...`);
-      
+
       let pumpAmount: string;
       if (side === "buy") {
         const solAmount = Number(amount) / 1_000_000_000;
@@ -929,74 +929,120 @@ serve(async (req) => {
       } else {
         pumpAmount = sellAll ? "100%" : String(amount);
       }
-      
-      // Use higher slippage for bonding curve tokens (10% minimum) due to high volatility
-      const pumpSlippage = Math.max(Number(slippageBps), 1000); // 10% minimum
-      console.log(`Using ${pumpSlippage} bps slippage for bonding curve token`);
-      
+
+      // Use higher slippage for bonding curve tokens due to high volatility.
+      // We progressively retry up to 50% before falling back to DEX routing.
+      const basePumpSlippage = Math.max(Number(slippageBps), 1000); // 10% minimum
+      const slippageCandidates = Array.from(
+        new Set([
+          basePumpSlippage,
+          Math.min(basePumpSlippage * 2, 5000),
+          3500,
+          5000,
+        ].filter((n) => Number.isFinite(n) && n > 0))
+      ).sort((a, b) => a - b);
+
+      console.log(
+        `PumpPortal slippage candidates (bps): ${slippageCandidates.join(", ")}`
+      );
+
+      let lastPumpError: string | null = null;
+      let sawSlippageError = false;
+
       try {
         // First try with specific pool, then with 'auto' if it fails
-        const pools: Array<'pump' | 'bonk' | 'auto'> = [getBondingCurvePool(), 'auto'];
-        
-        for (const pool of pools) {
-          const pumpResult = await tryPumpPortalTrade({
-            mint: String(tokenMint),
-            userPublicKey: owner.publicKey.toBase58(),
-            action: side as 'buy' | 'sell',
-            amount: pumpAmount,
-            slippageBps: pumpSlippage,
-            pool: pool,
-          });
-          
-          if ("tx" in pumpResult) {
-            const vtx = VersionedTransaction.deserialize(pumpResult.tx);
-            
-            const HELIUS_API_KEY = Deno.env.get('HELIUS_API_KEY');
-            const txRpc = HELIUS_API_KEY 
-              ? new Connection(`https://mainnet.helius-rpc.com/?api-key=${HELIUS_API_KEY}`, { commitment: "confirmed" })
-              : connection;
-            
-            const { blockhash, lastValidBlockHeight } = await txRpc.getLatestBlockhash("confirmed");
-            (vtx as any).message.recentBlockhash = blockhash;
-            vtx.sign([owner]);
-            
-            const sig = await txRpc.sendTransaction(vtx, { skipPreflight: true, maxRetries: 3 });
-            
-            // CRITICAL: Use hardConfirmTransaction for reliable confirmation
-            const confirmResult = await hardConfirmTransaction(txRpc, sig, blockhash, lastValidBlockHeight, 30000);
-            
-            if (!confirmResult.confirmed) {
-              const txError = confirmResult.error || "Unknown confirmation failure";
-              console.error(`PumpPortal tx failed: ${txError}`);
-              
-              // 6005 is a common PumpPortal on-chain failure code (often seen after migration)
-              if (txError.includes("6005") || txError.includes("TX_FAILED_ON_CHAIN")) {
-                console.log(`PumpPortal tx failed, switching to DEX routing (Raydium/Jupiter)...`);
-                needJupiter = true;
-                jupReason = `PumpPortal tx failed: ${txError}`;
-                // Don't return - continue to Jupiter/Raydium routing below
-              } else if (txError.includes("TX_EXPIRED") || txError.includes("TX_NOT_CONFIRMED")) {
-                // Transaction was dropped - this is a hard failure, don't retry with same approach
-                console.log(`PumpPortal tx dropped/expired, switching to DEX routing...`);
-                needJupiter = true;
-                jupReason = txError;
-              } else {
-                needJupiter = true;
-                jupReason = `PumpPortal tx failed: ${txError}`;
+        const poolsRaw: Array<'pump' | 'bonk' | 'auto'> = [getBondingCurvePool(), 'auto'];
+        const pools = Array.from(new Set(poolsRaw));
+
+        pump_attempts:
+        for (const candidateSlippageBps of slippageCandidates) {
+          console.log(`PumpPortal attempt with ${candidateSlippageBps} bps slippage`);
+
+          for (const pool of pools) {
+            const pumpResult = await tryPumpPortalTrade({
+              mint: String(tokenMint),
+              userPublicKey: owner.publicKey.toBase58(),
+              action: side as 'buy' | 'sell',
+              amount: pumpAmount,
+              slippageBps: candidateSlippageBps,
+              pool,
+            });
+
+            if ("tx" in pumpResult) {
+              const vtx = VersionedTransaction.deserialize(pumpResult.tx);
+
+              const HELIUS_API_KEY = Deno.env.get("HELIUS_API_KEY");
+              const txRpc = HELIUS_API_KEY
+                ? new Connection(`https://mainnet.helius-rpc.com/?api-key=${HELIUS_API_KEY}`, { commitment: "confirmed" })
+                : connection;
+
+              const { blockhash, lastValidBlockHeight } = await txRpc.getLatestBlockhash("confirmed");
+              (vtx as any).message.recentBlockhash = blockhash;
+              vtx.sign([owner]);
+
+              let sig: string;
+              try {
+                // Use preflight so we can fail fast without paying fees for doomed txs.
+                sig = await txRpc.sendTransaction(vtx, { skipPreflight: false, maxRetries: 3 });
+              } catch (sendErr) {
+                const msg = (sendErr as Error)?.message || String(sendErr);
+                lastPumpError = `PumpPortal send failed (pool=${pool}, slippage=${candidateSlippageBps}): ${msg}`;
+                console.error(lastPumpError);
+                continue;
               }
-            } else {
-              console.log(`PumpPortal ${side} successful with pool=${pool}:`, sig);
+
+              // CRITICAL: Use hardConfirmTransaction for reliable confirmation
+              const confirmResult = await hardConfirmTransaction(txRpc, sig, blockhash, lastValidBlockHeight, 30000);
+
+              if (!confirmResult.confirmed) {
+                const txError = confirmResult.error || "Unknown confirmation failure";
+                lastPumpError = `PumpPortal tx failed (pool=${pool}, slippage=${candidateSlippageBps}): ${txError}`;
+                console.error(lastPumpError);
+
+                const isCustom1 = txError.includes('"Custom":1');
+                if (isCustom1) {
+                  // Treat Custom:1 as slippage/price-move for bonding curve tokens; retry with higher slippage.
+                  sawSlippageError = true;
+                  continue;
+                }
+
+                // 6005 is a common PumpPortal on-chain failure code (often seen after migration)
+                if (txError.includes("6005") || txError.includes("TX_FAILED_ON_CHAIN")) {
+                  console.log("PumpPortal tx failed, switching to DEX routing (Raydium/Jupiter)...");
+                  needJupiter = true;
+                  jupReason = `PumpPortal tx failed: ${txError}`;
+                  break pump_attempts;
+                }
+
+                if (txError.includes("TX_EXPIRED") || txError.includes("TX_NOT_CONFIRMED")) {
+                  console.log("PumpPortal tx dropped/expired, switching to DEX routing...");
+                  needJupiter = true;
+                  jupReason = txError;
+                  break pump_attempts;
+                }
+
+                // Unknown failure → fallback
+                needJupiter = true;
+                jupReason = `PumpPortal tx failed: ${txError}`;
+                break pump_attempts;
+              }
+
+              console.log(`PumpPortal ${side} successful with pool=${pool} slippage=${candidateSlippageBps}:`, sig);
               // For PumpPortal, we don't have expected outAmount - caller should verify on-chain
-              return ok({ signatures: [sig], source: "pumpportal", pool: pool, outAmount: null });
-              }
-            } else if (pool === 'auto') {
-            // Both specific and auto pools failed - token might have graduated to unsupported DEX
-            console.log(`PumpPortal failed for token with all pools, falling back to DEX routing: ${pumpResult.error}`);
-            needJupiter = true;
-            jupReason = `PumpPortal failed: ${pumpResult.error}`;
-          } else {
-            console.log(`PumpPortal pool=${pool} failed, trying auto...`);
+              return ok({ signatures: [sig], source: "pumpportal", pool, outAmount: null, slippageBps: candidateSlippageBps });
+            } else {
+              lastPumpError = `PumpPortal build failed (pool=${pool}, slippage=${candidateSlippageBps}): ${pumpResult.error}`;
+              console.log(lastPumpError);
+            }
           }
+        }
+
+        // If we got here and didn't explicitly switch to Jupiter, then PumpPortal couldn't complete.
+        if (!needJupiter) {
+          needJupiter = true;
+          jupReason = sawSlippageError
+            ? `PumpPortal could not execute even after slippage retries (last: ${lastPumpError ?? "unknown"})`
+            : `PumpPortal failed (last: ${lastPumpError ?? "unknown"})`;
         }
       } catch (pumpError) {
         console.log(`PumpPortal error for bonding curve token, falling back: ${(pumpError as Error).message}`);
@@ -1109,9 +1155,9 @@ serve(async (req) => {
       const isPumpToken = tokenMint?.endsWith?.('pump') || String(outputMint).endsWith('pump') || String(inputMint).endsWith('pump');
       const baseSlippage = Number(slippageBps);
       const effectiveSlippage = isPumpToken ? Math.max(baseSlippage, 1000) : baseSlippage; // 10% min for pump tokens
+      const maxRetrySlippage = isPumpToken ? 5000 : 2500; // up to 50% for pump tokens
       
       console.log(`Jupiter fallback with slippage: ${effectiveSlippage} bps (pump token: ${isPumpToken})`);
-      
       const j = await tryJupiterSwap({
         inputMint: String(inputMint),
         outputMint: String(outputMint),
