@@ -32,8 +32,10 @@ interface PlatformAdapter {
 
 const platformAdapters: PlatformAdapter[] = [
   { key: 'onchain', type: 'rpc', priority: 100 },
+  { key: 'pumpfun', type: 'api', priority: 95, apiEndpoint: 'https://frontend-api.pump.fun/coins/{MINT}' },
+  { key: 'bagsfm', type: 'api', priority: 95, apiEndpoint: 'https://bags.fm/{MINT}' }, // Will scrape public page
   { key: 'coingecko', type: 'api', priority: 90, apiEndpoint: 'https://api.coingecko.com/api/v3/coins/solana/contract/{MINT}' },
-  { key: 'dexscreener', type: 'api', priority: 80, apiEndpoint: 'https://api.dexscreener.com/latest/dex/tokens/{MINT}' },
+  { key: 'dexscreener', type: 'api', priority: 85, apiEndpoint: 'https://api.dexscreener.com/latest/dex/tokens/{MINT}' },
   { key: 'birdeye', type: 'api', priority: 80, apiEndpoint: 'https://public-api.birdeye.so/public/token_overview?address={MINT}' },
   { key: 'solscan', type: 'scrape', priority: 70, url: 'https://solscan.io/token/{MINT}' },
   { key: 'geckoterminal', type: 'scrape', priority: 70, url: 'https://www.geckoterminal.com/solana/tokens/{MINT}' },
@@ -207,6 +209,24 @@ function parseAPIResponse(source: string, data: any, mint: string, url: string):
 
     // Parse based on known API structures
     switch (source) {
+      case 'pumpfun':
+        // pump.fun API response
+        if (data.name) profile.name = data.name;
+        if (data.symbol) profile.symbol = data.symbol;
+        if (data.image_uri || data.profile_image) profile.icon = data.image_uri || data.profile_image;
+        if (data.twitter) profile.twitter = `https://x.com/${data.twitter.replace('@', '')}`;
+        if (data.website) profile.website = data.website;
+        if (data.telegram) profile.telegram = `https://t.me/${data.telegram.replace('@', '')}`;
+        profile.verified = true;
+        break;
+
+      case 'bagsfm':
+        // bags.fm - data comes from HTML scrape, handled separately
+        // For API response, we set basic verified status
+        profile.verified = true;
+        profile.website = `https://bags.fm/${mint}`;
+        break;
+
       case 'coingecko':
         if (data.name) profile.name = data.name;
         if (data.symbol) profile.symbol = data.symbol;
@@ -221,6 +241,7 @@ function parseAPIResponse(source: string, data: any, mint: string, url: string):
           const pair = data.pairs[0];
           if (pair.baseToken?.name) profile.name = pair.baseToken.name;
           if (pair.baseToken?.symbol) profile.symbol = pair.baseToken.symbol;
+          if (pair.baseToken?.logoURI) profile.icon = pair.baseToken.logoURI;
           if (pair.info?.websites?.[0]?.url) profile.website = pair.info.websites[0].url;
           if (pair.info?.socials) {
             const socials = pair.info.socials;
