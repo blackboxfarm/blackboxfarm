@@ -325,8 +325,8 @@ export function FlipItDashboard() {
           }
           
           realtimeDebounceRef.current = setTimeout(() => {
-            console.log('[FlipIt] Debounced reload triggered');
-            loadPositions();
+            console.log('[FlipIt] Debounced reload triggered (silent)');
+            loadPositions({ silent: true });
           }, 2000);
         }
       )
@@ -411,18 +411,18 @@ export function FlipItDashboard() {
         setLastLimitOrderCheck(data.checkedAt);
       }
 
-      // Handle executed actions
+      // Handle executed actions (use silent reload to prevent flicker)
       if (data?.emergencyMonitor?.executed?.length > 0) {
         toast.error(`🚨 EMERGENCY SELL: ${data.emergencyMonitor.executed.length} position(s) sold!`, { duration: 10000 });
-        loadPositions();
+        loadPositions({ silent: true });
       }
       if (data?.rebuyMonitor?.executed?.length > 0) {
         toast.success(`Rebuy executed for ${data.rebuyMonitor.executed.length} position(s)!`);
-        loadPositions();
+        loadPositions({ silent: true });
       }
       if (data?.limitOrderMonitor?.executed?.length > 0) {
         toast.success(`Limit order executed for ${data.limitOrderMonitor.executed.length} order(s)!`);
-        loadPositions();
+        loadPositions({ silent: true });
         loadLimitOrders();
       }
       if (data?.limitOrderMonitor?.expired > 0) {
@@ -513,7 +513,7 @@ export function FlipItDashboard() {
       }
       if (data?.executed?.length > 0) {
         toast.success(`Rebuy executed for ${data.executed.length} position(s)!`);
-        loadPositions();
+        loadPositions({ silent: true });
       }
     } catch (err) {
       console.error('Rebuy check failed:', err);
@@ -547,7 +547,7 @@ export function FlipItDashboard() {
         toast.error(`🚨 EMERGENCY SELL: ${data.executed.length} position(s) sold at stop-loss!`, {
           duration: 10000,
         });
-        loadPositions();
+        loadPositions({ silent: true });
       }
     } catch (err) {
       console.error('Emergency check failed:', err);
@@ -616,7 +616,7 @@ export function FlipItDashboard() {
       if (data?.executed?.length > 0) {
         toast.success(`Limit buy executed for ${data.executed.length} order(s)!`);
         loadLimitOrders();
-        loadPositions();
+        loadPositions({ silent: true });
       }
       if (data?.expiredCount > 0) {
         loadLimitOrders();
@@ -1022,7 +1022,9 @@ export function FlipItDashboard() {
   const fetchedMetadataRef = useRef<Set<string>>(new Set());
   const lastMetadataFetchRef = useRef<number>(0);
 
-  const loadPositions = async () => {
+  const loadPositions = async (options?: { silent?: boolean }) => {
+    const silent = options?.silent ?? false;
+    
     // Guard: only load if authenticated
     if (!isAuthenticated && !isPreviewAdmin) {
       console.log('[FlipIt] loadPositions skipped - not authenticated');
@@ -1036,8 +1038,12 @@ export function FlipItDashboard() {
     }
     
     isLoadingPositionsRef.current = true;
-    console.log('[FlipIt] loadPositions called');
-    setIsLoading(true);
+    console.log('[FlipIt] loadPositions called', silent ? '(silent)' : '');
+    
+    // Only toggle loading UI for non-silent calls (prevents flicker on background reloads)
+    if (!silent) {
+      setIsLoading(true);
+    }
     
     try {
       const { data, error } = await supabase
@@ -1047,13 +1053,15 @@ export function FlipItDashboard() {
 
       if (error) {
         console.error('[FlipIt] Failed to load positions from database:', error);
-        // Only show error toast once every 10 seconds to prevent spam
-        const now = Date.now();
-        if (now - lastErrorToastRef.current > 10000) {
-          toast.error('Failed to load positions');
-          lastErrorToastRef.current = now;
+        // Only show error toast once every 10 seconds to prevent spam (and skip for silent reloads)
+        if (!silent) {
+          const now = Date.now();
+          if (now - lastErrorToastRef.current > 10000) {
+            toast.error('Failed to load positions');
+            lastErrorToastRef.current = now;
+          }
+          setIsLoading(false);
         }
-        setIsLoading(false);
         isLoadingPositionsRef.current = false;
         return;
       }
@@ -1063,7 +1071,9 @@ export function FlipItDashboard() {
       
       // Set positions immediately so UI can render
       setPositions(loadedPositions);
-      setIsLoading(false);
+      if (!silent) {
+        setIsLoading(false);
+      }
       
       // Only fetch metadata for HOLDING positions missing symbols (not all 100+ historical positions)
       const now = Date.now();
@@ -1107,8 +1117,15 @@ export function FlipItDashboard() {
       // This prevents cascading API calls
     } catch (err) {
       console.error('[FlipIt] Failed to load positions:', err);
-      toast.error('Failed to load positions');
-      setIsLoading(false);
+      // Only show error toast once every 10 seconds to prevent spam (and skip for silent reloads)
+      if (!silent) {
+        const now = Date.now();
+        if (now - lastErrorToastRef.current > 10000) {
+          toast.error('Failed to load positions');
+          lastErrorToastRef.current = now;
+        }
+        setIsLoading(false);
+      }
     } finally {
       isLoadingPositionsRef.current = false;
     }
@@ -1256,7 +1273,7 @@ export function FlipItDashboard() {
       if (error) throw error;
 
       toast.success(enabled ? `Stop-loss set at $${priceUsd?.toFixed(10).replace(/\.?0+$/, '')}` : 'Stop-loss disabled');
-      loadPositions();
+      loadPositions({ silent: true });
       
       // Clear editing state
       setEmergencyEditing(prev => {
@@ -1286,7 +1303,7 @@ export function FlipItDashboard() {
       if (error) throw error;
 
       toast.success(enabled ? `Moonbag set to ${percent}% of position` : 'Moonbag disabled');
-      loadPositions();
+      loadPositions({ silent: true });
       
       // Clear editing state
       setMoonbagEditing(prev => {
@@ -1310,7 +1327,7 @@ export function FlipItDashboard() {
       if (error) throw error;
 
       toast.success(`Deleted ${tokenSymbol || 'position'}`);
-      loadPositions();
+      loadPositions({ silent: true });
     } catch (err: any) {
       toast.error(err.message || 'Failed to delete position');
     }
@@ -1383,7 +1400,7 @@ export function FlipItDashboard() {
         setTokenAddress('');
         // Clear input token state
         setInputToken(getEmptyInputToken());
-        loadPositions();
+        loadPositions({ silent: true });
         refreshWalletBalance(); // Auto-refresh wallet balance after buy
       }
     } catch (err: any) {
@@ -1512,7 +1529,7 @@ export function FlipItDashboard() {
 
         toast.success(`🚀 BUY NOW executed for ${order.token_symbol || 'token'}!`);
         loadLimitOrders();
-        loadPositions();
+        loadPositions({ silent: true });
         refreshWalletBalance(); // Auto-refresh wallet balance after buy
       } else {
         throw new Error(data?.error || 'Failed to execute buy');
@@ -1557,7 +1574,7 @@ export function FlipItDashboard() {
       }
       if (data?.executed?.length > 0) {
         toast.success(`Sold ${data.executed.length} position(s) at target!`);
-        loadPositions();
+        loadPositions({ silent: true });
         refreshWalletBalance();
       } else {
         toast.success('Refreshed');
@@ -1587,7 +1604,7 @@ export function FlipItDashboard() {
         toast.error(data.error);
       } else {
         toast.success('Sold!');
-        loadPositions();
+        loadPositions({ silent: true });
         refreshWalletBalance(); // Auto-refresh wallet balance after sell
       }
     } catch (err: any) {
@@ -1653,7 +1670,7 @@ export function FlipItDashboard() {
     }
 
     toast.success(enabled ? 'Rebuy range configured!' : 'Rebuy disabled');
-    loadPositions();
+    loadPositions({ silent: true });
     
     // Clear local editing state
     setRebuyEditing(prev => {
@@ -1678,7 +1695,7 @@ export function FlipItDashboard() {
     }
 
     toast.success('Rebuy cancelled');
-    loadPositions();
+    loadPositions({ silent: true });
   };
 
   const getRebuyStatusBadge = (status: string | null) => {
@@ -1915,7 +1932,7 @@ export function FlipItDashboard() {
                               priorityFeeMode={priorityFeeMode}
                               onTokensSold={() => {
                                 refreshWalletBalance();
-                                loadPositions();
+                                loadPositions({ silent: true });
                               }}
                             />
                           ) : (
