@@ -157,6 +157,8 @@ export function FlipItDashboard() {
   const [isLoading, setIsLoading] = useState(false);
   const [isFlipping, setIsFlipping] = useState(false);
   const [isMonitoring, setIsMonitoring] = useState(false);
+  // Separate manual refresh state from background monitoring to prevent button flicker
+  const [isManualRefreshing, setIsManualRefreshing] = useState(false);
   const [currentPrices, setCurrentPrices] = useState<Record<string, number>>({});
   const [bondingCurveData, setBondingCurveData] = useState<Record<string, number>>({});
   const [tokenImages, setTokenImages] = useState<Record<string, string>>({});
@@ -891,8 +893,14 @@ export function FlipItDashboard() {
       console.log('[FlipIt] Loaded wallets from edge function:', flipitWallets.length);
 
       setWallets(flipitWallets);
-      if (flipitWallets.length > 0 && !selectedWallet) {
+      
+      // Restore previously selected wallet from localStorage
+      const savedWalletId = localStorage.getItem('flipit-selected-wallet');
+      if (savedWalletId && flipitWallets.find(w => w.id === savedWalletId)) {
+        setSelectedWallet(savedWalletId);
+      } else if (flipitWallets.length > 0 && !selectedWallet) {
         setSelectedWallet(flipitWallets[0].id);
+        localStorage.setItem('flipit-selected-wallet', flipitWallets[0].id);
       }
     } catch (err) {
       console.error('[FlipIt] Error loading wallets:', err);
@@ -1826,7 +1834,10 @@ export function FlipItDashboard() {
             ) : (
               <div className="space-y-3">
                 <div className="flex items-center gap-2">
-                  <Select value={selectedWallet} onValueChange={setSelectedWallet}>
+                  <Select value={selectedWallet} onValueChange={(val) => {
+                    setSelectedWallet(val);
+                    localStorage.setItem('flipit-selected-wallet', val);
+                  }}>
                     <SelectTrigger className="flex-1">
                       <SelectValue placeholder="Select wallet" />
                     </SelectTrigger>
@@ -2311,20 +2322,34 @@ export function FlipItDashboard() {
                   </span>
                 )}
                 {inputToken.price !== null && buyAmount && (
-                  <span className="text-xs text-muted-foreground">
-                    Entry: ~{(() => {
-                      const amt = parseFloat(buyAmount);
-                      if (isNaN(amt) || amt <= 0) return '—';
-                      const usdAmount = buyAmountMode === 'sol' && solPrice ? amt * solPrice : amt;
-                      const tokens = usdAmount / inputToken.price!;
-                      return `${tokens.toLocaleString(undefined, { maximumFractionDigits: 0 })} tokens`;
-                    })()}
-                    {inputToken.lastFetched && (
-                      <span className="ml-2 text-muted-foreground/70">
-                        • {new Date(inputToken.lastFetched).toLocaleTimeString()}
-                      </span>
+                  <>
+                    <span className="text-xs text-muted-foreground">
+                      Entry: ~{(() => {
+                        const amt = parseFloat(buyAmount);
+                        if (isNaN(amt) || amt <= 0) return '—';
+                        const usdAmount = buyAmountMode === 'sol' && solPrice ? amt * solPrice : amt;
+                        const tokens = usdAmount / inputToken.price!;
+                        return `${tokens.toLocaleString(undefined, { maximumFractionDigits: 0 })} tokens`;
+                      })()}
+                      {inputToken.lastFetched && (
+                        <span className="ml-2 text-muted-foreground/70">
+                          • {new Date(inputToken.lastFetched).toLocaleTimeString()}
+                        </span>
+                      )}
+                    </span>
+                    {/* Padre.gg link under Entry */}
+                    {tokenAddress.trim().length >= 32 && (
+                      <a
+                        href={`https://trade.padre.gg/trade/solana/${tokenAddress.trim()}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center hover:opacity-80 transition-opacity ml-2"
+                        title="Open in Padre Terminal"
+                      >
+                        <img src="https://trade.padre.gg/logo.svg" alt="Padre" className="h-4 w-auto" />
+                      </a>
                     )}
-                  </span>
+                  </>
                 )}
               </div>
               
@@ -2406,8 +2431,19 @@ export function FlipItDashboard() {
               </Button>
             )}
 
-            <Button variant="outline" onClick={handleRefreshPrices} disabled={isMonitoring || isLoading}>
-              {isMonitoring || isLoading ? (
+            <Button 
+              variant="outline" 
+              onClick={async () => {
+                setIsManualRefreshing(true);
+                try {
+                  await handleRefreshPrices();
+                } finally {
+                  setIsManualRefreshing(false);
+                }
+              }} 
+              disabled={isManualRefreshing}
+            >
+              {isManualRefreshing ? (
                 <Loader2 className="h-4 w-4 mr-2 animate-spin" />
               ) : (
                 <RefreshCw className="h-4 w-4 mr-2" />
@@ -2577,11 +2613,18 @@ export function FlipItDashboard() {
                 variant="ghost"
                 size="sm"
                 className="h-7 w-7 p-0"
-                onClick={handleRefreshPrices}
-                disabled={isMonitoring}
+                onClick={async () => {
+                  setIsManualRefreshing(true);
+                  try {
+                    await handleRefreshPrices();
+                  } finally {
+                    setIsManualRefreshing(false);
+                  }
+                }}
+                disabled={isManualRefreshing}
                 title="Refresh active flip prices"
               >
-                <RefreshCw className={`h-4 w-4 ${isMonitoring ? 'animate-spin' : ''}`} />
+                <RefreshCw className={`h-4 w-4 ${isManualRefreshing ? 'animate-spin' : ''}`} />
               </Button>
               {positions.filter(p => p.status === 'holding' && p.emergency_sell_status === 'watching').length > 0 && (
                 <Badge variant="destructive" className="gap-1">
@@ -2645,7 +2688,7 @@ export function FlipItDashboard() {
                     </>
                   )}
                   <TableHead className="px-2 py-1">Status</TableHead>
-                  <TableHead className="px-2 py-1 w-8"></TableHead>
+                  <TableHead className="px-2 py-1 w-8 sticky right-0 bg-background z-10"></TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -3402,8 +3445,8 @@ export function FlipItDashboard() {
                         </div>
                       </TableCell>
                       
-                      {/* Delete Column */}
-                      <TableCell className="px-2 py-1">
+                      {/* Delete Column - sticky so always visible */}
+                      <TableCell className="px-2 py-1 sticky right-0 bg-background z-10 border-l border-border">
                         <Button
                           size="sm"
                           variant="ghost"
