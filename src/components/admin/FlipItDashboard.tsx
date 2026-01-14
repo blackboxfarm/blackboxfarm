@@ -148,10 +148,11 @@ interface InputTokenData {
 }
 
 interface BlacklistWarning {
-  level: 'high' | 'medium' | 'low' | 'trusted' | 'review' | null;
+  level: 'high' | 'medium' | 'low' | 'trusted' | 'review' | 'team_blacklisted' | null;
   reason: string | null;
-  source: 'token_mint' | 'creator_wallet' | 'twitter' | null;
+  source: 'token_mint' | 'creator_wallet' | 'twitter' | 'team' | 'x_community' | null;
   entryType: string | null;
+  teamId?: string | null;
 }
 
 export function FlipItDashboard() {
@@ -710,6 +711,34 @@ export function FlipItDashboard() {
       const identifiers = [tokenMint];
       if (creatorWallet) identifiers.push(creatorWallet);
       if (twitterHandle) identifiers.push(twitterHandle);
+      
+      // Check dev_teams first (highest priority - organized groups)
+      if (creatorWallet || twitterHandle) {
+        const teamIdentifiers = [];
+        if (creatorWallet) teamIdentifiers.push(creatorWallet);
+        if (twitterHandle) teamIdentifiers.push(twitterHandle);
+        
+        const { data: teamData } = await supabase
+          .from('dev_teams')
+          .select('*')
+          .or(`member_wallets.cs.{${creatorWallet || ''}},member_twitter_accounts.cs.{${twitterHandle || ''}}`)
+          .eq('is_active', true)
+          .limit(1);
+        
+        if (teamData && teamData.length > 0) {
+          const team = teamData[0];
+          if (team.risk_level === 'high' || team.tokens_rugged > 0) {
+            setBlacklistWarning({
+              level: 'team_blacklisted',
+              reason: `🚨 Part of known rug team${team.team_name ? `: ${team.team_name}` : ''} (${team.tokens_rugged || 0} rugs, ${team.member_wallets?.length || 0} wallets)`,
+              source: 'team',
+              entryType: 'dev_team',
+              teamId: team.id
+            });
+            return;
+          }
+        }
+      }
       
       // Check blacklist first (higher priority)
       const { data: blacklistData } = await supabase

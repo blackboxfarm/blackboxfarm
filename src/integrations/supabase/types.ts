@@ -1750,6 +1750,78 @@ export type Database = {
           },
         ]
       }
+      dev_teams: {
+        Row: {
+          admin_usernames: string[] | null
+          created_at: string | null
+          estimated_stolen_sol: number | null
+          evidence: Json | null
+          id: string
+          is_active: boolean | null
+          linked_token_mints: string[] | null
+          linked_x_communities: string[] | null
+          member_telegram_accounts: string[] | null
+          member_twitter_accounts: string[] | null
+          member_wallets: string[] | null
+          moderator_usernames: string[] | null
+          notes: string | null
+          risk_level: string | null
+          source: string | null
+          tags: string[] | null
+          team_hash: string | null
+          team_name: string | null
+          tokens_created: number | null
+          tokens_rugged: number | null
+          updated_at: string | null
+        }
+        Insert: {
+          admin_usernames?: string[] | null
+          created_at?: string | null
+          estimated_stolen_sol?: number | null
+          evidence?: Json | null
+          id?: string
+          is_active?: boolean | null
+          linked_token_mints?: string[] | null
+          linked_x_communities?: string[] | null
+          member_telegram_accounts?: string[] | null
+          member_twitter_accounts?: string[] | null
+          member_wallets?: string[] | null
+          moderator_usernames?: string[] | null
+          notes?: string | null
+          risk_level?: string | null
+          source?: string | null
+          tags?: string[] | null
+          team_hash?: string | null
+          team_name?: string | null
+          tokens_created?: number | null
+          tokens_rugged?: number | null
+          updated_at?: string | null
+        }
+        Update: {
+          admin_usernames?: string[] | null
+          created_at?: string | null
+          estimated_stolen_sol?: number | null
+          evidence?: Json | null
+          id?: string
+          is_active?: boolean | null
+          linked_token_mints?: string[] | null
+          linked_x_communities?: string[] | null
+          member_telegram_accounts?: string[] | null
+          member_twitter_accounts?: string[] | null
+          member_wallets?: string[] | null
+          moderator_usernames?: string[] | null
+          notes?: string | null
+          risk_level?: string | null
+          source?: string | null
+          tags?: string[] | null
+          team_hash?: string | null
+          team_name?: string | null
+          tokens_created?: number | null
+          tokens_rugged?: number | null
+          updated_at?: string | null
+        }
+        Relationships: []
+      }
       dev_wallet_reputation: {
         Row: {
           avg_dump_then_pump_pct: number | null
@@ -3243,6 +3315,86 @@ export type Database = {
           wallet_address?: string
         }
         Relationships: []
+      }
+      launchpad_creator_profiles: {
+        Row: {
+          created_at: string | null
+          creator_wallet: string | null
+          id: string
+          is_blacklisted: boolean | null
+          is_whitelisted: boolean | null
+          last_scraped_at: string | null
+          linked_dev_team_id: string | null
+          linked_token_mints: string[] | null
+          linked_wallets: string[] | null
+          linked_x_account: string | null
+          platform: string
+          platform_user_id: string | null
+          platform_username: string | null
+          profile_url: string | null
+          risk_level: string | null
+          risk_notes: string | null
+          tokens_created: number | null
+          tokens_graduated: number | null
+          tokens_rugged: number | null
+          total_volume_sol: number | null
+          updated_at: string | null
+        }
+        Insert: {
+          created_at?: string | null
+          creator_wallet?: string | null
+          id?: string
+          is_blacklisted?: boolean | null
+          is_whitelisted?: boolean | null
+          last_scraped_at?: string | null
+          linked_dev_team_id?: string | null
+          linked_token_mints?: string[] | null
+          linked_wallets?: string[] | null
+          linked_x_account?: string | null
+          platform: string
+          platform_user_id?: string | null
+          platform_username?: string | null
+          profile_url?: string | null
+          risk_level?: string | null
+          risk_notes?: string | null
+          tokens_created?: number | null
+          tokens_graduated?: number | null
+          tokens_rugged?: number | null
+          total_volume_sol?: number | null
+          updated_at?: string | null
+        }
+        Update: {
+          created_at?: string | null
+          creator_wallet?: string | null
+          id?: string
+          is_blacklisted?: boolean | null
+          is_whitelisted?: boolean | null
+          last_scraped_at?: string | null
+          linked_dev_team_id?: string | null
+          linked_token_mints?: string[] | null
+          linked_wallets?: string[] | null
+          linked_x_account?: string | null
+          platform?: string
+          platform_user_id?: string | null
+          platform_username?: string | null
+          profile_url?: string | null
+          risk_level?: string | null
+          risk_notes?: string | null
+          tokens_created?: number | null
+          tokens_graduated?: number | null
+          tokens_rugged?: number | null
+          total_volume_sol?: number | null
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "launchpad_creator_profiles_linked_dev_team_id_fkey"
+            columns: ["linked_dev_team_id"]
+            isOneToOne: false
+            referencedRelation: "dev_teams"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       mega_whale_alert_config: {
         Row: {
@@ -10272,6 +10424,69 @@ export type Database = {
           twitter_handle?: string | null
           user_id?: string
           wallet_address?: string
+        }
+        Relationships: []
+      }
+      x_communities: {
+        Row: {
+          admin_usernames: string[] | null
+          community_id: string
+          community_url: string
+          created_at: string | null
+          created_at_x: string | null
+          description: string | null
+          flag_reason: string | null
+          id: string
+          is_flagged: boolean | null
+          last_scraped_at: string | null
+          linked_token_mints: string[] | null
+          linked_wallets: string[] | null
+          member_count: number | null
+          moderator_usernames: string[] | null
+          name: string | null
+          raw_data: Json | null
+          scrape_status: string | null
+          updated_at: string | null
+        }
+        Insert: {
+          admin_usernames?: string[] | null
+          community_id: string
+          community_url: string
+          created_at?: string | null
+          created_at_x?: string | null
+          description?: string | null
+          flag_reason?: string | null
+          id?: string
+          is_flagged?: boolean | null
+          last_scraped_at?: string | null
+          linked_token_mints?: string[] | null
+          linked_wallets?: string[] | null
+          member_count?: number | null
+          moderator_usernames?: string[] | null
+          name?: string | null
+          raw_data?: Json | null
+          scrape_status?: string | null
+          updated_at?: string | null
+        }
+        Update: {
+          admin_usernames?: string[] | null
+          community_id?: string
+          community_url?: string
+          created_at?: string | null
+          created_at_x?: string | null
+          description?: string | null
+          flag_reason?: string | null
+          id?: string
+          is_flagged?: boolean | null
+          last_scraped_at?: string | null
+          linked_token_mints?: string[] | null
+          linked_wallets?: string[] | null
+          member_count?: number | null
+          moderator_usernames?: string[] | null
+          name?: string | null
+          raw_data?: Json | null
+          scrape_status?: string | null
+          updated_at?: string | null
         }
         Relationships: []
       }

@@ -486,6 +486,8 @@ serve(async (req) => {
 
     // Step 1: Fetch DexScreener data for price, launchpad detection, and pools
     console.log('Fetching DexScreener data...');
+    let hasDexPaid = false;
+    
     try {
       const dexResponse = await fetchWithTimeout(
         `https://api.dexscreener.com/latest/dex/tokens/${tokenMint}`,
@@ -497,6 +499,13 @@ serve(async (req) => {
         
         if (dexData?.pairs && dexData.pairs.length > 0) {
           const pair = dexData.pairs[0];
+          
+          // Check if DEX paid (has profile, boosts, or CTO)
+          const hasBoosts = (pair.boosts?.active || 0) > 0;
+          const hasInfo = pair.info?.imageUrl || pair.info?.header || pair.info?.openGraph;
+          const hasSocials = pair.info?.socials?.length > 0 || pair.info?.websites?.length > 0;
+          hasDexPaid = hasBoosts || hasInfo || hasSocials;
+          console.log(`DEX Paid status: ${hasDexPaid} (boosts: ${hasBoosts}, info: ${hasInfo}, socials: ${hasSocials})`);
           
           // Update basic metadata from DexScreener
           if (pair.baseToken) {
@@ -532,16 +541,32 @@ serve(async (req) => {
     metadata.isPumpFun = launchpad.name === 'pump.fun' && launchpad.detected;
     console.log('Launchpad detection:', launchpad);
 
-    // Step 2.5: Extract social links from DexScreener as fallback
-    const socialLinks = extractSocialLinks(dexData);
-    metadata.twitter = socialLinks.twitter;
-    metadata.website = socialLinks.website;
-    metadata.telegram = socialLinks.telegram;
-    console.log('DexScreener social links:', socialLinks);
+    // Step 2.5: Smart Social Sourcing - DEX paid = use DexScreener, otherwise use launchpad
+    // Extract social links from DexScreener first
+    const dexSocialLinks = extractSocialLinks(dexData);
+    
+    // If DEX paid, prioritize DexScreener socials (project team has updated them)
+    if (hasDexPaid) {
+      console.log('DEX PAID detected - using DexScreener socials as authoritative');
+      metadata.twitter = dexSocialLinks.twitter;
+      metadata.website = dexSocialLinks.website;
+      metadata.telegram = dexSocialLinks.telegram;
+    } else {
+      // Not DEX paid - will try to get from launchpad first, DexScreener as fallback
+      console.log('Not DEX paid - will prioritize launchpad socials');
+    }
 
     // Step 2.6: Protocol-specific metadata fetching for better socials and creator info
     let creatorWallet: string | undefined;
     
+    // Store launchpad creator info for profile tracking
+    let launchpadCreatorInfo: {
+      platform: string;
+      creatorWallet?: string;
+      platformUsername?: string;
+      linkedXAccount?: string;
+    } | null = null;
+
     if (launchpad.name === 'bags.fm' && launchpad.detected) {
       console.log('Fetching bags.fm specific metadata...');
       const bagsApiKey = Deno.env.get('BAGS_API_KEY');
@@ -556,12 +581,26 @@ serve(async (req) => {
           metadata.logoURI = metadata.logoURI || bagsMetadata.image;
         }
         if (bagsMetadata.description) metadata.description = bagsMetadata.description;
-        if (bagsMetadata.twitter) metadata.twitter = bagsMetadata.twitter;
-        if (bagsMetadata.website) metadata.website = bagsMetadata.website;
-        if (bagsMetadata.telegram) metadata.telegram = bagsMetadata.telegram;
+        
+        // For bags.fm: Only use launchpad socials if NOT DEX paid
+        if (!hasDexPaid) {
+          if (bagsMetadata.twitter) metadata.twitter = bagsMetadata.twitter;
+          if (bagsMetadata.website) metadata.website = bagsMetadata.website;
+          if (bagsMetadata.telegram) metadata.telegram = bagsMetadata.telegram;
+        }
+        
         if (bagsMetadata.creator?.wallet) {
           creatorWallet = bagsMetadata.creator.wallet;
         }
+        
+        // Store launchpad creator profile info
+        launchpadCreatorInfo = {
+          platform: 'bags.fm',
+          creatorWallet: bagsMetadata.creator?.wallet,
+          platformUsername: bagsMetadata.creator?.username,
+          linkedXAccount: bagsMetadata.creator?.twitter
+        };
+        
         console.log('Bags.fm metadata merged:', { twitter: metadata.twitter, website: metadata.website, creator: creatorWallet });
       }
     } else if (launchpad.name === 'pump.fun' && launchpad.detected) {
@@ -577,15 +616,32 @@ serve(async (req) => {
           metadata.logoURI = metadata.logoURI || pumpMetadata.image;
         }
         if (pumpMetadata.description) metadata.description = pumpMetadata.description;
-        if (pumpMetadata.twitter) metadata.twitter = pumpMetadata.twitter;
-        if (pumpMetadata.website) metadata.website = pumpMetadata.website;
-        if (pumpMetadata.telegram) metadata.telegram = pumpMetadata.telegram;
+        
+        // For pump.fun: Only use launchpad socials if NOT DEX paid
+        if (!hasDexPaid) {
+          if (pumpMetadata.twitter) metadata.twitter = pumpMetadata.twitter;
+          if (pumpMetadata.website) metadata.website = pumpMetadata.website;
+          if (pumpMetadata.telegram) metadata.telegram = pumpMetadata.telegram;
+        }
+        
         if (pumpMetadata.creator) {
           creatorWallet = pumpMetadata.creator;
         }
+        
+        // Store launchpad creator profile info
+        launchpadCreatorInfo = {
+          platform: 'pump.fun',
+          creatorWallet: pumpMetadata.creator
+        };
+        
         console.log('Pump.fun metadata merged:', { twitter: metadata.twitter, website: metadata.website, creator: creatorWallet });
       }
     }
+    
+    // If still no socials and we have DexScreener data, use it as fallback
+    if (!metadata.twitter && dexSocialLinks.twitter) metadata.twitter = dexSocialLinks.twitter;
+    if (!metadata.website && dexSocialLinks.website) metadata.website = dexSocialLinks.website;
+    if (!metadata.telegram && dexSocialLinks.telegram) metadata.telegram = dexSocialLinks.telegram;
 
     // Step 3: Resolve Raydium pools
     pools = resolveRaydiumPools(dexData);
@@ -618,12 +674,28 @@ serve(async (req) => {
       console.log('Off-chain metadata merged (image set:', Boolean(img), ')');
     }
 
+    // Detect Twitter type (account vs community)
+    let twitterType: 'account' | 'community' | null = null;
+    if (metadata.twitter) {
+      if (metadata.twitter.includes('/i/communities/') || metadata.twitter.includes('communities/')) {
+        twitterType = 'community';
+      } else {
+        twitterType = 'account';
+      }
+    }
+
     const response = {
       success: true,
       metadata: {
         ...metadata,
         launchpad,
-        creatorWallet
+        creatorWallet,
+        socialLinks: {
+          twitter: metadata.twitter,
+          website: metadata.website,
+          telegram: metadata.telegram,
+          twitterType
+        }
       },
       priceInfo,
       onChainData: {
@@ -633,7 +705,13 @@ serve(async (req) => {
         isBagsFm: launchpad.name === 'bags.fm' && launchpad.detected,
         isBonkFun: launchpad.name === 'bonk.fun' && launchpad.detected
       },
-      pools
+      pools,
+      launchpadInfo: launchpadCreatorInfo ? {
+        ...launchpadCreatorInfo,
+        creatorWallet
+      } : null,
+      hasDexPaid,
+      socialSource: hasDexPaid ? 'dexscreener' : (launchpad.detected ? launchpad.name : 'dexscreener')
     };
 
     return new Response(
