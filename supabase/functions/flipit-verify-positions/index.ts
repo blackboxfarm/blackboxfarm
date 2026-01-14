@@ -18,7 +18,7 @@ function bad(message: string, status = 400) {
 }
 
 interface ParsedSwapResult {
-  tokenAmount: string | null;
+  tokenAmount: number | null; // Human-readable token amount (with decimals applied)
   solInput: number | null; // SOL spent in the swap
 }
 
@@ -98,9 +98,14 @@ async function parseSwapTransaction(
       );
       
       if (tokenOutput?.rawTokenAmount?.tokenAmount) {
-        result.tokenAmount = tokenOutput.rawTokenAmount.tokenAmount;
+        // Apply decimals to get human-readable amount
+        const rawAmount = BigInt(tokenOutput.rawTokenAmount.tokenAmount);
+        const decimals = tokenOutput.rawTokenAmount.decimals ?? 9;
+        result.tokenAmount = Number(rawAmount) / Math.pow(10, decimals);
+        console.log(`Token output: raw=${rawAmount}, decimals=${decimals}, human=${result.tokenAmount}`);
       } else if (tokenOutput?.tokenAmount) {
-        result.tokenAmount = String(tokenOutput.tokenAmount);
+        // tokenAmount is already human-readable
+        result.tokenAmount = Number(tokenOutput.tokenAmount);
       }
     }
     
@@ -124,20 +129,24 @@ async function parseSwapTransaction(
       );
       
       if (inboundTransfer?.tokenAmount) {
-        result.tokenAmount = String(inboundTransfer.tokenAmount);
+        // tokenAmount in tokenTransfers is already human-readable
+        result.tokenAmount = Number(inboundTransfer.tokenAmount);
       }
     }
     
     // Fallback: accountData tokenBalanceChanges
-    if (!result.tokenAmount && parsedTx?.accountData?.length > 0) {
+    if (result.tokenAmount === null && parsedTx?.accountData?.length > 0) {
       for (const acct of parsedTx.accountData) {
         const tokenChange = acct.tokenBalanceChanges?.find(
           (c: any) => c.mint === targetMint && c.userAccount === walletPubkey
         );
         if (tokenChange?.rawTokenAmount?.tokenAmount) {
-          const amount = BigInt(tokenChange.rawTokenAmount.tokenAmount);
-          if (amount > 0n) {
-            result.tokenAmount = amount.toString();
+          const rawAmount = BigInt(tokenChange.rawTokenAmount.tokenAmount);
+          if (rawAmount > 0n) {
+            // Apply decimals to get human-readable amount
+            const decimals = tokenChange.rawTokenAmount.decimals ?? 9;
+            result.tokenAmount = Number(rawAmount) / Math.pow(10, decimals);
+            console.log(`Token balance change: raw=${rawAmount}, decimals=${decimals}, human=${result.tokenAmount}`);
             break;
           }
         }
@@ -157,7 +166,7 @@ async function getCurrentBalance(
   rpcUrl: string, 
   walletPubkey: string, 
   tokenMint: string
-): Promise<string | null> {
+): Promise<number | null> {
   try {
     const res = await fetch(rpcUrl, {
       method: "POST",
@@ -175,9 +184,20 @@ async function getCurrentBalance(
     const data = await res.json();
     const accounts = data?.result?.value || [];
     
-    if (accounts.length === 0) return "0";
+    if (accounts.length === 0) return 0;
     
-    return accounts[0]?.account?.data?.parsed?.info?.tokenAmount?.amount || null;
+    // Use uiAmount which is human-readable (decimals already applied)
+    const tokenAmount = accounts[0]?.account?.data?.parsed?.info?.tokenAmount;
+    if (tokenAmount?.uiAmount !== undefined) {
+      return tokenAmount.uiAmount;
+    }
+    // Fallback: apply decimals manually
+    const rawAmount = tokenAmount?.amount;
+    const decimals = tokenAmount?.decimals ?? 9;
+    if (rawAmount) {
+      return Number(rawAmount) / Math.pow(10, decimals);
+    }
+    return null;
   } catch (e) {
     console.error(`Error getting balance for ${tokenMint}:`, e);
     return null;
