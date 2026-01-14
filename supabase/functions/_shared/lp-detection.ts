@@ -218,13 +218,14 @@ export function detectLP(
   }
   
   // Priority 7: High concentration heuristic (less reliable)
-  // Raised threshold to 20% to reduce false positives on large whale holders
-  if (percentageOfSupply > 20) {
+  // NOTE: Some LP vault owners are unique PDAs and won't match static lists.
+  // Use a conservative threshold to catch LPs that reliably sit ~15-25%.
+  if (percentageOfSupply >= 15) {
     return {
       isLP: true,
       confidence: 60,
       platform: 'Unknown Platform',
-      reason: `High concentration (${percentageOfSupply.toFixed(1)}%) - likely undetected LP`,
+      reason: `High concentration (${percentageOfSupply.toFixed(1)}%) - likely LP vault/authority`,
       source: 'heuristic'
     };
   }
