@@ -8992,6 +8992,93 @@ export type Database = {
           },
         ]
       }
+      token_projects: {
+        Row: {
+          community_admins: string[] | null
+          community_mods: string[] | null
+          created_at: string | null
+          creator_wallet: string | null
+          discord_url: string | null
+          first_seen_at: string | null
+          id: string
+          launch_date: string | null
+          launchpad_account_id: string | null
+          launchpad_platform: string | null
+          notes: string | null
+          parent_kyc_wallet: string | null
+          primary_twitter_url: string | null
+          risk_level: string | null
+          source: string | null
+          tags: string[] | null
+          telegram_url: string | null
+          token_mint: string
+          token_name: string | null
+          token_symbol: string | null
+          trust_rating: string | null
+          twitter_type: string | null
+          updated_at: string | null
+          upstream_wallets: string[] | null
+          website_url: string | null
+          x_community_id: string | null
+        }
+        Insert: {
+          community_admins?: string[] | null
+          community_mods?: string[] | null
+          created_at?: string | null
+          creator_wallet?: string | null
+          discord_url?: string | null
+          first_seen_at?: string | null
+          id?: string
+          launch_date?: string | null
+          launchpad_account_id?: string | null
+          launchpad_platform?: string | null
+          notes?: string | null
+          parent_kyc_wallet?: string | null
+          primary_twitter_url?: string | null
+          risk_level?: string | null
+          source?: string | null
+          tags?: string[] | null
+          telegram_url?: string | null
+          token_mint: string
+          token_name?: string | null
+          token_symbol?: string | null
+          trust_rating?: string | null
+          twitter_type?: string | null
+          updated_at?: string | null
+          upstream_wallets?: string[] | null
+          website_url?: string | null
+          x_community_id?: string | null
+        }
+        Update: {
+          community_admins?: string[] | null
+          community_mods?: string[] | null
+          created_at?: string | null
+          creator_wallet?: string | null
+          discord_url?: string | null
+          first_seen_at?: string | null
+          id?: string
+          launch_date?: string | null
+          launchpad_account_id?: string | null
+          launchpad_platform?: string | null
+          notes?: string | null
+          parent_kyc_wallet?: string | null
+          primary_twitter_url?: string | null
+          risk_level?: string | null
+          source?: string | null
+          tags?: string[] | null
+          telegram_url?: string | null
+          token_mint?: string
+          token_name?: string | null
+          token_symbol?: string | null
+          trust_rating?: string | null
+          twitter_type?: string | null
+          updated_at?: string | null
+          upstream_wallets?: string[] | null
+          website_url?: string | null
+          x_community_id?: string | null
+        }
+        Relationships: []
+      }
       token_rankings: {
         Row: {
           captured_at: string
