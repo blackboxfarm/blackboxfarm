@@ -3,6 +3,7 @@ import { detectLP, type LPDetectionResult, type LaunchpadInfo } from "../_shared
 import { fetchDexScreenerData } from "../_shared/dexscreener-api.ts"
 import { fetchCreatorInfo } from "../_shared/creator-api.ts"
 import { fetchSolscanMarkets } from "../_shared/solscan-markets.ts"
+import { fetchRugCheckInsiders, type InsidersGraphResult } from "../_shared/rugcheck-insiders.ts"
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -49,9 +50,10 @@ serve(async (req) => {
     // ============================================
     // PARALLEL API FETCHES
     // ============================================
-    const [solscanResult, dexResult] = await Promise.all([
+    const [solscanResult, dexResult, insidersResult] = await Promise.all([
       fetchSolscanMarkets(tokenMint),
-      fetchDexScreenerData(tokenMint)
+      fetchDexScreenerData(tokenMint),
+      fetchRugCheckInsiders(tokenMint)
     ]);
     
     // Merge pool addresses from Solscan
@@ -300,6 +302,7 @@ serve(async (req) => {
       socials: Object.keys(socials).length > 0 ? socials : undefined,
       dexStatus,
       creatorInfo: Object.keys(creatorInfo).length > 0 ? creatorInfo : undefined,
+      insidersGraph: insidersResult.hasInsiders ? insidersResult : undefined,
       firstBuyers: [],
       executionTimeMs: totalTime
     };
