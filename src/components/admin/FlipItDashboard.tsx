@@ -3613,6 +3613,126 @@ export function FlipItDashboard() {
         </Card>
       )}
 
+      {/* Completed Flips Section - Collapsed by default, no live price fetching */}
+      {positions.filter(p => p.status === 'sold').length > 0 && (
+        <Collapsible className="mb-6">
+          <CollapsibleTrigger asChild>
+            <Button variant="outline" className="w-full justify-between mb-2">
+              <span className="flex items-center gap-2">
+                <CheckCircle2 className="h-4 w-4 text-green-500" />
+                Completed Flips ({positions.filter(p => p.status === 'sold').length})
+              </span>
+              <ChevronDown className="h-4 w-4" />
+            </Button>
+          </CollapsibleTrigger>
+          <CollapsibleContent>
+            <Card className="border-green-500/20">
+              <CardContent className="p-3">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead compact>Token</TableHead>
+                      <TableHead compact>Invested</TableHead>
+                      <TableHead compact>Sold For</TableHead>
+                      <TableHead compact>P/L</TableHead>
+                      <TableHead compact>Sold At</TableHead>
+                      <TableHead compact>Rating</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {positions
+                      .filter(p => p.status === 'sold')
+                      .sort((a, b) => new Date(b.sell_executed_at || b.created_at).getTime() - new Date(a.sell_executed_at || a.created_at).getTime())
+                      .slice(0, 50)
+                      .map(position => {
+                        const soldFor = (position.sell_price_usd || 0) * (position.quantity_tokens || 0);
+                        const profitLoss = position.profit_usd || (soldFor - position.buy_amount_usd);
+                        const isProfit = profitLoss >= 0;
+                        
+                        return (
+                          <TableRow key={position.id} className="hover:bg-muted/30">
+                            {/* Token */}
+                            <TableCell compact>
+                              <div className="flex items-center gap-2">
+                                {position.token_image && (
+                                  <img 
+                                    src={position.token_image} 
+                                    alt="" 
+                                    className="h-5 w-5 rounded-full"
+                                    onError={(e) => (e.currentTarget.style.display = 'none')}
+                                  />
+                                )}
+                                <div className="flex flex-col">
+                                  <span className="font-medium text-xs">{position.token_symbol || 'Unknown'}</span>
+                                  <code className="text-[9px] text-muted-foreground font-mono">
+                                    {position.token_mint.slice(0, 6)}...
+                                  </code>
+                                </div>
+                              </div>
+                            </TableCell>
+                            
+                            {/* Invested */}
+                            <TableCell compact>
+                              <span className="font-mono text-xs">${position.buy_amount_usd.toFixed(2)}</span>
+                            </TableCell>
+                            
+                            {/* Sold For */}
+                            <TableCell compact>
+                              <span className="font-mono text-xs">${soldFor.toFixed(2)}</span>
+                            </TableCell>
+                            
+                            {/* P/L */}
+                            <TableCell compact>
+                              <span className={`font-mono text-xs font-medium ${isProfit ? 'text-green-500' : 'text-red-500'}`}>
+                                {isProfit ? '+' : ''}{profitLoss.toFixed(2)}
+                              </span>
+                            </TableCell>
+                            
+                            {/* Sold At */}
+                            <TableCell compact>
+                              <span className="text-[10px] text-muted-foreground">
+                                {position.sell_executed_at 
+                                  ? new Date(position.sell_executed_at).toLocaleString('en-US', { 
+                                      month: 'short', 
+                                      day: 'numeric',
+                                      hour: 'numeric', 
+                                      minute: '2-digit',
+                                      hour12: true 
+                                    })
+                                  : '-'
+                                }
+                              </span>
+                            </TableCell>
+                            
+                            {/* Rating Button */}
+                            <TableCell compact>
+                              <Button
+                                size="sm"
+                                className={`h-5 px-1.5 text-[9px] font-bold transition-colors ${
+                                  position.dev_trust_rating === 'unknown' || !position.dev_trust_rating
+                                    ? 'bg-yellow-500 hover:bg-yellow-600 text-black'
+                                    : position.dev_trust_rating === 'concern'
+                                    ? 'bg-orange-500 hover:bg-orange-600 text-white'
+                                    : position.dev_trust_rating === 'danger'
+                                    ? 'bg-red-600 hover:bg-red-700 text-white'
+                                    : 'bg-green-500 hover:bg-green-600 text-white'
+                                }`}
+                                onClick={() => handleCycleTrustRating(position)}
+                              >
+                                {(position.dev_trust_rating || 'unknown').toUpperCase()}
+                              </Button>
+                            </TableCell>
+                          </TableRow>
+                        );
+                      })}
+                  </TableBody>
+                </Table>
+              </CardContent>
+            </Card>
+          </CollapsibleContent>
+        </Collapsible>
+      )}
+
       {/* Tweet Templates Section - moved below Active Flips */}
       <Collapsible className="mb-6">
         <CollapsibleTrigger asChild>
