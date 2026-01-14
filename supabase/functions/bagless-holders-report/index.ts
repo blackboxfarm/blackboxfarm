@@ -185,6 +185,7 @@ serve(async (req) => {
     // Source 2: DexScreener - Fetch pair addresses
     // ============================================
     let dexScreenerPairs: any[] = [];
+    let socials: { twitter?: string; telegram?: string; website?: string } = {};
     try {
       console.log('[DexScreener] Fetching token pairs...');
       const dexResp = await fetch(`https://api.dexscreener.com/latest/dex/tokens/${tokenMint}`);
@@ -211,6 +212,31 @@ serve(async (req) => {
         if (dexScreenerPairs.length > 0) {
           launchpadInfo = detectLaunchpad(dexScreenerPairs[0], tokenMint);
           console.log(`[DexScreener] Launchpad detected: ${launchpadInfo.name} (${launchpadInfo.confidence})`);
+          
+          // Extract social links from DexScreener info
+          const info = dexScreenerPairs[0].info;
+          if (info?.socials) {
+            for (const social of info.socials) {
+              if (social.type === 'twitter' && social.url) {
+                socials.twitter = social.url;
+              } else if (social.type === 'telegram' && social.url) {
+                socials.telegram = social.url;
+              }
+            }
+          }
+          if (info?.websites?.length > 0) {
+            // Filter out launchpad websites
+            const nonLaunchpadSite = info.websites.find((w: any) => 
+              !w.url?.includes('pump.fun') && 
+              !w.url?.includes('bonk.fun') && 
+              !w.url?.includes('bags.fm') &&
+              !w.url?.includes('dexscreener')
+            );
+            if (nonLaunchpadSite?.url) {
+              socials.website = nonLaunchpadSite.url;
+            }
+          }
+          console.log(`[DexScreener] Socials found:`, socials);
         }
       }
     } catch (error) {
@@ -676,6 +702,7 @@ serve(async (req) => {
       holders: rankedHolders,
       liquidityPools: lpWallets,
       potentialDevWallet,
+      socials: Object.keys(socials).length > 0 ? socials : undefined,
       firstBuyers: firstBuyersWithPNL,
       firstBuyersError: firstBuyersData.length === 0 ? 
         (heliusApiKey ? 

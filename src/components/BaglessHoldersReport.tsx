@@ -114,6 +114,11 @@ interface HoldersReport {
     detected: boolean;
     confidence: 'high' | 'medium' | 'low';
   };
+  socials?: {
+    twitter?: string;
+    telegram?: string;
+    website?: string;
+  };
   summary: string;
 }
 
@@ -830,6 +835,10 @@ export function BaglessHoldersReport({ initialToken }: BaglessHoldersReportProps
             priceInfo={tokenData.priceInfo}
             onChainData={tokenData.onChainData}
             pools={tokenData.pools}
+            tokenAge={tokenAge}
+            twitterUrl={report?.socials?.twitter}
+            telegramUrl={report?.socials?.telegram}
+            websiteUrl={report?.socials?.website}
           />
         </div>
       )}
@@ -1086,8 +1095,11 @@ export function BaglessHoldersReport({ initialToken }: BaglessHoldersReportProps
 
               {/* Action Buttons Row */}
               <div className="mb-4 grid grid-cols-3 gap-2">
-                <Button variant="outline" asChild className="text-xs md:text-sm">
-                  <Link to="/holders-marketing">Why You Need This Before Every Buy</Link>
+                <Button variant="outline" asChild className="text-xs md:text-sm h-auto py-2">
+                  <Link to="/holders-marketing" className="text-center leading-tight">
+                    <span className="hidden md:inline">Why You Need This Before Every Buy</span>
+                    <span className="md:hidden">Why You Need This<br />Before Every Buy</span>
+                  </Link>
                 </Button>
                 
                 <DropdownMenu>
@@ -1130,8 +1142,11 @@ export function BaglessHoldersReport({ initialToken }: BaglessHoldersReportProps
                   </DropdownMenuContent>
                 </DropdownMenu>
 
-                <Button variant="outline" asChild className="text-xs md:text-sm">
-                  <Link to="/adverts">Get Seen! 👀 Eyes here!</Link>
+                <Button variant="outline" asChild className="text-xs md:text-sm h-auto py-2">
+                  <Link to="/adverts" className="text-center leading-tight">
+                    <span className="hidden md:inline">Get Seen! 👀 Eyes here!</span>
+                    <span className="md:hidden">Get Seen!<br />👀 Eyes Here!</span>
+                  </Link>
                 </Button>
               </div>
 
