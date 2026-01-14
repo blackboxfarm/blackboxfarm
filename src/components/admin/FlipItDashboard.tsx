@@ -92,6 +92,8 @@ interface FlipPosition {
   moon_bag_dump_threshold_pct: number | null;
   // DEX paid status
   dex_paid_status: DexPaidStatus | null;
+  // Dev trust rating for blacklist/whitelist/neutrallist
+  dev_trust_rating: 'unknown' | 'concern' | 'danger' | 'good' | null;
 }
 
 interface SuperAdminWallet {
@@ -1649,6 +1651,130 @@ export function FlipItDashboard() {
     }
   };
 
+  // Handle cycling through trust rating: unknown → concern → danger → good → unknown
+  const handleCycleTrustRating = async (position: FlipPosition) => {
+    const cycle: Array<'unknown' | 'concern' | 'danger' | 'good'> = ['unknown', 'concern', 'danger', 'good'];
+    const currentRating = position.dev_trust_rating || 'unknown';
+    const currentIndex = cycle.indexOf(currentRating as any);
+    const nextRating = cycle[(currentIndex + 1) % cycle.length];
+    
+    try {
+      // Update position with new rating
+      const { error: updateError } = await supabase
+        .from('flip_positions')
+        .update({ dev_trust_rating: nextRating })
+        .eq('id', position.id);
+      
+      if (updateError) throw updateError;
+      
+      // Collect all identifiers for the lists
+      const tokenMint = position.token_mint;
+      const twitterHandle = position.twitter_url ? extractTwitterHandle(position.twitter_url) : null;
+      const websiteUrl = position.website_url;
+      const telegramUrl = position.telegram_url;
+      
+      // Helper to extract twitter handle from URL
+      function extractTwitterHandle(url: string): string | null {
+        const match = url.match(/(?:twitter\.com|x\.com)\/([^/?]+)/i);
+        return match ? match[1].toLowerCase() : null;
+      }
+      
+      // Remove from all lists first for clean slate
+      if (currentRating !== 'unknown') {
+        // Remove from blacklist
+        await supabase.from('pumpfun_blacklist').delete().eq('identifier', tokenMint);
+        if (twitterHandle) await supabase.from('pumpfun_blacklist').delete().eq('identifier', twitterHandle);
+        
+        // Remove from whitelist
+        await supabase.from('pumpfun_whitelist').delete().eq('identifier', tokenMint);
+        if (twitterHandle) await supabase.from('pumpfun_whitelist').delete().eq('identifier', twitterHandle);
+        
+        // Remove from neutrallist
+        await supabase.from('pumpfun_neutrallist').delete().eq('identifier', tokenMint);
+        if (twitterHandle) await supabase.from('pumpfun_neutrallist').delete().eq('identifier', twitterHandle);
+      }
+      
+      // Add to appropriate list based on new rating
+      if (nextRating === 'concern' || nextRating === 'danger') {
+        // Add to Blacklist
+        const riskLevel = nextRating === 'danger' ? 'high' : 'medium';
+        
+        await supabase.from('pumpfun_blacklist').upsert({
+          entry_type: 'token_mint',
+          identifier: tokenMint,
+          risk_level: riskLevel,
+          reason: `Rated ${nextRating.toUpperCase()} via FlipIt`,
+          source: 'flipit_rating',
+          tags: ['manually_rated', nextRating],
+          linked_twitter: twitterHandle ? [twitterHandle] : [],
+          linked_websites: websiteUrl ? [websiteUrl] : [],
+          linked_telegram: telegramUrl ? [telegramUrl] : []
+        }, { onConflict: 'entry_type,identifier' });
+        
+        if (twitterHandle) {
+          await supabase.from('pumpfun_blacklist').upsert({
+            entry_type: 'twitter_account',
+            identifier: twitterHandle,
+            risk_level: riskLevel,
+            reason: `Rated ${nextRating.toUpperCase()} via FlipIt`,
+            source: 'flipit_rating',
+            tags: ['manually_rated', nextRating],
+            linked_token_mints: [tokenMint]
+          }, { onConflict: 'entry_type,identifier' });
+        }
+      } else if (nextRating === 'good') {
+        // Add to Whitelist
+        await supabase.from('pumpfun_whitelist').upsert({
+          entry_type: 'token_mint',
+          identifier: tokenMint,
+          trust_level: 'high',
+          reason: 'Rated GOOD via FlipIt',
+          source: 'flipit_rating',
+          tags: ['manually_rated', 'trusted'],
+          linked_twitter: twitterHandle ? [twitterHandle] : [],
+          linked_websites: websiteUrl ? [websiteUrl] : [],
+          linked_telegram: telegramUrl ? [telegramUrl] : []
+        }, { onConflict: 'entry_type,identifier' });
+        
+        if (twitterHandle) {
+          await supabase.from('pumpfun_whitelist').upsert({
+            entry_type: 'twitter_account',
+            identifier: twitterHandle,
+            trust_level: 'high',
+            reason: 'Rated GOOD via FlipIt',
+            source: 'flipit_rating',
+            tags: ['manually_rated', 'trusted'],
+            linked_token_mints: [tokenMint]
+          }, { onConflict: 'entry_type,identifier' });
+        }
+      } else if (nextRating === 'unknown') {
+        // Add to Neutrallist
+        await supabase.from('pumpfun_neutrallist').upsert({
+          entry_type: 'token_mint',
+          identifier: tokenMint,
+          reason: 'Marked UNKNOWN via FlipIt - needs review',
+          source: 'flipit_rating',
+          tags: ['pending_review'],
+          linked_twitter: twitterHandle ? [twitterHandle] : [],
+          linked_websites: websiteUrl ? [websiteUrl] : [],
+          linked_telegram: telegramUrl ? [telegramUrl] : []
+        }, { onConflict: 'entry_type,identifier' });
+      }
+      
+      // Update local state
+      setPositions(prev => prev.map(p => 
+        p.id === position.id ? { ...p, dev_trust_rating: nextRating } : p
+      ));
+      
+      const ratingEmoji = nextRating === 'good' ? '✅' : nextRating === 'danger' ? '🚨' : nextRating === 'concern' ? '⚠️' : '❓';
+      toast.success(`${ratingEmoji} Marked as ${nextRating.toUpperCase()}`);
+      
+    } catch (err: any) {
+      console.error('Failed to update trust rating:', err);
+      toast.error(err.message || 'Failed to update rating');
+    }
+  };
+
   const handleUpdateTarget = async (positionId: string, newMultiplier: number, buyPriceUsd: number) => {
     const newTargetPrice = buyPriceUsd * newMultiplier;
     
@@ -2674,6 +2800,7 @@ export function FlipItDashboard() {
                   <TableHead className="px-2 py-1">Target Value</TableHead>
                   <TableHead className="px-2 py-1">Progress</TableHead>
                   <TableHead className="px-2 py-1">Action</TableHead>
+                  <TableHead className="px-2 py-1 text-center">Rating</TableHead>
                   <TableHead className="px-2 py-1 text-center">🌙 MOONBAG</TableHead>
                   <TableHead className="px-2 py-1">MB %</TableHead>
                   <TableHead className="px-2 py-1 text-center">STOP-LOSS</TableHead>
@@ -2992,6 +3119,7 @@ export function FlipItDashboard() {
                           <Button
                             size="sm"
                             variant="destructive"
+                            className="h-6 px-2 py-0.5 text-xs"
                             onClick={() => {
                               const ticker = position.token_symbol || position.token_mint.slice(0, 8);
                               if (window.confirm(`Sell ${ticker} now?\n\nThis will immediately sell your entire position.`)) {
@@ -3002,6 +3130,25 @@ export function FlipItDashboard() {
                             Sell Now
                           </Button>
                         )}
+                      </TableCell>
+                      {/* Dev Trust Rating - 4 cycle button */}
+                      <TableCell className="px-2 py-1">
+                        <Button
+                          size="sm"
+                          className={`h-6 px-2 text-[10px] font-bold transition-colors ${
+                            position.dev_trust_rating === 'good' 
+                              ? 'bg-green-500 hover:bg-green-600 text-white' 
+                              : position.dev_trust_rating === 'danger' 
+                                ? 'bg-red-600 hover:bg-red-700 text-white' 
+                                : position.dev_trust_rating === 'concern' 
+                                  ? 'bg-orange-500 hover:bg-orange-600 text-white' 
+                                  : 'bg-yellow-500 hover:bg-yellow-600 text-black'
+                          }`}
+                          onClick={() => handleCycleTrustRating(position)}
+                          title="Click to cycle: UNKNOWN → CONCERN → DANGER → GOOD"
+                        >
+                          {(position.dev_trust_rating || 'unknown').toUpperCase()}
+                        </Button>
                       </TableCell>
                       {/* Moonbag Toggle */}
                       <TableCell className="px-2 py-1 text-center">
