@@ -94,6 +94,8 @@ interface FlipPosition {
   dex_paid_status: DexPaidStatus | null;
   // Dev trust rating for blacklist/whitelist/neutrallist
   dev_trust_rating: 'unknown' | 'concern' | 'danger' | 'good' | null;
+  // Creator wallet for cross-referencing
+  creator_wallet: string | null;
 }
 
 interface SuperAdminWallet {
@@ -142,6 +144,14 @@ interface InputTokenData {
   telegramUrl: string | null;
   lastFetched: string | null;
   source: 'token-metadata' | 'raydium-quote' | 'dexscreener' | null;
+  creatorWallet: string | null;
+}
+
+interface BlacklistWarning {
+  level: 'high' | 'medium' | 'low' | 'trusted' | 'review' | null;
+  reason: string | null;
+  source: 'token_mint' | 'creator_wallet' | 'twitter' | null;
+  entryType: string | null;
 }
 
 export function FlipItDashboard() {
@@ -191,10 +201,20 @@ export function FlipItDashboard() {
     websiteUrl: null,
     telegramUrl: null,
     lastFetched: null,
-    source: null
+    source: null,
+    creatorWallet: null
   });
   const [isLoadingInputToken, setIsLoadingInputToken] = useState(false);
   const inputFetchTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  
+  // Blacklist warning state for input token
+  const [blacklistWarning, setBlacklistWarning] = useState<BlacklistWarning>({
+    level: null,
+    reason: null,
+    source: null,
+    entryType: null
+  });
+  const [isCheckingBlacklist, setIsCheckingBlacklist] = useState(false);
   
   // Helper for empty input token state
   const getEmptyInputToken = (): InputTokenData => ({
@@ -211,7 +231,8 @@ export function FlipItDashboard() {
     websiteUrl: null,
     telegramUrl: null,
     lastFetched: null,
-    source: null
+    source: null,
+    creatorWallet: null
   });
   
   // SOL price for USD conversion
@@ -676,6 +697,94 @@ export function FlipItDashboard() {
     }
   }, [selectedWallet]);
 
+  // Check blacklist/whitelist status for token, creator wallet, or twitter
+  const checkBlacklistStatus = useCallback(async (tokenMint: string, creatorWallet: string | null, twitterUrl: string | null) => {
+    setIsCheckingBlacklist(true);
+    setBlacklistWarning({ level: null, reason: null, source: null, entryType: null });
+    
+    try {
+      // Extract twitter handle from URL
+      const twitterHandle = twitterUrl ? twitterUrl.match(/(?:twitter\.com|x\.com)\/([^/?]+)/i)?.[1]?.toLowerCase() : null;
+      
+      // Build list of identifiers to check
+      const identifiers = [tokenMint];
+      if (creatorWallet) identifiers.push(creatorWallet);
+      if (twitterHandle) identifiers.push(twitterHandle);
+      
+      // Check blacklist first (higher priority)
+      const { data: blacklistData } = await supabase
+        .from('pumpfun_blacklist')
+        .select('*')
+        .in('identifier', identifiers)
+        .eq('is_active', true)
+        .limit(1);
+      
+      if (blacklistData && blacklistData.length > 0) {
+        const entry = blacklistData[0];
+        const source = entry.identifier === tokenMint ? 'token_mint' 
+          : entry.identifier === creatorWallet ? 'creator_wallet'
+          : 'twitter';
+        
+        setBlacklistWarning({
+          level: entry.risk_level === 'high' ? 'high' : 'medium',
+          reason: entry.blacklist_reason || `Blacklisted ${entry.entry_type}`,
+          source: source as any,
+          entryType: entry.entry_type
+        });
+        return;
+      }
+      
+      // Check whitelist
+      const { data: whitelistData } = await supabase
+        .from('pumpfun_whitelist')
+        .select('*')
+        .in('identifier', identifiers)
+        .eq('is_active', true)
+        .limit(1);
+      
+      if (whitelistData && whitelistData.length > 0) {
+        const entry = whitelistData[0];
+        const source = entry.identifier === tokenMint ? 'token_mint' 
+          : entry.identifier === creatorWallet ? 'creator_wallet'
+          : 'twitter';
+        
+        setBlacklistWarning({
+          level: 'trusted',
+          reason: entry.whitelist_reason || `Whitelisted ${entry.entry_type}`,
+          source: source as any,
+          entryType: entry.entry_type
+        });
+        return;
+      }
+      
+      // Check neutrallist
+      const { data: neutrallistData } = await supabase
+        .from('pumpfun_neutrallist')
+        .select('*')
+        .in('identifier', identifiers)
+        .eq('is_active', true)
+        .limit(1);
+      
+      if (neutrallistData && neutrallistData.length > 0) {
+        const entry = neutrallistData[0];
+        const source = entry.identifier === tokenMint ? 'token_mint' 
+          : entry.identifier === creatorWallet ? 'creator_wallet'
+          : 'twitter';
+        
+        setBlacklistWarning({
+          level: 'review',
+          reason: entry.reason || `Under review: ${entry.entry_type}`,
+          source: source as any,
+          entryType: entry.entry_type
+        });
+      }
+    } catch (err) {
+      console.error('Failed to check blacklist status:', err);
+    } finally {
+      setIsCheckingBlacklist(false);
+    }
+  }, []);
+  
   // Unified token data fetch function - single source of truth
   const fetchInputTokenData = useCallback(async (tokenMint: string, forceRefresh = false): Promise<boolean> => {
     const mint = tokenMint.trim();
@@ -707,6 +816,8 @@ export function FlipItDashboard() {
         const meta = metaData.metadata;
         const priceInfo = metaData.priceInfo;
         
+        const creatorWallet = meta.creatorWallet || metaData.launchpadInfo?.creatorWallet || null;
+        
         setInputToken({
           mint: mint,
           symbol: meta.symbol || null,
@@ -721,8 +832,12 @@ export function FlipItDashboard() {
           websiteUrl: meta.socialLinks?.website ?? null,
           telegramUrl: meta.socialLinks?.telegram ?? null,
           lastFetched: new Date().toISOString(),
-          source: 'token-metadata'
+          source: 'token-metadata',
+          creatorWallet: creatorWallet
         });
+        
+        // Check blacklist/whitelist for the token and creator
+        checkBlacklistStatus(mint, creatorWallet, meta.socialLinks?.twitter);
 
         // If token-metadata returned a price, we're done
         if (priceInfo?.priceUsd) {
@@ -1659,14 +1774,6 @@ export function FlipItDashboard() {
     const nextRating = cycle[(currentIndex + 1) % cycle.length];
     
     try {
-      // Update position with new rating
-      const { error: updateError } = await supabase
-        .from('flip_positions')
-        .update({ dev_trust_rating: nextRating })
-        .eq('id', position.id);
-      
-      if (updateError) throw updateError;
-      
       // Collect all identifiers for the lists
       const tokenMint = position.token_mint;
       const twitterHandle = position.twitter_url ? extractTwitterHandle(position.twitter_url) : null;
@@ -1679,19 +1786,53 @@ export function FlipItDashboard() {
         return match ? match[1].toLowerCase() : null;
       }
       
+      // Get or fetch creator wallet
+      let creatorWallet = position.creator_wallet;
+      
+      if (!creatorWallet) {
+        // Fetch creator wallet from solscan-creator-lookup
+        try {
+          const { data: creatorData } = await supabase.functions.invoke('solscan-creator-lookup', {
+            body: { tokenMint }
+          });
+          if (creatorData?.creatorWallet) {
+            creatorWallet = creatorData.creatorWallet;
+            console.log('Fetched creator wallet:', creatorWallet);
+          }
+        } catch (err) {
+          console.warn('Failed to fetch creator wallet:', err);
+        }
+      }
+      
+      // Update position with new rating AND creator wallet
+      const updateData: any = { dev_trust_rating: nextRating };
+      if (creatorWallet && !position.creator_wallet) {
+        updateData.creator_wallet = creatorWallet;
+      }
+      
+      const { error: updateError } = await supabase
+        .from('flip_positions')
+        .update(updateData)
+        .eq('id', position.id);
+      
+      if (updateError) throw updateError;
+      
       // Remove from all lists first for clean slate
       if (currentRating !== 'unknown') {
         // Remove from blacklist
         await supabase.from('pumpfun_blacklist').delete().eq('identifier', tokenMint);
         if (twitterHandle) await supabase.from('pumpfun_blacklist').delete().eq('identifier', twitterHandle);
+        if (creatorWallet) await supabase.from('pumpfun_blacklist').delete().eq('identifier', creatorWallet);
         
         // Remove from whitelist
         await supabase.from('pumpfun_whitelist').delete().eq('identifier', tokenMint);
         if (twitterHandle) await supabase.from('pumpfun_whitelist').delete().eq('identifier', twitterHandle);
+        if (creatorWallet) await supabase.from('pumpfun_whitelist').delete().eq('identifier', creatorWallet);
         
         // Remove from neutrallist
         await supabase.from('pumpfun_neutrallist').delete().eq('identifier', tokenMint);
         if (twitterHandle) await supabase.from('pumpfun_neutrallist').delete().eq('identifier', twitterHandle);
+        if (creatorWallet) await supabase.from('pumpfun_neutrallist').delete().eq('identifier', creatorWallet);
       }
       
       // Add to appropriate list based on new rating
@@ -1703,12 +1844,13 @@ export function FlipItDashboard() {
           entry_type: 'token_mint',
           identifier: tokenMint,
           risk_level: riskLevel,
-          reason: `Rated ${nextRating.toUpperCase()} via FlipIt`,
+          blacklist_reason: `Rated ${nextRating.toUpperCase()} via FlipIt`,
           source: 'flipit_rating',
           tags: ['manually_rated', nextRating],
           linked_twitter: twitterHandle ? [twitterHandle] : [],
           linked_websites: websiteUrl ? [websiteUrl] : [],
-          linked_telegram: telegramUrl ? [telegramUrl] : []
+          linked_telegram: telegramUrl ? [telegramUrl] : [],
+          linked_dev_wallets: creatorWallet ? [creatorWallet] : []
         }, { onConflict: 'entry_type,identifier' });
         
         if (twitterHandle) {
@@ -1716,10 +1858,25 @@ export function FlipItDashboard() {
             entry_type: 'twitter_account',
             identifier: twitterHandle,
             risk_level: riskLevel,
-            reason: `Rated ${nextRating.toUpperCase()} via FlipIt`,
+            blacklist_reason: `Rated ${nextRating.toUpperCase()} via FlipIt`,
             source: 'flipit_rating',
             tags: ['manually_rated', nextRating],
-            linked_token_mints: [tokenMint]
+            linked_token_mints: [tokenMint],
+            linked_dev_wallets: creatorWallet ? [creatorWallet] : []
+          }, { onConflict: 'entry_type,identifier' });
+        }
+        
+        // Add creator wallet to blacklist (CRITICAL for future cross-referencing)
+        if (creatorWallet) {
+          await supabase.from('pumpfun_blacklist').upsert({
+            entry_type: 'dev_wallet',
+            identifier: creatorWallet,
+            risk_level: riskLevel,
+            blacklist_reason: `Developer rated ${nextRating.toUpperCase()} via FlipIt for token ${position.token_symbol || tokenMint.slice(0, 8)}`,
+            source: 'flipit_rating',
+            tags: ['manually_rated', nextRating, 'dev_wallet'],
+            linked_token_mints: [tokenMint],
+            linked_twitter: twitterHandle ? [twitterHandle] : []
           }, { onConflict: 'entry_type,identifier' });
         }
       } else if (nextRating === 'good') {
@@ -1728,12 +1885,13 @@ export function FlipItDashboard() {
           entry_type: 'token_mint',
           identifier: tokenMint,
           trust_level: 'high',
-          reason: 'Rated GOOD via FlipIt',
+          whitelist_reason: 'Rated GOOD via FlipIt',
           source: 'flipit_rating',
           tags: ['manually_rated', 'trusted'],
           linked_twitter: twitterHandle ? [twitterHandle] : [],
           linked_websites: websiteUrl ? [websiteUrl] : [],
-          linked_telegram: telegramUrl ? [telegramUrl] : []
+          linked_telegram: telegramUrl ? [telegramUrl] : [],
+          linked_dev_wallets: creatorWallet ? [creatorWallet] : []
         }, { onConflict: 'entry_type,identifier' });
         
         if (twitterHandle) {
@@ -1741,10 +1899,25 @@ export function FlipItDashboard() {
             entry_type: 'twitter_account',
             identifier: twitterHandle,
             trust_level: 'high',
-            reason: 'Rated GOOD via FlipIt',
+            whitelist_reason: 'Rated GOOD via FlipIt',
             source: 'flipit_rating',
             tags: ['manually_rated', 'trusted'],
-            linked_token_mints: [tokenMint]
+            linked_token_mints: [tokenMint],
+            linked_dev_wallets: creatorWallet ? [creatorWallet] : []
+          }, { onConflict: 'entry_type,identifier' });
+        }
+        
+        // Add creator wallet to whitelist (for trusted devs)
+        if (creatorWallet) {
+          await supabase.from('pumpfun_whitelist').upsert({
+            entry_type: 'dev_wallet',
+            identifier: creatorWallet,
+            trust_level: 'high',
+            whitelist_reason: `Trusted developer - rated GOOD for token ${position.token_symbol || tokenMint.slice(0, 8)}`,
+            source: 'flipit_rating',
+            tags: ['manually_rated', 'trusted', 'dev_wallet'],
+            linked_token_mints: [tokenMint],
+            linked_twitter: twitterHandle ? [twitterHandle] : []
           }, { onConflict: 'entry_type,identifier' });
         }
       } else if (nextRating === 'unknown') {
@@ -1752,22 +1925,24 @@ export function FlipItDashboard() {
         await supabase.from('pumpfun_neutrallist').upsert({
           entry_type: 'token_mint',
           identifier: tokenMint,
-          reason: 'Marked UNKNOWN via FlipIt - needs review',
+          neutrallist_reason: 'Marked UNKNOWN via FlipIt - needs review',
           source: 'flipit_rating',
           tags: ['pending_review'],
           linked_twitter: twitterHandle ? [twitterHandle] : [],
           linked_websites: websiteUrl ? [websiteUrl] : [],
-          linked_telegram: telegramUrl ? [telegramUrl] : []
+          linked_telegram: telegramUrl ? [telegramUrl] : [],
+          linked_dev_wallets: creatorWallet ? [creatorWallet] : []
         }, { onConflict: 'entry_type,identifier' });
       }
       
       // Update local state
       setPositions(prev => prev.map(p => 
-        p.id === position.id ? { ...p, dev_trust_rating: nextRating } : p
+        p.id === position.id ? { ...p, dev_trust_rating: nextRating, creator_wallet: creatorWallet || p.creator_wallet } : p
       ));
       
       const ratingEmoji = nextRating === 'good' ? '✅' : nextRating === 'danger' ? '🚨' : nextRating === 'concern' ? '⚠️' : '❓';
-      toast.success(`${ratingEmoji} Marked as ${nextRating.toUpperCase()}`);
+      const creatorInfo = creatorWallet ? ` (Dev: ${creatorWallet.slice(0, 6)}...)` : '';
+      toast.success(`${ratingEmoji} Marked as ${nextRating.toUpperCase()}${creatorInfo}`);
       
     } catch (err: any) {
       console.error('Failed to update trust rating:', err);
@@ -2496,6 +2671,47 @@ export function FlipItDashboard() {
                   telegramUrl={inputToken.telegramUrl}
                   isLoading={isLoadingInputToken}
                 />
+              )}
+              
+              {/* Blacklist/Whitelist Warning Banner */}
+              {blacklistWarning.level && tokenAddress.trim().length >= 32 && (
+                <div className={`p-3 rounded-lg border flex items-center gap-3 ${
+                  blacklistWarning.level === 'high' 
+                    ? 'bg-red-500/20 border-red-500 text-red-200' 
+                    : blacklistWarning.level === 'medium'
+                    ? 'bg-orange-500/20 border-orange-500 text-orange-200'
+                    : blacklistWarning.level === 'trusted'
+                    ? 'bg-green-500/20 border-green-500 text-green-200'
+                    : 'bg-yellow-500/20 border-yellow-500 text-yellow-200'
+                }`}>
+                  {blacklistWarning.level === 'high' ? (
+                    <AlertTriangle className="h-5 w-5 text-red-400 flex-shrink-0" />
+                  ) : blacklistWarning.level === 'medium' ? (
+                    <AlertTriangle className="h-5 w-5 text-orange-400 flex-shrink-0" />
+                  ) : blacklistWarning.level === 'trusted' ? (
+                    <CheckCircle2 className="h-5 w-5 text-green-400 flex-shrink-0" />
+                  ) : (
+                    <Eye className="h-5 w-5 text-yellow-400 flex-shrink-0" />
+                  )}
+                  <div className="flex-1">
+                    <div className="font-semibold text-sm">
+                      {blacklistWarning.level === 'high' ? '🚨 DANGER: Blacklisted' 
+                        : blacklistWarning.level === 'medium' ? '⚠️ CONCERN: Flagged'
+                        : blacklistWarning.level === 'trusted' ? '✅ TRUSTED: Whitelisted'
+                        : '❓ Under Review'}
+                      {blacklistWarning.source === 'creator_wallet' && ' (Dev Wallet)'}
+                      {blacklistWarning.source === 'twitter' && ' (Twitter)'}
+                    </div>
+                    <div className="text-xs opacity-80">
+                      {blacklistWarning.reason}
+                    </div>
+                  </div>
+                  {inputToken.creatorWallet && (
+                    <div className="text-xs opacity-60 font-mono">
+                      Dev: {inputToken.creatorWallet.slice(0, 6)}...{inputToken.creatorWallet.slice(-4)}
+                    </div>
+                  )}
+                </div>
               )}
               
               {/* Momentum Indicator only */}

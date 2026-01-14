@@ -2653,6 +2653,7 @@ export type Database = {
           buy_price_usd: number | null
           buy_signature: string | null
           created_at: string | null
+          creator_wallet: string | null
           dev_trust_rating: string | null
           dex_paid_status: Json | null
           diamond_max_hold_hours: number | null
@@ -2725,6 +2726,7 @@ export type Database = {
           buy_price_usd?: number | null
           buy_signature?: string | null
           created_at?: string | null
+          creator_wallet?: string | null
           dev_trust_rating?: string | null
           dex_paid_status?: Json | null
           diamond_max_hold_hours?: number | null
@@ -2797,6 +2799,7 @@ export type Database = {
           buy_price_usd?: number | null
           buy_signature?: string | null
           created_at?: string | null
+          creator_wallet?: string | null
           dev_trust_rating?: string | null
           dex_paid_status?: Json | null
           diamond_max_hold_hours?: number | null

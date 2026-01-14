@@ -396,6 +396,29 @@ serve(async (req) => {
         return bad("Missing tokenMint or walletId");
       }
 
+      // ============================================
+      // BLACKLIST CHECK: Block buys for blacklisted tokens/devs
+      // ============================================
+      try {
+        const { data: blacklisted } = await supabase
+          .from("pumpfun_blacklist")
+          .select("identifier, entry_type, risk_level, blacklist_reason")
+          .eq("identifier", tokenMint)
+          .eq("is_active", true)
+          .maybeSingle();
+        
+        if (blacklisted && blacklisted.risk_level === "high") {
+          console.error("BLOCKED: Token is blacklisted with DANGER rating:", blacklisted);
+          return bad(`BLOCKED: This token is blacklisted (${blacklisted.blacklist_reason || 'DANGER rating'})`);
+        }
+        
+        if (blacklisted) {
+          console.warn("WARNING: Token flagged but not blocked:", blacklisted);
+        }
+      } catch (blErr) {
+        console.warn("Blacklist check failed, continuing:", blErr);
+      }
+
       // Get wallet details
       console.log("Looking up wallet:", walletId);
       const { data: wallet, error: walletError } = await supabase
