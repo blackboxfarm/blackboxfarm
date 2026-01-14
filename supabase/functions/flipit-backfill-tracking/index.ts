@@ -8,6 +8,7 @@ const corsHeaders = {
 interface UniqueToken {
   token_mint: string;
   token_symbol: string | null;
+  token_name: string | null;
   twitter_url: string | null;
   website_url: string | null;
   telegram_url: string | null;
@@ -69,7 +70,7 @@ Deno.serve(async (req) => {
     // Query all sold positions
     const { data: allPositions, error: queryError } = await supabase
       .from("flip_positions")
-      .select("token_mint, token_symbol, twitter_url, website_url, telegram_url, dev_trust_rating, creator_wallet")
+      .select("token_mint, token_symbol, token_name, twitter_url, website_url, telegram_url, dev_trust_rating, creator_wallet")
       .eq("status", "sold")
       .not("token_mint", "is", null)
       .order("sell_executed_at", { ascending: false })
@@ -103,11 +104,9 @@ Deno.serve(async (req) => {
       skipped: 0,
       errors: 0,
       creatorWalletsFetched: 0,
-      addedToBlacklist: 0,
-      addedToWhitelist: 0,
-      addedToNeutral: 0,
-      teamsDetected: 0,
-      communitiesEnriched: 0
+      tokenProjectsCreated: 0,
+      communitiesEnriched: 0,
+      upstreamWalletsFetched: 0
     };
 
     // Process each unique token
@@ -115,27 +114,15 @@ Deno.serve(async (req) => {
       try {
         console.log(`Processing: ${tokenMint} (${data.token_symbol || 'unknown'})`);
 
-        // Check if already in any list
-        const { data: existingBlacklist } = await supabase
-          .from('pumpfun_blacklist')
+        // Check if token_project already exists
+        const { data: existingProject } = await supabase
+          .from('token_projects')
           .select('id')
-          .eq('identifier', tokenMint)
+          .eq('token_mint', tokenMint)
           .maybeSingle();
 
-        const { data: existingWhitelist } = await supabase
-          .from('pumpfun_whitelist')
-          .select('id')
-          .eq('identifier', tokenMint)
-          .maybeSingle();
-
-        const { data: existingNeutral } = await supabase
-          .from('pumpfun_neutrallist')
-          .select('id')
-          .eq('identifier', tokenMint)
-          .maybeSingle();
-
-        if (existingBlacklist || existingWhitelist || existingNeutral) {
-          console.log(`Token ${tokenMint} already in a list, skipping`);
+        if (existingProject) {
+          console.log(`Token project for ${tokenMint} already exists, skipping`);
           results.skipped++;
           continue;
         }
@@ -143,6 +130,8 @@ Deno.serve(async (req) => {
         // Get creator wallet if not present
         let creatorWallet = data.creator_wallet;
         let launchpadPlatform: string | null = null;
+        let upstreamWallets: string[] = [];
+        let parentKycWallet: string | null = null;
         
         if (!creatorWallet) {
           try {
@@ -168,6 +157,17 @@ Deno.serve(async (req) => {
           }
         }
 
+        // Try to fetch upstream wallets (funding chain) if we have creator wallet
+        if (creatorWallet) {
+          try {
+            // This would call a function to trace funding - for now we'll skip this
+            // as it requires Helius/Solscan API for transfer history
+            // upstreamWallets = await traceFundingChain(supabase, creatorWallet);
+          } catch (err) {
+            console.warn('Failed to fetch upstream wallets:', err);
+          }
+        }
+
         // Detect twitter type
         const twitterType = detectTwitterType(data.twitter_url);
         const communityId = twitterType === 'community' && data.twitter_url 
@@ -177,159 +177,77 @@ Deno.serve(async (req) => {
           ? extractTwitterHandle(data.twitter_url)
           : null;
 
+        // Will be populated by x-community-enricher if community
+        let communityAdmins: string[] = [];
+        let communityMods: string[] = [];
+
         if (dryRun) {
-          console.log(`[DRY RUN] Would add ${tokenMint} with rating ${data.dev_trust_rating || 'unrated'}`);
+          console.log(`[DRY RUN] Would create token_project for ${tokenMint}`);
           results.processed++;
           continue;
         }
 
-        // Add to appropriate list based on rating
-        const rating = data.dev_trust_rating || 'unknown';
-        
-        if (rating === 'danger' || rating === 'concern') {
-          const riskLevel = rating === 'danger' ? 'high' : 'medium';
-          
-          await supabase.from('pumpfun_blacklist').upsert({
-            entry_type: 'token_mint',
-            identifier: tokenMint,
-            risk_level: riskLevel,
-            blacklist_reason: `Backfilled from FlipIt - rated ${rating.toUpperCase()}`,
-            source: 'flipit_backfill',
-            tags: ['backfilled', rating],
-            linked_twitter: twitterHandle ? [twitterHandle] : [],
-            linked_websites: data.website_url ? [data.website_url] : [],
-            linked_telegram: data.telegram_url ? [data.telegram_url] : [],
-            linked_dev_wallets: creatorWallet ? [creatorWallet] : [],
-            linked_x_communities: communityId ? [communityId] : []
-          }, { onConflict: 'entry_type,identifier' });
-
-          if (creatorWallet) {
-            await supabase.from('pumpfun_blacklist').upsert({
-              entry_type: 'dev_wallet',
-              identifier: creatorWallet,
-              risk_level: riskLevel,
-              blacklist_reason: `Developer of ${data.token_symbol || tokenMint.slice(0, 8)} - rated ${rating.toUpperCase()}`,
-              source: 'flipit_backfill',
-              tags: ['backfilled', rating, 'dev_wallet'],
-              linked_token_mints: [tokenMint],
-              linked_twitter: twitterHandle ? [twitterHandle] : [],
-              linked_x_communities: communityId ? [communityId] : []
-            }, { onConflict: 'entry_type,identifier' });
-          }
-
-          results.addedToBlacklist++;
-          
-        } else if (rating === 'good') {
-          await supabase.from('pumpfun_whitelist').upsert({
-            entry_type: 'token_mint',
-            identifier: tokenMint,
-            trust_level: 'high',
-            whitelist_reason: 'Backfilled from FlipIt - rated GOOD',
-            source: 'flipit_backfill',
-            tags: ['backfilled', 'trusted'],
-            linked_twitter: twitterHandle ? [twitterHandle] : [],
-            linked_websites: data.website_url ? [data.website_url] : [],
-            linked_telegram: data.telegram_url ? [data.telegram_url] : [],
-            linked_dev_wallets: creatorWallet ? [creatorWallet] : []
-          }, { onConflict: 'entry_type,identifier' });
-
-          if (creatorWallet) {
-            await supabase.from('pumpfun_whitelist').upsert({
-              entry_type: 'dev_wallet',
-              identifier: creatorWallet,
-              trust_level: 'high',
-              whitelist_reason: `Trusted developer of ${data.token_symbol || tokenMint.slice(0, 8)}`,
-              source: 'flipit_backfill',
-              tags: ['backfilled', 'trusted', 'dev_wallet'],
-              linked_token_mints: [tokenMint],
-              linked_twitter: twitterHandle ? [twitterHandle] : []
-            }, { onConflict: 'entry_type,identifier' });
-          }
-
-          results.addedToWhitelist++;
-          
-        } else {
-          // unknown or null - add to neutral
-          await supabase.from('pumpfun_neutrallist').upsert({
-            entry_type: 'token_mint',
-            identifier: tokenMint,
-            trust_level: 'unreviewed',
-            neutrallist_reason: 'Backfilled from FlipIt - unrated',
-            source: 'flipit_backfill',
-            tags: ['backfilled', 'pending_review'],
-            linked_twitter: twitterHandle ? [twitterHandle] : [],
-            linked_websites: data.website_url ? [data.website_url] : [],
-            linked_telegram: data.telegram_url ? [data.telegram_url] : [],
-            linked_dev_wallets: creatorWallet ? [creatorWallet] : []
-          }, { onConflict: 'entry_type,identifier' });
-
-          if (creatorWallet) {
-            await supabase.from('pumpfun_neutrallist').upsert({
-              entry_type: 'dev_wallet',
-              identifier: creatorWallet,
-              trust_level: 'unreviewed',
-              neutrallist_reason: `Developer of ${data.token_symbol || tokenMint.slice(0, 8)} - unrated`,
-              source: 'flipit_backfill',
-              tags: ['backfilled', 'pending_review', 'dev_wallet'],
-              linked_token_mints: [tokenMint],
-              linked_twitter: twitterHandle ? [twitterHandle] : []
-            }, { onConflict: 'entry_type,identifier' });
-          }
-
-          results.addedToNeutral++;
-        }
-
-        // Trigger X community enricher if applicable
+        // Trigger X community enricher if applicable and wait for result
         if (twitterType === 'community' && data.twitter_url) {
-          supabase.functions.invoke('x-community-enricher', {
-            body: { 
-              communityUrl: data.twitter_url,
-              linkedTokenMint: tokenMint,
-              linkedCreatorWallet: creatorWallet
+          try {
+            const { data: enrichResult } = await supabase.functions.invoke('x-community-enricher', {
+              body: { 
+                communityUrl: data.twitter_url,
+                linkedTokenMint: tokenMint,
+                linkedCreatorWallet: creatorWallet
+              }
+            });
+            
+            if (enrichResult?.admins) {
+              communityAdmins = enrichResult.admins;
             }
-          }).catch(err => console.warn('X Community enricher failed:', err));
-          results.communitiesEnriched++;
+            if (enrichResult?.mods) {
+              communityMods = enrichResult.mods;
+            }
+            results.communitiesEnriched++;
+          } catch (err) {
+            console.warn('X Community enricher failed:', err);
+          }
         }
 
-        // Create ONE team entry per unique token (don't merge during backfill)
-        if (creatorWallet || twitterHandle || communityId) {
-          // Generate unique team hash per token
-          const uniqueTeamHash = `token_${tokenMint.slice(0, 12)}`;
-          
-          // Check if team already exists for this token
-          const { data: existingTeam } = await supabase
-            .from('dev_teams')
-            .select('id')
-            .contains('linked_token_mints', [tokenMint])
-            .maybeSingle();
-          
-          if (!existingTeam) {
-            // Create new team entry for this specific token
-            const { error: teamError } = await supabase
-              .from('dev_teams')
-              .insert({
-                team_hash: uniqueTeamHash,
-                team_name: `${data.token_symbol || tokenMint.slice(0, 8)} Dev`,
-                member_wallets: creatorWallet ? [creatorWallet] : [],
-                member_twitter_accounts: twitterHandle ? [twitterHandle] : [],
-                linked_x_communities: communityId ? [communityId] : [],
-                linked_token_mints: [tokenMint],
-                tokens_created: 1,
-                risk_level: rating === 'danger' ? 'high' : rating === 'concern' ? 'medium' : 'low',
-                source: 'flipit_backfill',
-                tags: ['backfilled', 'per_token_entry'],
-                is_active: true
-              });
-            
-            if (!teamError) {
-              results.teamsDetected++;
-              console.log(`Created team entry for ${data.token_symbol || tokenMint.slice(0, 8)}`);
-            } else {
-              console.warn('Failed to create team:', teamError.message);
-            }
-          } else {
-            console.log(`Team already exists for token ${tokenMint.slice(0, 8)}`);
-          }
+        // Map dev_trust_rating to risk_level
+        const rating = data.dev_trust_rating || 'unknown';
+        const riskLevel = rating === 'danger' ? 'high' 
+          : rating === 'concern' ? 'medium' 
+          : rating === 'good' ? 'low' 
+          : 'unknown';
+
+        // Create the Token Project entry
+        const { error: projectError } = await supabase
+          .from('token_projects')
+          .insert({
+            token_mint: tokenMint,
+            token_symbol: data.token_symbol,
+            token_name: data.token_name,
+            creator_wallet: creatorWallet,
+            upstream_wallets: upstreamWallets,
+            parent_kyc_wallet: parentKycWallet,
+            launchpad_platform: launchpadPlatform,
+            primary_twitter_url: data.twitter_url,
+            twitter_type: twitterType,
+            x_community_id: communityId,
+            community_admins: communityAdmins,
+            community_mods: communityMods,
+            website_url: data.website_url,
+            telegram_url: data.telegram_url,
+            risk_level: riskLevel,
+            trust_rating: rating,
+            source: 'flipit_backfill',
+            tags: ['backfilled'],
+            first_seen_at: new Date().toISOString()
+          });
+
+        if (projectError) {
+          console.error(`Failed to create token_project for ${tokenMint}:`, projectError.message);
+          results.errors++;
+        } else {
+          results.tokenProjectsCreated++;
+          console.log(`Created token_project for ${data.token_symbol || tokenMint.slice(0, 8)}`);
         }
 
         results.processed++;
