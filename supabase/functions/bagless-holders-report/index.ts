@@ -266,6 +266,7 @@ serve(async (req) => {
       };
     }
     
+    // === GRANULAR WALLET CATEGORIES (existing) ===
     const dustWallets = rankedHolders.filter(h => h.isDustWallet).length;
     const smallWallets = rankedHolders.filter(h => h.isSmallWallet).length;
     const mediumWallets = rankedHolders.filter(h => h.isMediumWallet).length;
@@ -276,9 +277,125 @@ serve(async (req) => {
     const babyWhaleWallets = rankedHolders.filter(h => h.isBabyWhaleWallet).length;
     const trueWhaleWallets = rankedHolders.filter(h => h.isTrueWhaleWallet).length;
     const realWallets = rankedHolders.filter(h => !h.isDustWallet && !h.isSmallWallet && !h.isMediumWallet && !h.isLargeWallet && !h.isBossWallet && !h.isKingpinWallet && !h.isSuperBossWallet && !h.isBabyWhaleWallet && !h.isTrueWhaleWallet && !h.isLiquidityPool).length;
+    
+    // === SIMPLE WALLET TIERS (new) ===
+    // Dust: < $1, Retail: $1-199, Serious: $200-1000, Whales: > $1000
+    const simpleTiers = {
+      dust: { count: 0, percentage: 0, avgValue: 0, totalValue: 0 },
+      retail: { count: 0, percentage: 0, avgValue: 0, totalValue: 0 },
+      serious: { count: 0, percentage: 0, avgValue: 0, totalValue: 0 },
+      whales: { count: 0, percentage: 0, avgValue: 0, totalValue: 0 }
+    };
+    
+    for (const h of nonLpHolders) {
+      if (h.usdValue < 1) {
+        simpleTiers.dust.count++;
+        simpleTiers.dust.totalValue += h.usdValue;
+        simpleTiers.dust.percentage += h.percentageOfSupply;
+      } else if (h.usdValue < 200) {
+        simpleTiers.retail.count++;
+        simpleTiers.retail.totalValue += h.usdValue;
+        simpleTiers.retail.percentage += h.percentageOfSupply;
+      } else if (h.usdValue <= 1000) {
+        simpleTiers.serious.count++;
+        simpleTiers.serious.totalValue += h.usdValue;
+        simpleTiers.serious.percentage += h.percentageOfSupply;
+      } else {
+        simpleTiers.whales.count++;
+        simpleTiers.whales.totalValue += h.usdValue;
+        simpleTiers.whales.percentage += h.percentageOfSupply;
+      }
+    }
+    
+    // Calculate averages
+    for (const tier of Object.values(simpleTiers)) {
+      tier.avgValue = tier.count > 0 ? tier.totalValue / tier.count : 0;
+    }
+    
+    // === TOP HOLDER CONCENTRATION (excluding LP) ===
+    const top5 = nonLpHolders.slice(0, 5);
+    const top10 = nonLpHolders.slice(0, 10);
+    const top20 = nonLpHolders.slice(0, 20);
+    
+    const distributionStats = {
+      top5Percentage: top5.reduce((sum, h) => sum + h.percentageOfSupply, 0),
+      top10Percentage: top10.reduce((sum, h) => sum + h.percentageOfSupply, 0),
+      top20Percentage: top20.reduce((sum, h) => sum + h.percentageOfSupply, 0),
+      top5Wallets: top5.length,
+      top10Wallets: top10.length,
+      top20Wallets: top20.length
+    };
+    
+    // === CIRCULATING SUPPLY (excluding LP) ===
     const totalBalance = rankedHolders.reduce((sum, h) => sum + h.balance, 0);
     const lpBalance = lpWallets.reduce((sum, h) => sum + h.balance, 0);
     const nonLpBalance = nonLpHolders.reduce((sum, h) => sum + h.balance, 0);
+    const circulatingSupplyExcludingLP = nonLpBalance;
+    const circulatingPercentage = totalBalance > 0 ? (nonLpBalance / totalBalance) * 100 : 0;
+    
+    // === RISK FLAGS ===
+    const riskFlags: string[] = [];
+    
+    // Flag: Top wallets control high percentage
+    if (distributionStats.top5Percentage > 25) {
+      riskFlags.push(`${top5.length} wallets control ${distributionStats.top5Percentage.toFixed(1)}% (excluding LP)`);
+    }
+    
+    // Flag: LP too low
+    const lpPercentage = totalBalance > 0 ? (lpBalance / totalBalance * 100) : 0;
+    if (lpPercentage < 15 && lpWallets.length > 0) {
+      riskFlags.push(`LP < 15% of circulating (${lpPercentage.toFixed(1)}%)`);
+    }
+    
+    // Flag: Very few whales
+    if (simpleTiers.whales.count === 0 && rankedHolders.length > 50) {
+      riskFlags.push('No whale holders detected (>$1K)');
+    }
+    
+    // Flag: High dust percentage
+    if (simpleTiers.dust.percentage > 30) {
+      riskFlags.push(`High dust: ${simpleTiers.dust.percentage.toFixed(1)}% in wallets under $1`);
+    }
+    
+    // Flag: Insider concentration from RugCheck
+    if (insidersResult.hasInsiders && insidersResult.bundledPercentage > 10) {
+      riskFlags.push(`Bundled wallets: ${insidersResult.bundledPercentage.toFixed(1)}% supply`);
+    }
+    
+    // === HOLDER HEALTH SCORE (A-F) ===
+    let healthScore = 100;
+    let healthGrade = 'A';
+    
+    // Deduct for whale concentration
+    if (distributionStats.top5Percentage > 40) healthScore -= 30;
+    else if (distributionStats.top5Percentage > 30) healthScore -= 20;
+    else if (distributionStats.top5Percentage > 20) healthScore -= 10;
+    
+    // Deduct for low LP
+    if (lpPercentage < 10) healthScore -= 20;
+    else if (lpPercentage < 20) healthScore -= 10;
+    
+    // Deduct for bundling
+    if (insidersResult.bundledPercentage > 20) healthScore -= 25;
+    else if (insidersResult.bundledPercentage > 10) healthScore -= 15;
+    else if (insidersResult.bundledPercentage > 5) healthScore -= 5;
+    
+    // Deduct for too few holders
+    if (rankedHolders.length < 50) healthScore -= 15;
+    else if (rankedHolders.length < 100) healthScore -= 10;
+    
+    // Deduct for high dust
+    if (simpleTiers.dust.percentage > 40) healthScore -= 10;
+    
+    // Clamp score
+    healthScore = Math.max(0, Math.min(100, healthScore));
+    
+    // Calculate grade
+    if (healthScore >= 90) healthGrade = 'A';
+    else if (healthScore >= 80) healthGrade = 'B';
+    else if (healthScore >= 65) healthGrade = 'C';
+    else if (healthScore >= 50) healthGrade = 'D';
+    else healthGrade = 'F';
 
     const totalTime = Date.now() - requestStartTime;
     console.log(`✅ [PERF] Request complete in ${totalTime}ms — ${rankedHolders.length} holders`);
@@ -303,6 +420,23 @@ serve(async (req) => {
       dexStatus,
       creatorInfo: Object.keys(creatorInfo).length > 0 ? creatorInfo : undefined,
       insidersGraph: insidersResult.hasInsiders ? insidersResult : undefined,
+      // NEW: Simplified tiers
+      simpleTiers,
+      // NEW: Distribution stats
+      distributionStats,
+      // NEW: Circulating supply excluding LP
+      circulatingSupply: {
+        tokens: circulatingSupplyExcludingLP,
+        percentage: circulatingPercentage,
+        usdValue: circulatingSupplyExcludingLP * tokenPriceUSD
+      },
+      // NEW: Risk flags
+      riskFlags,
+      // NEW: Health score
+      healthScore: {
+        score: healthScore,
+        grade: healthGrade
+      },
       firstBuyers: [],
       executionTimeMs: totalTime
     };

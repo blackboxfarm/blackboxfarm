@@ -102,6 +102,40 @@ interface InsidersGraphData {
   error?: string;
 }
 
+interface SimpleTier {
+  count: number;
+  percentage: number;
+  avgValue: number;
+  totalValue: number;
+}
+
+interface SimpleTiers {
+  dust: SimpleTier;
+  retail: SimpleTier;
+  serious: SimpleTier;
+  whales: SimpleTier;
+}
+
+interface DistributionStats {
+  top5Percentage: number;
+  top10Percentage: number;
+  top20Percentage: number;
+  top5Wallets: number;
+  top10Wallets: number;
+  top20Wallets: number;
+}
+
+interface CirculatingSupply {
+  tokens: number;
+  percentage: number;
+  usdValue: number;
+}
+
+interface HealthScore {
+  score: number;
+  grade: string;
+}
+
 interface HoldersReport {
   tokenMint: string;
   totalHolders: number;
@@ -160,9 +194,18 @@ interface HoldersReport {
     feeSplit?: { wallet1?: string; wallet2?: string; splitPercent?: number };
   };
   insidersGraph?: InsidersGraphData;
+  // NEW: Simplified tiers
+  simpleTiers?: SimpleTiers;
+  // NEW: Distribution stats
+  distributionStats?: DistributionStats;
+  // NEW: Circulating supply
+  circulatingSupply?: CirculatingSupply;
+  // NEW: Risk flags
+  riskFlags?: string[];
+  // NEW: Health score
+  healthScore?: HealthScore;
   summary: string;
 }
-
 interface BaglessHoldersReportProps {
   initialToken?: string;
 }
@@ -197,6 +240,10 @@ export function BaglessHoldersReport({ initialToken }: BaglessHoldersReportProps
   const [walletFlags, setWalletFlags] = useState<{[address: string]: { flag: 'dev' | 'team' | 'suspicious'; timestamp: number }}>({});
   const [flagModalOpen, setFlagModalOpen] = useState(false);
   const [selectedWallet, setSelectedWallet] = useState<string | null>(null);
+  // NEW: Toggle states for accordion views
+  const [holderViewMode, setHolderViewMode] = useState<'simple' | 'granular'>('simple');
+  const [sedimentViewMode, setSedimentViewMode] = useState<'simple' | 'granular'>('simple');
+  const [feedbackGiven, setFeedbackGiven] = useState<'up' | 'down' | null>(null);
   const { toast } = useToast();
   const { tokenData, fetchTokenMetadata } = useTokenMetadata();
   const { user } = useAuth();
@@ -1337,123 +1384,197 @@ export function BaglessHoldersReport({ initialToken }: BaglessHoldersReportProps
                 </Button>
               </div>
 
-              {/* Functional Holders Header */}
-              <div className="mb-4 p-4 bg-primary/10 rounded-lg border-2 border-primary/30">
-                <div className="text-center">
-                  <div className="text-3xl md:text-4xl font-bold text-primary">
-                    {filteredHolders.length.toLocaleString()}
-                  </div>
-                  <div className="text-sm md:text-base font-semibold text-foreground">
-                    Functional Holders above $1
-                  </div>
-                </div>
-              </div>
-
-              {/* Primary Statistics - Total Holders and Total Tokens on one line */}
-              <div className="grid grid-cols-2 gap-3 md:gap-4 mb-3 md:mb-4">
-                <div className="text-center">
-                  <div className="text-2xl md:text-3xl font-bold">{report.totalHolders}</div>
-                  <div className="text-xs md:text-sm text-muted-foreground">Total Wallets</div>
-                </div>
-                <div className="text-center">
-                  <div className="text-xl md:text-3xl font-bold break-all">{Math.round(report.totalBalance).toLocaleString()}</div>
-                  <div className="text-xs md:text-sm text-muted-foreground">Total Tokens</div>
-                </div>
-              </div>
-
-              {/* LP Detection with Solscan Badge - Hidden */}
-              {report.liquidityPools && report.liquidityPools.length > 0 && (
-                <div className="hidden mb-4 md:mb-6 space-y-3">
-                  <h4 className="text-sm font-semibold flex items-center gap-2">
-                    <Droplets className="w-4 h-4" />
-                    Liquidity Pools Detected
-                  </h4>
-                  {report.liquidityPools.map((lp: any, idx: number) => (
-                    <div key={idx} className="flex items-center justify-between p-3 bg-blue-500/10 rounded-lg border border-blue-500/20">
-                      <div className="flex items-center gap-2">
-                        <Droplets className="w-4 h-4 text-blue-400" />
-                        <div>
-                          <div className="flex items-center gap-2">
-                            <div className="text-sm font-medium">Liquidity Pool {idx + 1}</div>
-                            {lp.source === 'solscan_verified' && (
-                              <Badge variant="default" className="text-xs gap-1">
-                                <CheckCircle className="w-3 h-3" />
-                                Solscan
-                              </Badge>
-                            )}
-                          </div>
-                          <div className="text-xs text-muted-foreground font-mono">
-                            {lp.address?.slice(0, 8)}...{lp.address?.slice(-6)}
-                          </div>
-                          {lp.source === 'solscan_verified' && (
-                            <a 
-                              href={`https://solscan.io/account/${lp.address}`}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="text-xs text-primary hover:underline"
-                            >
-                              View on Solscan →
-                            </a>
-                          )}
-                        </div>
-                      </div>
-                      <div className="text-right">
-                        <div className="text-sm font-semibold">{lp.percentOfSupply?.toFixed(2)}%</div>
-                        <div className="text-xs text-muted-foreground">
-                          {lp.lpType} ({lp.confidence}%)
-                        </div>
-                      </div>
+              {/* === HOLDER HEALTHSCORE === */}
+              {report.healthScore && (
+                <div className="mb-4 p-4 rounded-lg border-2" style={{
+                  borderColor: report.healthScore.grade === 'A' ? 'hsl(var(--chart-2))' :
+                               report.healthScore.grade === 'B' ? 'hsl(var(--chart-3))' :
+                               report.healthScore.grade === 'C' ? 'hsl(var(--chart-4))' :
+                               report.healthScore.grade === 'D' ? 'hsl(var(--chart-5))' : 'hsl(var(--destructive))',
+                  backgroundColor: report.healthScore.grade === 'A' ? 'hsl(var(--chart-2) / 0.1)' :
+                                   report.healthScore.grade === 'B' ? 'hsl(var(--chart-3) / 0.1)' :
+                                   report.healthScore.grade === 'C' ? 'hsl(var(--chart-4) / 0.1)' :
+                                   report.healthScore.grade === 'D' ? 'hsl(var(--chart-5) / 0.1)' : 'hsl(var(--destructive) / 0.1)'
+                }}>
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <h3 className="text-sm font-semibold flex items-center gap-2">
+                        <Shield className="h-4 w-4" />
+                        Holder Healthscore
+                      </h3>
+                      <p className="text-xs text-muted-foreground mt-1">
+                        Based on distribution, concentration & bundling
+                      </p>
                     </div>
-                  ))}
+                    <div className="text-center">
+                      <div className={`text-4xl font-bold ${
+                        report.healthScore.grade === 'A' ? 'text-green-500' :
+                        report.healthScore.grade === 'B' ? 'text-blue-500' :
+                        report.healthScore.grade === 'C' ? 'text-yellow-500' :
+                        report.healthScore.grade === 'D' ? 'text-orange-500' : 'text-red-500'
+                      }`}>
+                        {report.healthScore.grade}
+                      </div>
+                      <div className="text-xs text-muted-foreground">{report.healthScore.score}/100</div>
+                    </div>
+                  </div>
                 </div>
               )}
 
-              {/* LP Detection and Wallet Categories */}
-              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2 md:gap-3 mb-4 md:mb-6">
-                <div className="text-center p-2 rounded-lg bg-muted/30">
-                  <div className="text-lg md:text-2xl font-bold text-yellow-500">{report.liquidityPoolsDetected || 0}</div>
-                  <div className="text-xs text-muted-foreground">LP Detected</div>
+              {/* === RISK SNAPSHOT === */}
+              {report.riskFlags && report.riskFlags.length > 0 && (
+                <div className="mb-4 p-3 rounded-lg border border-orange-500/30 bg-orange-500/5">
+                  <h3 className="text-sm font-semibold flex items-center gap-2 mb-2">
+                    <AlertTriangle className="h-4 w-4 text-orange-500" />
+                    Risk Snapshot
+                  </h3>
+                  <div className="space-y-1">
+                    {report.riskFlags.map((flag, idx) => (
+                      <div key={idx} className="flex items-center gap-2 text-xs text-orange-700 dark:text-orange-300">
+                        <Flag className="h-3 w-3 flex-shrink-0" />
+                        {flag}
+                      </div>
+                    ))}
+                  </div>
                 </div>
-                <div className="text-center p-2 rounded-lg bg-muted/30">
-                  <div className="text-lg md:text-2xl font-bold text-red-500">{report.trueWhaleWallets || 0}</div>
-                  <div className="text-xs text-muted-foreground">True Whale (≥$5K)</div>
+              )}
+
+              {/* === DISTRIBUTION INTEGRITY === */}
+              {report.distributionStats && (
+                <div className="mb-4 p-3 rounded-lg border bg-muted/20">
+                  <h3 className="text-sm font-semibold flex items-center gap-2 mb-3">
+                    <BarChart3 className="h-4 w-4" />
+                    Distribution Integrity
+                  </h3>
+                  <div className="grid grid-cols-3 gap-2 mb-3">
+                    <div className="text-center p-2 rounded bg-muted/30">
+                      <div className="text-lg font-bold">{report.distributionStats.top5Percentage.toFixed(1)}%</div>
+                      <div className="text-[10px] text-muted-foreground">Top 5 Hold</div>
+                    </div>
+                    <div className="text-center p-2 rounded bg-muted/30">
+                      <div className="text-lg font-bold">{report.distributionStats.top10Percentage.toFixed(1)}%</div>
+                      <div className="text-[10px] text-muted-foreground">Top 10 Hold</div>
+                    </div>
+                    <div className="text-center p-2 rounded bg-muted/30">
+                      <div className="text-lg font-bold">{report.distributionStats.top20Percentage.toFixed(1)}%</div>
+                      <div className="text-[10px] text-muted-foreground">Top 20 Hold</div>
+                    </div>
+                  </div>
+                  {report.circulatingSupply && (
+                    <div className="flex items-center justify-between text-xs border-t pt-2">
+                      <span className="text-muted-foreground">Circulating (excl. LP):</span>
+                      <span className="font-medium">{report.circulatingSupply.percentage.toFixed(1)}% (${report.circulatingSupply.usdValue.toLocaleString(undefined, { maximumFractionDigits: 0 })})</span>
+                    </div>
+                  )}
                 </div>
-                <div className="text-center p-2 rounded-lg bg-muted/30">
-                  <div className="text-lg md:text-2xl font-bold text-purple-500">{report.babyWhaleWallets || 0}</div>
-                  <div className="text-xs text-muted-foreground">Baby Whale ($2K-$5K)</div>
+              )}
+
+              {/* === FUNCTIONAL HOLDERS - Toggle View === */}
+              <div className="mb-4">
+                <div className="flex items-center justify-between mb-3">
+                  <h3 className="text-base font-semibold flex items-center gap-2">
+                    <Users className="h-4 w-4" />
+                    Functional Holders
+                  </h3>
+                  <div className="flex items-center gap-1 text-xs">
+                    <Button 
+                      variant={holderViewMode === 'simple' ? 'default' : 'outline'} 
+                      size="sm" 
+                      className="h-6 px-2 text-xs"
+                      onClick={() => setHolderViewMode('simple')}
+                    >
+                      Simple
+                    </Button>
+                    <Button 
+                      variant={holderViewMode === 'granular' ? 'default' : 'outline'} 
+                      size="sm" 
+                      className="h-6 px-2 text-xs"
+                      onClick={() => setHolderViewMode('granular')}
+                    >
+                      Granular
+                    </Button>
+                  </div>
                 </div>
-                <div className="text-center p-2 rounded-lg bg-muted/30">
-                  <div className="text-lg md:text-2xl font-bold text-indigo-500">{report.superBossWallets || 0}</div>
-                  <div className="text-xs text-muted-foreground">Super Boss ($1K-$2K)</div>
-                </div>
-                <div className="text-center p-2 rounded-lg bg-muted/30">
-                  <div className="text-lg md:text-2xl font-bold text-cyan-500">{report.kingpinWallets || 0}</div>
-                  <div className="text-xs text-muted-foreground">Kingpin ($500-$1K)</div>
-                </div>
-                <div className="text-center p-2 rounded-lg bg-muted/30">
-                  <div className="text-lg md:text-2xl font-bold text-orange-500">{report.bossWallets}</div>
-                  <div className="text-xs text-muted-foreground">Boss ($200-$500)</div>
-                </div>
-                <div className="text-center p-2 rounded-lg bg-muted/30">
-                  <div className="text-lg md:text-2xl font-bold text-green-500">{report.realWallets}</div>
-                  <div className="text-xs text-muted-foreground">Real ($50-$199)</div>
-                </div>
-                <div className="text-center p-2 rounded-lg bg-muted/30">
-                  <div className="text-lg md:text-2xl font-bold text-emerald-500">{report.largeWallets}</div>
-                  <div className="text-xs text-muted-foreground">Large ($25-$49)</div>
-                </div>
-                <div className="text-center p-2 rounded-lg bg-muted/30">
-                  <div className="text-lg md:text-2xl font-bold text-blue-500">{report.mediumWallets || 0}</div>
-                  <div className="text-xs text-muted-foreground">Medium ($12-$25)</div>
-                </div>
-                <div className="text-center p-2 rounded-lg bg-muted/30">
-                  <div className="text-lg md:text-2xl font-bold text-gray-500">{report.smallWallets || 0}</div>
-                  <div className="text-xs text-muted-foreground">Small ($1-$12)</div>
-                </div>
-                <div className="text-center p-2 rounded-lg bg-muted/30">
-                  <div className="text-lg md:text-2xl font-bold text-slate-500">{report.dustWallets || 0}</div>
-                  <div className="text-xs text-muted-foreground">Dust (&lt;$1)</div>
-                </div>
+
+                {/* Simple View - 4 Tiers */}
+                {holderViewMode === 'simple' && report.simpleTiers && (
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                    <div className="text-center p-3 rounded-lg bg-slate-500/10 border border-slate-500/20">
+                      <div className="text-2xl font-bold text-slate-500">{report.simpleTiers.dust.count}</div>
+                      <div className="text-xs font-medium">Dust</div>
+                      <div className="text-[10px] text-muted-foreground">&lt;$1</div>
+                      <div className="text-[10px] text-muted-foreground">{report.simpleTiers.dust.percentage.toFixed(1)}%</div>
+                    </div>
+                    <div className="text-center p-3 rounded-lg bg-blue-500/10 border border-blue-500/20">
+                      <div className="text-2xl font-bold text-blue-500">{report.simpleTiers.retail.count}</div>
+                      <div className="text-xs font-medium">Retail</div>
+                      <div className="text-[10px] text-muted-foreground">$1-$199</div>
+                      <div className="text-[10px] text-muted-foreground">{report.simpleTiers.retail.percentage.toFixed(1)}%</div>
+                    </div>
+                    <div className="text-center p-3 rounded-lg bg-orange-500/10 border border-orange-500/20">
+                      <div className="text-2xl font-bold text-orange-500">{report.simpleTiers.serious.count}</div>
+                      <div className="text-xs font-medium">Serious</div>
+                      <div className="text-[10px] text-muted-foreground">$200-$1K</div>
+                      <div className="text-[10px] text-muted-foreground">{report.simpleTiers.serious.percentage.toFixed(1)}%</div>
+                    </div>
+                    <div className="text-center p-3 rounded-lg bg-red-500/10 border border-red-500/20">
+                      <div className="text-2xl font-bold text-red-500">{report.simpleTiers.whales.count}</div>
+                      <div className="text-xs font-medium">Whales</div>
+                      <div className="text-[10px] text-muted-foreground">&gt;$1K</div>
+                      <div className="text-[10px] text-muted-foreground">{report.simpleTiers.whales.percentage.toFixed(1)}%</div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Granular View - All Tiers */}
+                {holderViewMode === 'granular' && (
+                  <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2">
+                    <div className="text-center p-2 rounded-lg bg-muted/30">
+                      <div className="text-lg md:text-2xl font-bold text-yellow-500">{report.liquidityPoolsDetected || 0}</div>
+                      <div className="text-xs text-muted-foreground">LP Detected</div>
+                    </div>
+                    <div className="text-center p-2 rounded-lg bg-muted/30">
+                      <div className="text-lg md:text-2xl font-bold text-red-500">{report.trueWhaleWallets || 0}</div>
+                      <div className="text-xs text-muted-foreground">True Whale (≥$5K)</div>
+                    </div>
+                    <div className="text-center p-2 rounded-lg bg-muted/30">
+                      <div className="text-lg md:text-2xl font-bold text-purple-500">{report.babyWhaleWallets || 0}</div>
+                      <div className="text-xs text-muted-foreground">Baby Whale ($2K-$5K)</div>
+                    </div>
+                    <div className="text-center p-2 rounded-lg bg-muted/30">
+                      <div className="text-lg md:text-2xl font-bold text-indigo-500">{report.superBossWallets || 0}</div>
+                      <div className="text-xs text-muted-foreground">Super Boss ($1K-$2K)</div>
+                    </div>
+                    <div className="text-center p-2 rounded-lg bg-muted/30">
+                      <div className="text-lg md:text-2xl font-bold text-cyan-500">{report.kingpinWallets || 0}</div>
+                      <div className="text-xs text-muted-foreground">Kingpin ($500-$1K)</div>
+                    </div>
+                    <div className="text-center p-2 rounded-lg bg-muted/30">
+                      <div className="text-lg md:text-2xl font-bold text-orange-500">{report.bossWallets}</div>
+                      <div className="text-xs text-muted-foreground">Boss ($200-$500)</div>
+                    </div>
+                    <div className="text-center p-2 rounded-lg bg-muted/30">
+                      <div className="text-lg md:text-2xl font-bold text-green-500">{report.realWallets}</div>
+                      <div className="text-xs text-muted-foreground">Real ($50-$199)</div>
+                    </div>
+                    <div className="text-center p-2 rounded-lg bg-muted/30">
+                      <div className="text-lg md:text-2xl font-bold text-emerald-500">{report.largeWallets}</div>
+                      <div className="text-xs text-muted-foreground">Large ($25-$49)</div>
+                    </div>
+                    <div className="text-center p-2 rounded-lg bg-muted/30">
+                      <div className="text-lg md:text-2xl font-bold text-blue-500">{report.mediumWallets || 0}</div>
+                      <div className="text-xs text-muted-foreground">Medium ($12-$25)</div>
+                    </div>
+                    <div className="text-center p-2 rounded-lg bg-muted/30">
+                      <div className="text-lg md:text-2xl font-bold text-gray-500">{report.smallWallets || 0}</div>
+                      <div className="text-xs text-muted-foreground">Small ($1-$12)</div>
+                    </div>
+                    <div className="text-center p-2 rounded-lg bg-muted/30">
+                      <div className="text-lg md:text-2xl font-bold text-slate-500">{report.dustWallets || 0}</div>
+                      <div className="text-xs text-muted-foreground">Dust (&lt;$1)</div>
+                    </div>
+                  </div>
+                )}
               </div>
 
               {/* Security Alerts Card - Hidden per user request */}
@@ -1839,9 +1960,78 @@ export function BaglessHoldersReport({ initialToken }: BaglessHoldersReportProps
 
               {/* Sediment Layer Chart */}
               <div className="mb-4 md:mb-6">
-                <h3 className="text-base md:text-lg font-semibold mb-3 md:mb-4">Wallet Distribution (Sediment Layers)</h3>
+                <div className="flex items-center justify-between mb-3 md:mb-4">
+                  <h3 className="text-base md:text-lg font-semibold">Distribution Integrity (Sediment Layers)</h3>
+                  <div className="flex items-center gap-1 text-xs">
+                    <Button 
+                      variant={sedimentViewMode === 'simple' ? 'default' : 'outline'} 
+                      size="sm" 
+                      className="h-6 px-2 text-xs"
+                      onClick={() => setSedimentViewMode('simple')}
+                    >
+                      Simple
+                    </Button>
+                    <Button 
+                      variant={sedimentViewMode === 'granular' ? 'default' : 'outline'} 
+                      size="sm" 
+                      className="h-6 px-2 text-xs"
+                      onClick={() => setSedimentViewMode('granular')}
+                    >
+                      Granular
+                    </Button>
+                  </div>
+                </div>
+
+                {/* Simple Sediment View - 4 Layers */}
+                {sedimentViewMode === 'simple' && report.simpleTiers && (
+                  <div className="mb-4">
+                    <div className="bg-muted/30 rounded-lg p-4 h-48 flex flex-col justify-end relative">
+                      {/* Simple 4-layer visualization */}
+                      {(() => {
+                        const lpBalance = report.liquidityPools?.reduce((sum, lp) => sum + lp.balance, 0) || 0;
+                        const lpPct = report.totalBalance > 0 ? (lpBalance / report.totalBalance) * 100 : 0;
+                        const dustPct = report.simpleTiers.dust.percentage;
+                        const retailPct = report.simpleTiers.retail.percentage;
+                        const seriousPct = report.simpleTiers.serious.percentage;
+                        const whalesPct = report.simpleTiers.whales.percentage;
+                        const total = lpPct + dustPct + retailPct + seriousPct + whalesPct;
+                        
+                        const layers = [
+                          { name: 'LP', pct: lpPct, color: 'bg-yellow-600', count: report.liquidityPoolsDetected || 0 },
+                          { name: 'Whales', pct: whalesPct, color: 'bg-red-500', count: report.simpleTiers.whales.count },
+                          { name: 'Serious', pct: seriousPct, color: 'bg-orange-500', count: report.simpleTiers.serious.count },
+                          { name: 'Retail', pct: retailPct, color: 'bg-blue-500', count: report.simpleTiers.retail.count },
+                          { name: 'Dust', pct: dustPct, color: 'bg-slate-500', count: report.simpleTiers.dust.count },
+                        ];
+                        
+                        return [...layers].reverse().map((layer, idx) => {
+                          const normalizedPct = total > 0 ? (layer.pct / total) * 100 : 0;
+                          const height = Math.max(normalizedPct * 1.8, layer.pct > 0 ? 12 : 0);
+                          return (
+                            <div
+                              key={layer.name}
+                              className={`${layer.color} border border-white/20 flex items-center justify-center text-white text-xs font-medium`}
+                              style={{ height: `${height}px`, minHeight: layer.pct > 0 ? '12px' : '0' }}
+                              title={`${layer.name}: ${layer.count} wallets (${layer.pct.toFixed(1)}%)`}
+                            >
+                              {normalizedPct > 8 && `${layer.name} (${layer.pct.toFixed(1)}%)`}
+                            </div>
+                          );
+                        });
+                      })()}
+                    </div>
+                    <div className="flex justify-between text-xs text-muted-foreground mt-2 px-1">
+                      <span>🟡 LP</span>
+                      <span>🔴 Whales (&gt;$1K)</span>
+                      <span>🟠 Serious ($200-1K)</span>
+                      <span>🔵 Retail ($1-199)</span>
+                      <span>⚪ Dust (&lt;$1)</span>
+                    </div>
+                  </div>
+                )}
                 
-                {/* Chart - Full width with Market Cap Y-axis */}
+                {/* Granular Sediment View - Original Chart */}
+                {sedimentViewMode === 'granular' && (
                 <div className="mb-4">
                   <div className="flex">
                     {/* Y-axis Market Cap Labels */}
@@ -1965,6 +2155,7 @@ export function BaglessHoldersReport({ initialToken }: BaglessHoldersReportProps
                     </div>
                   </div>
                 </div>
+                )}
                 
                 {/* Legend and Analysis - Side by side */}
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">

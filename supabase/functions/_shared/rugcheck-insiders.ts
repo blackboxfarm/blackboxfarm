@@ -115,15 +115,34 @@ function parseInsidersGraph(data: any): InsidersGraphResult {
     clusters = data.clusters || [];
   } else if (data.nodes && Array.isArray(data.nodes)) {
     // Graph format - nodes are wallets, edges show connections
-    insiders = data.nodes.map((node: any) => ({
+    // Filter nodes that actually have holdings > 0
+    const nodesWithHoldings = data.nodes.filter((node: any) => {
+      const holdings = parseFloat(node.holdings || node.percentage || node.holding || 0);
+      return holdings > 0;
+    });
+    
+    console.log(`[RugCheck Insiders] Found ${nodesWithHoldings.length} nodes with holdings > 0 out of ${data.nodes.length} total nodes`);
+    
+    insiders = nodesWithHoldings.map((node: any) => ({
       wallet: node.id || node.wallet || node.address,
-      percentage: node.percentage || node.holding || 0,
-      insiderType: node.type || node.label || 'unknown',
+      percentage: parseFloat(node.holdings || node.percentage || node.holding || 0),
+      insiderType: node.participant ? 'bundled' : (node.type || node.label || 'insider'),
     }));
     
-    // Build clusters from edges
+    // Build clusters from edges - only include nodes with holdings
     if (data.edges && Array.isArray(data.edges)) {
-      clusters = buildClustersFromEdges(data.nodes, data.edges);
+      const holdingNodeIds = new Set(nodesWithHoldings.map((n: any) => n.id || n.wallet || n.address));
+      clusters = buildClustersFromEdges(nodesWithHoldings, data.edges, holdingNodeIds);
+    }
+    
+    // Mark participants as bundled wallets
+    for (const node of data.nodes) {
+      if (node.participant === true) {
+        const wallet = node.id || node.wallet || node.address;
+        if (wallet && !result.bundledWallets.includes(wallet)) {
+          result.bundledWallets.push(wallet);
+        }
+      }
     }
   } else if (data.holders && Array.isArray(data.holders)) {
     insiders = data.holders;
@@ -134,9 +153,10 @@ function parseInsidersGraph(data: any): InsidersGraphResult {
     .filter((i: any) => i && (i.wallet || i.address || i.id))
     .map((i: any) => ({
       wallet: i.wallet || i.address || i.id,
-      percentage: parseFloat(i.percentage || i.holding || i.pct || 0),
+      percentage: parseFloat(i.percentage || i.holding || i.pct || i.holdings || 0),
       insiderType: i.insiderType || i.type || i.label || 'insider',
     }))
+    .filter((i: InsiderWallet) => i.percentage > 0) // Only include those with actual holdings
     .sort((a, b) => b.percentage - a.percentage);
 
   result.topInsiders = processedInsiders.slice(0, 10);
@@ -153,7 +173,7 @@ function parseInsidersGraph(data: any): InsidersGraphResult {
   }));
 
   // Identify bundled wallets (wallets in same block or connected clusters)
-  const bundledSet = new Set<string>();
+  const bundledSet = new Set<string>(result.bundledWallets);
   for (const cluster of result.clusters) {
     if (cluster.clusterType === 'bundled' || cluster.wallets.length >= 2) {
       cluster.wallets.forEach(w => bundledSet.add(w));
@@ -186,13 +206,18 @@ function parseInsidersGraph(data: any): InsidersGraphResult {
   return result;
 }
 
-function buildClustersFromEdges(nodes: any[], edges: any[]): any[] {
+function buildClustersFromEdges(nodes: any[], edges: any[], holdingNodeIds?: Set<string>): any[] {
   // Build adjacency list
   const adjacency: Map<string, Set<string>> = new Map();
   
   for (const edge of edges) {
     const source = edge.source || edge.from;
     const target = edge.target || edge.to;
+    
+    // Only include edges where at least one node has holdings (if filter provided)
+    if (holdingNodeIds && !holdingNodeIds.has(source) && !holdingNodeIds.has(target)) {
+      continue;
+    }
     
     if (!adjacency.has(source)) adjacency.set(source, new Set());
     if (!adjacency.has(target)) adjacency.set(target, new Set());
@@ -216,7 +241,10 @@ function buildClustersFromEdges(nodes: any[], edges: any[]): any[] {
       if (visited.has(current)) continue;
       
       visited.add(current);
-      cluster.push(current);
+      // Only add to cluster if it has holdings (or no filter)
+      if (!holdingNodeIds || holdingNodeIds.has(current)) {
+        cluster.push(current);
+      }
       
       const neighbors = adjacency.get(current) || new Set();
       for (const neighbor of neighbors) {
