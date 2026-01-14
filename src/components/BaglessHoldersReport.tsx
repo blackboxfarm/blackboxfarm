@@ -76,6 +76,32 @@ interface FirstBuyer {
   isDevWallet: boolean;
 }
 
+interface InsiderWallet {
+  wallet: string;
+  percentage: number;
+  insiderType?: string;
+}
+
+interface WalletCluster {
+  id: string;
+  wallets: string[];
+  totalPercentage: number;
+  clusterType: string;
+}
+
+interface InsidersGraphData {
+  hasInsiders: boolean;
+  insiderCount: number;
+  totalInsiderPercentage: number;
+  clusters: WalletCluster[];
+  topInsiders: InsiderWallet[];
+  bundledWallets: string[];
+  bundledPercentage: number;
+  warnings: string[];
+  fetchTimeMs: number;
+  error?: string;
+}
+
 interface HoldersReport {
   tokenMint: string;
   totalHolders: number;
@@ -133,6 +159,7 @@ interface HoldersReport {
     xAccount?: string;
     feeSplit?: { wallet1?: string; wallet2?: string; splitPercent?: number };
   };
+  insidersGraph?: InsidersGraphData;
   summary: string;
 }
 
@@ -859,6 +886,150 @@ export function BaglessHoldersReport({ initialToken }: BaglessHoldersReportProps
         </div>
       )}
 
+      {/* Bundle Analysis Section - RugCheck Insiders */}
+      {report?.insidersGraph?.hasInsiders && (
+        <Card className={`border-2 ${
+          report.insidersGraph.bundledPercentage > 10 
+            ? 'border-red-500/50 bg-red-500/5' 
+            : report.insidersGraph.warnings.length > 0 
+              ? 'border-yellow-500/50 bg-yellow-500/5'
+              : 'border-blue-500/30 bg-blue-500/5'
+        }`}>
+          <CardHeader className="p-3 md:p-6 pb-2 md:pb-3">
+            <CardTitle className="flex items-center gap-2 text-base md:text-lg">
+              <Users className="h-5 w-5" />
+              Bundle / Insider Analysis
+              {report.insidersGraph.bundledPercentage > 10 && (
+                <Badge variant="destructive" className="text-xs">
+                  ⚠️ High Risk
+                </Badge>
+              )}
+              <a
+                href={`https://rugcheck.xyz/tokens/${report.tokenMint}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="ml-auto text-xs text-muted-foreground hover:text-primary flex items-center gap-1"
+              >
+                <span className="hidden sm:inline">View on RugCheck</span>
+                <ExternalLink className="h-3 w-3" />
+              </a>
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="p-3 md:p-6 pt-0 md:pt-0 space-y-3">
+            {/* Warnings */}
+            {report.insidersGraph.warnings.length > 0 && (
+              <div className="space-y-1">
+                {report.insidersGraph.warnings.map((warning, idx) => (
+                  <div key={idx} className="flex items-center gap-2 text-xs text-yellow-600 dark:text-yellow-400">
+                    <AlertTriangle className="h-3 w-3 flex-shrink-0" />
+                    {warning}
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {/* Stats Grid */}
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-2 md:gap-3">
+              <div className="p-2 bg-muted/50 rounded-lg text-center">
+                <p className="text-xs text-muted-foreground">Insider Wallets</p>
+                <p className="text-lg md:text-xl font-bold">{report.insidersGraph.insiderCount}</p>
+              </div>
+              <div className="p-2 bg-muted/50 rounded-lg text-center">
+                <p className="text-xs text-muted-foreground">Insider Holdings</p>
+                <p className="text-lg md:text-xl font-bold">{report.insidersGraph.totalInsiderPercentage.toFixed(1)}%</p>
+              </div>
+              <div className={`p-2 rounded-lg text-center ${
+                report.insidersGraph.bundledPercentage > 10 ? 'bg-red-500/20' : 'bg-muted/50'
+              }`}>
+                <p className="text-xs text-muted-foreground">Bundled</p>
+                <p className={`text-lg md:text-xl font-bold ${
+                  report.insidersGraph.bundledPercentage > 10 ? 'text-red-600 dark:text-red-400' : ''
+                }`}>{report.insidersGraph.bundledPercentage.toFixed(1)}%</p>
+              </div>
+              <div className="p-2 bg-muted/50 rounded-lg text-center">
+                <p className="text-xs text-muted-foreground">Clusters</p>
+                <p className="text-lg md:text-xl font-bold">{report.insidersGraph.clusters.length}</p>
+              </div>
+            </div>
+
+            {/* Top Insiders List */}
+            {report.insidersGraph.topInsiders.length > 0 && (
+              <Accordion type="single" collapsible className="w-full">
+                <AccordionItem value="insiders" className="border-none">
+                  <AccordionTrigger className="text-xs py-2 hover:no-underline">
+                    <span className="flex items-center gap-2">
+                      <Eye className="h-3 w-3" />
+                      Top {Math.min(10, report.insidersGraph.topInsiders.length)} Insider Wallets
+                    </span>
+                  </AccordionTrigger>
+                  <AccordionContent>
+                    <div className="space-y-1 pt-1">
+                      {report.insidersGraph.topInsiders.slice(0, 10).map((insider, idx) => (
+                        <div key={idx} className="flex items-center justify-between text-xs p-1.5 bg-muted/30 rounded">
+                          <a
+                            href={`https://solscan.io/account/${insider.wallet}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="font-mono text-primary hover:underline"
+                          >
+                            {insider.wallet.slice(0, 6)}...{insider.wallet.slice(-4)}
+                          </a>
+                          <div className="flex items-center gap-2">
+                            {insider.insiderType && insider.insiderType !== 'insider' && (
+                              <Badge variant="outline" className="text-[10px] px-1 py-0">
+                                {insider.insiderType}
+                              </Badge>
+                            )}
+                            <span className={`font-medium ${
+                              insider.percentage > 5 ? 'text-red-600 dark:text-red-400' : ''
+                            }`}>
+                              {insider.percentage.toFixed(2)}%
+                            </span>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </AccordionContent>
+                </AccordionItem>
+              </Accordion>
+            )}
+
+            {/* Bundled Wallets */}
+            {report.insidersGraph.bundledWallets.length > 0 && (
+              <Accordion type="single" collapsible className="w-full">
+                <AccordionItem value="bundled" className="border-none">
+                  <AccordionTrigger className="text-xs py-2 hover:no-underline">
+                    <span className="flex items-center gap-2 text-red-600 dark:text-red-400">
+                      <AlertTriangle className="h-3 w-3" />
+                      {report.insidersGraph.bundledWallets.length} Bundled Wallets Detected
+                    </span>
+                  </AccordionTrigger>
+                  <AccordionContent>
+                    <div className="space-y-1 pt-1">
+                      {report.insidersGraph.bundledWallets.slice(0, 20).map((wallet, idx) => (
+                        <a
+                          key={idx}
+                          href={`https://solscan.io/account/${wallet}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="block text-xs font-mono text-primary hover:underline p-1 bg-red-500/10 rounded"
+                        >
+                          {wallet.slice(0, 8)}...{wallet.slice(-6)}
+                        </a>
+                      ))}
+                      {report.insidersGraph.bundledWallets.length > 20 && (
+                        <p className="text-xs text-muted-foreground">
+                          +{report.insidersGraph.bundledWallets.length - 20} more
+                        </p>
+                      )}
+                    </div>
+                  </AccordionContent>
+                </AccordionItem>
+              </Accordion>
+            )}
+          </CardContent>
+        </Card>
+      )}
 
 
       {report && (
