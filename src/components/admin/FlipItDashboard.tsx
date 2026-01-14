@@ -1795,6 +1795,24 @@ export function FlipItDashboard() {
     }
   };
 
+  // Detect if Twitter URL is an X Community vs regular account
+  const detectTwitterType = (url: string): 'account' | 'community' | null => {
+    if (!url) return null;
+    if (url.includes('/i/communities/') || url.includes('/communities/')) {
+      return 'community';
+    }
+    if (url.includes('x.com/') || url.includes('twitter.com/')) {
+      return 'account';
+    }
+    return null;
+  };
+  
+  // Extract X Community ID from URL
+  const extractCommunityId = (url: string): string | null => {
+    const match = url.match(/\/(?:i\/)?communities\/(\d+)/);
+    return match ? match[1] : null;
+  };
+
   // Handle cycling through trust rating: unknown → concern → danger → good → unknown
   const handleCycleTrustRating = async (position: FlipPosition) => {
     const cycle: Array<'unknown' | 'concern' | 'danger' | 'good'> = ['unknown', 'concern', 'danger', 'good'];
@@ -1809,14 +1827,23 @@ export function FlipItDashboard() {
       const websiteUrl = position.website_url;
       const telegramUrl = position.telegram_url;
       
+      // Detect if Twitter is a community
+      const twitterType = position.twitter_url ? detectTwitterType(position.twitter_url) : null;
+      const communityId = twitterType === 'community' && position.twitter_url 
+        ? extractCommunityId(position.twitter_url) 
+        : null;
+      
       // Helper to extract twitter handle from URL
       function extractTwitterHandle(url: string): string | null {
+        // Skip community URLs
+        if (url.includes('/communities/')) return null;
         const match = url.match(/(?:twitter\.com|x\.com)\/([^/?]+)/i);
         return match ? match[1].toLowerCase() : null;
       }
       
       // Get or fetch creator wallet
       let creatorWallet = position.creator_wallet;
+      let launchpadInfo: { platform?: string; creatorProfile?: string; creatorId?: string } = {};
       
       if (!creatorWallet) {
         // Fetch creator wallet from solscan-creator-lookup
@@ -1827,6 +1854,12 @@ export function FlipItDashboard() {
           if (creatorData?.creatorWallet) {
             creatorWallet = creatorData.creatorWallet;
             console.log('Fetched creator wallet:', creatorWallet);
+          }
+          if (creatorData?.launchpad) {
+            launchpadInfo.platform = creatorData.launchpad;
+          }
+          if (creatorData?.creatorProfile) {
+            launchpadInfo.creatorProfile = creatorData.creatorProfile;
           }
         } catch (err) {
           console.warn('Failed to fetch creator wallet:', err);
@@ -1845,6 +1878,82 @@ export function FlipItDashboard() {
         .eq('id', position.id);
       
       if (updateError) throw updateError;
+      
+      // If Twitter is a community, trigger X Community enricher
+      if (twitterType === 'community' && position.twitter_url) {
+        console.log('Detected X Community, triggering enricher:', position.twitter_url);
+        supabase.functions.invoke('x-community-enricher', {
+          body: { 
+            communityUrl: position.twitter_url,
+            linkedTokenMint: tokenMint,
+            linkedCreatorWallet: creatorWallet
+          }
+        }).then(({ data, error }) => {
+          if (error) {
+            console.warn('X Community enricher failed:', error);
+          } else {
+            console.log('X Community enricher result:', data);
+            if (data?.admins?.length > 0 || data?.moderators?.length > 0) {
+              toast.info(`Found ${data.admins?.length || 0} admins and ${data.moderators?.length || 0} mods in community`);
+            }
+          }
+        });
+      }
+      
+      // Upsert launchpad creator profile
+      if (creatorWallet && launchpadInfo.platform) {
+        const creatorProfileData: any = {
+          platform: launchpadInfo.platform,
+          creator_wallet: creatorWallet,
+          is_blacklisted: nextRating === 'danger' || nextRating === 'concern',
+          is_whitelisted: nextRating === 'good',
+          risk_notes: `Rated ${nextRating.toUpperCase()} via FlipIt for token ${position.token_symbol || tokenMint.slice(0, 8)}`
+        };
+        
+        if (launchpadInfo.creatorProfile) {
+          creatorProfileData.platform_username = launchpadInfo.creatorProfile;
+        }
+        if (twitterHandle && twitterType === 'account') {
+          creatorProfileData.linked_x_account = twitterHandle;
+        }
+        
+        // Check if exists
+        const { data: existingCreator } = await supabase
+          .from('launchpad_creator_profiles')
+          .select('id, tokens_created, linked_token_mints')
+          .eq('platform', launchpadInfo.platform)
+          .eq('creator_wallet', creatorWallet)
+          .maybeSingle();
+        
+        if (existingCreator) {
+          // Update existing
+          const linkedMints = (existingCreator.linked_token_mints as string[]) || [];
+          if (!linkedMints.includes(tokenMint)) {
+            linkedMints.push(tokenMint);
+          }
+          await supabase
+            .from('launchpad_creator_profiles')
+            .update({
+              ...creatorProfileData,
+              tokens_created: (existingCreator.tokens_created || 0) + (linkedMints.length > (existingCreator.linked_token_mints as string[])?.length ? 1 : 0),
+              linked_token_mints: linkedMints,
+              tokens_rugged: nextRating === 'danger' ? 1 : 0
+            })
+            .eq('id', existingCreator.id);
+        } else {
+          // Insert new
+          await supabase
+            .from('launchpad_creator_profiles')
+            .insert({
+              ...creatorProfileData,
+              tokens_created: 1,
+              linked_token_mints: [tokenMint],
+              tokens_rugged: nextRating === 'danger' ? 1 : 0,
+              tokens_graduated: 0
+            });
+        }
+        console.log('Upserted launchpad creator profile:', launchpadInfo.platform, creatorWallet);
+      }
       
       // Remove from all lists first for clean slate
       if (currentRating !== 'unknown') {
@@ -1879,7 +1988,8 @@ export function FlipItDashboard() {
           linked_twitter: twitterHandle ? [twitterHandle] : [],
           linked_websites: websiteUrl ? [websiteUrl] : [],
           linked_telegram: telegramUrl ? [telegramUrl] : [],
-          linked_dev_wallets: creatorWallet ? [creatorWallet] : []
+          linked_dev_wallets: creatorWallet ? [creatorWallet] : [],
+          linked_x_communities: communityId ? [communityId] : []
         }, { onConflict: 'entry_type,identifier' });
         
         if (twitterHandle) {
@@ -1905,8 +2015,20 @@ export function FlipItDashboard() {
             source: 'flipit_rating',
             tags: ['manually_rated', nextRating, 'dev_wallet'],
             linked_token_mints: [tokenMint],
-            linked_twitter: twitterHandle ? [twitterHandle] : []
+            linked_twitter: twitterHandle ? [twitterHandle] : [],
+            linked_x_communities: communityId ? [communityId] : []
           }, { onConflict: 'entry_type,identifier' });
+          
+          // Trigger team detection via blacklist-enricher
+          supabase.functions.invoke('blacklist-enricher', {
+            body: {
+              walletAddress: creatorWallet,
+              tokenMint,
+              twitterHandle,
+              xCommunityId: communityId,
+              riskLevel
+            }
+          }).catch(err => console.warn('Team detection failed:', err));
         }
       } else if (nextRating === 'good') {
         // Add to Whitelist
@@ -1920,7 +2042,8 @@ export function FlipItDashboard() {
           linked_twitter: twitterHandle ? [twitterHandle] : [],
           linked_websites: websiteUrl ? [websiteUrl] : [],
           linked_telegram: telegramUrl ? [telegramUrl] : [],
-          linked_dev_wallets: creatorWallet ? [creatorWallet] : []
+          linked_dev_wallets: creatorWallet ? [creatorWallet] : [],
+          linked_x_communities: communityId ? [communityId] : []
         }, { onConflict: 'entry_type,identifier' });
         
         if (twitterHandle) {
@@ -1946,7 +2069,8 @@ export function FlipItDashboard() {
             source: 'flipit_rating',
             tags: ['manually_rated', 'trusted', 'dev_wallet'],
             linked_token_mints: [tokenMint],
-            linked_twitter: twitterHandle ? [twitterHandle] : []
+            linked_twitter: twitterHandle ? [twitterHandle] : [],
+            linked_x_communities: communityId ? [communityId] : []
           }, { onConflict: 'entry_type,identifier' });
         }
       } else if (nextRating === 'unknown') {
@@ -1971,7 +2095,8 @@ export function FlipItDashboard() {
       
       const ratingEmoji = nextRating === 'good' ? '✅' : nextRating === 'danger' ? '🚨' : nextRating === 'concern' ? '⚠️' : '❓';
       const creatorInfo = creatorWallet ? ` (Dev: ${creatorWallet.slice(0, 6)}...)` : '';
-      toast.success(`${ratingEmoji} Marked as ${nextRating.toUpperCase()}${creatorInfo}`);
+      const communityInfo = communityId ? ' | X Community detected' : '';
+      toast.success(`${ratingEmoji} Marked as ${nextRating.toUpperCase()}${creatorInfo}${communityInfo}`);
       
     } catch (err: any) {
       console.error('Failed to update trust rating:', err);
