@@ -106,24 +106,66 @@ serve(async (req) => {
               if (holdersResp.ok) {
                 const holdersData = await holdersResp.json();
                 if (holdersData.success && holdersData.data?.length > 0) {
-                  // Find all holders matching pool addresses or AMM programs
+                  // Find all holders matching pool addresses, AMM programs, OR Solscan-labeled LP tags
                   const allDexPrograms = [...Object.values(KNOWN_DEX_PROGRAMS), ...Object.values(BONDING_CURVE_PROGRAMS)];
-                  
+
+                  const isSolscanLPLabeled = (holder: any): boolean => {
+                    // Solscan payloads vary across endpoints/versions; do a best-effort scan
+                    const hay: string[] = [];
+                    const push = (v: unknown) => {
+                      if (!v) return;
+                      if (typeof v === 'string') hay.push(v);
+                      else if (Array.isArray(v)) v.forEach(push);
+                      else if (typeof v === 'object') {
+                        // common nested shapes like { label: "Liquidity Pool" }
+                        for (const vv of Object.values(v as Record<string, unknown>)) push(vv);
+                      }
+                    };
+
+                    push(holder.label);
+                    push(holder.name);
+                    push(holder.type);
+                    push(holder.account_type);
+                    push(holder.owner_type);
+                    push(holder.owner_label);
+                    push(holder.owner_name);
+                    push(holder.tags);
+                    push(holder.labels);
+
+                    const text = hay.join(' ').toLowerCase();
+                    return (
+                      text.includes('liquidity pool') ||
+                      text.includes('amm pool') ||
+                      text.includes('pool (lp)') ||
+                      (text.includes('pool') && text.includes('lp'))
+                    );
+                  };
+
                   for (const holder of holdersData.data) {
-                    const holderOwner = holder.owner || holder.address;
-                    const ownerProgram = holder.owner_program || '';
-                    
+                    const holderOwner = holder.owner || null;
+                    const holderAddress = holder.address || null;
+                    const candidates = [holderOwner, holderAddress].filter(Boolean) as string[];
+
+                    const ownerProgram = holder.owner_program || holder.ownerProgram || holder.program_id || '';
+
                     // Check if this holder is an LP
-                    if (allPoolAddresses.has(holderOwner) || 
-                        allDexPrograms.includes(ownerProgram)) {
-                      allPoolAddresses.add(holderOwner);
-                      
-                      if (!verifiedLPAccount) {
-                        verifiedLPAccount = holderOwner;
-                        verifiedLPSource = 'solscan';
-                        console.log(`✅ [Solscan Verified] Primary LP: ${verifiedLPAccount}`);
-                      } else {
-                        console.log(`  [Solscan] Additional LP: ${holderOwner}`);
+                    const isAddressMatch = candidates.some((addr) => allPoolAddresses.has(addr));
+                    const isProgramMatch = typeof ownerProgram === 'string' && allDexPrograms.includes(ownerProgram);
+                    const isLabelMatch = isSolscanLPLabeled(holder);
+
+                    if (isAddressMatch || isProgramMatch || isLabelMatch) {
+                      // Add ALL candidate addresses so later RPC owner matching works reliably
+                      for (const addr of candidates) allPoolAddresses.add(addr);
+
+                      const primary = holderOwner || holderAddress;
+                      if (primary) {
+                        if (!verifiedLPAccount) {
+                          verifiedLPAccount = primary;
+                          verifiedLPSource = isLabelMatch ? 'solscan_label' : 'solscan';
+                          console.log(`✅ [Solscan Verified] Primary LP: ${verifiedLPAccount} (${verifiedLPSource})`);
+                        } else {
+                          console.log(`  [Solscan] Additional LP: ${primary}`);
+                        }
                       }
                     }
                   }
