@@ -4461,11 +4461,16 @@ export type Database = {
       pumpfun_blacklist: {
         Row: {
           added_by: string | null
+          auto_discovered_links: Json | null
           blacklist_reason: string | null
           created_at: string
+          enriched_at: string | null
+          enrichment_error: string | null
+          enrichment_status: string | null
           entry_type: string
           evidence_notes: string | null
           first_seen_at: string | null
+          funding_trace: Json | null
           id: string
           identifier: string
           is_active: boolean | null
@@ -4484,11 +4489,16 @@ export type Database = {
         }
         Insert: {
           added_by?: string | null
+          auto_discovered_links?: Json | null
           blacklist_reason?: string | null
           created_at?: string
+          enriched_at?: string | null
+          enrichment_error?: string | null
+          enrichment_status?: string | null
           entry_type: string
           evidence_notes?: string | null
           first_seen_at?: string | null
+          funding_trace?: Json | null
           id?: string
           identifier: string
           is_active?: boolean | null
@@ -4507,11 +4517,16 @@ export type Database = {
         }
         Update: {
           added_by?: string | null
+          auto_discovered_links?: Json | null
           blacklist_reason?: string | null
           created_at?: string
+          enriched_at?: string | null
+          enrichment_error?: string | null
+          enrichment_status?: string | null
           entry_type?: string
           evidence_notes?: string | null
           first_seen_at?: string | null
+          funding_trace?: Json | null
           id?: string
           identifier?: string
           is_active?: boolean | null

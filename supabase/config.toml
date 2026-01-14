@@ -366,3 +366,6 @@ verify_jwt = false
 
 [functions.wallet-genealogy-scanner]
 verify_jwt = false
+
+[functions.blacklist-enricher]
+verify_jwt = false

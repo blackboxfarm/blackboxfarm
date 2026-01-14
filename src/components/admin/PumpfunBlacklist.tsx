@@ -11,8 +11,9 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { toast } from "sonner";
-import { Plus, Search, Trash2, Link2, AlertTriangle, Wallet, Twitter, MessageCircle, User, RefreshCw, Eye, Network } from "lucide-react";
+import { Plus, Search, Trash2, Link2, AlertTriangle, Wallet, Twitter, MessageCircle, User, RefreshCw, Eye, Network, Loader2, Sparkles, CheckCircle2, XCircle } from "lucide-react";
 import { format } from "date-fns";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 
 interface BlacklistEntry {
   id: string;
@@ -36,6 +37,11 @@ interface BlacklistEntry {
   is_active: boolean;
   created_at: string;
   updated_at: string;
+  enrichment_status?: string;
+  enriched_at?: string;
+  enrichment_error?: string;
+  funding_trace?: any;
+  auto_discovered_links?: any;
 }
 
 const ENTRY_TYPES = [
@@ -131,13 +137,18 @@ export function PumpfunBlacklist() {
         linked_telegram: entry.linked_telegram ? entry.linked_telegram.split(',').map(t => t.trim()).filter(Boolean) : [],
         linked_pumpfun_accounts: entry.linked_pumpfun_accounts ? entry.linked_pumpfun_accounts.split(',').map(t => t.trim()).filter(Boolean) : [],
         source: 'manual',
+        enrichment_status: 'pending',
       }).select().single();
 
       if (error) throw error;
+      
+      // Trigger auto-enrichment
+      triggerEnrichment(data.id, data.entry_type, data.identifier);
+      
       return data;
     },
     onSuccess: () => {
-      toast.success("Blacklist entry added");
+      toast.success("Blacklist entry added - enrichment started");
       queryClient.invalidateQueries({ queryKey: ['pumpfun-blacklist'] });
       setIsAddDialogOpen(false);
       resetForm();
@@ -146,6 +157,40 @@ export function PumpfunBlacklist() {
       toast.error(`Failed to add entry: ${error.message}`);
     },
   });
+
+  // Enrichment mutation
+  const enrichMutation = useMutation({
+    mutationFn: async ({ entryId, entryType, identifier }: { entryId: string; entryType: string; identifier: string }) => {
+      const { data, error } = await supabase.functions.invoke('blacklist-enricher', {
+        body: { entry_id: entryId, entry_type: entryType, identifier, force_reenrich: true }
+      });
+      if (error) throw error;
+      return data;
+    },
+    onSuccess: () => {
+      toast.success("Enrichment complete");
+      queryClient.invalidateQueries({ queryKey: ['pumpfun-blacklist'] });
+    },
+    onError: (error: any) => {
+      toast.error(`Enrichment failed: ${error.message}`);
+      queryClient.invalidateQueries({ queryKey: ['pumpfun-blacklist'] });
+    },
+  });
+
+  // Trigger enrichment (fire and forget)
+  const triggerEnrichment = async (entryId: string, entryType: string, identifier: string) => {
+    try {
+      await supabase.functions.invoke('blacklist-enricher', {
+        body: { entry_id: entryId, entry_type: entryType, identifier }
+      });
+      // Refresh after enrichment completes
+      setTimeout(() => {
+        queryClient.invalidateQueries({ queryKey: ['pumpfun-blacklist'] });
+      }, 5000);
+    } catch (error) {
+      console.error("Enrichment trigger failed:", error);
+    }
+  };
 
   // Delete entry mutation
   const deleteMutation = useMutation({
@@ -186,6 +231,29 @@ export function PumpfunBlacklist() {
   const getRiskBadge = (level: string) => {
     const risk = RISK_LEVELS.find(r => r.value === level);
     return risk ? risk.color : 'bg-muted text-muted-foreground';
+  };
+
+  const getEnrichmentBadge = (status: string | undefined, error: string | undefined) => {
+    switch (status) {
+      case 'complete':
+        return <Badge className="bg-green-500/20 text-green-400 gap-1"><CheckCircle2 className="h-3 w-3" />Enriched</Badge>;
+      case 'enriching':
+        return <Badge className="bg-blue-500/20 text-blue-400 gap-1"><Loader2 className="h-3 w-3 animate-spin" />Enriching</Badge>;
+      case 'failed':
+        return (
+          <TooltipProvider>
+            <Tooltip>
+              <TooltipTrigger>
+                <Badge className="bg-red-500/20 text-red-400 gap-1"><XCircle className="h-3 w-3" />Failed</Badge>
+              </TooltipTrigger>
+              <TooltipContent>{error || 'Unknown error'}</TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
+        );
+      case 'pending':
+      default:
+        return <Badge className="bg-muted text-muted-foreground gap-1"><Sparkles className="h-3 w-3" />Pending</Badge>;
+    }
   };
 
   const totalConnections = entries?.reduce((acc, entry) => {
@@ -467,23 +535,24 @@ export function PumpfunBlacklist() {
                   <TableHead>Type</TableHead>
                   <TableHead>Identifier</TableHead>
                   <TableHead>Risk</TableHead>
+                  <TableHead>Enrichment</TableHead>
                   <TableHead>Reason</TableHead>
                   <TableHead>Cross-Links</TableHead>
                   <TableHead>Added</TableHead>
-                  <TableHead className="w-[80px]">Actions</TableHead>
+                  <TableHead className="w-[100px]">Actions</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {isLoading ? (
                   <TableRow>
-                    <TableCell colSpan={7} className="text-center py-8">
+                    <TableCell colSpan={8} className="text-center py-8">
                       <RefreshCw className="h-5 w-5 animate-spin mx-auto mb-2" />
                       Loading blacklist...
                     </TableCell>
                   </TableRow>
                 ) : entries?.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={7} className="text-center py-8 text-muted-foreground">
+                    <TableCell colSpan={8} className="text-center py-8 text-muted-foreground">
                       No blacklist entries found. Add bad actors to track them.
                     </TableCell>
                   </TableRow>
@@ -519,6 +588,9 @@ export function PumpfunBlacklist() {
                           <Badge className={getRiskBadge(entry.risk_level)}>
                             {entry.risk_level}
                           </Badge>
+                        </TableCell>
+                        <TableCell>
+                          {getEnrichmentBadge(entry.enrichment_status, entry.enrichment_error)}
                         </TableCell>
                         <TableCell>
                           <span className="text-sm line-clamp-1">
@@ -620,18 +692,43 @@ export function PumpfunBlacklist() {
                           </span>
                         </TableCell>
                         <TableCell>
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="h-8 w-8 text-destructive hover:text-destructive"
-                            onClick={() => {
-                              if (confirm('Remove this entry from the blacklist?')) {
-                                deleteMutation.mutate(entry.id);
-                              }
-                            }}
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </Button>
+                          <div className="flex items-center gap-1">
+                            <TooltipProvider>
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <Button
+                                    variant="ghost"
+                                    size="icon"
+                                    className="h-8 w-8 text-blue-400 hover:text-blue-300"
+                                    disabled={enrichMutation.isPending || entry.enrichment_status === 'enriching'}
+                                    onClick={() => enrichMutation.mutate({ 
+                                      entryId: entry.id, 
+                                      entryType: entry.entry_type, 
+                                      identifier: entry.identifier 
+                                    })}
+                                  >
+                                    {enrichMutation.isPending || entry.enrichment_status === 'enriching' 
+                                      ? <Loader2 className="h-4 w-4 animate-spin" />
+                                      : <Sparkles className="h-4 w-4" />
+                                    }
+                                  </Button>
+                                </TooltipTrigger>
+                                <TooltipContent>Re-enrich (scan for new links)</TooltipContent>
+                              </Tooltip>
+                            </TooltipProvider>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-8 w-8 text-destructive hover:text-destructive"
+                              onClick={() => {
+                                if (confirm('Remove this entry from the blacklist?')) {
+                                  deleteMutation.mutate(entry.id);
+                                }
+                              }}
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          </div>
                         </TableCell>
                       </TableRow>
                     );
