@@ -14,9 +14,8 @@ export const KNOWN_DEX_PROGRAMS: Record<string, string> = {
   'Pump.fun AMM': '6EF8rrecthR5Dkzon8Nwu78hRvfCKubJ14M5uBEwF6P',
   'Pump.fun Bonding Curve': 'PumpkFHPjXpQWCNPxhj3mwmEzxxDfRJqr1yBqNLR3cg',
   
-  // Bags.fm / Bonk.fun / Moonshot
-  'Bags.fm': 'BaGSfMx8GHd7f5EwdkQXWNCPwqbGNiN7ZQxw7NwdFWPE',
-  'Bonk.fun': 'BonKy2NqHdgFWW8MY7p3U8tXzDLSu91sAu2TqMBq8Mum',
+  // Note: Bags.fm and Bonk.fun use Pump.fun infrastructure (same program IDs)
+  // These are separate programs only if they have unique program IDs
   'Moonshot': 'MoonCVVNZFSYkqNXP6bxHLPL6QQJiMagDL3qcqUQTrG',
   
   // Raydium ecosystem
@@ -62,11 +61,11 @@ export const KNOWN_DEX_PROGRAMS: Record<string, string> = {
 // KNOWN BONDING CURVE PROGRAMS
 // ============================================
 
+// Known bonding curve and launchpad program IDs
+// Note: bags.fm and bonk.fun use Pump.fun infrastructure (same program)
 export const BONDING_CURVE_PROGRAMS: Record<string, string> = {
   'Pump.fun': '6EF8rrecthR5Dkzon8Nwu78hRvfCKubJ14M5uBEwF6P',
   'Pump.fun Bonding': 'PumpkFHPjXpQWCNPxhj3mwmEzxxDfRJqr1yBqNLR3cg',
-  'Bags.fm': 'BaGSfMx8GHd7f5EwdkQXWNCPwqbGNiN7ZQxw7NwdFWPE',
-  'Bonk.fun': 'BonKy2NqHdgFWW8MY7p3U8tXzDLSu91sAu2TqMBq8Mum',
   'Moonshot': 'MoonCVVNZFSYkqNXP6bxHLPL6QQJiMagDL3qcqUQTrG',
 };
 
@@ -75,25 +74,31 @@ export const BONDING_CURVE_PROGRAMS: Record<string, string> = {
 // ============================================
 
 export const KNOWN_LP_WALLETS = new Set([
-  // Pump.fun
-  'CebN5WGQ4jvEPvsVU4EoHEpgzq1VV7AbicfhtW4xC9iM', // Pump.fun bonding curve
-  '39azUYFWPz3VHgKCf3VChUwbpURdCHRxjWVowf5jUJjg', // Pump.fun fee wallet
+  // Pump.fun bonding curve and fee wallets
+  'CebN5WGQ4jvEPvsVU4EoHEpgzq1VV7AbicfhtW4xC9iM',
+  '39azUYFWPz3VHgKCf3VChUwbpURdCHRxjWVowf5jUJjg',
+  'Ce6TQqeHC9p8KetsN6JsjHK7UTZk7nasjjnr7XxXp9F1', // Pump.fun migration wallet
   'BVMxnagMaVBDtVFkSy2n9sVZpL2E2HNwMnvMECNRSqWM', // Pump.fun treasury
   
-  // Raydium common LP vaults
-  '5Q544fKrFoe6tsEbD7S8EmxGTJYAKtTVhAW5Q5pge4j1', // Raydium LP authority
-  '7YttLkHDoNj9wyDur5pM1ejNaAvT9X4eqaYcHQqtj2G5', // Raydium LP vault
+  // Raydium LP authorities and vaults
+  '5Q544fKrFoe6tsEbD7S8EmxGTJYAKtTVhAW5Q5pge4j1',
+  '7YttLkHDoNj9wyDur5pM1ejNaAvT9X4eqaYcHQqtj2G5',
+  'Hq1fCvvjNLf75h1LDoxZ5izJVmxNWjPzWd4sGgw6suGq',
   '3uaZBfHPfmpAHW7dsimC1SnyR61X4bJqQZKWmRSCXJxv', // Raydium AMM authority
+  'GThUX1Atko4tqhN2NaiTazWSeFWMuiUvfFnyJyUghFMJ', // Raydium authority
   
   // Meteora DLMM
-  '6C4d4fQo9qupzMWkVN5BbPnHQf9wKDBRSCLbJMM7xWr7', // Meteora DLMM common
+  '6C4d4fQo9qupzMWkVN5BbPnHQf9wKDBRSCLbJMM7xWr7',
   
-  // Orca
-  'DjVE6JNiYqPL2QXyCUUh8rNjHrbz9hXHNYt99MQ59qw1', // Orca vault authority
+  // Orca vaults
+  'DjVE6JNiYqPL2QXyCUUh8rNjHrbz9hXHNYt99MQ59qw1',
   
-  // Known burn addresses (tokens sent here are effectively locked)
-  '1nc1nerator11111111111111111111111111111111', // Incinerator
-  'deadbeefdeadbeefdeadbeefdeadbeefdeadbeef11', // Common burn
+  // Common LP/pool wallets seen across platforms
+  'TSLvdd1pWpHVjahSpsvCXUbgwsL3JAcvokwaKt1eokM', // Token Standard LP
+  
+  // Burn addresses (tokens locked forever)
+  '1nc1nerator11111111111111111111111111111111',
+  'deadbeefdeadbeefdeadbeefdeadbeefdeadbeef11',
 ]);
 
 // ============================================
@@ -212,11 +217,12 @@ export function detectLP(
     }
   }
   
-  // Priority 7: High concentration heuristic (70% confidence) - lowered threshold to 15%
-  if (percentageOfSupply > 15) {
+  // Priority 7: High concentration heuristic (less reliable)
+  // Raised threshold to 20% to reduce false positives on large whale holders
+  if (percentageOfSupply > 20) {
     return {
       isLP: true,
-      confidence: 70,
+      confidence: 60,
       platform: 'Unknown Platform',
       reason: `High concentration (${percentageOfSupply.toFixed(1)}%) - likely undetected LP`,
       source: 'heuristic'
