@@ -1282,10 +1282,10 @@ export function BaglessHoldersReport({ initialToken }: BaglessHoldersReportProps
 
               {/* Action Buttons Row */}
               <div className="mb-4 grid grid-cols-3 gap-2">
-                <Button variant="outline" asChild className="text-xs md:text-sm h-auto py-2">
+                <Button variant="outline" asChild className="text-xs md:text-sm h-auto py-2 whitespace-normal">
                   <Link to="/holders-marketing" className="text-center leading-tight">
                     <span className="hidden md:inline">Why You Need This Before Every Buy</span>
-                    <span className="md:hidden">Why You Need This<br />Before Every Buy</span>
+                    <span className="md:hidden whitespace-pre-wrap">Why You Need This{'\n'}Before Every Buy</span>
                   </Link>
                 </Button>
                 
@@ -1329,10 +1329,10 @@ export function BaglessHoldersReport({ initialToken }: BaglessHoldersReportProps
                   </DropdownMenuContent>
                 </DropdownMenu>
 
-                <Button variant="outline" asChild className="text-xs md:text-sm h-auto py-2">
+                <Button variant="outline" asChild className="text-xs md:text-sm h-auto py-2 whitespace-normal">
                   <Link to="/adverts" className="text-center leading-tight">
-                    <span className="hidden md:inline">Get Seen! 👀 Eyes here!</span>
-                    <span className="md:hidden">Get Seen!<br />👀 Eyes Here!</span>
+                    <span className="hidden md:inline">Get Seen! 👀 Eyes Here!</span>
+                    <span className="md:hidden whitespace-pre-wrap">Get Seen!{'\n'}👀 Eyes Here!</span>
                   </Link>
                 </Button>
               </div>

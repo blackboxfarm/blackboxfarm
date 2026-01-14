@@ -42,9 +42,16 @@ export function TokenPriceDisplay({
   if (!tokenMint) return null;
 
   const formatPrice = (price: number) => {
-    if (price >= 1) return `$${price.toFixed(2)}`;
-    if (price >= 0.01) return `$${price.toFixed(4)}`;
-    return `$${price.toExponential(2)}`;
+    // Always human-readable, never scientific notation
+    if (price === 0) return '$0';
+    if (price < 0.0000001) return `$${price.toFixed(12).replace(/\.?0+$/, '')}`;
+    if (price < 0.000001) return `$${price.toFixed(10).replace(/\.?0+$/, '')}`;
+    if (price < 0.00001) return `$${price.toFixed(9).replace(/\.?0+$/, '')}`;
+    if (price < 0.0001) return `$${price.toFixed(8).replace(/\.?0+$/, '')}`;
+    if (price < 0.001) return `$${price.toFixed(7).replace(/\.?0+$/, '')}`;
+    if (price < 0.01) return `$${price.toFixed(6).replace(/\.?0+$/, '')}`;
+    if (price < 1) return `$${price.toFixed(4).replace(/\.?0+$/, '')}`;
+    return `$${price.toFixed(2)}`;
   };
 
   const formatLargeNumber = (num: number) => {
