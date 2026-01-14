@@ -291,24 +291,45 @@ Deno.serve(async (req) => {
           results.communitiesEnriched++;
         }
 
-        // Trigger team detection if we have enough identifiers
+        // Create ONE team entry per unique token (don't merge during backfill)
         if (creatorWallet || twitterHandle || communityId) {
-          const identifiers = {
-            dev_wallets: creatorWallet ? [creatorWallet] : [],
-            twitter_accounts: twitterHandle ? [twitterHandle] : [],
-            token_mints: [tokenMint],
-            x_community_ids: communityId ? [communityId] : []
-          };
+          // Generate unique team hash per token
+          const uniqueTeamHash = `token_${tokenMint.slice(0, 12)}`;
           
-          supabase.functions.invoke('blacklist-enricher', {
-            body: {
-              detect_team: true,
-              identifiers,
-              risk_level: rating === 'danger' ? 'high' : rating === 'concern' ? 'medium' : 'low',
-              linked_token_mint: tokenMint
+          // Check if team already exists for this token
+          const { data: existingTeam } = await supabase
+            .from('dev_teams')
+            .select('id')
+            .contains('linked_token_mints', [tokenMint])
+            .maybeSingle();
+          
+          if (!existingTeam) {
+            // Create new team entry for this specific token
+            const { error: teamError } = await supabase
+              .from('dev_teams')
+              .insert({
+                team_hash: uniqueTeamHash,
+                team_name: `${data.token_symbol || tokenMint.slice(0, 8)} Dev`,
+                member_wallets: creatorWallet ? [creatorWallet] : [],
+                member_twitter_accounts: twitterHandle ? [twitterHandle] : [],
+                linked_x_communities: communityId ? [communityId] : [],
+                linked_token_mints: [tokenMint],
+                tokens_created: 1,
+                risk_level: rating === 'danger' ? 'high' : rating === 'concern' ? 'medium' : 'low',
+                source: 'flipit_backfill',
+                tags: ['backfilled', 'per_token_entry'],
+                is_active: true
+              });
+            
+            if (!teamError) {
+              results.teamsDetected++;
+              console.log(`Created team entry for ${data.token_symbol || tokenMint.slice(0, 8)}`);
+            } else {
+              console.warn('Failed to create team:', teamError.message);
             }
-          }).catch(err => console.warn('Team detection failed:', err));
-          results.teamsDetected++;
+          } else {
+            console.log(`Team already exists for token ${tokenMint.slice(0, 8)}`);
+          }
         }
 
         results.processed++;
