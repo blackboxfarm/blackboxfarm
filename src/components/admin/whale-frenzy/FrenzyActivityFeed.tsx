@@ -29,14 +29,17 @@ interface FrenzyActivityFeedProps {
   onFrenzyDetected?: (tokenMint: string) => void;
 }
 
-// Format price in readable format (handles very small numbers)
+// Format price in readable format (handles very small numbers) - always human-readable
 const formatPrice = (price: number | undefined): string => {
   if (!price || price === 0) return '-';
-  if (price < 0.000001) return price.toExponential(2);
-  if (price < 0.0001) return price.toFixed(8);
-  if (price < 0.01) return price.toFixed(6);
-  if (price < 1) return price.toFixed(4);
-  return price.toFixed(2);
+  if (price < 0.0000001) return `$${price.toFixed(12).replace(/\.?0+$/, '')}`;
+  if (price < 0.000001) return `$${price.toFixed(10).replace(/\.?0+$/, '')}`;
+  if (price < 0.00001) return `$${price.toFixed(9).replace(/\.?0+$/, '')}`;
+  if (price < 0.0001) return `$${price.toFixed(8).replace(/\.?0+$/, '')}`;
+  if (price < 0.001) return `$${price.toFixed(7).replace(/\.?0+$/, '')}`;
+  if (price < 0.01) return `$${price.toFixed(6).replace(/\.?0+$/, '')}`;
+  if (price < 1) return `$${price.toFixed(4).replace(/\.?0+$/, '')}`;
+  return `$${price.toFixed(2)}`;
 };
 
 // Format SOL amount

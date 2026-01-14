@@ -418,7 +418,7 @@ export function TokenMetadataDisplay({
           )}
 
           {/* Links Row - Launchpad, Padre, DexScreener, Socials, Age */}
-          <div className="flex items-center gap-3 text-sm flex-wrap">
+          <div className="flex items-center gap-2 md:gap-3 text-sm flex-wrap justify-start">
                 {/* Age badge */}
                 {tokenAge !== undefined && (
                   <Badge variant="outline" className="flex items-center gap-1 text-xs">
