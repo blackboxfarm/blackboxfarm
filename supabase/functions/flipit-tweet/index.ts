@@ -68,9 +68,12 @@ function generateOAuthHeader(method: string, url: string): string {
   );
 }
 
+// Your X Community ID for FlipIt announcements
+const FLIPIT_COMMUNITY_ID = "2001683327686672789";
+
 interface TweetRequest {
-  type?: 'buy' | 'sell' | 'rebuy';
-  eventType?: 'buy' | 'sell' | 'rebuy';
+  type?: 'buy' | 'sell' | 'rebuy' | 'test';
+  eventType?: 'buy' | 'sell' | 'rebuy' | 'test';
   tokenMint?: string;
   tokenSymbol?: string;
   tokenName?: string;
@@ -86,6 +89,9 @@ interface TweetRequest {
   txSignature?: string;
   positionId?: string;
   forceTweet?: boolean; // Bypass rate limiting for important tweets
+  testMessage?: string; // For test tweets
+  postToCommunity?: boolean; // Whether to also post to community (default: true for buys)
+  communityOnly?: boolean; // Only post to community, not main feed
 }
 
 interface TweetSettings {
@@ -376,12 +382,18 @@ function buildTweetText(template: string, data: TweetRequest): string {
   return text;
 }
 
-async function sendTweet(tweetText: string): Promise<any> {
+async function sendTweet(tweetText: string, communityId?: string): Promise<any> {
   const url = "https://api.x.com/2/tweets";
   const method = "POST";
 
   const oauthHeader = generateOAuthHeader(method, url);
-  console.log("Sending tweet:", tweetText.substring(0, 50) + "...");
+  console.log("Sending tweet:", tweetText.substring(0, 50) + "...", communityId ? `to community ${communityId}` : "to main feed");
+
+  // Build request body - include community_id if provided
+  const requestBody: { text: string; community_id?: string } = { text: tweetText };
+  if (communityId) {
+    requestBody.community_id = communityId;
+  }
 
   const response = await fetch(url, {
     method: method,
@@ -389,7 +401,7 @@ async function sendTweet(tweetText: string): Promise<any> {
       Authorization: oauthHeader,
       "Content-Type": "application/json",
     },
-    body: JSON.stringify({ text: tweetText }),
+    body: JSON.stringify(requestBody),
   });
 
   const responseText = await response.text();
@@ -400,6 +412,37 @@ async function sendTweet(tweetText: string): Promise<any> {
   }
 
   return JSON.parse(responseText);
+}
+
+// Send tweet to both main feed and community
+async function sendTweetWithCommunity(
+  tweetText: string, 
+  postToCommunity: boolean = true,
+  communityOnly: boolean = false
+): Promise<{ mainFeed?: any; community?: any }> {
+  const results: { mainFeed?: any; community?: any } = {};
+  
+  // Post to main feed (unless communityOnly)
+  if (!communityOnly) {
+    try {
+      results.mainFeed = await sendTweet(tweetText);
+      console.log("Posted to main feed:", results.mainFeed?.data?.id);
+    } catch (e: any) {
+      console.error("Failed to post to main feed:", e.message);
+    }
+  }
+  
+  // Also post to community
+  if (postToCommunity) {
+    try {
+      results.community = await sendTweet(tweetText, FLIPIT_COMMUNITY_ID);
+      console.log("Posted to community:", results.community?.data?.id);
+    } catch (e: any) {
+      console.error("Failed to post to community:", e.message);
+    }
+  }
+  
+  return results;
 }
 
 Deno.serve(async (req) => {
@@ -417,10 +460,32 @@ Deno.serve(async (req) => {
     let body: TweetRequest = await req.json();
     console.log("Tweet request:", JSON.stringify(body));
     
+    // Handle test tweets - skip all checks
+    if (body.type === 'test' || body.eventType === 'test') {
+      const testText = body.testMessage || "TEST";
+      console.log("Sending test tweet:", testText);
+      
+      // For test, only post to community (not main feed)
+      const result = await sendTweet(testText, FLIPIT_COMMUNITY_ID);
+      
+      return new Response(JSON.stringify({ 
+        success: true, 
+        tweet_id: result.data?.id,
+        tweet_text: testText,
+        posted_to: "community"
+      }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+    
     // Normalize: accept either 'type' or 'eventType', and 'entryPrice' or 'buyPriceUsd'
     const tweetType = body.type || body.eventType || 'buy';
     const entryPrice = body.entryPrice ?? body.buyPriceUsd;
     const exitPrice = body.exitPrice ?? body.sellPriceUsd;
+    
+    // Determine if we should post to community (default: true for buys)
+    const postToCommunity = body.postToCommunity ?? (tweetType === 'buy');
+    const communityOnly = body.communityOnly ?? false;
     
     // Get tweet settings
     const settings = await getTweetSettings(supabase);
@@ -560,15 +625,26 @@ Deno.serve(async (req) => {
     const tweetText = buildTweetText(template, body);
     console.log("Generated tweet text:", tweetText);
    
-    const result = await sendTweet(tweetText);
+    // Send tweet to main feed and/or community
+    const results = await sendTweetWithCommunity(tweetText, postToCommunity, communityOnly);
     
-    // Increment quota after successful tweet
-    await incrementQuota(supabase);
+    // Consider success if at least one post succeeded
+    const success = !!(results.mainFeed?.data?.id || results.community?.data?.id);
+    
+    if (success) {
+      // Increment quota after successful tweet
+      await incrementQuota(supabase);
+    }
     
     return new Response(JSON.stringify({ 
-      success: true, 
-      tweet_id: result.data?.id,
-      tweet_text: tweetText 
+      success,
+      tweet_id: results.mainFeed?.data?.id,
+      community_tweet_id: results.community?.data?.id,
+      tweet_text: tweetText,
+      posted_to: {
+        main_feed: !!results.mainFeed?.data?.id,
+        community: !!results.community?.data?.id
+      }
     }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
