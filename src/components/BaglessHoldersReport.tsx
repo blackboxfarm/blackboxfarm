@@ -1635,8 +1635,8 @@ export function BaglessHoldersReport({ initialToken }: BaglessHoldersReportProps
                 </Card>
               </div>
 
-              {/* Sediment Layer Chart - Hidden */}
-              <div className="hidden mb-4 md:mb-6">
+              {/* Sediment Layer Chart */}
+              <div className="mb-4 md:mb-6">
                 <h3 className="text-base md:text-lg font-semibold mb-3 md:mb-4">Wallet Distribution (Sediment Layers)</h3>
                 
                 {/* Chart - Full width with Market Cap Y-axis */}
