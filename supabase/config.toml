@@ -372,3 +372,6 @@ verify_jwt = false
 
 [functions.x-community-enricher]
 verify_jwt = false
+
+[functions.flipit-backfill-tracking]
+verify_jwt = false

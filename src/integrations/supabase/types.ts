@@ -2783,6 +2783,7 @@ export type Database = {
           token_mint: string
           token_name: string | null
           token_symbol: string | null
+          tracking_locked: boolean | null
           twitter_url: string | null
           updated_at: string | null
           user_id: string | null
@@ -2856,6 +2857,7 @@ export type Database = {
           token_mint: string
           token_name?: string | null
           token_symbol?: string | null
+          tracking_locked?: boolean | null
           twitter_url?: string | null
           updated_at?: string | null
           user_id?: string | null
@@ -2929,6 +2931,7 @@ export type Database = {
           token_mint?: string
           token_name?: string | null
           token_symbol?: string | null
+          tracking_locked?: boolean | null
           twitter_url?: string | null
           updated_at?: string | null
           user_id?: string | null

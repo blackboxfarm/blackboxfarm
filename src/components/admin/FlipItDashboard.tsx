@@ -12,7 +12,7 @@ import { Separator } from '@/components/ui/separator';
 import { Switch } from '@/components/ui/switch';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
-import { Flame, RefreshCw, TrendingUp, DollarSign, Wallet, Clock, CheckCircle2, XCircle, Loader2, Plus, Copy, ArrowUpRight, Key, Settings, Zap, Activity, Radio, Pencil, ChevronDown, Coins, Eye, EyeOff, RotateCcw, AlertTriangle, Twitter, Trash2, Globe, Send, Rocket, Megaphone, Users, Shield, ClipboardPaste, FlaskConical } from 'lucide-react';
+import { Flame, RefreshCw, TrendingUp, DollarSign, Wallet, Clock, CheckCircle2, XCircle, Loader2, Plus, Copy, ArrowUpRight, Key, Settings, Zap, Activity, Radio, Pencil, ChevronDown, Coins, Eye, EyeOff, RotateCcw, AlertTriangle, Twitter, Trash2, Globe, Send, Rocket, Megaphone, Users, Shield, ClipboardPaste, FlaskConical, Lock, LockOpen } from 'lucide-react';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { useSolPrice } from '@/hooks/useSolPrice';
 import { useHolderQualityCheck } from '@/hooks/useHolderQualityCheck';
@@ -96,6 +96,8 @@ interface FlipPosition {
   dev_trust_rating: 'unknown' | 'concern' | 'danger' | 'good' | null;
   // Creator wallet for cross-referencing
   creator_wallet: string | null;
+  // Tracking lock - when true, triggers data capture
+  tracking_locked: boolean | null;
 }
 
 interface SuperAdminWallet {
@@ -2019,14 +2021,18 @@ export function FlipItDashboard() {
             linked_x_communities: communityId ? [communityId] : []
           }, { onConflict: 'entry_type,identifier' });
           
-          // Trigger team detection via blacklist-enricher
+        // Trigger team detection via blacklist-enricher with correct params
           supabase.functions.invoke('blacklist-enricher', {
             body: {
-              walletAddress: creatorWallet,
-              tokenMint,
-              twitterHandle,
-              xCommunityId: communityId,
-              riskLevel
+              detect_team: true,
+              identifiers: {
+                dev_wallets: creatorWallet ? [creatorWallet] : [],
+                twitter_accounts: twitterHandle ? [twitterHandle] : [],
+                token_mints: [tokenMint],
+                x_community_ids: communityId ? [communityId] : []
+              },
+              risk_level: riskLevel,
+              linked_token_mint: tokenMint
             }
           }).catch(err => console.warn('Team detection failed:', err));
         }
@@ -2101,6 +2107,253 @@ export function FlipItDashboard() {
     } catch (err: any) {
       console.error('Failed to update trust rating:', err);
       toast.error(err.message || 'Failed to update rating');
+    }
+  };
+
+  // Handle toggling the tracking lock - when locked, captures all data to tracking systems
+  const handleToggleTrackingLock = async (position: FlipPosition) => {
+    const newLockedState = !position.tracking_locked;
+    
+    try {
+      // Update the lock state in DB
+      await supabase
+        .from('flip_positions')
+        .update({ tracking_locked: newLockedState })
+        .eq('id', position.id);
+      
+      // Update local state immediately
+      setPositions(prev => prev.map(p => 
+        p.id === position.id ? { ...p, tracking_locked: newLockedState } : p
+      ));
+      
+      if (newLockedState) {
+        // LOCKED - trigger full data capture
+        toast.info('🔒 Capturing data to tracking system...');
+        
+        const tokenMint = position.token_mint;
+        const twitterUrl = position.twitter_url;
+        const websiteUrl = position.website_url;
+        const telegramUrl = position.telegram_url;
+        const rating = position.dev_trust_rating || 'unknown';
+        
+        // Extract identifiers
+        const twitterType = twitterUrl ? detectTwitterType(twitterUrl) : null;
+        const communityId = twitterType === 'community' && twitterUrl 
+          ? extractCommunityId(twitterUrl) 
+          : null;
+        
+        function extractTwitterHandle(url: string): string | null {
+          if (url.includes('/communities/')) return null;
+          const match = url.match(/(?:twitter\.com|x\.com)\/([^/?]+)/i);
+          return match ? match[1].toLowerCase() : null;
+        }
+        
+        const twitterHandle = twitterType === 'account' && twitterUrl
+          ? extractTwitterHandle(twitterUrl)
+          : null;
+        
+        // Get creator wallet if not present
+        let creatorWallet = position.creator_wallet;
+        let launchpadPlatform: string | null = null;
+        
+        if (!creatorWallet) {
+          try {
+            const { data: creatorData } = await supabase.functions.invoke('solscan-creator-lookup', {
+              body: { tokenMint }
+            });
+            if (creatorData?.creatorWallet) {
+              creatorWallet = creatorData.creatorWallet;
+              
+              // Update position with creator wallet
+              await supabase
+                .from("flip_positions")
+                .update({ creator_wallet: creatorWallet })
+                .eq("id", position.id);
+              
+              setPositions(prev => prev.map(p => 
+                p.id === position.id ? { ...p, creator_wallet: creatorWallet } : p
+              ));
+            }
+            if (creatorData?.launchpad) {
+              launchpadPlatform = creatorData.launchpad;
+            }
+          } catch (err) {
+            console.warn('Failed to fetch creator wallet:', err);
+          }
+        }
+        
+        // Add to appropriate list based on current rating
+        const riskLevel = rating === 'danger' ? 'high' : rating === 'concern' ? 'medium' : 'low';
+        
+        if (rating === 'danger' || rating === 'concern') {
+          await supabase.from('pumpfun_blacklist').upsert({
+            entry_type: 'token_mint',
+            identifier: tokenMint,
+            risk_level: riskLevel,
+            blacklist_reason: `Locked from FlipIt - rated ${rating.toUpperCase()}`,
+            source: 'flipit_lock',
+            tags: ['locked', rating],
+            linked_twitter: twitterHandle ? [twitterHandle] : [],
+            linked_websites: websiteUrl ? [websiteUrl] : [],
+            linked_telegram: telegramUrl ? [telegramUrl] : [],
+            linked_dev_wallets: creatorWallet ? [creatorWallet] : [],
+            linked_x_communities: communityId ? [communityId] : []
+          }, { onConflict: 'entry_type,identifier' });
+          
+          if (creatorWallet) {
+            await supabase.from('pumpfun_blacklist').upsert({
+              entry_type: 'dev_wallet',
+              identifier: creatorWallet,
+              risk_level: riskLevel,
+              blacklist_reason: `Developer of ${position.token_symbol || tokenMint.slice(0, 8)} - locked as ${rating.toUpperCase()}`,
+              source: 'flipit_lock',
+              tags: ['locked', rating, 'dev_wallet'],
+              linked_token_mints: [tokenMint],
+              linked_twitter: twitterHandle ? [twitterHandle] : [],
+              linked_x_communities: communityId ? [communityId] : []
+            }, { onConflict: 'entry_type,identifier' });
+          }
+        } else if (rating === 'good') {
+          await supabase.from('pumpfun_whitelist').upsert({
+            entry_type: 'token_mint',
+            identifier: tokenMint,
+            trust_level: 'high',
+            whitelist_reason: 'Locked from FlipIt - rated GOOD',
+            source: 'flipit_lock',
+            tags: ['locked', 'trusted'],
+            linked_twitter: twitterHandle ? [twitterHandle] : [],
+            linked_websites: websiteUrl ? [websiteUrl] : [],
+            linked_telegram: telegramUrl ? [telegramUrl] : [],
+            linked_dev_wallets: creatorWallet ? [creatorWallet] : []
+          }, { onConflict: 'entry_type,identifier' });
+          
+          if (creatorWallet) {
+            await supabase.from('pumpfun_whitelist').upsert({
+              entry_type: 'dev_wallet',
+              identifier: creatorWallet,
+              trust_level: 'high',
+              whitelist_reason: `Trusted developer of ${position.token_symbol || tokenMint.slice(0, 8)}`,
+              source: 'flipit_lock',
+              tags: ['locked', 'trusted', 'dev_wallet'],
+              linked_token_mints: [tokenMint],
+              linked_twitter: twitterHandle ? [twitterHandle] : []
+            }, { onConflict: 'entry_type,identifier' });
+          }
+        } else {
+          // unknown - add to neutral
+          await supabase.from('pumpfun_neutrallist').upsert({
+            entry_type: 'token_mint',
+            identifier: tokenMint,
+            trust_level: 'unreviewed',
+            neutrallist_reason: 'Locked from FlipIt - unrated',
+            source: 'flipit_lock',
+            tags: ['locked', 'pending_review'],
+            linked_twitter: twitterHandle ? [twitterHandle] : [],
+            linked_websites: websiteUrl ? [websiteUrl] : [],
+            linked_telegram: telegramUrl ? [telegramUrl] : [],
+            linked_dev_wallets: creatorWallet ? [creatorWallet] : []
+          }, { onConflict: 'entry_type,identifier' });
+          
+          if (creatorWallet) {
+            await supabase.from('pumpfun_neutrallist').upsert({
+              entry_type: 'dev_wallet',
+              identifier: creatorWallet,
+              trust_level: 'unreviewed',
+              neutrallist_reason: `Developer of ${position.token_symbol || tokenMint.slice(0, 8)} - unrated`,
+              source: 'flipit_lock',
+              tags: ['locked', 'pending_review', 'dev_wallet'],
+              linked_token_mints: [tokenMint],
+              linked_twitter: twitterHandle ? [twitterHandle] : []
+            }, { onConflict: 'entry_type,identifier' });
+          }
+        }
+        
+        // Trigger X community enricher if applicable
+        if (twitterType === 'community' && twitterUrl) {
+          supabase.functions.invoke('x-community-enricher', {
+            body: { 
+              communityUrl: twitterUrl,
+              linkedTokenMint: tokenMint,
+              linkedCreatorWallet: creatorWallet
+            }
+          }).catch(err => console.warn('X Community enricher failed:', err));
+        }
+        
+        // Trigger team detection
+        if (creatorWallet || twitterHandle || communityId) {
+          supabase.functions.invoke('blacklist-enricher', {
+            body: {
+              detect_team: true,
+              identifiers: {
+                dev_wallets: creatorWallet ? [creatorWallet] : [],
+                twitter_accounts: twitterHandle ? [twitterHandle] : [],
+                token_mints: [tokenMint],
+                x_community_ids: communityId ? [communityId] : []
+              },
+              risk_level: riskLevel,
+              linked_token_mint: tokenMint
+            }
+          }).catch(err => console.warn('Team detection failed:', err));
+        }
+        
+        // Update launchpad creator profile if we have the info
+        if (creatorWallet && launchpadPlatform) {
+          const creatorProfileData: any = {
+            platform: launchpadPlatform,
+            creator_wallet: creatorWallet,
+            is_blacklisted: rating === 'danger' || rating === 'concern',
+            is_whitelisted: rating === 'good',
+            risk_notes: `Locked as ${rating.toUpperCase()} via FlipIt for token ${position.token_symbol || tokenMint.slice(0, 8)}`
+          };
+          
+          if (twitterHandle) {
+            creatorProfileData.linked_x_account = twitterHandle;
+          }
+          
+          const { data: existingCreator } = await supabase
+            .from('launchpad_creator_profiles')
+            .select('id, tokens_created, linked_token_mints')
+            .eq('platform', launchpadPlatform)
+            .eq('creator_wallet', creatorWallet)
+            .maybeSingle();
+          
+          if (existingCreator) {
+            const linkedMints = (existingCreator.linked_token_mints as string[]) || [];
+            if (!linkedMints.includes(tokenMint)) {
+              linkedMints.push(tokenMint);
+            }
+            await supabase
+              .from('launchpad_creator_profiles')
+              .update({
+                ...creatorProfileData,
+                tokens_created: (existingCreator.tokens_created || 0) + (linkedMints.length > (existingCreator.linked_token_mints as string[])?.length ? 1 : 0),
+                linked_token_mints: linkedMints
+              })
+              .eq('id', existingCreator.id);
+          } else {
+            await supabase
+              .from('launchpad_creator_profiles')
+              .insert({
+                ...creatorProfileData,
+                tokens_created: 1,
+                linked_token_mints: [tokenMint],
+                tokens_rugged: rating === 'danger' ? 1 : 0,
+                tokens_graduated: 0
+              });
+          }
+        }
+        
+        const walletInfo = creatorWallet ? ` | Dev: ${creatorWallet.slice(0, 6)}...` : '';
+        const listName = rating === 'danger' || rating === 'concern' ? 'blacklist' : rating === 'good' ? 'whitelist' : 'neutrallist';
+        toast.success(`🔒 Locked! Added to ${listName}${walletInfo}`);
+        
+      } else {
+        toast.info('🔓 Unlocked - no further tracking for this position');
+      }
+      
+    } catch (err: any) {
+      console.error('Failed to toggle tracking lock:', err);
+      toast.error(err.message || 'Failed to toggle lock');
     }
   };
 
@@ -3503,22 +3756,33 @@ export function FlipItDashboard() {
                       </TableCell>
                       {/* Dev Trust Rating - 4 cycle button */}
                       <TableCell className="px-2 py-1">
-                        <Button
-                          size="sm"
-                          className={`h-6 px-2 text-[10px] font-bold transition-colors ${
-                            position.dev_trust_rating === 'good' 
-                              ? 'bg-green-500 hover:bg-green-600 text-white' 
-                              : position.dev_trust_rating === 'danger' 
-                                ? 'bg-red-600 hover:bg-red-700 text-white' 
-                                : position.dev_trust_rating === 'concern' 
-                                  ? 'bg-orange-500 hover:bg-orange-600 text-white' 
-                                  : 'bg-yellow-500 hover:bg-yellow-600 text-black'
-                          }`}
-                          onClick={() => handleCycleTrustRating(position)}
-                          title="Click to cycle: UNKNOWN → CONCERN → DANGER → GOOD"
-                        >
-                          {(position.dev_trust_rating || 'unknown').toUpperCase()}
-                        </Button>
+                        <div className="flex items-center gap-1">
+                          <Button
+                            size="sm"
+                            className={`h-6 px-2 text-[10px] font-bold transition-colors ${
+                              position.dev_trust_rating === 'good' 
+                                ? 'bg-green-500 hover:bg-green-600 text-white' 
+                                : position.dev_trust_rating === 'danger' 
+                                  ? 'bg-red-600 hover:bg-red-700 text-white' 
+                                  : position.dev_trust_rating === 'concern' 
+                                    ? 'bg-orange-500 hover:bg-orange-600 text-white' 
+                                    : 'bg-yellow-500 hover:bg-yellow-600 text-black'
+                            }`}
+                            onClick={() => handleCycleTrustRating(position)}
+                            title="Click to cycle: UNKNOWN → CONCERN → DANGER → GOOD"
+                          >
+                            {(position.dev_trust_rating || 'unknown').toUpperCase()}
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant={position.tracking_locked ? "default" : "outline"}
+                            className={`h-6 w-6 p-0 ${position.tracking_locked ? 'bg-purple-600 hover:bg-purple-700' : ''}`}
+                            onClick={() => handleToggleTrackingLock(position)}
+                            title={position.tracking_locked ? "Locked - data captured to tracking system" : "Click to lock and capture data"}
+                          >
+                            {position.tracking_locked ? <Lock className="h-3 w-3" /> : <LockOpen className="h-3 w-3" />}
+                          </Button>
+                        </div>
                       </TableCell>
                       {/* Moonbag Toggle */}
                       <TableCell className="px-2 py-1 text-center">
