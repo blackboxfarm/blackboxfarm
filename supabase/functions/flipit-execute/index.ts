@@ -729,53 +729,17 @@ serve(async (req) => {
       }
 
       // ========================================================
-      // PRICE IMPACT GUARD: Pre-trade validation (max 10% deviation)
+      // PRICE IMPACT GUARD: DISABLED - Slippage protection handles this
       // ========================================================
-      const MAX_PRICE_DEVIATION_PCT = 10; // Reject if execution price > 10% above quoted price
-      
-      try {
-        // Get a quote to see expected output
-        const quoteSolPrice = await fetchSolPrice();
-        const quoteBuyAmountSol = (buyAmountUsd || 4) / quoteSolPrice;
-        const quoteLamports = Math.floor(quoteBuyAmountSol * 1_000_000_000);
-        
-        const quoteUrl = `https://transaction-v1.raydium.io/compute/swap-base-in?inputMint=So11111111111111111111111111111111111111112&outputMint=${tokenMint}&amount=${quoteLamports}&slippageBps=${effectiveSlippage}&txVersion=V0`;
-        
-        console.log("Fetching pre-trade quote for price impact check...");
-        const quoteRes = await fetch(quoteUrl, { signal: AbortSignal.timeout(5000) });
-        
-        if (quoteRes.ok) {
-          const quoteData = await quoteRes.json();
-          const expectedOutput = quoteData?.data?.outputAmount ?? quoteData?.outputAmount;
-          
-          if (expectedOutput && Number(expectedOutput) > 0) {
-            // Calculate implied execution price from quote
-            const outputTokens = Number(expectedOutput);
-            // Assume 6 decimals for pump tokens, 9 for others
-            const decimals = tokenMint.toLowerCase().endsWith('pump') ? 6 : 9;
-            const outputAmount = outputTokens / Math.pow(10, decimals);
-            const impliedPrice = (buyAmountUsd || 4) / outputAmount;
-            
-            // Calculate deviation from our displayed price
-            const deviation = ((impliedPrice - currentPrice) / currentPrice) * 100;
-            
-            console.log(`Price impact check: Quoted=$${currentPrice.toFixed(10)}, Implied=$${impliedPrice.toFixed(10)}, Deviation=${deviation.toFixed(2)}%`);
-            
-            if (deviation > MAX_PRICE_DEVIATION_PCT) {
-              // Rollback the pending position
-              await supabase.from("flip_positions").delete().eq("id", position.id);
-              
-              return bad(`[PRICE_IMPACT] Buy rejected: execution price $${impliedPrice.toFixed(8)} is ${deviation.toFixed(1)}% above quoted price $${currentPrice.toFixed(8)}. Max allowed: ${MAX_PRICE_DEVIATION_PCT}%. Try again or reduce position size.`);
-            }
-          } else {
-            console.log("Quote returned no output amount, skipping price impact check (new token or no liquidity)");
-          }
-        } else {
-          console.log("Raydium quote failed, skipping price impact check (will rely on slippage)");
-        }
-      } catch (quoteErr) {
-        console.warn("Price impact check failed, proceeding with slippage protection only:", (quoteErr as Error).message);
-      }
+      // The price impact check was causing false rejections because:
+      // 1. Token decimals vary and can't be reliably determined pre-trade
+      // 2. Pump.fun bonding curve prices don't match Raydium quotes
+      // 3. For new tokens, price discovery is inherently volatile
+      // 
+      // Instead, we rely on:
+      // - Raydium swap's built-in slippage protection (effectiveSlippage bps)
+      // - Transaction simulation to catch bad trades before execution
+      console.log(`Skipping price impact pre-check, relying on ${effectiveSlippage}bps slippage protection`);
 
       // Execute the buy via raydium-swap
       try {
