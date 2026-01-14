@@ -815,12 +815,16 @@ serve(async (req) => {
                 );
                 
                 if (tokenOutput?.rawTokenAmount?.tokenAmount) {
-                  quantityTokens = tokenOutput.rawTokenAmount.tokenAmount;
-                  console.log("Got exact token quantity from swap event:", quantityTokens);
+                  // Apply decimals to get human-readable amount
+                  const rawAmount = BigInt(tokenOutput.rawTokenAmount.tokenAmount);
+                  const decimals = tokenOutput.rawTokenAmount.decimals ?? 9;
+                  const humanAmount = Number(rawAmount) / Math.pow(10, decimals);
+                  quantityTokens = String(humanAmount);
+                  console.log(`Got token quantity from swap event: raw=${rawAmount}, decimals=${decimals}, human=${humanAmount}`);
                 } else if (tokenOutput?.tokenAmount) {
-                  // Some responses use tokenAmount directly
+                  // tokenAmount is already human-readable
                   quantityTokens = String(tokenOutput.tokenAmount);
-                  console.log("Got token quantity from tokenAmount:", quantityTokens);
+                  console.log("Got token quantity from tokenAmount (human-readable):", quantityTokens);
                 }
               }
               
@@ -832,8 +836,9 @@ serve(async (req) => {
                 );
                 
                 if (inboundTransfer?.tokenAmount) {
+                  // tokenAmount in tokenTransfers is human-readable
                   quantityTokens = String(inboundTransfer.tokenAmount);
-                  console.log("Got token quantity from tokenTransfers:", quantityTokens);
+                  console.log("Got token quantity from tokenTransfers (human-readable):", quantityTokens);
                 }
               }
               
@@ -844,11 +849,14 @@ serve(async (req) => {
                     (c: any) => c.mint === tokenMint && c.userAccount === wallet.pubkey
                   );
                   if (tokenChange?.rawTokenAmount?.tokenAmount) {
-                    const amount = BigInt(tokenChange.rawTokenAmount.tokenAmount);
+                    const rawAmount = BigInt(tokenChange.rawTokenAmount.tokenAmount);
                     // Only use positive changes (tokens received)
-                    if (amount > 0n) {
-                      quantityTokens = amount.toString();
-                      console.log("Got token quantity from accountData balance change:", quantityTokens);
+                    if (rawAmount > 0n) {
+                      // Apply decimals to get human-readable amount
+                      const decimals = tokenChange.rawTokenAmount.decimals ?? 9;
+                      const humanAmount = Number(rawAmount) / Math.pow(10, decimals);
+                      quantityTokens = String(humanAmount);
+                      console.log(`Got token quantity from accountData: raw=${rawAmount}, decimals=${decimals}, human=${humanAmount}`);
                       break;
                     }
                   }
@@ -888,18 +896,20 @@ serve(async (req) => {
               if (accounts.length > 0) {
                 const tokenAmount = accounts[0]?.account?.data?.parsed?.info?.tokenAmount;
                 if (tokenAmount) {
-                  const postBuyBalance = BigInt(tokenAmount.amount);
-                  const preBuyBalance = BigInt(preBuyTokenBalance || "0");
-                  const tokensReceived = postBuyBalance - preBuyBalance;
+                  // Use uiAmount for human-readable values
+                  const postBuyHuman = tokenAmount.uiAmount ?? (Number(tokenAmount.amount) / Math.pow(10, tokenAmount.decimals || 9));
+                  const preBuyHuman = Number(preBuyTokenBalance || "0") / Math.pow(10, tokenAmount.decimals || 9);
+                  const tokensReceived = postBuyHuman - preBuyHuman;
                   
                   console.log("Delta fallback:", {
-                    pre: preBuyBalance.toString(),
-                    post: postBuyBalance.toString(),
-                    delta: tokensReceived.toString()
+                    pre: preBuyHuman,
+                    post: postBuyHuman,
+                    delta: tokensReceived,
+                    decimals: tokenAmount.decimals
                   });
                   
-                  if (tokensReceived > 0n) {
-                    quantityTokens = tokensReceived.toString();
+                  if (tokensReceived > 0) {
+                    quantityTokens = String(tokensReceived);
                   }
                 }
               }
@@ -952,7 +962,7 @@ serve(async (req) => {
                 }
                 
                 await supabase.from("flip_positions").update({
-                  quantity_tokens: buyData.tokensReceivedRaw,
+                  quantity_tokens: buyData.tokensReceived, // Use human-readable, NOT raw lamports
                   buy_amount_sol: buyData.solSpent,
                   buy_amount_usd: verifiedBuyAmountUsd,
                   buy_price_usd: verifiedBuyPriceUsd,
