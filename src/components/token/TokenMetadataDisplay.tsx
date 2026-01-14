@@ -53,6 +53,22 @@ interface PriceInfo {
   dexId?: string;
 }
 
+interface DexStatus {
+  hasDexPaid: boolean;
+  hasCTO: boolean;
+  activeBoosts: number;
+  hasAds: boolean;
+}
+
+interface CreatorInfo {
+  wallet?: string;
+  balance?: number;
+  balanceUsd?: number;
+  bondingCurveProgress?: number;
+  xAccount?: string;
+  feeSplit?: { wallet1?: string; wallet2?: string; splitPercent?: number };
+}
+
 interface TokenMetadataDisplayProps {
   metadata: TokenMetadata;
   priceInfo: PriceInfo | null;
@@ -65,6 +81,8 @@ interface TokenMetadataDisplayProps {
   twitterUrl?: string;
   telegramUrl?: string;
   websiteUrl?: string;
+  dexStatus?: DexStatus;
+  creatorInfo?: CreatorInfo;
 }
 
 const LAUNCHPAD_LOGOS: Record<string, string> = {
@@ -88,7 +106,9 @@ export function TokenMetadataDisplay({
   tokenAge,
   twitterUrl,
   telegramUrl,
-  websiteUrl
+  websiteUrl,
+  dexStatus,
+  creatorInfo
 }: TokenMetadataDisplayProps) {
   if (isLoading) {
     return <TokenMetadataSkeleton compact={compact} />;
@@ -242,11 +262,95 @@ export function TokenMetadataDisplay({
                 </Badge>
               )}
 
+              {/* DexScreener Status Badges */}
+              {dexStatus && (dexStatus.hasDexPaid || dexStatus.hasCTO || dexStatus.activeBoosts > 0) && (
+                <div className="flex items-center gap-1.5 flex-wrap">
+                  {dexStatus.hasDexPaid && (
+                    <Badge className="text-[10px] px-1.5 py-0.5 bg-green-600 hover:bg-green-500 text-white">
+                      DEX PAID
+                    </Badge>
+                  )}
+                  {dexStatus.hasCTO && (
+                    <Badge className="text-[10px] px-1.5 py-0.5 bg-yellow-600 hover:bg-yellow-500 text-white">
+                      CTO
+                    </Badge>
+                  )}
+                  {dexStatus.activeBoosts > 0 && (
+                    <Badge className="text-[10px] px-1.5 py-0.5 bg-orange-500 hover:bg-orange-400 text-white">
+                      🚀 x{dexStatus.activeBoosts}
+                    </Badge>
+                  )}
+                </div>
+              )}
+
               {creatorWallet && (
                 <DeveloperRiskBadge creatorWallet={creatorWallet} showDetails />
               )}
             </div>
           </div>
+
+          {/* Creator/Dev Info Section */}
+          {creatorInfo?.wallet && (
+            <div className="p-3 bg-muted/30 rounded-lg border border-border/50 space-y-2">
+              <p className="text-xs text-muted-foreground uppercase tracking-wide flex items-center gap-2">
+                👨‍💻 Creator / Dev Wallet
+                {creatorInfo.bondingCurveProgress !== undefined && creatorInfo.bondingCurveProgress < 100 && (
+                  <Badge variant="outline" className="text-[10px] px-1.5">
+                    On Curve: {creatorInfo.bondingCurveProgress.toFixed(1)}%
+                  </Badge>
+                )}
+                {creatorInfo.bondingCurveProgress !== undefined && creatorInfo.bondingCurveProgress >= 100 && (
+                  <Badge variant="outline" className="text-[10px] px-1.5 bg-green-500/20 text-green-600">
+                    Graduated
+                  </Badge>
+                )}
+              </p>
+              <div className="flex items-center gap-2 flex-wrap">
+                <a
+                  href={`https://solscan.io/account/${creatorInfo.wallet}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-xs font-mono text-primary hover:underline"
+                >
+                  {creatorInfo.wallet.slice(0, 6)}...{creatorInfo.wallet.slice(-6)}
+                </a>
+                {creatorInfo.xAccount && (
+                  <a
+                    href={creatorInfo.xAccount}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex items-center gap-1 text-blue-400 hover:text-blue-300"
+                    title="Creator's X/Twitter"
+                  >
+                    <Twitter className="h-3.5 w-3.5" />
+                  </a>
+                )}
+              </div>
+              {creatorInfo.feeSplit && (
+                <div className="text-xs text-muted-foreground">
+                  <span className="text-yellow-500">⚠️ Fee Split:</span>{' '}
+                  <a
+                    href={`https://solscan.io/account/${creatorInfo.feeSplit.wallet1}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-primary hover:underline font-mono"
+                  >
+                    {creatorInfo.feeSplit.wallet1?.slice(0, 4)}...
+                  </a>
+                  {' '}({creatorInfo.feeSplit.splitPercent || 50}%) / {' '}
+                  <a
+                    href={`https://solscan.io/account/${creatorInfo.feeSplit.wallet2}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-primary hover:underline font-mono"
+                  >
+                    {creatorInfo.feeSplit.wallet2?.slice(0, 4)}...
+                  </a>
+                  {' '}({100 - (creatorInfo.feeSplit.splitPercent || 50)}%)
+                </div>
+              )}
+            </div>
+          )}
 
           {/* Token Address */}
           <div className="space-y-1">
