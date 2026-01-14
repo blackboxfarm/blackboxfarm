@@ -35,6 +35,33 @@ interface EnrichmentResult {
   cex_sources: Array<{ cex: string; wallet: string; amount: number }>;
   cross_linked_entries: string[];
   tags: string[];
+  detected_team_id?: string;
+  x_communities?: string[];
+}
+
+interface TeamIdentifiers {
+  wallets: string[];
+  twitter_accounts: string[];
+  x_communities: string[];
+  token_mints: string[];
+}
+
+// Generate a deterministic hash for team identification
+function generateTeamHash(identifiers: TeamIdentifiers): string {
+  const sorted = [
+    ...identifiers.wallets.sort(),
+    ...identifiers.twitter_accounts.sort(),
+    ...identifiers.x_communities.sort()
+  ].join('|');
+  
+  // Simple hash function
+  let hash = 0;
+  for (let i = 0; i < sorted.length; i++) {
+    const char = sorted.charCodeAt(i);
+    hash = ((hash << 5) - hash) + char;
+    hash = hash & hash;
+  }
+  return `team_${Math.abs(hash).toString(16)}`;
 }
 
 function delay(ms: number): Promise<void> {
@@ -185,6 +212,111 @@ async function getTokenCreatorWallet(tokenMint: string, heliusApiKey: string): P
   }
 }
 
+// Detect or create a dev team based on shared identifiers
+async function detectOrCreateTeam(
+  supabase: any,
+  identifiers: TeamIdentifiers,
+  riskLevel: string = 'unknown',
+  linkedTokenMint?: string
+): Promise<string | null> {
+  try {
+    // Check if any member already belongs to a team
+    const allIdentifiers = [
+      ...identifiers.wallets,
+      ...identifiers.twitter_accounts
+    ];
+    
+    if (allIdentifiers.length < 2) {
+      console.log('Not enough identifiers for team detection');
+      return null;
+    }
+
+    // Search for existing teams with overlapping members
+    const { data: existingTeams } = await supabase
+      .from('dev_teams')
+      .select('*')
+      .or(`member_wallets.ov.{${identifiers.wallets.join(',')}},member_twitter_accounts.ov.{${identifiers.twitter_accounts.join(',')}}`)
+      .eq('is_active', true)
+      .limit(5);
+
+    if (existingTeams && existingTeams.length > 0) {
+      // Merge into the first matching team
+      const team = existingTeams[0];
+      console.log(`Found existing team: ${team.id}, merging new members`);
+      
+      const mergedWallets = [...new Set([...team.member_wallets, ...identifiers.wallets])];
+      const mergedTwitter = [...new Set([...team.member_twitter_accounts, ...identifiers.twitter_accounts])];
+      const mergedCommunities = [...new Set([...(team.linked_x_communities || []), ...identifiers.x_communities])];
+      const mergedTokens = [...new Set([...(team.linked_token_mints || []), ...identifiers.token_mints])];
+      
+      if (linkedTokenMint && !mergedTokens.includes(linkedTokenMint)) {
+        mergedTokens.push(linkedTokenMint);
+      }
+      
+      // Update risk level if new one is worse
+      let newRiskLevel = team.risk_level;
+      if (riskLevel === 'high' || (riskLevel === 'medium' && team.risk_level !== 'high')) {
+        newRiskLevel = riskLevel;
+      }
+      
+      await supabase.from('dev_teams').update({
+        member_wallets: mergedWallets,
+        member_twitter_accounts: mergedTwitter,
+        linked_x_communities: mergedCommunities,
+        linked_token_mints: mergedTokens,
+        tokens_created: mergedTokens.length,
+        risk_level: newRiskLevel,
+        updated_at: new Date().toISOString()
+      }).eq('id', team.id);
+      
+      return team.id;
+    }
+
+    // Create new team
+    const teamHash = generateTeamHash(identifiers);
+    
+    // Check if team with this hash already exists
+    const { data: hashMatch } = await supabase
+      .from('dev_teams')
+      .select('id')
+      .eq('team_hash', teamHash)
+      .single();
+    
+    if (hashMatch) {
+      return hashMatch.id;
+    }
+    
+    const tokenMints = linkedTokenMint ? [linkedTokenMint, ...identifiers.token_mints] : identifiers.token_mints;
+    
+    const { data: newTeam, error: teamError } = await supabase
+      .from('dev_teams')
+      .insert({
+        team_hash: teamHash,
+        member_wallets: identifiers.wallets,
+        member_twitter_accounts: identifiers.twitter_accounts,
+        linked_x_communities: identifiers.x_communities,
+        linked_token_mints: tokenMints,
+        tokens_created: tokenMints.length,
+        risk_level: riskLevel,
+        source: 'auto_detected',
+        tags: ['auto_detected']
+      })
+      .select()
+      .single();
+    
+    if (teamError) {
+      console.error('Failed to create team:', teamError);
+      return null;
+    }
+    
+    console.log(`Created new team: ${newTeam.id}`);
+    return newTeam.id;
+  } catch (error) {
+    console.error('Team detection error:', error);
+    return null;
+  }
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
@@ -196,7 +328,31 @@ Deno.serve(async (req) => {
   const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
   try {
-    const { entry_id, entry_type, identifier, force_reenrich } = await req.json();
+    const body = await req.json();
+    const { entry_id, entry_type, identifier, force_reenrich, detect_team, identifiers: providedIdentifiers } = body;
+
+    // Handle team detection mode (called from x-community-enricher)
+    if (detect_team && providedIdentifiers) {
+      console.log('Team detection mode with provided identifiers');
+      const teamId = await detectOrCreateTeam(
+        supabase,
+        {
+          wallets: providedIdentifiers.wallets || [],
+          twitter_accounts: providedIdentifiers.twitter_accounts || [],
+          x_communities: providedIdentifiers.x_communities || [],
+          token_mints: providedIdentifiers.token_mints || []
+        },
+        'unknown'
+      );
+      
+      return new Response(JSON.stringify({
+        success: true,
+        teamId,
+        mode: 'team_detection'
+      }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" }
+      });
+    }
 
     if (!entry_id || !identifier) {
       return new Response(
@@ -231,7 +387,8 @@ Deno.serve(async (req) => {
       funding_trace: null,
       cex_sources: [],
       cross_linked_entries: [],
-      tags: []
+      tags: [],
+      x_communities: []
     };
 
     // Enrich based on entry type
@@ -296,7 +453,7 @@ Deno.serve(async (req) => {
     // Cross-reference with existing blacklist entries
     const { data: existingEntries } = await supabase
       .from("pumpfun_blacklist")
-      .select("id, identifier, linked_wallets, linked_token_mints")
+      .select("id, identifier, linked_wallets, linked_token_mints, linked_twitter, risk_level")
       .neq("id", entry_id);
 
     if (existingEntries) {
@@ -315,6 +472,11 @@ Deno.serve(async (req) => {
         if (walletOverlap || tokenOverlap) {
           result.cross_linked_entries.push(entry.id);
           
+          // Collect twitter accounts from linked entries
+          if (entry.linked_twitter) {
+            result.linked_twitter.push(...entry.linked_twitter);
+          }
+          
           // Update the existing entry to link back
           const existingLinkedWallets = entry.linked_wallets || [];
           const newLinkedWallets = [...new Set([...existingLinkedWallets, identifier])];
@@ -331,7 +493,7 @@ Deno.serve(async (req) => {
     // Get current entry data to merge arrays properly
     const { data: currentEntry } = await supabase
       .from("pumpfun_blacklist")
-      .select("linked_wallets, linked_token_mints, linked_twitter, tags")
+      .select("linked_wallets, linked_token_mints, linked_twitter, tags, risk_level")
       .eq("id", entry_id)
       .single();
 
@@ -339,6 +501,28 @@ Deno.serve(async (req) => {
     const mergedWallets = [...new Set([...(currentEntry?.linked_wallets || []), ...result.linked_wallets])];
     const mergedTokens = [...new Set([...(currentEntry?.linked_token_mints || []), ...result.linked_token_mints])];
     const mergedTags = [...new Set([...(currentEntry?.tags || []), ...result.tags])];
+    const mergedTwitter = [...new Set([...(currentEntry?.linked_twitter || []), ...result.linked_twitter])];
+
+    // Team Detection: Try to detect or create a team based on linked identifiers
+    let detectedTeamId: string | null = null;
+    if (mergedWallets.length > 0 || mergedTwitter.length > 0) {
+      detectedTeamId = await detectOrCreateTeam(
+        supabase,
+        {
+          wallets: [identifier, ...mergedWallets].filter(w => w && w.length > 30), // Filter valid wallet addresses
+          twitter_accounts: mergedTwitter,
+          x_communities: result.x_communities || [],
+          token_mints: mergedTokens
+        },
+        currentEntry?.risk_level || 'unknown',
+        entry_type === 'token_mint' ? identifier : undefined
+      );
+      
+      if (detectedTeamId) {
+        result.detected_team_id = detectedTeamId;
+        result.tags.push('part_of_team');
+      }
+    }
 
     // Update the entry with enriched data
     const { error: updateError } = await supabase.from("pumpfun_blacklist").update({
@@ -349,10 +533,12 @@ Deno.serve(async (req) => {
       auto_discovered_links: {
         cex_sources: result.cex_sources,
         cross_linked_entries: result.cross_linked_entries,
+        detected_team_id: detectedTeamId,
         discovered_at: new Date().toISOString()
       },
       linked_wallets: mergedWallets.slice(0, 50), // Limit to 50
       linked_token_mints: mergedTokens.slice(0, 50),
+      linked_twitter: mergedTwitter.slice(0, 20),
       tags: mergedTags
     }).eq("id", entry_id);
 
@@ -365,6 +551,7 @@ Deno.serve(async (req) => {
     console.log(`- Discovered tokens: ${result.linked_token_mints.length}`);
     console.log(`- CEX sources: ${result.cex_sources.length}`);
     console.log(`- Cross-links: ${result.cross_linked_entries.length}`);
+    console.log(`- Detected team: ${detectedTeamId || 'none'}`);
 
     return new Response(JSON.stringify({
       success: true,
@@ -374,7 +561,8 @@ Deno.serve(async (req) => {
         tokens_discovered: result.linked_token_mints.length,
         cex_sources: result.cex_sources,
         cross_linked_entries: result.cross_linked_entries.length,
-        tags_added: result.tags
+        tags_added: result.tags,
+        detected_team_id: result.detected_team_id
       }
     }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" }
