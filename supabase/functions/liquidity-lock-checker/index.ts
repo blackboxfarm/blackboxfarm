@@ -1,4 +1,12 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
+import {
+  KNOWN_DEX_PROGRAMS,
+  BONDING_CURVE_PROGRAMS,
+  KNOWN_LP_WALLETS,
+  BURN_ADDRESSES,
+  detectLP,
+  detectLaunchpad,
+} from "../_shared/lp-detection.ts"
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -38,9 +46,16 @@ serve(async (req) => {
       dataQuality: 'unverified',
       actualData: {} as any,
       assumptions: [] as string[],
-      lpAccount: null as string | null, // Verified LP account address
-      lpSource: 'heuristic' as 'solscan' | 'dexscreener' | 'heuristic' // Source of LP detection
+      lpAccount: null as string | null,
+      lpSource: 'heuristic' as 'solscan' | 'dexscreener' | 'heuristic',
+      detectedPlatforms: [] as string[],
     };
+
+    // ============================================
+    // Collect all pool addresses from multiple sources
+    // ============================================
+    const allPoolAddresses: Set<string> = new Set();
+    const dexScreenerPairAddresses: Set<string> = new Set();
 
     // Method 0: Solscan-first LP detection (primary source)
     const SOLSCAN_API_KEY = Deno.env.get('SOLSCAN_API_KEY');
@@ -52,7 +67,7 @@ serve(async (req) => {
           'accept': 'application/json'
         };
 
-        // Get markets for this token
+        // Get ALL markets for this token
         const marketsResponse = await fetch(
           `https://pro-api.solscan.io/v2.0/token/markets?address=${tokenMint}`,
           { headers: solscanHeaders }
@@ -63,6 +78,13 @@ serve(async (req) => {
           console.log(`✅ Solscan markets found: ${marketsData?.data?.length || 0}`);
           
           if (marketsData?.data && marketsData.data.length > 0) {
+            // Add ALL pool addresses
+            for (const market of marketsData.data) {
+              if (market.pool_address) allPoolAddresses.add(market.pool_address);
+              if (market.market_id) allPoolAddresses.add(market.market_id);
+              if (market.lp_address) allPoolAddresses.add(market.lp_address);
+            }
+            
             // Pick highest liquidity market
             const topMarket = marketsData.data.reduce((prev: any, curr: any) => 
               (curr.liquidity_usd > prev.liquidity_usd) ? curr : prev
@@ -81,38 +103,50 @@ serve(async (req) => {
               const holdersData = await holdersResponse.json();
               const holders = holdersData?.data || [];
               
-              // Find AMM pool in holders (tagged with owner program matching known AMMs)
-              const knownAmmPrograms = [
-                '675kPX9MHTjS2zt1qfr1NYHuzeLXfQM9H24wFSUt1Mp8', // Raydium AMM v4
-                '6EF8rrecthR5Dkzon8Nwu78hRvfCKubJ14M5uBEwF6P', // Pump.fun
-                'LBUZKhRxPF3XUpBCjp4YzTKgLccjZhTSDM9YuVaPwxo', // Meteora
-              ];
+              // Find AMM pool in holders using shared constants
+              const allDexPrograms = [...Object.values(KNOWN_DEX_PROGRAMS), ...Object.values(BONDING_CURVE_PROGRAMS)];
 
-              const ammHolder = holders.find((h: any) => {
-                const ownerProgram = h.owner_program || h.owner;
-                return knownAmmPrograms.some(amm => ownerProgram?.includes(amm)) ||
-                       h.address === topMarket.pool_address ||
-                       h.address === topMarket.market_id;
-              });
-
-              if (ammHolder) {
-                result.lpAccount = ammHolder.address;
-                result.lpSource = 'solscan';
-                result.dataQuality = 'verified';
-                result.actualData.solscanLP = ammHolder;
-                console.log(`✅ [Solscan Verified] LP Account: ${result.lpAccount}`);
+              for (const holder of holders) {
+                const holderAddress = holder.address || holder.owner;
+                const ownerProgram = holder.owner_program || holder.owner || '';
                 
-                // Check if Solscan indicates locked liquidity
-                if (topMarket.lock_info || topMarket.is_locked) {
-                  result.isLocked = true;
-                  result.lockMechanism = 'solscan_verified';
-                  result.lockPercentage = topMarket.locked_percentage || 100;
-                  if (topMarket.lock_expiry) {
-                    result.lockExpiry = topMarket.lock_expiry;
+                const isPoolMatch = allPoolAddresses.has(holderAddress) ||
+                                    allDexPrograms.includes(ownerProgram);
+
+                if (isPoolMatch) {
+                  allPoolAddresses.add(holderAddress);
+                  
+                  if (!result.lpAccount) {
+                    result.lpAccount = holderAddress;
+                    result.lpSource = 'solscan';
+                    result.dataQuality = 'verified';
+                    result.actualData.solscanLP = holder;
+                    
+                    // Identify platform
+                    for (const [platform, programId] of Object.entries(KNOWN_DEX_PROGRAMS)) {
+                      if (ownerProgram === programId) {
+                        result.detectedPlatforms.push(platform);
+                        break;
+                      }
+                    }
+                    
+                    console.log(`✅ [Solscan Verified] LP Account: ${result.lpAccount}`);
                   }
-                  console.log(`🔒 [Solscan] Liquidity locked via ${result.lockMechanism}`);
+                  
+                  // Check if Solscan indicates locked liquidity
+                  if (topMarket.lock_info || topMarket.is_locked) {
+                    result.isLocked = true;
+                    result.lockMechanism = 'solscan_verified';
+                    result.lockPercentage = topMarket.locked_percentage || 100;
+                    if (topMarket.lock_expiry) {
+                      result.lockExpiry = topMarket.lock_expiry;
+                    }
+                    console.log(`🔒 [Solscan] Liquidity locked via ${result.lockMechanism}`);
+                  }
                 }
-              } else {
+              }
+              
+              if (!result.lpAccount) {
                 console.log('⚠️ No AMM holder found in Solscan top holders, will use fallback');
               }
             }
@@ -127,7 +161,7 @@ serve(async (req) => {
     }
 
     // Method 1: Get token info and DEX liquidity data from DexScreener
-    let dexPairs = [];
+    let dexPairs: any[] = [];
     try {
       console.log('📊 Fetching token info and liquidity data from DexScreener...');
       const dexResponse = await fetch(`https://api.dexscreener.com/latest/dex/tokens/${tokenMint}`);
@@ -145,11 +179,22 @@ serve(async (req) => {
           };
           result.dexInfo = pair.dexId || 'Unknown DEX';
           
+          // Detect launchpad
+          const launchpadInfo = detectLaunchpad(pair, tokenMint);
+          if (launchpadInfo.detected) {
+            result.detectedPlatforms.push(launchpadInfo.name);
+          }
+          
           console.log(`✅ Token info: ${result.tokenInfo.name} (${result.tokenInfo.symbol})`);
           console.log(`📊 Found ${dexPairs.length} DEX pairs`);
           
-          // Check DexScreener's liquidity lock information
+          // Add all pair addresses to pool detection
           for (const dexPair of dexPairs) {
+            if (dexPair.pairAddress) {
+              dexScreenerPairAddresses.add(dexPair.pairAddress);
+              allPoolAddresses.add(dexPair.pairAddress);
+            }
+            
             if (dexPair.liquidity?.usd) {
               console.log(`💧 ${dexPair.dexId} liquidity: $${dexPair.liquidity.usd.toLocaleString()}`);
               
@@ -178,8 +223,8 @@ serve(async (req) => {
         
         if (dexId === 'meteora') {
           console.log(`🌊 Meteora pool detected: ${pairAddress}`);
+          result.detectedPlatforms.push('Meteora');
           
-          // Get real Meteora pool data - NO ASSUMPTIONS
           try {
             const meteoraResponse = await fetch(`https://app.meteora.ag/dlmm-api/pair/${pairAddress}`);
             if (meteoraResponse.ok) {
@@ -198,7 +243,6 @@ serve(async (req) => {
                   result.isLocked = true;
                   result.dataQuality = 'verified';
                   
-                  // Try to get actual percentage if available in the data
                   if (meteoraData.pair_data.locked_percentage !== undefined) {
                     result.lockPercentage = meteoraData.pair_data.locked_percentage;
                   } else {
@@ -217,23 +261,16 @@ serve(async (req) => {
                 result.lockMechanism = 'meteora_no_lock_data';
                 result.dataQuality = 'failed';
                 result.assumptions.push('Meteora API returned data but no lock information found');
-                console.log(`❌ NO DATA: Meteora API response missing lock data`);
               }
-            } else {
-              result.error = `Meteora API failed with status ${meteoraResponse.status}`;
-              result.dataQuality = 'failed';
-              console.log(`❌ API FAILED: Meteora API returned ${meteoraResponse.status}`);
             }
           } catch (e) {
             result.error = `Meteora API error: ${e instanceof Error ? e.message : String(e)}`;
             result.dataQuality = 'failed';
-            console.log(`❌ ERROR: Failed to check Meteora: ${e instanceof Error ? e.message : String(e)}`);
           }
         } else if (dexId === 'raydium') {
           console.log(`💧 Raydium pool detected: ${pairAddress}`);
-          // Raydium pools can have burned LP tokens or time locks
-          // We'll check this more thoroughly in the LP analysis
           result.dexInfo = 'Raydium';
+          result.detectedPlatforms.push('Raydium');
         }
       }
       
@@ -250,7 +287,6 @@ serve(async (req) => {
         
         const rpcUrl = `https://rpc.helius.xyz/?api-key=${heliusApiKey}`;
         
-        // First, check for LP token accounts
         const response = await fetch(rpcUrl, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -285,85 +321,67 @@ serve(async (req) => {
           for (const account of accounts) {
             const balance = parseInt(account.account.data.parsed.info.tokenAmount.amount);
             const owner = account.account.data.parsed.info.owner;
+            const accountOwner = account.account.owner;
             
             totalSupply += balance;
             
-            // Enhanced burn address detection
-            const burnAddresses = [
-              '11111111111111111111111111111111', // System Program
-              'So11111111111111111111111111111111111111112', // Native SOL
-              '1nc1nerator11111111111111111111111111111111', // Incinerator
-              'TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA', // Token Program itself
-            ];
-            
-            // Known DEX program addresses for pool identification
-            const dexPrograms = [
-              '675kPX9MHTjS2zt1qfr1NYHuzeLXfQM9H24wFSUt1Mp8', // Raydium AMM
-              'EyGdBX4EHWvZhG8kEF39yvEPBHcEF2ZaKGrYdcBCTm6h', // Meteora
-              'DjVE6JNiYqPL2QXyCUUh8rNjHrbz9hXHNYt99MQ59qw1', // Orca
-              'CAMMCzo5YL8w4VFF8KVHrK22GGUsp5VTaW7grrKgrWqK', // Raydium CLMM
-            ];
-            
-            if (burnAddresses.includes(owner)) {
+            // Check burn addresses
+            if (BURN_ADDRESSES.has(owner)) {
               lockedAmount += balance;
               lpAccounts.push({ owner, balance, type: 'burned' });
               console.log(`🔥 Found burned tokens: ${balance} to ${owner}`);
-            } else if (dexPrograms.includes(owner)) {
-              // This is likely a pool contract holding liquidity
-              poolContracts.push({ owner, balance, type: 'pool_contract' });
-              console.log(`💧 Found pool contract: ${owner} with ${balance} tokens`);
-              
-              // For pool contracts, we assume they're locked unless proven otherwise
-              lockedAmount += balance;
-            } else if (balance > totalSupply * 0.05) { // Large holders (5%+)
-              lpAccounts.push({ owner, balance, type: 'large_holder' });
             }
-          }
-          
-          // Enhanced pool contract analysis
-          for (const pool of poolContracts) {
-            try {
-              // Get account info to determine the pool type
-              const accountInfoResponse = await fetch(rpcUrl, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                  jsonrpc: '2.0',
-                  id: 'account-info',
-                  method: 'getAccountInfo',
-                  params: [pool.owner, { encoding: 'base64' }]
-                })
-              });
+            
+            // Check known LP wallets
+            if (KNOWN_LP_WALLETS.has(owner)) {
+              lockedAmount += balance;
+              lpAccounts.push({ owner, balance, type: 'known_lp' });
+              console.log(`💧 Found known LP wallet: ${owner} with ${balance} tokens`);
+            }
+            
+            // Check if owned by DEX program
+            const allDexPrograms = Object.values(KNOWN_DEX_PROGRAMS);
+            if (allDexPrograms.includes(accountOwner)) {
+              poolContracts.push({ owner, balance, accountOwner, type: 'pool_contract' });
+              lockedAmount += balance;
               
-              if (accountInfoResponse.ok) {
-                const accountData = await accountInfoResponse.json();
-                if (accountData.result?.value?.owner) {
-                  const programId = accountData.result.value.owner;
-                  
-                  if (programId === '675kPX9MHTjS2zt1qfr1NYHuzeLXfQM9H24wFSUt1Mp8') {
-                    result.lockMechanism = 'raydium_pool';
-                    console.log(`💧 Raydium pool detected with ${pool.balance} tokens`);
-                  } else if (programId === 'EyGdBX4EHWvZhG8kEF39yvEPBHcEF2ZaKGrYdcBCTm6h') {
-                    result.lockMechanism = 'meteora_pool';
-                    result.isLocked = true; // Meteora pools are typically locked
-                    console.log(`🌊 Meteora pool detected with ${pool.balance} tokens`);
+              // Identify which platform
+              for (const [platform, programId] of Object.entries(KNOWN_DEX_PROGRAMS)) {
+                if (accountOwner === programId) {
+                  if (!result.detectedPlatforms.includes(platform)) {
+                    result.detectedPlatforms.push(platform);
                   }
+                  console.log(`💧 Found ${platform} pool contract: ${owner} with ${balance} tokens`);
+                  break;
                 }
               }
-            } catch (e) {
-              console.log(`⚠️ Failed to analyze pool ${pool.owner}:`, e instanceof Error ? e.message : String(e));
+            }
+            
+            // Check bonding curves
+            const bondingPrograms = Object.values(BONDING_CURVE_PROGRAMS);
+            if (bondingPrograms.includes(accountOwner)) {
+              poolContracts.push({ owner, balance, accountOwner, type: 'bonding_curve' });
+              lockedAmount += balance;
+              
+              for (const [platform, programId] of Object.entries(BONDING_CURVE_PROGRAMS)) {
+                if (accountOwner === programId) {
+                  if (!result.detectedPlatforms.includes(platform)) {
+                    result.detectedPlatforms.push(platform);
+                  }
+                  console.log(`🔄 Found ${platform} bonding curve: ${owner} with ${balance} tokens`);
+                  break;
+                }
+              }
             }
           }
           
           if (totalSupply > 0) {
             const calculatedLockPercentage = Math.round((lockedAmount / totalSupply) * 100);
             
-            // Update result only if we found higher lock percentage or confirmed pool locks
             if (calculatedLockPercentage > (result.lockPercentage || 0)) {
               result.lockPercentage = calculatedLockPercentage;
             }
             
-            // Consider locked if >80% in pools/burned OR if it's a known locked pool type
             if ((result.lockPercentage || 0) > 80 || result.lockMechanism.includes('meteora')) {
               result.isLocked = true;
             }
@@ -387,7 +405,6 @@ serve(async (req) => {
         
         const rpcUrl = `https://rpc.helius.xyz/?api-key=${heliusApiKey}`;
         
-        // Check for LP token creation and burn events
         for (const pair of dexPairs) {
           if (pair.pairAddress) {
             try {
@@ -406,95 +423,76 @@ serve(async (req) => {
                 const txData = await txResponse.json();
                 const signatures = txData.result || [];
                 
-                let lpBurnFound = false;
-                let liquidityLockFound = false;
+                console.log(`📜 Found ${signatures.length} transactions for pair ${pair.pairAddress}`);
                 
-                for (const sig of signatures.slice(0, 20)) { // Check recent transactions
+                // Check for burn transactions
+                for (const sig of signatures.slice(0, 20)) {
                   try {
-                    const txDetailResponse = await fetch(rpcUrl, {
+                    const detailResp = await fetch(rpcUrl, {
                       method: 'POST',
                       headers: { 'Content-Type': 'application/json' },
                       body: JSON.stringify({
                         jsonrpc: '2.0',
-                        id: 'lp-tx-detail',
+                        id: 'tx-detail',
                         method: 'getTransaction',
-                        params: [sig.signature, { encoding: 'jsonParsed' }]
+                        params: [sig.signature, { encoding: 'jsonParsed', maxSupportedTransactionVersion: 0 }]
                       })
                     });
                     
-                    if (txDetailResponse.ok) {
-                      const txDetail = await txDetailResponse.json();
-                      const logMessages = txDetail.result?.meta?.logMessages || [];
-                      const instructions = txDetail.result?.transaction?.message?.instructions || [];
+                    if (detailResp.ok) {
+                      const detailData = await detailResp.json();
+                      const tx = detailData.result;
                       
-                      // Look for LP token burn or lock patterns
-                      const hasLpBurn = logMessages.some((log: any) => 
-                        log.toLowerCase().includes('burn') && log.toLowerCase().includes('liquidity') ||
-                        log.toLowerCase().includes('lp') && log.toLowerCase().includes('burn')
-                      );
-                      
-                      const hasLockInstruction = logMessages.some((log: any) =>
-                        log.toLowerCase().includes('lock') ||
-                        log.toLowerCase().includes('freeze') ||
-                        log.toLowerCase().includes('time') && log.toLowerCase().includes('lock')
-                      );
-                      
-                      if (hasLpBurn) {
-                        lpBurnFound = true;
-                        console.log(`🔥 LP burn detected in transaction: ${sig.signature.slice(0, 8)}...`);
-                      }
-                      
-                      if (hasLockInstruction) {
-                        liquidityLockFound = true;
-                        console.log(`🔒 Lock instruction detected in transaction: ${sig.signature.slice(0, 8)}...`);
+                      if (tx?.meta?.logMessages) {
+                        const logs = tx.meta.logMessages.join(' ').toLowerCase();
+                        
+                        if (logs.includes('burn') || logs.includes('lock') || logs.includes('close')) {
+                          result.isLocked = true;
+                          result.lockMechanism = 'lp_burn_detected';
+                          result.dataQuality = 'verified';
+                          console.log(`🔥 LP burn/lock transaction detected: ${sig.signature}`);
+                          break;
+                        }
                       }
                     }
                   } catch (e) {
-                    // Skip failed transaction details
+                    // Skip failed transaction lookups
                   }
                 }
                 
-                if (lpBurnFound) {
-                  result.isLocked = true;
-                  result.lockMechanism = 'lp_tokens_burned';
-                  result.lockPercentage = Math.max(result.lockPercentage || 0, 90); // Assume high lock if LP burned
-                  console.log(`✅ LP tokens burned for ${pair.dexId} pair`);
-                } else if (liquidityLockFound) {
-                  result.isLocked = true;
-                  result.lockMechanism = 'time_locked';
-                  result.lockPercentage = Math.max(result.lockPercentage || 0, 85); // Assume high lock for time locks
-                  console.log(`✅ Time lock detected for ${pair.dexId} pair`);
-                }
+                if (result.isLocked) break;
               }
             } catch (e) {
-              console.log(`⚠️ Failed to check LP transactions for ${pair.pairAddress}:`, e instanceof Error ? e.message : String(e));
+              console.log(`⚠️ Failed to analyze pair ${pair.pairAddress}:`, e instanceof Error ? e.message : String(e));
             }
           }
         }
         
         result.checkedMethods.push('LP Transaction & Burn Analysis');
       } catch (e) {
-        console.log('⚠️ LP transaction analysis failed:', e instanceof Error ? e.message : String(e));
+        console.log('⚠️ Transaction analysis failed:', e instanceof Error ? e.message : String(e));
         result.checkedMethods.push('LP Transaction Analysis (FAILED)');
       }
     }
 
-    // Final status determination
-    if (result.isLocked) {
-      console.log(`✅ LOCKED: ${result.lockPercentage}% via ${result.lockMechanism}`);
-    } else {
-      console.log(`❌ NOT LOCKED: Could not detect significant liquidity lock`);
-    }
+    // Final summary
+    console.log(`\n📊 Liquidity Lock Check Complete:`);
+    console.log(`  Token: ${result.tokenInfo?.symbol || tokenMint}`);
+    console.log(`  Locked: ${result.isLocked ? 'YES' : 'NO'}`);
+    console.log(`  Lock %: ${result.lockPercentage || 'Unknown'}%`);
+    console.log(`  Mechanism: ${result.lockMechanism}`);
+    console.log(`  Platforms: ${result.detectedPlatforms.join(', ') || 'Unknown'}`);
+    console.log(`  Methods checked: ${result.checkedMethods.length}`);
 
     return new Response(JSON.stringify(result), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' }
     });
 
   } catch (error) {
-    console.error('❌ Liquidity lock checker error:', error);
+    console.error('Error checking liquidity lock:', error);
     return new Response(JSON.stringify({ 
-      error: 'Internal server error', 
-      details: error instanceof Error ? error.message : String(error) 
+      error: 'Failed to check liquidity lock status',
+      details: error instanceof Error ? error.message : String(error)
     }), {
       status: 500,
       headers: { ...corsHeaders, 'Content-Type': 'application/json' }

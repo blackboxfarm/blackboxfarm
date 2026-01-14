@@ -1,42 +1,18 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
+import {
+  KNOWN_DEX_PROGRAMS,
+  BONDING_CURVE_PROGRAMS,
+  KNOWN_LP_WALLETS,
+  BURN_ADDRESSES,
+  detectLP,
+  detectLaunchpad,
+  type LPDetectionResult,
+  type LaunchpadInfo
+} from "../_shared/lp-detection.ts"
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-}
-
-// Launchpad detection function
-function detectLaunchpad(pairData: any, tokenMint: string): { name: string; detected: boolean; confidence: 'high' | 'medium' | 'low' } {
-  // Priority 1: Check DexScreener pair info websites
-  if (pairData?.info?.websites && Array.isArray(pairData.info.websites)) {
-    for (const website of pairData.info.websites) {
-      const url = website.url || website;
-      if (typeof url === 'string') {
-        if (url.includes('pump.fun')) {
-          return { name: 'pump.fun', detected: true, confidence: 'high' };
-        }
-        if (url.includes('bonk.bot') || url.includes('bonk.fun')) {
-          return { name: 'bonk.fun', detected: true, confidence: 'high' };
-        }
-        if (url.includes('bags.fm')) {
-          return { name: 'bags.fm', detected: true, confidence: 'high' };
-        }
-      }
-    }
-  }
-  
-  // Priority 2: Check address suffix (less reliable)
-  if (tokenMint.endsWith('pump')) {
-    return { name: 'pump.fun', detected: true, confidence: 'low' };
-  }
-  if (tokenMint.endsWith('bonk')) {
-    return { name: 'bonk.fun', detected: true, confidence: 'low' };
-  }
-  if (tokenMint.endsWith('bags')) {
-    return { name: 'bags.fm', detected: true, confidence: 'low' };
-  }
-  
-  return { name: 'unknown', detected: false, confidence: 'low' };
 }
 
 serve(async (req) => {
@@ -75,17 +51,23 @@ serve(async (req) => {
     let priceDiscoveryFailed = false;
     
     // Initialize launchpad info (will be populated later)
-    let launchpadInfo = { name: 'unknown', detected: false, confidence: 'low' as 'high' | 'medium' | 'low' };
+    let launchpadInfo: LaunchpadInfo = { name: 'unknown', detected: false, confidence: 'low' };
     
-    // Initialize Solscan-verified LP account (global scope)
+    // ============================================
+    // MULTI-SOURCE LP DETECTION: Collect ALL pool addresses
+    // ============================================
+    const allPoolAddresses: Set<string> = new Set();
+    const dexScreenerPairAddresses: Set<string> = new Set();
     let verifiedLPAccount: string | null = null;
     let verifiedLPSource: string | null = null;
     
-    // Try to get LP from Solscan Pro API
+    // ============================================
+    // Source 1: Solscan Pro API - Fetch ALL markets
+    // ============================================
     const solscanApiKey = Deno.env.get('SOLSCAN_API_KEY');
     if (solscanApiKey) {
       try {
-        console.log('[Solscan] Fetching token markets...');
+        console.log('[Solscan] Fetching ALL token markets...');
         const marketsResp = await fetch(`https://pro-api.solscan.io/v2.0/token/markets?address=${tokenMint}`, {
           headers: { 'token': solscanApiKey }
         });
@@ -93,12 +75,28 @@ serve(async (req) => {
         if (marketsResp.ok) {
           const marketsData = await marketsResp.json();
           if (marketsData.success && marketsData.data?.length > 0) {
-            // Pick the market with highest liquidity
+            console.log(`[Solscan] Found ${marketsData.data.length} markets`);
+            
+            // Add ALL pool addresses from ALL markets
+            for (const market of marketsData.data) {
+              if (market.pool_address) {
+                allPoolAddresses.add(market.pool_address);
+                console.log(`  [Solscan] Pool: ${market.pool_address} (${market.market_name || 'Unknown DEX'})`);
+              }
+              if (market.market_id) {
+                allPoolAddresses.add(market.market_id);
+              }
+              if (market.lp_address) {
+                allPoolAddresses.add(market.lp_address);
+              }
+            }
+            
+            // Pick highest liquidity market for primary LP verification
             const topMarket = marketsData.data.sort((a: any, b: any) => (b.liquidity || 0) - (a.liquidity || 0))[0];
             const poolAddress = topMarket.pool_address || topMarket.market_id;
             
             if (poolAddress) {
-              console.log(`[Solscan] Top market pool: ${poolAddress}`);
+              console.log(`[Solscan] Top market pool: ${poolAddress} (${topMarket.market_name || 'Unknown'})`);
               
               // Verify via holders endpoint
               const holdersResp = await fetch(`https://pro-api.solscan.io/v2.0/token/holders?address=${tokenMint}&page=1&page_size=50`, {
@@ -108,25 +106,32 @@ serve(async (req) => {
               if (holdersResp.ok) {
                 const holdersData = await holdersResp.json();
                 if (holdersData.success && holdersData.data?.length > 0) {
-                  // Find the holder matching the pool address or AMM program
-                  const knownAMMs = [
-                    '675kPX9MHTjS2zt1qfr1NYHuzeLXfQM9H24wFSUt1Mp8', // Raydium AMM v4
-                    '6EF8rrecthR5Dkzon8Nwu78hRvfCKubJ14M5uBEwF6P',  // Pump.fun
-                    'LBUZKhRxPF3XUpBCjp4YzTKgLccjZhTSDM9YuVaPwxo',  // Meteora
-                  ];
+                  // Find all holders matching pool addresses or AMM programs
+                  const allDexPrograms = [...Object.values(KNOWN_DEX_PROGRAMS), ...Object.values(BONDING_CURVE_PROGRAMS)];
                   
                   for (const holder of holdersData.data) {
                     const holderOwner = holder.owner || holder.address;
-                    if (holderOwner === poolAddress || knownAMMs.includes(holder.owner_program || '')) {
-                      verifiedLPAccount = holderOwner;
-                      verifiedLPSource = 'solscan';
-                      console.log(`✅ [Solscan] Verified LP account: ${verifiedLPAccount}`);
-                      break;
+                    const ownerProgram = holder.owner_program || '';
+                    
+                    // Check if this holder is an LP
+                    if (allPoolAddresses.has(holderOwner) || 
+                        allDexPrograms.includes(ownerProgram)) {
+                      allPoolAddresses.add(holderOwner);
+                      
+                      if (!verifiedLPAccount) {
+                        verifiedLPAccount = holderOwner;
+                        verifiedLPSource = 'solscan';
+                        console.log(`✅ [Solscan Verified] Primary LP: ${verifiedLPAccount}`);
+                      } else {
+                        console.log(`  [Solscan] Additional LP: ${holderOwner}`);
+                      }
                     }
                   }
                 }
               }
             }
+            
+            console.log(`[Solscan] Total pool addresses collected: ${allPoolAddresses.size}`);
           }
         }
       } catch (error) {
@@ -134,99 +139,125 @@ serve(async (req) => {
       }
     }
     
+    // ============================================
+    // Source 2: DexScreener - Fetch pair addresses
+    // ============================================
+    let dexScreenerPairs: any[] = [];
+    try {
+      console.log('[DexScreener] Fetching token pairs...');
+      const dexResp = await fetch(`https://api.dexscreener.com/latest/dex/tokens/${tokenMint}`);
+      
+      if (dexResp.ok) {
+        const dexData = await dexResp.json();
+        dexScreenerPairs = dexData.pairs || [];
+        
+        console.log(`[DexScreener] Found ${dexScreenerPairs.length} pairs`);
+        
+        for (const pair of dexScreenerPairs) {
+          if (pair.pairAddress) {
+            dexScreenerPairAddresses.add(pair.pairAddress);
+            allPoolAddresses.add(pair.pairAddress);
+            console.log(`  [DexScreener] Pair: ${pair.pairAddress} on ${pair.dexId}`);
+          }
+          // Also add the liquidity pool addresses if available
+          if (pair.quoteToken?.address) {
+            // Quote token is usually SOL/USDC, not the LP itself
+          }
+        }
+        
+        // Detect launchpad from first pair
+        if (dexScreenerPairs.length > 0) {
+          launchpadInfo = detectLaunchpad(dexScreenerPairs[0], tokenMint);
+          console.log(`[DexScreener] Launchpad detected: ${launchpadInfo.name} (${launchpadInfo.confidence})`);
+        }
+      }
+    } catch (error) {
+      console.error('[DexScreener] API error:', error);
+    }
+    
+    console.log(`📊 [LP Detection] Total unique pool addresses: ${allPoolAddresses.size}`);
+    
+    // ============================================
+    // PRICE DISCOVERY
+    // ============================================
     if (!manualPrice || manualPrice === 0) {
       const priceStartTime = Date.now();
       console.log('⏱️ [PERF] No manual price provided, trying multiple price sources...');
       
-      // Try multiple price sources in order of reliability
-      const priceAPIs = [
-        {
-          name: 'CoinGecko',
-          url: `https://api.coingecko.com/api/v3/simple/token_price/solana?contract_addresses=${tokenMint}&vs_currencies=usd`,
-          parser: (data: any) => data[tokenMint]?.usd || 0
-        },
-        {
-          name: 'Jupiter v4',
-          url: `https://price.jup.ag/v4/price?ids=${tokenMint}`,
-          parser: (data: any) => data.data?.[tokenMint]?.price || 0
-        },
-        {
-          name: 'Jupiter v6',
-          url: `https://price.jup.ag/v6/price?ids=${tokenMint}`,
-          parser: (data: any) => data.data?.[tokenMint]?.price || 0
-        },
-        {
-          name: 'DexScreener',
-          url: `https://api.dexscreener.com/latest/dex/tokens/${tokenMint}`,
-          parser: (data: any) => {
-            if (data.pairs && data.pairs.length > 0) {
-              return parseFloat(data.pairs[0].priceUsd) || 0;
-            }
-            return 0;
-          },
-          pairData: null as any // Store full pair data for launchpad detection
-        },
-        {
-          name: 'Birdeye',
-          url: `https://public-api.birdeye.so/defi/price?address=${tokenMint}`,
-          parser: (data: any) => data.value || 0
+      // Try to get price from DexScreener data we already fetched
+      if (dexScreenerPairs.length > 0 && dexScreenerPairs[0].priceUsd) {
+        tokenPriceUSD = parseFloat(dexScreenerPairs[0].priceUsd) || 0;
+        if (tokenPriceUSD > 0) {
+          priceSource = 'DexScreener (cached)';
+          console.log(`✅ [PERF] Got price from cached DexScreener data: $${tokenPriceUSD}`);
         }
-      ];
+      }
       
-      for (const api of priceAPIs) {
-        const apiStartTime = Date.now();
-        try {
-          console.log(`⏱️ [PERF] Trying ${api.name}...`);
-          
-          const controller = new AbortController();
-          const timeoutId = setTimeout(() => controller.abort(), 10000); // 10 second timeout
-          
-          const response = await fetch(api.url, {
-            signal: controller.signal,
-            headers: {
-              'User-Agent': 'Supabase Edge Function',
-              ...(api.name === 'Birdeye' ? { 'X-API-KEY': Deno.env.get('BIRDEYE_API_KEY') || '' } : {})
-            }
-          });
-          
-          clearTimeout(timeoutId);
-          
-          if (response.ok) {
-            const data = await response.json();
-            const price = api.parser(data);
-            
-            // Store DexScreener pair data for launchpad detection
-            if (api.name === 'DexScreener' && data.pairs && data.pairs.length > 0) {
-              api.pairData = data.pairs[0];
-            }
-            
-            if (price > 0) {
-              tokenPriceUSD = price;
-              priceSource = api.name;
-              const apiTime = Date.now() - apiStartTime;
-              console.log(`✅ [PERF] Got price from ${api.name} in ${apiTime}ms: $${tokenPriceUSD}`);
-              break;
-            } else {
-              const apiTime = Date.now() - apiStartTime;
-              console.log(`⚠️ [PERF] ${api.name} returned 0 price after ${apiTime}ms`);
-            }
-          } else {
-            const apiTime = Date.now() - apiStartTime;
-            console.log(`❌ [PERF] ${api.name} HTTP error ${response.status} after ${apiTime}ms`);
+      // If no price from DexScreener, try other sources
+      if (tokenPriceUSD === 0) {
+        const priceAPIs = [
+          {
+            name: 'CoinGecko',
+            url: `https://api.coingecko.com/api/v3/simple/token_price/solana?contract_addresses=${tokenMint}&vs_currencies=usd`,
+            parser: (data: any) => data[tokenMint]?.usd || 0
+          },
+          {
+            name: 'Jupiter v4',
+            url: `https://price.jup.ag/v4/price?ids=${tokenMint}`,
+            parser: (data: any) => data.data?.[tokenMint]?.price || 0
+          },
+          {
+            name: 'Jupiter v6',
+            url: `https://price.jup.ag/v6/price?ids=${tokenMint}`,
+            parser: (data: any) => data.data?.[tokenMint]?.price || 0
+          },
+          {
+            name: 'Birdeye',
+            url: `https://public-api.birdeye.so/defi/price?address=${tokenMint}`,
+            parser: (data: any) => data.value || 0
           }
-        } catch (error) {
-          const apiTime = Date.now() - apiStartTime;
-          console.log(`❌ [PERF] ${api.name} failed after ${apiTime}ms:`, error instanceof Error ? error.message : String(error));
-          continue;
+        ];
+        
+        for (const api of priceAPIs) {
+          const apiStartTime = Date.now();
+          try {
+            console.log(`⏱️ [PERF] Trying ${api.name}...`);
+            
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), 10000);
+            
+            const response = await fetch(api.url, {
+              signal: controller.signal,
+              headers: {
+                'User-Agent': 'Supabase Edge Function',
+                ...(api.name === 'Birdeye' ? { 'X-API-KEY': Deno.env.get('BIRDEYE_API_KEY') || '' } : {})
+              }
+            });
+            
+            clearTimeout(timeoutId);
+            
+            if (response.ok) {
+              const data = await response.json();
+              const price = api.parser(data);
+              
+              if (price > 0) {
+                tokenPriceUSD = price;
+                priceSource = api.name;
+                const apiTime = Date.now() - apiStartTime;
+                console.log(`✅ [PERF] Got price from ${api.name} in ${apiTime}ms: $${tokenPriceUSD}`);
+                break;
+              }
+            }
+          } catch (error) {
+            const apiTime = Date.now() - apiStartTime;
+            console.log(`❌ [PERF] ${api.name} failed after ${apiTime}ms:`, error instanceof Error ? error.message : String(error));
+            continue;
+          }
         }
       }
       
       const priceDiscoveryTime = Date.now() - priceStartTime;
       console.log(`⏱️ [PERF] Price discovery complete in ${priceDiscoveryTime}ms - Source: ${priceSource || 'FAILED'}`);
-      
-      // Detect launchpad from DexScreener data
-      const dexScreenerAPI = priceAPIs.find(api => api.name === 'DexScreener');
-      launchpadInfo = detectLaunchpad(dexScreenerAPI?.pairData, tokenMint);
       
       if (tokenPriceUSD === 0) {
         priceDiscoveryFailed = true;
@@ -240,10 +271,13 @@ serve(async (req) => {
       console.warn('⚠️ WARNING: All price sources failed or returned $0 - USD calculations will be incorrect');
     }
     
-    // Get all token accounts for this mint (try multiple RPCs and both SPL programs)
+    // ============================================
+    // RPC: Get all token accounts
+    // ============================================
     const rpcStartTime = Date.now();
     console.log('⏱️ [PERF] Starting RPC account fetch...');
     let data: any = null;
+    
     for (const url of rpcEndpoints) {
       try {
         const rpcCallStart = Date.now();
@@ -312,7 +346,7 @@ serve(async (req) => {
           continue;
         }
       } catch (e) {
-        const rpcCallTime = Date.now() - rpcCallStart;
+        const rpcCallTime = Date.now() - rpcStartTime;
         rpcErrors.push(`RPC ${url.includes('helius') ? 'Helius' : url} exception after ${rpcCallTime}ms: ${e instanceof Error ? e.message : String(e)}`);
         continue;
       }
@@ -328,9 +362,8 @@ serve(async (req) => {
     const buyersStartTime = Date.now();
     console.log('⚠️ [PERF] BYPASSING Helius/RPC Historical Buyers fetch - Using ANON placeholders');
     const firstBuyersData: any[] = [];
-    const txCount = 0; // No transactions searched since we're bypassing
+    const txCount = 0;
     
-    // Fill with 25 ANON placeholder buyers
     for (let i = 0; i < 25; i++) {
       firstBuyersData.push({
         wallet: 'ANON',
@@ -344,6 +377,9 @@ serve(async (req) => {
     const totalBuyersTime = Date.now() - buyersStartTime;
     console.log(`✅ [PERF] BYPASSED buyer discovery: ${totalBuyersTime.toFixed(0)}ms - Filled with ${firstBuyersData.length} ANON placeholders`);
 
+    // ============================================
+    // PROCESS HOLDERS
+    // ============================================
     const holders = [];
     let totalSupply = 0;
     let potentialDevWallet: any = null;
@@ -369,6 +405,8 @@ serve(async (req) => {
         return balanceB - balanceA;
       });
       
+      console.log(`\n🔍 [LP Detection] Processing ${sortedAccounts.length} holders...`);
+      
       for (const account of sortedAccounts) {
         try {
           const parsedInfo = account.account.data.parsed.info;
@@ -383,84 +421,42 @@ serve(async (req) => {
             // Calculate percentage of total supply
             const percentageOfSupply = (balance / totalSupply) * 100;
             
-            // LP Detection Logic - Solscan First, then Fallback
-            let isLiquidityPool = false;
-            let lpDetectionReason = '';
-            let lpConfidence = 0;
-            let detectedPlatform = '';
-            let lpSource = 'heuristic';
+            // ============================================
+            // ENHANCED LP DETECTION using shared function
+            // ============================================
+            const lpResult: LPDetectionResult = detectLP(
+              owner,
+              accountOwner,
+              percentageOfSupply,
+              allPoolAddresses,
+              dexScreenerPairAddresses
+            );
             
-            // Method 0: Solscan-verified LP (highest priority)
-            if (verifiedLPAccount && owner === verifiedLPAccount) {
-              isLiquidityPool = true;
-              detectedPlatform = 'Solscan Verified';
-              lpDetectionReason = 'Matched Solscan-verified LP account';
-              lpConfidence = 100;
-              lpSource = 'solscan_verified';
-              console.log(`✅ [Solscan Verified] LP: ${owner} (${percentageOfSupply.toFixed(2)}%)`);
-            }
+            const isLiquidityPool = lpResult.isLP;
+            const lpDetectionReason = lpResult.reason || '';
+            const lpConfidence = lpResult.confidence;
+            const detectedPlatform = lpResult.platform || '';
+            const lpSource = lpResult.source || 'heuristic';
             
-            // Fallback: Known LP wallet addresses
-            const knownLPWallets = new Set([
-              'CebN5WGQ4jvEPvsVU4EoHEpgzq1VV7AbicfhtW4xC9iM', // Pump.fun bonding curve
-              '5Q544fKrFoe6tsEbD7S8EmxGTJYAKtTVhAW5Q5pge4j1', // Common Raydium LP
-              '7YttLkHDoNj9wyDur5pM1ejNaAvT9X4eqaYcHQqtj2G5', // Common Raydium LP
-            ]);
-            
-            // Known DEX program IDs
-            const knownDEXPrograms: Record<string, string> = {
-              'Pump.fun AMM': '6EF8rrecthR5Dkzon8Nwu78hRvfCKubJ14M5uBEwF6P',
-              'Raydium V4': '675kPX9MHTjS2zt1qfr1NYHuzeLXfQM9H24wFSUt1Mp8',
-              'Raydium CLMM': 'CAMMCzo5YL8w4VFF8KVHrK22GGUsp5VTaW7grrKgrWqK',
-              'Raydium V3': '27haf8L6oxUeXrHrgEgsexjSY5hbVUWEmvv9Nyytg3Ct',
-              'Orca Whirlpool': 'whirLbMiicVdio4qvUfM5KAg6Ct8VwpYzGff3uctyCc',
-              'Orca V2': '9W959DqEETiGZocYWCQPaJ6sBmUzgfxXfqGeTEdp3aQP',
-              'Meteora': 'LBUZKhRxPF3XUpBCjp4YzTKgLccjZhTSDM9YuVaPwxo',
-              'Meteora DLMM': 'Eo7WjKq67rjJQSZxS6z3YkapzY3eMj6Xy8X5EQVn5UaB',
-            };
-            
-            // Check if this is a known LP wallet address
-            if (!isLiquidityPool && knownLPWallets.has(owner)) {
-              isLiquidityPool = true;
-              detectedPlatform = 'Known LP Wallet';
-              lpDetectionReason = 'Identified known LP wallet address';
-              lpConfidence = 99;
-              console.log(`✅ LP Detected: ${owner} is a known LP wallet (${percentageOfSupply.toFixed(2)}%)`);
-            }
-            
-            // Check the account owner (program ID)
-            if (!isLiquidityPool) {
-              for (const [platform, programId] of Object.entries(knownDEXPrograms)) {
-                if (accountOwner === programId) {
-                  isLiquidityPool = true;
-                  detectedPlatform = platform;
-                  lpDetectionReason = `Token account owned by ${platform} program`;
-                  lpConfidence = 95;
-                  console.log(`✅ LP Detected: ${owner} is owned by ${platform} (${programId})`);
-                  break;
-                }
+            // Log LP detection for debugging (only for significant holders)
+            if (percentageOfSupply > 1) {
+              if (isLiquidityPool) {
+                console.log(`  ✅ LP: ${owner.slice(0, 8)}... | ${percentageOfSupply.toFixed(1)}% | ${detectedPlatform} (${lpConfidence}%) | ${lpSource}`);
+              } else {
+                console.log(`  👤 Holder: ${owner.slice(0, 8)}... | ${percentageOfSupply.toFixed(1)}% | program: ${accountOwner.slice(0, 8)}...`);
               }
             }
             
-            // FALLBACK DETECTION: Higher threshold (20%) for unrecognized LP programs
-            if (!isLiquidityPool && percentageOfSupply > 20) {
-              isLiquidityPool = true;
-              detectedPlatform = 'Unknown Platform';
-              lpDetectionReason = `High concentration (${percentageOfSupply.toFixed(1)}%) - likely undetected LP`;
-              lpConfidence = 65;
-              console.log(`⚠️ Potential LP: ${owner} holds ${percentageOfSupply.toFixed(1)}% (owner program: ${accountOwner})`);
-            }
-            
             // Categorize wallets (excluding confirmed LPs from main categories)
-            const isDustWallet = !isLiquidityPool && usdValue < 1; // Less than $1 USD
-            const isSmallWallet = !isLiquidityPool && usdValue >= 1 && usdValue < 12; // $1-$12 USD
-            const isMediumWallet = !isLiquidityPool && usdValue >= 12 && usdValue < 25; // $12-$25 USD
-            const isLargeWallet = !isLiquidityPool && usdValue >= 25 && usdValue < 49; // $25-$49 USD
-            const isBossWallet = !isLiquidityPool && usdValue >= 200 && usdValue < 500; // $200-$500 USD
-            const isKingpinWallet = !isLiquidityPool && usdValue >= 500 && usdValue < 1000; // $500-$1K USD
-            const isSuperBossWallet = !isLiquidityPool && usdValue >= 1000 && usdValue < 2000; // $1K-$2K USD
-            const isBabyWhaleWallet = !isLiquidityPool && usdValue >= 2000 && usdValue < 5000; // $2K-$5K USD
-            const isTrueWhaleWallet = !isLiquidityPool && usdValue >= 5000; // $5K+ USD
+            const isDustWallet = !isLiquidityPool && usdValue < 1;
+            const isSmallWallet = !isLiquidityPool && usdValue >= 1 && usdValue < 12;
+            const isMediumWallet = !isLiquidityPool && usdValue >= 12 && usdValue < 25;
+            const isLargeWallet = !isLiquidityPool && usdValue >= 25 && usdValue < 49;
+            const isBossWallet = !isLiquidityPool && usdValue >= 200 && usdValue < 500;
+            const isKingpinWallet = !isLiquidityPool && usdValue >= 500 && usdValue < 1000;
+            const isSuperBossWallet = !isLiquidityPool && usdValue >= 1000 && usdValue < 2000;
+            const isBabyWhaleWallet = !isLiquidityPool && usdValue >= 2000 && usdValue < 5000;
+            const isTrueWhaleWallet = !isLiquidityPool && usdValue >= 5000;
             
             const holderData = {
               owner,
@@ -483,12 +479,10 @@ serve(async (req) => {
               isBabyWhaleWallet,
               isTrueWhaleWallet,
               tokenAccount: account.pubkey,
-              accountOwnerProgram: accountOwner // Include for transparency
+              accountOwnerProgram: accountOwner
             };
             
             holders.push(holderData);
-            
-            // Note: First buyer tracking moved to historical transactions section
           }
         } catch (e) {
           console.error(`Error processing account ${account.pubkey}:`, e);
@@ -509,9 +503,13 @@ serve(async (req) => {
     const lpWallets = rankedHolders.filter(h => h.isLiquidityPool);
     const nonLpHolders = rankedHolders.filter(h => !h.isLiquidityPool);
     
+    console.log(`\n📊 [LP Summary] Detected ${lpWallets.length} LP wallet(s):`);
+    for (const lp of lpWallets) {
+      console.log(`  - ${lp.owner.slice(0, 12)}... | ${lp.percentageOfSupply.toFixed(1)}% | ${lp.detectedPlatform} (${lp.lpSource})`);
+    }
+    
     // IMPROVED DEV WALLET DETECTION using historical first buyers
     if (firstBuyersData.length > 0) {
-      // Look at first 10 buyers for early large allocations (5-20% of supply)
       for (let i = 0; i < Math.min(10, firstBuyersData.length); i++) {
         const earlyBuyer = firstBuyersData[i];
         const currentHolder = rankedHolders.find(h => h.owner === earlyBuyer.wallet);
@@ -519,7 +517,6 @@ serve(async (req) => {
         if (currentHolder && !currentHolder.isLiquidityPool) {
           const initialPercentage = (earlyBuyer.initialTokens / totalSupply) * 100;
           
-          // Dev typically gets 5-20% in first few transactions
           if (initialPercentage >= 5 && initialPercentage <= 20) {
             potentialDevWallet = {
               address: currentHolder.owner,
@@ -529,7 +526,7 @@ serve(async (req) => {
               initialPercentage,
               purchaseRank: earlyBuyer.purchaseRank,
               firstBoughtAt: earlyBuyer.firstBoughtAt,
-              confidence: 90 - (i * 5), // Earlier = higher confidence
+              confidence: 90 - (i * 5),
               detectionMethod: 'early_large_holder',
               reason: `Early buyer #${earlyBuyer.purchaseRank} with ${initialPercentage.toFixed(1)}% initial allocation`
             };
@@ -566,11 +563,9 @@ serve(async (req) => {
       const tokensSold = Math.max(0, buyer.initialTokens - currentBalance);
       const percentageSold = buyer.initialTokens > 0 ? (tokensSold / buyer.initialTokens) * 100 : 0;
       
-      // Calculate PNL (simplified - assumes initial price was lower)
-      // In reality, we'd need historical price data at purchase time
-      const initialValueEstimate = buyer.initialTokens * (tokenPriceUSD * 0.1); // Assume bought at 10% of current price
+      const initialValueEstimate = buyer.initialTokens * (tokenPriceUSD * 0.1);
       const currentValue = currentBalance * tokenPriceUSD;
-      const soldValue = tokensSold * tokenPriceUSD; // Assumes sold at current price (approximation)
+      const soldValue = tokensSold * tokenPriceUSD;
       const totalValue = currentValue + soldValue;
       const pnl = totalValue - initialValueEstimate;
       const pnlPercentage = initialValueEstimate > 0 ? (pnl / initialValueEstimate) * 100 : 0;
@@ -592,7 +587,6 @@ serve(async (req) => {
     
     console.log(`📊 First 25 buyers PNL calculated: ${firstBuyersWithPNL.filter(b => b.hasSold).length} have sold`);
     
-    
     const dustWallets = rankedHolders.filter(h => h.isDustWallet).length;
     const smallWallets = rankedHolders.filter(h => h.isSmallWallet).length;
     const mediumWallets = rankedHolders.filter(h => h.isMediumWallet).length;
@@ -607,6 +601,8 @@ serve(async (req) => {
     const lpBalance = lpWallets.reduce((sum, h) => sum + h.balance, 0);
     const nonLpBalance = nonLpHolders.reduce((sum, h) => sum + h.balance, 0);
 
+    const totalTime = Date.now() - requestStartTime;
+    console.log(`\n✅ [PERF] Request complete in ${totalTime}ms`);
     console.log(`Found ${rankedHolders.length} token holders`);
     console.log(`LP wallets detected: ${lpWallets.length} (${(lpBalance/totalBalance*100).toFixed(1)}% of supply)`);
     console.log(`Real wallets: ${realWallets}, Boss wallets: ${bossWallets}, Kingpin wallets: ${kingpinWallets}, Super Boss wallets: ${superBossWallets}, Baby Whale wallets: ${babyWhaleWallets}, True Whale wallets: ${trueWhaleWallets}, Large wallets: ${largeWallets}, Medium wallets: ${mediumWallets}, Small wallets: ${smallWallets}, Dust wallets: ${dustWallets}`);
@@ -638,7 +634,7 @@ serve(async (req) => {
       holders: rankedHolders,
       liquidityPools: lpWallets,
       potentialDevWallet,
-      firstBuyers: firstBuyersWithPNL, // NEW: Historical first 25 buyers with PNL
+      firstBuyers: firstBuyersWithPNL,
       firstBuyersError: firstBuyersData.length === 0 ? 
         (heliusApiKey ? 
           `No buyers found (searched ${txCount} transactions using Enhanced Transactions API)` : 
@@ -650,7 +646,14 @@ serve(async (req) => {
         buyersFound: firstBuyersData.length,
         totalTransactionsSearched: txCount
       },
-      launchpadInfo,
+      lpDetectionDebug: {
+        solscanPoolsFound: allPoolAddresses.size,
+        dexScreenerPairsFound: dexScreenerPairAddresses.size,
+        verifiedLPAccount,
+        verifiedLPSource,
+        knownDexProgramsCount: Object.keys(KNOWN_DEX_PROGRAMS).length,
+        knownLPWalletsCount: KNOWN_LP_WALLETS.size
+      },
       summary: `Found ${rankedHolders.length} total holders (${lpWallets.length} LP detected${lpWallets.length > 0 ? ': ' + lpWallets.map(lp => lp.detectedPlatform).filter(Boolean).join(', ') : ''}). ${trueWhaleWallets} true whale wallets (≥$5K), ${babyWhaleWallets} baby whale wallets ($2K-$5K), ${superBossWallets} super boss wallets ($1K-$2K), ${kingpinWallets} kingpin wallets ($500-$1K), ${bossWallets} boss wallets ($200-$500), ${realWallets} real wallets ($50-$199), ${largeWallets} large wallets ($5-$49), ${mediumWallets} medium wallets ($1-$4), ${smallWallets} small wallets (<$1), ${dustWallets} dust wallets (<1 token). Total tokens distributed: ${totalBalance.toLocaleString()}${priceSource ? ` (Price from ${priceSource})` : ''}${potentialDevWallet ? `. Potential dev: ${potentialDevWallet.address.slice(0, 4)}...${potentialDevWallet.address.slice(-4)} (${potentialDevWallet.percentageOfSupply.toFixed(1)}%)` : ''}. First ${firstBuyersWithPNL.length} buyers tracked with ${firstBuyersWithPNL.filter(b => b.hasSold).length} having sold tokens.`
     };
 
