@@ -341,6 +341,79 @@ async function trackTradeOutcome(supabase: any, position: any) {
   }
 }
 
+// Auto-capture position to lists on sell if not already rated/tracked
+async function capturePositionToLists(supabase: any, position: any) {
+  try {
+    // Skip if already rated (was captured on rating) or already locked
+    if (position.tracking_locked) {
+      console.log("Position already locked, skipping capture");
+      return;
+    }
+    if (position.dev_trust_rating && 
+        position.dev_trust_rating !== 'unknown') {
+      console.log("Position already rated, skipping capture");
+      return;
+    }
+    
+    // Check if already in any list
+    const { data: existingBlacklist } = await supabase
+      .from('pumpfun_blacklist')
+      .select('id')
+      .eq('identifier', position.token_mint)
+      .maybeSingle();
+      
+    const { data: existingWhitelist } = await supabase
+      .from('pumpfun_whitelist')
+      .select('id')
+      .eq('identifier', position.token_mint)
+      .maybeSingle();
+      
+    const { data: existingNeutral } = await supabase
+      .from('pumpfun_neutrallist')
+      .select('id')
+      .eq('identifier', position.token_mint)
+      .maybeSingle();
+    
+    if (existingBlacklist || existingWhitelist || existingNeutral) {
+      console.log("Token already in a list, skipping capture");
+      return;
+    }
+    
+    // Add to neutrallist as unreviewed
+    await supabase.from('pumpfun_neutrallist').upsert({
+      entry_type: 'token_mint',
+      identifier: position.token_mint,
+      trust_level: 'unreviewed',
+      neutrallist_reason: 'Auto-captured on sell (unrated)',
+      source: 'flipit_auto_sell',
+      tags: ['auto_captured', 'pending_review'],
+      linked_twitter: position.twitter_url ? [position.twitter_url] : [],
+      linked_websites: position.website_url ? [position.website_url] : [],
+      linked_telegram: position.telegram_url ? [position.telegram_url] : [],
+      linked_dev_wallets: position.creator_wallet ? [position.creator_wallet] : [],
+      is_active: true
+    }, { onConflict: 'entry_type,identifier' });
+    
+    // Add creator wallet to neutrallist if present
+    if (position.creator_wallet) {
+      await supabase.from('pumpfun_neutrallist').upsert({
+        entry_type: 'dev_wallet',
+        identifier: position.creator_wallet,
+        trust_level: 'unreviewed',
+        neutrallist_reason: 'Auto-captured on sell (unrated)',
+        source: 'flipit_auto_sell',
+        tags: ['auto_captured', 'pending_review', 'dev_wallet'],
+        linked_token_mints: [position.token_mint],
+        is_active: true
+      }, { onConflict: 'entry_type,identifier' });
+    }
+    
+    console.log(`Auto-captured ${position.token_mint} to neutrallist on sell`);
+  } catch (e) {
+    console.error("Error capturing position to lists:", e);
+  }
+}
+
 async function sendTweet(supabase: any, tweetData: {
   type: 'buy' | 'sell' | 'rebuy';
   tokenMint?: string;
@@ -1087,6 +1160,10 @@ serve(async (req) => {
           ...position,
           sell_price_usd: sellPrice
         }).catch(e => console.error("Trade outcome tracking failed:", e));
+
+        // Auto-capture unrated positions to neutrallist on sell (fire and forget)
+        capturePositionToLists(supabase, position)
+          .catch(e => console.error("Position list capture failed:", e));
 
         return ok({
           success: true,

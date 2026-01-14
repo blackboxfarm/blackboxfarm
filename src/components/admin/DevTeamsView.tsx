@@ -10,7 +10,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
-import { RefreshCw, Users, Wallet, AlertTriangle, Shield, ChevronDown, ChevronRight, Search, Trash2, Eye, Twitter, MessageCircle, Link as LinkIcon, Copy, ExternalLink } from 'lucide-react';
+import { RefreshCw, Users, Wallet, AlertTriangle, Shield, ChevronDown, ChevronRight, Search, Trash2, Eye, Twitter, MessageCircle, Link as LinkIcon, Copy, ExternalLink, Database, Loader2 } from 'lucide-react';
 
 interface DevTeam {
   id: string;
@@ -77,6 +77,8 @@ export function DevTeamsView() {
   const [expandedTeams, setExpandedTeams] = useState<Set<string>>(new Set());
   const [selectedTeam, setSelectedTeam] = useState<DevTeam | null>(null);
   const [activeTab, setActiveTab] = useState<'teams' | 'communities' | 'creators'>('teams');
+  const [isBackfilling, setIsBackfilling] = useState(false);
+  const [backfillResults, setBackfillResults] = useState<any>(null);
 
   useEffect(() => {
     loadData();
@@ -158,6 +160,33 @@ export function DevTeamsView() {
     }
   };
 
+  const runBackfill = async (dryRun: boolean = false) => {
+    setIsBackfilling(true);
+    setBackfillResults(null);
+    
+    try {
+      const { data, error } = await supabase.functions.invoke('flipit-backfill-tracking', {
+        body: { dryRun, limit: 500 }
+      });
+      
+      if (error) throw error;
+      
+      setBackfillResults(data);
+      
+      if (dryRun) {
+        toast.info(`Dry run complete: Would process ${data.processed} tokens`);
+      } else {
+        toast.success(`Backfill complete: ${data.processed} tokens processed`);
+        // Reload data to show new entries
+        loadData();
+      }
+    } catch (err: any) {
+      toast.error(err.message || 'Backfill failed');
+    } finally {
+      setIsBackfilling(false);
+    }
+  };
+
   const filteredTeams = teams.filter(t => {
     if (!searchQuery) return true;
     const q = searchQuery.toLowerCase();
@@ -208,10 +237,31 @@ export function DevTeamsView() {
                   Track organized groups of developers, X Community admins/mods, and launchpad creators
                 </CardDescription>
               </div>
-              <Button onClick={loadData} disabled={isLoading} variant="outline" size="sm">
-                <RefreshCw className={`h-4 w-4 mr-2 ${isLoading ? 'animate-spin' : ''}`} />
-                Refresh
-              </Button>
+              <div className="flex items-center gap-2">
+                <Button 
+                  onClick={() => runBackfill(true)} 
+                  disabled={isBackfilling} 
+                  variant="outline" 
+                  size="sm"
+                  title="Preview what would be processed without making changes"
+                >
+                  {isBackfilling ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Eye className="h-4 w-4 mr-2" />}
+                  Dry Run
+                </Button>
+                <Button 
+                  onClick={() => runBackfill(false)} 
+                  disabled={isBackfilling} 
+                  size="sm"
+                  title="Process all sold FlipIt positions and add to tracking lists"
+                >
+                  {isBackfilling ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Database className="h-4 w-4 mr-2" />}
+                  Backfill Sold Positions
+                </Button>
+                <Button onClick={loadData} disabled={isLoading} variant="outline" size="sm">
+                  <RefreshCw className={`h-4 w-4 mr-2 ${isLoading ? 'animate-spin' : ''}`} />
+                  Refresh
+                </Button>
+              </div>
             </div>
           </CardHeader>
           <CardContent className="space-y-4">
