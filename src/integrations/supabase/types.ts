@@ -2653,6 +2653,7 @@ export type Database = {
           buy_price_usd: number | null
           buy_signature: string | null
           created_at: string | null
+          dev_trust_rating: string | null
           dex_paid_status: Json | null
           diamond_max_hold_hours: number | null
           diamond_min_peak_x: number | null
@@ -2724,6 +2725,7 @@ export type Database = {
           buy_price_usd?: number | null
           buy_signature?: string | null
           created_at?: string | null
+          dev_trust_rating?: string | null
           dex_paid_status?: Json | null
           diamond_max_hold_hours?: number | null
           diamond_min_peak_x?: number | null
@@ -2795,6 +2797,7 @@ export type Database = {
           buy_price_usd?: number | null
           buy_signature?: string | null
           created_at?: string | null
+          dev_trust_rating?: string | null
           dex_paid_status?: Json | null
           diamond_max_hold_hours?: number | null
           diamond_min_peak_x?: number | null
@@ -5753,6 +5756,69 @@ export type Database = {
           tokens_processed_count?: number | null
           updated_at?: string
           win_rate_lookback_hours?: number | null
+        }
+        Relationships: []
+      }
+      pumpfun_neutrallist: {
+        Row: {
+          added_by: string | null
+          created_at: string | null
+          entry_type: string
+          id: string
+          identifier: string
+          is_active: boolean | null
+          linked_bags_accounts: string[] | null
+          linked_pumpfun_accounts: string[] | null
+          linked_telegram: string[] | null
+          linked_token_mints: string[] | null
+          linked_twitter: string[] | null
+          linked_wallets: string[] | null
+          linked_websites: string[] | null
+          notes: string | null
+          reason: string | null
+          source: string | null
+          tags: string[] | null
+          updated_at: string | null
+        }
+        Insert: {
+          added_by?: string | null
+          created_at?: string | null
+          entry_type: string
+          id?: string
+          identifier: string
+          is_active?: boolean | null
+          linked_bags_accounts?: string[] | null
+          linked_pumpfun_accounts?: string[] | null
+          linked_telegram?: string[] | null
+          linked_token_mints?: string[] | null
+          linked_twitter?: string[] | null
+          linked_wallets?: string[] | null
+          linked_websites?: string[] | null
+          notes?: string | null
+          reason?: string | null
+          source?: string | null
+          tags?: string[] | null
+          updated_at?: string | null
+        }
+        Update: {
+          added_by?: string | null
+          created_at?: string | null
+          entry_type?: string
+          id?: string
+          identifier?: string
+          is_active?: boolean | null
+          linked_bags_accounts?: string[] | null
+          linked_pumpfun_accounts?: string[] | null
+          linked_telegram?: string[] | null
+          linked_token_mints?: string[] | null
+          linked_twitter?: string[] | null
+          linked_wallets?: string[] | null
+          linked_websites?: string[] | null
+          notes?: string | null
+          reason?: string | null
+          source?: string | null
+          tags?: string[] | null
+          updated_at?: string | null
         }
         Relationships: []
       }
