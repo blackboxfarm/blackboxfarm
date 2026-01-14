@@ -142,10 +142,11 @@ export async function parseBuyFromSolscan(
   );
 
   if (tokenChange) {
-    tokensReceived = tokenChange.change_amount;  // Already human-readable
-    tokenDecimals = tokenChange.token_decimals;
+    tokenDecimals = tokenChange.token_decimals || 6;
+    // Solscan returns raw amounts - divide by 10^decimals for human-readable
+    tokensReceived = tokenChange.change_amount / Math.pow(10, tokenDecimals);
     tokenSymbol = tokenChange.token_symbol;
-    console.log(`Token received: ${tokensReceived} ${tokenSymbol || tokenMint.slice(0, 8)}`);
+    console.log(`Token received: ${tokensReceived} ${tokenSymbol || tokenMint.slice(0, 8)} (raw=${tokenChange.change_amount}, decimals=${tokenDecimals})`);
   }
 
   // Validate we have what we need
@@ -223,12 +224,15 @@ export async function parseSellFromSolscan(
 
   // 2. Find tokens sold by wallet (negative change_amount)
   let tokensSold = 0;
+  let tokenDecimals = 6;
   const tokenChange = data.token_bal_change?.find(
     c => c.token_address === tokenMint && c.change_amount < 0
   );
 
   if (tokenChange) {
-    tokensSold = Math.abs(tokenChange.change_amount);
+    tokenDecimals = tokenChange.token_decimals || 6;
+    // Solscan returns raw amounts - divide by 10^decimals for human-readable
+    tokensSold = Math.abs(tokenChange.change_amount) / Math.pow(10, tokenDecimals);
   }
 
   if (tokensSold <= 0 || solReceivedLamports <= 0) {
