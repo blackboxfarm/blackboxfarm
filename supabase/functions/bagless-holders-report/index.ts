@@ -182,16 +182,29 @@ serve(async (req) => {
     }
     
     // ============================================
-    // Source 2: DexScreener - Fetch pair addresses
+    // Source 2: DexScreener - Fetch pair addresses AND boost/CTO status
     // ============================================
     let dexScreenerPairs: any[] = [];
     let socials: { twitter?: string; telegram?: string; website?: string } = {};
+    let dexStatus: { 
+      hasDexPaid: boolean; 
+      hasCTO: boolean; 
+      activeBoosts: number;
+      hasAds: boolean;
+    } = { hasDexPaid: false, hasCTO: false, activeBoosts: 0, hasAds: false };
+    
     try {
-      console.log('[DexScreener] Fetching token pairs...');
-      const dexResp = await fetch(`https://api.dexscreener.com/latest/dex/tokens/${tokenMint}`);
+      console.log('[DexScreener] Fetching token pairs and orders in parallel...');
       
-      if (dexResp.ok) {
-        const dexData = await dexResp.json();
+      // Fetch both pairs and orders in parallel
+      const [pairsResp, ordersResp] = await Promise.all([
+        fetch(`https://api.dexscreener.com/latest/dex/tokens/${tokenMint}`),
+        fetch(`https://api.dexscreener.com/orders/v1/solana/${tokenMint}`)
+      ]);
+      
+      // Process pairs data
+      if (pairsResp.ok) {
+        const dexData = await pairsResp.json();
         dexScreenerPairs = dexData.pairs || [];
         
         console.log(`[DexScreener] Found ${dexScreenerPairs.length} pairs`);
@@ -202,9 +215,10 @@ serve(async (req) => {
             allPoolAddresses.add(pair.pairAddress);
             console.log(`  [DexScreener] Pair: ${pair.pairAddress} on ${pair.dexId}`);
           }
-          // Also add the liquidity pool addresses if available
-          if (pair.quoteToken?.address) {
-            // Quote token is usually SOL/USDC, not the LP itself
+          
+          // Get boost count from pair data
+          if (pair.boosts?.active) {
+            dexStatus.activeBoosts = Math.max(dexStatus.activeBoosts, pair.boosts.active);
           }
         }
         
@@ -239,8 +253,122 @@ serve(async (req) => {
           console.log(`[DexScreener] Socials found:`, socials);
         }
       }
+      
+      // Process orders data for paid status, CTO, ads
+      if (ordersResp.ok) {
+        const ordersData = await ordersResp.json();
+        const orders = ordersData?.orders || (Array.isArray(ordersData) ? ordersData : []);
+        
+        for (const order of orders) {
+          if (order.status === 'approved') {
+            if (order.type === 'tokenProfile') {
+              dexStatus.hasDexPaid = true;
+            }
+            if (order.type === 'communityTakeover') {
+              dexStatus.hasCTO = true;
+            }
+            if (order.type === 'tokenAd' || order.type === 'trendingBarAd') {
+              dexStatus.hasAds = true;
+            }
+          }
+        }
+        
+        console.log(`[DexScreener] Status - Paid: ${dexStatus.hasDexPaid}, CTO: ${dexStatus.hasCTO}, Boosts: ${dexStatus.activeBoosts}, Ads: ${dexStatus.hasAds}`);
+      }
     } catch (error) {
       console.error('[DexScreener] API error:', error);
+    }
+    
+    // ============================================
+    // Fetch Dev/Creator wallet from launchpad
+    // ============================================
+    let creatorInfo: {
+      wallet?: string;
+      balance?: number;
+      balanceUsd?: number;
+      bondingCurveProgress?: number;
+      xAccount?: string;
+      feeSplit?: { wallet1?: string; wallet2?: string; splitPercent?: number };
+    } = {};
+    
+    try {
+      if (launchpadInfo.name.toLowerCase().includes('pump')) {
+        // Fetch pump.fun data
+        console.log('[PumpFun] Fetching creator info...');
+        const pumpResp = await fetch(`https://frontend-api.pump.fun/coins/${tokenMint}`, {
+          headers: { 'Accept': 'application/json' },
+          signal: AbortSignal.timeout(5000)
+        });
+        
+        if (pumpResp.ok) {
+          const pumpData = await pumpResp.json();
+          creatorInfo.wallet = pumpData.creator;
+          creatorInfo.bondingCurveProgress = pumpData.bonding_curve_progress;
+          
+          if (pumpData.twitter) {
+            creatorInfo.xAccount = pumpData.twitter.startsWith('http') ? pumpData.twitter : `https://x.com/${pumpData.twitter}`;
+          }
+          
+          console.log(`[PumpFun] Creator: ${creatorInfo.wallet}, Curve: ${creatorInfo.bondingCurveProgress}%`);
+        }
+      } else if (launchpadInfo.name.toLowerCase().includes('bonk')) {
+        // Bonk.fun creator lookup
+        console.log('[BonkFun] Fetching creator info...');
+        // Bonk.fun uses similar API structure
+        try {
+          const bonkResp = await fetch(`https://api.bonk.fun/token/${tokenMint}`, {
+            headers: { 'Accept': 'application/json' },
+            signal: AbortSignal.timeout(5000)
+          });
+          
+          if (bonkResp.ok) {
+            const bonkData = await bonkResp.json();
+            creatorInfo.wallet = bonkData.creator || bonkData.deployer;
+            if (bonkData.twitter) {
+              creatorInfo.xAccount = bonkData.twitter.startsWith('http') ? bonkData.twitter : `https://x.com/${bonkData.twitter}`;
+            }
+            console.log(`[BonkFun] Creator: ${creatorInfo.wallet}`);
+          }
+        } catch (e) {
+          console.log('[BonkFun] API not available, skipping');
+        }
+      } else if (launchpadInfo.name.toLowerCase().includes('bags')) {
+        // Bags.fm creator lookup
+        console.log('[BagsFM] Fetching creator info...');
+        try {
+          const bagsResp = await fetch(`https://public-api-v2.bags.fm/api/v1/analytics/token-creators/${tokenMint}`, {
+            headers: { 'Accept': 'application/json' },
+            signal: AbortSignal.timeout(5000)
+          });
+          
+          if (bagsResp.ok) {
+            const bagsData = await bagsResp.json();
+            if (bagsData.success && bagsData.response) {
+              const creators = bagsData.response.filter((c: any) => c.isCreator);
+              if (creators.length > 0) {
+                creatorInfo.wallet = creators[0].wallet;
+                if (creators[0].provider === 'twitter' && creators[0].providerUsername) {
+                  creatorInfo.xAccount = `https://x.com/${creators[0].providerUsername}`;
+                }
+                
+                // Check for fee split (multiple creators)
+                if (creators.length > 1) {
+                  creatorInfo.feeSplit = {
+                    wallet1: creators[0].wallet,
+                    wallet2: creators[1].wallet,
+                    splitPercent: creators[0].splitPercent || 50
+                  };
+                }
+              }
+              console.log(`[BagsFM] Creator: ${creatorInfo.wallet}, Split: ${creatorInfo.feeSplit ? 'Yes' : 'No'}`);
+            }
+          }
+        } catch (e) {
+          console.log('[BagsFM] API error, skipping');
+        }
+      }
+    } catch (error) {
+      console.error('[Creator Lookup] Error:', error);
     }
     
     console.log(`📊 [LP Detection] Total unique pool addresses: ${allPoolAddresses.size}`);
@@ -703,6 +831,8 @@ serve(async (req) => {
       liquidityPools: lpWallets,
       potentialDevWallet,
       socials: Object.keys(socials).length > 0 ? socials : undefined,
+      dexStatus,
+      creatorInfo: Object.keys(creatorInfo).length > 0 ? creatorInfo : undefined,
       firstBuyers: firstBuyersWithPNL,
       firstBuyersError: firstBuyersData.length === 0 ? 
         (heliusApiKey ? 

@@ -119,6 +119,20 @@ interface HoldersReport {
     telegram?: string;
     website?: string;
   };
+  dexStatus?: {
+    hasDexPaid: boolean;
+    hasCTO: boolean;
+    activeBoosts: number;
+    hasAds: boolean;
+  };
+  creatorInfo?: {
+    wallet?: string;
+    balance?: number;
+    balanceUsd?: number;
+    bondingCurveProgress?: number;
+    xAccount?: string;
+    feeSplit?: { wallet1?: string; wallet2?: string; splitPercent?: number };
+  };
   summary: string;
 }
 
@@ -839,6 +853,8 @@ export function BaglessHoldersReport({ initialToken }: BaglessHoldersReportProps
             twitterUrl={report?.socials?.twitter}
             telegramUrl={report?.socials?.telegram}
             websiteUrl={report?.socials?.website}
+            dexStatus={report?.dexStatus}
+            creatorInfo={report?.creatorInfo}
           />
         </div>
       )}
