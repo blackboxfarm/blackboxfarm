@@ -2,7 +2,7 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { DeveloperRiskBadge } from "./DeveloperRiskBadge";
-import { ExternalLink, Shield, ShieldCheck, TrendingUp, TrendingDown, Zap, Info } from "lucide-react";
+import { ExternalLink, Shield, ShieldCheck, TrendingUp, TrendingDown, Zap, Clock, Twitter, Globe, Send } from "lucide-react";
 import { Separator } from "@/components/ui/separator";
 import { useEffect, useState } from "react";
 
@@ -61,6 +61,10 @@ interface TokenMetadataDisplayProps {
   isLoading?: boolean;
   compact?: boolean;
   creatorWallet?: string;
+  tokenAge?: number; // Age in hours
+  twitterUrl?: string;
+  telegramUrl?: string;
+  websiteUrl?: string;
 }
 
 const LAUNCHPAD_LOGOS: Record<string, string> = {
@@ -80,7 +84,11 @@ export function TokenMetadataDisplay({
   pools = [],
   isLoading = false, 
   compact = false,
-  creatorWallet
+  creatorWallet,
+  tokenAge,
+  twitterUrl,
+  telegramUrl,
+  websiteUrl
 }: TokenMetadataDisplayProps) {
   if (isLoading) {
     return <TokenMetadataSkeleton compact={compact} />;
@@ -97,9 +105,16 @@ export function TokenMetadataDisplay({
   const descriptionText = metadata.description;
 
   const formatPrice = (price: number) => {
-    if (price < 0.001) return `$${price.toExponential(2)}`;
-    if (price < 1) return `$${price.toFixed(6)}`;
-    return `$${price.toFixed(4)}`;
+    // Always human-readable, never scientific notation
+    if (price === 0) return '$0';
+    if (price < 0.0000001) return `$${price.toFixed(12).replace(/\.?0+$/, '')}`;
+    if (price < 0.000001) return `$${price.toFixed(10).replace(/\.?0+$/, '')}`;
+    if (price < 0.00001) return `$${price.toFixed(9).replace(/\.?0+$/, '')}`;
+    if (price < 0.0001) return `$${price.toFixed(8).replace(/\.?0+$/, '')}`;
+    if (price < 0.001) return `$${price.toFixed(7).replace(/\.?0+$/, '')}`;
+    if (price < 0.01) return `$${price.toFixed(6).replace(/\.?0+$/, '')}`;
+    if (price < 1) return `$${price.toFixed(4).replace(/\.?0+$/, '')}`;
+    return `$${price.toFixed(2)}`;
   };
 
   const formatLargeNumber = (num: number) => {
@@ -298,21 +313,131 @@ export function TokenMetadataDisplay({
           </div>
           )}
 
-          <div className="flex items-center gap-4 text-sm text-muted-foreground flex-wrap">
-                <span>Decimals: {metadata.decimals}</span>
-                {metadata.totalSupply && (
-                  <span>Supply: {formatLargeNumber(metadata.totalSupply)}</span>
+          {/* Links Row - Launchpad, Padre, DexScreener, Socials, Age */}
+          <div className="flex items-center gap-3 text-sm flex-wrap">
+                {/* Age badge */}
+                {tokenAge !== undefined && (
+                  <Badge variant="outline" className="flex items-center gap-1 text-xs">
+                    <Clock className="h-3 w-3" />
+                    {tokenAge < 1 
+                      ? `${Math.round(tokenAge * 60)}m old`
+                      : tokenAge < 24 
+                        ? `${Math.round(tokenAge)}h old`
+                        : `${Math.round(tokenAge / 24)}d old`
+                    }
+                  </Badge>
                 )}
+
+                {/* Launchpad link with icon */}
+                {metadata.launchpad?.detected && metadata.launchpad.name.toLowerCase().includes('pump') && (
+                  <a
+                    href={`https://pump.fun/coin/${metadata.mint}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex items-center gap-1 hover:opacity-80 transition-opacity"
+                    title="View on Pump.fun"
+                  >
+                    <img src="/launchpad-logos/pumpfun.png" alt="Pump.fun" className="h-5 w-5 rounded" />
+                  </a>
+                )}
+                {metadata.launchpad?.detected && metadata.launchpad.name.toLowerCase().includes('bonk') && (
+                  <a
+                    href={`https://bonk.fun/token/${metadata.mint}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex items-center gap-1 hover:opacity-80 transition-opacity"
+                    title="View on Bonk.fun"
+                  >
+                    <img src="/launchpad-logos/bonkfun.png" alt="Bonk.fun" className="h-5 w-5 rounded" />
+                  </a>
+                )}
+                {metadata.launchpad?.detected && metadata.launchpad.name.toLowerCase().includes('bags') && (
+                  <a
+                    href={`https://bags.fm/token/${metadata.mint}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex items-center gap-1 hover:opacity-80 transition-opacity"
+                    title="View on Bags.fm"
+                  >
+                    <img src="/launchpad-logos/bagsfm.png" alt="Bags.fm" className="h-5 w-5 rounded" />
+                  </a>
+                )}
+                {metadata.isPumpFun && !metadata.launchpad?.detected && (
+                  <a
+                    href={`https://pump.fun/coin/${metadata.mint}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex items-center gap-1 hover:opacity-80 transition-opacity"
+                    title="View on Pump.fun"
+                  >
+                    <img src="/launchpad-logos/pumpfun.png" alt="Pump.fun" className="h-5 w-5 rounded" />
+                  </a>
+                )}
+
+                {/* Padre.gg trading terminal */}
+                <a
+                  href={`https://trade.padre.gg/trade/solana/${metadata.mint}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex items-center gap-1 hover:opacity-80 transition-opacity"
+                  title="Trade on Padre.gg"
+                >
+                  <img src="https://trade.padre.gg/logo.svg" alt="Padre.gg" className="h-5 w-5" />
+                </a>
+
+                {/* DexScreener */}
                 {priceInfo?.dexUrl && (
                   <a 
                     href={priceInfo.dexUrl} 
                     target="_blank" 
                     rel="noopener noreferrer"
-                    className="flex items-center gap-1 text-primary hover:underline"
+                    className="flex items-center gap-1 hover:opacity-80 transition-opacity"
+                    title="View on DexScreener"
                   >
-                    <ExternalLink className="h-3 w-3" />
-                    View on DEX
+                    <img src="/launchpad-logos/dexscreener.png" alt="DexScreener" className="h-5 w-5 rounded" />
                   </a>
+                )}
+
+                {/* Social links */}
+                {twitterUrl && (
+                  <a
+                    href={twitterUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex items-center gap-1 text-blue-400 hover:text-blue-300 transition-colors"
+                    title="Twitter/X"
+                  >
+                    <Twitter className="h-4 w-4" />
+                  </a>
+                )}
+                {telegramUrl && (
+                  <a
+                    href={telegramUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex items-center gap-1 text-primary hover:text-primary/80 transition-colors"
+                    title="Telegram"
+                  >
+                    <Send className="h-4 w-4" />
+                  </a>
+                )}
+                {websiteUrl && (
+                  <a
+                    href={websiteUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex items-center gap-1 text-blue-500 hover:text-blue-400 transition-colors"
+                    title="Website"
+                  >
+                    <Globe className="h-4 w-4" />
+                  </a>
+                )}
+
+                <Separator orientation="vertical" className="h-4" />
+
+                <span className="text-muted-foreground text-xs">Decimals: {metadata.decimals}</span>
+                {metadata.totalSupply && (
+                  <span className="text-muted-foreground text-xs">Supply: {formatLargeNumber(metadata.totalSupply)}</span>
                 )}
           </div>
         </div>
