@@ -683,12 +683,16 @@ serve(async (req) => {
 
       // Execute the buy via raydium-swap
       try {
-        const solPrice = await fetchSolPrice();
+        // CRITICAL: Pass the actual SOL amount, not convert from USD
+        // buyAmountSol is already calculated correctly (either from explicit SOL or converted from USD)
+        const buyUsdForSwap = buyAmountSol * solPrice; // Convert SOL back to USD for raydium-swap
+        console.log("Executing swap with:", { buyAmountSol, buyUsdForSwap, solPrice });
+        
         const { data: swapResult, error: swapError } = await supabase.functions.invoke("raydium-swap", {
           body: {
             side: "buy",
             tokenMint: tokenMint,
-            usdcAmount: buyAmountUsd || 10,
+            usdcAmount: buyUsdForSwap, // Use the calculated USD value from SOL amount
             buyWithSol: true,
             slippageBps: effectiveSlippage,
             priorityFeeMode: priorityFeeMode || "medium",
