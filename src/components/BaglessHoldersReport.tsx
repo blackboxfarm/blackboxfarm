@@ -1112,7 +1112,7 @@ export function BaglessHoldersReport({ initialToken }: BaglessHoldersReportProps
           <Card>
             <CardHeader className="p-3 md:p-6 pb-2 md:pb-4">
               <CardTitle className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2">
-                <span className="text-base md:text-xl text-blue-600 dark:text-blue-400 font-bold">Report Summary</span>
+                <span className="text-base md:text-xl text-white font-bold">Report Summary</span>
                 <Button 
                   onClick={exportToCSV}
                   variant="outline"
@@ -1126,13 +1126,6 @@ export function BaglessHoldersReport({ initialToken }: BaglessHoldersReportProps
               </CardTitle>
             </CardHeader>
             <CardContent className="p-3 md:p-6 pt-2 md:pt-0">
-              <div className="block md:hidden">
-                <AdBanner size="mobile" position={2} />
-              </div>
-              <div className="hidden md:block">
-                <AdBanner size="leaderboard" position={2} />
-              </div>
-              
               {/* Token price removed - redundant info */}
               
               {report.priceDiscoveryFailed && (
@@ -1386,7 +1379,7 @@ export function BaglessHoldersReport({ initialToken }: BaglessHoldersReportProps
               {/* === DISTRIBUTION INTEGRITY === */}
               {report.distributionStats && (
                 <div className="mb-4 p-3 rounded-lg border bg-muted/20">
-                  <h3 className="text-sm font-semibold flex items-center gap-2 mb-3 text-blue-600 dark:text-blue-400">
+                  <h3 className="text-sm font-semibold flex items-center gap-2 mb-3 text-white">
                     <BarChart3 className="h-4 w-4" />
                     Distribution Integrity
                   </h3>
@@ -1416,7 +1409,7 @@ export function BaglessHoldersReport({ initialToken }: BaglessHoldersReportProps
               {/* === FUNCTIONAL HOLDERS - Toggle View === */}
               <div className="mb-4">
                 <div className="flex items-center justify-between mb-3">
-                  <h3 className="text-base font-semibold flex items-center gap-2 text-blue-600 dark:text-blue-400">
+                  <h3 className="text-base font-semibold flex items-center gap-2 text-white">
                     <Users className="h-4 w-4" />
                     Functional Holders
                   </h3>
@@ -1831,7 +1824,7 @@ export function BaglessHoldersReport({ initialToken }: BaglessHoldersReportProps
               {/* Sediment Layer Chart */}
               <div className="mb-4 md:mb-6">
                 <div className="flex items-center justify-between mb-3 md:mb-4">
-                  <h3 className="text-base md:text-lg font-semibold text-blue-600 dark:text-blue-400">Distribution Integrity (Sediment Layers)</h3>
+                  <h3 className="text-base md:text-lg font-semibold text-white">Distribution Integrity (Sediment Layers)</h3>
                   <div className="flex items-center gap-1 text-xs">
                     <Button 
                       variant={sedimentViewMode === 'simple' ? 'default' : 'outline'} 

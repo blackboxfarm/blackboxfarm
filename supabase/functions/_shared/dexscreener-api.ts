@@ -111,6 +111,10 @@ export async function fetchDexScreenerData(tokenMint: string): Promise<DexScreen
           if (order.type === 'tokenAd' || order.type === 'trendingBarAd') {
             result.dexStatus.hasAds = true;
           }
+          // Also capture boosts from orders if not already detected from pairs
+          if (order.type === 'boost' && order.amount) {
+            result.dexStatus.activeBoosts = Math.max(result.dexStatus.activeBoosts, parseInt(order.amount) || 0);
+          }
         }
       }
       
