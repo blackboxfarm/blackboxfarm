@@ -29,17 +29,19 @@ import { useAuth } from '@/hooks/useAuth';
 import { useNavigate } from 'react-router-dom';
 
 interface DexPaidStatus {
-  tokenMint: string;
+  tokenMint?: string;
   activeBoosts: number;
-  hasPaidProfile: boolean;
-  hasActiveAds: boolean;
+  hasPaidProfile?: boolean;
+  hasDexPaid?: boolean; // Alias for hasPaidProfile (used by unified-monitor)
+  hasActiveAds?: boolean;
+  hasAds?: boolean; // Alias for hasActiveAds (used by unified-monitor)
   hasCTO: boolean;
-  orders: Array<{
+  orders?: Array<{
     type: string;
     status: string;
     paymentTimestamp?: number;
   }>;
-  checkedAt: string;
+  checkedAt?: string;
 }
 
 interface FlipPosition {
@@ -3578,7 +3580,7 @@ export function FlipItDashboard() {
                               </Badge>
                             )}
                             {/* DEX Paid Status Badges */}
-                            {position.dex_paid_status?.hasPaidProfile && (
+                            {(position.dex_paid_status?.hasDexPaid || position.dex_paid_status?.hasPaidProfile) && (
                               <Badge className="text-[9px] px-1 py-0 gap-0.5 bg-blue-900 hover:bg-blue-800 text-white">
                                 DEX
                               </Badge>
@@ -3589,7 +3591,7 @@ export function FlipItDashboard() {
                                 x{position.dex_paid_status.activeBoosts}
                               </Badge>
                             )}
-                            {position.dex_paid_status?.hasActiveAds && (
+                            {(position.dex_paid_status?.hasAds || position.dex_paid_status?.hasActiveAds) && (
                               <Badge className="text-[9px] px-1 py-0 gap-0.5 bg-purple-600 hover:bg-purple-700">
                                 <Megaphone className="h-2 w-2" />
                                 ADS
