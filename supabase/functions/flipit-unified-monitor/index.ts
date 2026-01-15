@@ -1,5 +1,6 @@
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+import { fetchDexScreenerData } from '../_shared/dexscreener-api.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -84,7 +85,7 @@ serve(async (req) => {
     const supabase = createClient(supabaseUrl, supabaseKey);
 
     const body = await req.json().catch(() => ({}));
-    const { slippageBps = 500, priorityFeeMode = 'medium' } = body;
+    const { slippageBps = 500, priorityFeeMode = 'medium', refreshDexStatus = false } = body;
 
     const results = {
       prices: {} as Record<string, number>,
@@ -95,6 +96,7 @@ serve(async (req) => {
       emergencyMonitor: { checked: 0, executed: [] as string[] },
       limitOrderMonitor: { checked: 0, executed: [] as string[], expired: 0 },
       stuckRecovery: { checked: 0, reset: [] as string[] },
+      dexStatusRefresh: { checked: 0, updated: [] as string[] },
     };
 
     // 0. STUCK POSITION RECOVERY - Reset positions stuck in pending_sell/pending_buy for > 3 minutes
@@ -265,6 +267,46 @@ serve(async (req) => {
       }
     }
 
+    // 7. Refresh DEX status and socials for holding positions (when requested)
+    if (refreshDexStatus && holdingPositions && holdingPositions.length > 0) {
+      console.log(`[Unified] Refreshing DEX status for ${holdingPositions.length} holding positions`);
+      results.dexStatusRefresh.checked = holdingPositions.length;
+      
+      for (const pos of holdingPositions) {
+        try {
+          const dexData = await fetchDexScreenerData(pos.token_mint);
+          
+          // Build update object
+          const updateData: Record<string, unknown> = {
+            dex_paid_status: {
+              hasDexPaid: dexData.dexStatus.hasDexPaid,
+              hasCTO: dexData.dexStatus.hasCTO,
+              activeBoosts: dexData.dexStatus.activeBoosts,
+              hasAds: dexData.dexStatus.hasAds,
+              checkedAt: new Date().toISOString(),
+            }
+          };
+          
+          // Update socials if found
+          if (dexData.socials.twitter) updateData.twitter_url = dexData.socials.twitter;
+          if (dexData.socials.telegram) updateData.telegram_url = dexData.socials.telegram;
+          if (dexData.socials.website) updateData.website_url = dexData.socials.website;
+          
+          const { error: updateErr } = await supabase
+            .from('flip_positions')
+            .update(updateData)
+            .eq('id', pos.id);
+          
+          if (!updateErr) {
+            results.dexStatusRefresh.updated.push(pos.token_symbol || pos.token_mint);
+            console.log(`[Unified] Updated DEX status for ${pos.token_symbol}: CTO=${dexData.dexStatus.hasCTO}, DexPaid=${dexData.dexStatus.hasDexPaid}`);
+          }
+        } catch (e) {
+          console.error(`[Unified] Failed to refresh DEX status for ${pos.token_mint}:`, e);
+        }
+      }
+    }
+
     return ok({
       success: true,
       ...results,
@@ -274,6 +316,7 @@ serve(async (req) => {
         rebuyWatching: rebuyPositions?.length || 0,
         limitOrdersActive: limitOrders?.length || 0,
         stuckPositionsReset: results.stuckRecovery.reset.length,
+        dexStatusUpdated: results.dexStatusRefresh.updated.length,
         solPrice,
       }
     });
