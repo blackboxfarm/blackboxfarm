@@ -24,6 +24,7 @@ import { RetentionAnalysis } from '@/components/premium/RetentionAnalysis';
 import { TokenHealthDashboard } from '@/components/premium/TokenHealthDashboard';
 import { useAuth } from '@/hooks/useAuth';
 import { useTokenDataCollection } from '@/hooks/useTokenDataCollection';
+import padreMemeCoins from '@/assets/padre-meme-coins.png';
 
 interface TokenHolder {
   owner: string;
@@ -1752,20 +1753,20 @@ export function BaglessHoldersReport({ initialToken }: BaglessHoldersReportProps
               {/* Padre Trading Promo */}
               <div className="mb-4 md:mb-6">
                 <Card className="bg-gradient-to-br from-background to-muted/30 border-orange-500/20">
-                  <CardContent className="flex flex-col items-center justify-center py-8 space-y-6">
+                  <CardContent className="flex flex-col items-center justify-center py-6 md:py-8 space-y-4 md:space-y-6">
                     <img 
-                      src="https://padre.gg/static/media/Right2.b396b79d7ddd061d0d42.png"
+                      src={padreMemeCoins}
                       alt="Trade your favorite meme coins"
-                      className="max-w-md w-full h-auto"
+                      className="max-w-xs md:max-w-md w-full h-auto"
                     />
-                    <p className="text-lg md:text-xl text-center text-muted-foreground font-medium">
-                      Trade your favourite meme coins
-                    </p>
+                    <h5 className="text-xl md:text-2xl text-center text-foreground font-bold tracking-tight uppercase">
+                      TRADE YOUR FAVOURITE MEME COINS
+                    </h5>
                     <a
                       href="https://trade.padre.gg/rk/blackbox"
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="inline-flex items-center justify-center px-8 py-3 bg-orange-500 hover:bg-orange-600 text-white font-semibold rounded-lg transition-colors text-lg shadow-lg hover:shadow-orange-500/25"
+                      className="inline-flex items-center justify-center px-6 md:px-8 py-2.5 md:py-3 bg-orange-500 hover:bg-orange-600 text-white font-semibold rounded-lg transition-colors text-base md:text-lg shadow-lg hover:shadow-orange-500/25"
                     >
                       Trade Now with Padre
                     </a>
