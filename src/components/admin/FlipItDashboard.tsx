@@ -1738,11 +1738,12 @@ export function FlipItDashboard() {
         return;
       }
 
-      const { data, error } = await supabase.functions.invoke('flipit-price-monitor', {
+      // Use unified monitor with refreshDexStatus to also update socials and DEX status
+      const { data, error } = await supabase.functions.invoke('flipit-unified-monitor', {
         body: {
-          action: 'check',
           slippageBps: slippageBps,
           priorityFeeMode: priorityFeeMode,
+          refreshDexStatus: true, // Refresh DEX status and socials on manual refresh
         },
       });
 
@@ -1757,14 +1758,18 @@ export function FlipItDashboard() {
       if (data?.checkedAt) {
         setLastAutoCheck(data.checkedAt);
       }
-      if (data?.executed?.length > 0) {
-        toast.success(`Sold ${data.executed.length} position(s) at target!`);
-        loadPositions({ silent: true });
-        refreshWalletBalance();
+      
+      // Reload positions to get updated DEX status from database
+      if (data?.dexStatusRefresh?.updated?.length > 0) {
+        await loadPositions({ silent: true });
+        toast.success(`Refreshed prices & DEX status for ${data.dexStatusRefresh.updated.length} token(s)`);
+      } else if (data?.priceMonitor?.executed?.length > 0) {
+        toast.success(`Sold ${data.priceMonitor.executed.length} position(s) at target!`);
+        await loadPositions({ silent: true });
       } else {
         toast.success('Refreshed');
-        refreshWalletBalance();
       }
+      refreshWalletBalance();
     } catch (err: any) {
       toast.error(err.message || 'Failed to refresh');
     } finally {
