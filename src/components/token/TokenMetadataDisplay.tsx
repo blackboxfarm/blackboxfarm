@@ -215,7 +215,7 @@ export function TokenMetadataDisplay({
       <CardContent className="p-3 md:p-6">
         <div className="space-y-3 md:space-y-4">
           {/* Quick Snapshot Title */}
-          <h3 className="text-base md:text-lg font-bold text-blue-600 dark:text-blue-400">Quick Snapshot</h3>
+          <h3 className="text-base md:text-lg font-bold text-white">Quick Snapshot</h3>
           
           {/* Mobile: Image left, Symbol + Launchpad right stacked */}
           <div className="flex gap-3 md:gap-6">
@@ -373,7 +373,7 @@ export function TokenMetadataDisplay({
               </div>
 
               {/* DexScreener Status Badges */}
-              {dexStatus && (dexStatus.hasDexPaid || dexStatus.hasCTO || dexStatus.activeBoosts > 0) && (
+              {dexStatus && (dexStatus.hasDexPaid || dexStatus.hasCTO || dexStatus.activeBoosts > 0 || dexStatus.hasAds) && (
                 <div className="flex items-center gap-1.5 flex-wrap">
                   {dexStatus.hasDexPaid && (
                     <Badge className="text-[10px] px-1.5 py-0.5 bg-green-600 hover:bg-green-500 text-white">
@@ -388,6 +388,11 @@ export function TokenMetadataDisplay({
                   {dexStatus.activeBoosts > 0 && (
                     <Badge className="text-[10px] px-1.5 py-0.5 bg-orange-500 hover:bg-orange-400 text-white">
                       🚀 x{dexStatus.activeBoosts}
+                    </Badge>
+                  )}
+                  {dexStatus.hasAds && (
+                    <Badge className="text-[10px] px-1.5 py-0.5 bg-purple-600 hover:bg-purple-500 text-white">
+                      📢 ADS
                     </Badge>
                   )}
                 </div>
