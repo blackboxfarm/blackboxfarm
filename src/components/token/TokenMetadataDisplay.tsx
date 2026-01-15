@@ -217,29 +217,33 @@ export function TokenMetadataDisplay({
           {/* Quick Snapshot Title */}
           <h3 className="text-base md:text-lg font-bold text-white">Quick Snapshot</h3>
           
-          {/* Mobile: Image left, Symbol + Launchpad right stacked */}
-          <div className="flex gap-3 md:gap-6">
-            <img 
-              src={displayImage || '/lovable-uploads/7283e809-e703-4594-8dc8-a1ade76b06de.png'} 
-              alt={displayImage ? `${metadata.symbol} token logo` : 'Token placeholder'}
-              loading="lazy"
-              className={`w-20 h-20 md:w-32 md:h-32 rounded-2xl flex-shrink-0 object-cover border-4 border-primary/20 shadow-xl ${!displayImage ? 'opacity-40 grayscale' : ''}`}
-              onError={(e) => {
-                if (e.currentTarget.src !== '/lovable-uploads/7283e809-e703-4594-8dc8-a1ade76b06de.png') {
-                  e.currentTarget.src = '/lovable-uploads/7283e809-e703-4594-8dc8-a1ade76b06de.png';
-                  e.currentTarget.className = 'w-20 h-20 md:w-32 md:h-32 rounded-2xl flex-shrink-0 object-cover border-4 border-primary/20 shadow-xl opacity-40 grayscale';
-                }
-              }}
-            />
+          {/* 3-Column Layout: MINT IMAGE | BOX1 | BOX2 */}
+          <div className="grid grid-cols-1 md:grid-cols-[auto_1fr_1fr] gap-3 md:gap-4">
+            {/* MINT IMAGE */}
+            <div className="flex justify-center md:justify-start">
+              <img 
+                src={displayImage || '/lovable-uploads/7283e809-e703-4594-8dc8-a1ade76b06de.png'} 
+                alt={displayImage ? `${metadata.symbol} token logo` : 'Token placeholder'}
+                loading="lazy"
+                className={`w-20 h-20 md:w-24 md:h-24 rounded-2xl flex-shrink-0 object-cover border-4 border-primary/20 shadow-xl ${!displayImage ? 'opacity-40 grayscale' : ''}`}
+                onError={(e) => {
+                  if (e.currentTarget.src !== '/lovable-uploads/7283e809-e703-4594-8dc8-a1ade76b06de.png') {
+                    e.currentTarget.src = '/lovable-uploads/7283e809-e703-4594-8dc8-a1ade76b06de.png';
+                    e.currentTarget.className = 'w-20 h-20 md:w-24 md:h-24 rounded-2xl flex-shrink-0 object-cover border-4 border-primary/20 shadow-xl opacity-40 grayscale';
+                  }
+                }}
+              />
+            </div>
             
-            <div className="flex-1 space-y-2">
-              {/* Symbol with Verified Badge + Links Row */}
+            {/* BOX 1: $TOKEN, Launchpad, DEX Status */}
+            <div className="space-y-2">
+              {/* Token Symbol */}
+              <Badge variant="outline" className="text-sm md:text-base font-bold px-3 py-1">
+                ${metadata.symbol}
+              </Badge>
+              
+              {/* Launchpad Link */}
               <div className="flex items-center gap-2 flex-wrap">
-                <Badge variant="outline" className="text-sm md:text-base font-bold px-3 py-1">
-                  ${metadata.symbol}
-                </Badge>
-                
-                {/* Launchpad link with icon + text */}
                 {metadata.launchpad?.detected && metadata.launchpad.name.toLowerCase().includes('pump') && (
                   <a
                     href={`https://pump.fun/coin/${metadata.mint}`}
@@ -288,9 +292,10 @@ export function TokenMetadataDisplay({
                     <span className="text-xs md:text-sm font-medium">pump.fun</span>
                   </a>
                 )}
+              </div>
 
-
-                {/* DexScreener */}
+              {/* DEX Status with DexScreener Icon */}
+              <div className="flex items-center gap-1.5 flex-wrap">
                 {priceInfo?.dexUrl && (
                   <a 
                     href={priceInfo.dexUrl} 
@@ -302,19 +307,95 @@ export function TokenMetadataDisplay({
                     <DexScreenerIcon className="h-5 w-5" />
                   </a>
                 )}
+                {dexStatus?.hasDexPaid && (
+                  <Badge className="text-[10px] px-1.5 py-0.5 bg-green-600 hover:bg-green-500 text-white">
+                    DEX PAID
+                  </Badge>
+                )}
+                {dexStatus?.hasCTO && (
+                  <Badge className="text-[10px] px-1.5 py-0.5 bg-yellow-600 hover:bg-yellow-500 text-white">
+                    CTO
+                  </Badge>
+                )}
+                {dexStatus && dexStatus.activeBoosts > 0 && (
+                  <Badge className="text-[10px] px-1.5 py-0.5 bg-orange-500 hover:bg-orange-400 text-white">
+                    🚀 x{dexStatus.activeBoosts}
+                  </Badge>
+                )}
+                {dexStatus?.hasAds && (
+                  <Badge className="text-[10px] px-1.5 py-0.5 bg-purple-600 hover:bg-purple-500 text-white">
+                    📢 ADS
+                  </Badge>
+                )}
+              </div>
 
-                {/* Padre.gg trading terminal - wider logo */}
+              {/* Age badge */}
+              {tokenAge !== undefined && (
+                <Badge variant="outline" className="flex items-center gap-1 text-xs w-fit">
+                  <Clock className="h-3 w-3" />
+                  {tokenAge < 1 
+                    ? `${Math.round(tokenAge * 60)}m old`
+                    : tokenAge < 24 
+                      ? `${Math.round(tokenAge)}h old`
+                      : `${Math.round(tokenAge / 24)}d old`
+                  }
+                </Badge>
+              )}
+
+              {creatorWallet && (
+                <DeveloperRiskBadge creatorWallet={creatorWallet} showDetails />
+              )}
+            </div>
+
+            {/* BOX 2: External Links & Socials */}
+            <div className="space-y-2">
+              {/* Padre.gg trading terminal */}
+              <a
+                href={`https://trade.padre.gg/trade/solana/${metadata.mint}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-center hover:opacity-80 transition-opacity"
+                title="Trade on Padre.gg"
+              >
+                <img src="https://trade.padre.gg/logo.svg" alt="Padre.gg" className="h-5 w-auto max-w-[100px]" />
+              </a>
+
+              {/* External Explorer Links */}
+              <div className="flex items-center gap-2 flex-wrap">
+                {/* CoinGecko */}
                 <a
-                  href={`https://trade.padre.gg/trade/solana/${metadata.mint}`}
+                  href={`https://www.coingecko.com/en/coins/${metadata.symbol.toLowerCase()}`}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="flex items-center hover:opacity-80 transition-opacity"
-                  title="Trade on Padre.gg"
+                  title="Search on CoinGecko"
                 >
-                  <img src="https://trade.padre.gg/logo.svg" alt="Padre.gg" className="h-5 w-auto max-w-[100px]" />
+                  <img src="https://static.coingecko.com/s/coingecko-logo-8903d34ce19ca4be1c81f0db30e924154750d208683fad7ae6f2ce06c76d0a56.png" alt="CoinGecko" className="h-5 w-5 rounded" />
                 </a>
+                {/* CoinMarketCap */}
+                <a
+                  href={`https://coinmarketcap.com/search/?q=${metadata.symbol}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex items-center hover:opacity-80 transition-opacity"
+                  title="Search on CoinMarketCap"
+                >
+                  <img src="https://s2.coinmarketcap.com/static/cloud/img/fav/apple-touch-icon.png" alt="CoinMarketCap" className="h-5 w-5 rounded" />
+                </a>
+                {/* Birdeye */}
+                <a
+                  href={`https://birdeye.so/token/${metadata.mint}?chain=solana`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex items-center hover:opacity-80 transition-opacity"
+                  title="View on Birdeye"
+                >
+                  <img src="https://birdeye.so/favicon.ico" alt="Birdeye" className="h-5 w-5 rounded" />
+                </a>
+              </div>
 
-                {/* Social links with platform detection */}
+              {/* Social Links */}
+              <div className="flex items-center gap-2 flex-wrap">
                 {twitterUrl && (() => {
                   const platformInfo = detectSocialPlatform(twitterUrl);
                   return (
@@ -357,50 +438,7 @@ export function TokenMetadataDisplay({
                     </a>
                   );
                 })()}
-
-                {/* Age badge */}
-                {tokenAge !== undefined && (
-                  <Badge variant="outline" className="flex items-center gap-1 text-xs">
-                    <Clock className="h-3 w-3" />
-                    {tokenAge < 1 
-                      ? `${Math.round(tokenAge * 60)}m old`
-                      : tokenAge < 24 
-                        ? `${Math.round(tokenAge)}h old`
-                        : `${Math.round(tokenAge / 24)}d old`
-                    }
-                  </Badge>
-                )}
               </div>
-
-              {/* DexScreener Status Badges */}
-              {dexStatus && (dexStatus.hasDexPaid || dexStatus.hasCTO || dexStatus.activeBoosts > 0 || dexStatus.hasAds) && (
-                <div className="flex items-center gap-1.5 flex-wrap">
-                  {dexStatus.hasDexPaid && (
-                    <Badge className="text-[10px] px-1.5 py-0.5 bg-green-600 hover:bg-green-500 text-white">
-                      DEX PAID
-                    </Badge>
-                  )}
-                  {dexStatus.hasCTO && (
-                    <Badge className="text-[10px] px-1.5 py-0.5 bg-yellow-600 hover:bg-yellow-500 text-white">
-                      CTO
-                    </Badge>
-                  )}
-                  {dexStatus.activeBoosts > 0 && (
-                    <Badge className="text-[10px] px-1.5 py-0.5 bg-orange-500 hover:bg-orange-400 text-white">
-                      🚀 x{dexStatus.activeBoosts}
-                    </Badge>
-                  )}
-                  {dexStatus.hasAds && (
-                    <Badge className="text-[10px] px-1.5 py-0.5 bg-purple-600 hover:bg-purple-500 text-white">
-                      📢 ADS
-                    </Badge>
-                  )}
-                </div>
-              )}
-
-              {creatorWallet && (
-                <DeveloperRiskBadge creatorWallet={creatorWallet} showDetails />
-              )}
             </div>
           </div>
 
