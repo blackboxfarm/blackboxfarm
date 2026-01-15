@@ -12,7 +12,9 @@ import { Separator } from '@/components/ui/separator';
 import { Switch } from '@/components/ui/switch';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
-import { Flame, RefreshCw, TrendingUp, DollarSign, Wallet, Clock, CheckCircle2, XCircle, Loader2, Plus, Copy, ArrowUpRight, Key, Settings, Zap, Activity, Radio, Pencil, ChevronDown, Coins, Eye, EyeOff, RotateCcw, AlertTriangle, Twitter, Trash2, Globe, Send, Rocket, Megaphone, Users, Shield, ClipboardPaste, FlaskConical, Lock, LockOpen } from 'lucide-react';
+import { Flame, RefreshCw, TrendingUp, DollarSign, Wallet, Clock, CheckCircle2, XCircle, Loader2, Plus, Copy, ArrowUpRight, Key, Settings, Zap, Activity, Radio, Pencil, ChevronDown, Coins, Eye, EyeOff, RotateCcw, AlertTriangle, Trash2, Globe, Send, Rocket, Megaphone, Users, Shield, ClipboardPaste, FlaskConical, Lock, LockOpen } from 'lucide-react';
+import { SocialIcon } from '@/components/token/SocialIcon';
+import { detectSocialPlatform } from '@/utils/socialPlatformDetector';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { useSolPrice } from '@/hooks/useSolPrice';
 import { useHolderQualityCheck } from '@/hooks/useHolderQualityCheck';
@@ -3516,46 +3518,55 @@ export function FlipItDashboard() {
                                 <Coins className="h-3 w-3 text-muted-foreground/50" />
                               </div>
                             )}
-                            {/* Twitter/X Icon */}
-                            {position.twitter_url ? (
-                              <a 
-                                href={position.twitter_url} 
-                                target="_blank" 
-                                rel="noopener noreferrer"
-                                className="text-primary hover:text-primary/80 transition-colors"
-                                title="View on X/Twitter"
-                              >
-                                <Twitter className="h-3 w-3" />
-                              </a>
-                            ) : (
-                              <Twitter className="h-3 w-3 text-muted-foreground/30" />
+                            {/* Twitter/X Icon - detect platform from URL */}
+                            {position.twitter_url ? (() => {
+                              const platformInfo = detectSocialPlatform(position.twitter_url);
+                              return (
+                                <a 
+                                  href={position.twitter_url} 
+                                  target="_blank" 
+                                  rel="noopener noreferrer"
+                                  className="hover:opacity-80 transition-opacity"
+                                  title={platformInfo.label}
+                                >
+                                  <SocialIcon platform={platformInfo.platform} className="h-3 w-3" />
+                                </a>
+                              );
+                            })() : (
+                              <SocialIcon platform="twitter" className="h-3 w-3 opacity-30" />
                             )}
-                            {/* Website Icon */}
-                            {position.website_url ? (
-                              <a 
-                                href={position.website_url} 
-                                target="_blank" 
-                                rel="noopener noreferrer"
-                                className="text-blue-500 hover:text-blue-400 transition-colors"
-                                title={position.website_url}
-                              >
-                                <Globe className="h-3 w-3" />
-                              </a>
-                            ) : (
+                            {/* Website Icon - detect platform (TikTok, Instagram, etc.) */}
+                            {position.website_url ? (() => {
+                              const platformInfo = detectSocialPlatform(position.website_url);
+                              return (
+                                <a 
+                                  href={position.website_url} 
+                                  target="_blank" 
+                                  rel="noopener noreferrer"
+                                  className="hover:opacity-80 transition-opacity"
+                                  title={platformInfo.label}
+                                >
+                                  <SocialIcon platform={platformInfo.platform} className="h-3 w-3" />
+                                </a>
+                              );
+                            })() : (
                               <Globe className="h-3 w-3 text-muted-foreground/30" />
                             )}
-                            {/* Telegram Icon */}
-                            {position.telegram_url ? (
-                              <a 
-                                href={position.telegram_url} 
-                                target="_blank" 
-                                rel="noopener noreferrer"
-                                className="text-primary hover:text-primary/80 transition-colors"
-                                title="Join Telegram"
-                              >
-                                <Send className="h-3 w-3" />
-                              </a>
-                            ) : (
+                            {/* Telegram Icon - detect platform from URL */}
+                            {position.telegram_url ? (() => {
+                              const platformInfo = detectSocialPlatform(position.telegram_url);
+                              return (
+                                <a 
+                                  href={position.telegram_url} 
+                                  target="_blank" 
+                                  rel="noopener noreferrer"
+                                  className="hover:opacity-80 transition-opacity"
+                                  title={platformInfo.label}
+                                >
+                                  <SocialIcon platform={platformInfo.platform} className="h-3 w-3" />
+                                </a>
+                              );
+                            })() : (
                               <Send className="h-3 w-3 text-muted-foreground/30" />
                             )}
                           </div>
@@ -4401,7 +4412,7 @@ export function FlipItDashboard() {
         <CollapsibleTrigger asChild>
           <Button variant="outline" className="w-full justify-between mb-2">
             <span className="flex items-center gap-2">
-              <Twitter className="h-4 w-4" />
+              <SocialIcon platform="twitter" className="h-4 w-4" />
               Tweet Templates
             </span>
             <ChevronDown className="h-4 w-4" />
