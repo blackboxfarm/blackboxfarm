@@ -1,12 +1,15 @@
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Button } from "@/components/ui/button";
 import { DeveloperRiskBadge } from "./DeveloperRiskBadge";
-import { ExternalLink, TrendingUp, TrendingDown, Zap, Clock } from "lucide-react";
+import { ExternalLink, TrendingUp, TrendingDown, Zap, Clock, Share2, MessageCircle, Send } from "lucide-react";
 import { Separator } from "@/components/ui/separator";
 import { useEffect, useState } from "react";
 import { SocialIcon, DexScreenerIcon } from "./SocialIcon";
 import { detectSocialPlatform } from "@/utils/socialPlatformDetector";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { useToast } from "@/hooks/use-toast";
 interface LaunchpadInfo {
   name: string;
   detected: boolean;
@@ -111,6 +114,8 @@ export function TokenMetadataDisplay({
   dexStatus,
   creatorInfo
 }: TokenMetadataDisplayProps) {
+  const { toast } = useToast();
+  
   if (isLoading) {
     return <TokenMetadataSkeleton compact={compact} />;
   }
@@ -209,6 +214,8 @@ export function TokenMetadataDisplay({
     <Card>
       <CardContent className="p-3 md:p-6">
         <div className="space-y-3 md:space-y-4">
+          {/* Quick Snapshot Title */}
+          <h3 className="text-base md:text-lg font-bold text-blue-600 dark:text-blue-400">Quick Snapshot</h3>
           
           {/* Mobile: Image left, Symbol + Launchpad right stacked */}
           <div className="flex gap-3 md:gap-6">
@@ -520,13 +527,46 @@ export function TokenMetadataDisplay({
           </div>
           )}
 
-          {/* Decimals & Supply */}
-          <div className="flex items-center gap-3 text-sm">
-            <span className="text-muted-foreground text-xs">Decimals: {metadata.decimals}</span>
-            {metadata.totalSupply && (
-              <span className="text-muted-foreground text-xs">Supply: {formatLargeNumber(metadata.totalSupply)}</span>
-            )}
-          </div>
+          {/* Share Report Button */}
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="outline" className="w-full gap-2 text-sm">
+                <Share2 className="h-4 w-4" />
+                Share ${metadata.symbol} Report
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="center" className="w-48">
+              <DropdownMenuItem onClick={() => {
+                const ticker = metadata.symbol || 'this token';
+                const text = `Check out the Whales vs the Dust for $${ticker} 🐋💨`;
+                const url = window.location.href;
+                window.open(`https://twitter.com/intent/tweet?text=${encodeURIComponent(text)}&url=${encodeURIComponent(url)}`, '_blank');
+              }}>
+                <span className="w-5 h-5 bg-foreground rounded-full flex items-center justify-center mr-2">
+                  <span className="text-background text-xs font-bold">𝕏</span>
+                </span>
+                Share on X
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => {
+                const ticker = metadata.symbol || 'this token';
+                const text = `🐋 **Whales vs Dust** 🐋\n\nCheck out the holder analysis for $${ticker}!\n\n🔗 ${window.location.href}`;
+                navigator.clipboard.writeText(text);
+                toast({ title: "Copied!", description: "Discord message copied to clipboard" });
+              }}>
+                <MessageCircle className="h-4 w-4 mr-2" />
+                Copy for Discord
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => {
+                const ticker = metadata.symbol || 'this token';
+                const text = `🐋 Check out the Whales vs the Dust for $${ticker}`;
+                const url = window.location.href;
+                window.open(`https://t.me/share/url?url=${encodeURIComponent(url)}&text=${encodeURIComponent(text)}`, '_blank');
+              }}>
+                <Send className="h-4 w-4 mr-2" />
+                Share on Telegram
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
         </div>
       </CardContent>
     </Card>
