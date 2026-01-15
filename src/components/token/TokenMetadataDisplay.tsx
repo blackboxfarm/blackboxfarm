@@ -2,7 +2,7 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { DeveloperRiskBadge } from "./DeveloperRiskBadge";
-import { ExternalLink, Shield, ShieldCheck, TrendingUp, TrendingDown, Zap, Clock } from "lucide-react";
+import { ExternalLink, TrendingUp, TrendingDown, Zap, Clock } from "lucide-react";
 import { Separator } from "@/components/ui/separator";
 import { useEffect, useState } from "react";
 import { SocialIcon, DexScreenerIcon } from "./SocialIcon";
@@ -176,9 +176,6 @@ export function TokenMetadataDisplay({
                   Pump.fun
                 </Badge>
               )}
-              {metadata.verified && (
-                <ShieldCheck className="h-4 w-4 text-green-500" />
-              )}
             </div>
             {priceInfo ? (
               <div className="flex items-center gap-2 text-sm text-muted-foreground">
@@ -285,19 +282,6 @@ export function TokenMetadataDisplay({
                   </a>
                 )}
 
-                {/* Verified Token Badge */}
-                <Badge 
-                  variant={metadata.verified ? "outline" : "secondary"} 
-                  className={`text-xs ${metadata.verified ? 'border-green-500 text-green-600' : 'border-yellow-500 text-yellow-600'}`}
-                  title={metadata.verified ? "Verified Token" : "Unverified Token"}
-                >
-                  {metadata.verified ? (
-                    <ShieldCheck className="h-3 w-3 mr-1" />
-                  ) : (
-                    <Shield className="h-3 w-3 mr-1" />
-                  )}
-                  {metadata.verified ? 'Verified Token' : 'Unverified'}
-                </Badge>
 
                 {/* DexScreener */}
                 {priceInfo?.dexUrl && (
