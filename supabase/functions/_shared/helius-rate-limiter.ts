@@ -1,10 +1,10 @@
 /**
- * Helius API Rate Limiter and Logger
+ * Helius API Rate Limiter and Logger - PERSISTENT VERSION
  * 
  * Provides:
- * 1. Rate limiting across all edge functions
+ * 1. Persistent rate limiting across all edge functions (via database)
  * 2. Logging of all Helius API calls to helius_api_usage table
- * 3. Circuit breaker for 429 responses
+ * 3. Circuit breaker for 429 responses (persistent)
  */
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.54.0';
@@ -13,11 +13,11 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.54.0';
 const MAX_CALLS_PER_MINUTE = 50;
 const CIRCUIT_BREAKER_DURATION_MS = 5 * 60 * 1000; // 5 minutes
 
-// In-memory tracking (resets per function invocation)
-let callCount = 0;
-let lastResetTime = Date.now();
-let circuitBreakerTripped = false;
-let circuitBreakerTrippedAt = 0;
+// In-memory fallback (if DB is unavailable)
+let localCallCount = 0;
+let localLastResetTime = Date.now();
+let localCircuitBreakerTripped = false;
+let localCircuitBreakerTrippedAt = 0;
 
 interface HeliusCallParams {
   functionName: string;
@@ -26,43 +26,169 @@ interface HeliusCallParams {
   requestParams?: any;
 }
 
-// Reset call count every minute
-function checkRateLimit(): boolean {
-  const now = Date.now();
+interface RateLimitState {
+  call_count: number;
+  window_start: string;
+  circuit_breaker_active: boolean;
+  circuit_breaker_until: string | null;
+}
+
+// Get or create Supabase client
+function getSupabaseClient() {
+  const supabaseUrl = Deno.env.get('SUPABASE_URL');
+  const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
   
-  // Reset counter every minute
-  if (now - lastResetTime > 60000) {
-    callCount = 0;
-    lastResetTime = now;
+  if (!supabaseUrl || !supabaseServiceKey) return null;
+  
+  return createClient(supabaseUrl, supabaseServiceKey);
+}
+
+// Get persistent rate limit state from database
+async function getPersistentRateLimitState(): Promise<RateLimitState | null> {
+  const supabase = getSupabaseClient();
+  if (!supabase) return null;
+  
+  try {
+    const { data, error } = await supabase
+      .from('helius_rate_limit_state')
+      .select('*')
+      .eq('id', 'global')
+      .single();
+    
+    if (error && error.code !== 'PGRST116') {
+      console.error('Error fetching rate limit state:', error);
+      return null;
+    }
+    
+    return data;
+  } catch (e) {
+    console.error('Failed to get rate limit state:', e);
+    return null;
+  }
+}
+
+// Update persistent rate limit state
+async function updatePersistentRateLimitState(update: Partial<RateLimitState>): Promise<boolean> {
+  const supabase = getSupabaseClient();
+  if (!supabase) return false;
+  
+  try {
+    const { error } = await supabase
+      .from('helius_rate_limit_state')
+      .upsert({
+        id: 'global',
+        ...update,
+        updated_at: new Date().toISOString()
+      });
+    
+    if (error) {
+      console.error('Error updating rate limit state:', error);
+      return false;
+    }
+    
+    return true;
+  } catch (e) {
+    console.error('Failed to update rate limit state:', e);
+    return false;
+  }
+}
+
+// Check rate limit (with persistent fallback)
+async function checkRateLimitPersistent(): Promise<{ allowed: boolean; reason?: string }> {
+  const now = Date.now();
+  const nowIso = new Date().toISOString();
+  
+  // Try to get persistent state
+  const state = await getPersistentRateLimitState();
+  
+  if (state) {
+    // Check circuit breaker first
+    if (state.circuit_breaker_active && state.circuit_breaker_until) {
+      const breakerUntil = new Date(state.circuit_breaker_until).getTime();
+      if (now < breakerUntil) {
+        const remainingSec = Math.round((breakerUntil - now) / 1000);
+        console.log(`⚡ Circuit breaker active (persistent), ${remainingSec}s remaining`);
+        return { allowed: false, reason: `circuit_breaker:${remainingSec}s` };
+      } else {
+        // Reset circuit breaker
+        await updatePersistentRateLimitState({ 
+          circuit_breaker_active: false, 
+          circuit_breaker_until: null 
+        });
+        console.log('🔌 Circuit breaker reset (persistent)');
+      }
+    }
+    
+    // Check if we need to reset the window
+    const windowStart = new Date(state.window_start).getTime();
+    const windowAge = now - windowStart;
+    
+    if (windowAge > 60000) {
+      // Reset the window
+      await updatePersistentRateLimitState({ 
+        call_count: 1, 
+        window_start: nowIso 
+      });
+      return { allowed: true };
+    }
+    
+    // Check rate limit
+    if (state.call_count >= MAX_CALLS_PER_MINUTE) {
+      console.log(`🚦 Rate limit reached (${state.call_count}/${MAX_CALLS_PER_MINUTE} calls/min) - persistent`);
+      return { allowed: false, reason: 'rate_limit' };
+    }
+    
+    // Increment counter
+    await updatePersistentRateLimitState({ 
+      call_count: state.call_count + 1 
+    });
+    
+    return { allowed: true };
   }
   
-  // Check circuit breaker
-  if (circuitBreakerTripped) {
-    if (now - circuitBreakerTrippedAt > CIRCUIT_BREAKER_DURATION_MS) {
-      console.log('🔌 Circuit breaker reset');
-      circuitBreakerTripped = false;
+  // Fallback to in-memory (for cold starts or DB issues)
+  if (now - localLastResetTime > 60000) {
+    localCallCount = 0;
+    localLastResetTime = now;
+  }
+  
+  if (localCircuitBreakerTripped) {
+    if (now - localCircuitBreakerTrippedAt > CIRCUIT_BREAKER_DURATION_MS) {
+      console.log('🔌 Circuit breaker reset (local)');
+      localCircuitBreakerTripped = false;
     } else {
-      const remainingMs = CIRCUIT_BREAKER_DURATION_MS - (now - circuitBreakerTrippedAt);
-      console.log(`⚡ Circuit breaker active, ${Math.round(remainingMs / 1000)}s remaining`);
-      return false;
+      const remainingMs = CIRCUIT_BREAKER_DURATION_MS - (now - localCircuitBreakerTrippedAt);
+      console.log(`⚡ Circuit breaker active (local), ${Math.round(remainingMs / 1000)}s remaining`);
+      return { allowed: false, reason: 'circuit_breaker_local' };
     }
   }
   
-  // Check rate limit
-  if (callCount >= MAX_CALLS_PER_MINUTE) {
-    console.log(`🚦 Rate limit reached (${callCount}/${MAX_CALLS_PER_MINUTE} calls/min)`);
-    return false;
+  if (localCallCount >= MAX_CALLS_PER_MINUTE) {
+    console.log(`🚦 Rate limit reached (${localCallCount}/${MAX_CALLS_PER_MINUTE} calls/min) - local`);
+    return { allowed: false, reason: 'rate_limit_local' };
   }
   
-  callCount++;
-  return true;
+  localCallCount++;
+  return { allowed: true };
 }
 
-// Trip circuit breaker on 429 response
-function tripCircuitBreaker(): void {
+// Trip circuit breaker (persistent)
+async function tripCircuitBreakerPersistent(): Promise<void> {
+  const breakerUntil = new Date(Date.now() + CIRCUIT_BREAKER_DURATION_MS).toISOString();
+  
   console.log('🔴 Circuit breaker TRIPPED - pausing Helius calls for 5 minutes');
-  circuitBreakerTripped = true;
-  circuitBreakerTrippedAt = Date.now();
+  
+  // Update persistent state
+  const updated = await updatePersistentRateLimitState({
+    circuit_breaker_active: true,
+    circuit_breaker_until: breakerUntil
+  });
+  
+  // Also set local state as fallback
+  if (!updated) {
+    localCircuitBreakerTripped = true;
+    localCircuitBreakerTrippedAt = Date.now();
+  }
 }
 
 // Log Helius API call to database
@@ -74,18 +200,20 @@ async function logHeliusCall(
   error?: string
 ): Promise<void> {
   try {
-    const supabaseUrl = Deno.env.get('SUPABASE_URL');
-    const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
-    
-    if (!supabaseUrl || !supabaseServiceKey) return;
-    
-    const supabase = createClient(supabaseUrl, supabaseServiceKey);
+    const supabase = getSupabaseClient();
+    if (!supabase) return;
     
     // Estimate credits based on method
     let creditsUsed = 1;
-    const premiumMethods = ['getAsset', 'getAssetBatch', 'searchAssets', 'TOKEN_MINT'];
+    const premiumMethods = ['getAsset', 'getAssetBatch', 'searchAssets', 'TOKEN_MINT', 'getTokenAccounts'];
     if (params.method && premiumMethods.some(m => params.method?.includes(m))) {
       creditsUsed = 10;
+    }
+    
+    // High-volume methods
+    const highVolumeMethods = ['transactions', 'getSignaturesForAddress'];
+    if (params.endpoint && highVolumeMethods.some(m => params.endpoint.includes(m))) {
+      creditsUsed = 5;
     }
     
     await supabase.from('helius_api_usage').insert({
@@ -109,23 +237,32 @@ async function logHeliusCall(
 function sanitizeParams(params: any): any {
   if (!params) return null;
   
-  const sanitized = JSON.parse(JSON.stringify(params));
-  const sensitiveKeys = ['api-key', 'apiKey', 'api_key', 'secretKey', 'privateKey', 'secret', 'password'];
-  
-  function recursiveSanitize(obj: any) {
-    if (typeof obj !== 'object' || obj === null) return;
+  try {
+    const sanitized = JSON.parse(JSON.stringify(params));
+    const sensitiveKeys = ['api-key', 'apiKey', 'api_key', 'secretKey', 'privateKey', 'secret', 'password'];
     
-    for (const key in obj) {
-      if (sensitiveKeys.some(k => key.toLowerCase().includes(k.toLowerCase()))) {
-        obj[key] = '[REDACTED]';
-      } else if (typeof obj[key] === 'object') {
-        recursiveSanitize(obj[key]);
+    function recursiveSanitize(obj: any) {
+      if (typeof obj !== 'object' || obj === null) return;
+      
+      for (const key in obj) {
+        if (sensitiveKeys.some(k => key.toLowerCase().includes(k.toLowerCase()))) {
+          obj[key] = '[REDACTED]';
+        } else if (typeof obj[key] === 'string' && obj[key].length > 50) {
+          // Truncate long strings (like URLs with API keys)
+          if (obj[key].includes('api-key') || obj[key].includes('apiKey')) {
+            obj[key] = obj[key].replace(/api-key=[^&]+/gi, 'api-key=[REDACTED]');
+          }
+        } else if (typeof obj[key] === 'object') {
+          recursiveSanitize(obj[key]);
+        }
       }
     }
+    
+    recursiveSanitize(sanitized);
+    return sanitized;
+  } catch {
+    return null;
   }
-  
-  recursiveSanitize(sanitized);
-  return sanitized;
 }
 
 /**
@@ -137,9 +274,10 @@ export async function heliusFetch(
   options: RequestInit,
   params: HeliusCallParams
 ): Promise<Response | null> {
-  // Check rate limit
-  if (!checkRateLimit()) {
-    console.log(`⏳ Helius call skipped due to rate limit: ${params.endpoint}`);
+  // Check rate limit (persistent)
+  const rateCheck = await checkRateLimitPersistent();
+  if (!rateCheck.allowed) {
+    console.log(`⏳ Helius call skipped: ${rateCheck.reason} - ${params.endpoint}`);
     return null;
   }
   
@@ -160,7 +298,7 @@ export async function heliusFetch(
     
     // Trip circuit breaker on 429
     if (response.status === 429) {
-      tripCircuitBreaker();
+      await tripCircuitBreakerPersistent();
     }
     
     return response;
@@ -179,37 +317,82 @@ export async function heliusFetch(
 
 /**
  * Check if Helius calls are currently allowed (not rate limited or circuit broken)
+ * Uses persistent state
  */
-export function canMakeHeliusCall(): boolean {
-  const now = Date.now();
-  
-  // Check circuit breaker
-  if (circuitBreakerTripped && now - circuitBreakerTrippedAt < CIRCUIT_BREAKER_DURATION_MS) {
-    return false;
-  }
-  
-  // Reset counter if needed
-  if (now - lastResetTime > 60000) {
-    callCount = 0;
-    lastResetTime = now;
-  }
-  
-  return callCount < MAX_CALLS_PER_MINUTE;
+export async function canMakeHeliusCall(): Promise<boolean> {
+  const result = await checkRateLimitPersistent();
+  return result.allowed;
 }
 
 /**
- * Get current rate limit status
+ * Get current rate limit status (persistent)
  */
-export function getRateLimitStatus(): { callsRemaining: number; circuitBreakerActive: boolean } {
-  const now = Date.now();
+export async function getRateLimitStatus(): Promise<{ 
+  callsRemaining: number; 
+  circuitBreakerActive: boolean;
+  isPersistent: boolean;
+}> {
+  const state = await getPersistentRateLimitState();
   
-  if (now - lastResetTime > 60000) {
-    callCount = 0;
-    lastResetTime = now;
+  if (state) {
+    const now = Date.now();
+    const windowStart = new Date(state.window_start).getTime();
+    const windowAge = now - windowStart;
+    
+    // If window is old, calls would reset to MAX
+    const callCount = windowAge > 60000 ? 0 : state.call_count;
+    
+    const circuitBreakerActive = state.circuit_breaker_active && 
+      state.circuit_breaker_until && 
+      now < new Date(state.circuit_breaker_until).getTime();
+    
+    return {
+      callsRemaining: Math.max(0, MAX_CALLS_PER_MINUTE - callCount),
+      circuitBreakerActive: !!circuitBreakerActive,
+      isPersistent: true,
+    };
+  }
+  
+  // Fallback to local
+  const now = Date.now();
+  if (now - localLastResetTime > 60000) {
+    localCallCount = 0;
+    localLastResetTime = now;
   }
   
   return {
-    callsRemaining: Math.max(0, MAX_CALLS_PER_MINUTE - callCount),
-    circuitBreakerActive: circuitBreakerTripped && now - circuitBreakerTrippedAt < CIRCUIT_BREAKER_DURATION_MS,
+    callsRemaining: Math.max(0, MAX_CALLS_PER_MINUTE - localCallCount),
+    circuitBreakerActive: localCircuitBreakerTripped && now - localCircuitBreakerTrippedAt < CIRCUIT_BREAKER_DURATION_MS,
+    isPersistent: false,
+  };
+}
+
+// Legacy synchronous exports for backward compatibility (use in-memory)
+export function canMakeHeliusCallSync(): boolean {
+  const now = Date.now();
+  
+  if (localCircuitBreakerTripped && now - localCircuitBreakerTrippedAt < CIRCUIT_BREAKER_DURATION_MS) {
+    return false;
+  }
+  
+  if (now - localLastResetTime > 60000) {
+    localCallCount = 0;
+    localLastResetTime = now;
+  }
+  
+  return localCallCount < MAX_CALLS_PER_MINUTE;
+}
+
+export function getRateLimitStatusSync(): { callsRemaining: number; circuitBreakerActive: boolean } {
+  const now = Date.now();
+  
+  if (now - localLastResetTime > 60000) {
+    localCallCount = 0;
+    localLastResetTime = now;
+  }
+  
+  return {
+    callsRemaining: Math.max(0, MAX_CALLS_PER_MINUTE - localCallCount),
+    circuitBreakerActive: localCircuitBreakerTripped && now - localCircuitBreakerTrippedAt < CIRCUIT_BREAKER_DURATION_MS,
   };
 }

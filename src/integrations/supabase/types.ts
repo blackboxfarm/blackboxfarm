@@ -3163,6 +3163,33 @@ export type Database = {
         }
         Relationships: []
       }
+      helius_rate_limit_state: {
+        Row: {
+          call_count: number
+          circuit_breaker_active: boolean
+          circuit_breaker_until: string | null
+          id: string
+          updated_at: string
+          window_start: string
+        }
+        Insert: {
+          call_count?: number
+          circuit_breaker_active?: boolean
+          circuit_breaker_until?: string | null
+          id?: string
+          updated_at?: string
+          window_start?: string
+        }
+        Update: {
+          call_count?: number
+          circuit_breaker_active?: boolean
+          circuit_breaker_until?: string | null
+          id?: string
+          updated_at?: string
+          window_start?: string
+        }
+        Relationships: []
+      }
       holder_movements: {
         Row: {
           action: string
