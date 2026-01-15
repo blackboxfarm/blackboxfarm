@@ -228,39 +228,148 @@ export function TokenMetadataDisplay({
             />
             
             <div className="flex-1 space-y-2">
-              {/* Symbol with $ */}
-              <div className="flex items-center gap-2">
+              {/* Symbol with Verified Badge + Links Row */}
+              <div className="flex items-center gap-2 flex-wrap">
                 <Badge variant="outline" className="text-sm md:text-base font-bold px-3 py-1">
                   ${metadata.symbol}
                 </Badge>
-                <div title={metadata.verified ? "Verified Token" : "Unverified Token"}>
-                  {metadata.verified ? (
-                    <ShieldCheck className="h-4 w-4 text-green-500" />
-                  ) : (
-                    <Shield className="h-4 w-4 text-yellow-500" />
-                  )}
-                </div>
-              </div>
+                
+                {/* Launchpad link with icon + text */}
+                {metadata.launchpad?.detected && metadata.launchpad.name.toLowerCase().includes('pump') && (
+                  <a
+                    href={`https://pump.fun/coin/${metadata.mint}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex items-center gap-1.5 hover:opacity-80 transition-opacity"
+                    title="View on Pump.fun"
+                  >
+                    <img src="/launchpad-logos/pumpfun.png" alt="Pump.fun" className="h-5 w-5 rounded" />
+                    <span className="text-xs md:text-sm font-medium">pump.fun</span>
+                  </a>
+                )}
+                {metadata.launchpad?.detected && metadata.launchpad.name.toLowerCase().includes('bonk') && (
+                  <a
+                    href={`https://bonk.fun/token/${metadata.mint}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex items-center gap-1.5 hover:opacity-80 transition-opacity"
+                    title="View on Bonk.fun"
+                  >
+                    <img src="/launchpad-logos/bonkfun.png" alt="Bonk.fun" className="h-5 w-5 rounded" />
+                    <span className="text-xs md:text-sm font-medium">bonk.fun</span>
+                  </a>
+                )}
+                {metadata.launchpad?.detected && metadata.launchpad.name.toLowerCase().includes('bags') && (
+                  <a
+                    href={`https://bags.fm/token/${metadata.mint}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex items-center gap-1.5 hover:opacity-80 transition-opacity"
+                    title="View on Bags.fm"
+                  >
+                    <img src="/launchpad-logos/bagsfm.png" alt="Bags.fm" className="h-5 w-5 rounded" />
+                    <span className="text-xs md:text-sm font-medium">bags.fm</span>
+                  </a>
+                )}
+                {metadata.isPumpFun && !metadata.launchpad?.detected && (
+                  <a
+                    href={`https://pump.fun/coin/${metadata.mint}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex items-center gap-1.5 hover:opacity-80 transition-opacity"
+                    title="View on Pump.fun"
+                  >
+                    <img src="/launchpad-logos/pumpfun.png" alt="Pump.fun" className="h-5 w-5 rounded" />
+                    <span className="text-xs md:text-sm font-medium">pump.fun</span>
+                  </a>
+                )}
 
-              {/* Launchpad Info */}
-              {metadata.launchpad && metadata.launchpad.detected && (
-                <div className="flex items-center gap-2">
-                  {LAUNCHPAD_LOGOS[metadata.launchpad.name.toLowerCase()] && (
-                    <img 
-                      src={LAUNCHPAD_LOGOS[metadata.launchpad.name.toLowerCase()]}
-                      alt={metadata.launchpad.name}
-                      className="w-5 h-5 md:w-6 md:h-6 rounded object-contain"
-                    />
+                {/* Verified Token Badge */}
+                <Badge 
+                  variant={metadata.verified ? "outline" : "secondary"} 
+                  className={`text-xs ${metadata.verified ? 'border-green-500 text-green-600' : 'border-yellow-500 text-yellow-600'}`}
+                  title={metadata.verified ? "Verified Token" : "Unverified Token"}
+                >
+                  {metadata.verified ? (
+                    <ShieldCheck className="h-3 w-3 mr-1" />
+                  ) : (
+                    <Shield className="h-3 w-3 mr-1" />
                   )}
-                  <span className="text-xs md:text-sm font-medium">{metadata.launchpad.name}</span>
-                </div>
-              )}
-              {metadata.isPumpFun && !metadata.launchpad?.detected && (
-                <Badge variant="secondary" className="text-xs">
-                  <Zap className="h-3 w-3 mr-1" />
-                  Pump.fun
+                  {metadata.verified ? 'Verified Token' : 'Unverified'}
                 </Badge>
-              )}
+
+                {/* DexScreener */}
+                {priceInfo?.dexUrl && (
+                  <a 
+                    href={priceInfo.dexUrl} 
+                    target="_blank" 
+                    rel="noopener noreferrer"
+                    className="flex items-center hover:opacity-80 transition-opacity"
+                    title="View on DexScreener"
+                  >
+                    <img src="/launchpad-logos/dexscreener.png" alt="DexScreener" className="h-5 w-5 rounded" />
+                  </a>
+                )}
+
+                {/* Padre.gg trading terminal - wider logo */}
+                <a
+                  href={`https://trade.padre.gg/trade/solana/${metadata.mint}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex items-center hover:opacity-80 transition-opacity"
+                  title="Trade on Padre.gg"
+                >
+                  <img src="https://trade.padre.gg/logo.svg" alt="Padre.gg" className="h-5 w-auto max-w-[100px]" />
+                </a>
+
+                {/* Social links */}
+                {twitterUrl && (
+                  <a
+                    href={twitterUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex items-center text-blue-400 hover:text-blue-300 transition-colors"
+                    title="Twitter/X"
+                  >
+                    <Twitter className="h-4 w-4" />
+                  </a>
+                )}
+                {telegramUrl && (
+                  <a
+                    href={telegramUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex items-center text-primary hover:text-primary/80 transition-colors"
+                    title="Telegram"
+                  >
+                    <Send className="h-4 w-4" />
+                  </a>
+                )}
+                {websiteUrl && (
+                  <a
+                    href={websiteUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex items-center text-blue-500 hover:text-blue-400 transition-colors"
+                    title="Website"
+                  >
+                    <Globe className="h-4 w-4" />
+                  </a>
+                )}
+
+                {/* Age badge */}
+                {tokenAge !== undefined && (
+                  <Badge variant="outline" className="flex items-center gap-1 text-xs">
+                    <Clock className="h-3 w-3" />
+                    {tokenAge < 1 
+                      ? `${Math.round(tokenAge * 60)}m old`
+                      : tokenAge < 24 
+                        ? `${Math.round(tokenAge)}h old`
+                        : `${Math.round(tokenAge / 24)}d old`
+                    }
+                  </Badge>
+                )}
+              </div>
 
               {/* DexScreener Status Badges */}
               {dexStatus && (dexStatus.hasDexPaid || dexStatus.hasCTO || dexStatus.activeBoosts > 0) && (
@@ -417,132 +526,12 @@ export function TokenMetadataDisplay({
           </div>
           )}
 
-          {/* Links Row - Launchpad, Padre, DexScreener, Socials, Age */}
-          <div className="flex items-center gap-2 md:gap-3 text-sm flex-wrap justify-start">
-                {/* Age badge */}
-                {tokenAge !== undefined && (
-                  <Badge variant="outline" className="flex items-center gap-1 text-xs">
-                    <Clock className="h-3 w-3" />
-                    {tokenAge < 1 
-                      ? `${Math.round(tokenAge * 60)}m old`
-                      : tokenAge < 24 
-                        ? `${Math.round(tokenAge)}h old`
-                        : `${Math.round(tokenAge / 24)}d old`
-                    }
-                  </Badge>
-                )}
-
-                {/* Launchpad link with icon */}
-                {metadata.launchpad?.detected && metadata.launchpad.name.toLowerCase().includes('pump') && (
-                  <a
-                    href={`https://pump.fun/coin/${metadata.mint}`}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="flex items-center gap-1 hover:opacity-80 transition-opacity"
-                    title="View on Pump.fun"
-                  >
-                    <img src="/launchpad-logos/pumpfun.png" alt="Pump.fun" className="h-5 w-5 rounded" />
-                  </a>
-                )}
-                {metadata.launchpad?.detected && metadata.launchpad.name.toLowerCase().includes('bonk') && (
-                  <a
-                    href={`https://bonk.fun/token/${metadata.mint}`}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="flex items-center gap-1 hover:opacity-80 transition-opacity"
-                    title="View on Bonk.fun"
-                  >
-                    <img src="/launchpad-logos/bonkfun.png" alt="Bonk.fun" className="h-5 w-5 rounded" />
-                  </a>
-                )}
-                {metadata.launchpad?.detected && metadata.launchpad.name.toLowerCase().includes('bags') && (
-                  <a
-                    href={`https://bags.fm/token/${metadata.mint}`}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="flex items-center gap-1 hover:opacity-80 transition-opacity"
-                    title="View on Bags.fm"
-                  >
-                    <img src="/launchpad-logos/bagsfm.png" alt="Bags.fm" className="h-5 w-5 rounded" />
-                  </a>
-                )}
-                {metadata.isPumpFun && !metadata.launchpad?.detected && (
-                  <a
-                    href={`https://pump.fun/coin/${metadata.mint}`}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="flex items-center gap-1 hover:opacity-80 transition-opacity"
-                    title="View on Pump.fun"
-                  >
-                    <img src="/launchpad-logos/pumpfun.png" alt="Pump.fun" className="h-5 w-5 rounded" />
-                  </a>
-                )}
-
-                {/* Padre.gg trading terminal */}
-                <a
-                  href={`https://trade.padre.gg/trade/solana/${metadata.mint}`}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="flex items-center gap-1 hover:opacity-80 transition-opacity"
-                  title="Trade on Padre.gg"
-                >
-                  <img src="https://trade.padre.gg/logo.svg" alt="Padre.gg" className="h-5 w-5" />
-                </a>
-
-                {/* DexScreener */}
-                {priceInfo?.dexUrl && (
-                  <a 
-                    href={priceInfo.dexUrl} 
-                    target="_blank" 
-                    rel="noopener noreferrer"
-                    className="flex items-center gap-1 hover:opacity-80 transition-opacity"
-                    title="View on DexScreener"
-                  >
-                    <img src="/launchpad-logos/dexscreener.png" alt="DexScreener" className="h-5 w-5 rounded" />
-                  </a>
-                )}
-
-                {/* Social links */}
-                {twitterUrl && (
-                  <a
-                    href={twitterUrl}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="flex items-center gap-1 text-blue-400 hover:text-blue-300 transition-colors"
-                    title="Twitter/X"
-                  >
-                    <Twitter className="h-4 w-4" />
-                  </a>
-                )}
-                {telegramUrl && (
-                  <a
-                    href={telegramUrl}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="flex items-center gap-1 text-primary hover:text-primary/80 transition-colors"
-                    title="Telegram"
-                  >
-                    <Send className="h-4 w-4" />
-                  </a>
-                )}
-                {websiteUrl && (
-                  <a
-                    href={websiteUrl}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="flex items-center gap-1 text-blue-500 hover:text-blue-400 transition-colors"
-                    title="Website"
-                  >
-                    <Globe className="h-4 w-4" />
-                  </a>
-                )}
-
-                <Separator orientation="vertical" className="h-4" />
-
-                <span className="text-muted-foreground text-xs">Decimals: {metadata.decimals}</span>
-                {metadata.totalSupply && (
-                  <span className="text-muted-foreground text-xs">Supply: {formatLargeNumber(metadata.totalSupply)}</span>
-                )}
+          {/* Decimals & Supply */}
+          <div className="flex items-center gap-3 text-sm">
+            <span className="text-muted-foreground text-xs">Decimals: {metadata.decimals}</span>
+            {metadata.totalSupply && (
+              <span className="text-muted-foreground text-xs">Supply: {formatLargeNumber(metadata.totalSupply)}</span>
+            )}
           </div>
         </div>
       </CardContent>
