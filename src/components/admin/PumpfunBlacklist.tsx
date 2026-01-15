@@ -45,6 +45,7 @@ interface BlacklistEntry {
 }
 
 const ENTRY_TYPES = [
+  { value: 'token_address', label: 'Token Address', icon: AlertTriangle },
   { value: 'dev_wallet', label: 'Dev Wallet', icon: Wallet },
   { value: 'mint_wallet', label: 'Mint Wallet', icon: Wallet },
   { value: 'funding_wallet', label: 'Funding Wallet', icon: Wallet },
@@ -72,7 +73,7 @@ export function PumpfunBlacklist() {
   
   // Form state
   const [newEntry, setNewEntry] = useState({
-    entry_type: 'dev_wallet',
+    entry_type: 'token_address',
     identifier: '',
     risk_level: 'medium',
     blacklist_reason: '',
@@ -209,7 +210,7 @@ export function PumpfunBlacklist() {
 
   const resetForm = () => {
     setNewEntry({
-      entry_type: 'dev_wallet',
+      entry_type: 'token_address',
       identifier: '',
       risk_level: 'medium',
       blacklist_reason: '',
