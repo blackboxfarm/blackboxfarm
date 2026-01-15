@@ -1749,168 +1749,51 @@ export function BaglessHoldersReport({ initialToken }: BaglessHoldersReportProps
                 );
               })()}
 
-              {/* First 25 Historical Buyers with PNL Tracking - HIDDEN */}
-              {false && report.firstBuyers && report.firstBuyers.length > 0 && (
-                <div className="mb-4 md:mb-6">
-                  <Card>
-                    <CardHeader className="pb-3">
-                      <CardTitle className="text-lg">First 25 Historical Buyers 🥇</CardTitle>
-                      <p className="text-xs text-muted-foreground">
-                        Chronological first 25 token purchases with sell tracking & PNL
-                      </p>
-                    </CardHeader>
-                    <CardContent>
-                      <div className="overflow-x-auto">
-                        <table className="w-full text-xs">
-                          <thead>
-                            <tr className="border-b">
-                              <th className="text-left p-2">#</th>
-                              <th className="text-left p-2">Wallet</th>
-                              <th className="text-right p-2">First Bought</th>
-                              <th className="text-right p-2">Bought</th>
-                              <th className="text-right p-2">Sold</th>
-                              <th className="text-right p-2">Current</th>
-                              <th className="text-right p-2">% Supply</th>
-                              <th className="text-right p-2">PNL</th>
-                              <th className="text-center p-2">Social</th>
-                            </tr>
-                          </thead>
-                          <tbody>
-                            {report.firstBuyers.map((buyer: any) => {
-                              const formatDate = (timestamp: number) => {
-                                const date = new Date(timestamp * 1000);
-                                return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-                              };
-                              
-                              return (
-                                <tr key={buyer.wallet} className="border-b hover:bg-muted/20">
-                                  <td className="p-2 font-mono">
-                                    <div className="flex items-center gap-1">
-                                      {buyer.purchaseRank === 1 && <span title="First ever buyer!">🥇</span>}
-                                      {buyer.isDevWallet && (
-                                        <span className="px-1.5 py-0.5 bg-purple-500/20 text-purple-600 dark:text-purple-400 rounded text-[10px] font-bold">
-                                          DEV
-                                        </span>
-                                      )}
-                                      {buyer.isLiquidityPool && (
-                                        <span className="px-1.5 py-0.5 bg-yellow-500/20 text-yellow-600 dark:text-yellow-400 rounded text-[10px] font-bold">
-                                          LP
-                                        </span>
-                                      )}
-                                      <span>#{buyer.purchaseRank}</span>
-                                    </div>
-                                  </td>
-                                  <td className="p-2">
-                                    <a 
-                                      href={`https://solscan.io/account/${buyer.wallet}`}
-                                      target="_blank"
-                                      rel="noopener noreferrer"
-                                      className="font-mono text-primary hover:underline text-xs"
-                                    >
-                                      {buyer.wallet.slice(0, 4)}...{buyer.wallet.slice(-4)}
-                                    </a>
-                                  </td>
-                                  <td className="p-2 text-right text-muted-foreground text-[10px]">
-                                    {formatDate(buyer.firstBoughtAt)}
-                                  </td>
-                                  <td className="p-2 text-right font-mono text-[11px]">
-                                    {Math.floor(buyer.initialTokens).toLocaleString()}
-                                  </td>
-                                  <td className="p-2 text-right">
-                                    {buyer.hasSold ? (
-                                      <div className="flex flex-col items-end">
-                                        <span className="font-mono text-red-600 dark:text-red-400 text-[11px]">
-                                          {Math.floor(buyer.tokensSold).toLocaleString()}
-                                        </span>
-                                        <span className="text-[9px] text-muted-foreground">
-                                          ({buyer.percentageSold.toFixed(0)}%)
-                                        </span>
-                                      </div>
-                                    ) : (
-                                      <span className="text-gray-400 text-xs">—</span>
-                                    )}
-                                  </td>
-                                  <td className="p-2 text-right font-mono text-[11px]">
-                                    {Math.floor(buyer.currentBalance).toLocaleString()}
-                                  </td>
-                                  <td className="p-2 text-right text-[11px]">
-                                    {buyer.currentPercentageOfSupply.toFixed(2)}%
-                                  </td>
-                                  <td className="p-2 text-right">
-                                    <div className="flex flex-col items-end">
-                                      <span 
-                                        className={`font-semibold text-[11px] ${
-                                          buyer.pnl >= 0 
-                                            ? 'text-green-600 dark:text-green-400' 
-                                            : 'text-red-600 dark:text-red-400'
-                                        }`}
-                                      >
-                                        {buyer.pnl >= 0 ? '+' : ''}${Math.abs(buyer.pnl).toFixed(0)}
-                                      </span>
-                                      <span 
-                                        className={`text-[9px] ${
-                                          buyer.pnlPercentage >= 0 
-                                            ? 'text-green-600 dark:text-green-400' 
-                                            : 'text-red-600 dark:text-red-400'
-                                        }`}
-                                      >
-                                        ({buyer.pnlPercentage >= 0 ? '+' : ''}{buyer.pnlPercentage.toFixed(0)}%)
-                                      </span>
-                                    </div>
-                                  </td>
-                                  <td className="p-2 text-center">
-                                    {isLoadingTwitter ? (
-                                      <div className="h-3 w-3 animate-pulse bg-gray-300 dark:bg-gray-600 rounded mx-auto"></div>
-                                    ) : walletTwitterHandles.has(buyer.wallet) ? (
-                                      <a
-                                        href={`https://twitter.com/${walletTwitterHandles.get(buyer.wallet)}`}
-                                        target="_blank"
-                                        rel="noopener noreferrer"
-                                        className="text-blue-600 dark:text-blue-400 hover:underline text-[10px]"
-                                        title="Twitter verified via SNS"
-                                      >
-                                        @{walletTwitterHandles.get(buyer.wallet)}
-                                      </a>
-                                    ) : (
-                                      <span className="text-gray-400 text-xs">—</span>
-                                    )}
-                                  </td>
-                                </tr>
-                              );
-                            })}
-                          </tbody>
-                        </table>
-                      </div>
-                      <div className="mt-3 text-xs text-muted-foreground space-y-1">
-                        <p>🥇 #1 = First ever token buyer • 🟣 DEV = Detected developer wallet • 🟡 LP = Liquidity pool</p>
-                        <p>💡 PNL is estimated based on current token price vs. assumed initial purchase price</p>
-                      </div>
-                    </CardContent>
-                  </Card>
-                </div>
-              )}
+              {/* Padre Trading Promo */}
+              <div className="mb-4 md:mb-6">
+                <Card className="bg-gradient-to-br from-background to-muted/30 border-orange-500/20">
+                  <CardContent className="flex flex-col items-center justify-center py-8 space-y-6">
+                    <img 
+                      src="https://padre.gg/static/media/Right2.b396b79d7ddd061d0d42.png"
+                      alt="Trade your favorite meme coins"
+                      className="max-w-md w-full h-auto"
+                    />
+                    <p className="text-lg md:text-xl text-center text-muted-foreground font-medium">
+                      Trade your favourite meme coins
+                    </p>
+                    <a
+                      href="https://trade.padre.gg/rk/blackbox"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center justify-center px-8 py-3 bg-orange-500 hover:bg-orange-600 text-white font-semibold rounded-lg transition-colors text-lg shadow-lg hover:shadow-orange-500/25"
+                    >
+                      Trade Now with Padre
+                    </a>
+                  </CardContent>
+                </Card>
+              </div>
 
-              {/* Fallback when no historical buyers */}
-              {report && (!report.firstBuyers || report.firstBuyers.length === 0) && (
-                <div className="mb-4 md:mb-6">
-                  <Card>
-                    <CardHeader className="pb-3">
-                      <CardTitle className="text-lg">First 25 Historical Buyers 🥇</CardTitle>
-                      <p className="text-xs text-muted-foreground">
-                        {report.firstBuyersError || 'No historical buyer data available'}
-                      </p>
-                      {report.firstBuyersDebug && (
-                        <details className="mt-2 text-xs text-muted-foreground">
-                          <summary className="cursor-pointer hover:text-foreground">Debug Info</summary>
-                          <pre className="mt-2 p-2 bg-muted rounded text-[10px] overflow-x-auto">
-                            {JSON.stringify(report.firstBuyersDebug, null, 2)}
-                          </pre>
-                        </details>
-                      )}
-                    </CardHeader>
-                  </Card>
-                </div>
-              )}
+              {/* First 25 Historical Buyers - HIDDEN */}
+              <div className="hidden">
+                {false && report.firstBuyers && report.firstBuyers.length > 0 && (
+                  <div className="mb-4 md:mb-6">
+                    <Card>
+                      <CardHeader className="pb-3">
+                        <CardTitle className="text-lg">First 25 Historical Buyers 🥇</CardTitle>
+                      </CardHeader>
+                    </Card>
+                  </div>
+                )}
+                {report && (!report.firstBuyers || report.firstBuyers.length === 0) && (
+                  <div className="mb-4 md:mb-6">
+                    <Card>
+                      <CardHeader className="pb-3">
+                        <CardTitle className="text-lg">First 25 Historical Buyers 🥇</CardTitle>
+                      </CardHeader>
+                    </Card>
+                  </div>
+                )}
+              </div>
 
               {/* KOL Table - HIDDEN */}
               <div className="mb-4 md:mb-6 hidden">
