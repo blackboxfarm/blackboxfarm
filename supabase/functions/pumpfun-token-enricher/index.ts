@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { heliusFetch, canMakeHeliusCall } from "../_shared/helius-rate-limiter.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -170,9 +171,27 @@ async function detectBundledBuys(
     return { bundledCount: existingBundleCount || 0, details: { error: 'No Helius key' }, fromCache: false };
   }
   
+  // Check rate limit before making call
+  const canCall = await canMakeHeliusCall();
+  if (!canCall) {
+    console.log(`   ⏳ Helius rate limited, using cached bundle count: ${existingBundleCount || 0}`);
+    return { bundledCount: existingBundleCount || 0, details: { rateLimited: true }, fromCache: true };
+  }
+  
   try {
-    // Fetch recent transactions for the token
-    const response = await fetch(`https://api.helius.xyz/v0/addresses/${mint}/transactions?api-key=${heliusKey}&limit=50`);
+    // Fetch recent transactions for the token using rate-limited wrapper
+    const url = `https://api.helius.xyz/v0/addresses/${mint}/transactions?api-key=${heliusKey}&limit=50`;
+    const response = await heliusFetch(url, { method: 'GET' }, {
+      functionName: 'pumpfun-token-enricher',
+      endpoint: 'transactions',
+      method: 'getTransactions',
+      requestParams: { mint, limit: 50 }
+    });
+    
+    if (!response) {
+      // Rate limited by wrapper
+      return { bundledCount: existingBundleCount || 0, details: { rateLimited: true }, fromCache: true };
+    }
     
     if (!response.ok) {
       // If rate limited, use cached value if available
@@ -233,9 +252,26 @@ async function detectBumpBotActivity(
     return { detected: false, microTxCount: 0, microTxRatio: 0, details: { error: 'No Helius key' } };
   }
   
+  // Check rate limit before making call
+  const canCall = await canMakeHeliusCall();
+  if (!canCall) {
+    console.log(`   ⏳ Helius rate limited, skipping bump bot detection`);
+    return { detected: false, microTxCount: 0, microTxRatio: 0, details: { rateLimited: true } };
+  }
+  
   try {
-    // Fetch recent transactions
-    const response = await fetch(`https://api.helius.xyz/v0/addresses/${mint}/transactions?api-key=${heliusKey}&limit=50`);
+    // Fetch recent transactions using rate-limited wrapper
+    const url = `https://api.helius.xyz/v0/addresses/${mint}/transactions?api-key=${heliusKey}&limit=50`;
+    const response = await heliusFetch(url, { method: 'GET' }, {
+      functionName: 'pumpfun-token-enricher',
+      endpoint: 'transactions',
+      method: 'getTransactions-bumpbot',
+      requestParams: { mint, limit: 50, purpose: 'bump_bot_detection' }
+    });
+    
+    if (!response) {
+      return { detected: false, microTxCount: 0, microTxRatio: 0, details: { rateLimited: true } };
+    }
     
     if (!response.ok) {
       console.log(`   ⚠️ Helius API error for bump bot detection: ${response.status}`);
