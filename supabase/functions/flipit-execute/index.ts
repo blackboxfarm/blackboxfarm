@@ -457,12 +457,12 @@ serve(async (req) => {
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
     const body = await req.json();
-    const { action, tokenMint, walletId, buyAmountSol: explicitBuyAmountSol, buyAmountUsd, targetMultiplier, positionId, slippageBps, priorityFeeMode, source, sourceChannelId, isScalpPosition, scalpTakeProfitPct, scalpMoonBagPct, scalpStopLossPct, moonbagEnabled, moonbagSellPct, moonbagKeepPct, positionType, isDiamondHand, diamondTrailingStopPct, diamondMinPeakX, diamondMaxHoldHours } = body;
+    const { action, tokenMint, walletId, buyAmountSol: explicitBuyAmountSol, buyAmountUsd, targetMultiplier, positionId, slippageBps, priorityFeeMode, customPriorityFee, source, sourceChannelId, isScalpPosition, scalpTakeProfitPct, scalpMoonBagPct, scalpStopLossPct, moonbagEnabled, moonbagSellPct, moonbagKeepPct, positionType, isDiamondHand, diamondTrailingStopPct, diamondMinPeakX, diamondMaxHoldHours } = body;
 
     // Default slippage 5% (500 bps), configurable
     const effectiveSlippage = slippageBps || 500;
     
-    console.log("FlipIt execute:", { action, tokenMint, walletId, explicitBuyAmountSol, buyAmountUsd, targetMultiplier, positionId, slippageBps: effectiveSlippage, priorityFeeMode, source, sourceChannelId, isScalpPosition });
+    console.log("FlipIt execute:", { action, tokenMint, walletId, explicitBuyAmountSol, buyAmountUsd, targetMultiplier, positionId, slippageBps: effectiveSlippage, priorityFeeMode, customPriorityFee, source, sourceChannelId, isScalpPosition });
 
     if (action === "buy") {
       if (!tokenMint || !walletId) {
@@ -1066,6 +1066,7 @@ serve(async (req) => {
             sellAll: true,
             slippageBps: effectiveSlippage,
             priorityFeeMode: priorityFeeMode || "medium",
+            priorityFeeSol: customPriorityFee, // Override with specific SOL amount if provided
             walletId: position.wallet_id, // Pass wallet ID for direct DB lookup
           },
         });
@@ -1247,6 +1248,7 @@ serve(async (req) => {
             sellAmount: tokensToSell, // Specific amount, not sellAll
             slippageBps: effectiveSlippage,
             priorityFeeMode: priorityFeeMode || "medium",
+            priorityFeeSol: customPriorityFee, // Override with specific SOL amount if provided
             walletId: position.wallet_id,
           },
         });

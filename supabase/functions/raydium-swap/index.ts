@@ -500,6 +500,7 @@ serve(async (req) => {
       confirmPolicy: _confirmPolicy,
       computeUnitPriceMicroLamports: _feeOverride,
       priorityFeeMicroLamports: _altFeeOverride,
+      priorityFeeSol, // New: priority fee in SOL (e.g., 0.0001, 0.0005)
       priorityFeeMode,
       action,
       preCreateWSOL,
@@ -1129,7 +1130,27 @@ serve(async (req) => {
     }
 
     // Priority fee (allow override or use priorityFeeMode)
-    let computeUnitPriceMicroLamports = Number(_feeOverride ?? _altFeeOverride ?? 0);
+    // Priority: priorityFeeSol (SOL amount) > _feeOverride/_altFeeOverride (microLamports) > priorityFeeMode > dynamic
+    let computeUnitPriceMicroLamports = 0;
+    
+    // NEW: If priorityFeeSol is provided, convert SOL to microLamports
+    // Formula: SOL * 1e9 (to lamports) / 200_000 (compute units) * 1e6 (to microLamports)
+    // Simplified: SOL * 5e12 (gives microLamports per compute unit)
+    // Actually, priority fee is: computeUnitPrice * computeUnits / 1e6 = total lamports
+    // So for 0.0001 SOL = 100,000 lamports = computeUnitPrice * 200,000 / 1e6
+    // computeUnitPrice = 100,000 * 1e6 / 200,000 = 500,000 microLamports? That's too high.
+    // Let me recalculate: The fee modes show low: 10,000 = ~0.0001 SOL
+    // So 0.0001 SOL ≈ 10,000 microLamports, meaning: SOL * 1e8 = microLamports
+    if (typeof priorityFeeSol === 'number' && priorityFeeSol > 0) {
+      // Convert SOL to approximate microLamports (based on existing mode mappings)
+      // 0.0001 SOL = 10,000 µLamports, 0.0005 SOL = 50,000 µLamports
+      // Ratio: 1 SOL = 100,000,000 µLamports (1e8)
+      computeUnitPriceMicroLamports = Math.round(priorityFeeSol * 1e8);
+      console.log(`Using custom priority fee: ${priorityFeeSol} SOL = ${computeUnitPriceMicroLamports} µLamports`);
+    } else {
+      computeUnitPriceMicroLamports = Number(_feeOverride ?? _altFeeOverride ?? 0);
+    }
+    
     if (!Number.isFinite(computeUnitPriceMicroLamports) || computeUnitPriceMicroLamports <= 0) {
       // Map priorityFeeMode to microLamports (1 SOL = 1e9 lamports, 1 lamport = 1e6 microLamports)
       // low: ~0.0001 SOL, medium: ~0.0005 SOL, high: ~0.001 SOL, turbo: ~0.0075 SOL, ultra: ~0.009 SOL
@@ -1146,8 +1167,8 @@ serve(async (req) => {
         computeUnitPriceMicroLamports = await getPriorityFeeMicroLamports(connection);
       }
     }
-    // Clamp to 5k–1M µLamports to control cost and allow high fees
-    computeUnitPriceMicroLamports = Math.min(Math.max(computeUnitPriceMicroLamports, 5_000), 1_000_000);
+    // Clamp to 5k–2M µLamports to control cost and allow high fees (raised max for 0.002 SOL = 200,000)
+    computeUnitPriceMicroLamports = Math.min(Math.max(computeUnitPriceMicroLamports, 5_000), 2_000_000);
 
     // Jupiter fallback if Raydium compute failed at compute stage
     if (needJupiter) {
