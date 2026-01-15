@@ -426,9 +426,9 @@ Deno.serve(async (req) => {
         result.tags.push("high_volume_launcher");
       }
       
-    } else if (entry_type === "token_mint") {
-      // Token enrichment - find creator wallet
-      console.log("Enriching token:", identifier);
+    } else if (entry_type === "token_mint" || entry_type === "token_address") {
+      // Token enrichment - find creator wallet and spider network
+      console.log("Enriching token:", identifier, "type:", entry_type);
       
       const creatorWallet = await getTokenCreatorWallet(identifier, heliusApiKey);
       if (creatorWallet) {

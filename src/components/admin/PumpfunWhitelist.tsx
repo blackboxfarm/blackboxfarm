@@ -40,6 +40,7 @@ interface WhitelistEntry {
 }
 
 const ENTRY_TYPES = [
+  { value: 'token_address', label: 'Token Address', icon: ShieldCheck },
   { value: 'dev_wallet', label: 'Dev Wallet', icon: Wallet },
   { value: 'mint_wallet', label: 'Mint Wallet', icon: Wallet },
   { value: 'funding_wallet', label: 'Funding Wallet', icon: Wallet },
@@ -66,7 +67,7 @@ export function PumpfunWhitelist() {
   const [selectedEntry, setSelectedEntry] = useState<WhitelistEntry | null>(null);
   
   const [newEntry, setNewEntry] = useState({
-    entry_type: 'dev_wallet',
+    entry_type: 'token_address',
     identifier: '',
     trust_level: 'medium',
     whitelist_reason: '',
@@ -164,7 +165,7 @@ export function PumpfunWhitelist() {
 
   const resetForm = () => {
     setNewEntry({
-      entry_type: 'dev_wallet',
+      entry_type: 'token_address',
       identifier: '',
       trust_level: 'medium',
       whitelist_reason: '',
