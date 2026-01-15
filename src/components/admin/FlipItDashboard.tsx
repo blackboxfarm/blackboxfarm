@@ -1772,14 +1772,18 @@ export function FlipItDashboard() {
     }
   };
 
-  const handleForceSell = async (positionId: string) => {
+  // Per-position sell fee state - stores custom priority fee for each position
+  const [positionSellFees, setPositionSellFees] = useState<Record<string, string>>({});
+
+  const handleForceSell = async (positionId: string, customPriorityFee?: number) => {
     try {
       const { data, error } = await supabase.functions.invoke('flipit-execute', {
         body: {
           action: 'sell',
           positionId: positionId,
           slippageBps: slippageBps,
-          priorityFeeMode: priorityFeeMode
+          priorityFeeMode: priorityFeeMode,
+          customPriorityFee: customPriorityFee // Override with specific SOL amount if provided
         }
       });
 
@@ -3739,19 +3743,37 @@ export function FlipItDashboard() {
                       {/* Sell Now Action - between Progress and Stop-Loss */}
                       <TableCell className="px-2 py-1">
                         {position.status === 'holding' && (
-                          <Button
-                            size="sm"
-                            variant="destructive"
-                            className="h-6 px-2 py-0.5 text-xs"
-                            onClick={() => {
-                              const ticker = position.token_symbol || position.token_mint.slice(0, 8);
-                              if (window.confirm(`Sell ${ticker} now?\n\nThis will immediately sell your entire position.`)) {
-                                handleForceSell(position.id);
-                              }
-                            }}
-                          >
-                            Sell Now
-                          </Button>
+                          <div className="flex flex-col gap-1">
+                            <Button
+                              size="sm"
+                              variant="destructive"
+                              className="h-6 px-2 py-0.5 text-xs"
+                              onClick={() => {
+                                const ticker = position.token_symbol || position.token_mint.slice(0, 8);
+                                const selectedFee = positionSellFees[position.id] || '0.0005';
+                                if (window.confirm(`Sell ${ticker} now?\n\nPriority Fee: ${selectedFee} SOL\n\nThis will immediately sell your entire position.`)) {
+                                  handleForceSell(position.id, parseFloat(selectedFee));
+                                }
+                              }}
+                            >
+                              Sell Now
+                            </Button>
+                            <Select
+                              value={positionSellFees[position.id] || '0.0005'}
+                              onValueChange={(value) => setPositionSellFees(prev => ({ ...prev, [position.id]: value }))}
+                            >
+                              <SelectTrigger className="h-5 text-[9px] px-1 w-20">
+                                <SelectValue />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="0.0001">0.0001 SOL</SelectItem>
+                                <SelectItem value="0.0005">0.0005 SOL</SelectItem>
+                                <SelectItem value="0.001">0.001 SOL</SelectItem>
+                                <SelectItem value="0.0015">0.0015 SOL</SelectItem>
+                                <SelectItem value="0.002">0.002 SOL</SelectItem>
+                              </SelectContent>
+                            </Select>
+                          </div>
                         )}
                       </TableCell>
                       {/* Dev Trust Rating - 4 cycle button */}
