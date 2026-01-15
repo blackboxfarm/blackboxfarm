@@ -1106,10 +1106,13 @@ export function BaglessHoldersReport({ initialToken }: BaglessHoldersReportProps
             </div>
           )}
 
+          {/* Ad Banner #2 - Above Report Summary */}
+          <AdBanner size="leaderboard" position={2} />
+
           <Card>
             <CardHeader className="p-3 md:p-6 pb-2 md:pb-4">
               <CardTitle className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2">
-                <span className="text-base md:text-xl">Report Summary</span>
+                <span className="text-base md:text-xl text-blue-600 dark:text-blue-400 font-bold">Report Summary</span>
                 <Button 
                   onClick={exportToCSV}
                   variant="outline"
@@ -1123,10 +1126,6 @@ export function BaglessHoldersReport({ initialToken }: BaglessHoldersReportProps
               </CardTitle>
             </CardHeader>
             <CardContent className="p-3 md:p-6 pt-2 md:pt-0">
-              {/* Launchpad banner removed - redundant info */}
-
-              
-              {/* Ad Banner #2 - After Token Metadata */}
               <div className="block md:hidden">
                 <AdBanner size="mobile" position={2} />
               </div>
@@ -1329,53 +1328,13 @@ export function BaglessHoldersReport({ initialToken }: BaglessHoldersReportProps
               })()}
 
               {/* Action Buttons Row */}
-              <div className="mb-4 grid grid-cols-3 gap-2">
+              <div className="mb-4 grid grid-cols-2 gap-2">
                 <Button variant="outline" asChild className="text-xs md:text-sm h-auto py-2 whitespace-normal">
                   <Link to="/holders-marketing" className="text-center leading-tight">
                     <span className="hidden md:inline">Why You Need This Before Every Buy</span>
                     <span className="md:hidden whitespace-pre-wrap">Why You Need This{'\n'}Before Every Buy</span>
                   </Link>
                 </Button>
-                
-                <DropdownMenu>
-                  <DropdownMenuTrigger asChild>
-                    <Button variant="outline" className="gap-2 text-xs md:text-sm">
-                      <Share2 className="h-4 w-4" />
-                      Share
-                    </Button>
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent align="center">
-                    <DropdownMenuItem onClick={() => {
-                      const ticker = tokenData?.metadata?.symbol || 'this token';
-                      const text = `Check out the Whales vs the Dust for $${ticker} 🐋💨`;
-                      const url = window.location.href;
-                      window.open(`https://twitter.com/intent/tweet?text=${encodeURIComponent(text)}&url=${encodeURIComponent(url)}`, '_blank');
-                    }}>
-                      <span className="w-5 h-5 bg-foreground rounded-full flex items-center justify-center mr-2">
-                        <span className="text-background text-xs font-bold">𝕏</span>
-                      </span>
-                      Share on X
-                    </DropdownMenuItem>
-                    <DropdownMenuItem onClick={() => {
-                      const ticker = tokenData?.metadata?.symbol || 'this token';
-                      const text = `🐋 **Whales vs Dust** 🐋\n\nCheck out the holder analysis for $${ticker}!\n\n🔗 ${window.location.href}`;
-                      navigator.clipboard.writeText(text);
-                      toast({ title: "Copied!", description: "Discord message copied to clipboard" });
-                    }}>
-                      <MessageCircle className="h-4 w-4 mr-2" />
-                      Copy for Discord
-                    </DropdownMenuItem>
-                    <DropdownMenuItem onClick={() => {
-                      const ticker = tokenData?.metadata?.symbol || 'this token';
-                      const text = `🐋 Check out the Whales vs the Dust for $${ticker}`;
-                      const url = window.location.href;
-                      window.open(`https://t.me/share/url?url=${encodeURIComponent(url)}&text=${encodeURIComponent(text)}`, '_blank');
-                    }}>
-                      <Send className="h-4 w-4 mr-2" />
-                      Share on Telegram
-                    </DropdownMenuItem>
-                  </DropdownMenuContent>
-                </DropdownMenu>
 
                 <Button variant="outline" asChild className="text-xs md:text-sm h-auto py-2 whitespace-normal">
                   <Link to="/adverts" className="text-center leading-tight">
@@ -1422,28 +1381,12 @@ export function BaglessHoldersReport({ initialToken }: BaglessHoldersReportProps
                 </div>
               )}
 
-              {/* === RISK SNAPSHOT === */}
-              {report.riskFlags && report.riskFlags.length > 0 && (
-                <div className="mb-4 p-3 rounded-lg border border-orange-500/30 bg-orange-500/5">
-                  <h3 className="text-sm font-semibold flex items-center gap-2 mb-2">
-                    <AlertTriangle className="h-4 w-4 text-orange-500" />
-                    Risk Snapshot
-                  </h3>
-                  <div className="space-y-1">
-                    {report.riskFlags.map((flag, idx) => (
-                      <div key={idx} className="flex items-center gap-2 text-xs text-orange-700 dark:text-orange-300">
-                        <Flag className="h-3 w-3 flex-shrink-0" />
-                        {flag}
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
+              {/* === RISK SNAPSHOT === REMOVED */}
 
               {/* === DISTRIBUTION INTEGRITY === */}
               {report.distributionStats && (
                 <div className="mb-4 p-3 rounded-lg border bg-muted/20">
-                  <h3 className="text-sm font-semibold flex items-center gap-2 mb-3">
+                  <h3 className="text-sm font-semibold flex items-center gap-2 mb-3 text-blue-600 dark:text-blue-400">
                     <BarChart3 className="h-4 w-4" />
                     Distribution Integrity
                   </h3>
@@ -1473,7 +1416,7 @@ export function BaglessHoldersReport({ initialToken }: BaglessHoldersReportProps
               {/* === FUNCTIONAL HOLDERS - Toggle View === */}
               <div className="mb-4">
                 <div className="flex items-center justify-between mb-3">
-                  <h3 className="text-base font-semibold flex items-center gap-2">
+                  <h3 className="text-base font-semibold flex items-center gap-2 text-blue-600 dark:text-blue-400">
                     <Users className="h-4 w-4" />
                     Functional Holders
                   </h3>
@@ -1576,6 +1519,49 @@ export function BaglessHoldersReport({ initialToken }: BaglessHoldersReportProps
                     </div>
                   </div>
                 )}
+              </div>
+
+              {/* Share Report Button - After Functional Holders */}
+              <div className="mb-4">
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button variant="outline" className="w-full gap-2 text-sm">
+                      <Share2 className="h-4 w-4" />
+                      Share ${tokenData?.metadata?.symbol || 'Token'} Report
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="center" className="w-48">
+                    <DropdownMenuItem onClick={() => {
+                      const ticker = tokenData?.metadata?.symbol || 'this token';
+                      const text = `Check out the Whales vs the Dust for $${ticker} 🐋💨`;
+                      const url = window.location.href;
+                      window.open(`https://twitter.com/intent/tweet?text=${encodeURIComponent(text)}&url=${encodeURIComponent(url)}`, '_blank');
+                    }}>
+                      <span className="w-5 h-5 bg-foreground rounded-full flex items-center justify-center mr-2">
+                        <span className="text-background text-xs font-bold">𝕏</span>
+                      </span>
+                      Share on X
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => {
+                      const ticker = tokenData?.metadata?.symbol || 'this token';
+                      const text = `🐋 **Whales vs Dust** 🐋\n\nCheck out the holder analysis for $${ticker}!\n\n🔗 ${window.location.href}`;
+                      navigator.clipboard.writeText(text);
+                      toast({ title: "Copied!", description: "Discord message copied to clipboard" });
+                    }}>
+                      <MessageCircle className="h-4 w-4 mr-2" />
+                      Copy for Discord
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => {
+                      const ticker = tokenData?.metadata?.symbol || 'this token';
+                      const text = `🐋 Check out the Whales vs the Dust for $${ticker}`;
+                      const url = window.location.href;
+                      window.open(`https://t.me/share/url?url=${encodeURIComponent(url)}&text=${encodeURIComponent(text)}`, '_blank');
+                    }}>
+                      <Send className="h-4 w-4 mr-2" />
+                      Share on Telegram
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
               </div>
 
               {/* Security Alerts Card - Hidden per user request */}
@@ -1845,7 +1831,7 @@ export function BaglessHoldersReport({ initialToken }: BaglessHoldersReportProps
               {/* Sediment Layer Chart */}
               <div className="mb-4 md:mb-6">
                 <div className="flex items-center justify-between mb-3 md:mb-4">
-                  <h3 className="text-base md:text-lg font-semibold">Distribution Integrity (Sediment Layers)</h3>
+                  <h3 className="text-base md:text-lg font-semibold text-blue-600 dark:text-blue-400">Distribution Integrity (Sediment Layers)</h3>
                   <div className="flex items-center gap-1 text-xs">
                     <Button 
                       variant={sedimentViewMode === 'simple' ? 'default' : 'outline'} 
@@ -2147,6 +2133,49 @@ export function BaglessHoldersReport({ initialToken }: BaglessHoldersReportProps
                       </div>
                     </div>
                   </div>
+                </div>
+
+                {/* Share Report Button - After Sediment Layers */}
+                <div className="mt-4">
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <Button variant="outline" className="w-full gap-2 text-sm">
+                        <Share2 className="h-4 w-4" />
+                        Share ${tokenData?.metadata?.symbol || 'Token'} Report
+                      </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="center" className="w-48">
+                      <DropdownMenuItem onClick={() => {
+                        const ticker = tokenData?.metadata?.symbol || 'this token';
+                        const text = `Check out the Whales vs the Dust for $${ticker} 🐋💨`;
+                        const url = window.location.href;
+                        window.open(`https://twitter.com/intent/tweet?text=${encodeURIComponent(text)}&url=${encodeURIComponent(url)}`, '_blank');
+                      }}>
+                        <span className="w-5 h-5 bg-foreground rounded-full flex items-center justify-center mr-2">
+                          <span className="text-background text-xs font-bold">𝕏</span>
+                        </span>
+                        Share on X
+                      </DropdownMenuItem>
+                      <DropdownMenuItem onClick={() => {
+                        const ticker = tokenData?.metadata?.symbol || 'this token';
+                        const text = `🐋 **Whales vs Dust** 🐋\n\nCheck out the holder analysis for $${ticker}!\n\n🔗 ${window.location.href}`;
+                        navigator.clipboard.writeText(text);
+                        toast({ title: "Copied!", description: "Discord message copied to clipboard" });
+                      }}>
+                        <MessageCircle className="h-4 w-4 mr-2" />
+                        Copy for Discord
+                      </DropdownMenuItem>
+                      <DropdownMenuItem onClick={() => {
+                        const ticker = tokenData?.metadata?.symbol || 'this token';
+                        const text = `🐋 Check out the Whales vs the Dust for $${ticker}`;
+                        const url = window.location.href;
+                        window.open(`https://t.me/share/url?url=${encodeURIComponent(url)}&text=${encodeURIComponent(text)}`, '_blank');
+                      }}>
+                        <Send className="h-4 w-4 mr-2" />
+                        Share on Telegram
+                      </DropdownMenuItem>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
                 </div>
               </div>
               
