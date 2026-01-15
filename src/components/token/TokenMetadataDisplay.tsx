@@ -2,10 +2,11 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { DeveloperRiskBadge } from "./DeveloperRiskBadge";
-import { ExternalLink, Shield, ShieldCheck, TrendingUp, TrendingDown, Zap, Clock, Twitter, Globe, Send } from "lucide-react";
+import { ExternalLink, Shield, ShieldCheck, TrendingUp, TrendingDown, Zap, Clock } from "lucide-react";
 import { Separator } from "@/components/ui/separator";
 import { useEffect, useState } from "react";
-
+import { SocialIcon, DexScreenerIcon } from "./SocialIcon";
+import { detectSocialPlatform } from "@/utils/socialPlatformDetector";
 interface LaunchpadInfo {
   name: string;
   detected: boolean;
@@ -307,7 +308,7 @@ export function TokenMetadataDisplay({
                     className="flex items-center hover:opacity-80 transition-opacity"
                     title="View on DexScreener"
                   >
-                    <img src="/launchpad-logos/dexscreener.png" alt="DexScreener" className="h-5 w-5 rounded" />
+                    <DexScreenerIcon className="h-5 w-5" />
                   </a>
                 )}
 
@@ -322,40 +323,49 @@ export function TokenMetadataDisplay({
                   <img src="https://trade.padre.gg/logo.svg" alt="Padre.gg" className="h-5 w-auto max-w-[100px]" />
                 </a>
 
-                {/* Social links */}
-                {twitterUrl && (
-                  <a
-                    href={twitterUrl}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="flex items-center text-blue-400 hover:text-blue-300 transition-colors"
-                    title="Twitter/X"
-                  >
-                    <Twitter className="h-4 w-4" />
-                  </a>
-                )}
-                {telegramUrl && (
-                  <a
-                    href={telegramUrl}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="flex items-center text-primary hover:text-primary/80 transition-colors"
-                    title="Telegram"
-                  >
-                    <Send className="h-4 w-4" />
-                  </a>
-                )}
-                {websiteUrl && (
-                  <a
-                    href={websiteUrl}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="flex items-center text-blue-500 hover:text-blue-400 transition-colors"
-                    title="Website"
-                  >
-                    <Globe className="h-4 w-4" />
-                  </a>
-                )}
+                {/* Social links with platform detection */}
+                {twitterUrl && (() => {
+                  const platformInfo = detectSocialPlatform(twitterUrl);
+                  return (
+                    <a
+                      href={twitterUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="flex items-center hover:opacity-80 transition-opacity"
+                      title={platformInfo.label}
+                    >
+                      <SocialIcon platform={platformInfo.platform} className="h-5 w-5" />
+                    </a>
+                  );
+                })()}
+                {telegramUrl && (() => {
+                  const platformInfo = detectSocialPlatform(telegramUrl);
+                  return (
+                    <a
+                      href={telegramUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="flex items-center hover:opacity-80 transition-opacity"
+                      title={platformInfo.label}
+                    >
+                      <SocialIcon platform={platformInfo.platform} className="h-5 w-5" />
+                    </a>
+                  );
+                })()}
+                {websiteUrl && (() => {
+                  const platformInfo = detectSocialPlatform(websiteUrl);
+                  return (
+                    <a
+                      href={websiteUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="flex items-center hover:opacity-80 transition-opacity"
+                      title={platformInfo.label}
+                    >
+                      <SocialIcon platform={platformInfo.platform} className="h-5 w-5" />
+                    </a>
+                  );
+                })()}
 
                 {/* Age badge */}
                 {tokenAge !== undefined && (
@@ -428,10 +438,10 @@ export function TokenMetadataDisplay({
                     href={creatorInfo.xAccount}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="flex items-center gap-1 text-blue-400 hover:text-blue-300"
+                    className="flex items-center gap-1 hover:opacity-80 transition-opacity"
                     title="Creator's X/Twitter"
                   >
-                    <Twitter className="h-3.5 w-3.5" />
+                    <SocialIcon platform="twitter" className="h-4 w-4" />
                   </a>
                 )}
               </div>
