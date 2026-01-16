@@ -2089,12 +2089,12 @@ export function BaglessHoldersReport({ initialToken }: BaglessHoldersReportProps
                       </div>
                     </div>
                     
-                    {/* Ad Banner #3 - After Liquidity Pool in Legend */}
+                    {/* Ad Banner #4 - After Liquidity Pool in Legend (Ledger) */}
                     <div className="block md:hidden mt-4">
-                      <AdBanner size="mobile" position={3} />
+                      <AdBanner size="mobile" position={4} />
                     </div>
                     <div className="hidden md:block mt-4">
-                      <AdBanner size="rectangle" position={3} />
+                      <AdBanner size="rectangle" position={4} />
                     </div>
                   </div>
                   
@@ -2522,13 +2522,6 @@ export function BaglessHoldersReport({ initialToken }: BaglessHoldersReportProps
             </CardContent>
           </Card>
           
-          {/* Ad Banner #4 - After Holders List Table (Ledger) */}
-          <div className="block md:hidden">
-            <AdBanner size="mobile" position={4} />
-          </div>
-          <div className="hidden md:block">
-            <AdBanner size="leaderboard" position={4} />
-          </div>
         </>
       )}
 
