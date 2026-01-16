@@ -53,9 +53,9 @@ export interface BulkPriceResult {
 const PUMP_PROGRAM_ID = '6EF8rrecthR5Dkzon8Nwu78hRvfCKubJ14M5uBEwF6P';
 const INITIAL_REAL_TOKEN_RESERVES = 793_100_000_000_000n;
 
-// Cache with 3-second TTL (short enough to be fresh, long enough to avoid spam)
+// Cache with 1-second TTL (reduced from 3s to minimize stale price issues)
 const priceCache: Map<string, { result: PriceResult; timestamp: number }> = new Map();
-const CACHE_TTL_MS = 3000;
+const CACHE_TTL_MS = 1000;
 
 // SOL price cache (slightly longer TTL since SOL moves slower)
 let solPriceCache: { price: number; timestamp: number } | null = null;

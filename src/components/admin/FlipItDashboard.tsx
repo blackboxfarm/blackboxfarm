@@ -828,14 +828,9 @@ export function FlipItDashboard() {
       return false;
     }
 
-    // Skip if same mint and not forcing refresh and has recent data
-    if (!forceRefresh && inputToken.mint === mint && inputToken.lastFetched) {
-      const lastFetchTime = new Date(inputToken.lastFetched).getTime();
-      const now = Date.now();
-      if (now - lastFetchTime < 30000) { // 30 second cache
-        return true;
-      }
-    }
+    // REMOVED CACHE: Always fetch fresh price to avoid stale price bugs
+    // The 30-second cache was causing users to see old prices and buy at stale rates
+    // Fresh prices are critical for accurate FlipIt execution
 
     setIsLoadingInputToken(true);
     
