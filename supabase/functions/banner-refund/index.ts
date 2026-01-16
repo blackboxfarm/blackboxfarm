@@ -42,21 +42,11 @@ serve(async (req) => {
       );
     }
 
-    const { orderId, refundWallet } = await req.json();
+    const { orderId } = await req.json();
 
-    if (!orderId || !refundWallet) {
+    if (!orderId) {
       return new Response(
-        JSON.stringify({ error: 'Missing orderId or refundWallet' }),
-        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
-    }
-
-    // Validate refund wallet address
-    try {
-      new PublicKey(refundWallet);
-    } catch {
-      return new Response(
-        JSON.stringify({ error: 'Invalid Solana wallet address' }),
+        JSON.stringify({ error: 'Missing orderId' }),
         { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
@@ -114,6 +104,15 @@ serve(async (req) => {
     if (order.payment_status !== 'paid') {
       return new Response(
         JSON.stringify({ error: 'Order not paid - nothing to refund' }),
+        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    // Get the refund wallet - use the stored sender wallet
+    const refundWallet = order.payment_sender_wallet;
+    if (!refundWallet) {
+      return new Response(
+        JSON.stringify({ error: 'Original payment sender wallet not recorded - cannot auto-refund' }),
         { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }

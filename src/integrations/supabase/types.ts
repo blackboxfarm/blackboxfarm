@@ -994,6 +994,7 @@ export type Database = {
           is_active: boolean | null
           link_url: string
           payment_confirmed_at: string | null
+          payment_sender_wallet: string | null
           payment_status: string | null
           price_sol: number | null
           price_usd: number
@@ -1022,6 +1023,7 @@ export type Database = {
           is_active?: boolean | null
           link_url: string
           payment_confirmed_at?: string | null
+          payment_sender_wallet?: string | null
           payment_status?: string | null
           price_sol?: number | null
           price_usd: number
@@ -1050,6 +1052,7 @@ export type Database = {
           is_active?: boolean | null
           link_url?: string
           payment_confirmed_at?: string | null
+          payment_sender_wallet?: string | null
           payment_status?: string | null
           price_sol?: number | null
           price_usd?: number

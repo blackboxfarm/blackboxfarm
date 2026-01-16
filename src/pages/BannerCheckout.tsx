@@ -439,27 +439,24 @@ export default function BannerCheckout() {
           <DialogHeader>
             <DialogTitle>Request Refund</DialogTitle>
             <DialogDescription>
-              A $10 clawback fee will be deducted. Enter your Solana wallet address to receive the refund.
+              Funds will be returned to the wallet that sent the payment.
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-4">
-            <div>
-              <Label>Refund Wallet Address</Label>
-              <Input
-                placeholder="Your Solana wallet address"
-                value={refundWallet}
-                onChange={(e) => setRefundWallet(e.target.value)}
-              />
-            </div>
             <div className="p-3 bg-yellow-500/10 border border-yellow-500/30 rounded-lg">
               <p className="text-sm text-yellow-600 dark:text-yellow-400">
                 <strong>$10 clawback fee</strong> will be deducted from your refund amount.
               </p>
             </div>
+            <div className="p-3 bg-muted rounded-lg">
+              <p className="text-sm text-muted-foreground">
+                Your refund will be sent back to the original wallet that made the payment.
+              </p>
+            </div>
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setShowRefundModal(false)}>Cancel</Button>
-            <Button onClick={handleRefund} disabled={!refundWallet || processingRefund}>
+            <Button onClick={handleRefund} disabled={processingRefund}>
               {processingRefund ? 'Processing...' : 'Confirm Refund'}
             </Button>
           </DialogFooter>

@@ -6,13 +6,53 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
+// Fetch trending Dexscreener banners for position 1 fallback
+async function fetchDexscreenerBanner(): Promise<{ banner: any } | null> {
+  try {
+    const response = await fetch('https://api.dexscreener.com/token-boosts/top/v1');
+    if (!response.ok) return null;
+    
+    const boosts = await response.json();
+    
+    // Filter for Solana tokens with header banners
+    const tokensWithBanners = boosts
+      .filter((token: any) => 
+        token.chainId === 'solana' && 
+        token.header && 
+        token.header.length > 0
+      )
+      .slice(0, 10);
+
+    if (tokensWithBanners.length === 0) return null;
+
+    // Random selection
+    const randomToken = tokensWithBanners[Math.floor(Math.random() * tokensWithBanners.length)];
+    
+    return {
+      banner: {
+        id: `dex-${randomToken.tokenAddress}`,
+        title: randomToken.description || 'Trending on Dexscreener',
+        image_url: randomToken.header,
+        link_url: randomToken.url,
+        position: 1,
+        is_active: true,
+        is_dexscreener: true,
+        token_address: randomToken.tokenAddress,
+      }
+    };
+  } catch (error) {
+    console.error('Error fetching Dexscreener banners:', error);
+    return null;
+  }
+}
+
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
   }
 
   try {
-    const { position } = await req.json();
+    const { position, includeDexscreener } = await req.json();
 
     if (!position || position < 1 || position > 4) {
       return new Response(
@@ -40,7 +80,36 @@ serve(async (req) => {
       throw bannersError;
     }
 
+    // If position 1 and includeDexscreener is true, mix in Dexscreener banners
+    if (position === 1 && includeDexscreener !== false) {
+      // If no scheduled banners, maybe show a Dexscreener banner (50% chance)
+      const scheduledBanners = (banners || []).filter((b: any) => Boolean(b.start_date) || Boolean(b.end_date));
+      
+      if (scheduledBanners.length === 0 && Math.random() < 0.5) {
+        const dexBanner = await fetchDexscreenerBanner();
+        if (dexBanner) {
+          console.log('Serving Dexscreener banner for position 1:', dexBanner.banner.title);
+          return new Response(
+            JSON.stringify(dexBanner),
+            { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+      }
+    }
+
     if (!banners || banners.length === 0) {
+      // Try Dexscreener as fallback for position 1
+      if (position === 1 && includeDexscreener !== false) {
+        const dexBanner = await fetchDexscreenerBanner();
+        if (dexBanner) {
+          console.log('Serving Dexscreener fallback for position 1');
+          return new Response(
+            JSON.stringify(dexBanner),
+            { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+      }
+      
       return new Response(
         JSON.stringify({ banner: null }),
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
