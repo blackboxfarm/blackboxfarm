@@ -417,6 +417,15 @@ export function TokenMetadataDisplay({
                 >
                   <img src="/external-icons/birdeye.ico" alt="Birdeye" className="h-6 w-6 rounded object-contain" />
                 </a>
+                <a
+                  href={`https://www.dextools.io/app/solana/pair-explorer/${metadata.mint}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="hover:opacity-80 transition-opacity"
+                  title="DexTools"
+                >
+                  <img src="/external-icons/dextools.png" alt="DexTools" className="h-6 w-6 rounded object-contain" />
+                </a>
               </div>
 
               {/* Social Links - Icons only */}
