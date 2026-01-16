@@ -120,10 +120,18 @@ export function TokenMetadataDisplay({
     return <TokenMetadataSkeleton compact={compact} />;
   }
 
-  // Normalize IPFS/Arweave URLs
+  // Normalize IPFS/Arweave URLs with better gateway support
   const normalizeUrl = (url?: string) => {
     if (!url) return undefined;
-    if (url.startsWith('ipfs://')) return `https://cloudflare-ipfs.com/ipfs/${url.replace('ipfs://','')}`;
+    if (url.startsWith('ipfs://')) {
+      const cid = url.replace('ipfs://', '');
+      return `https://gateway.pinata.cloud/ipfs/${cid}`;
+    }
+    // Convert ipfs.io to faster gateway
+    if (url.includes('ipfs.io/ipfs/')) {
+      const cid = url.split('ipfs.io/ipfs/')[1];
+      return `https://gateway.pinata.cloud/ipfs/${cid}`;
+    }
     if (url.startsWith('ar://')) return `https://arweave.net/${url.slice(5)}`;
     return url;
   };
@@ -227,9 +235,29 @@ export function TokenMetadataDisplay({
                 loading="lazy"
                 className={`w-20 h-20 md:w-24 md:h-24 rounded-2xl flex-shrink-0 object-cover border-4 border-primary/20 shadow-xl ${!displayImage ? 'opacity-40 grayscale' : ''}`}
                 onError={(e) => {
-                  if (e.currentTarget.src !== '/lovable-uploads/7283e809-e703-4594-8dc8-a1ade76b06de.png') {
-                    e.currentTarget.src = '/lovable-uploads/7283e809-e703-4594-8dc8-a1ade76b06de.png';
-                    e.currentTarget.className = 'w-20 h-20 md:w-24 md:h-24 rounded-2xl flex-shrink-0 object-cover border-4 border-primary/20 shadow-xl opacity-40 grayscale';
+                  const img = e.currentTarget;
+                  const currentSrc = img.src;
+                  
+                  // Try alternative IPFS gateways
+                  if (currentSrc.includes('gateway.pinata.cloud')) {
+                    const cid = currentSrc.split('/ipfs/')[1];
+                    if (cid) {
+                      img.src = `https://cloudflare-ipfs.com/ipfs/${cid}`;
+                      return;
+                    }
+                  }
+                  if (currentSrc.includes('cloudflare-ipfs.com')) {
+                    const cid = currentSrc.split('/ipfs/')[1];
+                    if (cid) {
+                      img.src = `https://ipfs.io/ipfs/${cid}`;
+                      return;
+                    }
+                  }
+                  
+                  // Final fallback to placeholder
+                  if (!currentSrc.includes('lovable-uploads')) {
+                    img.src = '/lovable-uploads/7283e809-e703-4594-8dc8-a1ade76b06de.png';
+                    img.className = 'w-20 h-20 md:w-24 md:h-24 rounded-2xl flex-shrink-0 object-cover border-4 border-primary/20 shadow-xl opacity-40 grayscale';
                   }
                 }}
               />
@@ -369,7 +397,7 @@ export function TokenMetadataDisplay({
                   className="hover:opacity-80 transition-opacity"
                   title="CoinGecko"
                 >
-                  <img src="https://static.coingecko.com/s/coingecko-logo-8903d34ce19ca4be1c81f0db30e924154750d208683fad7ae6f2ce06c76d0a56.png" alt="CoinGecko" className="h-5 w-5 rounded" />
+                  <img src="/external-icons/coingecko.png" alt="CoinGecko" className="h-5 w-5 rounded object-contain" />
                 </a>
                 <a
                   href={`https://coinmarketcap.com/search/?q=${metadata.symbol}`}
@@ -378,7 +406,7 @@ export function TokenMetadataDisplay({
                   className="hover:opacity-80 transition-opacity"
                   title="CoinMarketCap"
                 >
-                  <img src="https://s2.coinmarketcap.com/static/cloud/img/fav/apple-touch-icon.png" alt="CoinMarketCap" className="h-5 w-5 rounded" />
+                  <img src="/external-icons/coinmarketcap.png" alt="CoinMarketCap" className="h-5 w-5 rounded object-contain" />
                 </a>
                 <a
                   href={`https://birdeye.so/token/${metadata.mint}?chain=solana`}
@@ -387,7 +415,7 @@ export function TokenMetadataDisplay({
                   className="hover:opacity-80 transition-opacity"
                   title="Birdeye"
                 >
-                  <img src="https://birdeye.so/favicon.ico" alt="Birdeye" className="h-5 w-5 rounded" />
+                  <img src="/external-icons/birdeye.ico" alt="Birdeye" className="h-5 w-5 rounded object-contain" />
                 </a>
               </div>
 
