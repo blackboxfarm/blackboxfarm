@@ -9543,7 +9543,11 @@ export type Database = {
       }
       twitter_accounts: {
         Row: {
+          access_token_encrypted: string | null
+          access_token_secret_encrypted: string | null
           account_status: string | null
+          api_key_encrypted: string | null
+          api_secret_encrypted: string | null
           banner_image_url: string | null
           bio: string | null
           bio_urls: Json | null
@@ -9587,7 +9591,11 @@ export type Database = {
           withheld_countries: string[] | null
         }
         Insert: {
+          access_token_encrypted?: string | null
+          access_token_secret_encrypted?: string | null
           account_status?: string | null
+          api_key_encrypted?: string | null
+          api_secret_encrypted?: string | null
           banner_image_url?: string | null
           bio?: string | null
           bio_urls?: Json | null
@@ -9631,7 +9639,11 @@ export type Database = {
           withheld_countries?: string[] | null
         }
         Update: {
+          access_token_encrypted?: string | null
+          access_token_secret_encrypted?: string | null
           account_status?: string | null
+          api_key_encrypted?: string | null
+          api_secret_encrypted?: string | null
           banner_image_url?: string | null
           bio?: string | null
           bio_urls?: Json | null

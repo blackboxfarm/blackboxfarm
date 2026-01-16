@@ -57,6 +57,11 @@ interface TwitterAccount {
   bio_urls: any | null;
   profile_urls: any | null;
   withheld_countries: string[] | null;
+  // Twitter/X API Credentials
+  api_key_encrypted: string | null;
+  api_secret_encrypted: string | null;
+  access_token_encrypted: string | null;
+  access_token_secret_encrypted: string | null;
 }
 
 const STATUS_OPTIONS = ["active", "suspended", "locked", "unverified", "inactive"];
@@ -119,6 +124,11 @@ const TwitterAccountManager = () => {
     verification_type: "none",
     follower_count: 0,
     following_count: 0,
+    // Twitter/X API Credentials
+    api_key_encrypted: "",
+    api_secret_encrypted: "",
+    access_token_encrypted: "",
+    access_token_secret_encrypted: "",
   });
   const [profileImage, setProfileImage] = useState<File | null>(null);
   const [bannerImage, setBannerImage] = useState<File | null>(null);
@@ -174,6 +184,10 @@ const TwitterAccountManager = () => {
       verification_type: "none",
       follower_count: 0,
       following_count: 0,
+      api_key_encrypted: "",
+      api_secret_encrypted: "",
+      access_token_encrypted: "",
+      access_token_secret_encrypted: "",
     });
     setProfileImage(null);
     setBannerImage(null);
@@ -198,6 +212,10 @@ const TwitterAccountManager = () => {
       verification_type: account.verification_type || "none",
       follower_count: account.follower_count || 0,
       following_count: account.following_count || 0,
+      api_key_encrypted: account.api_key_encrypted || "",
+      api_secret_encrypted: account.api_secret_encrypted || "",
+      access_token_encrypted: account.access_token_encrypted || "",
+      access_token_secret_encrypted: account.access_token_secret_encrypted || "",
     });
     setDialogOpen(true);
   };
@@ -257,6 +275,10 @@ const TwitterAccountManager = () => {
         following_count: formData.following_count,
         profile_image_url,
         banner_image_url,
+        api_key_encrypted: formData.api_key_encrypted || null,
+        api_secret_encrypted: formData.api_secret_encrypted || null,
+        access_token_encrypted: formData.access_token_encrypted || null,
+        access_token_secret_encrypted: formData.access_token_secret_encrypted || null,
       };
 
       if (editingAccount) {
@@ -683,6 +705,105 @@ const TwitterAccountManager = () => {
                     placeholder="Internal notes..."
                     rows={2}
                   />
+                </div>
+
+                {/* Twitter/X API Credentials Section */}
+                <div className="border border-border rounded-lg p-4 space-y-4 bg-muted/30">
+                  <div className="flex items-center gap-2 text-sm font-medium">
+                    <Lock className="h-4 w-4 text-muted-foreground" />
+                    <span>Twitter/X API Credentials</span>
+                    <span className="text-xs text-muted-foreground">(Optional - for automated posting)</span>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <Label className="text-xs">API Key (Consumer Key)</Label>
+                      <div className="relative">
+                        <Input
+                          type={showPasswords["api_key"] ? "text" : "password"}
+                          value={formData.api_key_encrypted}
+                          onChange={(e) => setFormData({ ...formData, api_key_encrypted: e.target.value })}
+                          placeholder="Enter API Key..."
+                          className="pr-8"
+                        />
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon"
+                          className="absolute right-0 top-0 h-full w-8"
+                          onClick={() => togglePassword("api_key")}
+                        >
+                          {showPasswords["api_key"] ? <EyeOff className="h-3 w-3" /> : <Eye className="h-3 w-3" />}
+                        </Button>
+                      </div>
+                    </div>
+                    <div>
+                      <Label className="text-xs">API Secret (Consumer Secret)</Label>
+                      <div className="relative">
+                        <Input
+                          type={showPasswords["api_secret"] ? "text" : "password"}
+                          value={formData.api_secret_encrypted}
+                          onChange={(e) => setFormData({ ...formData, api_secret_encrypted: e.target.value })}
+                          placeholder="Enter API Secret..."
+                          className="pr-8"
+                        />
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon"
+                          className="absolute right-0 top-0 h-full w-8"
+                          onClick={() => togglePassword("api_secret")}
+                        >
+                          {showPasswords["api_secret"] ? <EyeOff className="h-3 w-3" /> : <Eye className="h-3 w-3" />}
+                        </Button>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <Label className="text-xs">Access Token</Label>
+                      <div className="relative">
+                        <Input
+                          type={showPasswords["access_token"] ? "text" : "password"}
+                          value={formData.access_token_encrypted}
+                          onChange={(e) => setFormData({ ...formData, access_token_encrypted: e.target.value })}
+                          placeholder="Enter Access Token..."
+                          className="pr-8"
+                        />
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon"
+                          className="absolute right-0 top-0 h-full w-8"
+                          onClick={() => togglePassword("access_token")}
+                        >
+                          {showPasswords["access_token"] ? <EyeOff className="h-3 w-3" /> : <Eye className="h-3 w-3" />}
+                        </Button>
+                      </div>
+                    </div>
+                    <div>
+                      <Label className="text-xs">Access Token Secret</Label>
+                      <div className="relative">
+                        <Input
+                          type={showPasswords["access_token_secret"] ? "text" : "password"}
+                          value={formData.access_token_secret_encrypted}
+                          onChange={(e) => setFormData({ ...formData, access_token_secret_encrypted: e.target.value })}
+                          placeholder="Enter Access Token Secret..."
+                          className="pr-8"
+                        />
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon"
+                          className="absolute right-0 top-0 h-full w-8"
+                          onClick={() => togglePassword("access_token_secret")}
+                        >
+                          {showPasswords["access_token_secret"] ? <EyeOff className="h-3 w-3" /> : <Eye className="h-3 w-3" />}
+                        </Button>
+                      </div>
+                    </div>
+                  </div>
                 </div>
 
                 <Button onClick={handleSave} disabled={saving} className="w-full">
