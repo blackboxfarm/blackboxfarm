@@ -36,7 +36,10 @@ import {
   Wallet,
   Crown,
   Zap,
-  Users
+  Users,
+  LayoutGrid,
+  List,
+  Eye
 } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
 import { ChannelScanLogs } from './ChannelScanLogs';
@@ -178,6 +181,19 @@ export function ChannelManagement() {
   const [testingAccess, setTestingAccess] = useState(false);
   const [sessionString, setSessionString] = useState('');
   const [savingSession, setSavingSession] = useState(false);
+  
+  // View mode toggle: 'cards' or 'list'
+  const [viewMode, setViewMode] = useState<'cards' | 'list'>('cards');
+  
+  // Simplified add form - just paste ID
+  const [newMonitorId, setNewMonitorId] = useState('');
+  const [lookingUp, setLookingUp] = useState(false);
+  const [lookupResult, setLookupResult] = useState<{
+    name: string | null;
+    type: 'channel' | 'group' | null;
+    valid: boolean;
+  } | null>(null);
+  
   const [formData, setFormData] = useState({
     channel_name: '',
     channel_username: '',
@@ -257,6 +273,99 @@ export function ChannelManagement() {
       toast.error('Failed to load channels');
     } finally {
       setLoading(false);
+    }
+  };
+
+  // Simplified add monitor - just paste ID and auto-lookup
+  const lookupMonitorId = async (idInput: string) => {
+    const cleanId = idInput.trim().replace('@', '').replace('https://t.me/', '').replace('t.me/', '');
+    if (!cleanId) {
+      setLookupResult(null);
+      return;
+    }
+    
+    setLookingUp(true);
+    setLookupResult(null);
+    
+    try {
+      // Try to fetch info about the channel/group using telegram-scraper
+      const { data, error } = await supabase.functions.invoke('telegram-scraper', {
+        body: { 
+          action: 'test_access',
+          channelId: cleanId
+        }
+      });
+      
+      if (error) throw error;
+      
+      if (data?.success) {
+        setLookupResult({
+          name: data.channelName || cleanId,
+          type: data.isGroup ? 'group' : 'channel',
+          valid: true
+        });
+      } else {
+        // Even if lookup fails, we can still add it - user has the ID
+        setLookupResult({
+          name: cleanId,
+          type: isNumericChatId(cleanId) ? 'group' : 'channel',
+          valid: true // Trust the user - they have the ID
+        });
+      }
+    } catch (err) {
+      console.warn('Lookup failed, proceeding anyway:', err);
+      // Still allow adding - if user has the ID, they're in it
+      setLookupResult({
+        name: cleanId,
+        type: isNumericChatId(cleanId) ? 'group' : 'channel',
+        valid: true
+      });
+    } finally {
+      setLookingUp(false);
+    }
+  };
+
+  const addMonitorSimple = async () => {
+    const cleanId = newMonitorId.trim().replace('@', '').replace('https://t.me/', '').replace('t.me/', '');
+    if (!cleanId) {
+      toast.error('Enter a channel/group ID');
+      return;
+    }
+
+    try {
+      const { data: userData, error: userError } = await supabase.auth.getUser();
+      if (userError) throw userError;
+      if (!userData?.user) {
+        toast.error('You must be logged in');
+        return;
+      }
+
+      const { error } = await supabase
+        .from('telegram_channel_config')
+        .insert({
+          user_id: userData.user.id,
+          channel_id: cleanId.toLowerCase(),
+          channel_name: lookupResult?.name || cleanId,
+          channel_username: cleanId.toLowerCase(),
+          channel_type: lookupResult?.type || (isNumericChatId(cleanId) ? 'group' : 'channel'),
+          is_active: true,
+          fantasy_mode: true,
+          fantasy_buy_amount_usd: 100,
+          ape_keyword_enabled: true,
+          max_mint_age_minutes: 60,
+          scan_window_minutes: 1440,
+        });
+
+      if (error) throw error;
+
+      toast.success('Monitor added!');
+      setShowAddDialog(false);
+      setNewMonitorId('');
+      setLookupResult(null);
+      loadChannels();
+    } catch (err: any) {
+      console.error('Error adding monitor:', err);
+      toast.error(err?.message || 'Failed to add monitor');
     }
   };
 
@@ -1021,8 +1130,28 @@ with TelegramClient(StringSession(), api_id, api_hash) as client:
     <div className="space-y-6">
       {/* Header */}
       <div className="flex items-center justify-between flex-wrap gap-2">
-        <h2 className="text-xl font-semibold">Channel Management</h2>
-        <div className="flex gap-2">
+        <h2 className="text-xl font-semibold">Telegram Monitor</h2>
+        <div className="flex gap-2 items-center">
+          {/* View Toggle */}
+          <div className="flex border rounded-lg overflow-hidden">
+            <Button
+              variant={viewMode === 'cards' ? 'default' : 'ghost'}
+              size="sm"
+              onClick={() => setViewMode('cards')}
+              className="rounded-none"
+            >
+              <LayoutGrid className="h-4 w-4" />
+            </Button>
+            <Button
+              variant={viewMode === 'list' ? 'default' : 'ghost'}
+              size="sm"
+              onClick={() => setViewMode('list')}
+              className="rounded-none"
+            >
+              <List className="h-4 w-4" />
+            </Button>
+          </div>
+          
           <Button 
             variant="outline" 
             onClick={enableAllChannels}
@@ -1031,24 +1160,212 @@ with TelegramClient(StringSession(), api_id, api_hash) as client:
             <Play className="h-4 w-4 mr-2" />
             Enable ALL + KOTH + FIRST
           </Button>
-          <Dialog open={showAddDialog} onOpenChange={setShowAddDialog}>
+          <Dialog open={showAddDialog} onOpenChange={(open) => {
+            setShowAddDialog(open);
+            if (!open) {
+              setNewMonitorId('');
+              setLookupResult(null);
+            }
+          }}>
             <DialogTrigger asChild>
               <Button>
                 <Plus className="h-4 w-4 mr-2" />
-                Add Channel
+                Add New Monitor
               </Button>
             </DialogTrigger>
-            <DialogContent className="max-h-[85vh] overflow-y-auto">
+            <DialogContent className="max-w-md">
               <DialogHeader>
-                <DialogTitle>Add Telegram Channel</DialogTitle>
+                <DialogTitle>Add New Monitor</DialogTitle>
               </DialogHeader>
-              {renderChannelForm(false)}
+              <div className="space-y-4 py-4">
+                <div className="space-y-2">
+                  <Label>Channel/Group ID</Label>
+                  <div className="flex gap-2">
+                    <Input
+                      placeholder="Paste ID (e.g., -1002486747312 or alphacalls)"
+                      value={newMonitorId}
+                      onChange={(e) => {
+                        setNewMonitorId(e.target.value);
+                        // Auto-lookup on paste
+                        if (e.target.value.length > 5) {
+                          lookupMonitorId(e.target.value);
+                        }
+                      }}
+                      className="font-mono"
+                    />
+                    <Button
+                      variant="outline"
+                      size="icon"
+                      onClick={() => lookupMonitorId(newMonitorId)}
+                      disabled={lookingUp || !newMonitorId.trim()}
+                    >
+                      {lookingUp ? (
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                      ) : (
+                        <Search className="h-4 w-4" />
+                      )}
+                    </Button>
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    Paste the numeric ID from TG bots or the username
+                  </p>
+                </div>
+                
+                {/* Lookup Result */}
+                {lookupResult && (
+                  <div className="p-3 rounded-lg bg-muted/50 border">
+                    <div className="flex items-center gap-2">
+                      <CheckCircle2 className="h-4 w-4 text-green-500" />
+                      <span className="font-medium">{lookupResult.name}</span>
+                      <Badge variant="outline" className="text-xs">
+                        {lookupResult.type === 'group' ? '👥 Group' : '📢 Channel'}
+                      </Badge>
+                    </div>
+                  </div>
+                )}
+                
+                <Button 
+                  onClick={addMonitorSimple} 
+                  className="w-full"
+                  disabled={!newMonitorId.trim() || lookingUp}
+                >
+                  <Plus className="h-4 w-4 mr-2" />
+                  Add Monitor
+                </Button>
+              </div>
             </DialogContent>
           </Dialog>
         </div>
       </div>
 
-      {/* Channel Cards */}
+      {/* List View */}
+      {viewMode === 'list' && (
+        <Card>
+          <CardContent className="p-0">
+            <div className="divide-y">
+              {channels.map((channel) => (
+                <div 
+                  key={channel.id} 
+                  className={`flex items-center justify-between p-3 hover:bg-muted/50 cursor-pointer transition-colors ${!channel.is_active ? 'opacity-60' : ''}`}
+                  onClick={() => {
+                    setEditingChannel(channel);
+                    setFormData({
+                      channel_name: channel.channel_name || '',
+                      channel_username: channel.channel_username || '',
+                      channel_type: (channel.channel_type as 'channel' | 'group') || 'channel',
+                      fantasy_mode: channel.fantasy_mode,
+                      fantasy_buy_amount_usd: channel.fantasy_buy_amount_usd,
+                      ape_keyword_enabled: channel.ape_keyword_enabled,
+                      max_mint_age_minutes: channel.max_mint_age_minutes,
+                      scan_window_minutes: channel.scan_window_minutes,
+                      selected_target_id: ''
+                    });
+                  }}
+                >
+                  <div className="flex items-center gap-3">
+                    <MessageCircle className="h-4 w-4 text-blue-500" />
+                    <div>
+                      <div className="font-medium text-sm">
+                        {channel.channel_name || channel.channel_username}
+                      </div>
+                      <div className="text-xs text-muted-foreground font-mono">
+                        @{channel.channel_username}
+                      </div>
+                    </div>
+                  </div>
+                  
+                  <div className="flex items-center gap-4">
+                    {/* Stats */}
+                    <div className="flex items-center gap-3 text-xs text-muted-foreground">
+                      <span title="Calls Detected">{channel.total_calls_detected || 0} calls</span>
+                      <span title="Buys Executed">{channel.total_buys_executed || 0} buys</span>
+                    </div>
+                    
+                    {/* Badges */}
+                    <div className="flex items-center gap-1">
+                      <Badge variant="outline" className="text-xs h-5">
+                        {channel.channel_type === 'group' ? '👥' : '📢'}
+                      </Badge>
+                      {channel.fantasy_mode ? (
+                        <Badge variant="outline" className="text-xs h-5 bg-purple-500/10 text-purple-400 border-purple-500/30">
+                          Fantasy
+                        </Badge>
+                      ) : (
+                        <Badge className="text-xs h-5 bg-green-500">
+                          Live
+                        </Badge>
+                      )}
+                      <Badge variant={channel.is_active ? 'default' : 'secondary'} className="text-xs h-5">
+                        {channel.is_active ? 'Active' : 'Paused'}
+                      </Badge>
+                    </div>
+                    
+                    {/* Actions */}
+                    <div className="flex items-center gap-1">
+                      <Button
+                        size="icon"
+                        variant="ghost"
+                        className="h-7 w-7"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          toggleChannel(channel);
+                        }}
+                      >
+                        {channel.is_active ? (
+                          <Pause className="h-3 w-3" />
+                        ) : (
+                          <Play className="h-3 w-3" />
+                        )}
+                      </Button>
+                      <Button
+                        size="icon"
+                        variant="ghost"
+                        className="h-7 w-7"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setEditingChannel(channel);
+                          setFormData({
+                            channel_name: channel.channel_name || '',
+                            channel_username: channel.channel_username || '',
+                            channel_type: (channel.channel_type as 'channel' | 'group') || 'channel',
+                            fantasy_mode: channel.fantasy_mode,
+                            fantasy_buy_amount_usd: channel.fantasy_buy_amount_usd,
+                            ape_keyword_enabled: channel.ape_keyword_enabled,
+                            max_mint_age_minutes: channel.max_mint_age_minutes,
+                            scan_window_minutes: channel.scan_window_minutes,
+                            selected_target_id: ''
+                          });
+                        }}
+                      >
+                        <Eye className="h-3 w-3" />
+                      </Button>
+                      <Button
+                        size="icon"
+                        variant="ghost"
+                        className="h-7 w-7 text-muted-foreground hover:text-destructive"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          deleteChannel(channel.id);
+                        }}
+                      >
+                        <Trash2 className="h-3 w-3" />
+                      </Button>
+                    </div>
+                  </div>
+                </div>
+              ))}
+              {channels.length === 0 && (
+                <div className="p-8 text-center text-muted-foreground">
+                  No monitors configured. Click "Add New Monitor" to get started.
+                </div>
+              )}
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Card View */}
+      {viewMode === 'cards' && (
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         {channels.map((channel) => (
           <Card key={channel.id} className={!channel.is_active ? 'opacity-60' : ''}>
@@ -2032,18 +2349,19 @@ with TelegramClient(StringSession(), api_id, api_hash) as client:
           </Card>
         ))}
       </div>
+      )}
 
-      {channels.length === 0 && (
+      {channels.length === 0 && viewMode === 'cards' && (
         <Card>
           <CardContent className="py-12 text-center">
             <MessageCircle className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
-            <h3 className="text-lg font-medium mb-2">No channels configured</h3>
+            <h3 className="text-lg font-medium mb-2">No monitors configured</h3>
             <p className="text-muted-foreground mb-4">
-              Add a Telegram channel to start monitoring for token calls
+              Add a Telegram channel or group to start monitoring for token calls
             </p>
             <Button onClick={() => setShowAddDialog(true)}>
               <Plus className="h-4 w-4 mr-2" />
-              Add Your First Channel
+              Add New Monitor
             </Button>
           </CardContent>
         </Card>
