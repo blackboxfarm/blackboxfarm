@@ -2505,12 +2505,12 @@ export function BaglessHoldersReport({ initialToken }: BaglessHoldersReportProps
             </CardContent>
           </Card>
           
-          {/* Ad Banner #3 - After Holders List Table */}
+          {/* Ad Banner #4 - After Holders List Table (Ledger) */}
           <div className="block md:hidden">
-            <AdBanner size="mobile" position={3} />
+            <AdBanner size="mobile" position={4} />
           </div>
           <div className="hidden md:block">
-            <AdBanner size="leaderboard" position={3} />
+            <AdBanner size="leaderboard" position={4} />
           </div>
         </>
       )}
