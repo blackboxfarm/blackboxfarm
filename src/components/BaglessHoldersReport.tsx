@@ -914,7 +914,7 @@ export function BaglessHoldersReport({ initialToken }: BaglessHoldersReportProps
       </Card>
 
       {/* Ad Banner under Generate Button */}
-      <AdBanner size="mobile" position={1} />
+      <AdBanner size="leaderboard" position={1} />
 
       {/* Token Metadata - show as soon as metadata is fetched (before report) */}
       {tokenData && (
