@@ -245,6 +245,9 @@ export function BaglessHoldersReport({ initialToken }: BaglessHoldersReportProps
   const [holderViewMode, setHolderViewMode] = useState<'simple' | 'granular'>('simple');
   const [sedimentViewMode, setSedimentViewMode] = useState<'simple' | 'granular'>('simple');
   const [feedbackGiven, setFeedbackGiven] = useState<'up' | 'down' | null>(null);
+  // Share card state
+  const [shareCardImageUrl, setShareCardImageUrl] = useState<string | null>(null);
+  const [isGeneratingShareCard, setIsGeneratingShareCard] = useState(false);
   const { toast } = useToast();
   const { tokenData, fetchTokenMetadata } = useTokenMetadata();
   const { user } = useAuth();
@@ -578,6 +581,9 @@ export function BaglessHoldersReport({ initialToken }: BaglessHoldersReportProps
         ` (Price: $${data.tokenPriceUSD.toFixed(8)}${data.priceSource ? ` from ${data.priceSource}` : ''})` : 
         ' (Price: Failed to fetch)';
       
+      // Generate share card image in background (non-blocking)
+      generateShareCard(data);
+      
       // Toast removed - UI feedback is sufficient
     } catch (error) {
       const totalReportTime = performance.now() - reportStartTime;
@@ -590,6 +596,51 @@ export function BaglessHoldersReport({ initialToken }: BaglessHoldersReportProps
     } finally {
       setIsLoading(false);
       setIsFetchingPrice(false);
+    }
+  };
+
+  // Generate share card image for social sharing (runs after report generation)
+  const generateShareCard = async (reportData: HoldersReport) => {
+    if (!reportData || !tokenData?.metadata?.symbol) return;
+    
+    setIsGeneratingShareCard(true);
+    try {
+      const tokenStats = {
+        symbol: tokenData.metadata.symbol,
+        name: tokenData.metadata.name || tokenData.metadata.symbol,
+        tokenAddress: tokenMint.trim(),
+        totalHolders: reportData.totalHolders,
+        realHolders: reportData.realWallets || 
+          reportData.holders.filter(h => !h.isDustWallet && !h.isLiquidityPool).length,
+        whaleCount: reportData.holders.filter(h => h.isTrueWhaleWallet || h.isBabyWhaleWallet).length,
+        strongCount: reportData.holders.filter(h => h.isSuperBossWallet || h.isKingpinWallet || h.isBossWallet).length,
+        activeCount: reportData.holders.filter(h => h.isLargeWallet || h.isMediumWallet).length,
+        dustCount: reportData.holders.filter(h => h.isDustWallet).length,
+        dustPercentage: Math.round((reportData.holders.filter(h => h.isDustWallet).length / reportData.totalHolders) * 100),
+        healthScore: reportData.healthScore?.score || 50,
+        healthGrade: reportData.healthScore?.grade || 'C',
+        price: reportData.tokenPriceUSD || 0,
+        marketCap: 0
+      };
+
+      console.log('⏱️ [PERF] Generating share card image...');
+      const { data, error } = await supabase.functions.invoke('generate-share-card-image', {
+        body: { tokenStats }
+      });
+      
+      if (error) {
+        console.error('Share card generation error:', error);
+        return;
+      }
+      
+      if (data?.imageUrl) {
+        setShareCardImageUrl(data.imageUrl);
+        console.log('✅ Share card generated:', data.imageUrl);
+      }
+    } catch (err) {
+      console.error('Failed to generate share card:', err);
+    } finally {
+      setIsGeneratingShareCard(false);
     }
   };
 
@@ -1518,17 +1569,44 @@ export function BaglessHoldersReport({ initialToken }: BaglessHoldersReportProps
               <div className="mb-4">
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
-                    <Button variant="outline" className="w-full gap-2 text-sm">
-                      <Share2 className="h-4 w-4" />
-                      Share ${tokenData?.metadata?.symbol || 'Token'} Report
+                    <Button variant="outline" className="w-full gap-2 text-sm" disabled={isGeneratingShareCard}>
+                      {isGeneratingShareCard ? (
+                        <>
+                          <Loader2 className="h-4 w-4 animate-spin" />
+                          Preparing Share Card...
+                        </>
+                      ) : (
+                        <>
+                          <Share2 className="h-4 w-4" />
+                          Share ${tokenData?.metadata?.symbol || 'Token'} Report
+                        </>
+                      )}
                     </Button>
                   </DropdownMenuTrigger>
                   <DropdownMenuContent align="center" className="w-48">
                     <DropdownMenuItem onClick={() => {
-                      const ticker = tokenData?.metadata?.symbol || 'this token';
-                      const text = `Check out the Whales vs the Dust for $${ticker} 🐋💨`;
-                      const url = window.location.href;
-                      window.open(`https://twitter.com/intent/tweet?text=${encodeURIComponent(text)}&url=${encodeURIComponent(url)}`, '_blank');
+                      const ticker = tokenData?.metadata?.symbol || 'TOKEN';
+                      const totalWallets = report?.totalHolders || 0;
+                      const realHolders = report?.realWallets || 0;
+                      const dustPct = report ? Math.round((report.dustWallets / report.totalHolders) * 100) : 0;
+                      const whales = (report?.trueWhaleWallets || 0) + (report?.babyWhaleWallets || 0);
+                      const strong = (report?.superBossWallets || 0) + (report?.kingpinWallets || 0) + (report?.bossWallets || 0);
+                      const active = (report?.largeWallets || 0) + (report?.mediumWallets || 0);
+                      const grade = report?.healthScore?.grade || 'C';
+                      const score = report?.healthScore?.score || 50;
+                      
+                      const text = `🔍 Holder/Wallet Analysis: $${ticker}
+CA: ${tokenMint.trim()}
+
+📊 ${totalWallets.toLocaleString()} Wallets   ✅ ${realHolders.toLocaleString()} Real Holders
+💨 ${dustPct}% Dust 😱
+
+🐋 ${whales} Whales | 💪 ${strong} Strong | 🌱 ${active.toLocaleString()} Active
+
+Health: ${grade} (${score}/100)`;
+                      
+                      const shareUrl = `https://blackbox.farm/holders?token=${encodeURIComponent(tokenMint.trim())}`;
+                      window.open(`https://twitter.com/intent/tweet?text=${encodeURIComponent(text)}&url=${encodeURIComponent(shareUrl)}`, '_blank');
                     }}>
                       <span className="w-5 h-5 bg-foreground rounded-full flex items-center justify-center mr-2">
                         <span className="text-background text-xs font-bold">𝕏</span>
@@ -1536,8 +1614,18 @@ export function BaglessHoldersReport({ initialToken }: BaglessHoldersReportProps
                       Share on X
                     </DropdownMenuItem>
                     <DropdownMenuItem onClick={() => {
-                      const ticker = tokenData?.metadata?.symbol || 'this token';
-                      const text = `🐋 **Whales vs Dust** 🐋\n\nCheck out the holder analysis for $${ticker}!\n\n🔗 ${window.location.href}`;
+                      const ticker = tokenData?.metadata?.symbol || 'TOKEN';
+                      const totalWallets = report?.totalHolders || 0;
+                      const realHolders = report?.realWallets || 0;
+                      const dustPct = report ? Math.round((report.dustWallets / report.totalHolders) * 100) : 0;
+                      const shareUrl = `https://blackbox.farm/holders?token=${encodeURIComponent(tokenMint.trim())}`;
+                      
+                      const text = `🔍 **Holder/Wallet Analysis: $${ticker}**
+
+📊 ${totalWallets.toLocaleString()} Wallets → ✅ ${realHolders.toLocaleString()} Real Holders
+💨 ${dustPct}% Dust
+
+🔗 ${shareUrl}`;
                       navigator.clipboard.writeText(text);
                       toast({ title: "Copied!", description: "Discord message copied to clipboard" });
                     }}>
@@ -1545,10 +1633,12 @@ export function BaglessHoldersReport({ initialToken }: BaglessHoldersReportProps
                       Copy for Discord
                     </DropdownMenuItem>
                     <DropdownMenuItem onClick={() => {
-                      const ticker = tokenData?.metadata?.symbol || 'this token';
-                      const text = `🐋 Check out the Whales vs the Dust for $${ticker}`;
-                      const url = window.location.href;
-                      window.open(`https://t.me/share/url?url=${encodeURIComponent(url)}&text=${encodeURIComponent(text)}`, '_blank');
+                      const ticker = tokenData?.metadata?.symbol || 'TOKEN';
+                      const totalWallets = report?.totalHolders || 0;
+                      const realHolders = report?.realWallets || 0;
+                      const text = `🔍 Holder Analysis: $${ticker} - ${totalWallets.toLocaleString()} wallets, ${realHolders.toLocaleString()} real holders`;
+                      const shareUrl = `https://blackbox.farm/holders?token=${encodeURIComponent(tokenMint.trim())}`;
+                      window.open(`https://t.me/share/url?url=${encodeURIComponent(shareUrl)}&text=${encodeURIComponent(text)}`, '_blank');
                     }}>
                       <Send className="h-4 w-4 mr-2" />
                       Share on Telegram
@@ -2149,17 +2239,44 @@ export function BaglessHoldersReport({ initialToken }: BaglessHoldersReportProps
                 <div className="mt-4">
                   <DropdownMenu>
                     <DropdownMenuTrigger asChild>
-                      <Button variant="outline" className="w-full gap-2 text-sm">
-                        <Share2 className="h-4 w-4" />
-                        Share ${tokenData?.metadata?.symbol || 'Token'} Report
+                      <Button variant="outline" className="w-full gap-2 text-sm" disabled={isGeneratingShareCard}>
+                        {isGeneratingShareCard ? (
+                          <>
+                            <Loader2 className="h-4 w-4 animate-spin" />
+                            Preparing Share Card...
+                          </>
+                        ) : (
+                          <>
+                            <Share2 className="h-4 w-4" />
+                            Share ${tokenData?.metadata?.symbol || 'Token'} Report
+                          </>
+                        )}
                       </Button>
                     </DropdownMenuTrigger>
                     <DropdownMenuContent align="center" className="w-48">
                       <DropdownMenuItem onClick={() => {
-                        const ticker = tokenData?.metadata?.symbol || 'this token';
-                        const text = `Check out the Whales vs the Dust for $${ticker} 🐋💨`;
-                        const url = window.location.href;
-                        window.open(`https://twitter.com/intent/tweet?text=${encodeURIComponent(text)}&url=${encodeURIComponent(url)}`, '_blank');
+                        const ticker = tokenData?.metadata?.symbol || 'TOKEN';
+                        const totalWallets = report?.totalHolders || 0;
+                        const realHolders = report?.realWallets || 0;
+                        const dustPct = report ? Math.round((report.dustWallets / report.totalHolders) * 100) : 0;
+                        const whales = (report?.trueWhaleWallets || 0) + (report?.babyWhaleWallets || 0);
+                        const strong = (report?.superBossWallets || 0) + (report?.kingpinWallets || 0) + (report?.bossWallets || 0);
+                        const active = (report?.largeWallets || 0) + (report?.mediumWallets || 0);
+                        const grade = report?.healthScore?.grade || 'C';
+                        const score = report?.healthScore?.score || 50;
+                        
+                        const text = `🔍 Holder/Wallet Analysis: $${ticker}
+CA: ${tokenMint.trim()}
+
+📊 ${totalWallets.toLocaleString()} Wallets   ✅ ${realHolders.toLocaleString()} Real Holders
+💨 ${dustPct}% Dust 😱
+
+🐋 ${whales} Whales | 💪 ${strong} Strong | 🌱 ${active.toLocaleString()} Active
+
+Health: ${grade} (${score}/100)`;
+                        
+                        const shareUrl = `https://blackbox.farm/holders?token=${encodeURIComponent(tokenMint.trim())}`;
+                        window.open(`https://twitter.com/intent/tweet?text=${encodeURIComponent(text)}&url=${encodeURIComponent(shareUrl)}`, '_blank');
                       }}>
                         <span className="w-5 h-5 bg-foreground rounded-full flex items-center justify-center mr-2">
                           <span className="text-background text-xs font-bold">𝕏</span>
@@ -2167,8 +2284,18 @@ export function BaglessHoldersReport({ initialToken }: BaglessHoldersReportProps
                         Share on X
                       </DropdownMenuItem>
                       <DropdownMenuItem onClick={() => {
-                        const ticker = tokenData?.metadata?.symbol || 'this token';
-                        const text = `🐋 **Whales vs Dust** 🐋\n\nCheck out the holder analysis for $${ticker}!\n\n🔗 ${window.location.href}`;
+                        const ticker = tokenData?.metadata?.symbol || 'TOKEN';
+                        const totalWallets = report?.totalHolders || 0;
+                        const realHolders = report?.realWallets || 0;
+                        const dustPct = report ? Math.round((report.dustWallets / report.totalHolders) * 100) : 0;
+                        const shareUrl = `https://blackbox.farm/holders?token=${encodeURIComponent(tokenMint.trim())}`;
+                        
+                        const text = `🔍 **Holder/Wallet Analysis: $${ticker}**
+
+📊 ${totalWallets.toLocaleString()} Wallets → ✅ ${realHolders.toLocaleString()} Real Holders
+💨 ${dustPct}% Dust
+
+🔗 ${shareUrl}`;
                         navigator.clipboard.writeText(text);
                         toast({ title: "Copied!", description: "Discord message copied to clipboard" });
                       }}>
@@ -2176,10 +2303,12 @@ export function BaglessHoldersReport({ initialToken }: BaglessHoldersReportProps
                         Copy for Discord
                       </DropdownMenuItem>
                       <DropdownMenuItem onClick={() => {
-                        const ticker = tokenData?.metadata?.symbol || 'this token';
-                        const text = `🐋 Check out the Whales vs the Dust for $${ticker}`;
-                        const url = window.location.href;
-                        window.open(`https://t.me/share/url?url=${encodeURIComponent(url)}&text=${encodeURIComponent(text)}`, '_blank');
+                        const ticker = tokenData?.metadata?.symbol || 'TOKEN';
+                        const totalWallets = report?.totalHolders || 0;
+                        const realHolders = report?.realWallets || 0;
+                        const text = `🔍 Holder Analysis: $${ticker} - ${totalWallets.toLocaleString()} wallets, ${realHolders.toLocaleString()} real holders`;
+                        const shareUrl = `https://blackbox.farm/holders?token=${encodeURIComponent(tokenMint.trim())}`;
+                        window.open(`https://t.me/share/url?url=${encodeURIComponent(shareUrl)}&text=${encodeURIComponent(text)}`, '_blank');
                       }}>
                         <Send className="h-4 w-4 mr-2" />
                         Share on Telegram
