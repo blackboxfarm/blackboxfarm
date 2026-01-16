@@ -214,6 +214,14 @@ export function FlipItDashboard() {
   const [isLoadingInputToken, setIsLoadingInputToken] = useState(false);
   const inputFetchTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   
+  // Last execution price comparison state
+  const [lastExecutionPrices, setLastExecutionPrices] = useState<{
+    requested: number | null;
+    received: number | null;
+    tokenSymbol: string | null;
+    timestamp: string | null;
+  } | null>(null);
+  
   // Blacklist warning state for input token
   const [blacklistWarning, setBlacklistWarning] = useState<BlacklistWarning>({
     level: null,
@@ -946,7 +954,11 @@ export function FlipItDashboard() {
     }
   }, [inputToken.mint, inputToken.lastFetched]);
 
-  // Debounced auto-fetch when token address changes
+  // Store fetchInputTokenData in a ref to avoid useEffect re-triggering
+  const fetchInputTokenDataRef = useRef(fetchInputTokenData);
+  fetchInputTokenDataRef.current = fetchInputTokenData;
+
+  // Debounced auto-fetch when token address changes - SINGLE FETCH ONLY
   useEffect(() => {
     if (inputFetchTimeoutRef.current) {
       clearTimeout(inputFetchTimeoutRef.current);
@@ -955,12 +967,13 @@ export function FlipItDashboard() {
     const mint = tokenAddress.trim();
     if (!mint || mint.length < 32) {
       setInputToken(getEmptyInputToken());
+      setLastExecutionPrices(null); // Clear previous execution prices
       return;
     }
 
-    // Debounce: wait 500ms after user stops typing
+    // Debounce: wait 500ms after user stops typing - FETCH ONCE
     inputFetchTimeoutRef.current = setTimeout(() => {
-      fetchInputTokenData(mint, false);
+      fetchInputTokenDataRef.current(mint, false);
     }, 500);
 
     return () => {
@@ -968,7 +981,7 @@ export function FlipItDashboard() {
         clearTimeout(inputFetchTimeoutRef.current);
       }
     };
-  }, [tokenAddress, fetchInputTokenData]);
+  }, [tokenAddress]); // REMOVED fetchInputTokenData from deps to stop refresh loop
 
   // Trigger holder quality check when token price is loaded
   useEffect(() => {
@@ -1533,10 +1546,42 @@ export function FlipItDashboard() {
       return;
     }
 
-    // Store the UI price for comparison after buy
-    const uiPriceAtClick = inputToken.price;
-    
     setIsFlipping(true);
+    
+    // FETCH FRESH PRICE at click time - this is the "requested" price
+    let requestedPrice: number | null = null;
+    const tokenSymbol = inputToken.symbol;
+    
+    try {
+      toast.info('Fetching fresh price...', { duration: 2000 });
+      
+      // Quick price fetch via raydium-quote for speed
+      const response = await fetch(
+        `https://apxauapuusmgwbbzjgfl.supabase.co/functions/v1/raydium-quote?priceMint=${encodeURIComponent(tokenAddress.trim())}`,
+        {
+          method: 'GET',
+          headers: {
+            'apikey': 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFweGF1YXB1dXNtZ3diYnpqZ2ZsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTQ1OTEzMDUsImV4cCI6MjA3MDE2NzMwNX0.w8IrKq4YVStF3TkdEcs5mCSeJsxjkaVq2NFkypYOXHU'
+          }
+        }
+      );
+      
+      if (response.ok) {
+        const priceData = await response.json();
+        if (priceData?.priceUSD) {
+          requestedPrice = priceData.priceUSD;
+        }
+      }
+      
+      // Fallback to current displayed price if fresh fetch fails
+      if (!requestedPrice) {
+        requestedPrice = inputToken.price;
+      }
+    } catch (err) {
+      console.warn('Fresh price fetch failed, using displayed price:', err);
+      requestedPrice = inputToken.price;
+    }
+
     try {
       // Send raw amount in user's chosen denomination - NO CONVERSION
       const { data, error } = await supabase.functions.invoke('flipit-execute', {
@@ -1558,27 +1603,42 @@ export function FlipItDashboard() {
       if (data?.error) {
         toast.error(data.error);
       } else {
-        // Show actual entry price used by the backend
-        const entryPrice = data?.entryPrice;
+        // Show actual entry price used by the backend (this is the "received" price)
+        const receivedPrice = data?.entryPrice;
         const signature = data?.signature;
         
-        // Check if price moved significantly from UI display
-        if (uiPriceAtClick && entryPrice) {
-          const priceDiff = Math.abs((entryPrice - uiPriceAtClick) / uiPriceAtClick) * 100;
-          if (priceDiff > 5) {
-            toast.warning(`Price moved ${priceDiff.toFixed(1)}% since you checked`, { duration: 5000 });
-          }
+        // Store both prices for UI display
+        setLastExecutionPrices({
+          requested: requestedPrice,
+          received: receivedPrice,
+          tokenSymbol: tokenSymbol,
+          timestamp: new Date().toISOString()
+        });
+        
+        // Calculate price difference
+        let priceDiffText = '';
+        if (requestedPrice && receivedPrice) {
+          const priceDiff = ((receivedPrice - requestedPrice) / requestedPrice) * 100;
+          const diffSign = priceDiff >= 0 ? '+' : '';
+          priceDiffText = ` (${diffSign}${priceDiff.toFixed(2)}% vs requested)`;
         }
         
-        // Format entry price for display (remove trailing zeros)
-        const formattedPrice = entryPrice 
-          ? `$${entryPrice.toFixed(10).replace(/\.?0+$/, '')}`
-          : '';
+        // Format prices for display (remove trailing zeros)
+        const formattedRequested = requestedPrice 
+          ? `$${requestedPrice.toFixed(10).replace(/\.?0+$/, '')}`
+          : 'N/A';
+        const formattedReceived = receivedPrice 
+          ? `$${receivedPrice.toFixed(10).replace(/\.?0+$/, '')}`
+          : 'N/A';
         
         toast.success(
-          `Flip initiated at ${formattedPrice} ${signature ? '| TX: ' + signature.slice(0, 8) + '...' : ''}`,
-          { duration: 5000 }
+          `Flip executed! Requested: ${formattedRequested} → Received: ${formattedReceived}${priceDiffText}`,
+          { duration: 8000 }
         );
+        
+        if (signature) {
+          toast.info(`TX: ${signature.slice(0, 12)}...`, { duration: 5000 });
+        }
         
         setTokenAddress('');
         // Clear input token state
@@ -3208,6 +3268,62 @@ export function FlipItDashboard() {
               Refresh
             </Button>
           </div>
+          
+          {/* Last Execution Price Comparison - shows requested vs received */}
+          {lastExecutionPrices && (
+            <div className="mt-4 p-3 rounded-lg border border-primary/30 bg-primary/5">
+              <div className="flex items-center justify-between flex-wrap gap-2">
+                <div className="flex items-center gap-2">
+                  <DollarSign className="h-4 w-4 text-primary" />
+                  <span className="text-sm font-medium">Last Trade: {lastExecutionPrices.tokenSymbol || 'Token'}</span>
+                </div>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-6 text-xs"
+                  onClick={() => setLastExecutionPrices(null)}
+                >
+                  <XCircle className="h-3 w-3" />
+                </Button>
+              </div>
+              <div className="mt-2 grid grid-cols-2 gap-4 text-sm">
+                <div className="space-y-1">
+                  <div className="text-xs text-muted-foreground">Requested Price</div>
+                  <div className="font-mono font-bold text-foreground">
+                    {lastExecutionPrices.requested 
+                      ? `$${lastExecutionPrices.requested.toFixed(10).replace(/\.?0+$/, '')}`
+                      : 'N/A'}
+                  </div>
+                </div>
+                <div className="space-y-1">
+                  <div className="text-xs text-muted-foreground">Received Price (Entry)</div>
+                  <div className="font-mono font-bold text-foreground">
+                    {lastExecutionPrices.received 
+                      ? `$${lastExecutionPrices.received.toFixed(10).replace(/\.?0+$/, '')}`
+                      : 'N/A'}
+                  </div>
+                </div>
+              </div>
+              {lastExecutionPrices.requested && lastExecutionPrices.received && (
+                <div className="mt-2 flex items-center gap-2">
+                  <span className="text-xs text-muted-foreground">Difference:</span>
+                  {(() => {
+                    const diff = ((lastExecutionPrices.received - lastExecutionPrices.requested) / lastExecutionPrices.requested) * 100;
+                    const isPositive = diff >= 0;
+                    return (
+                      <Badge variant={Math.abs(diff) > 5 ? 'destructive' : 'secondary'} className="text-xs">
+                        {isPositive ? '+' : ''}{diff.toFixed(2)}%
+                        {Math.abs(diff) > 5 && ' ⚠️ Significant slippage'}
+                      </Badge>
+                    );
+                  })()}
+                  <span className="text-xs text-muted-foreground ml-auto">
+                    {lastExecutionPrices.timestamp && new Date(lastExecutionPrices.timestamp).toLocaleTimeString()}
+                  </span>
+                </div>
+              )}
+            </div>
+          )}
         </CardContent>
       </Card>
 
