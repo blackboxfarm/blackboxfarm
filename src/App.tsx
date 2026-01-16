@@ -42,6 +42,7 @@ const BuyBanner = lazy(() => import("./pages/BuyBanner"));
 const BannerCheckout = lazy(() => import("./pages/BannerCheckout"));
 const BannerPreview = lazy(() => import("./pages/BannerPreview"));
 const TokenAnalysisDownload = lazy(() => import("./pages/TokenAnalysisDownload"));
+const ShareCardDemoPage = lazy(() => import("./pages/ShareCardDemo"));
 
 const queryClient = new QueryClient();
 
@@ -90,6 +91,7 @@ const App = () => (
                       <Route path="/breadcrumbs" element={<BreadCrumbs />} />
                       <Route path="/helius-usage" element={<HeliusUsage />} />
                       <Route path="/token-analysis" element={<TokenAnalysisDownload />} />
+                      <Route path="/share-card-demo" element={<ShareCardDemoPage />} />
                       {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
                       <Route path="*" element={<NotFound />} />
                     </Routes>
