@@ -182,6 +182,16 @@ Free analysis at blackbox.farm/holders`;
                 )}
               </Button>
 
+              {aiImage && (
+                <Button 
+                  className="w-full bg-sky-500 hover:bg-sky-600"
+                  onClick={shareToTwitter}
+                >
+                  <Share2 className="h-4 w-4 mr-2" />
+                  Share on Twitter
+                </Button>
+              )}
+
               <Button 
                 variant="outline" 
                 className="w-full"
