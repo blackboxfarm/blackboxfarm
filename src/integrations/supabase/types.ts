@@ -984,9 +984,11 @@ export type Database = {
           activation_key: string | null
           advertiser_id: string | null
           banner_ad_id: string | null
+          clawback_amount_sol: number | null
           created_at: string | null
           duration_hours: number
           end_time: string | null
+          funds_swept_at: string | null
           id: string
           image_url: string
           is_active: boolean | null
@@ -995,8 +997,14 @@ export type Database = {
           payment_status: string | null
           price_sol: number | null
           price_usd: number
+          refund_amount_sol: number | null
+          refund_tx_signature: string | null
+          refund_wallet: string | null
+          refunded_at: string | null
           sol_price_at_order: number | null
           start_time: string
+          sweep_tx_signature: string | null
+          swept_amount_sol: number | null
           title: string
           updated_at: string | null
         }
@@ -1004,9 +1012,11 @@ export type Database = {
           activation_key?: string | null
           advertiser_id?: string | null
           banner_ad_id?: string | null
+          clawback_amount_sol?: number | null
           created_at?: string | null
           duration_hours: number
           end_time?: string | null
+          funds_swept_at?: string | null
           id?: string
           image_url: string
           is_active?: boolean | null
@@ -1015,8 +1025,14 @@ export type Database = {
           payment_status?: string | null
           price_sol?: number | null
           price_usd: number
+          refund_amount_sol?: number | null
+          refund_tx_signature?: string | null
+          refund_wallet?: string | null
+          refunded_at?: string | null
           sol_price_at_order?: number | null
           start_time: string
+          sweep_tx_signature?: string | null
+          swept_amount_sol?: number | null
           title?: string
           updated_at?: string | null
         }
@@ -1024,9 +1040,11 @@ export type Database = {
           activation_key?: string | null
           advertiser_id?: string | null
           banner_ad_id?: string | null
+          clawback_amount_sol?: number | null
           created_at?: string | null
           duration_hours?: number
           end_time?: string | null
+          funds_swept_at?: string | null
           id?: string
           image_url?: string
           is_active?: boolean | null
@@ -1035,8 +1053,14 @@ export type Database = {
           payment_status?: string | null
           price_sol?: number | null
           price_usd?: number
+          refund_amount_sol?: number | null
+          refund_tx_signature?: string | null
+          refund_wallet?: string | null
+          refunded_at?: string | null
           sol_price_at_order?: number | null
           start_time?: string
+          sweep_tx_signature?: string | null
+          swept_amount_sol?: number | null
           title?: string
           updated_at?: string | null
         }

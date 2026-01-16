@@ -18,10 +18,12 @@ import { format, addHours, startOfHour } from 'date-fns';
 import { cn } from '@/lib/utils';
 
 const PRICING = {
-  24: { hours: 24, price: 1, label: '🧪 Test (24 Hours)', perDay: '$1/day' },
+  0: { hours: 24, price: 0, label: '🧪 FREE Test (24 Hours)', perDay: 'Free', isFree: true },
+  24: { hours: 24, price: 40, label: '24 Hours', perDay: '$40/day' },
   48: { hours: 48, price: 70, label: '48 Hours', perDay: '$35/day' },
   72: { hours: 72, price: 100, label: '72 Hours', perDay: '$33/day' },
   168: { hours: 168, price: 175, label: '1 Week', perDay: '$25/day' },
+  999: { hours: 24, price: 200, label: '📢 Telegram Exclusive (24 Hours)', perDay: '$200', isTelegram: true },
 };
 
 const REQUIRED_WIDTH = 1500;
@@ -38,7 +40,9 @@ export default function BuyBanner() {
   const [linkUrl, setLinkUrl] = useState('');
   const [title, setTitle] = useState('');
   const [twitter, setTwitter] = useState('');
-  const [duration, setDuration] = useState<keyof typeof PRICING>(24);
+  const [duration, setDuration] = useState<keyof typeof PRICING>(0);
+  const [solPrice, setSolPrice] = useState<number | null>(null);
+  const [fetchingSolPrice, setFetchingSolPrice] = useState(true);
   const [startDate, setStartDate] = useState<Date | undefined>(undefined);
   const [startHour, setStartHour] = useState<string>('12');
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -46,6 +50,28 @@ export default function BuyBanner() {
   const [showAuthModal, setShowAuthModal] = useState(false);
   const [authDefaultTab, setAuthDefaultTab] = useState<'signin' | 'signup'>('signin');
   const [startImmediately, setStartImmediately] = useState(false);
+
+  // Fetch SOL price on mount
+  React.useEffect(() => {
+    const fetchSolPrice = async () => {
+      try {
+        const { data, error } = await supabase.functions.invoke('sol-price');
+        if (!error && data?.price) {
+          setSolPrice(data.price);
+        }
+      } catch (error) {
+        console.error('Error fetching SOL price:', error);
+      } finally {
+        setFetchingSolPrice(false);
+      }
+    };
+    fetchSolPrice();
+  }, []);
+
+  const getSolEquivalent = (usdPrice: number): string => {
+    if (!solPrice || usdPrice === 0) return '';
+    return (usdPrice / solPrice).toFixed(4);
+  };
 
   const handleDrag = useCallback((e: React.DragEvent) => {
     e.preventDefault();
@@ -419,27 +445,46 @@ export default function BuyBanner() {
                   onValueChange={(v) => setDuration(parseInt(v) as keyof typeof PRICING)}
                   className="space-y-3"
                 >
-                  {Object.entries(PRICING).map(([hours, { label, price, perDay }]) => (
-                    <div
-                      key={hours}
-                      className={cn(
-                        "flex items-center justify-between p-4 rounded-lg border cursor-pointer transition-colors",
-                        duration.toString() === hours ? "border-primary bg-primary/5" : "border-border hover:border-primary/50"
-                      )}
-                      onClick={() => setDuration(parseInt(hours) as keyof typeof PRICING)}
-                    >
-                      <div className="flex items-center gap-3">
-                        <RadioGroupItem value={hours} id={`duration-${hours}`} />
-                        <Label htmlFor={`duration-${hours}`} className="cursor-pointer font-medium">
-                          {label}
-                        </Label>
+                  {Object.entries(PRICING).map(([hours, pricing]) => {
+                    const { label, price, perDay, isTelegram } = pricing as any;
+                    const solEquiv = getSolEquivalent(price);
+                    return (
+                      <div
+                        key={hours}
+                        className={cn(
+                          "flex items-center justify-between p-4 rounded-lg border cursor-pointer transition-colors",
+                          duration.toString() === hours ? "border-primary bg-primary/5" : "border-border hover:border-primary/50",
+                          isTelegram && "bg-blue-500/5 border-blue-500/30"
+                        )}
+                        onClick={() => setDuration(parseInt(hours) as keyof typeof PRICING)}
+                      >
+                        <div className="flex items-center gap-3">
+                          <RadioGroupItem value={hours} id={`duration-${hours}`} />
+                          <div>
+                            <Label htmlFor={`duration-${hours}`} className="cursor-pointer font-medium">
+                              {label}
+                            </Label>
+                            {isTelegram && (
+                              <p className="text-xs text-blue-400 mt-1">
+                                Broadcast to all TG Users & Groups using Holder Bot
+                              </p>
+                            )}
+                          </div>
+                        </div>
+                        <div className="text-right">
+                          <p className="font-bold text-lg">
+                            {price === 0 ? 'FREE' : `$${price}`}
+                            {solEquiv && price > 0 && (
+                              <span className="text-primary text-sm font-normal ml-1">
+                                ({solEquiv} SOL)
+                              </span>
+                            )}
+                          </p>
+                          <p className="text-xs text-muted-foreground">{perDay}</p>
+                        </div>
                       </div>
-                      <div className="text-right">
-                        <p className="font-bold text-lg">${price}</p>
-                        <p className="text-xs text-muted-foreground">{perDay}</p>
-                      </div>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </RadioGroup>
               </CardContent>
             </Card>
@@ -524,13 +569,24 @@ export default function BuyBanner() {
                     <span className="text-muted-foreground">Duration</span>
                     <span className="font-medium">{selectedPricing.label}</span>
                   </div>
-                  <div className="flex justify-between">
+                  <div className="flex justify-between items-baseline">
                     <span className="text-muted-foreground">Price</span>
-                    <span className="font-bold text-xl">${selectedPricing.price} USD</span>
+                    <div className="text-right">
+                      <span className="font-bold text-xl">
+                        {selectedPricing.price === 0 ? 'FREE' : `$${selectedPricing.price} USD`}
+                      </span>
+                      {selectedPricing.price > 0 && solPrice && (
+                        <span className="text-primary text-sm ml-2">
+                          ({getSolEquivalent(selectedPricing.price)} SOL)
+                        </span>
+                      )}
+                    </div>
                   </div>
-                  <p className="text-xs text-muted-foreground">
-                    Payable in SOL at current market rate
-                  </p>
+                  {selectedPricing.price > 0 && (
+                    <p className="text-xs text-muted-foreground">
+                      Payable in SOL at current market rate • 1 SOL = ${solPrice?.toFixed(2) || '...'} USD
+                    </p>
+                  )}
                 </div>
                 <Button
                   onClick={handleSubmit}
@@ -540,6 +596,11 @@ export default function BuyBanner() {
                 >
                   {isSubmitting ? (
                     'Processing...'
+                  ) : selectedPricing.price === 0 ? (
+                    <>
+                      Start Free Test
+                      <ArrowRight className="ml-2 h-4 w-4" />
+                    </>
                   ) : (
                     <>
                       Continue to Payment

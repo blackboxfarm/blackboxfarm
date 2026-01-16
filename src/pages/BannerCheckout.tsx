@@ -3,10 +3,13 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
-import { Copy, Check, Clock, AlertCircle, ExternalLink, RefreshCw, Wallet } from 'lucide-react';
+import { Copy, Check, Clock, AlertCircle, ExternalLink, RefreshCw, Wallet, Undo2 } from 'lucide-react';
 import { format } from 'date-fns';
 import QRCode from 'qrcode';
 
@@ -43,6 +46,9 @@ export default function BannerCheckout() {
   const [qrCodeUrl, setQrCodeUrl] = useState<string>('');
   const [checkingPayment, setCheckingPayment] = useState(false);
   const [solPrice, setSolPrice] = useState<number | null>(null);
+  const [showRefundModal, setShowRefundModal] = useState(false);
+  const [refundWallet, setRefundWallet] = useState('');
+  const [processingRefund, setProcessingRefund] = useState(false);
 
   useEffect(() => {
     if (orderId) {
@@ -154,6 +160,28 @@ export default function BannerCheckout() {
     setTimeout(() => setCopied(false), 2000);
   };
 
+  const canRefund = order && order.payment_status === 'paid' && new Date(order.start_time) > new Date();
+
+  const handleRefund = async () => {
+    if (!refundWallet || !orderId) return;
+    setProcessingRefund(true);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const { data, error } = await supabase.functions.invoke('banner-refund', {
+        body: { orderId, refundWallet },
+        headers: { Authorization: `Bearer ${session?.access_token}` },
+      });
+      if (error) throw error;
+      toast.success(`Refund processed! ${data.refundAmount.toFixed(4)} SOL sent (minus $10 fee)`);
+      setShowRefundModal(false);
+      fetchOrderDetails();
+    } catch (error: any) {
+      toast.error(error.message || 'Refund failed');
+    } finally {
+      setProcessingRefund(false);
+    }
+  };
+
   const getStatusBadge = (status: string) => {
     switch (status) {
       case 'pending':
@@ -164,6 +192,8 @@ export default function BannerCheckout() {
         return <Badge variant="outline" className="bg-blue-500/10 text-blue-500 border-blue-500/30">Active</Badge>;
       case 'expired':
         return <Badge variant="outline" className="bg-red-500/10 text-red-500 border-red-500/30">Expired</Badge>;
+      case 'refunded':
+        return <Badge variant="outline" className="bg-purple-500/10 text-purple-500 border-purple-500/30">Refunded</Badge>;
       default:
         return <Badge variant="outline">{status}</Badge>;
     }
@@ -380,19 +410,61 @@ export default function BannerCheckout() {
                   <p className="text-muted-foreground mb-4">
                     Your banner is scheduled and will go live at the selected start time.
                   </p>
-                  <Button onClick={() => navigate(`/banner-preview/${orderId}`)}>
-                    View Preview
-                  </Button>
+                  <div className="flex gap-2 justify-center">
+                    <Button onClick={() => navigate(`/banner-preview/${orderId}`)}>
+                      View Preview
+                    </Button>
+                    {canRefund && (
+                      <Button variant="outline" onClick={() => setShowRefundModal(true)}>
+                        <Undo2 className="h-4 w-4 mr-2" />
+                        Request Refund
+                      </Button>
+                    )}
+                  </div>
+                  {canRefund && (
+                    <p className="text-xs text-muted-foreground mt-3">
+                      Refunds available before start time ($10 fee applies)
+                    </p>
+                  )}
                 </CardContent>
               </Card>
             )}
           </div>
         </div>
       </div>
+
+      {/* Refund Modal */}
+      <Dialog open={showRefundModal} onOpenChange={setShowRefundModal}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Request Refund</DialogTitle>
+            <DialogDescription>
+              A $10 clawback fee will be deducted. Enter your Solana wallet address to receive the refund.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div>
+              <Label>Refund Wallet Address</Label>
+              <Input
+                placeholder="Your Solana wallet address"
+                value={refundWallet}
+                onChange={(e) => setRefundWallet(e.target.value)}
+              />
+            </div>
+            <div className="p-3 bg-yellow-500/10 border border-yellow-500/30 rounded-lg">
+              <p className="text-sm text-yellow-600 dark:text-yellow-400">
+                <strong>$10 clawback fee</strong> will be deducted from your refund amount.
+              </p>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowRefundModal(false)}>Cancel</Button>
+            <Button onClick={handleRefund} disabled={!refundWallet || processingRefund}>
+              {processingRefund ? 'Processing...' : 'Confirm Refund'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
-}
-
-function Label({ children, className }: { children: React.ReactNode; className?: string }) {
-  return <span className={className}>{children}</span>;
 }
