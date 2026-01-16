@@ -67,16 +67,27 @@ export function AdBanner({ size, position }: AdBannerProps) {
     return adContent[pos - 1] || adContent[0];
   };
 
-  const handleClick = async () => {
-    if (banner?.id && banner?.link_url) {
-      // Log click
-      await supabase.from('banner_clicks').insert({
-        banner_id: banner.id,
-        session_id: sessionStorage.getItem('session_id') || crypto.randomUUID()
-      });
-      
-      // Open link
-      window.open(banner.link_url, '_blank');
+  const handleClick = () => {
+    if (!banner?.link_url) return;
+
+    // Open immediately to avoid popup blockers treating it as a non-user action.
+    window.open(banner.link_url, '_blank', 'noopener,noreferrer');
+
+    // Log click (best-effort; never block navigation)
+    if (banner?.id) {
+      const existingSessionId = sessionStorage.getItem('session_id');
+      const sessionId = existingSessionId || crypto.randomUUID();
+      if (!existingSessionId) sessionStorage.setItem('session_id', sessionId);
+
+      supabase
+        .from('banner_clicks')
+        .insert({
+          banner_id: banner.id,
+          session_id: sessionId,
+        })
+        .catch((error) => {
+          console.warn('Failed to log banner click:', error);
+        });
     }
   };
 
