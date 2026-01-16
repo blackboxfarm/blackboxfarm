@@ -304,6 +304,12 @@ function sanitizeSymbol(input: string | undefined): string {
   return s.replace(/[^A-Za-z0-9_]/g, "").slice(0, 16);
 }
 
+// Detect if a URL is an X Community link
+function isXCommunityUrl(url: string | undefined): boolean {
+  if (!url) return false;
+  return url.includes('/communities/') || url.includes('/i/communities');
+}
+
 async function fetchTokenInfo(tokenMint: string): Promise<{ symbol: string; name?: string } | null> {
   try {
     const res = await fetch(`https://tokens.jup.ag/token/${tokenMint}`);
@@ -357,11 +363,18 @@ function buildTweetText(template: string, data: TweetRequest): string {
     }
   }
 
+  // Build conditional community line - only include if twitterUrl is an X community
+  const hasCommunity = isXCommunityUrl(twitterUrl);
+  const communityLine = hasCommunity 
+    ? `\n\n👥 Check out their Community: ${twitterUrl}` 
+    : '';
+
   const replacements: Record<string, string> = {
     '{{TOKEN_SYMBOL}}': symbol,
     '{{TOKEN_NAME}}': tokenName || symbol,
     '{{TOKEN_CA}}': tokenMint || '',
     '{{TOKEN_X}}': twitterUrl || '',
+    '{{COMMUNITY_LINE}}': communityLine,
     '{{ENTRY_PRICE}}': entryPrice?.toFixed(8) || 'N/A',
     '{{EXIT_PRICE}}': exitPrice?.toFixed(8) || 'N/A',
     '{{TARGET_MULTIPLIER}}': String(targetMultiplier || 2),
