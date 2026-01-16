@@ -46,11 +46,15 @@ export function ShareCardDemo({ tokenStats = mockTokenStats }: { tokenStats?: To
   const [isGeneratingAI, setIsGeneratingAI] = useState(false);
   const [selectedApproach, setSelectedApproach] = useState<'A' | 'B' | null>(null);
 
-  // Build the shareable URL - this page will have og:image meta tags
+  // Build the shareable URL (public HTML with OG/Twitter meta tags)
   const getShareUrl = (imageUrl: string) => {
-    // Create a shareable page URL with the image
-    const baseUrl = window.location.origin;
-    return `${baseUrl}/share/${tokenStats.symbol.toLowerCase()}?img=${encodeURIComponent(imageUrl)}`;
+    const supabaseUrl = (supabase as any)?.supabaseUrl as string | undefined;
+    if (!supabaseUrl) {
+      // Fallback (shouldn't happen) — keeps share from breaking entirely.
+      return `https://blackbox.farm/holders`;
+    }
+
+    return `${supabaseUrl}/functions/v1/share-card-page?symbol=${encodeURIComponent(tokenStats.symbol)}&img=${encodeURIComponent(imageUrl)}`;
   };
 
   // Open Twitter share dialog with Web Intent
