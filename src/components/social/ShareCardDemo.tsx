@@ -2,8 +2,9 @@ import React, { useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Loader2, Sparkles, Code2, Check } from 'lucide-react';
+import { Loader2, Sparkles, Code2, Check, Twitter, ExternalLink } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
+import { toast } from 'sonner';
 
 interface TokenStats {
   symbol: string;
@@ -42,6 +43,8 @@ const mockTokenStats: TokenStats = {
 export function ShareCardDemo({ tokenStats = mockTokenStats }: { tokenStats?: TokenStats }) {
   const [aiImage, setAiImage] = useState<string | null>(null);
   const [isGeneratingAI, setIsGeneratingAI] = useState(false);
+  const [isPostingToTwitter, setIsPostingToTwitter] = useState(false);
+  const [tweetUrl, setTweetUrl] = useState<string | null>(null);
   const [selectedApproach, setSelectedApproach] = useState<'A' | 'B' | null>(null);
 
   // Generate AI artistic image
@@ -477,8 +480,63 @@ export function ShareCardDemo({ tokenStats = mockTokenStats }: { tokenStats?: To
                 }}
               >
                 <Code2 className="h-4 w-4 mr-2" />
-                Try Twitter Card Preview
+                Preview Card Layout
               </Button>
+
+              <Button 
+                className="w-full bg-sky-500 hover:bg-sky-600"
+                onClick={async () => {
+                  setIsPostingToTwitter(true);
+                  try {
+                    const { data, error } = await supabase.functions.invoke('post-share-card-twitter', {
+                      body: { tokenStats }
+                    });
+                    
+                    if (error) throw error;
+                    
+                    if (data?.success && data?.tweetUrl) {
+                      setTweetUrl(data.tweetUrl);
+                      toast.success('Tweet posted successfully!', {
+                        action: {
+                          label: 'View Tweet',
+                          onClick: () => window.open(data.tweetUrl, '_blank')
+                        }
+                      });
+                    } else {
+                      throw new Error(data?.error || 'Failed to post tweet');
+                    }
+                  } catch (err: any) {
+                    console.error('Error posting to Twitter:', err);
+                    toast.error(`Failed to post: ${err.message}`);
+                  } finally {
+                    setIsPostingToTwitter(false);
+                  }
+                }}
+                disabled={isPostingToTwitter}
+              >
+                {isPostingToTwitter ? (
+                  <>
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                    Posting to Twitter...
+                  </>
+                ) : (
+                  <>
+                    <Twitter className="h-4 w-4 mr-2" />
+                    Post to Twitter (REAL)
+                  </>
+                )}
+              </Button>
+
+              {tweetUrl && (
+                <Button 
+                  variant="outline" 
+                  className="w-full border-sky-500/30 text-sky-400"
+                  onClick={() => window.open(tweetUrl, '_blank')}
+                >
+                  <ExternalLink className="h-4 w-4 mr-2" />
+                  View Posted Tweet
+                </Button>
+              )}
 
               <Button 
                 variant="outline" 
