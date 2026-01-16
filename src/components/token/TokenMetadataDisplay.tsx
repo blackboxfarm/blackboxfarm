@@ -424,7 +424,7 @@ export function TokenMetadataDisplay({
                   className="hover:opacity-80 transition-opacity"
                   title="DexTools"
                 >
-                  <img src="/external-icons/dextools.png" alt="DexTools" className="h-6 w-6 rounded object-contain" />
+                  <img src="/assets/dextools-logo.svg" alt="DexTools" className="h-6 w-6 rounded object-contain" />
                 </a>
               </div>
 
