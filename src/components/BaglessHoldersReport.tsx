@@ -1741,14 +1741,31 @@ export function BaglessHoldersReport({ initialToken }: BaglessHoldersReportProps
                     <h5 className="text-xl md:text-2xl text-center text-foreground font-bold tracking-tight uppercase">
                       TRADE YOUR FAVOURITE MEME COINS
                     </h5>
-                    <a
-                      href="https://trade.padre.gg/rk/blackbox"
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="inline-flex items-center justify-center px-6 md:px-8 py-2.5 md:py-3 bg-orange-500 hover:bg-orange-600 text-white font-semibold rounded-lg transition-colors text-base md:text-lg shadow-lg hover:shadow-orange-500/25"
+                    <button
+                      onClick={async () => {
+                        try {
+                          const { data: bannerData } = await supabase
+                            .from('banner_ads')
+                            .select('id')
+                            .eq('position', 3)
+                            .eq('is_active', true)
+                            .single();
+                          
+                          if (bannerData?.id) {
+                            await supabase.from('banner_clicks').insert({
+                              banner_id: bannerData.id,
+                              session_id: sessionStorage.getItem('session_id') || crypto.randomUUID()
+                            });
+                          }
+                        } catch (error) {
+                          console.error('Failed to track Padre click:', error);
+                        }
+                        window.open('https://trade.padre.gg/rk/blackbox', '_blank');
+                      }}
+                      className="inline-flex items-center justify-center px-6 md:px-8 py-2.5 md:py-3 bg-orange-500 hover:bg-orange-600 text-white font-semibold rounded-lg transition-colors text-base md:text-lg shadow-lg hover:shadow-orange-500/25 cursor-pointer"
                     >
                       Trade Now with Padre
-                    </a>
+                    </button>
                   </CardContent>
                 </Card>
               </div>
