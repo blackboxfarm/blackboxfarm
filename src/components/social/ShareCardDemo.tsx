@@ -9,6 +9,7 @@ import { toast } from 'sonner';
 interface TokenStats {
   symbol: string;
   name: string;
+  tokenAddress: string; // Added for CA display
   price: number;
   marketCap: number;
   healthScore: number;
@@ -27,6 +28,7 @@ interface TokenStats {
 const mockTokenStats: TokenStats = {
   symbol: 'DEMO',
   name: 'Demo Token',
+  tokenAddress: 'DemoToken1234567890abcdefghijklmnopqrstuvwxyz',
   price: 0.00001234,
   marketCap: 1250000,
   healthScore: 78,
@@ -46,35 +48,30 @@ export function ShareCardDemo({ tokenStats = mockTokenStats }: { tokenStats?: To
   const [isGeneratingAI, setIsGeneratingAI] = useState(false);
   const [selectedApproach, setSelectedApproach] = useState<'A' | 'B' | null>(null);
 
-  // Build the shareable URL (public HTML with OG/Twitter meta tags)
-  const getShareUrl = (imageUrl: string) => {
-    const supabaseUrl = (supabase as any)?.supabaseUrl as string | undefined;
-    if (!supabaseUrl) {
-      // Fallback (shouldn't happen) — keeps share from breaking entirely.
-      return `https://blackbox.farm/holders`;
-    }
+  // Build the shareable URL - always point to blackbox.farm/holders with token param
+  const getShareUrl = () => {
+    return `https://blackbox.farm/holders?token=${encodeURIComponent(tokenStats.tokenAddress)}`;
+  };
 
-    return `${supabaseUrl}/functions/v1/share-card-page?symbol=${encodeURIComponent(tokenStats.symbol)}&img=${encodeURIComponent(imageUrl)}`;
+  // Truncate CA for display
+  const truncateCA = (address: string) => {
+    if (address.length <= 12) return address;
+    return `${address.slice(0, 6)}...${address.slice(-4)}`;
   };
 
   // Open Twitter share dialog with Web Intent
-  const shareToTwitter = (withImage?: string) => {
-    const tweetText = `🔍 Holder Analysis: $${tokenStats.symbol}
+  const shareToTwitter = () => {
+    const tweetText = `🔍 Holder/Wallet Analysis: $${tokenStats.symbol}
+CA: ${tokenStats.tokenAddress}
 
-📊 ${tokenStats.totalHolders.toLocaleString()} Total Wallets
-✅ ${tokenStats.realHolders.toLocaleString()} Real Holders
-💨 ${tokenStats.dustPercentage}% Dust
+📊 ${tokenStats.totalHolders.toLocaleString()} Wallets   ✅ ${tokenStats.realHolders.toLocaleString()} Real Holders
+💨 ${tokenStats.dustPercentage}% Dust 😱
 
 🐋 ${tokenStats.whaleCount} Whales | 💪 ${tokenStats.strongCount} Strong | 🌱 ${tokenStats.activeCount.toLocaleString()} Active
 
-Health Grade: ${tokenStats.healthGrade} (${tokenStats.healthScore}/100)
+Health: ${tokenStats.healthGrade} (${tokenStats.healthScore}/100)`;
 
-Free holder report on BlackBox Farm`;
-
-    // If we have an uploaded image URL, share a page that has og:image
-    const shareUrl = withImage 
-      ? getShareUrl(withImage)
-      : `https://blackbox.farm/holders`;
+    const shareUrl = getShareUrl();
     
     const twitterIntentUrl = `https://twitter.com/intent/tweet?text=${encodeURIComponent(tweetText)}&url=${encodeURIComponent(shareUrl)}`;
     
@@ -211,10 +208,10 @@ Free holder report on BlackBox Farm`;
               {aiImage && (
                 <Button 
                   className="w-full bg-sky-500 hover:bg-sky-600"
-                  onClick={() => shareToTwitter(aiImageUrl || undefined)}
+                  onClick={() => shareToTwitter()}
                 >
                   <Share2 className="h-4 w-4 mr-2" />
-                  Share on Twitter {aiImageUrl ? '(with image)' : ''}
+                  Share on Twitter
                 </Button>
               )}
 
@@ -369,14 +366,20 @@ Free holder report on BlackBox Farm`;
                     </div>
                   </div>
 
-                  {/* RIGHT SIDE - Health Grade Badge */}
-                  <div className="flex flex-col items-center justify-center pl-3">
-                    <div className={`rounded-xl bg-gradient-to-b ${getGradeBgColor(tokenStats.healthGrade)} border p-3 text-center`}>
-                      <div className="text-white/50 text-[8px] uppercase tracking-wider mb-0.5">Health</div>
-                      <div className={`text-4xl font-black ${getGradeColor(tokenStats.healthGrade)}`}>
+                  {/* RIGHT SIDE - Token + Health Grade Badge */}
+                  <div className="flex flex-col items-center justify-center pl-3 space-y-2">
+                    {/* Token Ticker */}
+                    <div className="text-center">
+                      <div className="text-white font-bold text-lg">${tokenStats.symbol}</div>
+                      <div className="text-white/30 text-[7px] font-mono">{truncateCA(tokenStats.tokenAddress)}</div>
+                    </div>
+                    {/* Grade Box - smaller */}
+                    <div className={`rounded-lg bg-gradient-to-b ${getGradeBgColor(tokenStats.healthGrade)} border px-3 py-2 text-center`}>
+                      <div className="text-white/50 text-[7px] uppercase tracking-wider">Health</div>
+                      <div className={`text-2xl font-black ${getGradeColor(tokenStats.healthGrade)}`}>
                         {tokenStats.healthGrade}
                       </div>
-                      <div className="text-white/30 text-[10px] mt-0.5">{tokenStats.healthScore}/100</div>
+                      <div className="text-white/30 text-[8px]">{tokenStats.healthScore}/100</div>
                     </div>
                   </div>
                 </div>
@@ -452,9 +455,13 @@ Free holder report on BlackBox Farm`;
                             .divider { border-top: 1px dashed #374151; margin: 4px 0; }
                             .dust-row { opacity: 0.5; }
                             .grade { text-align: center; padding-left: 16px; }
-                            .grade-box { background: linear-gradient(180deg, rgba(59,130,246,0.2), rgba(59,130,246,0.1)); border: 1px solid rgba(59,130,246,0.4); border-radius: 12px; padding: 12px 16px; }
-                            .grade-label { color: rgba(255,255,255,0.5); font-size: 8px; text-transform: uppercase; letter-spacing: 1px; }
-                            .grade-value { color: #60a5fa; font-size: 40px; font-weight: 900; }
+                            .token-info { margin-bottom: 8px; }
+                            .token-ticker { color: #fff; font-size: 18px; font-weight: 700; }
+                            .token-ca { color: rgba(255,255,255,0.3); font-size: 7px; font-family: monospace; }
+                            .grade-box { background: linear-gradient(180deg, rgba(59,130,246,0.2), rgba(59,130,246,0.1)); border: 1px solid rgba(59,130,246,0.4); border-radius: 8px; padding: 8px 12px; }
+                            .grade-label { color: rgba(255,255,255,0.5); font-size: 7px; text-transform: uppercase; letter-spacing: 1px; }
+                            .grade-value { color: #60a5fa; font-size: 24px; font-weight: 900; }
+                            .grade-score { color: rgba(255,255,255,0.3); font-size: 8px; }
                             .grade-score { color: rgba(255,255,255,0.3); font-size: 10px; }
                             .footer { display: flex; justify-content: space-between; padding: 10px 16px; background: rgba(0,0,0,0.3); margin-top: 12px; }
                             .footer-url { color: rgba(52,211,153,0.7); font-size: 10px; font-weight: 500; }
@@ -508,6 +515,10 @@ Free holder report on BlackBox Farm`;
                                   </div>
                                 </div>
                                 <div class="grade">
+                                  <div class="token-info">
+                                    <div class="token-ticker">$${tokenStats.symbol}</div>
+                                    <div class="token-ca">${tokenStats.tokenAddress.slice(0, 6)}...${tokenStats.tokenAddress.slice(-4)}</div>
+                                  </div>
                                   <div class="grade-box">
                                     <div class="grade-label">Health</div>
                                     <div class="grade-value">${tokenStats.healthGrade}</div>
