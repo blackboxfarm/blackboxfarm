@@ -6,13 +6,15 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogDescription } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { toast } from "sonner";
-import { Plus, Eye, EyeOff, Pencil, Trash2, Upload, LayoutGrid, Table as TableIcon, Twitter, Copy, CheckCircle, XCircle, AlertCircle, GripVertical, RefreshCw, Users, MessageSquare, Calendar, Info, Mail, Shield, Briefcase, Globe, Lock } from "lucide-react";
+import { Plus, Eye, EyeOff, Pencil, Trash2, Upload, LayoutGrid, Table as TableIcon, Twitter, Copy, CheckCircle, XCircle, AlertCircle, GripVertical, RefreshCw, Users, MessageSquare, Calendar, Info, Mail, Shield, Briefcase, Globe, Lock, FileText } from "lucide-react";
+
+const API_POLICY_TEXT = `We use X's API to read public posts and account metadata for analytics, monitoring trends, and generating internal insights. Data is used for research, automation, and displaying aggregated information within our own applications. No data is resold, shared with third parties, or used for surveillance.`;
 
 interface TwitterAccount {
   id: string;
@@ -476,6 +478,42 @@ const TwitterAccountManager = () => {
         </div>
 
         <div className="flex items-center gap-2 flex-wrap">
+          {/* API Policy Modal */}
+          <Dialog>
+            <DialogTrigger asChild>
+              <Button variant="outline" size="sm">
+                <FileText className="h-4 w-4 mr-2" />
+                API Policy
+              </Button>
+            </DialogTrigger>
+            <DialogContent className="max-w-lg">
+              <DialogHeader>
+                <DialogTitle className="flex items-center gap-2">
+                  <Shield className="h-5 w-5" />
+                  X/Twitter API Usage Policy
+                </DialogTitle>
+                <DialogDescription>
+                  Copy this text for API compliance documentation
+                </DialogDescription>
+              </DialogHeader>
+              <div className="space-y-4 py-4">
+                <div className="p-4 bg-muted rounded-lg text-sm leading-relaxed">
+                  {API_POLICY_TEXT}
+                </div>
+                <Button 
+                  className="w-full" 
+                  onClick={() => {
+                    navigator.clipboard.writeText(API_POLICY_TEXT);
+                    toast.success("Policy text copied to clipboard");
+                  }}
+                >
+                  <Copy className="h-4 w-4 mr-2" />
+                  Copy to Clipboard
+                </Button>
+              </div>
+            </DialogContent>
+          </Dialog>
+
           <Button 
             variant="outline" 
             onClick={enrichAllAccounts} 
