@@ -98,7 +98,10 @@ serve(async (req) => {
     }
 
     // Check wallet balance on Solana
-    const rpcUrl = Deno.env.get('HELIUS_RPC_URL') || 'https://api.mainnet-beta.solana.com';
+    const heliusApiKey = Deno.env.get('HELIUS_API_KEY');
+    const rpcUrl = heliusApiKey 
+      ? `https://mainnet.helius-rpc.com/?api-key=${heliusApiKey}`
+      : 'https://api.mainnet-beta.solana.com';
     const connection = new Connection(rpcUrl);
     
     const pubkey = new PublicKey(walletPubkey);
@@ -113,6 +116,31 @@ serve(async (req) => {
 
     // Allow 1% tolerance for rounding
     const requiredAmount = order.price_sol * 0.99;
+
+    // Try to detect who sent the payment for refund purposes
+    let senderWallet: string | null = null;
+    if (balanceSol >= requiredAmount) {
+      try {
+        // Get recent signatures to find the sender
+        const signatures = await connection.getSignaturesForAddress(pubkey, { limit: 5 });
+        if (signatures.length > 0) {
+          const tx = await connection.getParsedTransaction(signatures[0].signature, { maxSupportedTransactionVersion: 0 });
+          if (tx?.transaction?.message?.accountKeys) {
+            // The first account that's not our wallet is likely the sender
+            for (const key of tx.transaction.message.accountKeys) {
+              const addr = typeof key === 'string' ? key : key.pubkey.toBase58();
+              if (addr !== walletPubkey) {
+                senderWallet = addr;
+                console.log('Detected payment sender:', senderWallet);
+                break;
+              }
+            }
+          }
+        }
+      } catch (e) {
+        console.error('Error detecting sender wallet:', e);
+      }
+    }
 
     if (balanceSol >= requiredAmount) {
       // Payment confirmed!
@@ -143,7 +171,7 @@ serve(async (req) => {
         // Continue anyway - we still want to mark payment as confirmed
       }
 
-      // Update the order with payment status and link to banner_ads
+      // Update the order with payment status, sender wallet, and link to banner_ads
       const { error: updateError } = await supabase
         .from('banner_orders')
         .update({
@@ -152,6 +180,7 @@ serve(async (req) => {
           banner_ad_id: bannerAd?.id || null,
           end_time: endDate.toISOString(),
           is_active: isCurrentlyActive,
+          payment_sender_wallet: senderWallet, // Store for refunds
         })
         .eq('id', orderId);
 
