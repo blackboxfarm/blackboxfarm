@@ -1247,20 +1247,7 @@ with TelegramClient(StringSession(), api_id, api_hash) as client:
                 <div 
                   key={channel.id} 
                   className={`flex items-center justify-between p-3 hover:bg-muted/50 cursor-pointer transition-colors ${!channel.is_active ? 'opacity-60' : ''}`}
-                  onClick={() => {
-                    setEditingChannel(channel);
-                    setFormData({
-                      channel_name: channel.channel_name || '',
-                      channel_username: channel.channel_username || '',
-                      channel_type: (channel.channel_type as 'channel' | 'group') || 'channel',
-                      fantasy_mode: channel.fantasy_mode,
-                      fantasy_buy_amount_usd: channel.fantasy_buy_amount_usd,
-                      ape_keyword_enabled: channel.ape_keyword_enabled,
-                      max_mint_age_minutes: channel.max_mint_age_minutes,
-                      scan_window_minutes: channel.scan_window_minutes,
-                      selected_target_id: ''
-                    });
-                  }}
+                  onClick={() => startEdit(channel)}
                 >
                   <div className="flex items-center gap-3">
                     <MessageCircle className="h-4 w-4 text-blue-500" />
@@ -1323,21 +1310,11 @@ with TelegramClient(StringSession(), api_id, api_hash) as client:
                         className="h-7 w-7"
                         onClick={(e) => {
                           e.stopPropagation();
-                          setEditingChannel(channel);
-                          setFormData({
-                            channel_name: channel.channel_name || '',
-                            channel_username: channel.channel_username || '',
-                            channel_type: (channel.channel_type as 'channel' | 'group') || 'channel',
-                            fantasy_mode: channel.fantasy_mode,
-                            fantasy_buy_amount_usd: channel.fantasy_buy_amount_usd,
-                            ape_keyword_enabled: channel.ape_keyword_enabled,
-                            max_mint_age_minutes: channel.max_mint_age_minutes,
-                            scan_window_minutes: channel.scan_window_minutes,
-                            selected_target_id: ''
-                          });
+                          startEdit(channel);
                         }}
+                        title="Edit settings"
                       >
-                        <Eye className="h-3 w-3" />
+                        <Edit className="h-3 w-3" />
                       </Button>
                       <Button
                         size="icon"
@@ -2365,6 +2342,18 @@ with TelegramClient(StringSession(), api_id, api_hash) as client:
             </Button>
           </CardContent>
         </Card>
+      )}
+
+      {/* Standalone Edit Dialog for List View */}
+      {viewMode === 'list' && editingChannel && (
+        <Dialog open={!!editingChannel} onOpenChange={(open) => !open && setEditingChannel(null)}>
+          <DialogContent className="max-h-[85vh] overflow-y-auto">
+            <DialogHeader>
+              <DialogTitle>Edit Monitor: {editingChannel.channel_name || editingChannel.channel_username}</DialogTitle>
+            </DialogHeader>
+            {renderChannelForm(true)}
+          </DialogContent>
+        </Dialog>
       )}
     </div>
   );
