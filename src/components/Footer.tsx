@@ -153,7 +153,7 @@ export function Footer() {
         {/* Bottom Section */}
         <div className="flex flex-col md:flex-row justify-between items-center space-y-4 md:space-y-0">
           <div className="text-sm text-muted-foreground">
-            © {new Date().getFullYear()} BlackBox Farm. All rights reserved. Built with ❤️ for the DeFi community.
+            © {new Date().getFullYear()} BlackBox Farm. All rights reserved. Built with 🍆 for the DeFi community.
           </div>
           
           <div className="flex items-center gap-4 text-sm text-muted-foreground">
