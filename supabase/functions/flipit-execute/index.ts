@@ -42,15 +42,19 @@ function firstSignature(swapResult: any): string | null {
  * - Pre-Raydium (on bonding curve): pump.fun API -> bonding curve math  
  * - Post-Raydium (graduated): DexScreener -> Jupiter fallback
  */
-async function fetchTokenPrice(tokenMint: string): Promise<{ price: number; metadata: PriceResult } | null> {
+async function fetchTokenPrice(tokenMint: string, options: { forceFresh?: boolean } = {}): Promise<{ price: number; metadata: PriceResult } | null> {
   const heliusApiKey = Deno.env.get("HELIUS_API_KEY");
-  const result = await resolvePrice(tokenMint, { heliusApiKey });
+  // CRITICAL: Pass forceFresh to bypass cache for accurate buy execution
+  const result = await resolvePrice(tokenMint, { 
+    heliusApiKey, 
+    forceFresh: options.forceFresh ?? false 
+  });
   
   if (!result) {
     return null;
   }
   
-  console.log(`Price for ${tokenMint.slice(0, 8)}: $${result.price.toFixed(10)} from ${result.source}${result.isOnCurve ? ` (curve ${result.bondingCurveProgress?.toFixed(1)}%)` : ''}`);
+  console.log(`Price for ${tokenMint.slice(0, 8)}: $${result.price.toFixed(10)} from ${result.source}${result.isOnCurve ? ` (curve ${result.bondingCurveProgress?.toFixed(1)}%)` : ''}${options.forceFresh ? ' [FRESH]' : ''}`);
   
   return { price: result.price, metadata: result };
 }
@@ -589,14 +593,16 @@ serve(async (req) => {
       
       console.log(`Balance check passed: ${walletBalance.toFixed(4)} SOL >= ${requiredSol.toFixed(4)} SOL required`);
 
-      // Fetch current token price using centralized resolver
-      const priceResult = await fetchTokenPrice(tokenMint);
+      // CRITICAL: Fetch FRESH token price - bypass cache to avoid stale prices
+      // This ensures the buy executes at current market price, not a cached quote
+      const priceResult = await fetchTokenPrice(tokenMint, { forceFresh: true });
       if (!priceResult) {
         return bad("Could not fetch token price");
       }
       
       const currentPrice = priceResult.price;
       const priceMetadata = priceResult.metadata;
+      console.log(`FRESH price for buy: $${currentPrice.toFixed(10)} from ${priceMetadata.source}`);
 
       // Fetch token metadata
       const metadata = await fetchTokenMetadata(tokenMint);
@@ -921,25 +927,42 @@ serve(async (req) => {
         
         console.log("Final quantity_tokens to store:", quantityTokens);
 
-        // Update position with buy result (verified or estimated quantity)
+        // CRITICAL: Calculate ACTUAL buy price from swap result immediately
+        // This ensures displayed price matches what user actually paid, not stale quote
+        let actualBuyPriceUsd = currentPrice; // Fallback to quote if calculation fails
+        let actualBuyAmountUsd = buyAmountSol * solPrice;
+        
+        if (quantityTokens && Number(quantityTokens) > 0) {
+          actualBuyPriceUsd = actualBuyAmountUsd / Number(quantityTokens);
+          console.log(`INLINE PRICE: Spent ${actualBuyAmountUsd.toFixed(4)} USD for ${quantityTokens} tokens = $${actualBuyPriceUsd.toFixed(10)}/token`);
+        }
+
+        // Update position with buy result AND inline-calculated price
         await supabase
           .from("flip_positions")
           .update({
             buy_signature: signature,
             buy_executed_at: new Date().toISOString(),
             quantity_tokens: quantityTokens,
+            buy_price_usd: actualBuyPriceUsd, // Use calculated price, not stale quote
+            buy_amount_usd: actualBuyAmountUsd,
             status: "holding",
             error_message: null,
           })
           .eq("id", position.id);
 
-        // AUTO-VERIFY ENTRY: Use Solscan for accurate on-chain truth (pre-parsed, no calculation needed)
+        // AUTO-VERIFY ENTRY: Use Solscan for accurate on-chain truth (with retry logic)
         const solscanApiKey = Deno.env.get("SOLSCAN_API_KEY");
         if (solscanApiKey && signature) {
-          // Wait for transaction to be indexed by Solscan (typically 5-10 seconds)
-          setTimeout(async () => {
+          // IMPROVED: More resilient verification with retries and longer wait
+          const verifyEntry = async (attempt = 1) => {
+            const maxAttempts = 3;
+            const waitTime = attempt === 1 ? 15000 : 10000; // 15s first try, 10s retries
+            
+            await new Promise(resolve => setTimeout(resolve, waitTime));
+            
             try {
-              console.log("Verifying entry via Solscan API:", signature);
+              console.log(`Verifying entry via Solscan API (attempt ${attempt}/${maxAttempts}):`, signature);
               const buyData = await parseBuyFromSolscan(signature, tokenMint, wallet.pubkey, solscanApiKey);
               
               if (buyData) {
@@ -949,7 +972,7 @@ serve(async (req) => {
                 const verifiedBuyPriceUsd = verifiedBuyAmountUsd / buyData.tokensReceived;
                 
                 // SANITY CHECK: Don't overwrite with bad data if deviation is too large
-                const quotedSolSpent = (buyAmountUsd || 4) / solPrice;
+                const quotedSolSpent = buyAmountSol;
                 const deviation = Math.abs(buyData.solSpent - quotedSolSpent) / quotedSolSpent * 100;
                 
                 if (deviation > 25) {
@@ -962,7 +985,7 @@ serve(async (req) => {
                 }
                 
                 await supabase.from("flip_positions").update({
-                  quantity_tokens: buyData.tokensReceived, // Use human-readable, NOT raw lamports
+                  quantity_tokens: buyData.tokensReceived,
                   buy_amount_sol: buyData.solSpent,
                   buy_amount_usd: verifiedBuyAmountUsd,
                   buy_price_usd: verifiedBuyPriceUsd,
@@ -972,13 +995,28 @@ serve(async (req) => {
                 }).eq("id", position.id);
                 
                 console.log(`Entry verified: ${buyData.tokensReceived} tokens for ${buyData.solSpent} SOL = $${verifiedBuyPriceUsd.toFixed(10)}/token`);
+              } else if (attempt < maxAttempts) {
+                console.warn(`Solscan verification attempt ${attempt} failed, retrying...`);
+                verifyEntry(attempt + 1);
               } else {
-                console.warn("Solscan verification failed - no data returned");
+                console.error("Solscan verification failed after all attempts - inline price used");
+                // Log failure for debugging
+                await supabase.from("activity_logs").insert({
+                  message: `Solscan verification failed for position ${position.id}`,
+                  log_level: "warn",
+                  metadata: { positionId: position.id, signature, attempts: maxAttempts }
+                });
               }
             } catch (e) {
-              console.error("Auto-verify via Solscan failed:", e);
+              console.error(`Auto-verify attempt ${attempt} failed:`, e);
+              if (attempt < maxAttempts) {
+                verifyEntry(attempt + 1);
+              }
             }
-          }, 10000); // Wait 10 seconds for Solscan to index
+          };
+          
+          // Start verification in background
+          verifyEntry();
         }
 
         // Calculate SOL amount from USD (reuse solPrice from above)
