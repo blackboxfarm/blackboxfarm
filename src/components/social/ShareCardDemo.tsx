@@ -13,12 +13,16 @@ interface TokenStats {
   healthScore: number;
   healthGrade: string;
   totalHolders: number;
-  whalePercentage: number;
+  // New breakdown fields
+  realHolders: number;
+  whaleCount: number;
+  strongCount: number;
+  activeCount: number;
+  dustCount: number;
   dustPercentage: number;
-  imageUrl?: string;
 }
 
-// Mock data for demo
+// Mock data for demo - realistic breakdown
 const mockTokenStats: TokenStats = {
   symbol: 'DEMO',
   name: 'Demo Token',
@@ -27,9 +31,12 @@ const mockTokenStats: TokenStats = {
   healthScore: 78,
   healthGrade: 'B+',
   totalHolders: 2847,
-  whalePercentage: 12.5,
-  dustPercentage: 45.2,
-  imageUrl: 'https://images.unsplash.com/photo-1518770660439-4636190af475?w=100&h=100&fit=crop'
+  realHolders: 1423,
+  whaleCount: 12,
+  strongCount: 284,
+  activeCount: 1127,
+  dustCount: 1424,
+  dustPercentage: 50,
 };
 
 export function ShareCardDemo({ tokenStats = mockTokenStats }: { tokenStats?: TokenStats }) {
@@ -56,24 +63,25 @@ export function ShareCardDemo({ tokenStats = mockTokenStats }: { tokenStats?: To
     }
   };
 
-  const formatPrice = (price: number) => {
-    if (price < 0.00001) return price.toExponential(4);
-    if (price < 1) return price.toFixed(8).replace(/\.?0+$/, '');
-    return price.toLocaleString(undefined, { maximumFractionDigits: 2 });
-  };
-
-  const formatMarketCap = (mc: number) => {
-    if (mc >= 1_000_000) return `$${(mc / 1_000_000).toFixed(2)}M`;
-    if (mc >= 1_000) return `$${(mc / 1_000).toFixed(1)}K`;
-    return `$${mc.toFixed(0)}`;
-  };
-
   const getGradeColor = (grade: string) => {
-    if (grade.startsWith('A')) return 'text-green-400';
+    if (grade.startsWith('A')) return 'text-emerald-400';
     if (grade.startsWith('B')) return 'text-blue-400';
-    if (grade.startsWith('C')) return 'text-yellow-400';
+    if (grade.startsWith('C')) return 'text-amber-400';
     return 'text-red-400';
   };
+
+  const getGradeBgColor = (grade: string) => {
+    if (grade.startsWith('A')) return 'from-emerald-500/20 to-emerald-600/10 border-emerald-500/40';
+    if (grade.startsWith('B')) return 'from-blue-500/20 to-blue-600/10 border-blue-500/40';
+    if (grade.startsWith('C')) return 'from-amber-500/20 to-amber-600/10 border-amber-500/40';
+    return 'from-red-500/20 to-red-600/10 border-red-500/40';
+  };
+
+  // Calculate percentages for the visual bars
+  const whalePercent = (tokenStats.whaleCount / tokenStats.totalHolders) * 100;
+  const strongPercent = (tokenStats.strongCount / tokenStats.totalHolders) * 100;
+  const activePercent = (tokenStats.activeCount / tokenStats.totalHolders) * 100;
+  const dustPercent = tokenStats.dustPercentage;
 
   return (
     <div className="space-y-6">
@@ -163,7 +171,7 @@ export function ShareCardDemo({ tokenStats = mockTokenStats }: { tokenStats?: To
               </Button>
             </div>
 
-            {/* Option B: HTML Template */}
+            {/* Option B: HTML Template - REDESIGNED */}
             <div className="space-y-4">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
@@ -185,66 +193,141 @@ export function ShareCardDemo({ tokenStats = mockTokenStats }: { tokenStats?: To
                 Pixel-perfect, consistent, and fast every time.
               </p>
 
-              {/* Template Preview - This IS what it looks like */}
-              <div className="aspect-[1200/628] bg-gradient-to-br from-gray-900 via-gray-800 to-gray-900 rounded-lg border border-border overflow-hidden relative p-4">
-                {/* BlackBox Farm Branding */}
-                <div className="absolute top-3 left-3 flex items-center gap-2">
-                  <div className="w-8 h-8 bg-gradient-to-br from-green-400 to-emerald-600 rounded-lg flex items-center justify-center">
-                    <span className="text-white text-xs font-bold">BB</span>
+              {/* REDESIGNED Template Preview */}
+              <div className="aspect-[1200/628] bg-gradient-to-br from-gray-950 via-gray-900 to-gray-950 rounded-lg border border-border overflow-hidden relative">
+                {/* Top Bar - Branding + Token Badge */}
+                <div className="absolute top-0 left-0 right-0 px-4 py-3 flex items-center justify-between">
+                  {/* BlackBox Farm Logo */}
+                  <div className="flex items-center gap-2">
+                    <div className="w-7 h-7 bg-gradient-to-br from-emerald-400 to-green-600 rounded-md flex items-center justify-center shadow-lg shadow-emerald-500/20">
+                      <span className="text-white text-[10px] font-black">BB</span>
+                    </div>
+                    <span className="text-white/70 text-[11px] font-medium tracking-wide">BlackBox Farm</span>
                   </div>
-                  <span className="text-white/80 text-xs font-medium">BlackBox Farm</span>
+                  
+                  {/* Token Badge - De-emphasized */}
+                  <div className="flex items-center gap-1.5 bg-white/5 px-2 py-1 rounded-full">
+                    <div className="w-4 h-4 rounded-full bg-gradient-to-br from-orange-400 to-pink-500 flex items-center justify-center">
+                      <span className="text-[7px] font-bold text-white">{tokenStats.symbol.slice(0, 1)}</span>
+                    </div>
+                    <span className="text-white/50 text-[10px]">${tokenStats.symbol}</span>
+                  </div>
                 </div>
 
-                {/* Main Content */}
-                <div className="flex h-full items-center pt-6">
-                  {/* Left: Token Info */}
-                  <div className="flex-1 space-y-2">
-                    <div className="flex items-center gap-3">
-                      <div className="w-12 h-12 rounded-full bg-gradient-to-br from-orange-400 to-pink-500 flex items-center justify-center text-white font-bold">
-                        {tokenStats.symbol.slice(0, 2)}
+                {/* Main Content Area */}
+                <div className="absolute inset-0 flex items-center justify-between px-5 pt-10 pb-8">
+                  
+                  {/* LEFT SIDE - Hero Numbers */}
+                  <div className="flex-1 flex flex-col items-start justify-center">
+                    {/* Total Wallets */}
+                    <div className="mb-1">
+                      <span className="text-white/40 text-[9px] uppercase tracking-wider">Total Wallets</span>
+                    </div>
+                    <div className="text-white text-3xl font-black tracking-tight leading-none">
+                      {tokenStats.totalHolders.toLocaleString()}
+                    </div>
+                    
+                    {/* Arrow down */}
+                    <div className="my-1.5 text-emerald-400 text-lg">↓</div>
+                    
+                    {/* Real Holders - The HERO stat */}
+                    <div className="mb-0.5">
+                      <span className="text-emerald-400 text-[9px] uppercase tracking-wider font-semibold">Real Holders</span>
+                    </div>
+                    <div className="text-emerald-400 text-4xl font-black tracking-tight leading-none">
+                      {tokenStats.realHolders.toLocaleString()}
+                    </div>
+                    
+                    {/* Dust disclosure */}
+                    <div className="mt-2 bg-gray-800/60 rounded-md px-2 py-1">
+                      <span className="text-gray-400 text-[9px]">
+                        <span className="text-amber-400/80">{tokenStats.dustPercentage}%</span> are dust from failed txns
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* CENTER - Visual Breakdown Bars */}
+                  <div className="flex-1 flex flex-col justify-center px-3 space-y-1.5">
+                    {/* Whales */}
+                    <div className="flex items-center gap-2">
+                      <span className="text-[10px] w-12 text-right">🐋</span>
+                      <div className="flex-1 h-4 bg-gray-800 rounded-sm overflow-hidden">
+                        <div 
+                          className="h-full bg-gradient-to-r from-emerald-500 to-emerald-400 rounded-sm"
+                          style={{ width: `${Math.max(whalePercent * 5, 8)}%` }}
+                        />
                       </div>
-                      <div>
-                        <div className="text-white font-bold text-lg">${tokenStats.symbol}</div>
-                        <div className="text-white/60 text-xs">{tokenStats.name}</div>
+                      <div className="text-right w-20">
+                        <span className="text-emerald-400 text-[11px] font-bold">{tokenStats.whaleCount}</span>
+                        <span className="text-white/30 text-[9px] ml-1">Whales</span>
                       </div>
                     </div>
                     
-                    <div className="space-y-1">
-                      <div className="text-green-400 text-xl font-bold">${formatPrice(tokenStats.price)}</div>
-                      <div className="text-white/60 text-xs">MCap: {formatMarketCap(tokenStats.marketCap)}</div>
+                    {/* Strong */}
+                    <div className="flex items-center gap-2">
+                      <span className="text-[10px] w-12 text-right">💪</span>
+                      <div className="flex-1 h-4 bg-gray-800 rounded-sm overflow-hidden">
+                        <div 
+                          className="h-full bg-gradient-to-r from-blue-500 to-blue-400 rounded-sm"
+                          style={{ width: `${Math.max(strongPercent * 2, 15)}%` }}
+                        />
+                      </div>
+                      <div className="text-right w-20">
+                        <span className="text-blue-400 text-[11px] font-bold">{tokenStats.strongCount}</span>
+                        <span className="text-white/30 text-[9px] ml-1">Strong</span>
+                      </div>
+                    </div>
+                    
+                    {/* Active */}
+                    <div className="flex items-center gap-2">
+                      <span className="text-[10px] w-12 text-right">🌱</span>
+                      <div className="flex-1 h-4 bg-gray-800 rounded-sm overflow-hidden">
+                        <div 
+                          className="h-full bg-gradient-to-r from-amber-500 to-yellow-400 rounded-sm"
+                          style={{ width: `${Math.max(activePercent, 40)}%` }}
+                        />
+                      </div>
+                      <div className="text-right w-20">
+                        <span className="text-amber-400 text-[11px] font-bold">{tokenStats.activeCount.toLocaleString()}</span>
+                        <span className="text-white/30 text-[9px] ml-1">Active</span>
+                      </div>
+                    </div>
+                    
+                    {/* Divider */}
+                    <div className="border-t border-dashed border-gray-700 my-0.5" />
+                    
+                    {/* Dust - grayed out */}
+                    <div className="flex items-center gap-2 opacity-50">
+                      <span className="text-[10px] w-12 text-right">💨</span>
+                      <div className="flex-1 h-4 bg-gray-800 rounded-sm overflow-hidden">
+                        <div 
+                          className="h-full bg-gradient-to-r from-gray-600 to-gray-500 rounded-sm"
+                          style={{ width: `${dustPercent}%` }}
+                        />
+                      </div>
+                      <div className="text-right w-20">
+                        <span className="text-gray-400 text-[11px] font-bold">{tokenStats.dustCount.toLocaleString()}</span>
+                        <span className="text-white/20 text-[9px] ml-1">Dust</span>
+                      </div>
                     </div>
                   </div>
 
-                  {/* Right: Health Score */}
-                  <div className="flex-1 flex flex-col items-center">
-                    <div className="text-white/60 text-xs mb-1">Holder Health Score</div>
-                    <div className={`text-4xl font-black ${getGradeColor(tokenStats.healthGrade)}`}>
-                      {tokenStats.healthGrade}
-                    </div>
-                    <div className="text-white/40 text-xs">{tokenStats.healthScore}/100</div>
-                  </div>
-
-                  {/* Stats Column */}
-                  <div className="flex-1 space-y-2 text-right pr-2">
-                    <div>
-                      <div className="text-white/60 text-xs">Holders</div>
-                      <div className="text-white font-bold">{tokenStats.totalHolders.toLocaleString()}</div>
-                    </div>
-                    <div>
-                      <div className="text-white/60 text-xs">Whale %</div>
-                      <div className="text-red-400 font-bold">{tokenStats.whalePercentage}%</div>
-                    </div>
-                    <div>
-                      <div className="text-white/60 text-xs">Dust %</div>
-                      <div className="text-yellow-400 font-bold">{tokenStats.dustPercentage}%</div>
+                  {/* RIGHT SIDE - Health Grade Badge */}
+                  <div className="flex flex-col items-center justify-center pl-3">
+                    <div className={`rounded-xl bg-gradient-to-b ${getGradeBgColor(tokenStats.healthGrade)} border p-3 text-center`}>
+                      <div className="text-white/50 text-[8px] uppercase tracking-wider mb-0.5">Health</div>
+                      <div className={`text-4xl font-black ${getGradeColor(tokenStats.healthGrade)}`}>
+                        {tokenStats.healthGrade}
+                      </div>
+                      <div className="text-white/30 text-[10px] mt-0.5">{tokenStats.healthScore}/100</div>
                     </div>
                   </div>
                 </div>
 
                 {/* Footer */}
-                <div className="absolute bottom-3 left-3 right-3 flex items-center justify-between">
-                  <span className="text-white/40 text-[10px]">blackboxfarm.lovable.app/holders</span>
-                  <span className="text-white/40 text-[10px]">Holder Analysis Report</span>
+                <div className="absolute bottom-0 left-0 right-0 px-4 py-2.5 flex items-center justify-between bg-black/30">
+                  <span className="text-emerald-400/70 text-[10px] font-medium">blackbox.farm/holders</span>
+                  <span className="text-white/30 text-[9px]">Free Holder Analysis Report</span>
                 </div>
               </div>
 
