@@ -69,7 +69,7 @@ export function ShareCardDemo({ tokenStats = mockTokenStats }: { tokenStats?: To
 
 Health Grade: ${tokenStats.healthGrade} (${tokenStats.healthScore}/100)
 
-Free analysis at blackbox.farm/holders`;
+Free holder report on BlackBox Farm`;
 
     // If we have an uploaded image URL, share a page that has og:image
     const shareUrl = withImage 
