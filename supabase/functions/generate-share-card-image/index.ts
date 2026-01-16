@@ -115,34 +115,40 @@ Design Requirements:
     const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const supabase = createClient(supabaseUrl, supabaseKey);
 
-    // Convert base64 to blob
-    const base64Data = imageBase64.replace(/^data:image\/\w+;base64,/, '');
-    const imageBytes = Uint8Array.from(atob(base64Data), c => c.charCodeAt(0));
+    // Convert base64 to bytes
+    const base64Data = imageBase64.replace(/^data:image\/\w+;base64,/, "");
+    const imageBytes = Uint8Array.from(atob(base64Data), (c) => c.charCodeAt(0));
 
+    // NOTE: Bucket must exist. We use the already-provisioned public bucket.
+    const bucket = "twitter-assets";
     const fileName = `share-cards/${tokenStats.symbol.toLowerCase()}-${Date.now()}.png`;
-    
-    const { data: uploadData, error: uploadError } = await supabase.storage
-      .from('public-assets')
-      .upload(fileName, imageBytes, {
-        contentType: 'image/png',
-        upsert: true
+
+    const imageBlob = new Blob([imageBytes], { type: "image/png" });
+
+    const { error: uploadError } = await supabase.storage
+      .from(bucket)
+      .upload(fileName, imageBlob, {
+        contentType: "image/png",
+        upsert: true,
+        cacheControl: "3600",
       });
 
     if (uploadError) {
-      console.error('Upload error:', uploadError);
+      console.error("Upload error:", uploadError);
       // Return base64 as fallback
-      return new Response(JSON.stringify({ 
-        success: true,
-        imageBase64,
-        note: 'Could not upload to storage, returning base64'
-      }), {
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+      return new Response(
+        JSON.stringify({
+          success: true,
+          imageBase64,
+          note: `Could not upload to storage (${uploadError.message}), returning base64`,
+        }),
+        {
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        }
+      );
     }
 
-    const { data: publicUrl } = supabase.storage
-      .from('public-assets')
-      .getPublicUrl(fileName);
+    const { data: publicUrl } = supabase.storage.from(bucket).getPublicUrl(fileName);
 
     console.log('Image uploaded successfully:', publicUrl.publicUrl);
 
