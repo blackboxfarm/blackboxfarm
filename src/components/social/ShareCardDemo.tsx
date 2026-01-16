@@ -42,11 +42,19 @@ const mockTokenStats: TokenStats = {
 
 export function ShareCardDemo({ tokenStats = mockTokenStats }: { tokenStats?: TokenStats }) {
   const [aiImage, setAiImage] = useState<string | null>(null);
+  const [aiImageUrl, setAiImageUrl] = useState<string | null>(null);
   const [isGeneratingAI, setIsGeneratingAI] = useState(false);
   const [selectedApproach, setSelectedApproach] = useState<'A' | 'B' | null>(null);
 
+  // Build the shareable URL - this page will have og:image meta tags
+  const getShareUrl = (imageUrl: string) => {
+    // Create a shareable page URL with the image
+    const baseUrl = window.location.origin;
+    return `${baseUrl}/share/${tokenStats.symbol.toLowerCase()}?img=${encodeURIComponent(imageUrl)}`;
+  };
+
   // Open Twitter share dialog with Web Intent
-  const shareToTwitter = () => {
+  const shareToTwitter = (withImage?: string) => {
     const tweetText = `🔍 Holder Analysis: $${tokenStats.symbol}
 
 📊 ${tokenStats.totalHolders.toLocaleString()} Total Wallets
@@ -59,26 +67,40 @@ Health Grade: ${tokenStats.healthGrade} (${tokenStats.healthScore}/100)
 
 Free analysis at blackbox.farm/holders`;
 
-    const shareUrl = `https://blackbox.farm/holders`;
+    // If we have an uploaded image URL, share a page that has og:image
+    const shareUrl = withImage 
+      ? getShareUrl(withImage)
+      : `https://blackbox.farm/holders`;
+    
     const twitterIntentUrl = `https://twitter.com/intent/tweet?text=${encodeURIComponent(tweetText)}&url=${encodeURIComponent(shareUrl)}`;
     
     window.open(twitterIntentUrl, '_blank', 'width=550,height=420');
   };
 
-  // Generate AI artistic image
+  // Generate AI card image and upload it
   const generateAICard = async () => {
     setIsGeneratingAI(true);
+    setAiImageUrl(null);
     try {
-      const { data, error } = await supabase.functions.invoke('generate-share-card-ai', {
+      const { data, error } = await supabase.functions.invoke('generate-share-card-image', {
         body: { tokenStats }
       });
       
       if (error) throw error;
+      
+      // Store both the base64 for display and the URL for sharing
+      if (data?.imageBase64) {
+        setAiImage(data.imageBase64);
+      }
       if (data?.imageUrl) {
-        setAiImage(data.imageUrl);
+        setAiImageUrl(data.imageUrl);
+        toast.success('Card generated and ready to share!');
+      } else if (data?.imageBase64) {
+        toast.success('Card generated! (Image preview only)');
       }
     } catch (err) {
       console.error('Failed to generate AI card:', err);
+      toast.error('Failed to generate card');
     } finally {
       setIsGeneratingAI(false);
     }
@@ -185,10 +207,10 @@ Free analysis at blackbox.farm/holders`;
               {aiImage && (
                 <Button 
                   className="w-full bg-sky-500 hover:bg-sky-600"
-                  onClick={shareToTwitter}
+                  onClick={() => shareToTwitter(aiImageUrl || undefined)}
                 >
                   <Share2 className="h-4 w-4 mr-2" />
-                  Share on Twitter
+                  Share on Twitter {aiImageUrl ? '(with image)' : ''}
                 </Button>
               )}
 
@@ -513,7 +535,7 @@ Free analysis at blackbox.farm/holders`;
 
               <Button 
                 className="w-full bg-sky-500 hover:bg-sky-600"
-                onClick={shareToTwitter}
+                onClick={() => shareToTwitter()}
               >
                 <Share2 className="h-4 w-4 mr-2" />
                 Share on Twitter

@@ -381,3 +381,6 @@ verify_jwt = false
 
 [functions.post-share-card-twitter]
 verify_jwt = false
+
+[functions.generate-share-card-image]
+verify_jwt = false
