@@ -217,8 +217,8 @@ export function TokenMetadataDisplay({
           {/* Quick Snapshot Title */}
           <h3 className="text-base md:text-lg font-bold text-white">Quick Snapshot</h3>
           
-          {/* 3-Column Layout: MINT IMAGE | BOX1 | BOX2 */}
-          <div className="grid grid-cols-1 md:grid-cols-[auto_1fr_1fr] gap-3 md:gap-4">
+          {/* 3-Column Layout: MINT IMAGE | BOX1 | BOX2 - always side by side */}
+          <div className="grid grid-cols-[auto_1fr_1fr] gap-2 md:gap-4">
             {/* MINT IMAGE */}
             <div className="flex justify-center md:justify-start">
               <img 
@@ -360,42 +360,39 @@ export function TokenMetadataDisplay({
                 <img src="https://trade.padre.gg/logo.svg" alt="Padre.gg" className="h-5 w-auto max-w-[100px]" />
               </a>
 
-              {/* External Explorer Links */}
-              <div className="flex items-center gap-2 flex-wrap">
-                {/* CoinGecko */}
+              {/* External Explorer Links - Icons only */}
+              <div className="flex items-center gap-1.5 flex-wrap">
                 <a
                   href={`https://www.coingecko.com/en/coins/${metadata.symbol.toLowerCase()}`}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="flex items-center hover:opacity-80 transition-opacity"
-                  title="Search on CoinGecko"
+                  className="hover:opacity-80 transition-opacity"
+                  title="CoinGecko"
                 >
                   <img src="https://static.coingecko.com/s/coingecko-logo-8903d34ce19ca4be1c81f0db30e924154750d208683fad7ae6f2ce06c76d0a56.png" alt="CoinGecko" className="h-5 w-5 rounded" />
                 </a>
-                {/* CoinMarketCap */}
                 <a
                   href={`https://coinmarketcap.com/search/?q=${metadata.symbol}`}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="flex items-center hover:opacity-80 transition-opacity"
-                  title="Search on CoinMarketCap"
+                  className="hover:opacity-80 transition-opacity"
+                  title="CoinMarketCap"
                 >
                   <img src="https://s2.coinmarketcap.com/static/cloud/img/fav/apple-touch-icon.png" alt="CoinMarketCap" className="h-5 w-5 rounded" />
                 </a>
-                {/* Birdeye */}
                 <a
                   href={`https://birdeye.so/token/${metadata.mint}?chain=solana`}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="flex items-center hover:opacity-80 transition-opacity"
-                  title="View on Birdeye"
+                  className="hover:opacity-80 transition-opacity"
+                  title="Birdeye"
                 >
                   <img src="https://birdeye.so/favicon.ico" alt="Birdeye" className="h-5 w-5 rounded" />
                 </a>
               </div>
 
-              {/* Social Links */}
-              <div className="flex items-center gap-2 flex-wrap">
+              {/* Social Links - Icons only */}
+              <div className="flex items-center gap-1.5 flex-wrap">
                 {twitterUrl && (() => {
                   const platformInfo = detectSocialPlatform(twitterUrl);
                   return (
