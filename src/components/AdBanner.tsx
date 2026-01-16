@@ -190,14 +190,10 @@ export function AdBanner({ size, position }: AdBannerProps) {
   }
 
   // Leaderboard (scaled for laptop, centered)
-  // Position 1: 1930x320 custom size | Other positions: original max-w-4xl, h-auto
-  const isPosition1 = position === 1;
-  const containerClass = isPosition1 
-    ? "mb-4 overflow-hidden cursor-pointer transition-all duration-300 hover:scale-105 hover:shadow-2xl hover:shadow-primary/20 w-full max-w-[1930px] mx-auto"
-    : "mb-4 overflow-hidden cursor-pointer transition-all duration-300 hover:scale-105 hover:shadow-2xl hover:shadow-primary/20 w-full max-w-4xl mx-auto";
-  const mediaClass = isPosition1 
-    ? "w-full h-[320px] object-cover"
-    : "w-full h-auto object-contain";
+  // Both Banner#1 and Banner#2 now use the same max-w-4xl width
+  // Original Position 1 setting was: max-w-[1930px] and h-[320px] object-cover
+  const containerClass = "mb-4 overflow-hidden cursor-pointer transition-all duration-300 hover:scale-105 hover:shadow-2xl hover:shadow-primary/20 w-full max-w-4xl mx-auto";
+  const mediaClass = "w-full h-auto object-contain";
 
   return (
       <Card className={containerClass} onClick={handleClick}>
