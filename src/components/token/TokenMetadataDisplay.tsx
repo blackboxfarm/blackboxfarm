@@ -397,7 +397,7 @@ export function TokenMetadataDisplay({
                   className="hover:opacity-80 transition-opacity"
                   title="CoinGecko"
                 >
-                  <img src="/external-icons/coingecko.png" alt="CoinGecko" className="h-5 w-5 rounded-full object-cover" />
+                  <img src="/external-icons/coingecko.png" alt="CoinGecko" className="h-6 w-6 rounded-full object-cover" />
                 </a>
                 <a
                   href={`https://coinmarketcap.com/search/?q=${metadata.symbol}`}
@@ -406,7 +406,7 @@ export function TokenMetadataDisplay({
                   className="hover:opacity-80 transition-opacity"
                   title="CoinMarketCap"
                 >
-                  <img src="/external-icons/coinmarketcap.png" alt="CoinMarketCap" className="h-5 w-5 rounded object-contain" />
+                  <img src="/external-icons/coinmarketcap.png" alt="CoinMarketCap" className="h-6 w-6 rounded object-contain" />
                 </a>
                 <a
                   href={`https://birdeye.so/token/${metadata.mint}?chain=solana`}
@@ -415,7 +415,7 @@ export function TokenMetadataDisplay({
                   className="hover:opacity-80 transition-opacity"
                   title="Birdeye"
                 >
-                  <img src="/external-icons/birdeye.ico" alt="Birdeye" className="h-5 w-5 rounded object-contain" />
+                  <img src="/external-icons/birdeye.ico" alt="Birdeye" className="h-6 w-6 rounded object-contain" />
                 </a>
               </div>
 
@@ -431,7 +431,7 @@ export function TokenMetadataDisplay({
                       className="flex items-center hover:opacity-80 transition-opacity"
                       title={platformInfo.label}
                     >
-                      <SocialIcon platform={platformInfo.platform} className="h-5 w-5" />
+                      <SocialIcon platform={platformInfo.platform} className="h-6 w-6" />
                     </a>
                   );
                 })()}
@@ -445,7 +445,7 @@ export function TokenMetadataDisplay({
                       className="flex items-center hover:opacity-80 transition-opacity"
                       title={platformInfo.label}
                     >
-                      <SocialIcon platform={platformInfo.platform} className="h-5 w-5" />
+                      <SocialIcon platform={platformInfo.platform} className="h-6 w-6" />
                     </a>
                   );
                 })()}
@@ -459,7 +459,7 @@ export function TokenMetadataDisplay({
                       className="flex items-center hover:opacity-80 transition-opacity"
                       title={platformInfo.label}
                     >
-                      <SocialIcon platform={platformInfo.platform} className="h-5 w-5" />
+                      <SocialIcon platform={platformInfo.platform} className="h-6 w-6" />
                     </a>
                   );
                 })()}
