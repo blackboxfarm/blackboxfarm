@@ -397,7 +397,7 @@ export function TokenMetadataDisplay({
                   className="hover:opacity-80 transition-opacity"
                   title="CoinGecko"
                 >
-                  <img src="/external-icons/coingecko.png" alt="CoinGecko" className="h-5 w-5 rounded object-contain" />
+                  <img src="/external-icons/coingecko.png" alt="CoinGecko" className="h-5 w-5 rounded-full object-cover" />
                 </a>
                 <a
                   href={`https://coinmarketcap.com/search/?q=${metadata.symbol}`}
