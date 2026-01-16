@@ -50,6 +50,7 @@ const PumpfunKOLCabals = lazy(() => import("@/components/admin/PumpfunKOLCabals"
 const PumpfunKOLTwitter = lazy(() => import("@/components/admin/PumpfunKOLTwitter"));
 const PumpfunTokenRetrace = lazy(() => import("@/components/admin/PumpfunTokenRetrace"));
 const DevTeamsView = lazy(() => import("@/components/admin/DevTeamsView").then(m => ({ default: m.DevTeamsView })));
+const SpiderRouteMap = lazy(() => import("@/components/admin/SpiderRouteMap").then(m => ({ default: m.SpiderRouteMap })));
 
 export default function SuperAdmin() {
   const [activeTab, setActiveTab] = useState("fuckoff");
@@ -148,6 +149,7 @@ export default function SuperAdmin() {
             <TabsTrigger value="pumpfun-whitelist" className="flex-shrink-0 data-[state=active]:bg-gradient-to-r data-[state=active]:from-green-600/30 data-[state=active]:to-emerald-500/20">✅ Whitelist Mesh</TabsTrigger>
             <TabsTrigger value="kol-tracker" className="flex-shrink-0 data-[state=active]:bg-gradient-to-r data-[state=active]:from-yellow-500/30 data-[state=active]:to-amber-500/20">👑 KOL Tracker</TabsTrigger>
             <TabsTrigger value="dev-teams" className="flex-shrink-0 data-[state=active]:bg-gradient-to-r data-[state=active]:from-purple-600/30 data-[state=active]:to-violet-500/20">👥 Dev Teams</TabsTrigger>
+            <TabsTrigger value="spider" className="flex-shrink-0 data-[state=active]:bg-gradient-to-r data-[state=active]:from-gray-500/30 data-[state=active]:to-slate-500/20">🕷️ Spider</TabsTrigger>
           </TabsList>
           
           <TabsContent value="fuckoff">
@@ -400,6 +402,12 @@ export default function SuperAdmin() {
           <TabsContent value="dev-teams">
             <ActiveTabOnly activeTab={activeTab} tabValue="dev-teams">
               <DevTeamsView />
+            </ActiveTabOnly>
+          </TabsContent>
+
+          <TabsContent value="spider">
+            <ActiveTabOnly activeTab={activeTab} tabValue="spider">
+              <SpiderRouteMap />
             </ActiveTabOnly>
           </TabsContent>
         </Tabs>
