@@ -61,19 +61,18 @@ export function ShareCardDemo({ tokenStats = mockTokenStats }: { tokenStats?: To
 
   // Open Twitter share dialog with Web Intent
   const shareToTwitter = () => {
-    const tweetText = `🔍 Holder/Wallet Analysis: $${tokenStats.symbol}
-CA: ${tokenStats.tokenAddress}
+    const tweetText = `🔍 Wallet Analysis: $${tokenStats.symbol}
 
-📊 ${tokenStats.totalHolders.toLocaleString()} Wallets   ✅ ${tokenStats.realHolders.toLocaleString()} Real Holders
+CA:${tokenStats.tokenAddress}
+
+📊 ${tokenStats.totalHolders.toLocaleString()} Wallets 
+✅ ${tokenStats.realHolders.toLocaleString()} Real Holders
+
 💨 ${tokenStats.dustPercentage}% Dust 😱
 
-🐋 ${tokenStats.whaleCount} Whales | 💪 ${tokenStats.strongCount} Strong | 🌱 ${tokenStats.activeCount.toLocaleString()} Active
-
-Health: ${tokenStats.healthGrade} (${tokenStats.healthScore}/100)`;
-
-    const shareUrl = getShareUrl();
+BLACKBOX.FARM/HOLDERS`;
     
-    const twitterIntentUrl = `https://twitter.com/intent/tweet?text=${encodeURIComponent(tweetText)}&url=${encodeURIComponent(shareUrl)}`;
+    const twitterIntentUrl = `https://twitter.com/intent/tweet?text=${encodeURIComponent(tweetText)}`;
     
     window.open(twitterIntentUrl, '_blank', 'width=550,height=420');
   };
