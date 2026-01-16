@@ -79,15 +79,17 @@ export function AdBanner({ size, position }: AdBannerProps) {
       const sessionId = existingSessionId || crypto.randomUUID();
       if (!existingSessionId) sessionStorage.setItem('session_id', sessionId);
 
-      supabase
-        .from('banner_clicks')
-        .insert({
-          banner_id: banner.id,
-          session_id: sessionId,
-        })
-        .catch((error) => {
-          console.warn('Failed to log banner click:', error);
-        });
+      // Fire-and-forget - don't await, don't block
+      (async () => {
+        try {
+          await supabase.from('banner_clicks').insert({
+            banner_id: banner.id,
+            session_id: sessionId,
+          });
+        } catch (e) {
+          console.warn('Failed to log banner click:', e);
+        }
+      })();
     }
   };
 
