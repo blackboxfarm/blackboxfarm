@@ -3,6 +3,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
+import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
 import { Badge } from '@/components/ui/badge';
@@ -128,7 +129,17 @@ interface ChannelConfig {
   holder_check_action?: 'skip' | 'watchlist' | 'warn_only';
   // Fantasy buy announcement settings
   tweet_on_fantasy_buy?: boolean;
-  announce_to_channel_id?: string | null;
+  telegram_announcements_enabled?: boolean;
+}
+
+interface AnnouncementTarget {
+  id: string;
+  source_channel_id: string;
+  target_channel_id: string;
+  target_channel_name: string | null;
+  custom_message: string;
+  is_active: boolean;
+  sort_order: number;
 }
 
 interface FlipItWallet {
@@ -224,7 +235,11 @@ export function ChannelManagement() {
     success: boolean;
     message: string;
     messageCount?: number;
-  }>>({})
+  }>>({});
+  
+  // Announcement targets state
+  const [announcementTargets, setAnnouncementTargets] = useState<Record<string, AnnouncementTarget[]>>({});
+  const [loadingTargets, setLoadingTargets] = useState<string | null>(null);
 
   useEffect(() => {
     loadChannels();
@@ -278,6 +293,106 @@ export function ChannelManagement() {
       toast.error('Failed to load channels');
     } finally {
       setLoading(false);
+    }
+  };
+
+  // ============================================
+  // ANNOUNCEMENT TARGETS CRUD
+  // ============================================
+  const loadAnnouncementTargets = async (sourceChannelId: string) => {
+    setLoadingTargets(sourceChannelId);
+    try {
+      const { data, error } = await supabase
+        .from('telegram_announcement_targets')
+        .select('*')
+        .eq('source_channel_id', sourceChannelId)
+        .order('sort_order', { ascending: true });
+
+      if (error) throw error;
+      setAnnouncementTargets(prev => ({
+        ...prev,
+        [sourceChannelId]: (data || []) as AnnouncementTarget[]
+      }));
+    } catch (err) {
+      console.error('Error loading announcement targets:', err);
+    } finally {
+      setLoadingTargets(null);
+    }
+  };
+
+  const addAnnouncementTarget = async (sourceChannelId: string, targetChannelId: string, targetChannelName: string) => {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error('Not authenticated');
+
+      const existingTargets = announcementTargets[sourceChannelId] || [];
+      const nextOrder = existingTargets.length;
+
+      const { data, error } = await supabase
+        .from('telegram_announcement_targets')
+        .insert({
+          source_channel_id: sourceChannelId,
+          target_channel_id: targetChannelId,
+          target_channel_name: targetChannelName,
+          custom_message: "Aped a bit of this - DYOR - I'm just guessing",
+          is_active: true,
+          sort_order: nextOrder,
+          user_id: user.id
+        })
+        .select()
+        .single();
+
+      if (error) throw error;
+      
+      setAnnouncementTargets(prev => ({
+        ...prev,
+        [sourceChannelId]: [...(prev[sourceChannelId] || []), data as AnnouncementTarget]
+      }));
+      toast.success('Announcement target added');
+    } catch (err) {
+      console.error('Error adding announcement target:', err);
+      toast.error('Failed to add target');
+    }
+  };
+
+  const updateAnnouncementTarget = async (targetId: string, sourceChannelId: string, updates: Partial<AnnouncementTarget>) => {
+    try {
+      const { error } = await supabase
+        .from('telegram_announcement_targets')
+        .update(updates)
+        .eq('id', targetId);
+
+      if (error) throw error;
+      
+      setAnnouncementTargets(prev => ({
+        ...prev,
+        [sourceChannelId]: (prev[sourceChannelId] || []).map(t => 
+          t.id === targetId ? { ...t, ...updates } : t
+        )
+      }));
+    } catch (err) {
+      console.error('Error updating announcement target:', err);
+      toast.error('Failed to update target');
+    }
+  };
+
+  const deleteAnnouncementTarget = async (targetId: string, sourceChannelId: string) => {
+    try {
+      const { error } = await supabase
+        .from('telegram_announcement_targets')
+        .delete()
+        .eq('id', targetId);
+
+      if (error) throw error;
+      
+      setAnnouncementTargets(prev => ({
+        ...prev,
+        [sourceChannelId]: (prev[sourceChannelId] || []).filter(t => t.id !== targetId)
+      }));
+      toast.success('Announcement target removed');
+    } catch (err) {
+      console.error('Error deleting announcement target:', err);
+      toast.error('Failed to remove target');
     }
   };
 
@@ -1513,44 +1628,126 @@ export function ChannelManagement() {
                       />
                     </div>
 
-                    {/* Telegram Announcement */}
+                    {/* Telegram Multi-Channel Announcements */}
                     <div className={`p-2 rounded border ${
-                      channel.announce_to_channel_id 
+                      channel.telegram_announcements_enabled 
                         ? 'bg-cyan-500/10 border-cyan-500/30' 
                         : 'bg-muted/30 border-border/50'
                     }`}>
-                      <div className="flex items-center gap-2 mb-2">
-                        <MessageSquare className={`h-4 w-4 ${channel.announce_to_channel_id ? 'text-cyan-500' : 'text-muted-foreground'}`} />
-                        <div>
-                          <span className="text-sm font-medium">Telegram Announcement</span>
-                          <p className="text-xs text-muted-foreground">
-                            Post to a different group when you ape
-                          </p>
+                      <div className="flex items-center justify-between mb-2">
+                        <div className="flex items-center gap-2">
+                          <MessageSquare className={`h-4 w-4 ${channel.telegram_announcements_enabled ? 'text-cyan-500' : 'text-muted-foreground'}`} />
+                          <div>
+                            <span className="text-sm font-medium">Telegram Announcements</span>
+                            <p className="text-xs text-muted-foreground">
+                              Post to multiple groups with custom messages
+                            </p>
+                          </div>
                         </div>
+                        <Switch 
+                          checked={channel.telegram_announcements_enabled || false}
+                          onCheckedChange={(checked) => {
+                            updateFlipitSettings(channel.id, 'telegram_announcements_enabled', checked);
+                            if (checked && !announcementTargets[channel.id]) {
+                              loadAnnouncementTargets(channel.id);
+                            }
+                          }}
+                        />
                       </div>
-                      <Select
-                        value={channel.announce_to_channel_id || 'none'}
-                        onValueChange={(value) => updateFlipitSettings(channel.id, 'announce_to_channel_id', value === 'none' ? null : value)}
-                      >
-                        <SelectTrigger className="h-8 text-sm">
-                          <SelectValue placeholder="Select announcement group..." />
-                        </SelectTrigger>
-                        <SelectContent className="bg-popover border border-border">
-                          <SelectItem value="none">None (disabled)</SelectItem>
-                          {channels
-                            .filter(c => c.id !== channel.id)
-                            .map((c) => (
-                              <SelectItem key={c.id} value={c.channel_id}>
-                                {c.channel_name || c.channel_username} {c.channel_type === 'group' ? '👥' : '📢'}
-                              </SelectItem>
-                            ))
-                          }
-                        </SelectContent>
-                      </Select>
-                      {channel.announce_to_channel_id && (
-                        <p className="text-xs text-cyan-400 mt-1">
-                          Will post: Token address → 2s pause → "Aped a bit of this - DYOR - I'm just guessing"
-                        </p>
+                      
+                      {channel.telegram_announcements_enabled && (
+                        <div className="space-y-2 mt-3">
+                          {/* Load targets on first render */}
+                          {!announcementTargets[channel.id] && loadingTargets !== channel.id && (
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="w-full text-xs"
+                              onClick={() => loadAnnouncementTargets(channel.id)}
+                            >
+                              Load announcement targets
+                            </Button>
+                          )}
+                          
+                          {loadingTargets === channel.id && (
+                            <div className="flex items-center justify-center py-2">
+                              <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+                            </div>
+                          )}
+                          
+                          {/* List of configured targets */}
+                          {(announcementTargets[channel.id] || []).map((target) => (
+                            <div 
+                              key={target.id} 
+                              className={`p-2 rounded border ${target.is_active ? 'bg-cyan-500/5 border-cyan-500/20' : 'bg-muted/20 border-border/30 opacity-60'}`}
+                            >
+                              <div className="flex items-center justify-between mb-2">
+                                <div className="flex items-center gap-2">
+                                  <Users className="h-3 w-3 text-cyan-400" />
+                                  <span className="text-sm font-medium">{target.target_channel_name || target.target_channel_id}</span>
+                                </div>
+                                <div className="flex items-center gap-1">
+                                  <Switch
+                                    checked={target.is_active}
+                                    onCheckedChange={(checked) => updateAnnouncementTarget(target.id, channel.id, { is_active: checked })}
+                                  />
+                                  <Button
+                                    variant="ghost"
+                                    size="icon"
+                                    className="h-6 w-6 text-destructive hover:bg-destructive/10"
+                                    onClick={() => deleteAnnouncementTarget(target.id, channel.id)}
+                                  >
+                                    <Trash2 className="h-3 w-3" />
+                                  </Button>
+                                </div>
+                              </div>
+                              <Textarea
+                                value={target.custom_message}
+                                onChange={(e) => updateAnnouncementTarget(target.id, channel.id, { custom_message: e.target.value })}
+                                placeholder="Custom message..."
+                                className="text-xs h-16 resize-none"
+                              />
+                            </div>
+                          ))}
+                          
+                          {/* Add new target */}
+                          <div className="pt-2 border-t border-border/30">
+                            <Label className="text-xs text-muted-foreground mb-1 block">Add Target Channel</Label>
+                            <Select
+                              value=""
+                              onValueChange={(value) => {
+                                const selectedChannel = channels.find(c => c.channel_id === value);
+                                if (selectedChannel) {
+                                  addAnnouncementTarget(
+                                    channel.id, 
+                                    selectedChannel.channel_id, 
+                                    selectedChannel.channel_name || selectedChannel.channel_username || selectedChannel.channel_id
+                                  );
+                                }
+                              }}
+                            >
+                              <SelectTrigger className="h-8 text-sm">
+                                <SelectValue placeholder="+ Add announcement target..." />
+                              </SelectTrigger>
+                              <SelectContent className="bg-popover border border-border">
+                                {channels
+                                  .filter(c => c.id !== channel.id && !(announcementTargets[channel.id] || []).some(t => t.target_channel_id === c.channel_id))
+                                  .map((c) => (
+                                    <SelectItem key={c.id} value={c.channel_id}>
+                                      {c.channel_name || c.channel_username} {c.channel_type === 'group' ? '👥' : '📢'}
+                                    </SelectItem>
+                                  ))
+                                }
+                              </SelectContent>
+                            </Select>
+                          </div>
+                          
+                          {(announcementTargets[channel.id] || []).length > 0 && (
+                            <p className="text-xs text-cyan-400">
+                              ⏱️ 3-second pause between groups to avoid rate limits
+                            </p>
+                          )}
+                        </div>
                       )}
                     </div>
                   </div>
