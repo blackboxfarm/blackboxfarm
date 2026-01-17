@@ -8402,6 +8402,95 @@ export type Database = {
         }
         Relationships: []
       }
+      telegram_monitor_run_logs: {
+        Row: {
+          calls_inserted_count: number
+          channel_config_id: string | null
+          channel_id: string | null
+          channel_name: string | null
+          channel_username: string | null
+          created_at: string
+          eligible_count: number
+          error_message: string | null
+          fantasy_positions_inserted_count: number
+          fetched_count: number
+          finished_at: string | null
+          flipit_buys_count: number
+          id: string
+          interpretations_inserted_count: number
+          lock_acquired: boolean | null
+          mtproto_used: boolean | null
+          new_max_message_id: number | null
+          new_messages_count: number
+          previous_message_id: number | null
+          run_id: string
+          skip_reasons: Json | null
+          started_at: string
+          status: string
+          tokens_found_count: number
+        }
+        Insert: {
+          calls_inserted_count?: number
+          channel_config_id?: string | null
+          channel_id?: string | null
+          channel_name?: string | null
+          channel_username?: string | null
+          created_at?: string
+          eligible_count?: number
+          error_message?: string | null
+          fantasy_positions_inserted_count?: number
+          fetched_count?: number
+          finished_at?: string | null
+          flipit_buys_count?: number
+          id?: string
+          interpretations_inserted_count?: number
+          lock_acquired?: boolean | null
+          mtproto_used?: boolean | null
+          new_max_message_id?: number | null
+          new_messages_count?: number
+          previous_message_id?: number | null
+          run_id: string
+          skip_reasons?: Json | null
+          started_at?: string
+          status?: string
+          tokens_found_count?: number
+        }
+        Update: {
+          calls_inserted_count?: number
+          channel_config_id?: string | null
+          channel_id?: string | null
+          channel_name?: string | null
+          channel_username?: string | null
+          created_at?: string
+          eligible_count?: number
+          error_message?: string | null
+          fantasy_positions_inserted_count?: number
+          fetched_count?: number
+          finished_at?: string | null
+          flipit_buys_count?: number
+          id?: string
+          interpretations_inserted_count?: number
+          lock_acquired?: boolean | null
+          mtproto_used?: boolean | null
+          new_max_message_id?: number | null
+          new_messages_count?: number
+          previous_message_id?: number | null
+          run_id?: string
+          skip_reasons?: Json | null
+          started_at?: string
+          status?: string
+          tokens_found_count?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "telegram_monitor_run_logs_channel_config_id_fkey"
+            columns: ["channel_config_id"]
+            isOneToOne: false
+            referencedRelation: "telegram_channel_config"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       telegram_mtproto_session: {
         Row: {
           created_at: string | null
