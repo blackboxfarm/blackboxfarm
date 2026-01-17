@@ -16,8 +16,28 @@ async function acquireMtprotoLock(supabase: any, lockerId: string): Promise<bool
   const now = new Date();
   const expiresAt = new Date(now.getTime() + LOCK_TIMEOUT_MS);
   
-  // Try to acquire lock - only succeeds if lock is free (null) or expired
-  // The lock is free when locked_by is null, OR when expires_at is null/expired
+  // First, check if lock is available (free or expired)
+  const { data: lockState, error: checkError } = await supabase
+    .from('telegram_monitor_lock')
+    .select('*')
+    .eq('id', 'singleton')
+    .single();
+  
+  if (checkError) {
+    console.log(`[telegram-channel-monitor] Error checking lock state:`, checkError);
+    return false;
+  }
+  
+  // Check if lock is free (null locked_by) or expired
+  const lockIsFree = !lockState.locked_by;
+  const lockIsExpired = lockState.expires_at && new Date(lockState.expires_at) < now;
+  
+  if (!lockIsFree && !lockIsExpired) {
+    console.log(`[telegram-channel-monitor] Lock acquisition failed - another instance is running (locked_by: ${lockState.locked_by}, expires_at: ${lockState.expires_at})`);
+    return false;
+  }
+  
+  // Try to acquire the lock
   const { data, error } = await supabase
     .from('telegram_monitor_lock')
     .update({
@@ -26,12 +46,11 @@ async function acquireMtprotoLock(supabase: any, lockerId: string): Promise<bool
       expires_at: expiresAt.toISOString()
     })
     .eq('id', 'singleton')
-    .or(`locked_by.is.null,expires_at.is.null,expires_at.lt.${now.toISOString()}`)
     .select()
     .single();
   
   if (error || !data) {
-    console.log(`[telegram-channel-monitor] Lock acquisition failed - another instance is running`, error);
+    console.log(`[telegram-channel-monitor] Lock update failed:`, error);
     return false;
   }
   
