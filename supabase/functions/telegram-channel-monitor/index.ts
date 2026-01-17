@@ -2784,13 +2784,34 @@ serve(async (req) => {
           console.error(`[telegram-channel-monitor] Failed to update last_message_id:`, updateError);
         }
 
-        results.push({
+        // Build per-channel run stats
+        const channelRunStats = {
           channel: config.channel_name || channelUsername || channelId,
           channelType,
           tradingMode,
           messagesFound: channelMessages.length,
           success: true
-        });
+        };
+        results.push(channelRunStats);
+        
+        // Log to telegram_monitor_run_logs table for debugging visibility
+        try {
+          await supabase.from('telegram_monitor_run_logs').insert({
+            run_id: lockerId,
+            channel_config_id: config.id,
+            channel_name: config.channel_name || channelUsername || channelId,
+            fetched_count: channelMessages.length,
+            eligible_count: channelMessages.filter(m => parseInt(m.messageId) > (config.last_message_id || 0)).length,
+            tokens_found_count: 0, // Will be updated below
+            calls_inserted_count: 0, // Will be updated below  
+            fantasy_inserted_count: 0, // Will be updated below
+            status: 'completed',
+            warning: groupWarning || null,
+            error_message: null
+          });
+        } catch (logError) {
+          console.warn('[telegram-channel-monitor] Failed to log run stats:', logError);
+        }
 
       } catch (channelError: any) {
         console.error(`[telegram-channel-monitor] Error processing channel:`, channelError);
@@ -2801,6 +2822,25 @@ serve(async (req) => {
           success: false,
           error: channelError.message
         });
+        
+        // Log error to telegram_monitor_run_logs
+        try {
+          await supabase.from('telegram_monitor_run_logs').insert({
+            run_id: lockerId,
+            channel_config_id: config.id,
+            channel_name: config.channel_name || channelUsername || channelId,
+            fetched_count: 0,
+            eligible_count: 0,
+            tokens_found_count: 0,
+            calls_inserted_count: 0,
+            fantasy_inserted_count: 0,
+            status: 'error',
+            warning: null,
+            error_message: channelError.message?.slice(0, 500) || 'Unknown error'
+          });
+        } catch (logError) {
+          console.warn('[telegram-channel-monitor] Failed to log error stats:', logError);
+        }
       }
     }
 
