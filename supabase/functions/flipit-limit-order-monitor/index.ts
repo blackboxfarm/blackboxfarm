@@ -199,6 +199,8 @@ serve(async (req) => {
               tokenMint: order.token_mint,
               walletId: order.wallet_id,
               buyAmountUsd: buyAmountUsd,
+              // Use the trigger price as the protected "display" price
+              displayPriceUsd: currentPrice,
               targetMultiplier: target_multiplier,
               slippageBps: slippage_bps,
               priorityFeeMode: priority_fee_mode,

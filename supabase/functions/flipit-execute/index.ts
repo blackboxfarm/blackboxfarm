@@ -463,7 +463,7 @@ serve(async (req) => {
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
     const body = await req.json();
-    const { action, tokenMint, walletId, buyAmountSol: explicitBuyAmountSol, buyAmountUsd, targetMultiplier, positionId, slippageBps, priorityFeeMode, customPriorityFee, source, sourceChannelId, isScalpPosition, scalpTakeProfitPct, scalpMoonBagPct, scalpStopLossPct, moonbagEnabled, moonbagSellPct, moonbagKeepPct, positionType, isDiamondHand, diamondTrailingStopPct, diamondMinPeakX, diamondMaxHoldHours } = body;
+    const { action, tokenMint, walletId, buyAmountSol: explicitBuyAmountSol, buyAmountUsd, displayPriceUsd, targetMultiplier, positionId, slippageBps, priorityFeeMode, customPriorityFee, source, sourceChannelId, isScalpPosition, scalpTakeProfitPct, scalpMoonBagPct, scalpStopLossPct, moonbagEnabled, moonbagSellPct, moonbagKeepPct, positionType, isDiamondHand, diamondTrailingStopPct, diamondMinPeakX, diamondMaxHoldHours } = body;
 
     // Default slippage 5% (500 bps), configurable
     const effectiveSlippage = slippageBps || 500;
@@ -743,11 +743,15 @@ serve(async (req) => {
       try {
         const tradeGuardConfig = await getTradeGuardConfig(supabase);
         console.log("[TradeGuard] Config:", JSON.stringify(tradeGuardConfig));
-        
+
+        const displayPriceForGuard = (Number.isFinite(Number(displayPriceUsd)) && Number(displayPriceUsd) > 0)
+          ? Number(displayPriceUsd)
+          : currentPrice;
+
         const quoteValidation = await validateBuyQuote(
           tokenMint,
           buyAmountSol,
-          currentPrice,
+          displayPriceForGuard,
           tradeGuardConfig
         );
         
@@ -971,6 +975,8 @@ serve(async (req) => {
             quantity_tokens: quantityTokens,
             buy_price_usd: actualBuyPriceUsd, // Use calculated price, not stale quote
             buy_amount_usd: actualBuyAmountUsd,
+            // CRITICAL: target must be based on the REAL entry price (not the pre-buy quote)
+            target_price_usd: actualBuyPriceUsd * mult,
             status: "holding",
             error_message: null,
           })
@@ -1014,6 +1020,8 @@ serve(async (req) => {
                   buy_amount_sol: buyData.solSpent,
                   buy_amount_usd: verifiedBuyAmountUsd,
                   buy_price_usd: verifiedBuyPriceUsd,
+                  // CRITICAL: target must track verified entry price too
+                  target_price_usd: verifiedBuyPriceUsd * mult,
                   buy_fee_sol: buyData.fee,
                   entry_verified: true,
                   entry_verified_at: new Date().toISOString(),
@@ -1071,8 +1079,8 @@ serve(async (req) => {
           positionId: position.id,
           signature,
           signatures: (swapResult as any)?.signatures ?? [signature],
-          entryPrice: currentPrice,
-          targetPrice: targetPrice,
+          entryPrice: actualBuyPriceUsd,
+          targetPrice: actualBuyPriceUsd * mult,
           multiplier: mult,
           quantityTokens: quantityTokens,
         });
