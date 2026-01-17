@@ -46,6 +46,7 @@ import {
 } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
 import { ChannelScanLogs } from './ChannelScanLogs';
+import { MonitorHealthPanel } from './MonitorHealthPanel';
 import { TradingRulesManager } from './TradingRulesManager';
 import { TradingKeywordsManager } from './TradingKeywordsManager';
 import { useSolPrice } from '@/hooks/useSolPrice';
@@ -231,6 +232,7 @@ export function ChannelManagement() {
   const [expandedLogs, setExpandedLogs] = useState<string | null>(null);
   const [expandedRules, setExpandedRules] = useState<string | null>(null);
   const [expandedKeywords, setExpandedKeywords] = useState<string | null>(null);
+  const [showHealthPanel, setShowHealthPanel] = useState(false);
   const [channelTestResults, setChannelTestResults] = useState<Record<string, {
     success: boolean;
     message: string;
@@ -1177,6 +1179,14 @@ export function ChannelManagement() {
           </div>
           
           <Button 
+            variant={showHealthPanel ? 'default' : 'outline'} 
+            onClick={() => setShowHealthPanel(!showHealthPanel)}
+            className={showHealthPanel ? '' : 'border-blue-500/30 text-blue-400 hover:bg-blue-500/10'}
+          >
+            <Eye className="h-4 w-4 mr-2" />
+            Monitor Health
+          </Button>
+          <Button 
             variant="outline" 
             onClick={enableAllChannels}
             className="border-green-500/30 text-green-400 hover:bg-green-500/10"
@@ -1261,6 +1271,11 @@ export function ChannelManagement() {
           </Dialog>
         </div>
       </div>
+
+      {/* Monitor Health Panel */}
+      {showHealthPanel && (
+        <MonitorHealthPanel />
+      )}
 
       {/* List View */}
       {viewMode === 'list' && (
