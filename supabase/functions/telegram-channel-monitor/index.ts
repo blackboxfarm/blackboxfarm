@@ -16,7 +16,8 @@ async function acquireMtprotoLock(supabase: any, lockerId: string): Promise<bool
   const now = new Date();
   const expiresAt = new Date(now.getTime() + LOCK_TIMEOUT_MS);
   
-  // Try to acquire lock - only succeeds if lock is free or expired
+  // Try to acquire lock - only succeeds if lock is free (null) or expired
+  // The lock is free when locked_by is null, OR when expires_at is null/expired
   const { data, error } = await supabase
     .from('telegram_monitor_lock')
     .update({
@@ -25,12 +26,12 @@ async function acquireMtprotoLock(supabase: any, lockerId: string): Promise<bool
       expires_at: expiresAt.toISOString()
     })
     .eq('id', 'singleton')
-    .or(`locked_by.is.null,expires_at.lt.${now.toISOString()}`)
+    .or(`locked_by.is.null,expires_at.is.null,expires_at.lt.${now.toISOString()}`)
     .select()
     .single();
   
   if (error || !data) {
-    console.log(`[telegram-channel-monitor] Lock acquisition failed - another instance is running`);
+    console.log(`[telegram-channel-monitor] Lock acquisition failed - another instance is running`, error);
     return false;
   }
   
