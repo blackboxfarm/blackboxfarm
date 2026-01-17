@@ -7676,6 +7676,7 @@ export type Database = {
       }
       telegram_channel_config: {
         Row: {
+          announce_to_channel_id: string | null
           ape_keyword_enabled: boolean | null
           auto_monitor_enabled: boolean | null
           channel_id: string
@@ -7754,11 +7755,13 @@ export type Database = {
           total_buys_executed: number | null
           total_calls_detected: number | null
           trading_mode: string | null
+          tweet_on_fantasy_buy: boolean | null
           updated_at: string
           user_id: string | null
           watch_mode_fantasy_only: boolean | null
         }
         Insert: {
+          announce_to_channel_id?: string | null
           ape_keyword_enabled?: boolean | null
           auto_monitor_enabled?: boolean | null
           channel_id: string
@@ -7837,11 +7840,13 @@ export type Database = {
           total_buys_executed?: number | null
           total_calls_detected?: number | null
           trading_mode?: string | null
+          tweet_on_fantasy_buy?: boolean | null
           updated_at?: string
           user_id?: string | null
           watch_mode_fantasy_only?: boolean | null
         }
         Update: {
+          announce_to_channel_id?: string | null
           ape_keyword_enabled?: boolean | null
           auto_monitor_enabled?: boolean | null
           channel_id?: string
@@ -7920,6 +7925,7 @@ export type Database = {
           total_buys_executed?: number | null
           total_calls_detected?: number | null
           trading_mode?: string | null
+          tweet_on_fantasy_buy?: boolean | null
           updated_at?: string
           user_id?: string | null
           watch_mode_fantasy_only?: boolean | null
