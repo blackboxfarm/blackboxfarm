@@ -2099,41 +2099,59 @@ serve(async (req) => {
                       }
                     }
 
-                    // 2. Telegram announcement (if target channel configured)
-                    if (config.announce_to_channel_id) {
-                      console.log(`[telegram-channel-monitor] Sending Telegram announcement to ${config.announce_to_channel_id} for ${tokenMint}`);
-                      try {
-                        // Use a background task to send the announcement with delay
+                    // 2. Telegram multi-channel announcements (if enabled)
+                    if (config.telegram_announcements_enabled) {
+                      console.log(`[telegram-channel-monitor] Fetching announcement targets for channel ${config.id}`);
+                      
+                      const { data: announceTargets, error: targetsError } = await supabase
+                        .from('telegram_announcement_targets')
+                        .select('*')
+                        .eq('source_channel_id', config.id)
+                        .eq('is_active', true)
+                        .order('sort_order');
+                      
+                      if (targetsError) {
+                        console.error(`[telegram-channel-monitor] Failed to fetch announcement targets:`, targetsError);
+                      } else if (announceTargets && announceTargets.length > 0) {
+                        console.log(`[telegram-channel-monitor] Sending announcements to ${announceTargets.length} targets`);
+                        
                         EdgeRuntime.waitUntil((async () => {
-                          try {
-                            // First message: token address
-                            await supabase.functions.invoke('telegram-mtproto-auth', {
-                              body: {
-                                action: 'send_message',
-                                chatId: config.announce_to_channel_id,
-                                message: tokenMint
-                              }
-                            });
+                          for (let i = 0; i < announceTargets.length; i++) {
+                            const target = announceTargets[i];
                             
-                            // Wait 2 seconds
-                            await new Promise(resolve => setTimeout(resolve, 2000));
+                            try {
+                              // First message: token address
+                              await supabase.functions.invoke('telegram-mtproto-auth', {
+                                body: {
+                                  action: 'send_message',
+                                  chatId: target.target_channel_id,
+                                  message: tokenMint
+                                }
+                              });
+                              
+                              // Wait 2 seconds
+                              await new Promise(resolve => setTimeout(resolve, 2000));
+                              
+                              // Second message: custom message
+                              await supabase.functions.invoke('telegram-mtproto-auth', {
+                                body: {
+                                  action: 'send_message',
+                                  chatId: target.target_channel_id,
+                                  message: target.custom_message || "Aped a bit of this - DYOR - I'm just guessing"
+                                }
+                              });
+                              
+                              console.log(`[telegram-channel-monitor] Announced to ${target.target_channel_name || target.target_channel_id}`);
+                            } catch (innerError) {
+                              console.error(`[telegram-channel-monitor] Failed announcing to ${target.target_channel_id}:`, innerError);
+                            }
                             
-                            // Second message: DYOR disclaimer
-                            await supabase.functions.invoke('telegram-mtproto-auth', {
-                              body: {
-                                action: 'send_message',
-                                chatId: config.announce_to_channel_id,
-                                message: "Aped a bit of this - DYOR - I'm just guessing"
-                              }
-                            });
-                            
-                            console.log(`[telegram-channel-monitor] Telegram announcement sent to ${config.announce_to_channel_id}`);
-                          } catch (innerError) {
-                            console.error(`[telegram-channel-monitor] Telegram announcement background task failed:`, innerError);
+                            // 3-second pause between groups to avoid rate limits
+                            if (i < announceTargets.length - 1) {
+                              await new Promise(resolve => setTimeout(resolve, 3000));
+                            }
                           }
                         })());
-                      } catch (announceError) {
-                        console.error(`[telegram-channel-monitor] Failed to send Telegram announcement:`, announceError);
                       }
                     }
                   }

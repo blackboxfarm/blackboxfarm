@@ -7500,6 +7500,50 @@ export type Database = {
         }
         Relationships: []
       }
+      telegram_announcement_targets: {
+        Row: {
+          created_at: string | null
+          custom_message: string | null
+          id: string
+          is_active: boolean | null
+          sort_order: number | null
+          source_channel_id: string
+          target_channel_id: string
+          target_channel_name: string | null
+          user_id: string | null
+        }
+        Insert: {
+          created_at?: string | null
+          custom_message?: string | null
+          id?: string
+          is_active?: boolean | null
+          sort_order?: number | null
+          source_channel_id: string
+          target_channel_id: string
+          target_channel_name?: string | null
+          user_id?: string | null
+        }
+        Update: {
+          created_at?: string | null
+          custom_message?: string | null
+          id?: string
+          is_active?: boolean | null
+          sort_order?: number | null
+          source_channel_id?: string
+          target_channel_id?: string
+          target_channel_name?: string | null
+          user_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "telegram_announcement_targets_source_channel_id_fkey"
+            columns: ["source_channel_id"]
+            isOneToOne: false
+            referencedRelation: "telegram_channel_config"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       telegram_callers: {
         Row: {
           average_gain_percent: number | null
@@ -7676,7 +7720,6 @@ export type Database = {
       }
       telegram_channel_config: {
         Row: {
-          announce_to_channel_id: string | null
           ape_keyword_enabled: boolean | null
           auto_monitor_enabled: boolean | null
           channel_id: string
@@ -7752,6 +7795,7 @@ export type Database = {
           signal_classification_enabled: boolean | null
           standard_buy_amount_usd: number | null
           standard_sell_multiplier: number | null
+          telegram_announcements_enabled: boolean | null
           total_buys_executed: number | null
           total_calls_detected: number | null
           trading_mode: string | null
@@ -7761,7 +7805,6 @@ export type Database = {
           watch_mode_fantasy_only: boolean | null
         }
         Insert: {
-          announce_to_channel_id?: string | null
           ape_keyword_enabled?: boolean | null
           auto_monitor_enabled?: boolean | null
           channel_id: string
@@ -7837,6 +7880,7 @@ export type Database = {
           signal_classification_enabled?: boolean | null
           standard_buy_amount_usd?: number | null
           standard_sell_multiplier?: number | null
+          telegram_announcements_enabled?: boolean | null
           total_buys_executed?: number | null
           total_calls_detected?: number | null
           trading_mode?: string | null
@@ -7846,7 +7890,6 @@ export type Database = {
           watch_mode_fantasy_only?: boolean | null
         }
         Update: {
-          announce_to_channel_id?: string | null
           ape_keyword_enabled?: boolean | null
           auto_monitor_enabled?: boolean | null
           channel_id?: string
@@ -7922,6 +7965,7 @@ export type Database = {
           signal_classification_enabled?: boolean | null
           standard_buy_amount_usd?: number | null
           standard_sell_multiplier?: number | null
+          telegram_announcements_enabled?: boolean | null
           total_buys_executed?: number | null
           total_calls_detected?: number | null
           trading_mode?: string | null
