@@ -9,6 +9,7 @@ const corsHeaders = {
 interface TokenStats {
   symbol: string;
   name: string;
+  tokenAddress?: string;
   totalHolders: number;
   realHolders: number;
   whaleCount: number;
@@ -18,6 +19,15 @@ interface TokenStats {
   dustPercentage: number;
   healthScore: number;
   healthGrade: string;
+}
+
+function escapeHtml(s: string) {
+  return s
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#039;");
 }
 
 serve(async (req) => {
@@ -121,13 +131,14 @@ Design Requirements:
 
     // NOTE: Bucket must exist. We use the already-provisioned public bucket.
     const bucket = "twitter-assets";
-    const fileName = `share-cards/${tokenStats.symbol.toLowerCase()}-${Date.now()}.png`;
+    const now = Date.now();
+    const imageFileName = `share-cards/${tokenStats.symbol.toLowerCase()}-${now}.png`;
 
     const imageBlob = new Blob([imageBytes], { type: "image/png" });
 
     const { error: uploadError } = await supabase.storage
       .from(bucket)
-      .upload(fileName, imageBlob, {
+      .upload(imageFileName, imageBlob, {
         contentType: "image/png",
         upsert: true,
         cacheControl: "3600",
@@ -148,17 +159,111 @@ Design Requirements:
       );
     }
 
-    const { data: publicUrl } = supabase.storage.from(bucket).getPublicUrl(fileName);
+    const { data: imagePublicUrl } = supabase.storage.from(bucket).getPublicUrl(imageFileName);
 
-    console.log('Image uploaded successfully:', publicUrl.publicUrl);
+    console.log('Image uploaded successfully:', imagePublicUrl.publicUrl);
 
-    return new Response(JSON.stringify({ 
-      success: true,
-      imageUrl: publicUrl.publicUrl,
-      imageBase64
-    }), {
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
-    });
+    // Create a public HTML "share page" in Storage that contains OG/Twitter meta tags.
+    // This is what X/Twitter will crawl to render the image preview.
+    const safeSymbol = escapeHtml((tokenStats.symbol || "TOKEN").toUpperCase());
+    const title = `Holder Analysis: $${safeSymbol} — BlackBox Farm`;
+    const description = `Free holder analysis report for $${safeSymbol}.`;
+    const canonical = tokenStats.tokenAddress
+      ? `https://blackbox.farm/holders?token=${encodeURIComponent(tokenStats.tokenAddress)}`
+      : "https://blackbox.farm/holders";
+
+    const sharePageHtml = `<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>${title}</title>
+  <meta name="description" content="${escapeHtml(description)}" />
+  <link rel="canonical" href="${escapeHtml(canonical)}" />
+
+  <meta property="og:type" content="website" />
+  <meta property="og:title" content="${title}" />
+  <meta property="og:description" content="${escapeHtml(description)}" />
+  <meta property="og:url" content="${escapeHtml(canonical)}" />
+  <meta property="og:image" content="${escapeHtml(imagePublicUrl.publicUrl)}" />
+  <meta property="og:image:secure_url" content="${escapeHtml(imagePublicUrl.publicUrl)}" />
+  <meta property="og:image:width" content="1200" />
+  <meta property="og:image:height" content="628" />
+
+  <meta name="twitter:card" content="summary_large_image" />
+  <meta name="twitter:title" content="${title}" />
+  <meta name="twitter:description" content="${escapeHtml(description)}" />
+  <meta name="twitter:image" content="${escapeHtml(imagePublicUrl.publicUrl)}" />
+
+  <style>
+    :root { color-scheme: dark; }
+    body { margin: 0; font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial; background: #0b0b0f; color: #eaeaf2; }
+    main { max-width: 920px; margin: 0 auto; padding: 28px 16px 40px; }
+    .card { border: 1px solid rgba(255,255,255,0.10); background: rgba(255,255,255,0.03); border-radius: 16px; overflow: hidden; }
+    .header { display:flex; align-items: baseline; justify-content: space-between; gap: 12px; padding: 16px 16px 10px; }
+    .kicker { font-size: 12px; opacity: 0.75; letter-spacing: 0.06em; text-transform: uppercase; }
+    .title { font-size: 18px; font-weight: 800; }
+    img { width: 100%; height: auto; display: block; }
+    .footer { display:flex; justify-content: space-between; gap: 10px; padding: 12px 16px 16px; font-size: 13px; opacity: 0.85; }
+    a { color: #6ee7b7; text-decoration: none; }
+    a:hover { text-decoration: underline; }
+  </style>
+</head>
+<body>
+  <main>
+    <div class="card">
+      <div class="header">
+        <div>
+          <div class="kicker">BlackBox Farm</div>
+          <div class="title">Holder Analysis: $${safeSymbol}</div>
+        </div>
+        <div class="kicker"><a href="${escapeHtml(canonical)}">blackbox.farm/holders</a></div>
+      </div>
+      <img src="${escapeHtml(imagePublicUrl.publicUrl)}" alt="Holder analysis share card for $${safeSymbol}" loading="eager" />
+      <div class="footer">
+        <span>Preview image for social sharing</span>
+        <span><a href="${escapeHtml(canonical)}">Open full report →</a></span>
+      </div>
+    </div>
+  </main>
+</body>
+</html>`;
+
+    let sharePageUrl: string | null = null;
+    try {
+      const sharePageFileName = `share-pages/${tokenStats.symbol.toLowerCase()}-${now}.html`;
+      const pageBlob = new Blob([sharePageHtml], { type: "text/html" });
+
+      const { error: pageUploadError } = await supabase.storage
+        .from(bucket)
+        .upload(sharePageFileName, pageBlob, {
+          contentType: "text/html",
+          upsert: true,
+          cacheControl: "3600",
+        });
+
+      if (pageUploadError) {
+        console.error("Share page upload error:", pageUploadError);
+      } else {
+        const { data: sharePagePublicUrl } = supabase.storage.from(bucket).getPublicUrl(sharePageFileName);
+        sharePageUrl = sharePagePublicUrl.publicUrl;
+        console.log("Share page uploaded successfully:", sharePageUrl);
+      }
+    } catch (e) {
+      console.error("Failed to create share page:", e);
+    }
+
+    return new Response(
+      JSON.stringify({
+        success: true,
+        imageUrl: imagePublicUrl.publicUrl,
+        sharePageUrl,
+        imageBase64,
+      }),
+      {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      }
+    );
 
   } catch (error) {
     console.error('Error generating share card:', error);
