@@ -931,17 +931,12 @@ serve(async (req) => {
         pumpAmount = sellAll ? "100%" : String(amount);
       }
 
-      // Use higher slippage for bonding curve tokens due to high volatility.
-      // We progressively retry up to 50% before falling back to DEX routing.
-      const basePumpSlippage = Math.max(Number(slippageBps), 1000); // 10% minimum
-      const slippageCandidates = Array.from(
-        new Set([
-          basePumpSlippage,
-          Math.min(basePumpSlippage * 2, 5000),
-          3500,
-          5000,
-        ].filter((n) => Number.isFinite(n) && n > 0))
-      ).sort((a, b) => a - b);
+      // Use the USER slippage for bonding curve tokens.
+      // CRITICAL: do NOT auto-increase slippage to 10-50% (that can cause massive overpay fills).
+      const basePumpSlippage = Math.max(1, Number(slippageBps));
+      const slippageCandidates = [basePumpSlippage]
+        .filter((n) => Number.isFinite(n) && n > 0)
+        .map((n) => Math.floor(n));
 
       console.log(
         `PumpPortal slippage candidates (bps): ${slippageCandidates.join(", ")}`

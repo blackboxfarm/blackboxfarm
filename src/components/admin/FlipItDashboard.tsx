@@ -1592,6 +1592,8 @@ export function FlipItDashboard() {
           // Pass raw amount in user's chosen denomination
           buyAmountSol: buyAmountMode === 'sol' ? parsedAmount : undefined,
           buyAmountUsd: buyAmountMode === 'usd' ? parsedAmount : undefined,
+          // CRITICAL: pass the UI-clicked price so backend can enforce price protection
+          displayPriceUsd: requestedPrice,
           targetMultiplier: targetMultiplier,
           slippageBps: slippageBps,
           priorityFeeMode: priorityFeeMode
