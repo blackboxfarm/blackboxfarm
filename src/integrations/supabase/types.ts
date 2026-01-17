@@ -3016,6 +3016,51 @@ export type Database = {
         }
         Relationships: []
       }
+      flipit_settings: {
+        Row: {
+          block_on_high_price_impact: boolean
+          created_at: string
+          id: string
+          jito_tip_lamports: number
+          max_price_impact_pct: number
+          max_price_premium_pct: number
+          require_quote_check: boolean
+          updated_at: string
+          use_helius_verification: boolean
+          use_jito_bundles: boolean
+          verification_retry_count: number
+          verification_retry_delay_ms: number
+        }
+        Insert: {
+          block_on_high_price_impact?: boolean
+          created_at?: string
+          id?: string
+          jito_tip_lamports?: number
+          max_price_impact_pct?: number
+          max_price_premium_pct?: number
+          require_quote_check?: boolean
+          updated_at?: string
+          use_helius_verification?: boolean
+          use_jito_bundles?: boolean
+          verification_retry_count?: number
+          verification_retry_delay_ms?: number
+        }
+        Update: {
+          block_on_high_price_impact?: boolean
+          created_at?: string
+          id?: string
+          jito_tip_lamports?: number
+          max_price_impact_pct?: number
+          max_price_premium_pct?: number
+          require_quote_check?: boolean
+          updated_at?: string
+          use_helius_verification?: boolean
+          use_jito_bundles?: boolean
+          verification_retry_count?: number
+          verification_retry_delay_ms?: number
+        }
+        Relationships: []
+      }
       flipit_tweet_quota: {
         Row: {
           created_at: string | null

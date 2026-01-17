@@ -6,6 +6,8 @@ import {
   type PriceResult 
 } from "../_shared/price-resolver.ts";
 import { parseBuyFromSolscan } from "../_shared/solscan-api.ts";
+import { validateBuyQuote, getTradeGuardConfig } from "../_shared/trade-guard.ts";
+import { verifyBuyTransaction, updatePositionWithVerifiedBuy } from "../_shared/helius-verify.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -735,17 +737,40 @@ serve(async (req) => {
       }
 
       // ========================================================
-      // PRICE IMPACT GUARD: DISABLED - Slippage protection handles this
+      // TRADE GUARD: Pre-Trade Quote Validation
+      // Blocks trades if executable price exceeds display price by threshold
       // ========================================================
-      // The price impact check was causing false rejections because:
-      // 1. Token decimals vary and can't be reliably determined pre-trade
-      // 2. Pump.fun bonding curve prices don't match Raydium quotes
-      // 3. For new tokens, price discovery is inherently volatile
-      // 
-      // Instead, we rely on:
-      // - Raydium swap's built-in slippage protection (effectiveSlippage bps)
-      // - Transaction simulation to catch bad trades before execution
-      console.log(`Skipping price impact pre-check, relying on ${effectiveSlippage}bps slippage protection`);
+      try {
+        const tradeGuardConfig = await getTradeGuardConfig(supabase);
+        console.log("[TradeGuard] Config:", JSON.stringify(tradeGuardConfig));
+        
+        const quoteValidation = await validateBuyQuote(
+          tokenMint,
+          buyAmountSol,
+          currentPrice,
+          tradeGuardConfig
+        );
+        
+        if (!quoteValidation.isValid) {
+          console.error("[TradeGuard] ❌ TRADE BLOCKED:", quoteValidation.blockReason);
+          
+          // Update position with block reason
+          await supabase
+            .from("flip_positions")
+            .update({
+              status: "blocked",
+              error_message: quoteValidation.blockReason,
+            })
+            .eq("id", position.id);
+          
+          return bad(`Trade blocked: ${quoteValidation.blockReason}`);
+        }
+        
+        console.log(`[TradeGuard] ✅ PASSED: Premium ${quoteValidation.premiumPct.toFixed(1)}%, Impact ${quoteValidation.priceImpactPct.toFixed(1)}%`);
+      } catch (guardErr) {
+        // Trade guard failure should NOT block trades - log and continue
+        console.warn("[TradeGuard] Validation error (continuing):", guardErr);
+      }
 
       // Execute the buy via raydium-swap
       try {
