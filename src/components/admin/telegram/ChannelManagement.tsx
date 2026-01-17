@@ -39,7 +39,9 @@ import {
   Users,
   LayoutGrid,
   List,
-  Eye
+  Eye,
+  Twitter,
+  Send
 } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
 import { ChannelScanLogs } from './ChannelScanLogs';
@@ -124,6 +126,9 @@ interface ChannelConfig {
   min_holder_count?: number;
   holder_check_enabled?: boolean;
   holder_check_action?: 'skip' | 'watchlist' | 'warn_only';
+  // Fantasy buy announcement settings
+  tweet_on_fantasy_buy?: boolean;
+  announce_to_channel_id?: string | null;
 }
 
 interface FlipItWallet {
@@ -1477,6 +1482,80 @@ export function ChannelManagement() {
                     </p>
                   )}
                 </div>
+
+                {/* Fantasy Buy Announcements Section */}
+                {channel.fantasy_mode && (
+                <div className="p-3 bg-muted/30 rounded-lg border border-border/50">
+                  <div className="flex items-center gap-2 mb-3">
+                    <Send className="h-4 w-4 text-cyan-500" />
+                    <span className="text-sm font-medium">Fantasy Buy Announcements</span>
+                  </div>
+                  
+                  <div className="space-y-3">
+                    {/* Twitter Toggle */}
+                    <div className={`flex items-center justify-between p-2 rounded border ${
+                      channel.tweet_on_fantasy_buy 
+                        ? 'bg-sky-500/10 border-sky-500/30' 
+                        : 'bg-muted/30 border-border/50'
+                    }`}>
+                      <div className="flex items-center gap-2">
+                        <Twitter className={`h-4 w-4 ${channel.tweet_on_fantasy_buy ? 'text-sky-500' : 'text-muted-foreground'}`} />
+                        <div>
+                          <span className="text-sm font-medium">Post to Twitter</span>
+                          <p className="text-xs text-muted-foreground">
+                            Tweet when fantasy buy is executed
+                          </p>
+                        </div>
+                      </div>
+                      <Switch 
+                        checked={channel.tweet_on_fantasy_buy || false}
+                        onCheckedChange={(checked) => updateFlipitSettings(channel.id, 'tweet_on_fantasy_buy', checked)}
+                      />
+                    </div>
+
+                    {/* Telegram Announcement */}
+                    <div className={`p-2 rounded border ${
+                      channel.announce_to_channel_id 
+                        ? 'bg-cyan-500/10 border-cyan-500/30' 
+                        : 'bg-muted/30 border-border/50'
+                    }`}>
+                      <div className="flex items-center gap-2 mb-2">
+                        <MessageSquare className={`h-4 w-4 ${channel.announce_to_channel_id ? 'text-cyan-500' : 'text-muted-foreground'}`} />
+                        <div>
+                          <span className="text-sm font-medium">Telegram Announcement</span>
+                          <p className="text-xs text-muted-foreground">
+                            Post to a different group when you ape
+                          </p>
+                        </div>
+                      </div>
+                      <Select
+                        value={channel.announce_to_channel_id || 'none'}
+                        onValueChange={(value) => updateFlipitSettings(channel.id, 'announce_to_channel_id', value === 'none' ? null : value)}
+                      >
+                        <SelectTrigger className="h-8 text-sm">
+                          <SelectValue placeholder="Select announcement group..." />
+                        </SelectTrigger>
+                        <SelectContent className="bg-popover border border-border">
+                          <SelectItem value="none">None (disabled)</SelectItem>
+                          {channels
+                            .filter(c => c.id !== channel.id)
+                            .map((c) => (
+                              <SelectItem key={c.id} value={c.channel_id}>
+                                {c.channel_name || c.channel_username} {c.channel_type === 'group' ? '👥' : '📢'}
+                              </SelectItem>
+                            ))
+                          }
+                        </SelectContent>
+                      </Select>
+                      {channel.announce_to_channel_id && (
+                        <p className="text-xs text-cyan-400 mt-1">
+                          Will post: Token address → 2s pause → "Aped a bit of this - DYOR - I'm just guessing"
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                </div>
+                )}
 
                 {/* FlipIt Auto-Buy Section */}
                 <div className="p-3 bg-muted/30 rounded-lg border border-border/50">

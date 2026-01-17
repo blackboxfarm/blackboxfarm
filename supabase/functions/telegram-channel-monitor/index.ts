@@ -2070,6 +2070,72 @@ serve(async (req) => {
                     const riskBadge = developerData?.riskLevel ? ` [${developerData.riskLevel.toUpperCase()}]` : '';
                     const rugcheckBadge = developerData?.rugcheckNormalised !== undefined ? ` RC:${developerData.rugcheckNormalised}/100` : '';
                     console.log(`[telegram-channel-monitor] Fantasy INSERTED: ${currentTokenData?.symbol || tokenMint} - $${currentRuleResult.buyAmount} @ $${entryPrice.toFixed(10)} (${tradingMode})${riskBadge}${rugcheckBadge}`);
+
+                    // ============================================
+                    // POST-FANTASY-BUY ANNOUNCEMENTS
+                    // ============================================
+                    
+                    // 1. Twitter posting (if enabled for this channel)
+                    if (config.tweet_on_fantasy_buy) {
+                      console.log(`[telegram-channel-monitor] Posting fantasy buy to Twitter for ${currentTokenData?.symbol || tokenMint}`);
+                      try {
+                        await supabase.functions.invoke('flipit-tweet', {
+                          body: {
+                            type: 'buy',
+                            tokenMint: tokenMint,
+                            tokenSymbol: currentTokenData?.symbol || 'TOKEN',
+                            tokenName: currentTokenData?.name || null,
+                            twitterUrl: currentTokenData?.twitterUrl || '',
+                            entryPrice: entryPrice,
+                            targetMultiplier: currentRuleResult.sellTarget,
+                            amountSol: currentRuleResult.buyAmount / (await getSolPrice() || 130),
+                            isFantasy: true,
+                            source: `telegram-${config.channel_name || config.channel_id}`
+                          }
+                        });
+                        console.log(`[telegram-channel-monitor] Twitter post sent for fantasy buy: ${currentTokenData?.symbol || tokenMint}`);
+                      } catch (tweetError) {
+                        console.error(`[telegram-channel-monitor] Failed to post tweet for fantasy buy:`, tweetError);
+                      }
+                    }
+
+                    // 2. Telegram announcement (if target channel configured)
+                    if (config.announce_to_channel_id) {
+                      console.log(`[telegram-channel-monitor] Sending Telegram announcement to ${config.announce_to_channel_id} for ${tokenMint}`);
+                      try {
+                        // Use a background task to send the announcement with delay
+                        EdgeRuntime.waitUntil((async () => {
+                          try {
+                            // First message: token address
+                            await supabase.functions.invoke('telegram-mtproto-auth', {
+                              body: {
+                                action: 'send_message',
+                                chatId: config.announce_to_channel_id,
+                                message: tokenMint
+                              }
+                            });
+                            
+                            // Wait 2 seconds
+                            await new Promise(resolve => setTimeout(resolve, 2000));
+                            
+                            // Second message: DYOR disclaimer
+                            await supabase.functions.invoke('telegram-mtproto-auth', {
+                              body: {
+                                action: 'send_message',
+                                chatId: config.announce_to_channel_id,
+                                message: "Aped a bit of this - DYOR - I'm just guessing"
+                              }
+                            });
+                            
+                            console.log(`[telegram-channel-monitor] Telegram announcement sent to ${config.announce_to_channel_id}`);
+                          } catch (innerError) {
+                            console.error(`[telegram-channel-monitor] Telegram announcement background task failed:`, innerError);
+                          }
+                        })());
+                      } catch (announceError) {
+                        console.error(`[telegram-channel-monitor] Failed to send Telegram announcement:`, announceError);
+                      }
+                    }
                   }
                 }
               }
