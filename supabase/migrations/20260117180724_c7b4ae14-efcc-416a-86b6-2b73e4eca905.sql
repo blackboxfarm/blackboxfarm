@@ -1,0 +1,1 @@
+DELETE FROM fantasy_positions WHERE created_at < NOW() - INTERVAL '1 day';
