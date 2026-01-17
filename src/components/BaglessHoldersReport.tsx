@@ -247,6 +247,7 @@ export function BaglessHoldersReport({ initialToken }: BaglessHoldersReportProps
   const [feedbackGiven, setFeedbackGiven] = useState<'up' | 'down' | null>(null);
   // Share card state
   const [shareCardImageUrl, setShareCardImageUrl] = useState<string | null>(null);
+  const [shareCardPageUrl, setShareCardPageUrl] = useState<string | null>(null);
   const [isGeneratingShareCard, setIsGeneratingShareCard] = useState(false);
   const { toast } = useToast();
   const { tokenData, fetchTokenMetadata } = useTokenMetadata();
@@ -636,6 +637,10 @@ export function BaglessHoldersReport({ initialToken }: BaglessHoldersReportProps
       if (data?.imageUrl) {
         setShareCardImageUrl(data.imageUrl);
         console.log('✅ Share card generated:', data.imageUrl);
+      }
+      if (data?.sharePageUrl) {
+        setShareCardPageUrl(data.sharePageUrl);
+        console.log('✅ Share page URL:', data.sharePageUrl);
       }
     } catch (err) {
       console.error('Failed to generate share card:', err);
@@ -1596,15 +1601,19 @@ export function BaglessHoldersReport({ initialToken }: BaglessHoldersReportProps
                       const score = report?.healthScore?.score || 50;
                       
                       const text = `🔎 Holder Analysis: $${ticker}
-CA:${tokenMint.trim()}
 
 🏛 ${totalWallets.toLocaleString()} Total Wallets
 ✅ ${realHolders.toLocaleString()} Real Holders
 🌫 ${dustPct}% Dust
 
-🐋 ${whales} Whales | 💪 ${strong} Strong | 🌱 ${active.toLocaleString()} Active`;
+🐋 ${whales} Whales | 💪 ${strong} Strong | 🌱 ${active.toLocaleString()} Active
+
+Health: ${grade} (${score}/100)
+
+Free holder report on BlackBox Farm`;
                       
-                      const shareUrl = `https://blackbox.farm/holders?token=${encodeURIComponent(tokenMint.trim())}`;
+                      // Use AI-generated share page URL if available for proper Twitter card preview
+                      const shareUrl = shareCardPageUrl || `https://blackbox.farm/holders?token=${encodeURIComponent(tokenMint.trim())}`;
                       window.open(`https://twitter.com/intent/tweet?text=${encodeURIComponent(text)}&url=${encodeURIComponent(shareUrl)}`, '_blank');
                     }}>
                       <span className="w-5 h-5 bg-foreground rounded-full flex items-center justify-center mr-2">
@@ -2299,17 +2308,20 @@ CA:${tokenMint.trim()}
                         const grade = report?.healthScore?.grade || 'C';
                         const score = report?.healthScore?.score || 50;
                         
-                        const text = `🔍 Holder/Wallet Analysis: $${ticker}
-CA: ${tokenMint.trim()}
+                        const text = `🔍 Holder Analysis: $${ticker}
 
-📊 ${totalWallets.toLocaleString()} Wallets   ✅ ${realHolders.toLocaleString()} Real Holders
-💨 ${dustPct}% Dust 😱
+📊 ${totalWallets.toLocaleString()} Wallets
+✅ ${realHolders.toLocaleString()} Real Holders
+💨 ${dustPct}% Dust
 
 🐋 ${whales} Whales | 💪 ${strong} Strong | 🌱 ${active.toLocaleString()} Active
 
-Health: ${grade} (${score}/100)`;
+Health: ${grade} (${score}/100)
+
+Free holder report on BlackBox Farm`;
                         
-                        const shareUrl = `https://blackbox.farm/holders?token=${encodeURIComponent(tokenMint.trim())}`;
+                        // Use AI-generated share page URL if available for proper Twitter card preview
+                        const shareUrl = shareCardPageUrl || `https://blackbox.farm/holders?token=${encodeURIComponent(tokenMint.trim())}`;
                         window.open(`https://twitter.com/intent/tweet?text=${encodeURIComponent(text)}&url=${encodeURIComponent(shareUrl)}`, '_blank');
                       }}>
                         <span className="w-5 h-5 bg-foreground rounded-full flex items-center justify-center mr-2">
