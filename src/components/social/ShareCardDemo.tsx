@@ -61,14 +61,17 @@ export function ShareCardDemo({ tokenStats = mockTokenStats }: { tokenStats?: To
 
   // Open Twitter share dialog with Web Intent
   const shareToTwitter = () => {
-    const tweetText = `🔍 Wallet Analysis: $${tokenStats.symbol}
+    const tweetText = `🔎 Holder Analysis: $${tokenStats.symbol}
 
-CA:${tokenStats.tokenAddress}
-
-📊 ${tokenStats.totalHolders.toLocaleString()} Wallets 
+🏛 ${tokenStats.totalHolders.toLocaleString()} Total Wallets
 ✅ ${tokenStats.realHolders.toLocaleString()} Real Holders
+🌫 ${tokenStats.dustPercentage}% Dust
 
-💨 ${tokenStats.dustPercentage}% Dust 😱`;
+🐋 ${tokenStats.whaleCount} Whales | 💪 ${tokenStats.strongCount} Strong | 🌱 ${tokenStats.activeCount.toLocaleString()} Active
+
+Health Grade: ${tokenStats.healthGrade} (${tokenStats.healthScore}/100)
+
+Free holder report on BlackBox Farm`;
 
     const shareUrl = getShareUrl();
     
