@@ -11,7 +11,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/u
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
-import { Loader2, Download, RefreshCw, Flag, AlertTriangle, Shield, TrendingUp, Diamond, Brain, Droplets, CheckCircle, Users, Wallet, DollarSign, BarChart3, Info, Search, Percent, ExternalLink, ChevronDown, ChevronUp, Eye, EyeOff, XCircle, Share2, MessageCircle, Send } from 'lucide-react';
+import { Loader2, Download, RefreshCw, Flag, AlertTriangle, Shield, TrendingUp, Diamond, Brain, Droplets, CheckCircle, Users, Wallet, DollarSign, BarChart3, Info, Search, Percent, ExternalLink, ChevronDown, ChevronUp, Eye, EyeOff, XCircle, Share2, MessageCircle, Send, Sparkles } from 'lucide-react';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { Progress } from '@/components/ui/progress';
 import { useTokenMetadata } from '@/hooks/useTokenMetadata';
@@ -1595,15 +1595,14 @@ export function BaglessHoldersReport({ initialToken }: BaglessHoldersReportProps
                       const grade = report?.healthScore?.grade || 'C';
                       const score = report?.healthScore?.score || 50;
                       
-                      const text = `🔍 Holder/Wallet Analysis: $${ticker}
-CA: ${tokenMint.trim()}
+                      const text = `🔎 Holder Analysis: $${ticker}
+CA:${tokenMint.trim()}
 
-📊 ${totalWallets.toLocaleString()} Wallets   ✅ ${realHolders.toLocaleString()} Real Holders
-💨 ${dustPct}% Dust 😱
+🏛 ${totalWallets.toLocaleString()} Total Wallets
+✅ ${realHolders.toLocaleString()} Real Holders
+🌫 ${dustPct}% Dust
 
-🐋 ${whales} Whales | 💪 ${strong} Strong | 🌱 ${active.toLocaleString()} Active
-
-Health: ${grade} (${score}/100)`;
+🐋 ${whales} Whales | 💪 ${strong} Strong | 🌱 ${active.toLocaleString()} Active`;
                       
                       const shareUrl = `https://blackbox.farm/holders?token=${encodeURIComponent(tokenMint.trim())}`;
                       window.open(`https://twitter.com/intent/tweet?text=${encodeURIComponent(text)}&url=${encodeURIComponent(shareUrl)}`, '_blank');
@@ -1646,6 +1645,41 @@ Health: ${grade} (${score}/100)`;
                   </DropdownMenuContent>
                 </DropdownMenu>
               </div>
+
+              {/* AI Share Card Preview - Show after generating */}
+              {(shareCardImageUrl || isGeneratingShareCard) && (
+                <div className="mb-4">
+                  <Card className="border-purple-500/30 bg-purple-500/5">
+                    <CardHeader className="pb-2">
+                      <CardTitle className="text-sm flex items-center gap-2">
+                        <Sparkles className="h-4 w-4 text-purple-400" />
+                        AI Share Card Preview
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      {isGeneratingShareCard ? (
+                        <div className="aspect-[1200/628] bg-gradient-to-br from-purple-900/30 via-background to-blue-900/30 rounded-lg border border-purple-500/20 flex flex-col items-center justify-center gap-3">
+                          <Loader2 className="h-8 w-8 animate-spin text-purple-400" />
+                          <span className="text-sm text-purple-300">AI is generating your share card...</span>
+                        </div>
+                      ) : shareCardImageUrl ? (
+                        <div className="space-y-3">
+                          <div className="aspect-[1200/628] rounded-lg border border-purple-500/20 overflow-hidden">
+                            <img 
+                              src={shareCardImageUrl} 
+                              alt="AI Generated Share Card" 
+                              className="w-full h-full object-cover"
+                            />
+                          </div>
+                          <p className="text-xs text-muted-foreground text-center">
+                            This card will be shown as a preview when you share on X/Twitter
+                          </p>
+                        </div>
+                      ) : null}
+                    </CardContent>
+                  </Card>
+                </div>
+              )}
 
               {/* Security Alerts Card - Hidden per user request */}
               {false && (() => {

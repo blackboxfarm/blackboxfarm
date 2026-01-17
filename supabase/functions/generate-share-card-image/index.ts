@@ -46,16 +46,20 @@ serve(async (req) => {
       throw new Error("LOVABLE_API_KEY is not configured");
     }
 
+    // Truncate CA for display
+    const truncateCA = (addr: string) => addr && addr.length > 12 ? `${addr.slice(0, 6)}...${addr.slice(-4)}` : addr || '';
+    const displayCA = truncateCA(tokenStats.tokenAddress || '');
+
     const prompt = `Create a professional, sleek social media share card (1200x628 pixels, Twitter/OG format) for a cryptocurrency holder analysis report.
 
 Design Requirements:
 - Dark theme background with subtle gradients (dark grays, blacks)
 - Modern, clean fintech aesthetic
-- Left side: Large hero numbers showing "${tokenStats.totalHolders.toLocaleString()}" total wallets with arrow pointing down to "${tokenStats.realHolders.toLocaleString()}" real holders in bright green
+- TOP RIGHT CORNER: Show the token ticker "$${tokenStats.symbol}" in bold white text, and directly below it show "CA:${displayCA}" in smaller gray/muted font
+- LEFT SIDE: Large hero numbers showing "${tokenStats.totalHolders.toLocaleString()}" total wallets with arrow pointing down to "${tokenStats.realHolders.toLocaleString()}" real holders in bright green
 - Include text "${tokenStats.dustPercentage}% are dust wallets" in amber/orange
-- Right side: Health grade badge showing "${tokenStats.healthGrade}" (${tokenStats.healthScore}/100) - use ${tokenStats.healthGrade.startsWith('A') ? 'green' : tokenStats.healthGrade.startsWith('B') ? 'blue' : tokenStats.healthGrade.startsWith('C') ? 'amber' : 'red'} color
-- Bottom: "blackbox.farm/holders" branding and "Free Holder Analysis Report"
-- Small token badge showing "$${tokenStats.symbol}" in corner
+- CENTER/RIGHT: Health grade badge showing "${tokenStats.healthGrade}" - make this SMALLER and more compact (not the hero element), use ${tokenStats.healthGrade.startsWith('A') ? 'green' : tokenStats.healthGrade.startsWith('B') ? 'blue' : tokenStats.healthGrade.startsWith('C') ? 'amber' : 'red'} color, show score ${tokenStats.healthScore}/100 below
+- BOTTOM: "blackbox.farm/holders" branding in bottom left
 - Include visual bars or icons for: ${tokenStats.whaleCount} Whales 🐋, ${tokenStats.strongCount} Strong 💪, ${tokenStats.activeCount} Active 🌱
 - Professional, trustworthy, data-driven look
 - NO placeholder text, all data should be the actual numbers provided

@@ -65,16 +65,13 @@ export function ShareCardDemo({ tokenStats = mockTokenStats }: { tokenStats?: To
   // We generate a public share page URL (hosted in Supabase Storage) in generate-share-card-image.
   const shareToTwitter = () => {
     const tweetText = `🔎 Holder Analysis: $${tokenStats.symbol}
+CA:${tokenStats.tokenAddress}
 
 🏛 ${tokenStats.totalHolders.toLocaleString()} Total Wallets
 ✅ ${tokenStats.realHolders.toLocaleString()} Real Holders
 🌫 ${tokenStats.dustPercentage}% Dust
 
-🐋 ${tokenStats.whaleCount} Whales | 💪 ${tokenStats.strongCount} Strong | 🌱 ${tokenStats.activeCount.toLocaleString()} Active
-
-Health Grade: ${tokenStats.healthGrade} (${tokenStats.healthScore}/100)
-
-Free holder report on BlackBox Farm`;
+🐋 ${tokenStats.whaleCount} Whales | 💪 ${tokenStats.strongCount} Strong | 🌱 ${tokenStats.activeCount.toLocaleString()} Active`;
 
     const shareUrl = aiSharePageUrl ?? getShareUrl();
 
