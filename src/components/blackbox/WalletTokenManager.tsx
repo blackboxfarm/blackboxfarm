@@ -500,16 +500,55 @@ export function WalletTokenManager({
 
     setConvertLoading(true);
     try {
-      // Here you would implement USD to SOL conversion logic
+      // USDC mint address
+      const USDC_MINT = "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v";
+      const WSOL_MINT = "So11111111111111111111111111111111111111112";
+      
+      // Find USDC specifically
+      const usdcToken = tokens.find(t => t.mint === USDC_MINT);
+      if (!usdcToken || usdcToken.uiAmount <= 0) {
+        toast({
+          title: "No USDC to convert",
+          description: "This wallet doesn't have USDC to convert to SOL",
+          variant: "destructive"
+        });
+        return;
+      }
+
+      // Convert USDC raw amount (6 decimals)
+      const rawAmount = Math.floor(usdcToken.uiAmount * 1_000_000);
+      
       toast({
-        title: "USD to SOL conversion",
-        description: "USD to SOL conversion is not yet implemented. This would require integration with a DEX.",
-        variant: "destructive"
+        title: "Converting USDC to SOL",
+        description: `Swapping ${usdcToken.uiAmount.toFixed(2)} USDC to SOL...`,
       });
+
+      const { data, error } = await supabase.functions.invoke('raydium-swap', {
+        body: {
+          inputMint: USDC_MINT,
+          outputMint: WSOL_MINT,
+          amount: rawAmount,
+          slippageBps: 100,
+          unwrapSol: true,
+          walletId: walletId,
+        }
+      });
+
+      if (error) throw error;
+      if (data?.error) throw new Error(data.error);
+
+      toast({
+        title: "USDC converted to SOL!",
+        description: `Successfully swapped ${usdcToken.uiAmount.toFixed(2)} USDC to SOL. TX: ${data?.signature?.slice(0, 8)}...`,
+      });
+
+      // Refresh token list
+      loadTokenBalances();
     } catch (error: any) {
+      console.error("USDC->SOL conversion failed:", error);
       toast({
         title: "Conversion failed",
-        description: error.message,
+        description: error.message || "Failed to convert USDC to SOL",
         variant: "destructive"
       });
     } finally {

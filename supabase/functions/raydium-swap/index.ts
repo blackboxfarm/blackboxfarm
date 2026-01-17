@@ -739,9 +739,9 @@ serve(async (req) => {
         }
       } else if (side === "sell") {
         inputMint = tokenMint;
-        // For pump.fun tokens, sell to SOL since they don't have USDC pairs
-        const isPumpToken = tokenMint.endsWith('pump') || tokenMint.includes('pump');
-        outputMint = isPumpToken ? NATIVE_MINT.toBase58() : USDC_MINT;
+        // CRITICAL FIX: ALL token sells go directly to SOL (not USDC)
+        // This prevents leftover USDC in wallets and matches how TrojanBot works
+        outputMint = NATIVE_MINT.toBase58();
         if (sellAll) {
           console.log("Sell debug:", {
             ownerPubkey: owner.publicKey.toBase58(),
