@@ -45,6 +45,7 @@ const mockTokenStats: TokenStats = {
 export function ShareCardDemo({ tokenStats = mockTokenStats }: { tokenStats?: TokenStats }) {
   const [aiImage, setAiImage] = useState<string | null>(null);
   const [aiImageUrl, setAiImageUrl] = useState<string | null>(null);
+  const [aiSharePageUrl, setAiSharePageUrl] = useState<string | null>(null);
   const [isGeneratingAI, setIsGeneratingAI] = useState(false);
   const [selectedApproach, setSelectedApproach] = useState<'A' | 'B' | null>(null);
 
@@ -60,6 +61,8 @@ export function ShareCardDemo({ tokenStats = mockTokenStats }: { tokenStats?: To
   };
 
   // Open Twitter share dialog with Web Intent
+  // NOTE: To get an image preview card, we must share a URL that contains OG/Twitter meta tags.
+  // We generate a public share page URL (hosted in Supabase Storage) in generate-share-card-image.
   const shareToTwitter = () => {
     const tweetText = `🔎 Holder Analysis: $${tokenStats.symbol}
 
@@ -73,31 +76,37 @@ Health Grade: ${tokenStats.healthGrade} (${tokenStats.healthScore}/100)
 
 Free holder report on BlackBox Farm`;
 
-    const shareUrl = getShareUrl();
-    
+    const shareUrl = aiSharePageUrl ?? getShareUrl();
+
     const twitterIntentUrl = `https://twitter.com/intent/tweet?text=${encodeURIComponent(tweetText)}&url=${encodeURIComponent(shareUrl)}`;
-    
+
     window.open(twitterIntentUrl, '_blank', 'width=550,height=420');
   };
 
-  // Generate AI card image and upload it
+  // Generate AI card image + public share page (for Twitter/OG preview)
   const generateAICard = async () => {
     setIsGeneratingAI(true);
     setAiImageUrl(null);
+    setAiSharePageUrl(null);
     try {
       const { data, error } = await supabase.functions.invoke('generate-share-card-image', {
-        body: { tokenStats }
+        body: { tokenStats },
       });
-      
+
       if (error) throw error;
-      
+
       // Store both the base64 for display and the URL for sharing
       if (data?.imageBase64) {
         setAiImage(data.imageBase64);
       }
       if (data?.imageUrl) {
         setAiImageUrl(data.imageUrl);
-        toast.success('Card generated and ready to share!');
+      }
+      if (data?.sharePageUrl) {
+        setAiSharePageUrl(data.sharePageUrl);
+        toast.success('Card generated — Twitter will show the image preview.');
+      } else if (data?.imageUrl) {
+        toast.success('Card generated!');
       } else if (data?.imageBase64) {
         toast.success('Card generated! (Image preview only)');
       }
@@ -207,7 +216,7 @@ Free holder report on BlackBox Farm`;
                 )}
               </Button>
 
-              {aiImage && (
+              {aiSharePageUrl && (
                 <Button 
                   className="w-full bg-sky-500 hover:bg-sky-600"
                   onClick={() => shareToTwitter()}
