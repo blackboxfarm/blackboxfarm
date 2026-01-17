@@ -68,11 +68,11 @@ CA:${tokenStats.tokenAddress}
 📊 ${tokenStats.totalHolders.toLocaleString()} Wallets 
 ✅ ${tokenStats.realHolders.toLocaleString()} Real Holders
 
-💨 ${tokenStats.dustPercentage}% Dust 😱
+💨 ${tokenStats.dustPercentage}% Dust 😱`;
 
-BLACKBOX.FARM/HOLDERS`;
+    const shareUrl = getShareUrl();
     
-    const twitterIntentUrl = `https://twitter.com/intent/tweet?text=${encodeURIComponent(tweetText)}`;
+    const twitterIntentUrl = `https://twitter.com/intent/tweet?text=${encodeURIComponent(tweetText)}&url=${encodeURIComponent(shareUrl)}`;
     
     window.open(twitterIntentUrl, '_blank', 'width=550,height=420');
   };
