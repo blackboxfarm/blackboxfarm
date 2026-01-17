@@ -1,0 +1,1 @@
+SELECT cron.unschedule('dexscreener-top-200-scraper-cron');
