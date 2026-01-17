@@ -556,6 +556,66 @@ export function WalletTokenManager({
     }
   };
 
+  // Unwrap WSOL (wrapped SOL) to native SOL
+  const unwrapWsol = async () => {
+    const WSOL_MINT = "So11111111111111111111111111111111111111112";
+    
+    // Find WSOL token (distinct from native SOL - it's the token account, not the native balance)
+    // WSOL appears as a separate token entry with the same mint as SOL but in a token account
+    const wsolToken = tokens.find(t => 
+      t.mint === WSOL_MINT && 
+      t.symbol !== 'SOL' // Native SOL is displayed as 'SOL', WSOL in token account may show differently
+    );
+    
+    // Also check for any token with WSOL mint that has a token balance
+    const anyWsol = tokens.find(t => t.mint === WSOL_MINT && t.uiAmount > 0 && t.symbol !== 'SOL');
+    
+    if (!wsolToken && !anyWsol) {
+      toast({
+        title: "No WSOL to unwrap",
+        description: "This wallet doesn't have wrapped SOL to unwrap",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    setConvertLoading(true);
+    try {
+      toast({
+        title: "Unwrapping WSOL",
+        description: "Closing WSOL account and recovering native SOL...",
+      });
+
+      // Call raydium-swap with a special "unwrap" action
+      const { data, error } = await supabase.functions.invoke('raydium-swap', {
+        body: {
+          action: "unwrap-wsol",
+          walletId: walletId,
+        }
+      });
+
+      if (error) throw error;
+      if (data?.error) throw new Error(data.error);
+
+      toast({
+        title: "WSOL unwrapped!",
+        description: `Successfully recovered native SOL. TX: ${data?.signature?.slice(0, 8) || 'complete'}...`,
+      });
+
+      // Refresh token list
+      loadTokenBalances();
+    } catch (error: any) {
+      console.error("WSOL unwrap failed:", error);
+      toast({
+        title: "Unwrap failed",
+        description: error.message || "Failed to unwrap WSOL",
+        variant: "destructive"
+      });
+    } finally {
+      setConvertLoading(false);
+    }
+  };
+
   return (
     <Card className="mt-4">
       <CardHeader>
@@ -615,6 +675,16 @@ export function WalletTokenManager({
             >
               <ArrowLeftRight className="h-4 w-4" />
               USD→SOL
+            </Button>
+            <Button 
+              onClick={unwrapWsol} 
+              variant="outline" 
+              size="sm"
+              disabled={convertLoading}
+              title="Unwrap wrapped SOL (WSOL) to native SOL"
+            >
+              <ArrowLeftRight className="h-4 w-4" />
+              WSOL→SOL
             </Button>
             <Button 
               onClick={loadTokenBalances} 
