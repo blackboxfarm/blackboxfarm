@@ -704,6 +704,65 @@ serve(async (req) => {
       }
     }
 
+    // Unwrap WSOL mode: close WSOL account and recover native SOL
+    if (action === "unwrap-wsol") {
+      try {
+        console.log("Unwrapping WSOL for wallet:", owner.publicKey.toBase58());
+        
+        // Get WSOL ATA
+        const wsolAta = await getAssociatedTokenAddress(NATIVE_MINT, owner.publicKey);
+        const ataInfo = await connection.getAccountInfo(wsolAta);
+        
+        if (!ataInfo) {
+          return ok({ unwrapped: false, message: "No WSOL account found", solRecovered: 0 });
+        }
+        
+        // Parse the token account data to get balance
+        const data = ataInfo.data;
+        let wsolBalance = 0;
+        if (data && data.length >= 72) {
+          // Token account: bytes 64-72 = amount (little-endian u64)
+          const amountBytes = data.slice(64, 72);
+          wsolBalance = Number(readU64LE(amountBytes));
+        }
+        
+        console.log(`WSOL account found with ${wsolBalance / 1e9} WSOL`);
+        
+        // Create close account instruction (this unwraps WSOL to native SOL)
+        const closeAccountIx = new TransactionInstruction({
+          programId: TOKEN_PROGRAM_ID,
+          keys: [
+            { pubkey: wsolAta, isSigner: false, isWritable: true },
+            { pubkey: owner.publicKey, isSigner: false, isWritable: true }, // destination for rent + balance
+            { pubkey: owner.publicKey, isSigner: true, isWritable: false }, // authority
+          ],
+          data: Buffer.from([9]) // CloseAccount instruction = 9
+        });
+        
+        const tx = new Transaction().add(closeAccountIx);
+        const { blockhash, lastValidBlockHeight } = await connection.getLatestBlockhash("confirmed");
+        tx.recentBlockhash = blockhash;
+        tx.feePayer = owner.publicKey;
+        tx.sign(owner);
+        
+        const sig = await connection.sendRawTransaction(tx.serialize(), { skipPreflight: true, maxRetries: 2 });
+        await connection.confirmTransaction({ blockhash, lastValidBlockHeight, signature: sig }, "confirmed" as any);
+        
+        const solRecovered = (wsolBalance + ataInfo.lamports) / 1e9;
+        console.log(`WSOL unwrapped successfully! Recovered ${solRecovered} SOL. TX: ${sig}`);
+        
+        return ok({ 
+          unwrapped: true, 
+          signature: sig, 
+          solRecovered,
+          message: `Recovered ${solRecovered.toFixed(6)} SOL from WSOL account`
+        });
+      } catch (e) {
+        console.error("WSOL unwrap failed:", e);
+        return bad(`WSOL unwrap failed: ${(e as Error).message}`, 500);
+      }
+    }
+
     // Resolve low-level params
     inputMint = _inputMint as string | undefined;
     outputMint = _outputMint as string | undefined;

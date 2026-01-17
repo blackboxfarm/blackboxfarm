@@ -1130,6 +1130,7 @@ serve(async (req) => {
 
       try {
         // Execute sell via raydium-swap using wallet ID for direct lookup
+        // CRITICAL: unwrapSol ensures we get native SOL back (no stranded WSOL)
         const { data: swapResult, error: swapError } = await supabase.functions.invoke("raydium-swap", {
           body: {
             side: "sell",
@@ -1139,6 +1140,7 @@ serve(async (req) => {
             priorityFeeMode: priorityFeeMode || "medium",
             priorityFeeSol: customPriorityFee, // Override with specific SOL amount if provided
             walletId: position.wallet_id, // Pass wallet ID for direct DB lookup
+            unwrapSol: true, // CRITICAL: Unwrap WSOL to native SOL to prevent stranded wrapped SOL
           },
         });
 
@@ -1160,11 +1162,41 @@ serve(async (req) => {
           throw new Error("Swap returned no signature (sell did not confirm)");
         }
 
-        // Get current price for profit calculation
-        const sellPrice = (await fetchTokenPrice(position.token_mint)) || position.buy_price_usd;
-        const profit = sellPrice && position.buy_price_usd
-          ? position.buy_amount_usd * ((sellPrice / position.buy_price_usd) - 1)
-          : null;
+        // CRITICAL FIX: Calculate actual USD received from the swap
+        // swapResult should contain the SOL amount received from the sell
+        const solPrice = await fetchSolPrice();
+        let soldForUsd = 0;
+        let sellPricePerToken = 0;
+
+        // Try to get actual SOL received from swap result
+        const solReceived = Number(swapResult?.solReceived || swapResult?.outputAmount || 0);
+        if (solReceived > 0) {
+          // solReceived is in lamports, convert to SOL then to USD
+          const solAmount = solReceived / 1e9;
+          soldForUsd = solAmount * solPrice;
+          console.log(`Sell: Received ${solAmount.toFixed(6)} SOL = $${soldForUsd.toFixed(2)} USD`);
+        }
+
+        // If swap didn't return SOL amount, estimate from current price
+        if (soldForUsd <= 0) {
+          const currentPriceResult = await fetchTokenPrice(position.token_mint);
+          const currentPrice = currentPriceResult?.price || 0;
+          if (currentPrice > 0 && position.quantity_tokens) {
+            // quantity_tokens is already in human-readable form
+            soldForUsd = currentPrice * Number(position.quantity_tokens);
+            console.log(`Sell: Estimated $${soldForUsd.toFixed(2)} USD from price $${currentPrice.toFixed(10)} × ${position.quantity_tokens} tokens`);
+          }
+        }
+
+        // Calculate sell price per token for display
+        if (position.quantity_tokens && Number(position.quantity_tokens) > 0) {
+          sellPricePerToken = soldForUsd / Number(position.quantity_tokens);
+        }
+
+        // Calculate profit: what we got minus what we paid
+        const profit = soldForUsd > 0 ? soldForUsd - Number(position.buy_amount_usd || 0) : null;
+
+        console.log(`Sell summary: Invested $${position.buy_amount_usd}, Sold for $${soldForUsd.toFixed(2)}, Profit: $${profit?.toFixed(2) || 'N/A'}`);
 
         // Update position with sell result
         await supabase
@@ -1172,7 +1204,7 @@ serve(async (req) => {
           .update({
             sell_signature: signature,
             sell_executed_at: new Date().toISOString(),
-            sell_price_usd: sellPrice,
+            sell_price_usd: sellPricePerToken, // Price per token (for display consistency)
             profit_usd: profit,
             status: "sold",
             error_message: null,
@@ -1180,10 +1212,9 @@ serve(async (req) => {
           .eq("id", positionId);
 
         // Calculate profit percent and SOL values for tweet
-        const profitPercent = position.buy_price_usd && sellPrice
-          ? ((sellPrice / position.buy_price_usd) - 1) * 100
+        const profitPercent = position.buy_price_usd && sellPricePerToken
+          ? ((sellPricePerToken / Number(position.buy_price_usd)) - 1) * 100
           : 0;
-        const solPrice = await fetchSolPrice();
         const profitSol = profit ? profit / solPrice : 0;
 
         // Send sell tweet (fire and forget)
@@ -1195,7 +1226,7 @@ serve(async (req) => {
           twitterUrl: position.twitter_url || '',
           positionId: positionId,
           entryPrice: position.buy_price_usd,
-          exitPrice: sellPrice,
+          exitPrice: sellPricePerToken,
           profitPercent: profitPercent,
           profitSol: profitSol,
           txSignature: signature,
@@ -1204,7 +1235,7 @@ serve(async (req) => {
         // Track trade outcome for developer reputation (fire and forget)
         trackTradeOutcome(supabase, {
           ...position,
-          sell_price_usd: sellPrice
+          sell_price_usd: sellPricePerToken
         }).catch(e => console.error("Trade outcome tracking failed:", e));
 
         // Auto-capture unrated positions to neutrallist on sell (fire and forget)
@@ -1215,7 +1246,8 @@ serve(async (req) => {
           success: true,
           signature,
           signatures: (swapResult as any)?.signatures ?? [signature],
-          sellPrice,
+          sellPrice: sellPricePerToken,
+          soldForUsd,
           profit,
         });
 
