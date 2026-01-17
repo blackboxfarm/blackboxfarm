@@ -50,20 +50,25 @@ serve(async (req) => {
     const truncateCA = (addr: string) => addr && addr.length > 12 ? `${addr.slice(0, 6)}...${addr.slice(-4)}` : addr || '';
     const displayCA = truncateCA(tokenStats.tokenAddress || '');
 
-    const prompt = `Create a professional, sleek social media share card (1200x628 pixels, Twitter/OG format) for a cryptocurrency holder analysis report.
+    const prompt = `Create a professional social media share card (1200x628 pixels) for a crypto holder analysis.
 
-Design Requirements:
-- Dark theme background with subtle gradients (dark grays, blacks)
-- Modern, clean fintech aesthetic
-- TOP RIGHT CORNER: Show the token ticker "$${tokenStats.symbol}" in bold white text, and directly below it show "CA:${displayCA}" in smaller gray/muted font
-- LEFT SIDE: Large hero numbers showing "${tokenStats.totalHolders.toLocaleString()}" total wallets with arrow pointing down to "${tokenStats.realHolders.toLocaleString()}" real holders in bright green
-- Include text "${tokenStats.dustPercentage}% are dust wallets" in amber/orange
-- CENTER/RIGHT: Health grade badge showing "${tokenStats.healthGrade}" - make this SMALLER and more compact (not the hero element), use ${tokenStats.healthGrade.startsWith('A') ? 'green' : tokenStats.healthGrade.startsWith('B') ? 'blue' : tokenStats.healthGrade.startsWith('C') ? 'amber' : 'red'} color, show score ${tokenStats.healthScore}/100 below
-- BOTTOM: "blackbox.farm/holders" branding in bottom left
-- Include visual bars or icons for: ${tokenStats.whaleCount} Whales 🐋, ${tokenStats.strongCount} Strong 💪, ${tokenStats.activeCount} Active 🌱
-- Professional, trustworthy, data-driven look
-- NO placeholder text, all data should be the actual numbers provided
-- Ultra high resolution, crisp text`;
+CRITICAL - HIGH CONTRAST TEXT REQUIREMENTS:
+- Background: SOLID DARK (#0a0a0f or similar very dark color, NOT complex gradients that reduce readability)
+- ALL text must be HIGHLY READABLE with strong contrast
+- Use BOLD WHITE text for important numbers
+- Use BRIGHT NEON GREEN (#00ff88) for key metrics
+
+LAYOUT:
+- TOP RIGHT: "$${tokenStats.symbol}" in LARGE BOLD WHITE (32px+), below it "CA:${displayCA}" in LIGHT GRAY (#aaaaaa, 16px)
+- LEFT SIDE HERO STATS (large, clear, readable):
+  * "${tokenStats.totalHolders.toLocaleString()}" in HUGE BOLD WHITE text (72px+) with label "Total Wallets" below
+  * Arrow down to "${tokenStats.realHolders.toLocaleString()}" in BRIGHT GREEN (#00ff88, 48px+) with "Real Holders" label
+  * "${tokenStats.dustPercentage}% Dust" in ORANGE/AMBER (#ffaa00)
+- RIGHT SIDE: Compact grade badge "${tokenStats.healthGrade}" (small, ${tokenStats.healthGrade.startsWith('A') ? 'green' : tokenStats.healthGrade.startsWith('B') ? 'blue' : 'amber'}, with ${tokenStats.healthScore}/100 below)
+- BOTTOM ROW: ${tokenStats.whaleCount} Whales 🐋 | ${tokenStats.strongCount} Strong 💪 | ${tokenStats.activeCount} Active 🌱 (in white text)
+- BOTTOM LEFT: "blackbox.farm/holders" branding
+
+STYLE: Clean, minimal, fintech look. NO busy backgrounds. MAXIMUM TEXT READABILITY. Ultra sharp text.`;
 
     console.log('Calling Lovable AI for image generation...');
 
