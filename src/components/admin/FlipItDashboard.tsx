@@ -2996,10 +2996,11 @@ export function FlipItDashboard() {
                   Target
                 </Label>
                 <Select value={targetMultiplier.toString()} onValueChange={v => setTargetMultiplier(Number(v))}>
-                  <SelectTrigger className="w-28">
+                  <SelectTrigger className="w-32">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
+                    <SelectItem value="0" className="text-yellow-500 font-semibold">⛔ NO AUTO-SELL</SelectItem>
                     <SelectItem value="1.25">1.25x (+25%)</SelectItem>
                     <SelectItem value="1.30">1.30x (+30%)</SelectItem>
                     <SelectItem value="1.50">1.50x (+50%)</SelectItem>
