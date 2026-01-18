@@ -9762,6 +9762,8 @@ export type Database = {
           account_status: string | null
           api_key_encrypted: string | null
           api_secret_encrypted: string | null
+          bags_fm_url: string | null
+          bags_fm_wallet: string | null
           banner_image_url: string | null
           bio: string | null
           bio_urls: Json | null
@@ -9793,6 +9795,8 @@ export type Database = {
           professional_type: string | null
           profile_image_url: string | null
           profile_urls: Json | null
+          pump_fun_url: string | null
+          pump_fun_wallet: string | null
           tags: string[] | null
           tweet_count: number | null
           twitter_id: string | null
@@ -9810,6 +9814,8 @@ export type Database = {
           account_status?: string | null
           api_key_encrypted?: string | null
           api_secret_encrypted?: string | null
+          bags_fm_url?: string | null
+          bags_fm_wallet?: string | null
           banner_image_url?: string | null
           bio?: string | null
           bio_urls?: Json | null
@@ -9841,6 +9847,8 @@ export type Database = {
           professional_type?: string | null
           profile_image_url?: string | null
           profile_urls?: Json | null
+          pump_fun_url?: string | null
+          pump_fun_wallet?: string | null
           tags?: string[] | null
           tweet_count?: number | null
           twitter_id?: string | null
@@ -9858,6 +9866,8 @@ export type Database = {
           account_status?: string | null
           api_key_encrypted?: string | null
           api_secret_encrypted?: string | null
+          bags_fm_url?: string | null
+          bags_fm_wallet?: string | null
           banner_image_url?: string | null
           bio?: string | null
           bio_urls?: Json | null
@@ -9889,6 +9899,8 @@ export type Database = {
           professional_type?: string | null
           profile_image_url?: string | null
           profile_urls?: Json | null
+          pump_fun_url?: string | null
+          pump_fun_wallet?: string | null
           tags?: string[] | null
           tweet_count?: number | null
           twitter_id?: string | null

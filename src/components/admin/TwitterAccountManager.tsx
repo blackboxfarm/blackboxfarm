@@ -64,6 +64,11 @@ interface TwitterAccount {
   api_secret_encrypted: string | null;
   access_token_encrypted: string | null;
   access_token_secret_encrypted: string | null;
+  // External Profile Links
+  bags_fm_url: string | null;
+  bags_fm_wallet: string | null;
+  pump_fun_url: string | null;
+  pump_fun_wallet: string | null;
 }
 
 const STATUS_OPTIONS = ["active", "suspended", "locked", "unverified", "inactive"];
@@ -131,6 +136,11 @@ const TwitterAccountManager = () => {
     api_secret_encrypted: "",
     access_token_encrypted: "",
     access_token_secret_encrypted: "",
+    // External Profile Links
+    bags_fm_url: "",
+    bags_fm_wallet: "",
+    pump_fun_url: "",
+    pump_fun_wallet: "",
   });
   const [profileImage, setProfileImage] = useState<File | null>(null);
   const [bannerImage, setBannerImage] = useState<File | null>(null);
@@ -190,6 +200,10 @@ const TwitterAccountManager = () => {
       api_secret_encrypted: "",
       access_token_encrypted: "",
       access_token_secret_encrypted: "",
+      bags_fm_url: "",
+      bags_fm_wallet: "",
+      pump_fun_url: "",
+      pump_fun_wallet: "",
     });
     setProfileImage(null);
     setBannerImage(null);
@@ -218,6 +232,10 @@ const TwitterAccountManager = () => {
       api_secret_encrypted: account.api_secret_encrypted || "",
       access_token_encrypted: account.access_token_encrypted || "",
       access_token_secret_encrypted: account.access_token_secret_encrypted || "",
+      bags_fm_url: account.bags_fm_url || "",
+      bags_fm_wallet: account.bags_fm_wallet || "",
+      pump_fun_url: account.pump_fun_url || "",
+      pump_fun_wallet: account.pump_fun_wallet || "",
     });
     setDialogOpen(true);
   };
@@ -281,6 +299,10 @@ const TwitterAccountManager = () => {
         api_secret_encrypted: formData.api_secret_encrypted || null,
         access_token_encrypted: formData.access_token_encrypted || null,
         access_token_secret_encrypted: formData.access_token_secret_encrypted || null,
+        bags_fm_url: formData.bags_fm_url || null,
+        bags_fm_wallet: formData.bags_fm_wallet || null,
+        pump_fun_url: formData.pump_fun_url || null,
+        pump_fun_wallet: formData.pump_fun_wallet || null,
       };
 
       if (editingAccount) {
@@ -839,6 +861,61 @@ const TwitterAccountManager = () => {
                         >
                           {showPasswords["access_token_secret"] ? <EyeOff className="h-3 w-3" /> : <Eye className="h-3 w-3" />}
                         </Button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* External Profile Links Section */}
+                <div className="border border-border rounded-lg p-4 space-y-4 bg-muted/30">
+                  <div className="flex items-center gap-2 text-sm font-medium">
+                    <Globe className="h-4 w-4 text-muted-foreground" />
+                    <span>External Profile Links</span>
+                    <span className="text-xs text-muted-foreground">(BAGS.FM & PUMP.fun)</span>
+                  </div>
+
+                  {/* BAGS.FM Section */}
+                  <div className="space-y-2">
+                    <Label className="text-xs font-medium text-orange-400">BAGS.FM Profile</Label>
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <Label className="text-xs">Profile Link</Label>
+                        <Input
+                          value={formData.bags_fm_url}
+                          onChange={(e) => setFormData({ ...formData, bags_fm_url: e.target.value })}
+                          placeholder="https://bags.fm/$username"
+                        />
+                      </div>
+                      <div>
+                        <Label className="text-xs">In-house Wallet</Label>
+                        <Input
+                          value={formData.bags_fm_wallet}
+                          onChange={(e) => setFormData({ ...formData, bags_fm_wallet: e.target.value })}
+                          placeholder="Wallet address or 'unknown'"
+                        />
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* PUMP.fun Section */}
+                  <div className="space-y-2">
+                    <Label className="text-xs font-medium text-green-400">PUMP.fun Profile</Label>
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <Label className="text-xs">Profile Link</Label>
+                        <Input
+                          value={formData.pump_fun_url}
+                          onChange={(e) => setFormData({ ...formData, pump_fun_url: e.target.value })}
+                          placeholder="https://pump.fun/profile/{wallet}"
+                        />
+                      </div>
+                      <div>
+                        <Label className="text-xs">In-house Wallet</Label>
+                        <Input
+                          value={formData.pump_fun_wallet}
+                          onChange={(e) => setFormData({ ...formData, pump_fun_wallet: e.target.value })}
+                          placeholder="Wallet address"
+                        />
                       </div>
                     </div>
                   </div>
