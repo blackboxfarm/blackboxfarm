@@ -734,7 +734,7 @@ serve(async (req) => {
                 { pubkey: owner.publicKey, isSigner: false, isWritable: true }, // destination for all lamports
                 { pubkey: owner.publicKey, isSigner: true, isWritable: false }, // authority
               ],
-              data: Buffer.from([9]), // CloseAccount instruction = 9
+              data: new Uint8Array([9]), // CloseAccount instruction = 9 (Deno-safe)
             })
           );
 
