@@ -269,10 +269,11 @@ serve(async (req) => {
 
     // 7. Refresh DEX status and socials for holding positions (when requested)
     if (refreshDexStatus && holdingPositions && holdingPositions.length > 0) {
-      console.log(`[Unified] Refreshing DEX status for ${holdingPositions.length} holding positions`);
+      console.log(`[Unified] Refreshing DEX status for ${holdingPositions.length} holding positions (parallel)`);
       results.dexStatusRefresh.checked = holdingPositions.length;
       
-      for (const pos of holdingPositions) {
+      // Parallelize DEX status refresh for faster response
+      const dexRefreshPromises = holdingPositions.map(async (pos) => {
         try {
           const dexData = await fetchDexScreenerData(pos.token_mint);
           
@@ -298,13 +299,21 @@ serve(async (req) => {
             .eq('id', pos.id);
           
           if (!updateErr) {
-            results.dexStatusRefresh.updated.push(pos.token_symbol || pos.token_mint);
             console.log(`[Unified] Updated DEX status for ${pos.token_symbol}: CTO=${dexData.dexStatus.hasCTO}, DexPaid=${dexData.dexStatus.hasDexPaid}`);
+            return { success: true, symbol: pos.token_symbol || pos.token_mint };
           }
+          return { success: false, symbol: pos.token_symbol || pos.token_mint };
         } catch (e) {
           console.error(`[Unified] Failed to refresh DEX status for ${pos.token_mint}:`, e);
+          return { success: false, symbol: pos.token_symbol || pos.token_mint };
         }
-      }
+      });
+      
+      const dexResults = await Promise.allSettled(dexRefreshPromises);
+      results.dexStatusRefresh.updated = dexResults
+        .filter((r): r is PromiseFulfilledResult<{ success: boolean; symbol: string }> => 
+          r.status === 'fulfilled' && r.value.success)
+        .map(r => r.value.symbol);
     }
 
     return ok({
