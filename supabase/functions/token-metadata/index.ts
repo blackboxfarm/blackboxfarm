@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { PublicKey } from 'npm:@solana/web3.js@1.95.3';
+import { resolvePrice, PriceResult } from '../_shared/price-resolver.ts';
 
 const METAPLEX_PROGRAM_ID = new PublicKey('metaqbxxUerdq28cj1RbAWkYQm3ybzjb6a8bt518x1s');
 
@@ -540,6 +541,37 @@ serve(async (req) => {
     const launchpad = detectLaunchpad(tokenMint, dexData);
     metadata.isPumpFun = launchpad.name === 'pump.fun' && launchpad.detected;
     console.log('Launchpad detection:', launchpad);
+
+    // Step 2.1: Use price router for ACCURATE pricing (replaces DexScreener price)
+    console.log('Fetching accurate price via resolvePrice router...');
+    const priceResult: PriceResult | null = await resolvePrice(tokenMint, {
+      forceFresh: true,  // Never use cache for user-initiated fetches
+      heliusApiKey: heliusApiKey
+    });
+    
+    if (priceResult) {
+      console.log(`Price router result: $${priceResult.price.toFixed(10)} from ${priceResult.source}, onCurve=${priceResult.isOnCurve}`);
+      // Override the DexScreener price with the accurate price from the router
+      priceInfo = {
+        priceUsd: priceResult.price,
+        priceChange24h: priceInfo?.priceChange24h || 0,  // Keep DexScreener's 24h change
+        volume24h: priceInfo?.volume24h || 0,            // Keep DexScreener's volume
+        liquidity: priceInfo?.liquidity || 0,            // Keep DexScreener's liquidity
+        marketCap: priceInfo?.marketCap || 0,
+        fdv: priceInfo?.fdv || 0,
+        dexUrl: priceInfo?.dexUrl,
+        pairAddress: priceInfo?.pairAddress,
+        dexId: priceInfo?.dexId,
+        // Add price source info for transparency
+        source: priceResult.source,
+        isOnCurve: priceResult.isOnCurve,
+        bondingCurveProgress: priceResult.bondingCurveProgress,
+        confidence: priceResult.confidence,
+        fetchedAt: priceResult.fetchedAt
+      };
+    } else {
+      console.log('Price router returned null, keeping DexScreener price as fallback');
+    }
 
     // Step 2.5: Smart Social Sourcing - DEX paid = use DexScreener, otherwise use launchpad
     // Extract social links from DexScreener first
