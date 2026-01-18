@@ -40,10 +40,10 @@ export interface TokenTaxInfo {
 }
 
 const DEFAULT_CONFIG: TradeGuardConfig = {
-  maxPricePremiumPct: 10,
+  maxPricePremiumPct: 25,  // Increased from 10% to 25% to allow pump.fun volatility
   requireQuoteCheck: true,
   blockOnHighPriceImpact: true,
-  maxPriceImpactPct: 15,
+  maxPriceImpactPct: 20,  // Increased from 15% to 20% for memecoin volatility
   blockTokensWithTax: true,  // Default: block all tokens with transfer tax
 };
 
