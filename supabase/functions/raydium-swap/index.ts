@@ -704,58 +704,65 @@ serve(async (req) => {
       }
     }
 
-    // Unwrap WSOL mode: close WSOL account and recover native SOL
+    // Unwrap WSOL mode: close ALL WSOL token accounts (ATA + any temp accounts) and recover native SOL
     if (action === "unwrap-wsol") {
       try {
         console.log("Unwrapping WSOL for wallet:", owner.publicKey.toBase58());
-        
-        // Get WSOL ATA
-        const wsolAta = await getAssociatedTokenAddress(NATIVE_MINT, owner.publicKey);
-        const ataInfo = await connection.getAccountInfo(wsolAta);
-        
-        if (!ataInfo) {
-          return ok({ unwrapped: false, message: "No WSOL account found", solRecovered: 0 });
+
+        // IMPORTANT:
+        // A user can have multiple WSOL token accounts (ATA + temporary WSOL accounts created during swaps).
+        // Closing only the ATA can leave WSOL stranded. Here we close *all* token accounts for the WSOL mint.
+        const tokenAccounts = await connection.getTokenAccountsByOwner(owner.publicKey, { mint: NATIVE_MINT });
+
+        if (!tokenAccounts.value.length) {
+          return ok({ unwrapped: false, message: "No WSOL accounts found", solRecovered: 0 });
         }
-        
-        // Parse the token account data to get balance
-        const data = ataInfo.data;
-        let wsolBalance = 0;
-        if (data && data.length >= 72) {
-          // Token account: bytes 64-72 = amount (little-endian u64)
-          const amountBytes = data.slice(64, 72);
-          wsolBalance = Number(readU64LE(amountBytes));
+
+        const signatures: string[] = [];
+        let recoveredLamportsTotal = 0;
+
+        // Keep transactions small to avoid TX size limits
+        const BATCH_SIZE = 8;
+        for (let i = 0; i < tokenAccounts.value.length; i += BATCH_SIZE) {
+          const batch = tokenAccounts.value.slice(i, i + BATCH_SIZE);
+
+          const instrs = batch.map(({ pubkey }) =>
+            new TransactionInstruction({
+              programId: TOKEN_PROGRAM_ID,
+              keys: [
+                { pubkey, isSigner: false, isWritable: true },
+                { pubkey: owner.publicKey, isSigner: false, isWritable: true }, // destination for all lamports
+                { pubkey: owner.publicKey, isSigner: true, isWritable: false }, // authority
+              ],
+              data: Buffer.from([9]), // CloseAccount instruction = 9
+            })
+          );
+
+          const tx = new Transaction().add(...instrs);
+          const { blockhash, lastValidBlockHeight } = await connection.getLatestBlockhash("confirmed");
+          tx.recentBlockhash = blockhash;
+          tx.feePayer = owner.publicKey;
+          tx.sign(owner);
+
+          const sig = await connection.sendRawTransaction(tx.serialize(), { skipPreflight: true, maxRetries: 2 });
+          await connection.confirmTransaction({ blockhash, lastValidBlockHeight, signature: sig }, "confirmed" as any);
+          signatures.push(sig);
+
+          // NOTE: The lamports recovered are the account lamports (rent + WSOL backing). Do NOT add token amount separately.
+          recoveredLamportsTotal += batch.reduce((sum, a) => sum + (a.account?.lamports ?? 0), 0);
         }
-        
-        console.log(`WSOL account found with ${wsolBalance / 1e9} WSOL`);
-        
-        // Create close account instruction (this unwraps WSOL to native SOL)
-        const closeAccountIx = new TransactionInstruction({
-          programId: TOKEN_PROGRAM_ID,
-          keys: [
-            { pubkey: wsolAta, isSigner: false, isWritable: true },
-            { pubkey: owner.publicKey, isSigner: false, isWritable: true }, // destination for rent + balance
-            { pubkey: owner.publicKey, isSigner: true, isWritable: false }, // authority
-          ],
-          data: Buffer.from([9]) // CloseAccount instruction = 9
-        });
-        
-        const tx = new Transaction().add(closeAccountIx);
-        const { blockhash, lastValidBlockHeight } = await connection.getLatestBlockhash("confirmed");
-        tx.recentBlockhash = blockhash;
-        tx.feePayer = owner.publicKey;
-        tx.sign(owner);
-        
-        const sig = await connection.sendRawTransaction(tx.serialize(), { skipPreflight: true, maxRetries: 2 });
-        await connection.confirmTransaction({ blockhash, lastValidBlockHeight, signature: sig }, "confirmed" as any);
-        
-        const solRecovered = (wsolBalance + ataInfo.lamports) / 1e9;
-        console.log(`WSOL unwrapped successfully! Recovered ${solRecovered} SOL. TX: ${sig}`);
-        
-        return ok({ 
-          unwrapped: true, 
-          signature: sig, 
+
+        const solRecovered = recoveredLamportsTotal / 1e9;
+        console.log(
+          `WSOL unwrapped successfully! Recovered ${solRecovered} SOL from ${tokenAccounts.value.length} account(s). TXs: ${signatures.join(", ")}`
+        );
+
+        return ok({
+          unwrapped: true,
+          signature: signatures[0],
+          signatures,
           solRecovered,
-          message: `Recovered ${solRecovered.toFixed(6)} SOL from WSOL account`
+          message: `Recovered ${solRecovered.toFixed(6)} SOL from ${tokenAccounts.value.length} WSOL account(s)`,
         });
       } catch (e) {
         console.error("WSOL unwrap failed:", e);

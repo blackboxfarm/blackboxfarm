@@ -559,22 +559,15 @@ export function WalletTokenManager({
   // Unwrap WSOL (wrapped SOL) to native SOL
   const unwrapWsol = async () => {
     const WSOL_MINT = "So11111111111111111111111111111111111111112";
-    
-    // Find WSOL token (distinct from native SOL - it's the token account, not the native balance)
-    // WSOL appears as a separate token entry with the same mint as SOL but in a token account
-    const wsolToken = tokens.find(t => 
-      t.mint === WSOL_MINT && 
-      t.symbol !== 'SOL' // Native SOL is displayed as 'SOL', WSOL in token account may show differently
-    );
-    
-    // Also check for any token with WSOL mint that has a token balance
-    const anyWsol = tokens.find(t => t.mint === WSOL_MINT && t.uiAmount > 0 && t.symbol !== 'SOL');
-    
-    if (!wsolToken && !anyWsol) {
+
+    // Detect any WSOL token account by mint (symbol/name are unreliable and may appear as "SOL")
+    const hasWsol = tokens.some((t) => t.mint === WSOL_MINT && t.uiAmount > 0);
+
+    if (!hasWsol) {
       toast({
         title: "No WSOL to unwrap",
-        description: "This wallet doesn't have wrapped SOL to unwrap",
-        variant: "destructive"
+        description: "This wallet doesn't have wrapped SOL (WSOL) to unwrap",
+        variant: "destructive",
       });
       return;
     }
