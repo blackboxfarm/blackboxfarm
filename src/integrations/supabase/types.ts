@@ -3019,6 +3019,7 @@ export type Database = {
       flipit_settings: {
         Row: {
           block_on_high_price_impact: boolean
+          block_tokens_with_tax: boolean | null
           created_at: string
           id: string
           jito_tip_lamports: number
@@ -3033,6 +3034,7 @@ export type Database = {
         }
         Insert: {
           block_on_high_price_impact?: boolean
+          block_tokens_with_tax?: boolean | null
           created_at?: string
           id?: string
           jito_tip_lamports?: number
@@ -3047,6 +3049,7 @@ export type Database = {
         }
         Update: {
           block_on_high_price_impact?: boolean
+          block_tokens_with_tax?: boolean | null
           created_at?: string
           id?: string
           jito_tip_lamports?: number
