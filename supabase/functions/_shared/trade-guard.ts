@@ -37,18 +37,49 @@ const DEFAULT_CONFIG: TradeGuardConfig = {
 };
 
 /**
- * Fetch current SOL price from Jupiter
+ * Fetch current SOL price from Jupiter v2 API
  */
 async function fetchSolPrice(): Promise<number> {
+  const jupiterApiKey = Deno.env.get("JUPITER_API_KEY") || "";
+  
   try {
-    const res = await fetch("https://price.jup.ag/v6/price?ids=SOL");
+    // Jupiter v2 Price API
+    const res = await fetch("https://api.jup.ag/price/v2?ids=So11111111111111111111111111111111111111112", {
+      headers: {
+        "Accept": "application/json",
+        ...(jupiterApiKey ? { "x-api-key": jupiterApiKey } : {}),
+      },
+      signal: AbortSignal.timeout(5000),
+    });
     const json = await res.json();
-    const price = Number(json?.data?.SOL?.price);
-    if (Number.isFinite(price) && price > 0) return price;
+    // v2 format: { data: { "So111...": { price: "200.5" } } }
+    const solData = json?.data?.["So11111111111111111111111111111111111111112"];
+    const price = Number(solData?.price);
+    if (Number.isFinite(price) && price > 0) {
+      console.log(`[TradeGuard] SOL price from Jupiter v2: $${price.toFixed(2)}`);
+      return price;
+    }
   } catch (e) {
-    console.error("Failed to fetch SOL price:", e);
+    console.error("[TradeGuard] Failed to fetch SOL price from Jupiter v2:", e);
   }
-  return 200; // Fallback
+  
+  // Fallback to CoinGecko
+  try {
+    const res = await fetch("https://api.coingecko.com/api/v3/simple/price?ids=solana&vs_currencies=usd", {
+      signal: AbortSignal.timeout(5000),
+    });
+    const json = await res.json();
+    const price = Number(json?.solana?.usd);
+    if (Number.isFinite(price) && price > 0) {
+      console.log(`[TradeGuard] SOL price from CoinGecko: $${price.toFixed(2)}`);
+      return price;
+    }
+  } catch (e) {
+    console.error("[TradeGuard] CoinGecko fallback failed:", e);
+  }
+  
+  console.warn("[TradeGuard] Using fallback SOL price: $200");
+  return 200;
 }
 
 /**
@@ -68,20 +99,25 @@ export async function getExecutableQuote(
   quoteResponse: any;
 } | null> {
   const SOL_MINT = "So11111111111111111111111111111111111111112";
+  const jupiterApiKey = Deno.env.get("JUPITER_API_KEY") || "";
   
   try {
-    console.log(`[TradeGuard] Fetching Jupiter quote: ${solAmountLamports} lamports → ${tokenMint}`);
+    console.log(`[TradeGuard] Fetching Jupiter v1 quote: ${solAmountLamports} lamports → ${tokenMint}`);
     
-    const quoteUrl = `https://quote-api.jup.ag/v6/quote?inputMint=${SOL_MINT}&outputMint=${tokenMint}&amount=${solAmountLamports}&slippageBps=${slippageBps}&swapMode=ExactIn`;
+    // Jupiter v1 Quote API (replaces deprecated v6)
+    const quoteUrl = `https://api.jup.ag/swap/v1/quote?inputMint=${SOL_MINT}&outputMint=${tokenMint}&amount=${solAmountLamports}&slippageBps=${slippageBps}&swapMode=ExactIn`;
     
     const res = await fetch(quoteUrl, {
-      headers: { "Accept": "application/json" },
+      headers: { 
+        "Accept": "application/json",
+        ...(jupiterApiKey ? { "x-api-key": jupiterApiKey } : {}),
+      },
       signal: AbortSignal.timeout(10000)
     });
     
     if (!res.ok) {
       const text = await res.text();
-      console.error(`[TradeGuard] Jupiter quote failed: ${res.status} ${text}`);
+      console.error(`[TradeGuard] Jupiter v1 quote failed: ${res.status} ${text}`);
       return null;
     }
     
