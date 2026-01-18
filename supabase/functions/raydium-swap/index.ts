@@ -779,12 +779,25 @@ serve(async (req) => {
       if (side === "buy") {
         const buyWithSol = Boolean(body?.buyWithSol);
         if (buyWithSol) {
-          const usd = Number(usdcAmount ?? 0);
-          if (!Number.isFinite(usd) || usd <= 0) return bad("Invalid usdcAmount for buy");
-          const solPrice = await fetchSolUsdPrice();
-          const approxPrice = solPrice > 0 ? solPrice : 200;
-            let wantedLamports = Math.floor((usd / approxPrice) * 1_000_000_000);
-            const feeReserveLamports = 1_000_000; // 0.001 SOL (reduced for micro-buys)
+          // NEW: Prefer exact SOL input (lamports) from caller to avoid SOL↔USD double conversion.
+          const explicitLamports = Number(body?.solAmountLamports ?? body?.solLamports ?? 0);
+          const explicitSol = Number(body?.solAmountSol ?? body?.solAmount ?? 0);
+
+          let wantedLamports: number;
+          if (Number.isFinite(explicitLamports) && explicitLamports > 0) {
+            wantedLamports = Math.floor(explicitLamports);
+          } else if (Number.isFinite(explicitSol) && explicitSol > 0) {
+            wantedLamports = Math.floor(explicitSol * 1_000_000_000);
+          } else {
+            // Legacy path: derive SOL from USD using a SOL/USD feed
+            const usd = Number(usdcAmount ?? 0);
+            if (!Number.isFinite(usd) || usd <= 0) return bad("Invalid usdcAmount for buy");
+            const solPrice = await fetchSolUsdPrice();
+            const approxPrice = solPrice > 0 ? solPrice : 200;
+            wantedLamports = Math.floor((usd / approxPrice) * 1_000_000_000);
+          }
+
+          const feeReserveLamports = 1_000_000; // 0.001 SOL (reduced for micro-buys)
           let solBal: number | null = null;
           try { solBal = await connection.getBalance(owner.publicKey); } catch { solBal = null; }
           let lamports = wantedLamports;
@@ -1380,7 +1393,11 @@ serve(async (req) => {
           }
         }
         // Jupiter fallback - no outAmount available, caller should verify on-chain
-        return ok({ signatures: sigs, source: "jupiter", outAmount: null });
+        const solInputLamports =
+          side === "buy" && String(inputMint) === NATIVE_MINT.toBase58() && Number.isFinite(Number(amount))
+            ? Number(amount)
+            : null;
+        return ok({ signatures: sigs, source: "jupiter", outAmount: null, solInputLamports });
       } else {
         // Jupiter also failed - try PumpPortal as LAST RESORT for ANY token
         // PumpPortal will quickly fail if the token is not on pump.fun bonding curve
@@ -1438,7 +1455,11 @@ serve(async (req) => {
               }
               
               console.log(`PumpPortal ${side} successful:`, sig);
-              return ok({ signatures: [sig], source: "pumpportal", outAmount: null });
+              const solInputLamports =
+                side === "buy" && String(inputMint) === NATIVE_MINT.toBase58() && Number.isFinite(Number(amount))
+                  ? Number(amount)
+                  : null;
+              return ok({ signatures: [sig], source: "pumpportal", outAmount: null, solInputLamports });
             } catch (sendError) {
               console.error("PumpPortal transaction send failed:", (sendError as Error).message);
               return softError(
@@ -1641,7 +1662,12 @@ serve(async (req) => {
     const expectedOutAmount = swapResponse?.data?.outputAmount || swapResponse?.outputAmount || null;
     console.log("Raydium swap complete, expected outAmount:", expectedOutAmount);
     
-    return ok({ signatures: sigs, source: "raydium", outAmount: expectedOutAmount });
+    const solInputLamports =
+      side === "buy" && String(inputMint) === NATIVE_MINT.toBase58() && Number.isFinite(Number(amount))
+        ? Number(amount)
+        : null;
+
+    return ok({ signatures: sigs, source: "raydium", outAmount: expectedOutAmount, solInputLamports });
   } catch (e) {
     console.error("raydium-swap error", e);
     console.error("Error details:", {

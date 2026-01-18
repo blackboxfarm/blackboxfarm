@@ -779,23 +779,28 @@ serve(async (req) => {
 
       // Execute the buy via raydium-swap
       try {
-        // CRITICAL: Pass the actual SOL amount, not convert from USD
-        // buyAmountSol is already calculated correctly (either from explicit SOL or converted from USD)
-        const buyUsdForSwap = buyAmountSol * solPrice; // Convert SOL back to USD for raydium-swap
-        console.log("Executing swap with:", { buyAmountSol, buyUsdForSwap, solPrice });
-        
+        // CRITICAL: Avoid SOL↔USD double conversion (it caused mismatched spend amounts).
+        // We pass the exact SOL amount (lamports) we intend to spend.
+        const buyLamportsForSwap = Math.floor(buyAmountSol * 1_000_000_000);
+        const buyUsdForSwap = buyAmountSol * solPrice; // informational only (backwards compat)
+
+        console.log("Executing SOL swap with:", { buyAmountSol, buyLamportsForSwap, buyUsdForSwap, solPrice });
+
         const { data: swapResult, error: swapError } = await supabase.functions.invoke("raydium-swap", {
           body: {
             side: "buy",
             tokenMint: tokenMint,
-            usdcAmount: buyUsdForSwap, // Use the calculated USD value from SOL amount
             buyWithSol: true,
+            // NEW: exact SOL spend (prevents the swap function from recomputing SOL from USD)
+            solAmountLamports: buyLamportsForSwap,
+            // Keep legacy field for other callers / logs
+            usdcAmount: buyUsdForSwap,
             slippageBps: effectiveSlippage,
             priorityFeeMode: priorityFeeMode || "medium",
           },
           headers: {
-            "x-owner-secret": wallet.secret_key_encrypted
-          }
+            "x-owner-secret": wallet.secret_key_encrypted,
+          },
         });
 
         if (swapError) {
@@ -957,14 +962,24 @@ serve(async (req) => {
         
         console.log("Final quantity_tokens to store:", quantityTokens);
 
+        // CRITICAL: Use the ACTUAL SOL input used by the swap (raydium-swap may cap spendable balance)
+        const solInputLamports = Number.isFinite(Number((swapResult as any)?.solInputLamports))
+          ? Number((swapResult as any)?.solInputLamports)
+          : buyLamportsForSwap;
+        const solSpentSol = solInputLamports / 1_000_000_000;
+
         // CRITICAL: Calculate ACTUAL buy price from swap result immediately
         // This ensures displayed price matches what user actually paid, not stale quote
         let actualBuyPriceUsd = currentPrice; // Fallback to quote if calculation fails
-        let actualBuyAmountUsd = buyAmountSol * solPrice;
-        
+        const actualBuyAmountUsd = solSpentSol * solPrice;
+
         if (quantityTokens && Number(quantityTokens) > 0) {
           actualBuyPriceUsd = actualBuyAmountUsd / Number(quantityTokens);
-          console.log(`INLINE PRICE: Spent ${actualBuyAmountUsd.toFixed(4)} USD for ${quantityTokens} tokens = $${actualBuyPriceUsd.toFixed(10)}/token`);
+          console.log(
+            `INLINE PRICE: Spent ${solSpentSol.toFixed(6)} SOL ($${actualBuyAmountUsd.toFixed(
+              4
+            )}) for ${quantityTokens} tokens = $${actualBuyPriceUsd.toFixed(10)}/token`
+          );
         }
 
         // Update position with buy result AND inline-calculated price
@@ -974,6 +989,7 @@ serve(async (req) => {
             buy_signature: signature,
             buy_executed_at: new Date().toISOString(),
             quantity_tokens: quantityTokens,
+            buy_amount_sol: solSpentSol,
             buy_price_usd: actualBuyPriceUsd, // Use calculated price, not stale quote
             buy_amount_usd: actualBuyAmountUsd,
             // CRITICAL: target must be based on the REAL entry price (not the pre-buy quote)
