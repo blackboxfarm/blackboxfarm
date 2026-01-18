@@ -3591,19 +3591,27 @@ export function FlipItDashboard() {
                   const hasCurrentPrice =
                     typeof currentPrice === 'number' && Number.isFinite(currentPrice) && currentPrice > 0;
 
-                  const currentValue = hasQuantity && hasCurrentPrice
-                    ? effectiveQuantityTokens * currentPrice
+                  // SANITY CHECK: Detect wildly incorrect prices from wrong DexScreener matches
+                  // If price changed by more than 10000x from buy price, it's likely a wrong token match
+                  const priceRatio = hasCurrentPrice && effectiveEntryPrice > 0 
+                    ? currentPrice / effectiveEntryPrice 
+                    : 1;
+                  const isPriceSane = priceRatio < 10000 && priceRatio > 0.00001; // Allow 10000x up or down
+                  const usableCurrentPrice = hasCurrentPrice && isPriceSane ? currentPrice : null;
+
+                  const currentValue = hasQuantity && usableCurrentPrice
+                    ? effectiveQuantityTokens * usableCurrentPrice
                     : null;
 
                   // PnL based on PRICE CHANGE (not buy_amount_usd which may be inconsistent with stored price)
                   // PnL$ = tokens × (current_price - entry_price)
                   // PnL% = (current_price - entry_price) / entry_price × 100
-                  const pnlUsd = hasQuantity && hasCurrentPrice && effectiveEntryPrice > 0
-                    ? effectiveQuantityTokens * (currentPrice - effectiveEntryPrice)
+                  const pnlUsd = hasQuantity && usableCurrentPrice && effectiveEntryPrice > 0
+                    ? effectiveQuantityTokens * (usableCurrentPrice - effectiveEntryPrice)
                     : null;
 
-                  const pnlPercent = hasCurrentPrice && effectiveEntryPrice > 0
-                    ? ((currentPrice - effectiveEntryPrice) / effectiveEntryPrice) * 100
+                  const pnlPercent = usableCurrentPrice && effectiveEntryPrice > 0
+                    ? ((usableCurrentPrice - effectiveEntryPrice) / effectiveEntryPrice) * 100
                     : null;
 
                   // Target value
