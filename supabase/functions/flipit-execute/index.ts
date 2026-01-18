@@ -773,8 +773,18 @@ serve(async (req) => {
         
         console.log(`[TradeGuard] ✅ PASSED: Premium ${quoteValidation.premiumPct.toFixed(1)}%, Impact ${quoteValidation.priceImpactPct.toFixed(1)}%`);
       } catch (guardErr) {
-        // Trade guard failure should NOT block trades - log and continue
-        console.warn("[TradeGuard] Validation error (continuing):", guardErr);
+        // CRITICAL FIX: Trade guard errors MUST block trades - fail closed for safety
+        console.error("[TradeGuard] ❌ Critical validation error - blocking trade:", guardErr);
+        
+        await supabase
+          .from("flip_positions")
+          .update({
+            status: "blocked",
+            error_message: `TradeGuard error: ${guardErr instanceof Error ? guardErr.message : String(guardErr)}`,
+          })
+          .eq("id", position.id);
+        
+        return bad(`Trade blocked: TradeGuard validation failed - ${guardErr instanceof Error ? guardErr.message : "Unknown error"}`);
       }
 
       // Execute the buy via raydium-swap
