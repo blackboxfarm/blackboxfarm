@@ -102,6 +102,9 @@ interface FlipPosition {
   creator_wallet: string | null;
   // Tracking lock - when true, triggers data capture
   tracking_locked: boolean | null;
+  // Bonding curve status
+  is_on_curve: boolean | null;
+  bonding_curve_progress: number | null;
 }
 
 interface SuperAdminWallet {
@@ -3794,14 +3797,23 @@ export function FlipItDashboard() {
                               <span className="text-[10px] text-muted-foreground">
                                 {`Price: $${currentPrice.toFixed(8)}`}
                               </span>
-                              {bondingCurveData[position.token_mint] !== undefined && (
+                              {bondingCurveData[position.token_mint] !== undefined && 
+                               bondingCurveData[position.token_mint] < 100 && 
+                               position.is_on_curve !== false ? (
                                 <span 
                                   className="inline-flex items-center justify-center w-8 h-4 text-[9px] font-bold text-orange-400 bg-orange-500/20 border border-orange-500/40 rounded-full"
                                   title={`${bondingCurveData[position.token_mint].toFixed(0)}% on bonding curve`}
                                 >
                                   {bondingCurveData[position.token_mint].toFixed(0)}%
                                 </span>
-                              )}
+                              ) : position.is_on_curve === false ? (
+                                <span 
+                                  className="inline-flex items-center justify-center px-1.5 h-4 text-[9px] font-bold text-green-400 bg-green-500/20 border border-green-500/40 rounded-full"
+                                  title="Token has graduated from bonding curve"
+                                >
+                                  Graduated
+                                </span>
+                              ) : null}
                             </div>
                           </div>
                         ) : (
