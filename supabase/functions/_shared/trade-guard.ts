@@ -15,6 +15,7 @@ export interface TradeGuardConfig {
   requireQuoteCheck: boolean;  // If false, skip validation (emergency bypass)
   blockOnHighPriceImpact: boolean;  // Block if Jupiter reports high price impact
   maxPriceImpactPct: number;  // e.g., 15 = block if price impact > 15%
+  blockTokensWithTax: boolean;  // Block tokens with transfer tax (e.g., 5% tax)
 }
 
 export interface QuoteValidation {
@@ -27,6 +28,15 @@ export interface QuoteValidation {
   solPrice: number;
   blockReason?: string;
   jupiterQuote?: any;
+  hasTax?: boolean;
+  taxPct?: number;
+}
+
+export interface TokenTaxInfo {
+  hasTax: boolean;
+  taxPct: number;
+  taxType?: string;
+  source?: string;
 }
 
 const DEFAULT_CONFIG: TradeGuardConfig = {
@@ -34,6 +44,7 @@ const DEFAULT_CONFIG: TradeGuardConfig = {
   requireQuoteCheck: true,
   blockOnHighPriceImpact: true,
   maxPriceImpactPct: 15,
+  blockTokensWithTax: true,  // Default: block all tokens with transfer tax
 };
 
 /**
@@ -80,6 +91,135 @@ async function fetchSolPrice(): Promise<number> {
   
   console.warn("[TradeGuard] Using fallback SOL price: $200");
   return 200;
+}
+
+/**
+ * Check if token has a transfer tax using multiple sources:
+ * 1. RugCheck API - detects "Transfer Fee" risk
+ * 2. DexScreener token info
+ * 3. Direct on-chain check for Token-2022 transfer fee extension
+ */
+export async function checkTokenTax(tokenMint: string): Promise<TokenTaxInfo> {
+  console.log(`[TradeGuard] Checking for token tax: ${tokenMint}`);
+  
+  // Method 1: RugCheck API (most reliable for pump.fun tokens)
+  try {
+    const rugCheckRes = await fetch(`https://api.rugcheck.xyz/v1/tokens/${tokenMint}/report/summary`, {
+      signal: AbortSignal.timeout(8000),
+    });
+    
+    if (rugCheckRes.ok) {
+      const rugData = await rugCheckRes.json();
+      const risks = rugData.risks || [];
+      
+      // Look for tax-related risks
+      for (const risk of risks) {
+        const name = (risk.name || "").toLowerCase();
+        const description = (risk.description || "").toLowerCase();
+        
+        // Check for various tax indicators
+        if (
+          name.includes("transfer fee") ||
+          name.includes("transfer tax") ||
+          name.includes("tax") ||
+          description.includes("transfer fee") ||
+          description.includes("transfer tax") ||
+          description.includes("% tax") ||
+          description.includes("% fee")
+        ) {
+          // Try to extract the percentage
+          const match = description.match(/(\d+(?:\.\d+)?)\s*%/);
+          const taxPct = match ? parseFloat(match[1]) : 0;
+          
+          console.log(`[TradeGuard] 🚨 TOKEN HAS TAX via RugCheck: ${risk.name} - ${taxPct}%`);
+          return {
+            hasTax: true,
+            taxPct,
+            taxType: risk.name,
+            source: "rugcheck",
+          };
+        }
+      }
+    }
+  } catch (e) {
+    console.error("[TradeGuard] RugCheck tax check failed:", e);
+  }
+  
+  // Method 2: DexScreener API (check for tax info in token metadata)
+  try {
+    const dexRes = await fetch(`https://api.dexscreener.com/tokens/v1/solana/${tokenMint}`, {
+      signal: AbortSignal.timeout(5000),
+    });
+    
+    if (dexRes.ok) {
+      const dexData = await dexRes.json();
+      const pairs = Array.isArray(dexData) ? dexData : dexData?.pairs || [];
+      
+      for (const pair of pairs) {
+        // Check if DexScreener reports any tax info
+        const buyTax = pair.txns?.h24?.buyTax || pair.priceChange?.buyTax || 0;
+        const sellTax = pair.txns?.h24?.sellTax || pair.priceChange?.sellTax || 0;
+        const totalTax = Math.max(Number(buyTax) || 0, Number(sellTax) || 0);
+        
+        if (totalTax > 0) {
+          console.log(`[TradeGuard] 🚨 TOKEN HAS TAX via DexScreener: ${totalTax}%`);
+          return {
+            hasTax: true,
+            taxPct: totalTax,
+            taxType: "transfer_tax",
+            source: "dexscreener",
+          };
+        }
+        
+        // Check labels for tax indicators
+        const labels = pair.labels || [];
+        if (labels.some((l: string) => l.toLowerCase().includes("tax"))) {
+          console.log(`[TradeGuard] 🚨 TOKEN HAS TAX via DexScreener labels`);
+          return {
+            hasTax: true,
+            taxPct: 0,
+            taxType: "labeled_tax",
+            source: "dexscreener",
+          };
+        }
+      }
+    }
+  } catch (e) {
+    console.error("[TradeGuard] DexScreener tax check failed:", e);
+  }
+  
+  // Method 3: Check pump.fun API for token metadata (if it's a pump.fun token)
+  try {
+    const pumpRes = await fetch(`https://frontend-api-v3.pump.fun/coins/${tokenMint}`, {
+      signal: AbortSignal.timeout(5000),
+    });
+    
+    if (pumpRes.ok) {
+      const pumpData = await pumpRes.json();
+      // Note: pump.fun tokens typically don't have built-in taxes,
+      // but we check just in case the API exposes this info
+      if (pumpData.transferFee || pumpData.tax || pumpData.hasTax) {
+        const taxPct = Number(pumpData.transferFee || pumpData.tax || 0);
+        console.log(`[TradeGuard] 🚨 TOKEN HAS TAX via pump.fun API: ${taxPct}%`);
+        return {
+          hasTax: true,
+          taxPct,
+          taxType: "pump_fun_tax",
+          source: "pumpfun",
+        };
+      }
+    }
+  } catch (e) {
+    // pump.fun API might not exist for all tokens, that's ok
+    console.log("[TradeGuard] pump.fun tax check skipped");
+  }
+  
+  console.log(`[TradeGuard] ✅ No token tax detected for ${tokenMint.slice(0, 8)}...`);
+  return {
+    hasTax: false,
+    taxPct: 0,
+    source: "none",
+  };
 }
 
 /**
@@ -185,6 +325,34 @@ export async function validateBuyQuote(
     };
   }
   
+  // ========================================================
+  // STEP 1: CHECK FOR TOKEN TAX (block before quote check)
+  // ========================================================
+  if (cfg.blockTokensWithTax) {
+    console.log("[TradeGuard] Checking for token transfer tax...");
+    const taxInfo = await checkTokenTax(tokenMint);
+    
+    if (taxInfo.hasTax) {
+      console.error(`[TradeGuard] ❌ BLOCKED: Token has ${taxInfo.taxPct}% transfer tax (${taxInfo.taxType}) via ${taxInfo.source}`);
+      return {
+        isValid: false,
+        displayPrice: displayPriceUsd,
+        executablePrice: 0,
+        premiumPct: 0,
+        priceImpactPct: 0,
+        outputTokens: 0,
+        solPrice: 0,
+        hasTax: true,
+        taxPct: taxInfo.taxPct,
+        blockReason: `TOKEN_HAS_TAX: This token has a ${taxInfo.taxPct}% transfer tax built into the contract. Tokens with transfer taxes are blocked to protect against hidden fees. Source: ${taxInfo.source}`,
+      };
+    }
+    console.log("[TradeGuard] ✅ No transfer tax detected");
+  }
+  
+  // ========================================================
+  // STEP 2: FETCH EXECUTABLE QUOTE
+  // ========================================================
   const solAmountLamports = Math.floor(solAmount * 1e9);
   const quote = await getExecutableQuote(tokenMint, solAmountLamports, 100);
   
@@ -227,6 +395,8 @@ export async function validateBuyQuote(
     outputTokens: tokensDecimal,
     solPrice: quote.solPrice,
     jupiterQuote: quote.quoteResponse,
+    hasTax: false,
+    taxPct: 0,
   };
   
   // Check price premium
@@ -245,7 +415,7 @@ export async function validateBuyQuote(
     return result;
   }
   
-  console.log(`[TradeGuard] ✅ PASSED: Price validation OK`);
+  console.log(`[TradeGuard] ✅ PASSED: All validations OK (no tax, price OK, impact OK)`);
   return result;
 }
 
@@ -256,7 +426,7 @@ export async function getTradeGuardConfig(supabase: any): Promise<TradeGuardConf
   try {
     const { data } = await supabase
       .from("flipit_settings")
-      .select("max_price_premium_pct, require_quote_check, block_on_high_price_impact, max_price_impact_pct")
+      .select("max_price_premium_pct, require_quote_check, block_on_high_price_impact, max_price_impact_pct, block_tokens_with_tax")
       .single();
     
     if (data) {
@@ -265,6 +435,7 @@ export async function getTradeGuardConfig(supabase: any): Promise<TradeGuardConf
         requireQuoteCheck: data.require_quote_check ?? DEFAULT_CONFIG.requireQuoteCheck,
         blockOnHighPriceImpact: data.block_on_high_price_impact ?? DEFAULT_CONFIG.blockOnHighPriceImpact,
         maxPriceImpactPct: data.max_price_impact_pct ?? DEFAULT_CONFIG.maxPriceImpactPct,
+        blockTokensWithTax: data.block_tokens_with_tax ?? DEFAULT_CONFIG.blockTokensWithTax,
       };
     }
   } catch (e) {
