@@ -609,9 +609,10 @@ serve(async (req) => {
       // Fetch token metadata
       const metadata = await fetchTokenMetadata(tokenMint);
 
-      // Calculate target price
-      const mult = targetMultiplier || 2;
-      const targetPrice = currentPrice * mult;
+      // Calculate target price (0 = no auto-sell)
+      // CRITICAL: Allow 0 as valid value for "no auto-sell" mode
+      const mult = targetMultiplier === 0 ? 0 : (targetMultiplier || 2);
+      const targetPrice = mult > 0 ? currentPrice * mult : 0; // 0 means no target (manual sell only)
 
       // Get auth user
       const authHeader = req.headers.get("authorization");
@@ -976,7 +977,8 @@ serve(async (req) => {
             buy_price_usd: actualBuyPriceUsd, // Use calculated price, not stale quote
             buy_amount_usd: actualBuyAmountUsd,
             // CRITICAL: target must be based on the REAL entry price (not the pre-buy quote)
-            target_price_usd: actualBuyPriceUsd * mult,
+            // If mult is 0 (no auto-sell), target_price_usd = 0
+            target_price_usd: mult > 0 ? actualBuyPriceUsd * mult : 0,
             status: "holding",
             error_message: null,
           })
@@ -1021,7 +1023,8 @@ serve(async (req) => {
                   buy_amount_usd: verifiedBuyAmountUsd,
                   buy_price_usd: verifiedBuyPriceUsd,
                   // CRITICAL: target must track verified entry price too
-                  target_price_usd: verifiedBuyPriceUsd * mult,
+                  // If mult is 0 (no auto-sell), target_price_usd = 0
+                  target_price_usd: mult > 0 ? verifiedBuyPriceUsd * mult : 0,
                   buy_fee_sol: buyData.fee,
                   entry_verified: true,
                   entry_verified_at: new Date().toISOString(),
