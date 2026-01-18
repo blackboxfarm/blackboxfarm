@@ -8,11 +8,54 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { parseBuyFromHelius, parseSellFromHelius } from "../_shared/helius-api.ts";
+import { parseBuyFromSolscan as parseBuyFromSolscanDirect, parseSellFromSolscan as parseSellFromSolscanDirect } from "../_shared/solscan-api.ts";
 import { fetchSolPrice } from "../_shared/price-resolver.ts";
 
-// Aliases to keep code compatible
-const parseBuyFromSolscan = parseBuyFromHelius;
-const parseSellFromSolscan = parseSellFromHelius;
+/**
+ * Try Helius first, then fallback to Solscan for parsing buy transactions
+ */
+async function parseBuyFromSolscan(
+  signature: string,
+  tokenMint: string,
+  walletPubkey: string,
+  heliusApiKey: string,
+  solscanApiKey?: string
+) {
+  // Try Helius first
+  const heliusResult = await parseBuyFromHelius(signature, tokenMint, walletPubkey, heliusApiKey);
+  if (heliusResult) return heliusResult;
+  
+  // Fallback to Solscan if available
+  if (solscanApiKey) {
+    console.log(`Helius failed, trying Solscan for ${signature.slice(0, 12)}...`);
+    return await parseBuyFromSolscanDirect(signature, tokenMint, walletPubkey, solscanApiKey);
+  }
+  
+  return null;
+}
+
+/**
+ * Try Helius first, then fallback to Solscan for parsing sell transactions
+ */
+async function parseSellFromSolscan(
+  signature: string,
+  tokenMint: string,
+  walletPubkey: string,
+  heliusApiKey: string,
+  solscanApiKey?: string
+) {
+  // Try Helius first
+  const heliusResult = await parseSellFromHelius(signature, tokenMint, walletPubkey, heliusApiKey);
+  if (heliusResult) return heliusResult;
+  
+  // Fallback to Solscan if available
+  if (solscanApiKey) {
+    console.log(`Helius sell failed, trying Solscan for ${signature.slice(0, 12)}...`);
+    return await parseSellFromSolscanDirect(signature, tokenMint, walletPubkey, solscanApiKey);
+  }
+  
+  return null;
+}
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -44,13 +87,11 @@ serve(async (req) => {
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const heliusApiKey = Deno.env.get("HELIUS_API_KEY");
+    const solscanApiKey = Deno.env.get("SOLSCAN_API_KEY");
     
     if (!heliusApiKey) {
       return bad("HELIUS_API_KEY required");
     }
-
-    // Use heliusApiKey in place of solscanApiKey
-    const solscanApiKey = heliusApiKey;
 
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
     const body = await req.json().catch(() => ({}));
@@ -106,6 +147,7 @@ serve(async (req) => {
           position.buy_signature,
           position.token_mint,
           walletPubkey,
+          heliusApiKey,
           solscanApiKey
         );
 
@@ -148,6 +190,7 @@ serve(async (req) => {
           position.sell_signature,
           position.token_mint,
           walletPubkey,
+          heliusApiKey,
           solscanApiKey
         );
 
@@ -225,6 +268,7 @@ serve(async (req) => {
             position.buy_signature!,
             position.token_mint,
             walletPubkey,
+            heliusApiKey,
             solscanApiKey
           );
 
