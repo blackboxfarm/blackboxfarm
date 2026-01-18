@@ -206,29 +206,43 @@ export function AdBanner({ size, position }: AdBannerProps) {
   // Both Banner#1 and Banner#2 now use the same max-w-4xl width
   // Original Position 1 setting was: max-w-[1930px] and h-[320px] object-cover
   const containerClass = "mb-4 overflow-hidden cursor-pointer transition-all duration-300 hover:scale-105 hover:shadow-2xl hover:shadow-primary/20 w-full max-w-4xl mx-auto";
-  const mediaClass = "w-full h-auto object-contain";
+  const mediaClass = "w-full h-[300px] object-cover";
+  
+  // For Dexscreener banners, extract ticker from title (usually "TOKEN - description" format)
+  const isDexBanner = banner?.is_dexscreener === true;
+  const tickerDisplay = isDexBanner ? `$${(banner.title || 'TOKEN').split(' ')[0].replace(/[^A-Za-z0-9]/g, '').toUpperCase()}` : null;
 
   return (
       <Card className={containerClass} onClick={handleClick}>
       {mediaUrl ? (
-        isVideo ? (
-          <video
-            src={mediaUrl}
-            autoPlay
-            loop
-            muted
-            playsInline
-            preload="metadata"
-            className={mediaClass}
-          />
-        ) : (
-          <img
-            src={mediaUrl}
-            alt={displayData.title}
-            className={mediaClass}
-            loading="lazy"
-          />
-        )
+        <div className="relative">
+          {isVideo ? (
+            <video
+              src={mediaUrl}
+              autoPlay
+              loop
+              muted
+              playsInline
+              preload="metadata"
+              className={mediaClass}
+            />
+          ) : (
+            <img
+              src={mediaUrl}
+              alt={displayData.title}
+              className={mediaClass}
+              loading="lazy"
+            />
+          )}
+          {/* Ticker overlay for Dexscreener banners */}
+          {isDexBanner && tickerDisplay && (
+            <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+              <h1 className="text-4xl md:text-5xl font-black text-white drop-shadow-[0_4px_8px_rgba(0,0,0,0.8)] tracking-wider">
+                {tickerDisplay}
+              </h1>
+            </div>
+          )}
+        </div>
       ) : (
         <div className={`bg-gradient-to-r ${displayData.gradient} p-4 text-white`}>
           <div className="flex items-center justify-between max-w-4xl mx-auto">
