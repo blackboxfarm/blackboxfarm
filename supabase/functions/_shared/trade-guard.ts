@@ -153,17 +153,18 @@ export async function validateBuyQuote(
   const quote = await getExecutableQuote(tokenMint, solAmountLamports, 100);
   
   if (!quote) {
-    // If we can't get a quote, fail open with warning
-    console.warn("[TradeGuard] Could not fetch executable quote - proceeding with caution");
+    // CRITICAL FIX: Fail CLOSED - if we can't verify the quote is safe, DON'T trade
+    // This prevents buying at unknown/bad prices when Jupiter is unreachable
+    console.error("[TradeGuard] ❌ BLOCKED: Could not fetch executable quote - failing closed for safety");
     return {
-      isValid: true,
+      isValid: false,
       displayPrice: displayPriceUsd,
-      executablePrice: displayPriceUsd,
+      executablePrice: 0,
       premiumPct: 0,
       priceImpactPct: 0,
       outputTokens: 0,
       solPrice: 0,
-      blockReason: "QUOTE_UNAVAILABLE",
+      blockReason: "QUOTE_UNAVAILABLE: Cannot verify executable price - trade blocked for safety. Retry in a moment.",
     };
   }
   
