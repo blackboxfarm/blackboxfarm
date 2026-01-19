@@ -242,13 +242,19 @@ export function AdBanner({ size, position }: AdBannerProps) {
               </h1>
             </div>
           )}
-          {/* ADVERTISE HERE overlay for position 1 */}
+          {/* ADVERTISE HERE overlay for position 1 - clickable link to /adverts */}
           {position === 1 && (
-            <div className="absolute bottom-2 right-2 pointer-events-none">
-              <span className="text-white text-xs md:text-sm font-bold uppercase tracking-wide drop-shadow-[0_2px_4px_rgba(0,0,0,0.9)] bg-black/50 px-2 py-1 rounded">
+            <a 
+              href="/adverts" 
+              className="absolute bottom-2 right-2 z-10"
+              onClick={(e) => {
+                e.stopPropagation(); // Prevent parent click handler (opens token link)
+              }}
+            >
+              <span className="text-white text-xs md:text-sm font-bold uppercase tracking-wide drop-shadow-[0_2px_4px_rgba(0,0,0,0.9)] bg-black/50 px-2 py-1 rounded hover:bg-primary/80 transition-colors cursor-pointer">
                 ADVERTISE HERE
               </span>
-            </div>
+            </a>
           )}
         </div>
       ) : (
