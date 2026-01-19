@@ -6,7 +6,7 @@
 
 _Built by the BlackBox team — bringing institutional-grade tools to retail traders_
 
-[🌐 Live Platform](https://blackbox.farm) · [𝕏 BlackBoxFarm](https://x.com/blackboxfarm) · [📊 Token Analytics](https://blackbox.farm/holders) · [🤖 Trading Bots](https://blackbox.farm/blackbox)
+[🌐 Live Platform](https://blackbox.farm) · [𝕏 BlackBox_Farm](https://x.com/blackbox_farm) · [📊 Token Analytics](https://blackbox.farm/holders) · [🤖 Trading Bots](https://blackbox.farm/blackbox)
 
 [![License](https://img.shields.io/badge/License-Proprietary-red?style=for-the-badge)](#)
 [![Version](https://img.shields.io/badge/version-2.0.0-cyan?style=for-the-badge)](#)
@@ -230,7 +230,7 @@ npm run dev
 ## 📬 Contact
 
 - **Website:** [blackbox.farm](https://blackbox.farm)
-- **Twitter/X:** [@blackboxfarm](https://x.com/blackboxfarm)
+- **Twitter/X:** [@blackbox_farm](https://x.com/blackbox_farm)
 - **Email:** contact@blackbox.farm
 
 ---
