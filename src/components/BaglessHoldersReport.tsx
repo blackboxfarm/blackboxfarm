@@ -920,6 +920,20 @@ export function BaglessHoldersReport({ initialToken }: BaglessHoldersReportProps
       <Card>
         <CardHeader className="p-3 md:p-6 pb-2 md:pb-4">
           <CardTitle className="text-base md:text-xl">Token Holders Report</CardTitle>
+          {/* Wizard-style flow indicator */}
+          <div className="mt-2 flex flex-wrap items-center gap-1 text-[10px] md:text-xs text-muted-foreground">
+            <span className="font-semibold text-primary">Paste & Click</span>
+            <span className="text-muted-foreground/60">→</span>
+            <span className="bg-muted/50 px-1.5 py-0.5 rounded font-medium">1. Quick Snapshot</span>
+            <span className="text-muted-foreground/60">→</span>
+            <span className="bg-muted/50 px-1.5 py-0.5 rounded font-medium">2. Report Summary</span>
+            <span className="text-muted-foreground/60">→</span>
+            <span className="bg-muted/50 px-1.5 py-0.5 rounded font-medium">3. Functional Holders</span>
+            <span className="text-muted-foreground/60">→</span>
+            <span className="bg-muted/50 px-1.5 py-0.5 rounded font-medium">4. Distribution Integrity</span>
+            <span className="text-muted-foreground/60">→</span>
+            <span className="font-semibold text-primary">Share!</span>
+          </div>
         </CardHeader>
         <CardContent className="space-y-2 md:space-y-4 p-3 md:p-6 pt-2 md:pt-0">
           <div>
