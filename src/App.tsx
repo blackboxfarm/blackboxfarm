@@ -43,6 +43,11 @@ const BannerCheckout = lazy(() => import("./pages/BannerCheckout"));
 const BannerPreview = lazy(() => import("./pages/BannerPreview"));
 const TokenAnalysisDownload = lazy(() => import("./pages/TokenAnalysisDownload"));
 const ShareCardDemoPage = lazy(() => import("./pages/ShareCardDemo"));
+const BumpBotLanding = lazy(() => import("./pages/BumpBotLanding"));
+const VolumeBotLanding = lazy(() => import("./pages/VolumeBotLanding"));
+const HoldersLanding = lazy(() => import("./pages/HoldersLanding"));
+const HoldersBotLanding = lazy(() => import("./pages/HoldersBotLanding"));
+const Security = lazy(() => import("./pages/Security"));
 
 const queryClient = new QueryClient();
 
@@ -92,6 +97,11 @@ const App = () => (
                       <Route path="/helius-usage" element={<HeliusUsage />} />
                       <Route path="/token-analysis" element={<TokenAnalysisDownload />} />
                       <Route path="/share-card-demo" element={<ShareCardDemoPage />} />
+                      <Route path="/bumpbot" element={<BumpBotLanding />} />
+                      <Route path="/volumebot" element={<VolumeBotLanding />} />
+                      <Route path="/holders-info" element={<HoldersLanding />} />
+                      <Route path="/holders-bot" element={<HoldersBotLanding />} />
+                      <Route path="/security" element={<Security />} />
                       {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
                       <Route path="*" element={<NotFound />} />
                     </Routes>
