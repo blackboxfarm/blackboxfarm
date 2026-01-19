@@ -73,6 +73,48 @@ export function Footer() {
               )}
             </ul>
           </div>
+          {/* Apps & Services */}
+          <div className="space-y-4">
+            <h3 className="font-semibold text-sm uppercase tracking-wide">Apps & Services</h3>
+            <ul className="space-y-2 text-sm">
+              <li>
+                <Link to="/bumpbot" className="text-muted-foreground hover:text-primary transition-colors flex items-center gap-2">
+                  <span>⚡</span>
+                  BumpBot
+                </Link>
+              </li>
+              <li>
+                <Link to="/volumebot" className="text-muted-foreground hover:text-primary transition-colors flex items-center gap-2">
+                  <span>📊</span>
+                  Volume Bot
+                </Link>
+              </li>
+              <li>
+                <Link to="/holders-info" className="text-muted-foreground hover:text-primary transition-colors flex items-center gap-2">
+                  <span>👥</span>
+                  Holders Analysis
+                </Link>
+              </li>
+              <li>
+                <Link to="/holders-bot" className="text-muted-foreground hover:text-primary transition-colors flex items-center gap-2">
+                  <span>🤖</span>
+                  Holders Bot
+                </Link>
+              </li>
+              <li>
+                <Link to="/adverts" className="text-muted-foreground hover:text-primary transition-colors flex items-center gap-2">
+                  <span>📢</span>
+                  Marketing
+                </Link>
+              </li>
+              <li>
+                <Link to="/security" className="text-muted-foreground hover:text-primary transition-colors flex items-center gap-2">
+                  <span>🔒</span>
+                  Security
+                </Link>
+              </li>
+            </ul>
+          </div>
 
           <div className="space-y-4">
             <h3 className="font-semibold text-sm uppercase tracking-wide">Company</h3>
