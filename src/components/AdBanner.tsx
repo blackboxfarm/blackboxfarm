@@ -242,6 +242,14 @@ export function AdBanner({ size, position }: AdBannerProps) {
               </h1>
             </div>
           )}
+          {/* ADVERTISE HERE overlay for position 1 */}
+          {position === 1 && (
+            <div className="absolute bottom-2 right-2 pointer-events-none">
+              <span className="text-white text-xs md:text-sm font-bold uppercase tracking-wide drop-shadow-[0_2px_4px_rgba(0,0,0,0.9)] bg-black/50 px-2 py-1 rounded">
+                ADVERTISE HERE
+              </span>
+            </div>
+          )}
         </div>
       ) : (
         <div className={`bg-gradient-to-r ${displayData.gradient} p-4 text-white`}>
