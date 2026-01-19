@@ -174,6 +174,18 @@ export function Footer() {
                   Cookie Policy
                 </Link>
               </li>
+              <li>
+                <Link to="/api" className="text-muted-foreground hover:text-primary transition-colors flex items-center gap-2">
+                  <span>🔌</span>
+                  API
+                </Link>
+              </li>
+              <li>
+                <Link to="/api-docs" className="text-muted-foreground hover:text-primary transition-colors flex items-center gap-2">
+                  <span>📖</span>
+                  API Docs
+                </Link>
+              </li>
             </ul>
             
             <div className="pt-2">

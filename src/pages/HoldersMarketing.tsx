@@ -278,7 +278,7 @@ export default function HoldersMarketing() {
                   Users spend 30-60 seconds reviewing reports - perfect for brand awareness and clicks.
                 </p>
                 <Button 
-                  onClick={() => navigate("/contact-us")}
+                  onClick={() => navigate("/adverts")}
                   variant="default"
                   size="lg"
                   className="w-full"

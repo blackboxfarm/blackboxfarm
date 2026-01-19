@@ -19,10 +19,21 @@ const ALL_ROUTES: RouteInfo[] = [
   { path: "/auth", label: "Auth", category: "public", description: "Login/signup page" },
   { path: "/holders", label: "Holders Report", category: "public", description: "Token holder analysis" },
   { path: "/holders-marketing", label: "Holders Marketing", category: "marketing", description: "Marketing page for holder reports" },
+  { path: "/holders-info", label: "Holders Landing", category: "marketing", description: "Holders tool info page" },
   { path: "/blackbox", label: "BlackBox", category: "public", description: "Alternative landing" },
   { path: "/demo", label: "Demo", category: "public", description: "Demo page" },
   { path: "/share-card-demo", label: "Share Card Demo", category: "public", description: "Social share card generator" },
   { path: "/token-analysis", label: "Token Analysis", category: "public", description: "Token analysis download" },
+  
+  // Apps & Services
+  { path: "/bumpbot", label: "BumpBot Landing", category: "marketing", description: "Token bumping service (PENDING)" },
+  { path: "/volumebot", label: "Volume Bot Landing", category: "marketing", description: "Trading volume service (PENDING)" },
+  { path: "/holders-bot", label: "Holders Bot", category: "marketing", description: "TG holder analysis bot (In Dev)" },
+  { path: "/security", label: "Security", category: "legal", description: "Platform security info" },
+  
+  // API & Docs
+  { path: "/api", label: "API", category: "public", description: "API overview (In Dev)" },
+  { path: "/api-docs", label: "API Docs", category: "public", description: "API documentation (In Dev)" },
   
   // Advertising
   { path: "/buy-banner", label: "Buy Banner", category: "marketing", description: "Banner ad purchase" },
