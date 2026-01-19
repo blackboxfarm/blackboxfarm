@@ -226,9 +226,112 @@ export async function checkTokenTax(tokenMint: string): Promise<TokenTaxInfo> {
  * Fetch executable quote from Jupiter for the exact SOL amount
  * Returns the actual tokens you would receive and implied price
  */
+// Constants for on-chain bonding curve parsing
+const PUMP_PROGRAM_ID = '6EF8rrecthR5Dkzon8Nwu78hRvfCKubJ14M5uBEwF6P';
+
+/**
+ * Fetch bonding curve state directly from on-chain via Helius RPC
+ * Used when pump.fun API is unavailable
+ */
+async function fetchOnChainCurveState(tokenMint: string): Promise<{
+  virtualSolReserves: number;
+  virtualTokenReserves: number;
+  complete: boolean;
+} | null> {
+  const heliusApiKey = Deno.env.get("HELIUS_API_KEY") || "";
+  if (!heliusApiKey) {
+    console.log("[TradeGuard] No HELIUS_API_KEY, skipping on-chain fallback");
+    return null;
+  }
+  
+  try {
+    const { Connection, PublicKey } = await import('npm:@solana/web3.js@1.95.3');
+    
+    const connection = new Connection(
+      `https://mainnet.helius-rpc.com/?api-key=${heliusApiKey}`,
+      'confirmed'
+    );
+
+    const mint = new PublicKey(tokenMint);
+    const programId = new PublicKey(PUMP_PROGRAM_ID);
+    const seed = new TextEncoder().encode('bonding-curve');
+    
+    const [bondingCurvePda] = PublicKey.findProgramAddressSync(
+      [seed, mint.toBuffer()],
+      programId
+    );
+
+    const info = await connection.getAccountInfo(bondingCurvePda);
+    if (!info?.data || info.data.length < 49) {
+      console.log("[TradeGuard] No bonding curve account found (token may be graduated or not pump.fun)");
+      return null;
+    }
+
+    const data = info.data;
+    const view = new DataView(data.buffer, data.byteOffset, data.byteLength);
+
+    // Parse bonding curve account data
+    // Layout: discriminator (8) + virtualTokenReserves (8) + virtualSolReserves (8) + ... + complete (1 @ byte 48)
+    const virtualTokenReserves = Number(view.getBigUint64(8, true));
+    const virtualSolReserves = Number(view.getBigUint64(16, true));
+    const complete = data[48] === 1;
+
+    console.log(`[TradeGuard] On-chain curve: virtualSol=${virtualSolReserves}, virtualTokens=${virtualTokenReserves}, complete=${complete}`);
+    
+    return { virtualSolReserves, virtualTokenReserves, complete };
+  } catch (e) {
+    console.error("[TradeGuard] On-chain curve fetch failed:", e);
+    return null;
+  }
+}
+
+/**
+ * Compute quote from bonding curve reserves
+ */
+function computeCurveQuote(
+  virtualSolReserves: number,
+  virtualTokenReserves: number,
+  solAmountLamports: number,
+  solPrice: number
+): {
+  outputAmount: number;
+  outputDecimals: number;
+  priceImpactPct: number;
+  impliedPriceUsd: number;
+  solPrice: number;
+  source: string;
+} {
+  const solAmount = solAmountLamports / 1e9;
+  const usdAmount = solAmount * solPrice;
+  
+  // Bonding curve math: constant product AMM
+  const newSolReserves = virtualSolReserves + solAmountLamports;
+  const newTokenReserves = (virtualSolReserves * virtualTokenReserves) / newSolReserves;
+  const tokensOutRaw = virtualTokenReserves - newTokenReserves;
+  
+  // pump.fun tokens have 6 decimals
+  const outputDecimals = 6;
+  const tokensDecimal = tokensOutRaw / 1e6;
+  
+  const impliedPriceUsd = tokensDecimal > 0 ? usdAmount / tokensDecimal : 0;
+  const priceImpactPct = (solAmountLamports / virtualSolReserves) * 100;
+  
+  console.log(`[TradeGuard] Curve quote: ${solAmount.toFixed(4)} SOL ($${usdAmount.toFixed(2)}) → ${tokensDecimal.toFixed(2)} tokens @ $${impliedPriceUsd.toFixed(10)}, impact: ${priceImpactPct.toFixed(2)}%`);
+  
+  return {
+    outputAmount: tokensOutRaw,
+    outputDecimals,
+    priceImpactPct,
+    impliedPriceUsd,
+    solPrice,
+    source: 'bonding_curve'
+  };
+}
+
 /**
  * Fetch quote from pump.fun bonding curve math
  * Used as fallback when Jupiter returns TOKEN_NOT_TRADABLE
+ * Tries pump.fun API first, then falls back to on-chain data via Helius
  */
 async function getBondingCurveQuote(
   tokenMint: string,
@@ -241,77 +344,56 @@ async function getBondingCurveQuote(
   solPrice: number;
   source: string;
 } | null> {
+  // Get SOL price first (needed for all calculations)
+  const solPrice = await fetchSolPrice();
+  
+  // Try pump.fun API first
   try {
     console.log(`[TradeGuard] Fetching pump.fun bonding curve quote for ${tokenMint}`);
     
-    // Fetch token data from pump.fun API
     const res = await fetch(`https://frontend-api.pump.fun/coins/${tokenMint}`, {
       headers: { 'Accept': 'application/json' },
       signal: AbortSignal.timeout(5000)
     });
     
-    if (!res.ok) {
-      console.log(`[TradeGuard] pump.fun API returned ${res.status}`);
-      return null;
+    if (res.ok) {
+      const data = await res.json();
+      
+      if (data.complete === true) {
+        console.log(`[TradeGuard] Token is graduated, bonding curve quote not applicable`);
+        return null;
+      }
+      
+      const virtualSolReserves = Number(data.virtual_sol_reserves);
+      const virtualTokenReserves = Number(data.virtual_token_reserves);
+      
+      if (virtualSolReserves && virtualTokenReserves) {
+        return computeCurveQuote(virtualSolReserves, virtualTokenReserves, solAmountLamports, solPrice);
+      }
+    } else {
+      console.log(`[TradeGuard] pump.fun API returned ${res.status}, trying on-chain fallback...`);
     }
-    
-    const data = await res.json();
-    
-    // Check if graduated - can't use bonding curve math
-    if (data.complete === true) {
-      console.log(`[TradeGuard] Token is graduated, bonding curve quote not applicable`);
-      return null;
-    }
-    
-    // Get reserves
-    const virtualSolReserves = Number(data.virtual_sol_reserves);
-    const virtualTokenReserves = Number(data.virtual_token_reserves);
-    
-    if (!virtualSolReserves || !virtualTokenReserves) {
-      console.log(`[TradeGuard] Missing bonding curve reserves`);
-      return null;
-    }
-    
-    // Get SOL price
-    const solPrice = await fetchSolPrice();
-    const solAmount = solAmountLamports / 1e9;
-    const usdAmount = solAmount * solPrice;
-    
-    // Bonding curve math: constant product AMM
-    // newSolReserves = virtualSolReserves + solAmountLamports
-    // newTokenReserves = (virtualSolReserves * virtualTokenReserves) / newSolReserves
-    // tokensOut = virtualTokenReserves - newTokenReserves
-    const solLamports = solAmountLamports;
-    const newSolReserves = virtualSolReserves + solLamports;
-    const newTokenReserves = (virtualSolReserves * virtualTokenReserves) / newSolReserves;
-    const tokensOutRaw = virtualTokenReserves - newTokenReserves;
-    
-    // pump.fun tokens have 6 decimals
-    const outputDecimals = 6;
-    const tokensDecimal = tokensOutRaw / 1e6;
-    
-    // Calculate implied price
-    const impliedPriceUsd = tokensDecimal > 0 ? usdAmount / tokensDecimal : 0;
-    
-    // Estimate price impact (simplified)
-    // priceImpact = (actualTokensOut - idealTokensOut) / idealTokensOut * 100
-    // For a constant product, this is roughly 2 * (solIn / virtualSolReserves) * 100
-    const priceImpactPct = (solLamports / virtualSolReserves) * 100;
-    
-    console.log(`[TradeGuard] Bonding curve quote: ${solAmount.toFixed(4)} SOL ($${usdAmount.toFixed(2)}) → ${tokensDecimal.toFixed(2)} tokens @ $${impliedPriceUsd.toFixed(10)}, impact: ${priceImpactPct.toFixed(2)}%`);
-    
-    return {
-      outputAmount: tokensOutRaw,
-      outputDecimals,
-      priceImpactPct,
-      impliedPriceUsd,
-      solPrice,
-      source: 'bonding_curve'
-    };
   } catch (e) {
-    console.error("[TradeGuard] Bonding curve quote error:", e);
-    return null;
+    console.log(`[TradeGuard] pump.fun API error: ${e instanceof Error ? e.message : String(e)}, trying on-chain fallback...`);
   }
+  
+  // Fallback to on-chain data via Helius RPC
+  const onChainState = await fetchOnChainCurveState(tokenMint);
+  if (onChainState) {
+    if (onChainState.complete) {
+      console.log(`[TradeGuard] Token is graduated (on-chain), bonding curve quote not applicable`);
+      return null;
+    }
+    return computeCurveQuote(
+      onChainState.virtualSolReserves,
+      onChainState.virtualTokenReserves,
+      solAmountLamports,
+      solPrice
+    );
+  }
+  
+  console.log(`[TradeGuard] Could not fetch bonding curve data from any source`);
+  return null;
 }
 
 export async function getExecutableQuote(
