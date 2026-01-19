@@ -3,13 +3,12 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
 import { DeveloperRiskBadge } from "./DeveloperRiskBadge";
-import { ExternalLink, TrendingUp, TrendingDown, Zap, Clock, Share2, MessageCircle, Send } from "lucide-react";
+import { ExternalLink, TrendingUp, TrendingDown, Zap, Clock } from "lucide-react";
 import { Separator } from "@/components/ui/separator";
 import { useEffect, useState } from "react";
 import { SocialIcon, DexScreenerIcon } from "./SocialIcon";
 import { detectSocialPlatform } from "@/utils/socialPlatformDetector";
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
-import { useToast } from "@/hooks/use-toast";
+import { ShareToXButton } from "@/components/ShareToXButton";
 interface LaunchpadInfo {
   name: string;
   detected: boolean;
@@ -132,7 +131,6 @@ export function TokenMetadataDisplay({
   shareData,
   shareCardPageUrl
 }: TokenMetadataDisplayProps) {
-  const { toast } = useToast();
   
   if (isLoading) {
     return <TokenMetadataSkeleton compact={compact} />;
@@ -623,65 +621,19 @@ export function TokenMetadataDisplay({
           )}
 
           {/* Share Report Button */}
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button variant="outline" className="w-full gap-2 text-sm">
-                <Share2 className="h-4 w-4" />
-                Share ${metadata.symbol} Report
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="center" className="w-48">
-              <DropdownMenuItem onClick={() => {
-                const ticker = metadata.symbol || 'TOKEN';
-                const totalWallets = shareData?.totalHolders || 0;
-                const realHolders = shareData?.realWallets || 0;
-                const dustPct = shareData?.totalHolders ? Math.round((shareData.dustWallets || 0) / shareData.totalHolders * 100) : 0;
-                const whales = (shareData?.trueWhaleWallets || 0) + (shareData?.babyWhaleWallets || 0);
-                const strong = (shareData?.superBossWallets || 0) + (shareData?.kingpinWallets || 0) + (shareData?.bossWallets || 0);
-                const active = (shareData?.largeWallets || 0) + (shareData?.mediumWallets || 0);
-                const grade = shareData?.healthScore?.grade || 'C';
-                const score = shareData?.healthScore?.score || 50;
-                
-                const text = `🔎 Holder Analysis: $${ticker}
-
-🏛 ${totalWallets.toLocaleString()} Total Wallets
-✅ ${realHolders.toLocaleString()} Real Holders
-🌫 ${dustPct}% Dust
-
-🐋 ${whales} Whales | 💪 ${strong} Strong | 🌱 ${active.toLocaleString()} Active
-
-Health: ${grade} (${score}/100)
-
-Free holder report on BlackBox Farm`;
-                
-                const shareUrl = shareCardPageUrl || `https://blackbox.farm/holders?token=${encodeURIComponent(metadata.mint)}`;
-                window.open(`https://twitter.com/intent/tweet?text=${encodeURIComponent(text)}&url=${encodeURIComponent(shareUrl)}`, '_blank');
-              }}>
-                <span className="w-5 h-5 bg-foreground rounded-full flex items-center justify-center mr-2">
-                  <span className="text-background text-xs font-bold">𝕏</span>
-                </span>
-                Share on X
-              </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => {
-                const ticker = metadata.symbol || 'this token';
-                const text = `🐋 **Whales vs Dust** 🐋\n\nCheck out the holder analysis for $${ticker}!\n\n🔗 ${window.location.href}`;
-                navigator.clipboard.writeText(text);
-                toast({ title: "Copied!", description: "Discord message copied to clipboard" });
-              }}>
-                <MessageCircle className="h-4 w-4 mr-2" />
-                Copy for Discord
-              </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => {
-                const ticker = metadata.symbol || 'this token';
-                const text = `🐋 Check out the Whales vs the Dust for $${ticker}`;
-                const url = window.location.href;
-                window.open(`https://t.me/share/url?url=${encodeURIComponent(url)}&text=${encodeURIComponent(text)}`, '_blank');
-              }}>
-                <Send className="h-4 w-4 mr-2" />
-                Share on Telegram
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
+          <ShareToXButton
+            ticker={metadata.symbol || 'TOKEN'}
+            tokenMint={metadata.mint}
+            totalWallets={shareData?.totalHolders || 0}
+            realHolders={shareData?.realWallets || 0}
+            dustWallets={shareData?.dustWallets || 0}
+            whales={(shareData?.trueWhaleWallets || 0) + (shareData?.babyWhaleWallets || 0)}
+            strong={(shareData?.superBossWallets || 0) + (shareData?.kingpinWallets || 0) + (shareData?.bossWallets || 0)}
+            active={(shareData?.largeWallets || 0) + (shareData?.mediumWallets || 0)}
+            healthGrade={shareData?.healthScore?.grade || 'C'}
+            healthScore={shareData?.healthScore?.score || 50}
+            shareCardPageUrl={shareCardPageUrl}
+          />
         </div>
       </CardContent>
     </Card>
