@@ -353,53 +353,57 @@ export async function resolvePrice(
   }
 
   const solPrice = await fetchSolPrice();
-  const isPumpToken = tokenMint.toLowerCase().endsWith('pump');
 
   // ============================================
-  // ROUTING LOGIC
+  // ROUTING LOGIC - Multi-Signal Detection
   // ============================================
+  // NOTE: We no longer use isPumpToken check (endsWith 'pump') because older
+  // pump.fun tokens don't follow this pattern. Instead, we ALWAYS try pump.fun
+  // sources first for ANY token, then fall back to DexScreener/Jupiter.
 
-  // STEP 1: For pump.fun tokens, try pump.fun API first (freshest for curve tokens)
-  if (isPumpToken) {
-    console.log(`[${tokenMint.slice(0, 8)}] Trying pump.fun API (pump token detected)`);
-    const pumpResult = await fetchPumpFunApiPrice(tokenMint, solPrice);
+  // STEP 1: Try pump.fun API for ALL tokens (handles both old and new pump tokens)
+  console.log(`[${tokenMint.slice(0, 8)}] Trying pump.fun API (universal check)`);
+  const pumpResult = await fetchPumpFunApiPrice(tokenMint, solPrice);
+  
+  if (pumpResult) {
+    console.log(`[${tokenMint.slice(0, 8)}] pump.fun API: $${pumpResult.price.toFixed(10)}, onCurve=${pumpResult.isOnCurve}`);
     
-    if (pumpResult) {
-      console.log(`[${tokenMint.slice(0, 8)}] pump.fun API: $${pumpResult.price.toFixed(10)}, onCurve=${pumpResult.isOnCurve}`);
-      
-      // If token is still on curve, this is authoritative - use it
-      if (pumpResult.isOnCurve) {
-        priceCache.set(tokenMint, { result: pumpResult, timestamp: Date.now() });
-        return pumpResult;
-      }
-      
-      // Token graduated - pump.fun API may still return price, but prefer DexScreener
-      // Fall through to DexScreener check
+    // If token is still on curve, this is authoritative - use it
+    if (pumpResult.isOnCurve) {
+      priceCache.set(tokenMint, { result: pumpResult, timestamp: Date.now() });
+      return pumpResult;
     }
+    
+    // Token graduated according to pump.fun - fall through to DexScreener for better price
   }
 
-  // STEP 2: For pump tokens, try on-chain bonding curve (fallback if API blocked)
-  if (isPumpToken && heliusApiKey) {
-    console.log(`[${tokenMint.slice(0, 8)}] Trying on-chain bonding curve`);
+  // STEP 2: Try on-chain bonding curve for ANY token (catches old pump tokens pump.fun API might miss)
+  if (heliusApiKey) {
+    console.log(`[${tokenMint.slice(0, 8)}] Trying on-chain bonding curve (universal check)`);
     const curveState = await fetchBondingCurveState(tokenMint, heliusApiKey);
     
-    if (curveState && curveState.isOnCurve) {
-      const price = computeBondingCurvePrice(curveState, solPrice);
-      const result: PriceResult = {
-        price,
-        source: 'pumpfun_curve',
-        fetchedAt: new Date().toISOString(),
-        latencyMs: 0,
-        isOnCurve: true,
-        bondingCurveProgress: curveState.progress,
-        confidence: 'high',
-        virtualSolReserves: Number(curveState.virtualSolReserves),
-        virtualTokenReserves: Number(curveState.virtualTokenReserves)
-      };
-      
-      console.log(`[${tokenMint.slice(0, 8)}] On-chain curve: $${price.toFixed(10)}, progress=${curveState.progress.toFixed(1)}%`);
-      priceCache.set(tokenMint, { result, timestamp: Date.now() });
-      return result;
+    if (curveState) {
+      if (curveState.isOnCurve) {
+        // Token IS on curve - use curve price (authoritative)
+        const price = computeBondingCurvePrice(curveState, solPrice);
+        const result: PriceResult = {
+          price,
+          source: 'pumpfun_curve',
+          fetchedAt: new Date().toISOString(),
+          latencyMs: 0,
+          isOnCurve: true,
+          bondingCurveProgress: curveState.progress,
+          confidence: 'high',
+          virtualSolReserves: Number(curveState.virtualSolReserves),
+          virtualTokenReserves: Number(curveState.virtualTokenReserves)
+        };
+        
+        console.log(`[${tokenMint.slice(0, 8)}] On-chain curve: $${price.toFixed(10)}, progress=${curveState.progress.toFixed(1)}%`);
+        priceCache.set(tokenMint, { result, timestamp: Date.now() });
+        return result;
+      } else {
+        console.log(`[${tokenMint.slice(0, 8)}] On-chain confirms GRADUATED (complete=true)`);
+      }
     }
   }
 
