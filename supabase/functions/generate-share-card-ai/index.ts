@@ -53,7 +53,7 @@ STYLE:
 - Clean, modern typography
 - Professional data visualization feel
 - Include subtle chart/graph decorative elements
-- Footer with "blackboxfarm.lovable.app/holders" URL
+- Footer with "blackbox.farm/holders" URL
 
 Make it look like a premium crypto analytics report card that traders would want to share.`;
 

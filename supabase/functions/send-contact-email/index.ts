@@ -68,8 +68,8 @@ const handler = async (req: Request): Promise<Response> => {
           
           <p>In the meantime, you might find these resources helpful:</p>
           <ul>
-            <li><a href="https://blackboxfarm.io/whitepaper">White Paper</a> - Learn about our technology and vision</li>
-            <li><a href="https://blackboxfarm.io/">Fee Calculator</a> - Estimate your trading costs</li>
+            <li><a href="https://blackbox.farm/whitepaper">White Paper</a> - Learn about our technology and vision</li>
+            <li><a href="https://blackbox.farm/">Fee Calculator</a> - Estimate your trading costs</li>
             <li><a href="https://discord.gg/blackboxfarm">Discord Community</a> - Join our community for real-time discussions</li>
           </ul>
           
