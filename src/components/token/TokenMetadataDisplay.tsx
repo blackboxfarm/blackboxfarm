@@ -73,6 +73,20 @@ interface CreatorInfo {
   feeSplit?: { wallet1?: string; wallet2?: string; splitPercent?: number };
 }
 
+interface ShareData {
+  totalHolders?: number;
+  realWallets?: number;
+  dustWallets?: number;
+  trueWhaleWallets?: number;
+  babyWhaleWallets?: number;
+  superBossWallets?: number;
+  kingpinWallets?: number;
+  bossWallets?: number;
+  largeWallets?: number;
+  mediumWallets?: number;
+  healthScore?: { grade: string; score: number };
+}
+
 interface TokenMetadataDisplayProps {
   metadata: TokenMetadata;
   priceInfo: PriceInfo | null;
@@ -87,6 +101,8 @@ interface TokenMetadataDisplayProps {
   websiteUrl?: string;
   dexStatus?: DexStatus;
   creatorInfo?: CreatorInfo;
+  shareData?: ShareData;
+  shareCardPageUrl?: string;
 }
 
 const LAUNCHPAD_LOGOS: Record<string, string> = {
@@ -112,7 +128,9 @@ export function TokenMetadataDisplay({
   telegramUrl,
   websiteUrl,
   dexStatus,
-  creatorInfo
+  creatorInfo,
+  shareData,
+  shareCardPageUrl
 }: TokenMetadataDisplayProps) {
   const { toast } = useToast();
   
@@ -614,10 +632,30 @@ export function TokenMetadataDisplay({
             </DropdownMenuTrigger>
             <DropdownMenuContent align="center" className="w-48">
               <DropdownMenuItem onClick={() => {
-                const ticker = metadata.symbol || 'this token';
-                const text = `Check out the Whales vs the Dust for $${ticker} 🐋💨`;
-                const url = window.location.href;
-                window.open(`https://twitter.com/intent/tweet?text=${encodeURIComponent(text)}&url=${encodeURIComponent(url)}`, '_blank');
+                const ticker = metadata.symbol || 'TOKEN';
+                const totalWallets = shareData?.totalHolders || 0;
+                const realHolders = shareData?.realWallets || 0;
+                const dustPct = shareData?.totalHolders ? Math.round((shareData.dustWallets || 0) / shareData.totalHolders * 100) : 0;
+                const whales = (shareData?.trueWhaleWallets || 0) + (shareData?.babyWhaleWallets || 0);
+                const strong = (shareData?.superBossWallets || 0) + (shareData?.kingpinWallets || 0) + (shareData?.bossWallets || 0);
+                const active = (shareData?.largeWallets || 0) + (shareData?.mediumWallets || 0);
+                const grade = shareData?.healthScore?.grade || 'C';
+                const score = shareData?.healthScore?.score || 50;
+                
+                const text = `🔎 Holder Analysis: $${ticker}
+
+🏛 ${totalWallets.toLocaleString()} Total Wallets
+✅ ${realHolders.toLocaleString()} Real Holders
+🌫 ${dustPct}% Dust
+
+🐋 ${whales} Whales | 💪 ${strong} Strong | 🌱 ${active.toLocaleString()} Active
+
+Health: ${grade} (${score}/100)
+
+Free holder report on BlackBox Farm`;
+                
+                const shareUrl = shareCardPageUrl || `https://blackbox.farm/holders?token=${encodeURIComponent(metadata.mint)}`;
+                window.open(`https://twitter.com/intent/tweet?text=${encodeURIComponent(text)}&url=${encodeURIComponent(shareUrl)}`, '_blank');
               }}>
                 <span className="w-5 h-5 bg-foreground rounded-full flex items-center justify-center mr-2">
                   <span className="text-background text-xs font-bold">𝕏</span>

@@ -986,6 +986,20 @@ export function BaglessHoldersReport({ initialToken }: BaglessHoldersReportProps
             websiteUrl={report?.socials?.website}
             dexStatus={report?.dexStatus}
             creatorInfo={report?.creatorInfo}
+            shareData={report ? {
+              totalHolders: report.totalHolders,
+              realWallets: report.realWallets,
+              dustWallets: report.dustWallets,
+              trueWhaleWallets: report.trueWhaleWallets,
+              babyWhaleWallets: report.babyWhaleWallets,
+              superBossWallets: report.superBossWallets,
+              kingpinWallets: report.kingpinWallets,
+              bossWallets: report.bossWallets,
+              largeWallets: report.largeWallets,
+              mediumWallets: report.mediumWallets,
+              healthScore: report.healthScore
+            } : undefined}
+            shareCardPageUrl={shareCardPageUrl}
           />
         </div>
       )}
@@ -2339,11 +2353,11 @@ Free holder report on BlackBox Farm`;
                         const grade = report?.healthScore?.grade || 'C';
                         const score = report?.healthScore?.score || 50;
                         
-                        const text = `🔍 Holder Analysis: $${ticker}
+                        const text = `🔎 Holder Analysis: $${ticker}
 
-📊 ${totalWallets.toLocaleString()} Wallets
+🏛 ${totalWallets.toLocaleString()} Total Wallets
 ✅ ${realHolders.toLocaleString()} Real Holders
-💨 ${dustPct}% Dust
+🌫 ${dustPct}% Dust
 
 🐋 ${whales} Whales | 💪 ${strong} Strong | 🌱 ${active.toLocaleString()} Active
 
