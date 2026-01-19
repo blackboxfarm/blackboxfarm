@@ -26,6 +26,7 @@ interface PriceInfo {
   dexUrl?: string;
   pairAddress?: string;
   dexId?: string;
+  isOnCurve?: boolean;
 }
 
 interface OnChainData {

@@ -148,7 +148,7 @@ export function TokenPriceDisplay({
       {showDetails && tokenData?.priceInfo && (
         <div className="flex items-center gap-2 text-xs text-muted-foreground">
           <span>Vol: ${formatLargeNumber(tokenData.priceInfo.volume24h)}</span>
-          <span>Liq: ${formatLargeNumber(tokenData.priceInfo.liquidity)}</span>
+          <span>Liq: {tokenData.priceInfo.isOnCurve ? <span className="text-amber-500">On Curve</span> : `$${formatLargeNumber(tokenData.priceInfo.liquidity)}`}</span>
         </div>
       )}
       

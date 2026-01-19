@@ -54,6 +54,7 @@ interface PriceInfo {
   dexUrl?: string;
   pairAddress?: string;
   dexId?: string;
+  isOnCurve?: boolean;
 }
 
 interface DexStatus {
@@ -601,7 +602,13 @@ export function TokenMetadataDisplay({
                 
                 <div>
                   <p className="text-sm text-muted-foreground">Liquidity</p>
-                  <p className="text-lg font-semibold">${formatLargeNumber(priceInfo.liquidity)}</p>
+                  <p className="text-lg font-semibold">
+                    {priceInfo.isOnCurve ? (
+                      <span className="text-amber-500">On Curve</span>
+                    ) : (
+                      `$${formatLargeNumber(priceInfo.liquidity)}`
+                    )}
+                  </p>
                 </div>
 
                 {priceInfo.marketCap && priceInfo.marketCap > 0 && (
