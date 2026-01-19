@@ -85,7 +85,7 @@ export function SpiderRouteMap() {
   const [copiedPath, setCopiedPath] = useState<string | null>(null);
   const [filter, setFilter] = useState<string>("all");
 
-  const baseUrl = "https://blackboxfarm.lovable.app";
+  const baseUrl = "https://blackbox.farm";
 
   const copyToClipboard = async (path: string) => {
     const fullUrl = `${baseUrl}${path}`;
