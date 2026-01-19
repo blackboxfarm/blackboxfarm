@@ -204,9 +204,9 @@ export function AdBanner({ size, position }: AdBannerProps) {
 
   // Leaderboard (scaled for laptop, centered)
   // Both Banner#1 and Banner#2 now use the same max-w-4xl width
-  // Original Position 1 setting was: max-w-[1930px] and h-[320px] object-cover
+  // Use aspect ratio to prevent cropping/crunching on desktop
   const containerClass = "mb-4 overflow-hidden cursor-pointer transition-all duration-300 hover:scale-105 hover:shadow-2xl hover:shadow-primary/20 w-full max-w-4xl mx-auto";
-  const mediaClass = "w-full h-[300px] object-cover";
+  const mediaClass = "w-full h-auto max-h-[400px] object-contain";
   
   // For Dexscreener banners, extract ticker from title (usually "TOKEN - description" format)
   const isDexBanner = banner?.is_dexscreener === true;
