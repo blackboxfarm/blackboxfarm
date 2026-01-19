@@ -226,6 +226,94 @@ export async function checkTokenTax(tokenMint: string): Promise<TokenTaxInfo> {
  * Fetch executable quote from Jupiter for the exact SOL amount
  * Returns the actual tokens you would receive and implied price
  */
+/**
+ * Fetch quote from pump.fun bonding curve math
+ * Used as fallback when Jupiter returns TOKEN_NOT_TRADABLE
+ */
+async function getBondingCurveQuote(
+  tokenMint: string,
+  solAmountLamports: number
+): Promise<{
+  outputAmount: number;
+  outputDecimals: number;
+  priceImpactPct: number;
+  impliedPriceUsd: number;
+  solPrice: number;
+  source: string;
+} | null> {
+  try {
+    console.log(`[TradeGuard] Fetching pump.fun bonding curve quote for ${tokenMint}`);
+    
+    // Fetch token data from pump.fun API
+    const res = await fetch(`https://frontend-api.pump.fun/coins/${tokenMint}`, {
+      headers: { 'Accept': 'application/json' },
+      signal: AbortSignal.timeout(5000)
+    });
+    
+    if (!res.ok) {
+      console.log(`[TradeGuard] pump.fun API returned ${res.status}`);
+      return null;
+    }
+    
+    const data = await res.json();
+    
+    // Check if graduated - can't use bonding curve math
+    if (data.complete === true) {
+      console.log(`[TradeGuard] Token is graduated, bonding curve quote not applicable`);
+      return null;
+    }
+    
+    // Get reserves
+    const virtualSolReserves = Number(data.virtual_sol_reserves);
+    const virtualTokenReserves = Number(data.virtual_token_reserves);
+    
+    if (!virtualSolReserves || !virtualTokenReserves) {
+      console.log(`[TradeGuard] Missing bonding curve reserves`);
+      return null;
+    }
+    
+    // Get SOL price
+    const solPrice = await fetchSolPrice();
+    const solAmount = solAmountLamports / 1e9;
+    const usdAmount = solAmount * solPrice;
+    
+    // Bonding curve math: constant product AMM
+    // newSolReserves = virtualSolReserves + solAmountLamports
+    // newTokenReserves = (virtualSolReserves * virtualTokenReserves) / newSolReserves
+    // tokensOut = virtualTokenReserves - newTokenReserves
+    const solLamports = solAmountLamports;
+    const newSolReserves = virtualSolReserves + solLamports;
+    const newTokenReserves = (virtualSolReserves * virtualTokenReserves) / newSolReserves;
+    const tokensOutRaw = virtualTokenReserves - newTokenReserves;
+    
+    // pump.fun tokens have 6 decimals
+    const outputDecimals = 6;
+    const tokensDecimal = tokensOutRaw / 1e6;
+    
+    // Calculate implied price
+    const impliedPriceUsd = tokensDecimal > 0 ? usdAmount / tokensDecimal : 0;
+    
+    // Estimate price impact (simplified)
+    // priceImpact = (actualTokensOut - idealTokensOut) / idealTokensOut * 100
+    // For a constant product, this is roughly 2 * (solIn / virtualSolReserves) * 100
+    const priceImpactPct = (solLamports / virtualSolReserves) * 100;
+    
+    console.log(`[TradeGuard] Bonding curve quote: ${solAmount.toFixed(4)} SOL ($${usdAmount.toFixed(2)}) → ${tokensDecimal.toFixed(2)} tokens @ $${impliedPriceUsd.toFixed(10)}, impact: ${priceImpactPct.toFixed(2)}%`);
+    
+    return {
+      outputAmount: tokensOutRaw,
+      outputDecimals,
+      priceImpactPct,
+      impliedPriceUsd,
+      solPrice,
+      source: 'bonding_curve'
+    };
+  } catch (e) {
+    console.error("[TradeGuard] Bonding curve quote error:", e);
+    return null;
+  }
+}
+
 export async function getExecutableQuote(
   tokenMint: string,
   solAmountLamports: number,
@@ -258,6 +346,23 @@ export async function getExecutableQuote(
     if (!res.ok) {
       const text = await res.text();
       console.error(`[TradeGuard] Jupiter v1 quote failed: ${res.status} ${text}`);
+      
+      // Check if token is not tradable on Jupiter (likely a bonding curve token)
+      if (text.includes("TOKEN_NOT_TRADABLE") || text.includes("not tradable")) {
+        console.log(`[TradeGuard] Token not tradable on Jupiter, trying bonding curve fallback...`);
+        const curveQuote = await getBondingCurveQuote(tokenMint, solAmountLamports);
+        if (curveQuote) {
+          return {
+            outputAmount: curveQuote.outputAmount,
+            outputDecimals: curveQuote.outputDecimals,
+            priceImpactPct: curveQuote.priceImpactPct,
+            impliedPriceUsd: curveQuote.impliedPriceUsd,
+            solPrice: curveQuote.solPrice,
+            quoteResponse: { source: curveQuote.source }
+          };
+        }
+      }
+      
       return null;
     }
     
@@ -265,6 +370,21 @@ export async function getExecutableQuote(
     
     if (!quote || !quote.outAmount) {
       console.error("[TradeGuard] Jupiter returned no route");
+      
+      // Try bonding curve fallback for no-route case too
+      console.log(`[TradeGuard] No Jupiter route, trying bonding curve fallback...`);
+      const curveQuote = await getBondingCurveQuote(tokenMint, solAmountLamports);
+      if (curveQuote) {
+        return {
+          outputAmount: curveQuote.outputAmount,
+          outputDecimals: curveQuote.outputDecimals,
+          priceImpactPct: curveQuote.priceImpactPct,
+          impliedPriceUsd: curveQuote.impliedPriceUsd,
+          solPrice: curveQuote.solPrice,
+          quoteResponse: { source: curveQuote.source }
+        };
+      }
+      
       return null;
     }
     
@@ -295,6 +415,21 @@ export async function getExecutableQuote(
     };
   } catch (e) {
     console.error("[TradeGuard] Jupiter quote error:", e);
+    
+    // Final fallback: try bonding curve
+    console.log(`[TradeGuard] Jupiter exception, trying bonding curve fallback...`);
+    const curveQuote = await getBondingCurveQuote(tokenMint, solAmountLamports);
+    if (curveQuote) {
+      return {
+        outputAmount: curveQuote.outputAmount,
+        outputDecimals: curveQuote.outputDecimals,
+        priceImpactPct: curveQuote.priceImpactPct,
+        impliedPriceUsd: curveQuote.impliedPriceUsd,
+        solPrice: curveQuote.solPrice,
+        quoteResponse: { source: curveQuote.source }
+      };
+    }
+    
     return null;
   }
 }
