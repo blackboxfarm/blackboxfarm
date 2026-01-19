@@ -15,6 +15,8 @@
 export type PriceSource = 
   | 'pumpfun_api'      // Fresh from pump.fun HTTP API
   | 'pumpfun_curve'    // Computed from on-chain bonding curve
+  | 'meteora_dbc'      // bags.fm Meteora Dynamic Bonding Curve
+  | 'raydium_launchlab' // Bonk.fun Raydium Launchlab curve
   | 'dexscreener'      // DexScreener (best for graduated tokens)
   | 'jupiter'          // Jupiter (fallback)
   | 'fallback';        // Last resort / cached
@@ -50,8 +52,18 @@ export interface BulkPriceResult {
 // CONSTANTS
 // ============================================
 
+// pump.fun
 const PUMP_PROGRAM_ID = '6EF8rrecthR5Dkzon8Nwu78hRvfCKubJ14M5uBEwF6P';
 const INITIAL_REAL_TOKEN_RESERVES = 793_100_000_000_000n;
+
+// bags.fm (Meteora Dynamic Bonding Curve)
+const METEORA_DBC_PROGRAM_ID = 'dbcij3LWUppWqq96dh6gJWwBifmcGfLSB5D4DuSMaqN';
+const METEORA_BASE_MINT = 'So11111111111111111111111111111111111111112'; // WSOL
+
+// Bonk.fun (Raydium Launchlab)
+const RAYDIUM_LAUNCHLAB_PROGRAM_ID = 'LanMV9sAd7wArD4vJFi2qDdfnVhFxYSUg6eADduJ3uj';
+const LAUNCHLAB_INITIAL_TOKEN_BALANCE = 793_100_000_000_000n; // ~793.1M tokens (6 decimals)
+const LAUNCHLAB_DEAD_BALANCE = 206_900_000_000_000n; // ~206.9M tokens remain at graduation
 
 // Cache with 1-second TTL (reduced from 3s to minimize stale price issues)
 const priceCache: Map<string, { result: PriceResult; timestamp: number }> = new Map();
@@ -180,6 +192,207 @@ export function computeBondingCurvePrice(curveState: CurveState, solPriceUsd: nu
                      (Number(curveState.virtualTokenReserves) / 1e6);
   
   return priceInSol * solPriceUsd;
+}
+
+// ============================================
+// METEORA DBC STATE (bags.fm) - On-Chain via Helius RPC
+// ============================================
+
+export interface MeteoraCurveState {
+  isOnCurve: boolean;
+  progress: number;  // 0-100
+  quoteReserve: bigint;
+  migrationThreshold: bigint;
+  currentPrice?: number;  // Price in SOL (if calculable)
+}
+
+/**
+ * Fetch bonding curve state for bags.fm tokens (Meteora Dynamic Bonding Curve)
+ * 
+ * Pool PDA derivation: seeds = ['pool', base_mint, quote_mint, config]
+ * Account layout (partial):
+ *   - Byte 72-80: quote_reserve (u64) - SOL deposited
+ *   - Config has migration_quote_threshold 
+ */
+export async function fetchMeteoraDBC(
+  tokenMint: string,
+  heliusApiKey: string
+): Promise<MeteoraCurveState | null> {
+  try {
+    const { Connection, PublicKey } = await import('npm:@solana/web3.js@1.95.3');
+    
+    const connection = new Connection(
+      `https://mainnet.helius-rpc.com/?api-key=${heliusApiKey}`,
+      'confirmed'
+    );
+
+    const programId = new PublicKey(METEORA_DBC_PROGRAM_ID);
+    const baseMint = new PublicKey(METEORA_BASE_MINT);
+    const quoteMint = new PublicKey(tokenMint);
+
+    // Try to find pool accounts owned by the Meteora DBC program
+    // We look for accounts that reference our token mint
+    const accounts = await connection.getProgramAccounts(programId, {
+      filters: [
+        { dataSize: 400 }, // Approximate pool account size
+      ],
+      commitment: 'confirmed',
+    });
+
+    // Find a pool that contains our token
+    for (const { pubkey, account } of accounts) {
+      const data = account.data;
+      if (data.length < 100) continue;
+
+      try {
+        // Pool layout (simplified - positions may vary slightly):
+        // The token mints are typically at known offsets
+        // We check if the account data contains our token mint
+        const dataStr = data.toString('hex');
+        const tokenMintHex = new PublicKey(tokenMint).toBuffer().toString('hex');
+        
+        if (!dataStr.includes(tokenMintHex)) continue;
+
+        // Found a matching pool - parse the relevant data
+        const view = new DataView(data.buffer, data.byteOffset, data.byteLength);
+        
+        // Quote reserve is typically at offset 72 (after discriminator + pubkeys)
+        // This offset may need adjustment based on actual layout
+        let quoteReserve = 0n;
+        try {
+          quoteReserve = view.getBigUint64(72, true);
+        } catch {
+          // Try alternate offset
+          quoteReserve = view.getBigUint64(80, true);
+        }
+
+        // Migration threshold is typically ~85 SOL for bags.fm
+        const migrationThreshold = 85_000_000_000n; // 85 SOL in lamports
+        
+        // Calculate progress
+        const progress = Math.min(
+          Math.max(Number((quoteReserve * 100n) / migrationThreshold), 0),
+          100
+        );
+
+        const isOnCurve = progress < 100;
+
+        console.log(`[Meteora DBC] ${tokenMint.slice(0, 8)}: quoteReserve=${Number(quoteReserve) / 1e9} SOL, progress=${progress.toFixed(1)}%, onCurve=${isOnCurve}`);
+
+        return {
+          isOnCurve,
+          progress,
+          quoteReserve,
+          migrationThreshold,
+        };
+      } catch (parseError) {
+        continue;
+      }
+    }
+
+    console.log(`[Meteora DBC] No pool found for ${tokenMint.slice(0, 8)}`);
+    return null;
+  } catch (e) {
+    console.log('[Meteora DBC] Fetch failed:', e instanceof Error ? e.message : String(e));
+    return null;
+  }
+}
+
+// ============================================
+// RAYDIUM LAUNCHLAB STATE (Bonk.fun) - On-Chain via Helius RPC  
+// ============================================
+
+export interface LaunchlabCurveState {
+  isOnCurve: boolean;
+  progress: number;  // 0-100
+  tokenBalance: bigint;
+  tokensToSell: bigint;
+}
+
+/**
+ * Fetch bonding curve state for Bonk.fun tokens (Raydium Launchlab)
+ * 
+ * Progress formula: 100 - (((balance - 206.9M) * 100) / 793.1M)
+ * When balance reaches ~206.9M tokens, the curve is complete (100%)
+ */
+export async function fetchRaydiumLaunchlab(
+  tokenMint: string,
+  heliusApiKey: string
+): Promise<LaunchlabCurveState | null> {
+  try {
+    const { Connection, PublicKey, TOKEN_PROGRAM_ID } = await import('npm:@solana/web3.js@1.95.3');
+    
+    const connection = new Connection(
+      `https://mainnet.helius-rpc.com/?api-key=${heliusApiKey}`,
+      'confirmed'
+    );
+
+    const programId = new PublicKey(RAYDIUM_LAUNCHLAB_PROGRAM_ID);
+    const mint = new PublicKey(tokenMint);
+
+    // Find the pool/vault PDA that holds the tokens
+    // Seeds typically: ['pool', token_mint] or similar
+    const [poolPda] = PublicKey.findProgramAddressSync(
+      [Buffer.from('pool'), mint.toBuffer()],
+      programId
+    );
+
+    // Get the token account for this pool
+    const tokenAccounts = await connection.getTokenAccountsByOwner(poolPda, {
+      mint: mint,
+    });
+
+    if (tokenAccounts.value.length === 0) {
+      // Try alternate PDA derivation
+      const [vaultPda] = PublicKey.findProgramAddressSync(
+        [Buffer.from('vault'), mint.toBuffer()],
+        programId
+      );
+      
+      const vaultAccounts = await connection.getTokenAccountsByOwner(vaultPda, {
+        mint: mint,
+      });
+
+      if (vaultAccounts.value.length === 0) {
+        console.log(`[Launchlab] No token account found for ${tokenMint.slice(0, 8)}`);
+        return null;
+      }
+
+      tokenAccounts.value = vaultAccounts.value;
+    }
+
+    // Parse token account to get balance
+    const accountInfo = tokenAccounts.value[0].account;
+    const data = accountInfo.data;
+    
+    // SPL Token Account layout: mint (32) + owner (32) + amount (8) + ...
+    const view = new DataView(data.buffer, data.byteOffset, data.byteLength);
+    const tokenBalance = view.getBigUint64(64, true);
+
+    // Calculate progress using the formula
+    // progress = 100 - (((balance - 206.9M) * 100) / 793.1M)
+    const adjustedBalance = tokenBalance > LAUNCHLAB_DEAD_BALANCE 
+      ? tokenBalance - LAUNCHLAB_DEAD_BALANCE 
+      : 0n;
+    
+    const tokensToSell = LAUNCHLAB_INITIAL_TOKEN_BALANCE;
+    const progress = 100 - Number((adjustedBalance * 100n) / tokensToSell);
+    const normalizedProgress = Math.min(Math.max(progress, 0), 100);
+
+    const isOnCurve = tokenBalance > LAUNCHLAB_DEAD_BALANCE;
+
+    console.log(`[Launchlab] ${tokenMint.slice(0, 8)}: balance=${Number(tokenBalance) / 1e6}M, progress=${normalizedProgress.toFixed(1)}%, onCurve=${isOnCurve}`);
+
+    return {
+      isOnCurve,
+      progress: normalizedProgress,
+      tokenBalance,
+      tokensToSell,
+    };
+  } catch (e) {
+    console.log('[Launchlab] Fetch failed:', e instanceof Error ? e.message : String(e));
+    return null;
+  }
 }
 
 // ============================================
@@ -355,14 +568,18 @@ export async function resolvePrice(
   const solPrice = await fetchSolPrice();
 
   // ============================================
-  // ROUTING LOGIC - Multi-Signal Detection
+  // ROUTING LOGIC - Multi-Platform Detection
   // ============================================
-  // NOTE: We no longer use isPumpToken check (endsWith 'pump') because older
-  // pump.fun tokens don't follow this pattern. Instead, we ALWAYS try pump.fun
-  // sources first for ANY token, then fall back to DexScreener/Jupiter.
+  // Priority order:
+  // 1. pump.fun API (handles pump.fun tokens)
+  // 2. pump.fun on-chain bonding curve (fallback for old pump tokens)
+  // 3. Meteora DBC on-chain (handles bags.fm tokens)
+  // 4. Raydium Launchlab on-chain (handles Bonk.fun tokens)
+  // 5. DexScreener (graduated tokens on any DEX)
+  // 6. Jupiter (last resort fallback)
 
   // STEP 1: Try pump.fun API for ALL tokens (handles both old and new pump tokens)
-  console.log(`[${tokenMint.slice(0, 8)}] Trying pump.fun API (universal check)`);
+  console.log(`[${tokenMint.slice(0, 8)}] Trying pump.fun API`);
   const pumpResult = await fetchPumpFunApiPrice(tokenMint, solPrice);
   
   if (pumpResult) {
@@ -374,17 +591,17 @@ export async function resolvePrice(
       return pumpResult;
     }
     
-    // Token graduated according to pump.fun - fall through to DexScreener for better price
+    // Token graduated according to pump.fun - fall through to other checks
   }
 
-  // STEP 2: Try on-chain bonding curve for ANY token (catches old pump tokens pump.fun API might miss)
+  // STEP 2: Try pump.fun on-chain bonding curve (catches old pump tokens API might miss)
   if (heliusApiKey) {
-    console.log(`[${tokenMint.slice(0, 8)}] Trying on-chain bonding curve (universal check)`);
+    console.log(`[${tokenMint.slice(0, 8)}] Trying pump.fun on-chain curve`);
     const curveState = await fetchBondingCurveState(tokenMint, heliusApiKey);
     
     if (curveState) {
       if (curveState.isOnCurve) {
-        // Token IS on curve - use curve price (authoritative)
+        // Token IS on pump.fun curve - use curve price (authoritative)
         const price = computeBondingCurvePrice(curveState, solPrice);
         const result: PriceResult = {
           price,
@@ -398,16 +615,68 @@ export async function resolvePrice(
           virtualTokenReserves: Number(curveState.virtualTokenReserves)
         };
         
-        console.log(`[${tokenMint.slice(0, 8)}] On-chain curve: $${price.toFixed(10)}, progress=${curveState.progress.toFixed(1)}%`);
+        console.log(`[${tokenMint.slice(0, 8)}] pump.fun curve: $${price.toFixed(10)}, progress=${curveState.progress.toFixed(1)}%`);
         priceCache.set(tokenMint, { result, timestamp: Date.now() });
         return result;
       } else {
-        console.log(`[${tokenMint.slice(0, 8)}] On-chain confirms GRADUATED (complete=true)`);
+        console.log(`[${tokenMint.slice(0, 8)}] pump.fun confirms GRADUATED`);
       }
     }
   }
 
-  // STEP 3: Try DexScreener (best for graduated tokens)
+  // STEP 3: Try Meteora DBC (bags.fm tokens)
+  if (heliusApiKey) {
+    console.log(`[${tokenMint.slice(0, 8)}] Trying Meteora DBC (bags.fm)`);
+    const meteoraState = await fetchMeteoraDBC(tokenMint, heliusApiKey);
+    
+    if (meteoraState && meteoraState.isOnCurve) {
+      // Token IS on Meteora DBC - need to get price from DexScreener but mark as on curve
+      const dexPrice = await fetchDexScreenerPrice(tokenMint);
+      const price = dexPrice?.price || 0;
+      
+      const result: PriceResult = {
+        price,
+        source: 'meteora_dbc',
+        fetchedAt: new Date().toISOString(),
+        latencyMs: 0,
+        isOnCurve: true,
+        bondingCurveProgress: meteoraState.progress,
+        confidence: price > 0 ? 'high' : 'low'
+      };
+      
+      console.log(`[${tokenMint.slice(0, 8)}] Meteora DBC: $${price.toFixed(10)}, progress=${meteoraState.progress.toFixed(1)}%`);
+      priceCache.set(tokenMint, { result, timestamp: Date.now() });
+      return result;
+    }
+  }
+
+  // STEP 4: Try Raydium Launchlab (Bonk.fun tokens)
+  if (heliusApiKey) {
+    console.log(`[${tokenMint.slice(0, 8)}] Trying Raydium Launchlab (Bonk.fun)`);
+    const launchlabState = await fetchRaydiumLaunchlab(tokenMint, heliusApiKey);
+    
+    if (launchlabState && launchlabState.isOnCurve) {
+      // Token IS on Launchlab curve - need to get price from DexScreener but mark as on curve
+      const dexPrice = await fetchDexScreenerPrice(tokenMint);
+      const price = dexPrice?.price || 0;
+      
+      const result: PriceResult = {
+        price,
+        source: 'raydium_launchlab',
+        fetchedAt: new Date().toISOString(),
+        latencyMs: 0,
+        isOnCurve: true,
+        bondingCurveProgress: launchlabState.progress,
+        confidence: price > 0 ? 'high' : 'low'
+      };
+      
+      console.log(`[${tokenMint.slice(0, 8)}] Raydium Launchlab: $${price.toFixed(10)}, progress=${launchlabState.progress.toFixed(1)}%`);
+      priceCache.set(tokenMint, { result, timestamp: Date.now() });
+      return result;
+    }
+  }
+
+  // STEP 5: Try DexScreener (best for graduated tokens)
   console.log(`[${tokenMint.slice(0, 8)}] Trying DexScreener`);
   const dexResult = await fetchDexScreenerPrice(tokenMint);
   
@@ -417,7 +686,7 @@ export async function resolvePrice(
     return dexResult;
   }
 
-  // STEP 4: Jupiter fallback
+  // STEP 6: Jupiter fallback
   console.log(`[${tokenMint.slice(0, 8)}] Trying Jupiter (fallback)`);
   const jupResult = await fetchJupiterPrice(tokenMint);
   
