@@ -72,8 +72,13 @@ serve(async (req) => {
 
     const feeData = await heliusResponse.json();
     
-    // Get SOL price for USD conversion
-    const priceResponse = await fetch('https://api.coingecko.com/api/v3/simple/price?ids=solana&vs_currencies=usd');
+    // Get SOL price for USD conversion with authenticated CoinGecko
+    const apiKey = Deno.env.get('COINGECKO_API_KEY');
+    const headers: Record<string, string> = { 'Accept': 'application/json' };
+    if (apiKey) {
+      headers['x-cg-demo-api-key'] = apiKey;
+    }
+    const priceResponse = await fetch('https://api.coingecko.com/api/v3/simple/price?ids=solana&vs_currencies=usd', { headers });
     const priceData = await priceResponse.json();
     const solPrice = priceData.solana?.usd || 20; // Fallback price
 

@@ -66,11 +66,29 @@ async function fetchSolPrice(): Promise<number> {
     const res = await fetch('https://api.jup.ag/price/v2?ids=So11111111111111111111111111111111111111112');
     if (res.ok) {
       const data = await res.json();
-      return parseFloat(data.data?.['So11111111111111111111111111111111111111112']?.price || '150');
+      const price = parseFloat(data.data?.['So11111111111111111111111111111111111111112']?.price || '0');
+      if (price > 0) return price;
     }
   } catch (e) {
-    console.error('SOL price fetch failed:', e);
+    console.error('Jupiter SOL price fetch failed:', e);
   }
+  
+  // Fallback to CoinGecko with API key authentication
+  try {
+    const apiKey = Deno.env.get('COINGECKO_API_KEY');
+    const headers: Record<string, string> = { 'Accept': 'application/json' };
+    if (apiKey) {
+      headers['x-cg-demo-api-key'] = apiKey;
+    }
+    const res = await fetch('https://api.coingecko.com/api/v3/simple/price?ids=solana&vs_currencies=usd', { headers });
+    if (res.ok) {
+      const data = await res.json();
+      if (data?.solana?.usd) return data.solana.usd;
+    }
+  } catch (e) {
+    console.error('CoinGecko SOL price failed:', e);
+  }
+  
   return 150; // fallback
 }
 

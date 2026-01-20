@@ -51,13 +51,13 @@ const DEFAULT_CONFIG: TradeGuardConfig = {
 };
 
 /**
- * Fetch current SOL price from Jupiter v2 API
+ * Fetch current SOL price - Jupiter primary, CoinGecko fallback with API key
  */
 async function fetchSolPrice(): Promise<number> {
   const jupiterApiKey = Deno.env.get("JUPITER_API_KEY") || "";
   
   try {
-    // Jupiter v2 Price API
+    // Jupiter v2 Price API - primary source
     const res = await fetch("https://api.jup.ag/price/v2?ids=So11111111111111111111111111111111111111112", {
       headers: {
         "Accept": "application/json",
@@ -66,7 +66,6 @@ async function fetchSolPrice(): Promise<number> {
       signal: AbortSignal.timeout(5000),
     });
     const json = await res.json();
-    // v2 format: { data: { "So111...": { price: "200.5" } } }
     const solData = json?.data?.["So11111111111111111111111111111111111111112"];
     const price = Number(solData?.price);
     if (Number.isFinite(price) && price > 0) {
@@ -77,15 +76,22 @@ async function fetchSolPrice(): Promise<number> {
     console.error("[TradeGuard] Failed to fetch SOL price from Jupiter v2:", e);
   }
   
-  // Fallback to CoinGecko
+  // Fallback to CoinGecko with API key authentication
   try {
+    const apiKey = Deno.env.get('COINGECKO_API_KEY');
+    const headers: Record<string, string> = { 'Accept': 'application/json' };
+    if (apiKey) {
+      headers['x-cg-demo-api-key'] = apiKey;
+    }
+    
     const res = await fetch("https://api.coingecko.com/api/v3/simple/price?ids=solana&vs_currencies=usd", {
+      headers,
       signal: AbortSignal.timeout(5000),
     });
     const json = await res.json();
     const price = Number(json?.solana?.usd);
     if (Number.isFinite(price) && price > 0) {
-      console.log(`[TradeGuard] SOL price from CoinGecko: $${price.toFixed(2)}`);
+      console.log(`[TradeGuard] SOL price from CoinGecko (authenticated): $${price.toFixed(2)}`);
       return price;
     }
   } catch (e) {
