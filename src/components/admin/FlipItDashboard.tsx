@@ -290,8 +290,8 @@ export function FlipItDashboard() {
   
   // Auto-refresh state
   const [autoRefreshEnabled, setAutoRefreshEnabled] = useState(true);
-  const [countdown, setCountdown] = useState(15);
-  const countdownRef = useRef(15);
+  const [countdown, setCountdown] = useState(5);
+  const countdownRef = useRef(5);
   
   // Rebuy monitoring state
   const [rebuyMonitorEnabled, setRebuyMonitorEnabled] = useState(true);
@@ -2916,36 +2916,7 @@ export function FlipItDashboard() {
                 </div>
               </div>
 
-              {/* Auto-Refresh Control */}
-              <div className="space-y-2">
-                <Label className="flex items-center gap-1 text-sm">
-                  <Radio className="h-4 w-4" />
-                  Auto-Refresh Prices
-                </Label>
-                <div className="flex items-center gap-2 p-2 rounded-md bg-muted/50 h-10">
-                  <Switch 
-                    checked={autoRefreshEnabled} 
-                    onCheckedChange={setAutoRefreshEnabled}
-                  />
-                  {autoRefreshEnabled && positions.filter(p => p.status === 'holding').length > 0 ? (
-                    <div className="flex items-center gap-2">
-                      <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />
-                      <span className="text-sm font-medium text-green-500">
-                        Refreshing in {countdown}s
-                      </span>
-                    </div>
-                  ) : (
-                    <span className="text-sm text-muted-foreground">
-                      {autoRefreshEnabled ? 'Waiting for positions...' : 'Paused'}
-                    </span>
-                  )}
-                  {lastAutoCheck && (
-                    <span className="text-xs text-muted-foreground ml-auto">
-                      Last: {new Date(lastAutoCheck).toLocaleTimeString()}
-                    </span>
-                  )}
-                </div>
-              </div>
+              {/* Auto-Refresh Control moved to Active Flips header */}
             </div>
 
             {/* Limit Order Price Range - Only show when limit mode is enabled */}
@@ -3563,6 +3534,26 @@ export function FlipItDashboard() {
               >
                 <RefreshCw className={`h-4 w-4 ${isManualRefreshing ? 'animate-spin' : ''}`} />
               </Button>
+              {/* Auto-Refresh Toggle - inline */}
+              <div className="flex items-center gap-2 ml-2 px-2 py-1 rounded bg-muted/50">
+                <Switch 
+                  checked={autoRefreshEnabled} 
+                  onCheckedChange={setAutoRefreshEnabled}
+                  className="scale-75"
+                />
+                {autoRefreshEnabled && positions.filter(p => p.status === 'holding').length > 0 ? (
+                  <div className="flex items-center gap-1">
+                    <div className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" />
+                    <span className="text-xs font-medium text-green-500">
+                      {countdown}s
+                    </span>
+                  </div>
+                ) : (
+                  <span className="text-xs text-muted-foreground">
+                    {autoRefreshEnabled ? 'Waiting...' : 'Auto'}
+                  </span>
+                )}
+              </div>
               {positions.filter(p => p.status === 'holding' && p.emergency_sell_status === 'watching').length > 0 && (
                 <Badge variant="destructive" className="gap-1">
                   <AlertTriangle className="h-3 w-3" />
