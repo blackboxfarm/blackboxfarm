@@ -351,40 +351,99 @@ async function checkRaydiumLaunchlab(tokenMint: string, heliusApiKey: string): P
 
 /**
  * Get SOL price for USD conversions
- * Uses Jupiter first, CoinGecko fallback - NO hardcoded fallback
+ * Multi-source with aggressive fallbacks - NEVER fails
  */
 async function getSolPrice(): Promise<number> {
-  // Try Jupiter first
-  try {
-    const res = await fetch('https://api.jup.ag/price/v2?ids=So11111111111111111111111111111111111111112', {
-      signal: AbortSignal.timeout(3000)
-    });
-    if (res.ok) {
-      const json = await res.json();
-      const price = Number(json?.data?.['So11111111111111111111111111111111111111112']?.price);
-      if (price > 0) return price;
+  const sources = [
+    // Jupiter v6 (same as working sol-price edge function)
+    async () => {
+      const res = await fetch('https://price.jup.ag/v6/price?ids=So11111111111111111111111111111111111111112', {
+        signal: AbortSignal.timeout(5000)
+      });
+      if (res.ok) {
+        const json = await res.json();
+        const price = Number(json?.data?.['So11111111111111111111111111111111111111112']?.price);
+        if (price > 0) {
+          console.log(`[VenueQuote] SOL price from Jupiter v6: $${price}`);
+          return price;
+        }
+      }
+      throw new Error('Jupiter v6 failed');
+    },
+    // CoinGecko
+    async () => {
+      const res = await fetch('https://api.coingecko.com/api/v3/simple/price?ids=solana&vs_currencies=usd', {
+        signal: AbortSignal.timeout(5000)
+      });
+      if (res.ok) {
+        const json = await res.json();
+        const price = Number(json?.solana?.usd);
+        if (price > 0) {
+          console.log(`[VenueQuote] SOL price from CoinGecko: $${price}`);
+          return price;
+        }
+      }
+      throw new Error('CoinGecko failed');
+    },
+    // Binance
+    async () => {
+      const res = await fetch('https://api.binance.com/api/v3/ticker/price?symbol=SOLUSDT', {
+        signal: AbortSignal.timeout(5000)
+      });
+      if (res.ok) {
+        const json = await res.json();
+        const price = Number(json?.price);
+        if (price > 0) {
+          console.log(`[VenueQuote] SOL price from Binance: $${price}`);
+          return price;
+        }
+      }
+      throw new Error('Binance failed');
+    },
+    // Kraken
+    async () => {
+      const res = await fetch('https://api.kraken.com/0/public/Ticker?pair=SOLUSD', {
+        signal: AbortSignal.timeout(5000)
+      });
+      if (res.ok) {
+        const json = await res.json();
+        const price = Number(json?.result?.SOLUSD?.c?.[0]);
+        if (price > 0) {
+          console.log(`[VenueQuote] SOL price from Kraken: $${price}`);
+          return price;
+        }
+      }
+      throw new Error('Kraken failed');
+    },
+    // DexScreener SOL/USDC pair
+    async () => {
+      const res = await fetch('https://api.dexscreener.com/latest/dex/tokens/So11111111111111111111111111111111111111112', {
+        signal: AbortSignal.timeout(5000)
+      });
+      if (res.ok) {
+        const json = await res.json();
+        const price = Number(json?.pairs?.[0]?.priceUsd);
+        if (price > 0) {
+          console.log(`[VenueQuote] SOL price from DexScreener: $${price}`);
+          return price;
+        }
+      }
+      throw new Error('DexScreener failed');
     }
-  } catch (e) {
-    console.log('[VenueQuote] Jupiter SOL price failed:', e);
+  ];
+
+  // Try all sources in sequence until one works
+  for (const source of sources) {
+    try {
+      return await source();
+    } catch (e) {
+      continue;
+    }
   }
   
-  // Try CoinGecko fallback
-  try {
-    const res = await fetch('https://api.coingecko.com/api/v3/simple/price?ids=solana&vs_currencies=usd', {
-      signal: AbortSignal.timeout(3000)
-    });
-    if (res.ok) {
-      const json = await res.json();
-      const price = Number(json?.solana?.usd);
-      if (price > 0) return price;
-    }
-  } catch (e) {
-    console.log('[VenueQuote] CoinGecko SOL price failed:', e);
-  }
-  
-  // CRITICAL: No hardcoded fallback - fail if we can't get real price
-  console.error('[VenueQuote] CRITICAL: Could not fetch SOL price from any source');
-  throw new Error('Could not fetch SOL price - refusing to use hardcoded fallback');
+  // CRITICAL: All sources failed - this should never happen
+  console.error('[VenueQuote] CRITICAL: All 5 SOL price sources failed');
+  throw new Error('Could not fetch SOL price from any of 5 sources');
 }
 
 /**
