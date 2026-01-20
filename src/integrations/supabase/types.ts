@@ -7387,6 +7387,42 @@ export type Database = {
         }
         Relationships: []
       }
+      sol_price_fetch_logs: {
+        Row: {
+          created_at: string
+          error_message: string | null
+          error_type: string | null
+          http_status: number | null
+          id: string
+          price_fetched: number | null
+          response_time_ms: number | null
+          source_name: string
+          success: boolean
+        }
+        Insert: {
+          created_at?: string
+          error_message?: string | null
+          error_type?: string | null
+          http_status?: number | null
+          id?: string
+          price_fetched?: number | null
+          response_time_ms?: number | null
+          source_name: string
+          success: boolean
+        }
+        Update: {
+          created_at?: string
+          error_message?: string | null
+          error_type?: string | null
+          http_status?: number | null
+          id?: string
+          price_fetched?: number | null
+          response_time_ms?: number | null
+          source_name?: string
+          success?: boolean
+        }
+        Relationships: []
+      }
       super_admin_wallets: {
         Row: {
           created_at: string
@@ -10907,6 +10943,18 @@ export type Database = {
           encrypted_tokens: number | null
           table_name: string | null
           total_records: number | null
+        }
+        Relationships: []
+      }
+      sol_price_source_stats: {
+        Row: {
+          avg_success_time_ms: number | null
+          failures: number | null
+          last_attempt_at: string | null
+          source_name: string | null
+          success_rate_pct: number | null
+          successes: number | null
+          total_attempts: number | null
         }
         Relationships: []
       }

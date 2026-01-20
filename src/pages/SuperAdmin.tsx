@@ -51,6 +51,7 @@ const PumpfunKOLTwitter = lazy(() => import("@/components/admin/PumpfunKOLTwitte
 const PumpfunTokenRetrace = lazy(() => import("@/components/admin/PumpfunTokenRetrace"));
 const DevTeamsView = lazy(() => import("@/components/admin/DevTeamsView").then(m => ({ default: m.DevTeamsView })));
 const SpiderRouteMap = lazy(() => import("@/components/admin/SpiderRouteMap").then(m => ({ default: m.SpiderRouteMap })));
+const SolPriceAnalytics = lazy(() => import("@/components/admin/SolPriceAnalytics").then(m => ({ default: m.SolPriceAnalytics })));
 
 export default function SuperAdmin() {
   const [activeTab, setActiveTab] = useState("fuckoff");
@@ -150,6 +151,7 @@ export default function SuperAdmin() {
             <TabsTrigger value="kol-tracker" className="flex-shrink-0 data-[state=active]:bg-gradient-to-r data-[state=active]:from-yellow-500/30 data-[state=active]:to-amber-500/20">👑 KOL Tracker</TabsTrigger>
             <TabsTrigger value="dev-teams" className="flex-shrink-0 data-[state=active]:bg-gradient-to-r data-[state=active]:from-purple-600/30 data-[state=active]:to-violet-500/20">👥 Dev Teams</TabsTrigger>
             <TabsTrigger value="spider" className="flex-shrink-0 data-[state=active]:bg-gradient-to-r data-[state=active]:from-gray-500/30 data-[state=active]:to-slate-500/20">🕷️ Spider</TabsTrigger>
+            <TabsTrigger value="sol-analytics" className="flex-shrink-0 data-[state=active]:bg-gradient-to-r data-[state=active]:from-emerald-500/30 data-[state=active]:to-green-500/20">📊 SOL Price</TabsTrigger>
           </TabsList>
           
           <TabsContent value="fuckoff">
@@ -408,6 +410,12 @@ export default function SuperAdmin() {
           <TabsContent value="spider">
             <ActiveTabOnly activeTab={activeTab} tabValue="spider">
               <SpiderRouteMap />
+            </ActiveTabOnly>
+          </TabsContent>
+
+          <TabsContent value="sol-analytics">
+            <ActiveTabOnly activeTab={activeTab} tabValue="sol-analytics">
+              <SolPriceAnalytics />
             </ActiveTabOnly>
           </TabsContent>
         </Tabs>

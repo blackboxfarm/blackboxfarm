@@ -1,9 +1,5 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-
-// NOTE: This edge function still has a fallback price for the UI display hook (useSolPrice)
-// because it's better to show an approximate price than fail the UI entirely.
-// However, the TRADE EXECUTION path (flipit-execute, trade-guard, etc.) will now FAIL
-// if it can't get a real SOL price - never using hardcoded fallbacks for actual trades.
+import { getSolPriceWithLogging } from "../_shared/sol-price-fetcher.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -16,76 +12,27 @@ serve(async (req) => {
   }
 
   try {
-    const heliusRpcUrl = Deno.env.get('SOLANA_RPC_URL');
+    const result = await getSolPriceWithLogging();
     
-    let solPrice = null;
+    // Round up to nearest penny
+    const solPrice = Math.ceil(result.price * 100) / 100;
     
-    // Try Helius RPC first if available
-    if (heliusRpcUrl) {
-      try {
-        console.log('Fetching SOL price from Helius RPC...');
-        
-        // Use Jupiter's price API with Helius as backup
-        const jupiterResponse = await fetch('https://price.jup.ag/v6/price?ids=So11111111111111111111111111111111111111112');
-        
-        if (jupiterResponse.ok) {
-          const jupiterData = await jupiterResponse.json();
-          const price = jupiterData?.data?.['So11111111111111111111111111111111111111112']?.price;
-          
-          if (price && typeof price === 'number') {
-            solPrice = Math.ceil(price * 100) / 100; // Round up to nearest penny
-            console.log(`SOL price from Jupiter: $${solPrice}`);
-          }
-        }
-      } catch (error) {
-        console.log('Helius/Jupiter fetch failed:', error instanceof Error ? error.message : String(error));
-      }
-    }
+    console.log(`[sol-price] ✓ $${solPrice} from ${result.source}`);
     
-    // Fallback to CoinGecko if Helios/Jupiter fails
-    if (!solPrice) {
-      try {
-        console.log('Falling back to CoinGecko...');
-        const coinGeckoResponse = await fetch(
-          'https://api.coingecko.com/api/v3/simple/price?ids=solana&vs_currencies=usd'
-        );
-        
-        if (coinGeckoResponse.ok) {
-          const coinGeckoData = await coinGeckoResponse.json();
-          const price = coinGeckoData?.solana?.usd;
-          
-          if (price && typeof price === 'number') {
-            solPrice = Math.ceil(price * 100) / 100; // Round up to nearest penny
-            console.log(`SOL price from CoinGecko: $${solPrice}`);
-          }
-        }
-      } catch (error) {
-        console.log('CoinGecko fetch failed:', error instanceof Error ? error.message : String(error));
-      }
-    }
-    
-    // No fallback - if we can't get a real price, return error
-    if (!solPrice) {
-      console.error('Failed to fetch SOL price from all sources');
-      return new Response(
-        JSON.stringify({ 
-          error: 'Could not fetch SOL price from any source',
-          price: null,
-          timestamp: new Date().toISOString(),
-          source: 'error'
-        }),
-        { 
-          status: 503, 
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
-        }
-      );
+    // Log any failed attempts for visibility
+    const failures = result.attempts.filter(a => !a.success);
+    if (failures.length > 0) {
+      console.log(`[sol-price] Had ${failures.length} failed attempts before success:`);
+      failures.forEach(f => console.log(`  - ${f.source}: ${f.errorType} (${f.responseTimeMs}ms)`));
     }
     
     return new Response(
       JSON.stringify({ 
         price: solPrice,
         timestamp: new Date().toISOString(),
-        source: heliusRpcUrl ? 'helius/jupiter' : 'coingecko'
+        source: result.source,
+        attempts: result.attempts.length,
+        failedAttempts: failures.length,
       }),
       { 
         headers: { 
@@ -96,17 +43,18 @@ serve(async (req) => {
     );
     
   } catch (error) {
-    console.error('Error fetching SOL price:', error);
+    console.error('[sol-price] CRITICAL: All sources failed!', error);
     
     return new Response(
       JSON.stringify({ 
-        error: 'Failed to fetch SOL price',
-        price: null, // No fake fallback
+        error: 'Could not fetch SOL price from any source',
+        message: error instanceof Error ? error.message : String(error),
+        price: null,
         timestamp: new Date().toISOString(),
         source: 'error'
       }),
       { 
-        status: 500, 
+        status: 503, 
         headers: { 
           ...corsHeaders, 
           'Content-Type': 'application/json' 
