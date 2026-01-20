@@ -92,8 +92,9 @@ async function fetchSolPrice(): Promise<number> {
     console.error("[TradeGuard] CoinGecko fallback failed:", e);
   }
   
-  console.warn("[TradeGuard] Using fallback SOL price: $200");
-  return 200;
+  // CRITICAL: Do not use hardcoded fallback - this causes calculation mismatches
+  console.error("[TradeGuard] CRITICAL: Could not fetch SOL price from any source");
+  throw new Error("CRITICAL: Could not fetch SOL price - refusing to use hardcoded fallback");
 }
 
 /**
