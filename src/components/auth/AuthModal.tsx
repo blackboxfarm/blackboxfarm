@@ -8,7 +8,7 @@ import { useAuth } from '@/hooks/useAuth';
 import { useToast } from '@/hooks/use-toast';
 import { Loader2, Mail, Lock, Eye, EyeOff } from 'lucide-react';
 import { PasswordResetModal } from './PasswordResetModal';
-import { GoogleAuthButton } from './GoogleAuthButton';
+import { OAuthButtons } from './OAuthButtons';
 import { OTPVerification } from './OTPVerification';
 import { supabase } from '@/integrations/supabase/client';
 
@@ -262,7 +262,7 @@ export const AuthModal = ({ isOpen, onClose, defaultTab = 'signin' }: AuthModalP
                 </div>
               </div>
 
-              <GoogleAuthButton />
+              <OAuthButtons />
 
               <Button
                 type="button"
@@ -367,7 +367,7 @@ export const AuthModal = ({ isOpen, onClose, defaultTab = 'signin' }: AuthModalP
                 </div>
               </div>
 
-              <GoogleAuthButton />
+              <OAuthButtons />
             </form>
           </TabsContent>
         </Tabs>
