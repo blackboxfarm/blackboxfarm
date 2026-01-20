@@ -8,6 +8,8 @@
  * This is the SINGLE SOURCE OF TRUTH for all price fetching across FlipIt.
  */
 
+import { getSolPriceWithLogging } from './sol-price-fetcher.ts';
+
 // ============================================
 // TYPES
 // ============================================
@@ -83,50 +85,22 @@ export async function fetchSolPrice(): Promise<number> {
     return solPriceCache.price;
   }
 
-  // Try Jupiter v2 first (most reliable)
+  // Use the shared SOL price fetcher (5 sources + DB logging)
   try {
-    const res = await fetch('https://api.jup.ag/price/v2?ids=So11111111111111111111111111111111111111112', {
-      signal: AbortSignal.timeout(3000)
-    });
-    if (res.ok) {
-      const json = await res.json();
-      const price = Number(json?.data?.['So11111111111111111111111111111111111111112']?.price);
-      if (price > 0) {
-        solPriceCache = { price, timestamp: Date.now() };
-        return price;
-      }
-    }
+    const { price } = await getSolPriceWithLogging();
+    solPriceCache = { price, timestamp: Date.now() };
+    return price;
   } catch (e) {
-    console.log('Jupiter SOL price failed:', e instanceof Error ? e.message : String(e));
-  }
-
-  // Try CoinGecko fallback
-  try {
-    const res = await fetch('https://api.coingecko.com/api/v3/simple/price?ids=solana&vs_currencies=usd', {
-      signal: AbortSignal.timeout(3000)
-    });
-    if (res.ok) {
-      const json = await res.json();
-      const price = Number(json?.solana?.usd);
-      if (price > 0) {
-        solPriceCache = { price, timestamp: Date.now() };
-        return price;
-      }
+    // CRITICAL: If we can't get SOL price, use cache if available, otherwise FAIL
+    // Never use a hardcoded fallback - that causes mismatched calculations
+    if (solPriceCache?.price) {
+      console.warn('[fetchSolPrice] Using stale cached SOL price:', solPriceCache.price);
+      return solPriceCache.price;
     }
-  } catch (e) {
-    console.log('CoinGecko SOL price failed:', e instanceof Error ? e.message : String(e));
-  }
 
-  // CRITICAL: If we can't get SOL price, use cache if available, otherwise FAIL
-  // Never use a hardcoded fallback - that causes mismatched calculations
-  if (solPriceCache?.price) {
-    console.warn('[fetchSolPrice] Using stale cached SOL price:', solPriceCache.price);
-    return solPriceCache.price;
+    console.error('[fetchSolPrice] CRITICAL: Could not fetch SOL price from any source');
+    throw e;
   }
-  
-  // No cache, no API response - this is a critical failure
-  console.error('[fetchSolPrice] CRITICAL: Could not fetch SOL price from any source');
-  throw new Error('CRITICAL: Could not fetch SOL price from any source - refusing to use hardcoded fallback');
 }
 
 // ============================================
