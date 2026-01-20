@@ -593,27 +593,28 @@ export async function getVenueAwareQuote(
   // PUMP.FUN ON-CURVE: Use pump.fun API + bonding curve math
   // ============================================
   if (venue === 'pumpfun' && isOnCurve) {
+    // 1) Try pump.fun HTTP API reserves (fast)
     try {
       const pumpRes = await fetch(`https://frontend-api.pump.fun/coins/${tokenMint}`, {
         headers: { 'Accept': 'application/json' },
         signal: AbortSignal.timeout(5000)
       });
-      
+
       if (pumpRes.ok) {
         const data = await pumpRes.json();
         const virtualSolReserves = Number(data.virtual_sol_reserves);
         const virtualTokenReserves = Number(data.virtual_token_reserves);
-        
+
         if (virtualSolReserves && virtualTokenReserves) {
           // Constant product AMM math
           const newSolReserves = virtualSolReserves + solAmountLamports;
           const newTokenReserves = (virtualSolReserves * virtualTokenReserves) / newSolReserves;
           const tokensOutRaw = virtualTokenReserves - newTokenReserves;
           const tokensOut = tokensOutRaw / 1e6; // 6 decimals
-          
+
           const executablePriceUsd = tokensOut > 0 ? usdSpent / tokensOut : 0;
           const priceImpactPct = (solAmountLamports / virtualSolReserves) * 100;
-          
+
           return {
             venue: 'pumpfun',
             isOnCurve: true,
@@ -628,6 +629,35 @@ export async function getVenueAwareQuote(
       }
     } catch (e) {
       console.log('[VenueQuote] pump.fun curve quote failed:', e);
+    }
+
+    // 2) Fallback: on-chain curve reserves via Helius (authoritative)
+    if (heliusApiKey) {
+      const curve = await fetchPumpFunCurveOnChain(tokenMint, heliusApiKey);
+      if (curve && !curve.complete) {
+        const vSol = BigInt(Math.floor(curve.virtualSolReserves));
+        const vTok = BigInt(Math.floor(curve.virtualTokenReserves));
+        const solIn = BigInt(solAmountLamports);
+
+        const newVSol = vSol + solIn;
+        const newVTok = (vSol * vTok) / newVSol;
+        const tokensOutRaw = vTok - newVTok;
+        const tokensOut = Number(tokensOutRaw) / 1e6;
+
+        const executablePriceUsd = tokensOut > 0 ? usdSpent / tokensOut : 0;
+        const priceImpactPct = vSol > 0n ? (Number(solIn) / Number(vSol)) * 100 : 0;
+
+        return {
+          venue: 'pumpfun',
+          isOnCurve: true,
+          executablePriceUsd,
+          tokensOut,
+          solSpent,
+          priceImpactPct,
+          confidence: 'high',
+          source: 'pumpfun_curve_onchain'
+        };
+      }
     }
   }
   
