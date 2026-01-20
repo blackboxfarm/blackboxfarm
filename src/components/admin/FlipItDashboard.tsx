@@ -3283,25 +3283,6 @@ export function FlipItDashboard() {
               </Button>
             )}
 
-            <Button 
-              variant="outline" 
-              onClick={async () => {
-                setIsManualRefreshing(true);
-                try {
-                  await handleRefreshPrices();
-                } finally {
-                  setIsManualRefreshing(false);
-                }
-              }} 
-              disabled={isManualRefreshing}
-            >
-              {isManualRefreshing ? (
-                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-              ) : (
-                <RefreshCw className="h-4 w-4 mr-2" />
-              )}
-              Refresh
-            </Button>
           </div>
           
           {/* Last Execution Price Comparison - shows requested vs received */}
