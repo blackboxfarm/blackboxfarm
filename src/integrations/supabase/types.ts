@@ -2796,7 +2796,10 @@ export type Database = {
           rebuy_price_usd: number | null
           rebuy_status: string | null
           rebuy_target_multiplier: number | null
+          scalp_moon_bag_pct: number | null
           scalp_stage: string | null
+          scalp_stop_loss_pct: number | null
+          scalp_take_profit_pct: number | null
           sell_executed_at: string | null
           sell_price_usd: number | null
           sell_signature: string | null
@@ -2870,7 +2873,10 @@ export type Database = {
           rebuy_price_usd?: number | null
           rebuy_status?: string | null
           rebuy_target_multiplier?: number | null
+          scalp_moon_bag_pct?: number | null
           scalp_stage?: string | null
+          scalp_stop_loss_pct?: number | null
+          scalp_take_profit_pct?: number | null
           sell_executed_at?: string | null
           sell_price_usd?: number | null
           sell_signature?: string | null
@@ -2944,7 +2950,10 @@ export type Database = {
           rebuy_price_usd?: number | null
           rebuy_status?: string | null
           rebuy_target_multiplier?: number | null
+          scalp_moon_bag_pct?: number | null
           scalp_stage?: string | null
+          scalp_stop_loss_pct?: number | null
+          scalp_take_profit_pct?: number | null
           sell_executed_at?: string | null
           sell_price_usd?: number | null
           sell_signature?: string | null
