@@ -157,6 +157,41 @@ export async function detectVenue(
     return { venue: 'bags_fm', isOnCurve: true };
   }
   
+  // PUMP suffix = pump.fun token - PRIORITIZE THIS CHECK
+  if (tokenMint.endsWith('pump')) {
+    console.log(`[VenueDetect] pump suffix detected, checking pump.fun directly`);
+    
+    // First try pump.fun API
+    try {
+      const pumpRes = await fetch(`https://frontend-api.pump.fun/coins/${tokenMint}`, {
+        headers: { 'Accept': 'application/json' },
+        signal: AbortSignal.timeout(3000)
+      });
+
+      if (pumpRes.ok) {
+        const pumpData = await pumpRes.json();
+        const isOnCurve = !pumpData.complete && !pumpData.raydium_pool;
+        console.log(`[VenueDetect] pump.fun API: complete=${pumpData.complete}, raydium_pool=${!!pumpData.raydium_pool}, isOnCurve=${isOnCurve}`);
+        return { venue: 'pumpfun', isOnCurve };
+      }
+    } catch (e) {
+      console.log('[VenueDetect] pump.fun API check failed:', e);
+    }
+    
+    // Fallback to on-chain check
+    if (heliusApiKey) {
+      const onChainData = await fetchPumpFunCurveOnChain(tokenMint, heliusApiKey);
+      if (onChainData) {
+        console.log(`[VenueDetect] pump.fun on-chain: complete=${onChainData.complete}`);
+        return { venue: 'pumpfun', isOnCurve: !onChainData.complete };
+      }
+    }
+    
+    // If we can't verify, assume on-curve for pump suffix tokens
+    console.log(`[VenueDetect] pump suffix but couldn't verify - assuming on-curve`);
+    return { venue: 'pumpfun', isOnCurve: true };
+  }
+  
   // BONK suffix = bonk.fun token
   if (tokenMint.endsWith('BONK') || tokenMint.endsWith('bonk')) {
     console.log(`[VenueDetect] BONK suffix detected, checking bonk.fun first`);
