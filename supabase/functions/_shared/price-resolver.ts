@@ -225,7 +225,7 @@ export interface MeteoraCurveState {
 /**
  * Fetch bonding curve state for bags.fm tokens (Meteora Dynamic Bonding Curve)
  * 
- * CRITICAL FIX: Use Deno-compatible hex encoding (Uint8Array doesn't have toString('hex'))
+ * CRITICAL FIX: Use Deno-compatible hex encoding and scan multiple account sizes
  */
 export async function fetchMeteoraDBC(
   tokenMint: string,
@@ -241,14 +241,6 @@ export async function fetchMeteoraDBC(
 
     const programId = new PublicKey(METEORA_DBC_PROGRAM_ID);
 
-    // Try to find pool accounts owned by the Meteora DBC program
-    const accounts = await connection.getProgramAccounts(programId, {
-      filters: [
-        { dataSize: 400 }, // Approximate pool account size
-      ],
-      commitment: 'confirmed',
-    });
-
     // Helper function to convert Uint8Array to hex (Deno-compatible)
     const toHex = (bytes: Uint8Array): string => {
       return Array.from(bytes).map(b => b.toString(16).padStart(2, '0')).join('');
@@ -257,59 +249,112 @@ export async function fetchMeteoraDBC(
     // Get token mint as hex for matching
     const tokenMintBuffer = new PublicKey(tokenMint).toBuffer();
     const tokenMintHex = toHex(new Uint8Array(tokenMintBuffer));
+    
+    console.log(`[Meteora DBC] Searching for pool containing ${tokenMint.slice(0, 8)}...`);
 
-    // Find a pool that contains our token
-    for (const { pubkey, account } of accounts) {
-      const data = account.data;
-      if (data.length < 100) continue;
-
+    // Try multiple pool account sizes (Meteora uses variable layouts)
+    const accountSizes = [360, 400, 432, 500, 550];
+    
+    for (const dataSize of accountSizes) {
       try {
-        // Convert account data to hex for searching
-        const dataHex = toHex(data);
-        
-        if (!dataHex.includes(tokenMintHex)) continue;
+        const accounts = await connection.getProgramAccounts(programId, {
+          filters: [{ dataSize }],
+          commitment: 'confirmed',
+        });
 
-        console.log(`[Meteora DBC] Found matching pool: ${pubkey.toBase58()}`);
+        console.log(`[Meteora DBC] Found ${accounts.length} accounts with dataSize=${dataSize}`);
 
-        // Found a matching pool - parse the relevant data
-        const view = new DataView(data.buffer, data.byteOffset, data.byteLength);
-        
-        // Quote reserve is typically at offset 72 (after discriminator + pubkeys)
-        let quoteReserve = 0n;
-        try {
-          quoteReserve = view.getBigUint64(72, true);
-        } catch {
-          // Try alternate offset
+        // Find a pool that contains our token
+        for (const { pubkey, account } of accounts) {
+          const data = account.data;
+          if (data.length < 80) continue;
+
           try {
-            quoteReserve = view.getBigUint64(80, true);
-          } catch {
-            quoteReserve = 0n;
+            // Convert account data to hex for searching
+            const dataHex = toHex(data);
+            
+            if (!dataHex.includes(tokenMintHex)) continue;
+
+            console.log(`[Meteora DBC] Found matching pool: ${pubkey.toBase58()}`);
+
+            // Found a matching pool - parse the relevant data
+            const view = new DataView(data.buffer, data.byteOffset, data.byteLength);
+            
+            // Try multiple offsets for quote reserve
+            let quoteReserve = 0n;
+            const offsets = [72, 80, 88, 96];
+            for (const offset of offsets) {
+              if (data.length >= offset + 8) {
+                try {
+                  const val = view.getBigUint64(offset, true);
+                  // Reasonable SOL reserve range: > 0 and < 1000 SOL
+                  if (val > 0n && val < 1000_000_000_000n) {
+                    quoteReserve = val;
+                    console.log(`[Meteora DBC] Found quoteReserve at offset ${offset}: ${Number(val) / 1e9} SOL`);
+                    break;
+                  }
+                } catch {}
+              }
+            }
+
+            // Migration threshold is typically ~85 SOL for bags.fm
+            const migrationThreshold = 85_000_000_000n; // 85 SOL in lamports
+            
+            // Calculate progress
+            const progress = Math.min(
+              Math.max(Number((quoteReserve * 100n) / migrationThreshold), 0),
+              100
+            );
+
+            const isOnCurve = progress < 100 && quoteReserve > 0n;
+
+            console.log(`[Meteora DBC] ${tokenMint.slice(0, 8)}: quoteReserve=${Number(quoteReserve) / 1e9} SOL, progress=${progress.toFixed(1)}%, onCurve=${isOnCurve}`);
+
+            return {
+              isOnCurve,
+              progress,
+              quoteReserve,
+              migrationThreshold,
+            };
+          } catch (parseError) {
+            console.log('[Meteora DBC] Parse error for pool, continuing:', parseError);
+            continue;
           }
         }
-
-        // Migration threshold is typically ~85 SOL for bags.fm
-        const migrationThreshold = 85_000_000_000n; // 85 SOL in lamports
-        
-        // Calculate progress
-        const progress = Math.min(
-          Math.max(Number((quoteReserve * 100n) / migrationThreshold), 0),
-          100
-        );
-
-        const isOnCurve = progress < 100;
-
-        console.log(`[Meteora DBC] ${tokenMint.slice(0, 8)}: quoteReserve=${Number(quoteReserve) / 1e9} SOL, progress=${progress.toFixed(1)}%, onCurve=${isOnCurve}`);
-
-        return {
-          isOnCurve,
-          progress,
-          quoteReserve,
-          migrationThreshold,
-        };
-      } catch (parseError) {
-        console.log('[Meteora DBC] Parse error for pool, continuing:', parseError);
+      } catch (e) {
+        console.log(`[Meteora DBC] Error with dataSize=${dataSize}:`, e);
         continue;
       }
+    }
+
+    // Last resort: try without dataSize filter
+    try {
+      console.log(`[Meteora DBC] Trying without dataSize filter...`);
+      const accounts = await connection.getProgramAccounts(programId, {
+        commitment: 'confirmed',
+      });
+
+      console.log(`[Meteora DBC] Found ${accounts.length} total accounts`);
+
+      for (const { pubkey, account } of accounts.slice(0, 100)) { // Limit to first 100
+        const data = account.data;
+        if (data.length < 80) continue;
+
+        const dataHex = toHex(data);
+        if (!dataHex.includes(tokenMintHex)) continue;
+
+        console.log(`[Meteora DBC] Found matching pool (no filter): ${pubkey.toBase58()}, size=${data.length}`);
+        
+        // Basic assumption: if pool exists with reserves, it's on curve
+        return {
+          isOnCurve: true,
+          progress: 50, // Unknown progress, estimate 50%
+          quoteReserve: 0n,
+          migrationThreshold: 85_000_000_000n,
+        };
+      }
+    } catch (e) {
+      console.log(`[Meteora DBC] No-filter search failed:`, e);
     }
 
     console.log(`[Meteora DBC] No pool found for ${tokenMint.slice(0, 8)}`);
