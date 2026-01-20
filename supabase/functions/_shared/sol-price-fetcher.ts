@@ -2,7 +2,7 @@
  * Shared SOL Price Fetcher with detailed logging and analytics
  * 
  * Priority order (fastest & most reliable first):
- * 1. Jupiter v6 - fastest, Solana-native, no rate limits
+ * 1. Jupiter v1 - Solana-native, requires API key
  * 2. Binance - extremely fast, highly reliable, minimal rate limits
  * 3. CoinGecko - reliable but can rate limit
  * 4. Kraken - solid backup
@@ -137,8 +137,8 @@ export async function getSolPriceWithLogging(): Promise<{ price: number; source:
   // Priority order: fastest & most reliable first
   const sources: Array<{ name: string; url: string; extractor: (json: unknown) => number; timeout: number }> = [
     {
-      name: 'jupiter_v6',
-      url: `https://price.jup.ag/v6/price?ids=${SOL_MINT}`,
+      name: 'jupiter_v1',
+      url: `https://api.jup.ag/price/v2?ids=${SOL_MINT}`,
       extractor: (json: unknown) => Number((json as Record<string, unknown>)?.data?.[SOL_MINT]?.price),
       timeout: 3000,
     },
