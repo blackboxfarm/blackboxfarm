@@ -6,7 +6,7 @@ import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Loader2, Bell, BellOff, MessageCircle, RefreshCw } from "lucide-react";
+import { Loader2, Bell, BellOff, MessageCircle, RefreshCw, Send } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 
 interface NotificationTarget {
@@ -31,6 +31,7 @@ export function FlipItNotificationSettings() {
   const [targets, setTargets] = useState<NotificationTarget[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [sendingTest, setSendingTest] = useState(false);
   const { toast } = useToast();
 
   const loadData = async () => {
@@ -195,6 +196,46 @@ export function FlipItNotificationSettings() {
     saveSettings({ selectedTargetIds: newIds });
   };
 
+  const sendTestNotification = async () => {
+    if (!settings || settings.selectedTargetIds.length === 0) return;
+    
+    setSendingTest(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('flipit-notify', {
+        body: {
+          type: 'buy',
+          tokenSymbol: 'TEST',
+          tokenName: 'Test Notification Token',
+          tokenMint: 'TestMint123456789TestMint123456789TestMint',
+          amountSol: 0.05,
+          amountUsd: 10.00,
+          tokenAmount: 1000000,
+          pricePerToken: 0.00001,
+          multiplier2x: 0.00002,
+          multiplier3x: 0.00003,
+          walletAddress: 'TestWallet123...789',
+          isTest: true,
+        },
+      });
+
+      if (error) throw error;
+
+      toast({
+        title: "Test notification sent!",
+        description: `Check your Telegram group${settings.selectedTargetIds.length > 1 ? 's' : ''} for the message.`,
+      });
+    } catch (error) {
+      console.error("Failed to send test notification:", error);
+      toast({
+        title: "Failed to send test",
+        description: error instanceof Error ? error.message : "Unknown error",
+        variant: "destructive",
+      });
+    } finally {
+      setSendingTest(false);
+    }
+  };
+
   if (loading) {
     return (
       <Card className="bg-muted/30">
@@ -316,15 +357,32 @@ export function FlipItNotificationSettings() {
               )}
             </div>
 
-            {/* Status Summary */}
-            <div className="text-xs text-muted-foreground text-center pt-2 border-t border-border/50">
-              {settings.selectedTargetIds.length === 0 ? (
-                <span className="text-yellow-400">⚠️ No groups selected - notifications won't be sent</span>
-              ) : (
-                <span className="text-green-400">
-                  ✓ Sending {settings.notify_on_buy && settings.notify_on_sell ? 'buy & sell' : 
-                    settings.notify_on_buy ? 'buy' : 'sell'} alerts to {settings.selectedTargetIds.length} group{settings.selectedTargetIds.length > 1 ? 's' : ''}
-                </span>
+            {/* Status Summary & Test Button */}
+            <div className="flex items-center justify-between pt-2 border-t border-border/50">
+              <div className="text-xs text-muted-foreground">
+                {settings.selectedTargetIds.length === 0 ? (
+                  <span className="text-yellow-400">⚠️ No groups selected</span>
+                ) : (
+                  <span className="text-green-400">
+                    ✓ {settings.selectedTargetIds.length} group{settings.selectedTargetIds.length > 1 ? 's' : ''} selected
+                  </span>
+                )}
+              </div>
+              {settings.selectedTargetIds.length > 0 && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={sendTestNotification}
+                  disabled={sendingTest}
+                  className="h-7 text-xs"
+                >
+                  {sendingTest ? (
+                    <Loader2 className="h-3 w-3 mr-1 animate-spin" />
+                  ) : (
+                    <Send className="h-3 w-3 mr-1" />
+                  )}
+                  Send Test
+                </Button>
               )}
             </div>
           </>
