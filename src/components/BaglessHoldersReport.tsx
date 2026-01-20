@@ -25,6 +25,7 @@ import { TokenHealthDashboard } from '@/components/premium/TokenHealthDashboard'
 import { useAuth } from '@/hooks/useAuth';
 import { useTokenDataCollection } from '@/hooks/useTokenDataCollection';
 import padreMemeCoins from '@/assets/padre-meme-coins.png';
+import { ExtendedAnalysisSection } from '@/components/holders/ExtendedAnalysisSection';
 
 interface TokenHolder {
   owner: string;
@@ -1166,7 +1167,7 @@ export function BaglessHoldersReport({ initialToken }: BaglessHoldersReportProps
 
       {report && (
         <>
-          {/* Token Health Dashboard - Hidden */}
+          {/* Token Health Dashboard - Hidden (data available via ExtendedAnalysisSection) */}
           <div className="hidden">
             {(() => {
               const lpAnalysis = calculateLPAnalysis();
@@ -1181,14 +1182,6 @@ export function BaglessHoldersReport({ initialToken }: BaglessHoldersReportProps
               );
             })()}
           </div>
-
-          {/* Real-Time Whale Movements - Hidden */}
-          {tokenMint && (
-            <div className="hidden">
-              <WhaleWarningSystem tokenMint={tokenMint} />
-              <HolderMovementFeed tokenMint={tokenMint} hideWhenEmpty={true} tokenAge={tokenAge} />
-            </div>
-          )}
 
           {/* Ad Banner #2 - Above Report Summary */}
           <AdBanner size="leaderboard" position={2} />
@@ -1681,6 +1674,37 @@ export function BaglessHoldersReport({ initialToken }: BaglessHoldersReportProps
                   </Card>
                 </div>
               )}
+
+              {/* Extended Analysis Section - Logged-in users only */}
+              <div className="mb-4 md:mb-6">
+                {(() => {
+                  const stabilityData = calculateStabilityScore();
+                  const securityAlerts = detectSuspiciousPatterns();
+                  const lpAnalysis = calculateLPAnalysis();
+                  
+                  if (!stabilityData) return null;
+                  
+                  return (
+                    <ExtendedAnalysisSection
+                      tokenMint={tokenMint}
+                      tokenAge={tokenAge}
+                      holders={report.holders}
+                      potentialDevWallet={report.potentialDevWallet}
+                      walletFlags={walletFlags}
+                      onFlagWallet={handleFlagWallet}
+                      stabilityData={stabilityData}
+                      securityAlerts={securityAlerts}
+                      lpAnalysis={{
+                        lpPercentage: lpAnalysis.lpPercentage,
+                        unlockedSupply: lpAnalysis.unlockedSupply,
+                        unlockedPercentage: lpAnalysis.unlockedPercentage,
+                        lpBalance: report.lpBalance,
+                      }}
+                      liquidityPoolsDetected={report.liquidityPoolsDetected}
+                    />
+                  );
+                })()}
+              </div>
 
               {/* Security Alerts Card - Hidden per user request */}
               {false && (() => {
