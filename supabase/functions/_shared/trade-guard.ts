@@ -1,14 +1,17 @@
 /**
- * TRADE GUARD - Pre-Trade Quote Validation
+ * TRADE GUARD - Pre-Trade Quote Validation (VENUE-AWARE)
  * 
- * Fetches executable quote from Jupiter BEFORE executing any trade.
+ * Fetches executable quote from the ACTUAL VENUE that will execute the trade:
+ * - pump.fun on-curve: bonding curve math
+ * - bags.fm/bonk.fun on-curve: PumpPortal simulation
+ * - graduated tokens: Jupiter quote
+ * 
+ * This prevents the mismatch where we validated against Jupiter but executed via PumpPortal.
+ * 
  * Blocks trades if the executable price exceeds the display price by more than the threshold.
- * 
- * This prevents buying at 40% higher than expected due to:
- * - Thin liquidity causing high slippage
- * - Price moving during execution
- * - Stale display prices from DexScreener/pump.fun
  */
+
+import { getVenueAwareQuote, detectVenue, type VenueQuote } from "./venue-aware-quote.ts";
 
 export interface TradeGuardConfig {
   maxPricePremiumPct: number;  // e.g., 10 = block if > 10% above display price
@@ -575,33 +578,99 @@ export async function validateBuyQuote(
   }
   
   // ========================================================
-  // STEP 2: FETCH EXECUTABLE QUOTE (using real slippage)
-  // CRITICAL: Use the same slippage as the actual trade will use
+  // STEP 2: FETCH VENUE-AWARE EXECUTABLE QUOTE
+  // Uses the SAME venue that will actually execute the trade:
+  // - pump.fun: bonding curve math
+  // - bags.fm/bonk.fun: PumpPortal simulation
+  // - graduated: Jupiter quote
   // ========================================================
   const solAmountLamports = Math.floor(solAmount * 1e9);
+  const heliusApiKey = Deno.env.get("HELIUS_API_KEY");
   
-  // Use the REAL slippage from user settings, not hardcoded 1%
-  console.log(`[TradeGuard] Fetching quote with slippage: ${slippageBps} bps (${slippageBps / 100}%)`);
-  const quote = await getExecutableQuote(tokenMint, solAmountLamports, slippageBps);
+  console.log(`[TradeGuard] Fetching VENUE-AWARE quote with slippage: ${slippageBps} bps (${slippageBps / 100}%)`);
   
-  if (!quote) {
-    // CRITICAL FIX: Fail CLOSED - if we can't verify the quote is safe, DON'T trade
-    // This prevents buying at unknown/bad prices when Jupiter is unreachable
-    console.error("[TradeGuard] ❌ BLOCKED: Could not fetch executable quote - failing closed for safety");
-    return {
-      isValid: false,
-      displayPrice: displayPriceUsd,
-      executablePrice: 0,
-      premiumPct: 0,
-      priceImpactPct: 0,
-      outputTokens: 0,
-      solPrice: 0,
-      blockReason: "QUOTE_UNAVAILABLE: Cannot verify executable price - trade blocked for safety. Retry in a moment.",
-    };
+  let executablePrice: number;
+  let tokensDecimal: number;
+  let priceImpactPct: number;
+  let solPriceUsed: number;
+  let quoteSource: string;
+  let venueUsed: string;
+  
+  // TRY VENUE-AWARE QUOTE FIRST (most accurate for bonding curve tokens)
+  if (walletPubkey && heliusApiKey) {
+    const venueQuote = await getVenueAwareQuote(tokenMint, solAmountLamports, walletPubkey, {
+      heliusApiKey,
+      slippageBps
+    });
+    
+    if (venueQuote) {
+      console.log(`[TradeGuard] Got venue-aware quote from ${venueQuote.source} (venue: ${venueQuote.venue}, onCurve: ${venueQuote.isOnCurve})`);
+      executablePrice = venueQuote.executablePriceUsd;
+      tokensDecimal = venueQuote.tokensOut;
+      priceImpactPct = venueQuote.priceImpactPct;
+      solPriceUsed = venueQuote.solSpent > 0 ? (venueQuote.executablePriceUsd * venueQuote.tokensOut) / venueQuote.solSpent : 180;
+      quoteSource = venueQuote.source;
+      venueUsed = venueQuote.venue;
+      
+      // For low-confidence quotes, add a warning but still proceed
+      if (venueQuote.confidence === 'low') {
+        console.warn(`[TradeGuard] ⚠️ LOW CONFIDENCE quote from ${venueQuote.source} - price may differ at execution`);
+      }
+    } else {
+      // Fallback to legacy Jupiter-first quote
+      console.log(`[TradeGuard] Venue-aware quote failed, falling back to legacy quote...`);
+      const legacyQuote = await getExecutableQuote(tokenMint, solAmountLamports, slippageBps);
+      
+      if (!legacyQuote) {
+        console.error("[TradeGuard] ❌ BLOCKED: Could not fetch any executable quote - failing closed for safety");
+        return {
+          isValid: false,
+          displayPrice: displayPriceUsd,
+          executablePrice: 0,
+          premiumPct: 0,
+          priceImpactPct: 0,
+          outputTokens: 0,
+          solPrice: 0,
+          blockReason: "QUOTE_UNAVAILABLE: Cannot verify executable price from any source - trade blocked for safety. Retry in a moment.",
+        };
+      }
+      
+      executablePrice = legacyQuote.impliedPriceUsd;
+      tokensDecimal = legacyQuote.outputAmount / Math.pow(10, legacyQuote.outputDecimals);
+      priceImpactPct = legacyQuote.priceImpactPct;
+      solPriceUsed = legacyQuote.solPrice;
+      quoteSource = legacyQuote.quoteResponse?.source || 'jupiter';
+      venueUsed = 'jupiter_fallback';
+    }
+  } else {
+    // No wallet pubkey provided - use legacy quote (less accurate for bonding curves)
+    console.log(`[TradeGuard] No wallet pubkey, using legacy Jupiter quote...`);
+    const legacyQuote = await getExecutableQuote(tokenMint, solAmountLamports, slippageBps);
+    
+    if (!legacyQuote) {
+      console.error("[TradeGuard] ❌ BLOCKED: Could not fetch executable quote - failing closed for safety");
+      return {
+        isValid: false,
+        displayPrice: displayPriceUsd,
+        executablePrice: 0,
+        premiumPct: 0,
+        priceImpactPct: 0,
+        outputTokens: 0,
+        solPrice: 0,
+        blockReason: "QUOTE_UNAVAILABLE: Cannot verify executable price - trade blocked for safety. Retry in a moment.",
+      };
+    }
+    
+    executablePrice = legacyQuote.impliedPriceUsd;
+    tokensDecimal = legacyQuote.outputAmount / Math.pow(10, legacyQuote.outputDecimals);
+    priceImpactPct = legacyQuote.priceImpactPct;
+    solPriceUsed = legacyQuote.solPrice;
+    quoteSource = legacyQuote.quoteResponse?.source || 'jupiter';
+    venueUsed = 'jupiter';
   }
   
-  const executablePrice = quote.impliedPriceUsd;
-  const tokensDecimal = quote.outputAmount / Math.pow(10, quote.outputDecimals);
+  console.log(`[TradeGuard] Quote obtained: venue=${venueUsed}, source=${quoteSource}, price=$${executablePrice?.toFixed(10)}`);
+
   
   // ========================================================
   // STEP 3: SANITY CHECK - Block obviously garbage quotes
@@ -615,8 +684,8 @@ export async function validateBuyQuote(
       premiumPct: 0,
       priceImpactPct: 0,
       outputTokens: 0,
-      solPrice: quote.solPrice,
-      blockReason: "INVALID_QUOTE: Executable price is invalid (zero or non-finite). This usually means the token is not tradable.",
+      solPrice: solPriceUsed,
+      blockReason: `INVALID_QUOTE: Executable price is invalid (zero or non-finite) from ${quoteSource}. This usually means the token is not tradable on ${venueUsed}.`,
     };
   }
   
@@ -633,10 +702,10 @@ export async function validateBuyQuote(
       displayPrice: displayPriceUsd,
       executablePrice,
       premiumPct,
-      priceImpactPct: quote.priceImpactPct,
+      priceImpactPct,
       outputTokens: tokensDecimal,
-      solPrice: quote.solPrice,
-      blockReason: `EXTREME_DEVIATION: Price deviation is ${Math.abs(premiumPct).toFixed(0)}% which indicates a quote error or extreme volatility. Display: $${displayPriceUsd.toFixed(10)}, Executable: $${executablePrice.toFixed(10)}`,
+      solPrice: solPriceUsed,
+      blockReason: `EXTREME_DEVIATION: Price deviation is ${Math.abs(premiumPct).toFixed(0)}% which indicates a quote error or extreme volatility. Display: $${displayPriceUsd.toFixed(10)}, Executable: $${executablePrice.toFixed(10)} (venue: ${venueUsed})`,
     };
   }
   
@@ -644,18 +713,18 @@ export async function validateBuyQuote(
   console.log(`  Display price:     $${displayPriceUsd.toFixed(10)}`);
   console.log(`  Executable price:  $${executablePrice.toFixed(10)}`);
   console.log(`  Premium:           ${premiumPct.toFixed(2)}% (max: ${cfg.maxPricePremiumPct}%)`);
-  console.log(`  Price impact:      ${quote.priceImpactPct.toFixed(2)}% (max: ${cfg.maxPriceImpactPct}%)`);
-  console.log(`  Slippage used:     ${slippageBps} bps`);
+  console.log(`  Price impact:      ${priceImpactPct.toFixed(2)}% (max: ${cfg.maxPriceImpactPct}%)`);
+  console.log(`  Slippage used:     ${slippageBps} bps, Venue: ${venueUsed}, Source: ${quoteSource}`);
   
   const result: QuoteValidation = {
     isValid: true,
     displayPrice: displayPriceUsd,
     executablePrice,
     premiumPct,
-    priceImpactPct: quote.priceImpactPct,
+    priceImpactPct,
     outputTokens: tokensDecimal,
-    solPrice: quote.solPrice,
-    jupiterQuote: quote.quoteResponse,
+    solPrice: solPriceUsed,
+    jupiterQuote: { source: quoteSource, venue: venueUsed },
     hasTax: false,
     taxPct: 0,
   };
@@ -669,9 +738,9 @@ export async function validateBuyQuote(
   }
   
   // Check price impact
-  if (cfg.blockOnHighPriceImpact && quote.priceImpactPct > cfg.maxPriceImpactPct) {
+  if (cfg.blockOnHighPriceImpact && priceImpactPct > cfg.maxPriceImpactPct) {
     result.isValid = false;
-    result.blockReason = `PRICE_IMPACT_TOO_HIGH: Jupiter reports ${quote.priceImpactPct.toFixed(1)}% price impact (max: ${cfg.maxPriceImpactPct}%). Consider a smaller buy size.`;
+    result.blockReason = `PRICE_IMPACT_TOO_HIGH: ${venueUsed} reports ${priceImpactPct.toFixed(1)}% price impact (max: ${cfg.maxPriceImpactPct}%). Consider a smaller buy size.`;
     console.error(`[TradeGuard] ❌ BLOCKED: ${result.blockReason}`);
     return result;
   }
