@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { validateStaleAlpha } from "../_shared/historical-price.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -1797,7 +1798,8 @@ serve(async (req) => {
                   skip_reason: currentRuleResult.decision === 'skip' ? currentRuleResult.reasoning : null,
                   caller_username: callerUsername || null,
                   caller_display_name: callerDisplayName || null,
-                  is_first_call: isFirstCall
+                  is_first_call: isFirstCall,
+                  message_timestamp: messageDate.toISOString() // Track message post time for stale alpha check
                 })
                 .select('id')
                 .single();
@@ -2227,6 +2229,76 @@ serve(async (req) => {
               } catch (scalpErr) {
                 console.error('[telegram-channel-monitor] Scalp validator exception:', scalpErr);
               }
+            }
+
+            // ============================================
+            // STALE ALPHA PROTECTION CHECK
+            // ============================================
+            let staleAlphaCheckPassed = true;
+            let staleAlphaResult: any = null;
+            
+            const staleAlphaEnabled = config.stale_alpha_check_enabled !== false;
+            const staleAlphaThreshold = config.stale_alpha_drop_threshold || 40;
+            const staleAlphaMinAge = config.stale_alpha_min_age_seconds || 30;
+            
+            if (staleAlphaEnabled && currentTokenData?.price && currentTokenData.price > 0) {
+              console.log(`[telegram-channel-monitor] 🛡️ STALE ALPHA CHECK: Validating price hasn't dropped >${staleAlphaThreshold}% since call`);
+              
+              try {
+                staleAlphaResult = await validateStaleAlpha(
+                  tokenMint,
+                  messageDate,
+                  currentTokenData.price,
+                  {
+                    enabled: true,
+                    dropThresholdPct: staleAlphaThreshold,
+                    minAgeSeconds: staleAlphaMinAge
+                  }
+                );
+                
+                staleAlphaCheckPassed = staleAlphaResult.passed;
+                
+                // Update call record with stale alpha validation results
+                if (callId) {
+                  await supabase
+                    .from('telegram_channel_calls')
+                    .update({
+                      price_at_message_time: staleAlphaResult.priceAtMessage,
+                      price_drop_pct: staleAlphaResult.priceDropPct,
+                      sanity_check_passed: staleAlphaResult.passed,
+                      price_source_at_message: staleAlphaResult.source
+                    })
+                    .eq('id', callId);
+                }
+                
+                if (!staleAlphaCheckPassed) {
+                  console.log(`[telegram-channel-monitor] ❌ STALE ALPHA BLOCKED: ${staleAlphaResult.blockReason}`);
+                  
+                  // Update status to skipped
+                  if (callId) {
+                    await supabase
+                      .from('telegram_channel_calls')
+                      .update({
+                        status: 'skipped',
+                        skip_reason: staleAlphaResult.blockReason
+                      })
+                      .eq('id', callId);
+                  }
+                  
+                  totalSkipped++;
+                } else {
+                  console.log(`[telegram-channel-monitor] ✅ Stale alpha check PASSED (${staleAlphaResult.priceDropPct?.toFixed(1) || 'N/A'}% change, source: ${staleAlphaResult.source})`);
+                }
+              } catch (staleAlphaErr) {
+                console.warn('[telegram-channel-monitor] Stale alpha check error:', staleAlphaErr);
+                // Default to passing if check fails
+              }
+            }
+            
+            // Skip Scalp/FlipIt execution if stale alpha check failed
+            if (!staleAlphaCheckPassed) {
+              console.log(`[telegram-channel-monitor] Skipping buy execution due to stale alpha protection`);
+              continue; // Move to next token
             }
 
             // ============================================

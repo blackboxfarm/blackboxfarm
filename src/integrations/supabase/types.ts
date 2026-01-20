@@ -7680,10 +7680,15 @@ export type Database = {
           is_first_call: boolean | null
           market_cap_at_call: number | null
           message_id: number
+          message_timestamp: string | null
           mint_age_minutes: number | null
           position_id: string | null
           price_at_call: number | null
+          price_at_message_time: number | null
+          price_drop_pct: number | null
+          price_source_at_message: string | null
           raw_message: string | null
+          sanity_check_passed: boolean | null
           scalp_approved: boolean | null
           scalp_validation_result: Json | null
           sell_multiplier: number | null
@@ -7712,10 +7717,15 @@ export type Database = {
           is_first_call?: boolean | null
           market_cap_at_call?: number | null
           message_id: number
+          message_timestamp?: string | null
           mint_age_minutes?: number | null
           position_id?: string | null
           price_at_call?: number | null
+          price_at_message_time?: number | null
+          price_drop_pct?: number | null
+          price_source_at_message?: string | null
           raw_message?: string | null
+          sanity_check_passed?: boolean | null
           scalp_approved?: boolean | null
           scalp_validation_result?: Json | null
           sell_multiplier?: number | null
@@ -7744,10 +7754,15 @@ export type Database = {
           is_first_call?: boolean | null
           market_cap_at_call?: number | null
           message_id?: number
+          message_timestamp?: string | null
           mint_age_minutes?: number | null
           position_id?: string | null
           price_at_call?: number | null
+          price_at_message_time?: number | null
+          price_drop_pct?: number | null
+          price_source_at_message?: string | null
           raw_message?: string | null
+          sanity_check_passed?: boolean | null
           scalp_approved?: boolean | null
           scalp_validation_result?: Json | null
           sell_multiplier?: number | null
@@ -7850,6 +7865,9 @@ export type Database = {
           scalp_test_mode: boolean | null
           scan_window_minutes: number | null
           signal_classification_enabled: boolean | null
+          stale_alpha_check_enabled: boolean | null
+          stale_alpha_drop_threshold: number | null
+          stale_alpha_min_age_seconds: number | null
           standard_buy_amount_usd: number | null
           standard_sell_multiplier: number | null
           telegram_announcements_enabled: boolean | null
@@ -7935,6 +7953,9 @@ export type Database = {
           scalp_test_mode?: boolean | null
           scan_window_minutes?: number | null
           signal_classification_enabled?: boolean | null
+          stale_alpha_check_enabled?: boolean | null
+          stale_alpha_drop_threshold?: number | null
+          stale_alpha_min_age_seconds?: number | null
           standard_buy_amount_usd?: number | null
           standard_sell_multiplier?: number | null
           telegram_announcements_enabled?: boolean | null
@@ -8020,6 +8041,9 @@ export type Database = {
           scalp_test_mode?: boolean | null
           scan_window_minutes?: number | null
           signal_classification_enabled?: boolean | null
+          stale_alpha_check_enabled?: boolean | null
+          stale_alpha_drop_threshold?: number | null
+          stale_alpha_min_age_seconds?: number | null
           standard_buy_amount_usd?: number | null
           standard_sell_multiplier?: number | null
           telegram_announcements_enabled?: boolean | null
