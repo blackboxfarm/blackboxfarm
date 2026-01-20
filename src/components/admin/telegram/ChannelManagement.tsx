@@ -112,6 +112,8 @@ interface ChannelConfig {
   // Analytics opt-in
   koth_enabled?: boolean;
   first_enabled?: boolean;
+  // Watch mode - when true, only fantasy trades are executed
+  watch_mode_fantasy_only?: boolean;
   // KingKong Caller Mode settings
   kingkong_mode_enabled?: boolean;
   kingkong_trigger_source?: 'whale_name' | 'username';
@@ -1769,6 +1771,43 @@ export function ChannelManagement() {
                   </div>
                 </div>
                 )}
+
+                {/* Watch Mode Toggle - CRITICAL: Controls real vs fantasy trading */}
+                <div className={`p-3 rounded-lg border ${
+                  channel.watch_mode_fantasy_only === false 
+                    ? 'bg-red-500/10 border-red-500/50' 
+                    : 'bg-purple-500/10 border-purple-500/30'
+                }`}>
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <Eye className={`h-4 w-4 ${channel.watch_mode_fantasy_only === false ? 'text-red-500' : 'text-purple-400'}`} />
+                      <div>
+                        <span className="text-sm font-medium">
+                          {channel.watch_mode_fantasy_only === false ? '🔴 LIVE MODE' : '👁️ Watch Mode'}
+                        </span>
+                        <p className="text-xs text-muted-foreground">
+                          {channel.watch_mode_fantasy_only === false 
+                            ? 'Real SOL will be spent on trades!' 
+                            : 'Simulation only - no real trades'}
+                        </p>
+                      </div>
+                    </div>
+                    <Switch
+                      checked={channel.watch_mode_fantasy_only !== false}
+                      onCheckedChange={async (checked) => {
+                        if (!checked) {
+                          // Switching to LIVE mode - confirm first
+                          const confirmed = window.confirm(
+                            '⚠️ ENABLE LIVE TRADING?\n\nThis will allow REAL SOL to be spent on trades from this channel.\n\nAre you sure?'
+                          );
+                          if (!confirmed) return;
+                        }
+                        await updateFlipitSettings(channel.id, 'watch_mode_fantasy_only', checked);
+                        toast.success(checked ? 'Watch mode enabled (simulation only)' : '🔴 LIVE mode enabled - real trades active!');
+                      }}
+                    />
+                  </div>
+                </div>
 
                 {/* FlipIt Auto-Buy Section */}
                 <div className="p-3 bg-muted/30 rounded-lg border border-border/50">
