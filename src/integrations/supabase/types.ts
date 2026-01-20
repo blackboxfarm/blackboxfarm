@@ -3025,6 +3025,72 @@ export type Database = {
         }
         Relationships: []
       }
+      flipit_notification_settings: {
+        Row: {
+          created_at: string
+          id: string
+          is_enabled: boolean
+          notify_on_buy: boolean
+          notify_on_sell: boolean
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          is_enabled?: boolean
+          notify_on_buy?: boolean
+          notify_on_sell?: boolean
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          is_enabled?: boolean
+          notify_on_buy?: boolean
+          notify_on_sell?: boolean
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      flipit_notification_targets: {
+        Row: {
+          created_at: string
+          id: string
+          settings_id: string
+          target_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          settings_id: string
+          target_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          settings_id?: string
+          target_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "flipit_notification_targets_settings_id_fkey"
+            columns: ["settings_id"]
+            isOneToOne: false
+            referencedRelation: "flipit_notification_settings"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "flipit_notification_targets_target_id_fkey"
+            columns: ["target_id"]
+            isOneToOne: false
+            referencedRelation: "telegram_message_targets"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       flipit_settings: {
         Row: {
           block_on_high_price_impact: boolean
