@@ -521,13 +521,17 @@ serve(async (req) => {
       // ============================================
       // CRITICAL: CHECK BALANCE BEFORE ANYTHING ELSE
       // ============================================
-      const solPrice = await fetchSolPrice();
-      // If user specified SOL directly, use it. Otherwise convert USD.
-      const buyAmountSol = explicitBuyAmountSol 
-        ? explicitBuyAmountSol                    // User said 1.0 SOL → execute 1.0 SOL
-        : ((buyAmountUsd || 4) / solPrice);       // USD mode: convert to SOL
+      // CRITICAL FIX: Require buyAmountSol - frontend MUST convert USD→SOL using displayed price
+      // This prevents mismatch where backend uses a different/fallback SOL price
+      if (!explicitBuyAmountSol || explicitBuyAmountSol <= 0) {
+        console.error("buyAmountSol is required - frontend must convert USD to SOL before calling");
+        return bad("buyAmountSol is required and must be positive (frontend must convert USD→SOL)");
+      }
+      const buyAmountSol = explicitBuyAmountSol;
       
-      console.log("Buy amount calculation:", { explicitBuyAmountSol, buyAmountUsd, solPrice, finalBuyAmountSol: buyAmountSol });
+      // Fetch SOL price for USD display/logging only (NOT for buy amount calculation)
+      const solPrice = await fetchSolPrice();
+      console.log("Buy amount (SOL-only mode):", { buyAmountSol, solPriceForDisplay: solPrice });
       const gasFeeBuffer = 0.005; // 0.005 SOL buffer for gas fees (reduced from 0.01)
       const requiredSol = buyAmountSol + gasFeeBuffer;
       

@@ -117,8 +117,16 @@ export async function fetchSolPrice(): Promise<number> {
     console.log('CoinGecko SOL price failed:', e instanceof Error ? e.message : String(e));
   }
 
-  // Return cached or default
-  return solPriceCache?.price || 180;
+  // CRITICAL: If we can't get SOL price, use cache if available, otherwise FAIL
+  // Never use a hardcoded fallback - that causes mismatched calculations
+  if (solPriceCache?.price) {
+    console.warn('[fetchSolPrice] Using stale cached SOL price:', solPriceCache.price);
+    return solPriceCache.price;
+  }
+  
+  // No cache, no API response - this is a critical failure
+  console.error('[fetchSolPrice] CRITICAL: Could not fetch SOL price from any source');
+  throw new Error('CRITICAL: Could not fetch SOL price from any source - refusing to use hardcoded fallback');
 }
 
 // ============================================

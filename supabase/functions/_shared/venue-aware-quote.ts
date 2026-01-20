@@ -351,8 +351,10 @@ async function checkRaydiumLaunchlab(tokenMint: string, heliusApiKey: string): P
 
 /**
  * Get SOL price for USD conversions
+ * Uses Jupiter first, CoinGecko fallback - NO hardcoded fallback
  */
 async function getSolPrice(): Promise<number> {
+  // Try Jupiter first
   try {
     const res = await fetch('https://api.jup.ag/price/v2?ids=So11111111111111111111111111111111111111112', {
       signal: AbortSignal.timeout(3000)
@@ -362,9 +364,27 @@ async function getSolPrice(): Promise<number> {
       const price = Number(json?.data?.['So11111111111111111111111111111111111111112']?.price);
       if (price > 0) return price;
     }
-  } catch (e) {}
+  } catch (e) {
+    console.log('[VenueQuote] Jupiter SOL price failed:', e);
+  }
   
-  return 180; // Fallback
+  // Try CoinGecko fallback
+  try {
+    const res = await fetch('https://api.coingecko.com/api/v3/simple/price?ids=solana&vs_currencies=usd', {
+      signal: AbortSignal.timeout(3000)
+    });
+    if (res.ok) {
+      const json = await res.json();
+      const price = Number(json?.solana?.usd);
+      if (price > 0) return price;
+    }
+  } catch (e) {
+    console.log('[VenueQuote] CoinGecko SOL price failed:', e);
+  }
+  
+  // CRITICAL: No hardcoded fallback - fail if we can't get real price
+  console.error('[VenueQuote] CRITICAL: Could not fetch SOL price from any source');
+  throw new Error('Could not fetch SOL price - refusing to use hardcoded fallback');
 }
 
 /**

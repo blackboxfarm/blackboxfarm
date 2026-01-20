@@ -1647,16 +1647,32 @@ export function FlipItDashboard() {
     
     const parsedAmount = parseFloat(buyAmount);
     
+    // CRITICAL FIX: Always convert to SOL in the frontend using the displayed SOL price
+    // This ensures the SAME price the user sees is used for the conversion
+    // Never let the backend convert USD→SOL because it might use a different/fallback price
+    let amountInSol: number;
+    if (buyAmountMode === 'sol') {
+      amountInSol = parsedAmount;
+    } else {
+      // Convert USD to SOL using the DISPLAYED price from useSolPrice hook
+      if (!solPrice || solPrice <= 0) {
+        toast.error('Cannot convert USD to SOL: SOL price unavailable');
+        setIsFlipping(false);
+        return;
+      }
+      amountInSol = parsedAmount / solPrice;
+      console.log(`[FlipIt] Converting $${parsedAmount} USD → ${amountInSol.toFixed(6)} SOL @ $${solPrice.toFixed(2)}/SOL (displayed price)`);
+    }
+    
     try {
-      // Send raw amount in user's chosen denomination - NO CONVERSION
+      // ALWAYS send SOL amount - backend no longer handles USD conversion
       const { data, error } = await supabase.functions.invoke('flipit-execute', {
         body: {
           action: 'buy',
           tokenMint: tokenAddress.trim(),
           walletId: selectedWallet,
-          // Pass raw amount in user's chosen denomination
-          buyAmountSol: buyAmountMode === 'sol' ? parsedAmount : undefined,
-          buyAmountUsd: buyAmountMode === 'usd' ? parsedAmount : undefined,
+          // CRITICAL: Always send SOL amount, never USD
+          buyAmountSol: amountInSol,
           // CRITICAL: pass the preflight-verified price for Trade Guard validation
           displayPriceUsd: requestedPrice,
           targetMultiplier: targetMultiplier,

@@ -1,5 +1,10 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 
+// NOTE: This edge function still has a fallback price for the UI display hook (useSolPrice)
+// because it's better to show an approximate price than fail the UI entirely.
+// However, the TRADE EXECUTION path (flipit-execute, trade-guard, etc.) will now FAIL
+// if it can't get a real SOL price - never using hardcoded fallbacks for actual trades.
+
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
