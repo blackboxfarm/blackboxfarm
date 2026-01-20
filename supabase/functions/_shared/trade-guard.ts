@@ -519,14 +519,21 @@ export async function getExecutableQuote(
 /**
  * Main validation function - call this BEFORE executing any buy
  * Returns validation result with clear block reasons if trade should not proceed
+ * 
+ * CRITICAL CHANGE: Now accepts slippageBps and walletPubkey for venue-aware quotes
  */
 export async function validateBuyQuote(
   tokenMint: string,
   solAmount: number,
   displayPriceUsd: number,
-  config: Partial<TradeGuardConfig> = {}
+  config: Partial<TradeGuardConfig> = {},
+  options: {
+    slippageBps?: number;
+    walletPubkey?: string;
+  } = {}
 ): Promise<QuoteValidation> {
   const cfg = { ...DEFAULT_CONFIG, ...config };
+  const { slippageBps = 500, walletPubkey } = options;
   
   // If validation is disabled, always pass
   if (!cfg.requireQuoteCheck) {
@@ -568,10 +575,14 @@ export async function validateBuyQuote(
   }
   
   // ========================================================
-  // STEP 2: FETCH EXECUTABLE QUOTE
+  // STEP 2: FETCH EXECUTABLE QUOTE (using real slippage)
+  // CRITICAL: Use the same slippage as the actual trade will use
   // ========================================================
   const solAmountLamports = Math.floor(solAmount * 1e9);
-  const quote = await getExecutableQuote(tokenMint, solAmountLamports, 100);
+  
+  // Use the REAL slippage from user settings, not hardcoded 1%
+  console.log(`[TradeGuard] Fetching quote with slippage: ${slippageBps} bps (${slippageBps / 100}%)`);
+  const quote = await getExecutableQuote(tokenMint, solAmountLamports, slippageBps);
   
   if (!quote) {
     // CRITICAL FIX: Fail CLOSED - if we can't verify the quote is safe, DON'T trade
@@ -592,16 +603,49 @@ export async function validateBuyQuote(
   const executablePrice = quote.impliedPriceUsd;
   const tokensDecimal = quote.outputAmount / Math.pow(10, quote.outputDecimals);
   
+  // ========================================================
+  // STEP 3: SANITY CHECK - Block obviously garbage quotes
+  // ========================================================
+  if (!Number.isFinite(executablePrice) || executablePrice <= 0) {
+    console.error(`[TradeGuard] ❌ BLOCKED: Invalid executable price: ${executablePrice}`);
+    return {
+      isValid: false,
+      displayPrice: displayPriceUsd,
+      executablePrice: 0,
+      premiumPct: 0,
+      priceImpactPct: 0,
+      outputTokens: 0,
+      solPrice: quote.solPrice,
+      blockReason: "INVALID_QUOTE: Executable price is invalid (zero or non-finite). This usually means the token is not tradable.",
+    };
+  }
+  
   // Calculate premium: how much more expensive is executable vs display
   const premiumPct = displayPriceUsd > 0 
     ? ((executablePrice - displayPriceUsd) / displayPriceUsd) * 100
     : 0;
+  
+  // Extreme premium sanity check (>90% means something is very wrong)
+  if (Math.abs(premiumPct) > 90) {
+    console.error(`[TradeGuard] ❌ BLOCKED: Extreme price deviation (${premiumPct.toFixed(1)}%) - quote likely garbage`);
+    return {
+      isValid: false,
+      displayPrice: displayPriceUsd,
+      executablePrice,
+      premiumPct,
+      priceImpactPct: quote.priceImpactPct,
+      outputTokens: tokensDecimal,
+      solPrice: quote.solPrice,
+      blockReason: `EXTREME_DEVIATION: Price deviation is ${Math.abs(premiumPct).toFixed(0)}% which indicates a quote error or extreme volatility. Display: $${displayPriceUsd.toFixed(10)}, Executable: $${executablePrice.toFixed(10)}`,
+    };
+  }
   
   console.log(`[TradeGuard] Price comparison:`);
   console.log(`  Display price:     $${displayPriceUsd.toFixed(10)}`);
   console.log(`  Executable price:  $${executablePrice.toFixed(10)}`);
   console.log(`  Premium:           ${premiumPct.toFixed(2)}% (max: ${cfg.maxPricePremiumPct}%)`);
   console.log(`  Price impact:      ${quote.priceImpactPct.toFixed(2)}% (max: ${cfg.maxPriceImpactPct}%)`);
+  console.log(`  Slippage used:     ${slippageBps} bps`);
   
   const result: QuoteValidation = {
     isValid: true,

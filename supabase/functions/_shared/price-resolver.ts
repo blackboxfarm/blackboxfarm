@@ -214,6 +214,11 @@ export interface MeteoraCurveState {
  *   - Byte 72-80: quote_reserve (u64) - SOL deposited
  *   - Config has migration_quote_threshold 
  */
+/**
+ * Fetch bonding curve state for bags.fm tokens (Meteora Dynamic Bonding Curve)
+ * 
+ * CRITICAL FIX: Use Deno-compatible hex encoding (Uint8Array doesn't have toString('hex'))
+ */
 export async function fetchMeteoraDBC(
   tokenMint: string,
   heliusApiKey: string
@@ -227,11 +232,8 @@ export async function fetchMeteoraDBC(
     );
 
     const programId = new PublicKey(METEORA_DBC_PROGRAM_ID);
-    const baseMint = new PublicKey(METEORA_BASE_MINT);
-    const quoteMint = new PublicKey(tokenMint);
 
     // Try to find pool accounts owned by the Meteora DBC program
-    // We look for accounts that reference our token mint
     const accounts = await connection.getProgramAccounts(programId, {
       filters: [
         { dataSize: 400 }, // Approximate pool account size
@@ -239,31 +241,42 @@ export async function fetchMeteoraDBC(
       commitment: 'confirmed',
     });
 
+    // Helper function to convert Uint8Array to hex (Deno-compatible)
+    const toHex = (bytes: Uint8Array): string => {
+      return Array.from(bytes).map(b => b.toString(16).padStart(2, '0')).join('');
+    };
+
+    // Get token mint as hex for matching
+    const tokenMintBuffer = new PublicKey(tokenMint).toBuffer();
+    const tokenMintHex = toHex(new Uint8Array(tokenMintBuffer));
+
     // Find a pool that contains our token
     for (const { pubkey, account } of accounts) {
       const data = account.data;
       if (data.length < 100) continue;
 
       try {
-        // Pool layout (simplified - positions may vary slightly):
-        // The token mints are typically at known offsets
-        // We check if the account data contains our token mint
-        const dataStr = data.toString('hex');
-        const tokenMintHex = new PublicKey(tokenMint).toBuffer().toString('hex');
+        // Convert account data to hex for searching
+        const dataHex = toHex(data);
         
-        if (!dataStr.includes(tokenMintHex)) continue;
+        if (!dataHex.includes(tokenMintHex)) continue;
+
+        console.log(`[Meteora DBC] Found matching pool: ${pubkey.toBase58()}`);
 
         // Found a matching pool - parse the relevant data
         const view = new DataView(data.buffer, data.byteOffset, data.byteLength);
         
         // Quote reserve is typically at offset 72 (after discriminator + pubkeys)
-        // This offset may need adjustment based on actual layout
         let quoteReserve = 0n;
         try {
           quoteReserve = view.getBigUint64(72, true);
         } catch {
           // Try alternate offset
-          quoteReserve = view.getBigUint64(80, true);
+          try {
+            quoteReserve = view.getBigUint64(80, true);
+          } catch {
+            quoteReserve = 0n;
+          }
         }
 
         // Migration threshold is typically ~85 SOL for bags.fm
@@ -286,6 +299,7 @@ export async function fetchMeteoraDBC(
           migrationThreshold,
         };
       } catch (parseError) {
+        console.log('[Meteora DBC] Parse error for pool, continuing:', parseError);
         continue;
       }
     }
@@ -469,6 +483,10 @@ async function fetchPumpFunApiPrice(tokenMint: string, solPriceUsd: number): Pro
 // DEXSCREENER PRICE (Best for graduated tokens)
 // ============================================
 
+/**
+ * Fetch price from DexScreener
+ * CRITICAL FIX: Select HIGHEST USD LIQUIDITY pair to avoid spoofed/low-liquidity pairs
+ */
 async function fetchDexScreenerPrice(tokenMint: string): Promise<PriceResult | null> {
   const start = Date.now();
   
@@ -482,21 +500,38 @@ async function fetchDexScreenerPrice(tokenMint: string): Promise<PriceResult | n
     }
 
     const data = await res.json();
-    const pair = data?.pairs?.[0];
+    const pairs = data?.pairs || [];
     
-    if (!pair?.priceUsd) {
+    if (pairs.length === 0) {
+      return null;
+    }
+
+    // CRITICAL: Sort by USD liquidity descending and pick the highest
+    // This prevents using spoofed low-liquidity pairs that can show fake prices
+    const sortedPairs = pairs.sort((a: any, b: any) => {
+      const liquidityA = Number(a.liquidity?.usd) || 0;
+      const liquidityB = Number(b.liquidity?.usd) || 0;
+      return liquidityB - liquidityA;
+    });
+    
+    const bestPair = sortedPairs[0];
+    
+    if (!bestPair?.priceUsd) {
       return null;
     }
 
     const latencyMs = Date.now() - start;
+    const liquidity = Number(bestPair.liquidity?.usd) || 0;
+
+    console.log(`[DexScreener] Selected pair with $${liquidity.toFixed(0)} liquidity from ${pairs.length} pairs`);
 
     return {
-      price: Number(pair.priceUsd),
+      price: Number(bestPair.priceUsd),
       source: 'dexscreener',
       fetchedAt: new Date().toISOString(),
       latencyMs,
       isOnCurve: false, // DexScreener only has graduated tokens
-      confidence: 'high'
+      confidence: liquidity > 10000 ? 'high' : liquidity > 1000 ? 'medium' : 'low'
     };
   } catch (e) {
     console.log('DexScreener failed:', e instanceof Error ? e.message : String(e));

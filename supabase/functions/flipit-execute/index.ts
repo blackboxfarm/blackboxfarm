@@ -740,20 +740,27 @@ serve(async (req) => {
       // ========================================================
       // TRADE GUARD: Pre-Trade Quote Validation
       // Blocks trades if executable price exceeds display price by threshold
+      // CRITICAL: Pass the REAL slippage and wallet pubkey for venue-aware quotes
       // ========================================================
       try {
         const tradeGuardConfig = await getTradeGuardConfig(supabase);
         console.log("[TradeGuard] Config:", JSON.stringify(tradeGuardConfig));
+        console.log("[TradeGuard] Using slippage:", effectiveSlippage, "bps");
 
         const displayPriceForGuard = (Number.isFinite(Number(displayPriceUsd)) && Number(displayPriceUsd) > 0)
           ? Number(displayPriceUsd)
           : currentPrice;
 
+        // CRITICAL FIX: Pass the ACTUAL slippage and wallet for accurate venue-aware quotes
         const quoteValidation = await validateBuyQuote(
           tokenMint,
           buyAmountSol,
           displayPriceForGuard,
-          tradeGuardConfig
+          tradeGuardConfig,
+          {
+            slippageBps: effectiveSlippage,
+            walletPubkey: wallet.pubkey
+          }
         );
         
         if (!quoteValidation.isValid) {
