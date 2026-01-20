@@ -174,7 +174,7 @@ export function FlipItDashboard() {
   const [selectedWallet, setSelectedWallet] = useState<string>('');
   const [tokenAddress, setTokenAddress] = useState('');
   const [buyAmount, setBuyAmount] = useState('0.1');
-  const [buyAmountMode, setBuyAmountMode] = useState<'usd' | 'sol'>('sol');
+  // REMOVED: buyAmountMode - always SOL only, no USD option
   const [targetMultiplier, setTargetMultiplier] = useState(2);
   const [isLoading, setIsLoading] = useState(false);
   const [isFlipping, setIsFlipping] = useState(false);
@@ -1576,10 +1576,8 @@ export function FlipItDashboard() {
     const tokenSymbol = inputToken.symbol;
     const displayedPrice = inputToken.price;
 
-    // Calculate SOL amount for preflight
-    const solAmountForPreflight = buyAmountMode === 'sol'
-      ? parsedAmount
-      : (solPrice ? parsedAmount / solPrice : 0.1);
+    // SOL amount for preflight - direct passthrough, no conversion needed
+    const solAmountForPreflight = parsedAmount;
 
     try {
       // Call flipit-preflight to get venue-aware executable quote
@@ -1647,22 +1645,8 @@ export function FlipItDashboard() {
     
     const parsedAmount = parseFloat(buyAmount);
     
-    // CRITICAL FIX: Always convert to SOL in the frontend using the displayed SOL price
-    // This ensures the SAME price the user sees is used for the conversion
-    // Never let the backend convert USD→SOL because it might use a different/fallback price
-    let amountInSol: number;
-    if (buyAmountMode === 'sol') {
-      amountInSol = parsedAmount;
-    } else {
-      // Convert USD to SOL using the DISPLAYED price from useSolPrice hook
-      if (!solPrice || solPrice <= 0) {
-        toast.error('Cannot convert USD to SOL: SOL price unavailable');
-        setIsFlipping(false);
-        return;
-      }
-      amountInSol = parsedAmount / solPrice;
-      console.log(`[FlipIt] Converting $${parsedAmount} USD → ${amountInSol.toFixed(6)} SOL @ $${solPrice.toFixed(2)}/SOL (displayed price)`);
-    }
+    // SOL-only mode: direct passthrough, no USD conversion ever needed
+    const amountInSol = parsedAmount;
     
     try {
       // ALWAYS send SOL amount - backend no longer handles USD conversion
@@ -1776,7 +1760,7 @@ export function FlipItDashboard() {
 
     const expiryHours = parseInt(limitExpiry) || 168;
     const expiresAt = new Date(Date.now() + expiryHours * 60 * 60 * 1000).toISOString();
-    const amountSol = buyAmountMode === 'sol' ? parsedAmount : (solPrice ? parsedAmount / solPrice : parsedAmount);
+    const amountSol = parsedAmount; // SOL-only mode, no conversion
 
     setIsSubmittingLimitOrder(true);
     try {
@@ -3037,7 +3021,7 @@ export function FlipItDashboard() {
               {/* Buy Amount - compact */}
               <div className="space-y-1">
                 <Label className="flex items-center gap-1 text-sm">
-                  {buyAmountMode === 'usd' ? <DollarSign className="h-3 w-3" /> : <Wallet className="h-3 w-3" />}
+                  <Wallet className="h-3 w-3" />
                   Buy Amount
                 </Label>
                 <div className="flex gap-1 items-center">
@@ -3047,25 +3031,14 @@ export function FlipItDashboard() {
                     min="0"
                     value={buyAmount}
                     onChange={(e) => setBuyAmount(e.target.value)}
-                    placeholder={buyAmountMode === 'usd' ? '0.00' : '0.001'}
+                    placeholder="0.001"
                     className="w-24"
                   />
-                  <Select value={buyAmountMode} onValueChange={(v: 'usd' | 'sol') => setBuyAmountMode(v)}>
-                    <SelectTrigger className="w-16">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="sol">SOL</SelectItem>
-                      <SelectItem value="usd">USD</SelectItem>
-                    </SelectContent>
-                  </Select>
+                  <span className="text-sm font-medium text-muted-foreground px-2">SOL</span>
                 </div>
-                {solPrice && buyAmount && (
+                {solPrice && buyAmount && parseFloat(buyAmount) > 0 && (
                   <p className="text-xs text-muted-foreground">
-                    {buyAmountMode === 'usd' 
-                      ? `≈ ${(parseFloat(buyAmount) / solPrice).toFixed(4)} SOL`
-                      : `≈ $${(parseFloat(buyAmount) * solPrice).toFixed(2)} USD`
-                    }
+                    ≈ ${(parseFloat(buyAmount) * solPrice).toFixed(2)} USD
                   </p>
                 )}
               </div>
@@ -3186,8 +3159,8 @@ export function FlipItDashboard() {
                     <span className="text-xs text-muted-foreground">
                       Entry: ~{(() => {
                         const amt = parseFloat(buyAmount);
-                        if (isNaN(amt) || amt <= 0) return '—';
-                        const usdAmount = buyAmountMode === 'sol' && solPrice ? amt * solPrice : amt;
+                        if (isNaN(amt) || amt <= 0 || !solPrice) return '—';
+                        const usdAmount = amt * solPrice; // SOL-only: always convert SOL → USD for display
                         const tokens = usdAmount / inputToken.price!;
                         return `${tokens.toLocaleString(undefined, { maximumFractionDigits: 0 })} tokens`;
                       })()}
@@ -4647,7 +4620,7 @@ export function FlipItDashboard() {
             </AccordionTrigger>
             <AccordionContent className="px-4 pb-4">
               <FlipItFeeCalculator
-                buyAmountSol={buyAmountMode === 'sol' ? parseFloat(buyAmount) : parseFloat(buyAmount) / solPrice}
+                buyAmountSol={parseFloat(buyAmount) || 0}
                 solPrice={solPrice}
                 priorityFeeMode={priorityFeeMode}
                 slippageBps={slippageBps}
