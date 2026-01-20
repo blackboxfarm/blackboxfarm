@@ -49,6 +49,8 @@ interface XCommunity {
   scrape_status: string;
   last_scraped_at: string | null;
   created_at: string;
+  is_deleted?: boolean;
+  deleted_detected_at?: string | null;
 }
 
 interface LaunchpadCreatorProfile {
@@ -559,9 +561,25 @@ export function DevTeamsView() {
                           </TableCell>
                           <TableCell>{community.linked_token_mints.length}</TableCell>
                           <TableCell>
-                            <Badge variant={community.scrape_status === 'completed' ? 'default' : 'secondary'}>
-                              {community.scrape_status}
-                            </Badge>
+                            <div className="flex items-center gap-1">
+                              {community.is_deleted ? (
+                                <Tooltip>
+                                  <TooltipTrigger>
+                                    <Badge variant="destructive" className="gap-1">
+                                      <AlertTriangle className="h-3 w-3" />
+                                      DELETED
+                                    </Badge>
+                                  </TooltipTrigger>
+                                  <TooltipContent>
+                                    Deleted: {community.deleted_detected_at ? new Date(community.deleted_detected_at).toLocaleDateString() : 'Unknown'}
+                                  </TooltipContent>
+                                </Tooltip>
+                              ) : (
+                                <Badge variant={community.scrape_status === 'completed' ? 'default' : 'secondary'}>
+                                  {community.scrape_status}
+                                </Badge>
+                              )}
+                            </div>
                           </TableCell>
                         </TableRow>
                       ))}

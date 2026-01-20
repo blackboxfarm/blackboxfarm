@@ -10975,10 +10975,15 @@ export type Database = {
           community_url: string
           created_at: string | null
           created_at_x: string | null
+          deleted_detected_at: string | null
+          deletion_alert_sent: boolean | null
           description: string | null
+          failed_scrape_count: number | null
           flag_reason: string | null
           id: string
+          is_deleted: boolean | null
           is_flagged: boolean | null
+          last_existence_check_at: string | null
           last_scraped_at: string | null
           linked_token_mints: string[] | null
           linked_wallets: string[] | null
@@ -10995,10 +11000,15 @@ export type Database = {
           community_url: string
           created_at?: string | null
           created_at_x?: string | null
+          deleted_detected_at?: string | null
+          deletion_alert_sent?: boolean | null
           description?: string | null
+          failed_scrape_count?: number | null
           flag_reason?: string | null
           id?: string
+          is_deleted?: boolean | null
           is_flagged?: boolean | null
+          last_existence_check_at?: string | null
           last_scraped_at?: string | null
           linked_token_mints?: string[] | null
           linked_wallets?: string[] | null
@@ -11015,10 +11025,15 @@ export type Database = {
           community_url?: string
           created_at?: string | null
           created_at_x?: string | null
+          deleted_detected_at?: string | null
+          deletion_alert_sent?: boolean | null
           description?: string | null
+          failed_scrape_count?: number | null
           flag_reason?: string | null
           id?: string
+          is_deleted?: boolean | null
           is_flagged?: boolean | null
+          last_existence_check_at?: string | null
           last_scraped_at?: string | null
           linked_token_mints?: string[] | null
           linked_wallets?: string[] | null

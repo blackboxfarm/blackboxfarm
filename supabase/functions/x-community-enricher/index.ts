@@ -1,4 +1,6 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { validateCommunityExists } from "../_shared/x-community-validator.ts";
+import { alertAndLogCommunityDeletion, CommunityAlertInfo } from "../_shared/x-community-alerts.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -192,9 +194,63 @@ Deno.serve(async (req) => {
         console.log('Fetching fresh community data from Apify...');
         const members = await fetchCommunityMembers(communityId, apifyApiKey);
         
+        // Validate if community still exists
+        const existenceCheck = await validateCommunityExists(communityId, members);
+        
+        if (existenceCheck.isDeleted) {
+          console.warn(`[X Community Enricher] Community ${communityId} appears DELETED`);
+          
+          // Update database with deletion status
+          const newFailCount = (existingCommunity?.failed_scrape_count || 0) + 1;
+          await supabase.from('x_communities').update({
+            is_deleted: true,
+            deleted_detected_at: new Date().toISOString(),
+            scrape_status: 'deleted',
+            failed_scrape_count: newFailCount,
+            last_existence_check_at: new Date().toISOString(),
+          }).eq('community_id', communityId);
+          
+          // Send alert if not already sent
+          if (!existingCommunity?.deletion_alert_sent) {
+            const alertInfo: CommunityAlertInfo = {
+              communityId,
+              communityUrl: urlToProcess,
+              communityName: existingCommunity?.name,
+              linkedTokens: linkedTokenMint ? [linkedTokenMint, ...(existingCommunity?.linked_token_mints || [])] : (existingCommunity?.linked_token_mints || []),
+              adminUsernames: existingCommunity?.admin_usernames || [],
+              moderatorUsernames: existingCommunity?.moderator_usernames || [],
+              memberCount: existingCommunity?.member_count,
+              detectedAt: new Date().toISOString(),
+            };
+            
+            const { alerted } = await alertAndLogCommunityDeletion(supabase, alertInfo);
+            
+            if (alerted) {
+              await supabase.from('x_communities').update({
+                deletion_alert_sent: true,
+              }).eq('community_id', communityId);
+            }
+          }
+          
+          return new Response(JSON.stringify({
+            success: true,
+            type: 'community',
+            communityId,
+            isDeleted: true,
+            message: 'Community has been deleted by its owners'
+          }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+        }
+        
         if (members.length > 0) {
           communityData = await processCommunityData(members);
           communityData.communityId = communityId;
+          
+          // Reset fail count on successful scrape
+          if (existingCommunity?.failed_scrape_count > 0) {
+            await supabase.from('x_communities').update({
+              failed_scrape_count: 0,
+            }).eq('community_id', communityId);
+          }
         }
       } else if (needsScrape && !apifyApiKey) {
         console.warn('APIFY_API_KEY not configured, skipping scrape');
