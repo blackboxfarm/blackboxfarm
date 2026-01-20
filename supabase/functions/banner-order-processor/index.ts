@@ -51,10 +51,15 @@ serve(async (req) => {
       );
     }
 
-    // Get current SOL price
+    // Get current SOL price with authenticated CoinGecko
     let solPrice = 150; // Default fallback
     try {
-      const priceResponse = await fetch('https://api.coingecko.com/api/v3/simple/price?ids=solana&vs_currencies=usd');
+      const apiKey = Deno.env.get('COINGECKO_API_KEY');
+      const headers: Record<string, string> = { 'Accept': 'application/json' };
+      if (apiKey) {
+        headers['x-cg-demo-api-key'] = apiKey;
+      }
+      const priceResponse = await fetch('https://api.coingecko.com/api/v3/simple/price?ids=solana&vs_currencies=usd', { headers });
       const priceData = await priceResponse.json();
       if (priceData?.solana?.usd) {
         solPrice = priceData.solana.usd;

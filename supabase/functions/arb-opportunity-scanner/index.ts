@@ -99,10 +99,16 @@ serve(async (req) => {
 
 async function fetchEthPrice(rpcUrl: string, chain: 'mainnet' | 'base' = 'mainnet'): Promise<number> {
   try {
-    // Try CoinGecko first - most reliable
+    // Try CoinGecko first with API key authentication
+    const apiKey = Deno.env.get('COINGECKO_API_KEY');
+    const headers: Record<string, string> = { 'Accept': 'application/json' };
+    if (apiKey) {
+      headers['x-cg-demo-api-key'] = apiKey;
+    }
+    
     const response = await fetch(
       'https://api.coingecko.com/api/v3/simple/price?ids=ethereum&vs_currencies=usd',
-      { headers: { 'Accept': 'application/json' } }
+      { headers }
     );
     
     if (!response.ok) throw new Error(`CoinGecko error: ${response.status}`);

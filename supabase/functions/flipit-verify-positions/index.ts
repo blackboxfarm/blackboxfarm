@@ -204,10 +204,15 @@ async function getCurrentBalance(
   }
 }
 
-// Fetch current SOL price in USD
+// Fetch current SOL price in USD with authenticated CoinGecko
 async function getSolPrice(): Promise<number> {
   try {
-    const res = await fetch("https://api.coingecko.com/api/v3/simple/price?ids=solana&vs_currencies=usd");
+    const apiKey = Deno.env.get('COINGECKO_API_KEY');
+    const headers: Record<string, string> = { 'Accept': 'application/json' };
+    if (apiKey) {
+      headers['x-cg-demo-api-key'] = apiKey;
+    }
+    const res = await fetch("https://api.coingecko.com/api/v3/simple/price?ids=solana&vs_currencies=usd", { headers });
     if (!res.ok) return 135; // fallback
     const data = await res.json();
     return data?.solana?.usd || 135;

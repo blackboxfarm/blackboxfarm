@@ -1,9 +1,10 @@
 /**
- * Shared SOL Price Fetcher - CoinGecko Only
- * Simple, reliable, fast.
+ * Shared SOL Price Fetcher - CoinGecko with API Key Authentication
+ * Uses the unified CoinGecko helper for authenticated requests.
  */
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { getSolPrice as getCGSolPrice, getCoinGeckoConfig } from "./coingecko.ts";
 
 interface PriceFetchResult {
   success: boolean;
@@ -43,53 +44,17 @@ async function logFetchAttempt(result: PriceFetchResult): Promise<void> {
 }
 
 /**
- * Get SOL price from CoinGecko
+ * Get SOL price from CoinGecko with authenticated API
  * Returns price or throws if it fails
  */
 export async function getSolPriceWithLogging(): Promise<{ price: number; source: string; attempts: PriceFetchResult[] }> {
   const startTime = Date.now();
-  const source = 'coingecko';
+  const config = getCoinGeckoConfig();
+  const source = `coingecko_${config.tier}`;
   
   try {
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 5000);
-    
-    const res = await fetch('https://api.coingecko.com/api/v3/simple/price?ids=solana&vs_currencies=usd', {
-      signal: controller.signal,
-    });
-    clearTimeout(timeoutId);
-    
+    const price = await getCGSolPrice();
     const responseTimeMs = Date.now() - startTime;
-    
-    if (!res.ok) {
-      const result: PriceFetchResult = {
-        success: false,
-        price: null,
-        source,
-        responseTimeMs,
-        error: `HTTP ${res.status}: ${res.statusText}`,
-        errorType: 'http_error',
-        httpStatus: res.status,
-      };
-      logFetchAttempt(result);
-      throw new Error(result.error);
-    }
-    
-    const json = await res.json();
-    const price = Number(json?.solana?.usd);
-    
-    if (!price || !isFinite(price) || price <= 0) {
-      const result: PriceFetchResult = {
-        success: false,
-        price: null,
-        source,
-        responseTimeMs,
-        error: `Invalid price extracted: ${price}`,
-        errorType: 'invalid_price',
-      };
-      logFetchAttempt(result);
-      throw new Error(result.error);
-    }
     
     const result: PriceFetchResult = {
       success: true,
@@ -101,15 +66,16 @@ export async function getSolPriceWithLogging(): Promise<{ price: number; source:
     // Log success (fire and forget)
     logFetchAttempt(result);
     
-    console.log(`[SOL Price] ✓ CoinGecko returned $${price.toFixed(2)} in ${responseTimeMs}ms`);
+    console.log(`[SOL Price] ✓ CoinGecko (${config.tier}) returned $${price.toFixed(2)} in ${responseTimeMs}ms`);
     return { price, source, attempts: [result] };
     
   } catch (e) {
     const responseTimeMs = Date.now() - startTime;
     const error = e instanceof Error ? e.message : String(e);
-    const errorType = error.includes('abort') ? 'timeout' : 
+    const errorType = error.includes('timeout') ? 'timeout' : 
                       error.includes('DNS') ? 'dns_error' :
-                      error.includes('network') ? 'network_error' : 'unknown';
+                      error.includes('network') ? 'network_error' : 
+                      error.includes('429') ? 'rate_limit' : 'unknown';
     
     const result: PriceFetchResult = {
       success: false,
@@ -121,7 +87,7 @@ export async function getSolPriceWithLogging(): Promise<{ price: number; source:
     };
     
     logFetchAttempt(result);
-    console.error(`[SOL Price] ✗ CoinGecko failed: ${error} (${responseTimeMs}ms)`);
+    console.error(`[SOL Price] ✗ CoinGecko (${config.tier}) failed: ${error} (${responseTimeMs}ms)`);
     
     throw new Error(`CoinGecko SOL price failed: ${error}`);
   }
