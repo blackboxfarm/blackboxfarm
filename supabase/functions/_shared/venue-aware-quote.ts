@@ -103,7 +103,99 @@ export async function detectVenue(
   tokenMint: string,
   heliusApiKey?: string
 ): Promise<{ venue: VenueQuote['venue']; isOnCurve: boolean }> {
-  // 1. Check pump.fun via HTTP API first (fastest)
+  
+  // ============================================
+  // STEP 0: EARLY DETECTION VIA MINT SUFFIX
+  // This catches bags.fm/bonk.fun tokens BEFORE other checks fail
+  // ============================================
+  
+  // BAGS suffix = bags.fm token - prioritize bags.fm detection path
+  if (tokenMint.endsWith('BAGS')) {
+    console.log(`[VenueDetect] BAGS suffix detected, checking bags.fm first`);
+    
+    // Try bags.fm API directly
+    try {
+      const bagsRes = await fetch(`https://api.bags.fm/api/v1/token/${tokenMint}`, {
+        headers: { 'Accept': 'application/json' },
+        signal: AbortSignal.timeout(3000)
+      });
+
+      if (bagsRes.ok) {
+        const bagsData = await bagsRes.json();
+        const isGraduated = bagsData.graduated === true || bagsData.migrated === true;
+        console.log(`[VenueDetect] bags.fm API: graduated=${isGraduated}`);
+        
+        if (!isGraduated) {
+          // Verify on-chain if we have Helius key
+          if (heliusApiKey) {
+            const curveCheck = await checkMeteoraDBC(tokenMint, heliusApiKey);
+            if (curveCheck?.isOnCurve) {
+              console.log(`[VenueDetect] bags.fm on-chain confirmed on-curve`);
+              return { venue: 'bags_fm', isOnCurve: true };
+            }
+          }
+          // API says not graduated, trust it
+          return { venue: 'bags_fm', isOnCurve: true };
+        }
+        return { venue: 'bags_fm', isOnCurve: false };
+      }
+    } catch (e) {
+      console.log('[VenueDetect] bags.fm API check failed:', e);
+    }
+    
+    // bags.fm API failed, try on-chain detection
+    if (heliusApiKey) {
+      const curveCheck = await checkMeteoraDBC(tokenMint, heliusApiKey);
+      if (curveCheck) {
+        console.log(`[VenueDetect] BAGS token on-chain check: isOnCurve=${curveCheck.isOnCurve}`);
+        return { venue: 'bags_fm', isOnCurve: curveCheck.isOnCurve };
+      }
+    }
+    
+    // Last resort for BAGS suffix - assume on-curve if we can't verify
+    console.log(`[VenueDetect] BAGS suffix but couldn't verify - assuming on-curve`);
+    return { venue: 'bags_fm', isOnCurve: true };
+  }
+  
+  // BONK suffix = bonk.fun token
+  if (tokenMint.endsWith('BONK') || tokenMint.endsWith('bonk')) {
+    console.log(`[VenueDetect] BONK suffix detected, checking bonk.fun first`);
+    
+    try {
+      const bonkRes = await fetch(`https://api.bonk.fun/token/${tokenMint}`, {
+        headers: { 'Accept': 'application/json' },
+        signal: AbortSignal.timeout(3000)
+      });
+
+      if (bonkRes.ok) {
+        const bonkData = await bonkRes.json();
+        const isGraduated = bonkData.graduated === true || bonkData.migrated === true;
+        
+        if (!isGraduated && heliusApiKey) {
+          const curveCheck = await checkRaydiumLaunchlab(tokenMint, heliusApiKey);
+          if (curveCheck?.isOnCurve) {
+            return { venue: 'bonk_fun', isOnCurve: true };
+          }
+        }
+        return { venue: 'bonk_fun', isOnCurve: !isGraduated };
+      }
+    } catch (e) {
+      console.log('[VenueDetect] bonk.fun API check failed:', e);
+    }
+    
+    if (heliusApiKey) {
+      const curveCheck = await checkRaydiumLaunchlab(tokenMint, heliusApiKey);
+      if (curveCheck) {
+        return { venue: 'bonk_fun', isOnCurve: curveCheck.isOnCurve };
+      }
+    }
+    
+    return { venue: 'bonk_fun', isOnCurve: true };
+  }
+
+  // ============================================
+  // STEP 1: Check pump.fun via HTTP API (fastest for pump.fun tokens)
+  // ============================================
   try {
     const pumpRes = await fetch(`https://frontend-api.pump.fun/coins/${tokenMint}`, {
       headers: { 'Accept': 'application/json' },
@@ -137,7 +229,9 @@ export async function detectVenue(
     }
   }
 
-  // 2. Check bags.fm API directly
+  // ============================================
+  // STEP 2: Check bags.fm API (for tokens without BAGS suffix)
+  // ============================================
   try {
     const bagsRes = await fetch(`https://api.bags.fm/api/v1/token/${tokenMint}`, {
       headers: { 'Accept': 'application/json' },
@@ -163,7 +257,9 @@ export async function detectVenue(
     console.log('[VenueDetect] bags.fm API check failed:', e);
   }
 
-  // 3. Check bonk.fun API directly
+  // ============================================
+  // STEP 3: Check bonk.fun API
+  // ============================================
   try {
     const bonkRes = await fetch(`https://api.bonk.fun/token/${tokenMint}`, {
       headers: { 'Accept': 'application/json' },
@@ -187,7 +283,28 @@ export async function detectVenue(
     console.log('[VenueDetect] bonk.fun API check failed:', e);
   }
 
-  // 4. Check DexScreener for venue hints via dexId and URL patterns
+  // ============================================
+  // STEP 4: On-chain PDA checks (before DexScreener)
+  // ============================================
+  if (heliusApiKey) {
+    // Check for Meteora DBC pool
+    const meteoraCheck = await checkMeteoraDBC(tokenMint, heliusApiKey);
+    if (meteoraCheck?.isOnCurve) {
+      console.log(`[VenueDetect] Found Meteora DBC pool on-chain`);
+      return { venue: 'bags_fm', isOnCurve: true };
+    }
+
+    // Check for Raydium Launchlab pool
+    const launchlabCheck = await checkRaydiumLaunchlab(tokenMint, heliusApiKey);
+    if (launchlabCheck?.isOnCurve) {
+      console.log(`[VenueDetect] Found Raydium Launchlab pool on-chain`);
+      return { venue: 'bonk_fun', isOnCurve: true };
+    }
+  }
+
+  // ============================================
+  // STEP 5: Check DexScreener for venue hints (graduated tokens)
+  // ============================================
   try {
     const dexRes = await fetch(`https://api.dexscreener.com/latest/dex/tokens/${tokenMint}`, {
       signal: AbortSignal.timeout(3000)
@@ -203,23 +320,11 @@ export async function detectVenue(
 
         // bags.fm uses Meteora DBC
         if (dexId.includes('meteora') && pairUrl.includes('bags')) {
-          if (heliusApiKey) {
-            const curveCheck = await checkMeteoraDBC(tokenMint, heliusApiKey);
-            if (curveCheck?.isOnCurve) {
-              return { venue: 'bags_fm', isOnCurve: true };
-            }
-          }
           return { venue: 'bags_fm', isOnCurve: false };
         }
 
         // bonk.fun uses Raydium Launchlab
         if (dexId.includes('raydium') && pairUrl.includes('bonk')) {
-          if (heliusApiKey) {
-            const curveCheck = await checkRaydiumLaunchlab(tokenMint, heliusApiKey);
-            if (curveCheck?.isOnCurve) {
-              return { venue: 'bonk_fun', isOnCurve: true };
-            }
-          }
           return { venue: 'bonk_fun', isOnCurve: false };
         }
       }
@@ -233,27 +338,13 @@ export async function detectVenue(
     console.log('[VenueDetect] DexScreener check failed:', e);
   }
 
-  // 5. On-chain PDA checks as final fallback
-  if (heliusApiKey) {
-    // Check for Meteora DBC pool
-    const meteoraCheck = await checkMeteoraDBC(tokenMint, heliusApiKey);
-    if (meteoraCheck?.isOnCurve) {
-      return { venue: 'bags_fm', isOnCurve: true };
-    }
-
-    // Check for Raydium Launchlab pool
-    const launchlabCheck = await checkRaydiumLaunchlab(tokenMint, heliusApiKey);
-    if (launchlabCheck?.isOnCurve) {
-      return { venue: 'bonk_fun', isOnCurve: true };
-    }
-  }
-
   // Default to unknown - will use Jupiter
   return { venue: 'unknown', isOnCurve: false };
 }
 
 /**
- * Check for Meteora DBC on-curve status via pool PDA
+ * Check for Meteora DBC on-curve status via pool discovery
+ * FIXED: Use program account scan instead of incorrect PDA derivation
  */
 async function checkMeteoraDBC(tokenMint: string, heliusApiKey: string): Promise<{ isOnCurve: boolean; poolData?: any } | null> {
   try {
@@ -265,40 +356,105 @@ async function checkMeteoraDBC(tokenMint: string, heliusApiKey: string): Promise
     );
 
     const programId = new PublicKey(METEORA_DBC_PROGRAM_ID);
-    const mint = new PublicKey(tokenMint);
+    const tokenMintPubkey = new PublicKey(tokenMint);
+    const tokenMintBuffer = tokenMintPubkey.toBuffer();
+    const tokenMintHex = toHex(new Uint8Array(tokenMintBuffer));
     
-    // Derive pool PDA: ["pool", mint]
-    const [poolPda] = PublicKey.findProgramAddressSync(
-      [Buffer.from('pool'), mint.toBuffer()],
-      programId
-    );
+    console.log(`[checkMeteoraDBC] Searching for pool containing mint ${tokenMint.slice(0, 8)}...`);
 
-    const accountInfo = await connection.getAccountInfo(poolPda);
+    // Try multiple pool account sizes since Meteora uses variable layouts
+    const accountSizes = [360, 400, 432, 500, 550];
     
-    if (accountInfo && accountInfo.data.length >= 200) {
-      // Pool exists - parse reserves to check if still on curve
-      // Meteora DBC pool layout (approximate):
-      // - bytes 8-40: base_mint
-      // - bytes 40-72: quote_mint  
-      // - bytes 72-80: base_reserve (u64)
-      // - bytes 80-88: quote_reserve (u64)
-      // - bytes 88+: virtual reserves, fees, etc.
-      
-      const data = accountInfo.data;
-      const quoteReserve = Number(data.readBigUInt64LE(80));
-      
-      // If quote reserve > 0, token is still on curve
-      if (quoteReserve > 0) {
-        return { 
-          isOnCurve: true,
+    for (const dataSize of accountSizes) {
+      try {
+        const accounts = await connection.getProgramAccounts(programId, {
+          filters: [{ dataSize }],
+          commitment: 'confirmed',
+        });
+
+        console.log(`[checkMeteoraDBC] Found ${accounts.length} accounts with dataSize=${dataSize}`);
+
+        // Search each account for our token mint
+        for (const { pubkey, account } of accounts) {
+          const data = account.data;
+          if (data.length < 80) continue;
+
+          // Convert account data to hex for searching
+          const dataHex = toHex(data);
+          
+          if (!dataHex.includes(tokenMintHex)) continue;
+
+          console.log(`[checkMeteoraDBC] Found matching pool: ${pubkey.toBase58()}`);
+
+          // Parse the pool data to check if still on curve
+          const view = new DataView(data.buffer, data.byteOffset, data.byteLength);
+          
+          // Try multiple offsets for quote reserve
+          let quoteReserve = 0n;
+          const offsets = [72, 80, 88, 96];
+          for (const offset of offsets) {
+            if (data.length >= offset + 8) {
+              try {
+                const val = view.getBigUint64(offset, true);
+                if (val > 0n && val < 1000_000_000_000n) { // < 1000 SOL in lamports
+                  quoteReserve = val;
+                  console.log(`[checkMeteoraDBC] Found quoteReserve at offset ${offset}: ${Number(val) / 1e9} SOL`);
+                  break;
+                }
+              } catch {}
+            }
+          }
+
+          // If we found a pool, it's likely still on curve unless reserves are depleted
+          const migrationThreshold = 85_000_000_000n; // 85 SOL
+          const isOnCurve = quoteReserve > 0n && quoteReserve < migrationThreshold;
+          
+          return {
+            isOnCurve,
+            poolData: {
+              poolPda: pubkey.toBase58(),
+              quoteReserve: Number(quoteReserve),
+              dataSize
+            }
+          };
+        }
+      } catch (e) {
+        console.log(`[checkMeteoraDBC] Error with dataSize=${dataSize}:`, e);
+        continue;
+      }
+    }
+
+    // No pool found with any size filter - try without dataSize filter as last resort
+    try {
+      console.log(`[checkMeteoraDBC] Trying without dataSize filter...`);
+      const accounts = await connection.getProgramAccounts(programId, {
+        commitment: 'confirmed',
+      });
+
+      console.log(`[checkMeteoraDBC] Found ${accounts.length} total accounts`);
+
+      for (const { pubkey, account } of accounts.slice(0, 100)) { // Limit to first 100
+        const data = account.data;
+        if (data.length < 80) continue;
+
+        const dataHex = toHex(data);
+        if (!dataHex.includes(tokenMintHex)) continue;
+
+        console.log(`[checkMeteoraDBC] Found matching pool (no filter): ${pubkey.toBase58()}, size=${data.length}`);
+        
+        return {
+          isOnCurve: true, // Found pool = on curve
           poolData: {
-            poolPda: poolPda.toBase58(),
-            quoteReserve
+            poolPda: pubkey.toBase58(),
+            dataSize: data.length
           }
         };
       }
+    } catch (e) {
+      console.log(`[checkMeteoraDBC] No-filter search failed:`, e);
     }
-    
+
+    console.log(`[checkMeteoraDBC] No pool found for ${tokenMint.slice(0, 8)}`);
     return null;
   } catch (e) {
     console.log('[checkMeteoraDBC] Failed:', e);
