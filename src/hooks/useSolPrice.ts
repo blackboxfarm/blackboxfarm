@@ -11,9 +11,9 @@ interface SolPriceData {
 
 export function useSolPrice() {
   const [priceData, setPriceData] = useState<SolPriceData>({
-    price: 201.00, // Default fallback
+    price: 0, // No hardcoded fallback - wait for real price
     timestamp: new Date().toISOString(),
-    source: 'default',
+    source: 'loading',
     isLoading: true,
     error: null
   });

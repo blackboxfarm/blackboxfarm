@@ -64,10 +64,21 @@ serve(async (req) => {
       }
     }
     
-    // Final fallback to a reasonable default
+    // No fallback - if we can't get a real price, return error
     if (!solPrice) {
-      solPrice = 201.00; // Default fallback price
-      console.log('Using fallback price: $201.00');
+      console.error('Failed to fetch SOL price from all sources');
+      return new Response(
+        JSON.stringify({ 
+          error: 'Could not fetch SOL price from any source',
+          price: null,
+          timestamp: new Date().toISOString(),
+          source: 'error'
+        }),
+        { 
+          status: 503, 
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
+        }
+      );
     }
     
     return new Response(
@@ -90,9 +101,9 @@ serve(async (req) => {
     return new Response(
       JSON.stringify({ 
         error: 'Failed to fetch SOL price',
-        price: 201.00, // Fallback price
+        price: null, // No fake fallback
         timestamp: new Date().toISOString(),
-        source: 'fallback'
+        source: 'error'
       }),
       { 
         status: 500, 
