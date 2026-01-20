@@ -26,6 +26,7 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/component
 import { WalletTokenManager } from '@/components/blackbox/WalletTokenManager';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import TweetTemplateEditor from './TweetTemplateEditor';
+import { FlipItNotificationSettings } from './FlipItNotificationSettings';
 import { usePreviewSuperAdmin } from '@/hooks/usePreviewSuperAdmin';
 import { useAuth } from '@/hooks/useAuth';
 import { useNavigate } from 'react-router-dom';
@@ -4597,6 +4598,11 @@ export function FlipItDashboard() {
           </CollapsibleContent>
         </Collapsible>
       )}
+
+      {/* Telegram Notification Settings */}
+      <div className="mb-6">
+        <FlipItNotificationSettings />
+      </div>
 
       {/* Tweet Templates Section - moved below Active Flips */}
       <Collapsible className="mb-6">

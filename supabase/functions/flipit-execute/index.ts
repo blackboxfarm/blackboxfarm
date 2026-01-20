@@ -452,6 +452,57 @@ async function sendTweet(supabase: any, tweetData: {
   }
 }
 
+async function sendTelegramNotification(supabase: any, notifyData: {
+  type: 'buy' | 'sell';
+  positionId: string;
+  tokenMint: string;
+  tokenSymbol: string;
+  tokenName?: string;
+  buyAmountSol?: number;
+  buyAmountUsd?: number;
+  buyPrice?: number;
+  tokensReceived?: number;
+  targetMultiplier?: number;
+  targetPrice?: number;
+  expectedProfit?: number;
+  sellAmountSol?: number;
+  sellAmountUsd?: number;
+  sellPrice?: number;
+  tokensSold?: number;
+  profitLossSol?: number;
+  profitLossUsd?: number;
+  profitLossPct?: number;
+  holdDurationMins?: number;
+  walletAddress?: string;
+  txSignature?: string;
+  venue?: string;
+  source?: string;
+  sourceChannel?: string;
+  priceImpact?: number;
+  slippageBps?: number;
+  solPrice?: number;
+  twitterUrl?: string;
+  telegramUrl?: string;
+  websiteUrl?: string;
+  pumpfunUrl?: string;
+}) {
+  try {
+    console.log("Sending Telegram notification for:", notifyData.type, notifyData.tokenSymbol);
+    const { data, error } = await supabase.functions.invoke("flipit-notify", {
+      body: notifyData
+    });
+    if (error) {
+      console.error("Telegram notification failed:", error);
+    } else {
+      console.log("Telegram notification sent:", data?.sent, "messages");
+    }
+    return data;
+  } catch (e) {
+    console.error("Telegram notification error:", e);
+    return null;
+  }
+}
+
 serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
@@ -1109,6 +1160,34 @@ serve(async (req) => {
           txSignature: signature,
         });
 
+        // Send Telegram notification (fire and forget)
+        sendTelegramNotification(supabase, {
+          type: 'buy',
+          positionId: position.id,
+          tokenMint: tokenMint,
+          tokenSymbol: position.token_symbol || metadata?.symbol || 'TOKEN',
+          tokenName: position.token_name || metadata?.name,
+          buyAmountSol: buyAmountSol,
+          buyAmountUsd: actualBuyAmountUsd,
+          buyPrice: actualBuyPriceUsd,
+          tokensReceived: quantityTokens ? Number(quantityTokens) : undefined,
+          targetMultiplier: mult,
+          targetPrice: actualBuyPriceUsd * mult,
+          expectedProfit: actualBuyAmountUsd * (mult - 1),
+          walletAddress: wallet.pubkey,
+          txSignature: signature,
+          venue: priceMetadata?.source || 'unknown',
+          source: source || 'manual',
+          sourceChannel: sourceChannelId,
+          priceImpact: quoteValidation?.priceImpact,
+          slippageBps: effectiveSlippage,
+          solPrice: solPrice,
+          twitterUrl: position.twitter_url || metadata?.twitter,
+          telegramUrl: metadata?.telegram,
+          websiteUrl: metadata?.website,
+          pumpfunUrl: `https://pump.fun/${tokenMint}`,
+        }).catch(e => console.error("Telegram notification failed:", e));
+
         // Track developer (fire and forget - don't block the response)
         trackDeveloper(supabase, tokenMint, position.id, metadata).catch(e => 
           console.error("Developer tracking failed:", e)
@@ -1271,6 +1350,38 @@ serve(async (req) => {
           profitSol: profitSol,
           txSignature: signature,
         });
+
+        // Calculate hold duration in minutes
+        const holdDurationMins = position.buy_executed_at 
+          ? (Date.now() - new Date(position.buy_executed_at).getTime()) / 60000
+          : undefined;
+
+        // Send Telegram notification (fire and forget)
+        sendTelegramNotification(supabase, {
+          type: 'sell',
+          positionId: positionId,
+          tokenMint: position.token_mint,
+          tokenSymbol: position.token_symbol || 'TOKEN',
+          tokenName: position.token_name,
+          buyAmountSol: position.buy_amount_sol,
+          buyAmountUsd: position.buy_amount_usd,
+          buyPrice: position.buy_price_usd,
+          sellAmountSol: soldForUsd / solPrice,
+          sellAmountUsd: soldForUsd,
+          sellPrice: sellPricePerToken,
+          tokensSold: position.quantity_tokens ? Number(position.quantity_tokens) : undefined,
+          profitLossSol: profitSol,
+          profitLossUsd: profit,
+          profitLossPct: profitPercent,
+          holdDurationMins: holdDurationMins,
+          walletAddress: position.super_admin_wallets?.pubkey,
+          txSignature: signature,
+          venue: 'raydium',
+          source: position.source || 'manual',
+          solPrice: solPrice,
+          twitterUrl: position.twitter_url,
+          pumpfunUrl: `https://pump.fun/${position.token_mint}`,
+        }).catch(e => console.error("Telegram notification failed:", e));
 
         // Track trade outcome for developer reputation (fire and forget)
         trackTradeOutcome(supabase, {
