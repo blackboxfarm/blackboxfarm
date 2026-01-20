@@ -2161,13 +2161,28 @@ serve(async (req) => {
             }
 
             // ============================================
+            // TRADING MODE DECISION LOG
+            // ============================================
+            const tradingMode = config.scalp_mode_enabled 
+              ? (config.scalp_test_mode ? 'SCALP_TEST' : 'SCALP_LIVE')
+              : (config.flipit_enabled ? 'FLIPIT' : 'DISABLED');
+            
+            console.log(`[telegram-channel-monitor] ⚡ TRADING MODE for "${config.channel_name || config.channel_id}": ${tradingMode}`);
+            console.log(`[telegram-channel-monitor]    → scalp_mode_enabled: ${config.scalp_mode_enabled}, scalp_test_mode: ${config.scalp_test_mode}`);
+            console.log(`[telegram-channel-monitor]    → flipit_enabled: ${config.flipit_enabled}`);
+            
+            if (tradingMode === 'DISABLED') {
+              console.log(`[telegram-channel-monitor] ⏭️ No trading mode enabled for this channel, skipping buy execution`);
+            }
+
+            // ============================================
             // SCALP MODE: Pre-buy validation when enabled
             // ============================================
             let scalpModeApproved = false;
             let scalpValidationResult: any = null;
             
             if (config.scalp_mode_enabled) {
-              console.log(`[telegram-channel-monitor] Scalp Mode: Validating ${tokenMint}`);
+              console.log(`[telegram-channel-monitor] 🔪 Scalp Mode ACTIVE: Validating ${tokenMint} (test_mode=${config.scalp_test_mode})`);
               
               try {
                 const { data: scalpResult, error: scalpError } = await supabase.functions.invoke('scalp-mode-validator', {
@@ -2423,6 +2438,7 @@ serve(async (req) => {
             // ============================================
             // Only run FlipIt if Scalp Mode is NOT enabled (they are mutually exclusive per channel)
             if (config.flipit_enabled && !config.scalp_mode_enabled) {
+              console.log(`[telegram-channel-monitor] 🎯 FlipIt Mode ACTIVE: Processing ${tokenMint} for REAL buy`);
               // Priority: SOL amount (converted to USD) > USD amount > fallback $10
               let flipitBuyAmount = 10; // fallback
               if (config.flipit_buy_amount_sol && config.flipit_buy_amount_sol > 0) {
