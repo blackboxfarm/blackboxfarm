@@ -11,9 +11,9 @@ import {
   classifyCoinGeckoError, 
   parseResponseError, 
   shouldUseFallback,
-  CoinGeckoErrorInfo,
   formatErrorForLog 
 } from "./coingecko-error-handler.ts";
+import type { CoinGeckoErrorInfo } from "./coingecko-error-handler.ts";
 import { sendCoinGeckoAlert, logFallbackActivation } from "./coingecko-alerts.ts";
 
 export interface CoinGeckoConfig {
@@ -30,7 +30,8 @@ export interface PriceResult {
 }
 
 // Re-export for convenience
-export { CoinGeckoErrorInfo, classifyCoinGeckoError };
+export type { CoinGeckoErrorInfo };
+export { classifyCoinGeckoError };
 
 /**
  * Get CoinGecko API configuration based on environment
