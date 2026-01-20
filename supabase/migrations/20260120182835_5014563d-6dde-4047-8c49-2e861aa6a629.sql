@@ -1,0 +1,1 @@
+TRUNCATE TABLE sol_price_fetch_logs;

@@ -1,18 +1,9 @@
 /**
- * Shared SOL Price Fetcher with detailed logging and analytics
- * 
- * Priority order (fastest & most reliable first):
- * 1. Jupiter v1 - Solana-native, requires API key
- * 2. Binance - extremely fast, highly reliable, minimal rate limits
- * 3. CoinGecko - reliable but can rate limit
- * 4. Kraken - solid backup
- * 5. DexScreener - slowest but always works
+ * Shared SOL Price Fetcher - CoinGecko Only
+ * Simple, reliable, fast.
  */
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-
-// SOL mint address
-const SOL_MINT = 'So11111111111111111111111111111111111111112';
 
 interface PriceFetchResult {
   success: boolean;
@@ -22,12 +13,6 @@ interface PriceFetchResult {
   error?: string;
   errorType?: string;
   httpStatus?: number;
-}
-
-interface SourceConfig {
-  name: string;
-  fetch: () => Promise<number>;
-  timeout: number;
 }
 
 /**
@@ -58,61 +43,67 @@ async function logFetchAttempt(result: PriceFetchResult): Promise<void> {
 }
 
 /**
- * Fetch with timeout and detailed error tracking
+ * Get SOL price from CoinGecko
+ * Returns price or throws if it fails
  */
-async function fetchWithTracking(
-  name: string,
-  url: string,
-  extractor: (json: unknown) => number,
-  timeout: number = 3000,
-  headers?: Record<string, string>
-): Promise<PriceFetchResult> {
+export async function getSolPriceWithLogging(): Promise<{ price: number; source: string; attempts: PriceFetchResult[] }> {
   const startTime = Date.now();
+  const source = 'coingecko';
   
   try {
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), timeout);
+    const timeoutId = setTimeout(() => controller.abort(), 5000);
     
-    const res = await fetch(url, { 
+    const res = await fetch('https://api.coingecko.com/api/v3/simple/price?ids=solana&vs_currencies=usd', {
       signal: controller.signal,
-      headers: headers || {}
     });
     clearTimeout(timeoutId);
     
     const responseTimeMs = Date.now() - startTime;
     
     if (!res.ok) {
-      return {
+      const result: PriceFetchResult = {
         success: false,
         price: null,
-        source: name,
+        source,
         responseTimeMs,
         error: `HTTP ${res.status}: ${res.statusText}`,
         errorType: 'http_error',
         httpStatus: res.status,
       };
+      logFetchAttempt(result);
+      throw new Error(result.error);
     }
     
     const json = await res.json();
-    const price = extractor(json);
+    const price = Number(json?.solana?.usd);
     
     if (!price || !isFinite(price) || price <= 0) {
-      return {
+      const result: PriceFetchResult = {
         success: false,
         price: null,
-        source: name,
+        source,
         responseTimeMs,
         error: `Invalid price extracted: ${price}`,
         errorType: 'invalid_price',
       };
+      logFetchAttempt(result);
+      throw new Error(result.error);
     }
     
-    return {
+    const result: PriceFetchResult = {
       success: true,
       price,
-      source: name,
+      source,
       responseTimeMs,
     };
+    
+    // Log success (fire and forget)
+    logFetchAttempt(result);
+    
+    console.log(`[SOL Price] ✓ CoinGecko returned $${price.toFixed(2)} in ${responseTimeMs}ms`);
+    return { price, source, attempts: [result] };
+    
   } catch (e) {
     const responseTimeMs = Date.now() - startTime;
     const error = e instanceof Error ? e.message : String(e);
@@ -120,84 +111,20 @@ async function fetchWithTracking(
                       error.includes('DNS') ? 'dns_error' :
                       error.includes('network') ? 'network_error' : 'unknown';
     
-    return {
+    const result: PriceFetchResult = {
       success: false,
       price: null,
-      source: name,
+      source,
       responseTimeMs,
       error,
       errorType,
     };
-  }
-}
-
-/**
- * Get SOL price with priority ordering and detailed logging
- * Returns price or throws if ALL sources fail
- */
-export async function getSolPriceWithLogging(): Promise<{ price: number; source: string; attempts: PriceFetchResult[] }> {
-  const attempts: PriceFetchResult[] = [];
-  
-  // Priority order: fastest & most reliable first
-  const sources: Array<{ name: string; url: string; extractor: (json: unknown) => number; timeout: number; headers?: Record<string, string> }> = [
-    {
-      name: 'jupiter_v1',
-      url: `https://api.jup.ag/price/v2?ids=${SOL_MINT}`,
-      extractor: (json: unknown) => Number((json as Record<string, unknown>)?.data?.[SOL_MINT]?.price),
-      timeout: 3000,
-      headers: { 'x-api-key': Deno.env.get('JUPITER_API_KEY') || '' },
-    },
-    {
-      name: 'binance',
-      url: 'https://api.binance.com/api/v3/ticker/price?symbol=SOLUSDT',
-      extractor: (json: unknown) => Number((json as Record<string, unknown>)?.price),
-      timeout: 2000, // Binance is very fast
-    },
-    {
-      name: 'coingecko',
-      url: 'https://api.coingecko.com/api/v3/simple/price?ids=solana&vs_currencies=usd',
-      extractor: (json: unknown) => Number((json as Record<string, unknown>)?.solana?.usd),
-      timeout: 4000, // CoinGecko can be slower
-    },
-    {
-      name: 'kraken',
-      url: 'https://api.kraken.com/0/public/Ticker?pair=SOLUSD',
-      extractor: (json: unknown) => Number((json as Record<string, unknown>)?.result?.SOLUSD?.c?.[0]),
-      timeout: 4000,
-    },
-    {
-      name: 'dexscreener',
-      url: `https://api.dexscreener.com/latest/dex/tokens/${SOL_MINT}`,
-      extractor: (json: unknown) => Number((json as Record<string, unknown>)?.pairs?.[0]?.priceUsd),
-      timeout: 5000, // DexScreener can be slowest
-    },
-  ];
-  
-  for (const source of sources) {
-    console.log(`[SOL Price] Trying ${source.name}...`);
     
-    const result = await fetchWithTracking(source.name, source.url, source.extractor, source.timeout, source.headers);
-    attempts.push(result);
-    
-    // Log to database (fire and forget)
     logFetchAttempt(result);
+    console.error(`[SOL Price] ✗ CoinGecko failed: ${error} (${responseTimeMs}ms)`);
     
-    if (result.success && result.price) {
-      console.log(`[SOL Price] ✓ ${source.name} returned $${result.price.toFixed(2)} in ${result.responseTimeMs}ms`);
-      return { price: result.price, source: source.name, attempts };
-    }
-    
-    console.log(`[SOL Price] ✗ ${source.name} failed: ${result.error} (${result.responseTimeMs}ms)`);
+    throw new Error(`CoinGecko SOL price failed: ${error}`);
   }
-  
-  // ALL sources failed - log detailed report
-  console.error('[SOL Price] CRITICAL: All 5 sources failed!');
-  console.error('[SOL Price] Failure Report:');
-  for (const attempt of attempts) {
-    console.error(`  - ${attempt.source}: ${attempt.errorType} - ${attempt.error} (${attempt.responseTimeMs}ms)`);
-  }
-  
-  throw new Error(`All 5 SOL price sources failed: ${attempts.map(a => `${a.source}:${a.errorType}`).join(', ')}`);
 }
 
 /**
