@@ -74,7 +74,7 @@ export function SolPriceAnalytics() {
 
   const getSourceColor = (source: string): string => {
     const colors: Record<string, string> = {
-      jupiter_v6: 'bg-green-500/20 text-green-400',
+      jupiter_v1: 'bg-green-500/20 text-green-400',
       binance: 'bg-yellow-500/20 text-yellow-400',
       coingecko: 'bg-orange-500/20 text-orange-400',
       kraken: 'bg-purple-500/20 text-purple-400',
@@ -144,7 +144,7 @@ export function SolPriceAnalytics() {
         </CardHeader>
         <CardContent>
           <div className="space-y-4">
-            {['jupiter_v6', 'binance', 'coingecko', 'kraken', 'dexscreener'].map((sourceName, index) => {
+            {['jupiter_v1', 'binance', 'coingecko', 'kraken', 'dexscreener'].map((sourceName, index) => {
               const source = stats.find(s => s.source_name === sourceName);
               if (!source) {
                 return (
