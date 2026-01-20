@@ -2532,6 +2532,11 @@ serve(async (req) => {
               const today = new Date();
               today.setHours(0, 0, 0, 0);
               
+              if (!config?.id) {
+                console.warn('[telegram-channel-monitor] Cannot check daily positions - no config.id');
+                continue;
+              }
+              
               const { count: todayPositions } = await supabase
                 .from('flip_positions')
                 .select('id', { count: 'exact', head: true })
@@ -2861,16 +2866,20 @@ serve(async (req) => {
 
         console.log(`[telegram-channel-monitor] Updating last_message_id: ${config.last_message_id} -> ${maxMessageId} for ${config.channel_name}`);
 
-        const { error: updateError } = await supabase
-          .from('telegram_channel_config')
-          .update({
-            last_check_at: new Date().toISOString(),
-            last_message_id: maxMessageId
-          })
-          .eq('id', config.id);
-        
-        if (updateError) {
-          console.error(`[telegram-channel-monitor] Failed to update last_message_id:`, updateError);
+        if (config?.id) {
+          const { error: updateError } = await supabase
+            .from('telegram_channel_config')
+            .update({
+              last_check_at: new Date().toISOString(),
+              last_message_id: maxMessageId
+            })
+            .eq('id', config.id);
+          
+          if (updateError) {
+            console.error(`[telegram-channel-monitor] Failed to update last_message_id:`, updateError);
+          }
+        } else {
+          console.warn('[telegram-channel-monitor] Skipping config update - no valid config.id');
         }
 
         // Build per-channel run stats
@@ -2884,22 +2893,26 @@ serve(async (req) => {
         results.push(channelRunStats);
         
         // Log to telegram_monitor_run_logs table for debugging visibility
-        try {
-          await supabase.from('telegram_monitor_run_logs').insert({
-            run_id: lockerId,
-            channel_config_id: config.id,
-            channel_name: config.channel_name || channelUsername || channelId,
-            fetched_count: channelMessages.length,
-            eligible_count: channelMessages.filter(m => parseInt(m.messageId) > (config.last_message_id || 0)).length,
-            tokens_found_count: 0, // Will be updated below
-            calls_inserted_count: 0, // Will be updated below  
-            fantasy_inserted_count: 0, // Will be updated below
-            status: 'completed',
-            warning: groupWarning || null,
-            error_message: null
-          });
-        } catch (logError) {
-          console.warn('[telegram-channel-monitor] Failed to log run stats:', logError);
+        if (config?.id) {
+          try {
+            await supabase.from('telegram_monitor_run_logs').insert({
+              run_id: lockerId,
+              channel_config_id: config.id,
+              channel_name: config.channel_name || channelUsername || channelId,
+              fetched_count: channelMessages.length,
+              eligible_count: channelMessages.filter(m => parseInt(m.messageId) > (config.last_message_id || 0)).length,
+              tokens_found_count: 0, // Will be updated below
+              calls_inserted_count: 0, // Will be updated below  
+              fantasy_inserted_count: 0, // Will be updated below
+              status: 'completed',
+              warning: groupWarning || null,
+              error_message: null
+            });
+          } catch (logError) {
+            console.warn('[telegram-channel-monitor] Failed to log run stats:', logError);
+          }
+        } else {
+          console.warn('[telegram-channel-monitor] Skipping run log - no valid config.id');
         }
 
       } catch (channelError: any) {
@@ -2912,23 +2925,27 @@ serve(async (req) => {
           error: channelError.message
         });
         
-        // Log error to telegram_monitor_run_logs
-        try {
-          await supabase.from('telegram_monitor_run_logs').insert({
-            run_id: lockerId,
-            channel_config_id: config.id,
-            channel_name: config.channel_name || channelUsername || channelId,
-            fetched_count: 0,
-            eligible_count: 0,
-            tokens_found_count: 0,
-            calls_inserted_count: 0,
-            fantasy_inserted_count: 0,
-            status: 'error',
-            warning: null,
-            error_message: channelError.message?.slice(0, 500) || 'Unknown error'
-          });
-        } catch (logError) {
-          console.warn('[telegram-channel-monitor] Failed to log error stats:', logError);
+        // Log error to telegram_monitor_run_logs (only if config.id is valid)
+        if (config?.id) {
+          try {
+            await supabase.from('telegram_monitor_run_logs').insert({
+              run_id: lockerId,
+              channel_config_id: config.id,
+              channel_name: config.channel_name || channelUsername || channelId,
+              fetched_count: 0,
+              eligible_count: 0,
+              tokens_found_count: 0,
+              calls_inserted_count: 0,
+              fantasy_inserted_count: 0,
+              status: 'error',
+              warning: null,
+              error_message: channelError.message?.slice(0, 500) || 'Unknown error'
+            });
+          } catch (logError) {
+            console.warn('[telegram-channel-monitor] Failed to log error stats:', logError);
+          }
+        } else {
+          console.warn('[telegram-channel-monitor] Skipping error log - no valid config.id');
         }
       }
     }
