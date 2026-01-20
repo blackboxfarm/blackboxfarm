@@ -33,6 +33,69 @@ function toHex(buffer: Uint8Array): string {
 }
 
 /**
+ * Pump.fun ON-CHAIN fallback (Helius RPC)
+ *
+ * When pump.fun HTTP APIs are down (e.g., 530), DexScreener can falsely make an
+ * on-curve token look "graduated".
+ *
+ * This reads the bonding curve PDA directly and returns the authoritative
+ * on-chain curve status + reserves.
+ */
+async function fetchPumpFunCurveOnChain(
+  tokenMint: string,
+  heliusApiKey: string
+): Promise<{
+  complete: boolean;
+  virtualSolReserves: number;
+  virtualTokenReserves: number;
+} | null> {
+  try {
+    const { Connection, PublicKey } = await import('npm:@solana/web3.js@1.95.3');
+
+    const connection = new Connection(
+      `https://mainnet.helius-rpc.com/?api-key=${heliusApiKey}`,
+      'confirmed'
+    );
+
+    const mint = new PublicKey(tokenMint);
+    const programId = new PublicKey(PUMP_PROGRAM_ID);
+    const seed = new TextEncoder().encode('bonding-curve');
+
+    const [bondingCurvePda] = PublicKey.findProgramAddressSync(
+      [seed, mint.toBuffer()],
+      programId
+    );
+
+    const info = await connection.getAccountInfo(bondingCurvePda);
+    if (!info?.data || info.data.length < 49) {
+      return null;
+    }
+
+    const data = info.data;
+    const view = new DataView(data.buffer, data.byteOffset, data.byteLength);
+
+    // Layout: discriminator(8) + vToken(8) + vSol(8) + ... + complete(1 @ byte 48)
+    const virtualTokenReserves = Number(view.getBigUint64(8, true));
+    const virtualSolReserves = Number(view.getBigUint64(16, true));
+    const complete = data[48] === 1;
+
+    if (
+      !Number.isFinite(virtualTokenReserves) ||
+      !Number.isFinite(virtualSolReserves) ||
+      virtualTokenReserves <= 0 ||
+      virtualSolReserves <= 0
+    ) {
+      return null;
+    }
+
+    return { complete, virtualSolReserves, virtualTokenReserves };
+  } catch (e) {
+    console.log('[fetchPumpFunCurveOnChain] Failed:', e);
+    return null;
+  }
+}
+
+/**
  * Detect which venue will execute a trade for a given token
  * Uses multiple detection methods for reliability
  */
@@ -40,14 +103,13 @@ export async function detectVenue(
   tokenMint: string,
   heliusApiKey?: string
 ): Promise<{ venue: VenueQuote['venue']; isOnCurve: boolean }> {
-  
-  // 1. Check pump.fun via API first (fastest and most reliable for pump.fun tokens)
+  // 1. Check pump.fun via HTTP API first (fastest)
   try {
     const pumpRes = await fetch(`https://frontend-api.pump.fun/coins/${tokenMint}`, {
       headers: { 'Accept': 'application/json' },
       signal: AbortSignal.timeout(3000)
     });
-    
+
     if (pumpRes.ok) {
       const data = await pumpRes.json();
       if (data && !data.complete) {
@@ -61,14 +123,27 @@ export async function detectVenue(
   } catch (e) {
     console.log('[VenueDetect] pump.fun API check failed:', e);
   }
-  
+
+  // 1b. Pump.fun ON-CHAIN fallback (authoritative)
+  // IMPORTANT: must happen BEFORE DexScreener fallback; DexScreener can show pairs
+  // for tokens that are still on-curve.
+  if (heliusApiKey) {
+    const curve = await fetchPumpFunCurveOnChain(tokenMint, heliusApiKey);
+    if (curve) {
+      if (curve.complete) {
+        return { venue: 'jupiter', isOnCurve: false };
+      }
+      return { venue: 'pumpfun', isOnCurve: true };
+    }
+  }
+
   // 2. Check bags.fm API directly
   try {
     const bagsRes = await fetch(`https://api.bags.fm/api/v1/token/${tokenMint}`, {
       headers: { 'Accept': 'application/json' },
       signal: AbortSignal.timeout(3000)
     });
-    
+
     if (bagsRes.ok) {
       const bagsData = await bagsRes.json();
       // If bags.fm returns token data, it's a bags.fm token
@@ -87,14 +162,14 @@ export async function detectVenue(
   } catch (e) {
     console.log('[VenueDetect] bags.fm API check failed:', e);
   }
-  
+
   // 3. Check bonk.fun API directly
   try {
     const bonkRes = await fetch(`https://api.bonk.fun/token/${tokenMint}`, {
       headers: { 'Accept': 'application/json' },
       signal: AbortSignal.timeout(3000)
     });
-    
+
     if (bonkRes.ok) {
       const bonkData = await bonkRes.json();
       if (bonkData && (bonkData.mint || bonkData.address)) {
@@ -117,15 +192,15 @@ export async function detectVenue(
     const dexRes = await fetch(`https://api.dexscreener.com/latest/dex/tokens/${tokenMint}`, {
       signal: AbortSignal.timeout(3000)
     });
-    
+
     if (dexRes.ok) {
       const dexData = await dexRes.json();
       const pairs = dexData?.pairs || [];
-      
+
       for (const pair of pairs) {
         const dexId = (pair.dexId || '').toLowerCase();
         const pairUrl = (pair.url || '').toLowerCase();
-        
+
         // bags.fm uses Meteora DBC
         if (dexId.includes('meteora') && pairUrl.includes('bags')) {
           if (heliusApiKey) {
@@ -136,7 +211,7 @@ export async function detectVenue(
           }
           return { venue: 'bags_fm', isOnCurve: false };
         }
-        
+
         // bonk.fun uses Raydium Launchlab
         if (dexId.includes('raydium') && pairUrl.includes('bonk')) {
           if (heliusApiKey) {
@@ -148,7 +223,7 @@ export async function detectVenue(
           return { venue: 'bonk_fun', isOnCurve: false };
         }
       }
-      
+
       // Has DexScreener pairs but not a special venue - it's graduated
       if (pairs.length > 0) {
         return { venue: 'jupiter', isOnCurve: false };
@@ -157,7 +232,7 @@ export async function detectVenue(
   } catch (e) {
     console.log('[VenueDetect] DexScreener check failed:', e);
   }
-  
+
   // 5. On-chain PDA checks as final fallback
   if (heliusApiKey) {
     // Check for Meteora DBC pool
@@ -165,7 +240,7 @@ export async function detectVenue(
     if (meteoraCheck?.isOnCurve) {
       return { venue: 'bags_fm', isOnCurve: true };
     }
-    
+
     // Check for Raydium Launchlab pool
     const launchlabCheck = await checkRaydiumLaunchlab(tokenMint, heliusApiKey);
     if (launchlabCheck?.isOnCurve) {
