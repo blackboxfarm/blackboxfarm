@@ -3036,10 +3036,16 @@ export function FlipItDashboard() {
                   />
                   <span className="text-sm font-medium text-muted-foreground px-2">SOL</span>
                 </div>
-                {solPrice && buyAmount && parseFloat(buyAmount) > 0 && (
+                {solPriceLoading && (
+                  <p className="text-xs text-muted-foreground animate-pulse">Loading SOL price...</p>
+                )}
+                {!solPriceLoading && solPrice > 0 && buyAmount && parseFloat(buyAmount) > 0 && (
                   <p className="text-xs text-muted-foreground">
                     ≈ ${(parseFloat(buyAmount) * solPrice).toFixed(2)} USD
                   </p>
+                )}
+                {!solPriceLoading && solPrice === 0 && (
+                  <p className="text-xs text-destructive">SOL price unavailable</p>
                 )}
               </div>
 
