@@ -3517,23 +3517,6 @@ export function FlipItDashboard() {
           <CardHeader className="flex flex-row items-center justify-between">
             <CardTitle className="flex items-center gap-2">
               Active Flips ({activePositions.length})
-              <Button
-                variant="ghost"
-                size="sm"
-                className="h-7 w-7 p-0"
-                onClick={async () => {
-                  setIsManualRefreshing(true);
-                  try {
-                    await handleRefreshPrices();
-                  } finally {
-                    setIsManualRefreshing(false);
-                  }
-                }}
-                disabled={isManualRefreshing}
-                title="Refresh active flip prices"
-              >
-                <RefreshCw className={`h-4 w-4 ${isManualRefreshing ? 'animate-spin' : ''}`} />
-              </Button>
               {/* Auto-Refresh Toggle - inline */}
               <div className="flex items-center gap-2 ml-2 px-2 py-1 rounded bg-muted/50">
                 <Switch 
@@ -3553,6 +3536,25 @@ export function FlipItDashboard() {
                     {autoRefreshEnabled ? 'Waiting...' : 'Auto'}
                   </span>
                 )}
+                {/* Check Socials button */}
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-6 px-2 text-xs gap-1"
+                  onClick={async () => {
+                    setIsManualRefreshing(true);
+                    try {
+                      await handleRefreshPrices();
+                    } finally {
+                      setIsManualRefreshing(false);
+                    }
+                  }}
+                  disabled={isManualRefreshing}
+                  title="Refresh positions and fetch DEX/social data"
+                >
+                  <RefreshCw className={`h-3 w-3 ${isManualRefreshing ? 'animate-spin' : ''}`} />
+                  Check Socials
+                </Button>
               </div>
               {positions.filter(p => p.status === 'holding' && p.emergency_sell_status === 'watching').length > 0 && (
                 <Badge variant="destructive" className="gap-1">
