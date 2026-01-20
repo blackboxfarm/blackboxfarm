@@ -225,6 +225,28 @@ export function FlipItDashboard() {
     timestamp: string | null;
   } | null>(null);
   
+  // Price confirmation dialog state (Phase 3: UI confirmation for price deviation)
+  const [priceConfirmation, setPriceConfirmation] = useState<{
+    show: boolean;
+    displayedPrice: number | null;
+    executablePrice: number | null;
+    deviationPct: number;
+    venue: string;
+    confidence: string;
+    source: string;
+    onConfirm: (() => void) | null;
+  }>({
+    show: false,
+    displayedPrice: null,
+    executablePrice: null,
+    deviationPct: 0,
+    venue: '',
+    confidence: '',
+    source: '',
+    onConfirm: null
+  });
+  const [isFetchingPreflight, setIsFetchingPreflight] = useState(false);
+  
   // Blacklist warning state for input token
   const [blacklistWarning, setBlacklistWarning] = useState<BlacklistWarning>({
     level: null,
@@ -1549,42 +1571,82 @@ export function FlipItDashboard() {
       return;
     }
 
-    setIsFlipping(true);
+    setIsFetchingPreflight(true);
     
-    // FETCH FRESH PRICE at click time - this is the "requested" price
-    let requestedPrice: number | null = null;
     const tokenSymbol = inputToken.symbol;
+    const displayedPrice = inputToken.price;
+    
+    // Calculate SOL amount for preflight
+    const solAmountForPreflight = buyAmountMode === 'sol' 
+      ? parsedAmount 
+      : (solPrice ? parsedAmount / solPrice : 0.1);
     
     try {
-      toast.info('Fetching fresh price...', { duration: 2000 });
+      // Call flipit-preflight to get venue-aware executable quote
+      toast.info('Checking executable price...', { duration: 2000 });
       
-      // Quick price fetch via raydium-quote for speed
-      const response = await fetch(
-        `https://apxauapuusmgwbbzjgfl.supabase.co/functions/v1/raydium-quote?priceMint=${encodeURIComponent(tokenAddress.trim())}`,
-        {
-          method: 'GET',
-          headers: {
-            'apikey': 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFweGF1YXB1dXNtZ3diYnpqZ2ZsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTQ1OTEzMDUsImV4cCI6MjA3MDE2NzMwNX0.w8IrKq4YVStF3TkdEcs5mCSeJsxjkaVq2NFkypYOXHU'
-          }
+      const preflightRes = await supabase.functions.invoke('flipit-preflight', {
+        body: {
+          tokenMint: tokenAddress.trim(),
+          solAmount: solAmountForPreflight,
+          walletPubkey: wallets.find(w => w.id === selectedWallet)?.pubkey,
+          slippageBps: slippageBps
         }
-      );
+      });
       
-      if (response.ok) {
-        const priceData = await response.json();
-        if (priceData?.priceUSD) {
-          requestedPrice = priceData.priceUSD;
-        }
+      const preflightData = preflightRes.data;
+      
+      if (preflightRes.error || !preflightData?.success) {
+        // Preflight failed - fail-closed, don't proceed
+        const errMsg = preflightData?.error || preflightRes.error?.message || 'Failed to get executable quote';
+        toast.error(`Price check failed: ${errMsg}`);
+        setIsFetchingPreflight(false);
+        return;
       }
       
-      // Fallback to current displayed price if fresh fetch fails
-      if (!requestedPrice) {
-        requestedPrice = inputToken.price;
+      const executablePrice = preflightData.executablePriceUsd;
+      
+      // Calculate deviation from displayed price
+      let deviationPct = 0;
+      if (displayedPrice && displayedPrice > 0 && executablePrice) {
+        deviationPct = ((executablePrice - displayedPrice) / displayedPrice) * 100;
       }
-    } catch (err) {
-      console.warn('Fresh price fetch failed, using displayed price:', err);
-      requestedPrice = inputToken.price;
+      
+      const DEVIATION_THRESHOLD = 15; // 15% threshold for confirmation
+      
+      // If deviation > threshold, show confirmation dialog
+      if (Math.abs(deviationPct) > DEVIATION_THRESHOLD && displayedPrice) {
+        setIsFetchingPreflight(false);
+        setPriceConfirmation({
+          show: true,
+          displayedPrice,
+          executablePrice,
+          deviationPct,
+          venue: preflightData.venue || 'unknown',
+          confidence: preflightData.confidence || 'unknown',
+          source: preflightData.source || 'unknown',
+          onConfirm: () => executeFlip(executablePrice, tokenSymbol)
+        });
+        return;
+      }
+      
+      // Deviation acceptable - proceed with flip
+      setIsFetchingPreflight(false);
+      await executeFlip(executablePrice || displayedPrice, tokenSymbol);
+      
+    } catch (err: any) {
+      console.error('Preflight error:', err);
+      toast.error('Failed to check price: ' + (err.message || 'Unknown error'));
+      setIsFetchingPreflight(false);
     }
-
+  };
+  
+  // Execute the actual flip (separated for confirmation dialog flow)
+  const executeFlip = async (requestedPrice: number | null, tokenSymbol: string | null) => {
+    setIsFlipping(true);
+    
+    const parsedAmount = parseFloat(buyAmount);
+    
     try {
       // Send raw amount in user's chosen denomination - NO CONVERSION
       const { data, error } = await supabase.functions.invoke('flipit-execute', {
@@ -1595,7 +1657,7 @@ export function FlipItDashboard() {
           // Pass raw amount in user's chosen denomination
           buyAmountSol: buyAmountMode === 'sol' ? parsedAmount : undefined,
           buyAmountUsd: buyAmountMode === 'usd' ? parsedAmount : undefined,
-          // CRITICAL: pass the UI-clicked price so backend can enforce price protection
+          // CRITICAL: pass the preflight-verified price for Trade Guard validation
           displayPriceUsd: requestedPrice,
           targetMultiplier: targetMultiplier,
           slippageBps: slippageBps,
@@ -4673,6 +4735,63 @@ export function FlipItDashboard() {
           <DialogFooter>
             <Button variant="outline" onClick={handleCloseKeysModal}>
               Close
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Price Confirmation Dialog - Phase 3: UI confirmation for price deviation */}
+      <Dialog open={priceConfirmation.show} onOpenChange={(open) => !open && setPriceConfirmation(prev => ({ ...prev, show: false, onConfirm: null }))}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-amber-500">
+              <AlertTriangle className="h-5 w-5" />
+              Price Changed Significantly
+            </DialogTitle>
+            <DialogDescription>
+              The executable price differs from what was displayed. Review before proceeding.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4">
+            <div className="grid grid-cols-2 gap-4">
+              <div className="p-3 rounded-lg bg-muted">
+                <p className="text-xs text-muted-foreground">Displayed Price</p>
+                <p className="text-lg font-mono font-semibold">
+                  ${priceConfirmation.displayedPrice?.toFixed(10).replace(/\.?0+$/, '') || 'N/A'}
+                </p>
+              </div>
+              <div className="p-3 rounded-lg bg-muted border-2 border-amber-500/50">
+                <p className="text-xs text-muted-foreground">Executable Price</p>
+                <p className="text-lg font-mono font-semibold">
+                  ${priceConfirmation.executablePrice?.toFixed(10).replace(/\.?0+$/, '') || 'N/A'}
+                </p>
+              </div>
+            </div>
+            
+            <div className={`text-center text-lg font-bold ${priceConfirmation.deviationPct > 0 ? 'text-red-500' : 'text-green-500'}`}>
+              {priceConfirmation.deviationPct > 0 ? '+' : ''}{priceConfirmation.deviationPct.toFixed(2)}% deviation
+            </div>
+            
+            <div className="text-xs text-muted-foreground space-y-1">
+              <p>Venue: <span className="font-mono">{priceConfirmation.venue}</span></p>
+              <p>Source: <span className="font-mono">{priceConfirmation.source}</span></p>
+              <p>Confidence: <Badge variant={priceConfirmation.confidence === 'high' ? 'default' : 'secondary'}>{priceConfirmation.confidence}</Badge></p>
+            </div>
+          </div>
+
+          <DialogFooter className="gap-2">
+            <Button variant="outline" onClick={() => setPriceConfirmation(prev => ({ ...prev, show: false, onConfirm: null }))}>
+              Cancel
+            </Button>
+            <Button 
+              variant="destructive" 
+              onClick={() => {
+                setPriceConfirmation(prev => ({ ...prev, show: false }));
+                priceConfirmation.onConfirm?.();
+              }}
+            >
+              Continue Anyway
             </Button>
           </DialogFooter>
         </DialogContent>
