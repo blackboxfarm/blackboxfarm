@@ -64,7 +64,8 @@ async function fetchWithTracking(
   name: string,
   url: string,
   extractor: (json: unknown) => number,
-  timeout: number = 3000
+  timeout: number = 3000,
+  headers?: Record<string, string>
 ): Promise<PriceFetchResult> {
   const startTime = Date.now();
   
@@ -72,7 +73,10 @@ async function fetchWithTracking(
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), timeout);
     
-    const res = await fetch(url, { signal: controller.signal });
+    const res = await fetch(url, { 
+      signal: controller.signal,
+      headers: headers || {}
+    });
     clearTimeout(timeoutId);
     
     const responseTimeMs = Date.now() - startTime;
@@ -135,12 +139,13 @@ export async function getSolPriceWithLogging(): Promise<{ price: number; source:
   const attempts: PriceFetchResult[] = [];
   
   // Priority order: fastest & most reliable first
-  const sources: Array<{ name: string; url: string; extractor: (json: unknown) => number; timeout: number }> = [
+  const sources: Array<{ name: string; url: string; extractor: (json: unknown) => number; timeout: number; headers?: Record<string, string> }> = [
     {
       name: 'jupiter_v1',
       url: `https://api.jup.ag/price/v2?ids=${SOL_MINT}`,
       extractor: (json: unknown) => Number((json as Record<string, unknown>)?.data?.[SOL_MINT]?.price),
       timeout: 3000,
+      headers: { 'x-api-key': Deno.env.get('JUPITER_API_KEY') || '' },
     },
     {
       name: 'binance',
@@ -171,7 +176,7 @@ export async function getSolPriceWithLogging(): Promise<{ price: number; source:
   for (const source of sources) {
     console.log(`[SOL Price] Trying ${source.name}...`);
     
-    const result = await fetchWithTracking(source.name, source.url, source.extractor, source.timeout);
+    const result = await fetchWithTracking(source.name, source.url, source.extractor, source.timeout, source.headers);
     attempts.push(result);
     
     // Log to database (fire and forget)
