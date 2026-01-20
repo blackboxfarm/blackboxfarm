@@ -138,13 +138,18 @@ export function FlipItNotificationSettings() {
 
       // Update targets if changed
       if (updates.selectedTargetIds !== undefined) {
-        // Delete existing targets
-        await supabase
+        // Delete existing targets first and wait for it to complete
+        const { error: deleteError } = await supabase
           .from('flipit_notification_targets')
           .delete()
           .eq('settings_id', settings.id);
 
-        // Insert new targets
+        if (deleteError) {
+          console.error("Delete error:", deleteError);
+          throw deleteError;
+        }
+
+        // Insert new targets only after delete is confirmed
         if (newSettings.selectedTargetIds.length > 0) {
           const { error: insertError } = await supabase
             .from('flipit_notification_targets')
@@ -155,7 +160,10 @@ export function FlipItNotificationSettings() {
               }))
             );
 
-          if (insertError) throw insertError;
+          if (insertError) {
+            console.error("Insert error:", insertError);
+            throw insertError;
+          }
         }
       }
 
