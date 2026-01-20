@@ -327,35 +327,8 @@ export async function fetchMeteoraDBC(
       }
     }
 
-    // Last resort: try without dataSize filter
-    try {
-      console.log(`[Meteora DBC] Trying without dataSize filter...`);
-      const accounts = await connection.getProgramAccounts(programId, {
-        commitment: 'confirmed',
-      });
-
-      console.log(`[Meteora DBC] Found ${accounts.length} total accounts`);
-
-      for (const { pubkey, account } of accounts.slice(0, 100)) { // Limit to first 100
-        const data = account.data;
-        if (data.length < 80) continue;
-
-        const dataHex = toHex(data);
-        if (!dataHex.includes(tokenMintHex)) continue;
-
-        console.log(`[Meteora DBC] Found matching pool (no filter): ${pubkey.toBase58()}, size=${data.length}`);
-        
-        // Basic assumption: if pool exists with reserves, it's on curve
-        return {
-          isOnCurve: true,
-          progress: 50, // Unknown progress, estimate 50%
-          quoteReserve: 0n,
-          migrationThreshold: 85_000_000_000n,
-        };
-      }
-    } catch (e) {
-      console.log(`[Meteora DBC] No-filter search failed:`, e);
-    }
+    // REMOVED: No-filter fallback causes memory crashes on getProgramAccounts
+    // If we couldn't find the pool with size filters, it's likely not a Meteora DBC pool
 
     console.log(`[Meteora DBC] No pool found for ${tokenMint.slice(0, 8)}`);
     return null;
@@ -712,8 +685,9 @@ export async function resolvePrice(
     }
   }
 
-  // STEP 3: Try Meteora DBC (bags.fm tokens)
-  if (heliusApiKey) {
+  // STEP 3: Try Meteora DBC (bags.fm tokens) - ONLY for BAGS suffix tokens
+  // Skip this expensive scan for pump.fun tokens (already handled above)
+  if (heliusApiKey && tokenMint.endsWith('BAGS')) {
     console.log(`[${tokenMint.slice(0, 8)}] Trying Meteora DBC (bags.fm)`);
     const meteoraState = await fetchMeteoraDBC(tokenMint, heliusApiKey);
     
@@ -738,8 +712,8 @@ export async function resolvePrice(
     }
   }
 
-  // STEP 4: Try Raydium Launchlab (Bonk.fun tokens)
-  if (heliusApiKey) {
+  // STEP 4: Try Raydium Launchlab (Bonk.fun tokens) - ONLY for BONK suffix tokens
+  if (heliusApiKey && (tokenMint.endsWith('BONK') || tokenMint.endsWith('bonk'))) {
     console.log(`[${tokenMint.slice(0, 8)}] Trying Raydium Launchlab (Bonk.fun)`);
     const launchlabState = await fetchRaydiumLaunchlab(tokenMint, heliusApiKey);
     
