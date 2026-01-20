@@ -2373,66 +2373,67 @@ serve(async (req) => {
                   const isTestMode = config.scalp_test_mode !== false;
 
                   if (isTestMode) {
-                    // ============== TEST MODE: SIMULATE BUY ==============
-                    console.log(`[telegram-channel-monitor] SCALP TEST MODE: Simulating buy for ${currentTokenData?.symbol || tokenMint}${launchpadInfo}${curveInfo} - $${scalpBuyAmount}`);
+                    // ============== TEST MODE: FANTASY BUY (Uses telegram_fantasy_positions table) ==============
+                    console.log(`[telegram-channel-monitor] SCALP FANTASY MODE: Simulating buy for ${currentTokenData?.symbol || tokenMint}${launchpadInfo}${curveInfo} - $${scalpBuyAmount}`);
 
                     const currentPrice = currentTokenData?.priceUsd || 0;
                     const estimatedTokens = currentPrice > 0 ? scalpBuyAmount / currentPrice : 0;
                     const takeProfitPct = config.scalp_take_profit_pct || 50;
-                    const targetPrice = currentPrice * (1 + takeProfitPct / 100);
 
-                    // Insert simulated position directly into flip_positions
-                    const { data: testPosition, error: insertError } = await supabase
-                      .from('flip_positions')
+                    // Get user_id for the fantasy position
+                    const { data: walletData } = await supabase
+                      .from('trading_wallets')
+                      .select('user_id')
+                      .eq('id', walletId)
+                      .single();
+
+                    // Insert into telegram_fantasy_positions (NOT flip_positions!)
+                    const { data: fantasyPosition, error: insertError } = await supabase
+                      .from('telegram_fantasy_positions')
                       .insert({
-                        wallet_id: walletId,
+                        channel_config_id: config.id,
+                        call_id: callId || null,
+                        user_id: walletData?.user_id || null,
                         token_mint: tokenMint,
                         token_symbol: currentTokenData?.symbol || null,
                         token_name: currentTokenData?.name || null,
-                        token_image: currentTokenData?.imageUri || null,
-                        buy_amount_usd: scalpBuyAmount,
-                        buy_price_usd: currentPrice,
-                        quantity_tokens: estimatedTokens,
-                        target_multiplier: 1 + takeProfitPct / 100,
-                        target_price_usd: targetPrice,
-                        status: 'holding',
-                        source: 'telegram_scalp_test',
-                        source_channel_id: config.id,
-                        is_scalp_position: true,
-                        is_test_position: true,
-                        moon_bag_enabled: true,
-                        moon_bag_percent: config.scalp_moon_bag_pct || 10,
-                        scalp_stage: 'initial',
-                        scalp_take_profit_pct: takeProfitPct,
-                        scalp_moon_bag_pct: config.scalp_moon_bag_pct || 10,
-                        scalp_stop_loss_pct: config.scalp_stop_loss_pct || 35,
-                        original_quantity_tokens: estimatedTokens,
-                        buy_executed_at: new Date().toISOString(),
-                        buy_signature: 'SIMULATED_' + Date.now(),
+                        entry_price_usd: currentPrice,
+                        entry_amount_usd: scalpBuyAmount,
+                        token_amount: estimatedTokens,
+                        current_price_usd: currentPrice,
+                        unrealized_pnl_usd: 0,
+                        unrealized_pnl_percent: 0,
+                        status: 'open',
+                        channel_name: config.channel_name,
+                        target_sell_multiplier: 1 + takeProfitPct / 100,
+                        stop_loss_pct: config.scalp_stop_loss_pct || 35,
+                        stop_loss_enabled: true,
+                        is_active: true,
+                        message_received_at: new Date().toISOString(),
                       })
                       .select()
                       .single();
 
                     if (insertError) {
-                      console.error('[telegram-channel-monitor] SCALP TEST MODE: Failed to create test position:', insertError);
+                      console.error('[telegram-channel-monitor] SCALP FANTASY MODE: Failed to create fantasy position:', insertError);
                       if (callId) {
                         await supabase
                           .from('telegram_channel_calls')
                           .update({
                             status: 'failed',
-                            skip_reason: `Test position creation failed: ${insertError.message}`
+                            skip_reason: `Fantasy position creation failed: ${insertError.message}`
                           })
                           .eq('id', callId);
                       }
                     } else {
                       totalBuys++;
-                      console.log(`[telegram-channel-monitor] SCALP TEST MODE: Created test position ${testPosition.id} for ${currentTokenData?.symbol || tokenMint} @ $${currentPrice.toFixed(10)}`);
+                      console.log(`[telegram-channel-monitor] SCALP FANTASY MODE: Created fantasy position ${fantasyPosition.id} for ${currentTokenData?.symbol || tokenMint} @ $${currentPrice.toFixed(10)}`);
                       if (callId) {
                         await supabase
                           .from('telegram_channel_calls')
                           .update({
-                            status: 'test_bought',
-                            flipit_position_id: testPosition.id,
+                            status: 'fantasy_bought',
+                            // Note: NOT linking to flipit_position_id since this is fantasy
                             skip_reason: null
                           })
                           .eq('id', callId);
