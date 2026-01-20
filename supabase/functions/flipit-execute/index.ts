@@ -797,6 +797,7 @@ serve(async (req) => {
       // Blocks trades if executable price exceeds display price by threshold
       // CRITICAL: Pass the REAL slippage and wallet pubkey for venue-aware quotes
       // ========================================================
+      let quoteValidation: { isValid: boolean; blockReason?: string; premiumPct: number; priceImpactPct: number; priceImpact?: number } | null = null;
       try {
         const tradeGuardConfig = await getTradeGuardConfig(supabase);
         console.log("[TradeGuard] Config:", JSON.stringify(tradeGuardConfig));
@@ -807,7 +808,7 @@ serve(async (req) => {
           : currentPrice;
 
         // CRITICAL FIX: Pass the ACTUAL slippage and wallet for accurate venue-aware quotes
-        const quoteValidation = await validateBuyQuote(
+        quoteValidation = await validateBuyQuote(
           tokenMint,
           buyAmountSol,
           displayPriceForGuard,
