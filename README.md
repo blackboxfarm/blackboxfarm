@@ -216,7 +216,7 @@ For development:
 
 ```bash
 # Clone the repository
-git clone https://github.com/systemreset-ca/blackboxfarm.git
+git clone https://github.com/blackboxfarm/blackboxfarm.git
 
 # Install dependencies
 npm install
