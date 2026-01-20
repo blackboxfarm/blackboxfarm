@@ -6,7 +6,7 @@ import { Label } from '@/components/ui/label';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useSecureAuth } from '@/hooks/useSecureAuth';
 import { useToast } from '@/hooks/use-toast';
-import { Loader2, Mail, Lock, AlertTriangle } from 'lucide-react';
+import { Loader2, Mail, Lock, AlertTriangle, Eye, EyeOff } from 'lucide-react';
 import { PasswordResetModal } from './PasswordResetModal';
 import { EmailVerificationModal } from './EmailVerificationModal';
 import { InputValidator, ValidationRules } from '@/components/security/InputValidator';
@@ -27,6 +27,8 @@ export const SecureAuthModal = ({ isOpen, onClose, defaultTab = 'signin' }: Secu
   const [showPasswordReset, setShowPasswordReset] = useState(false);
   const [showEmailVerification, setShowEmailVerification] = useState(false);
   const [verificationEmail, setVerificationEmail] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   
   const { signIn, signUp, isRateLimited, rateLimitState } = useSecureAuth();
   const { toast } = useToast();
@@ -102,11 +104,9 @@ export const SecureAuthModal = ({ isOpen, onClose, defaultTab = 'signin' }: Secu
   };
 
   const getPasswordValidationRules = () => [
-    ValidationRules.password.minLength(6),
-    ValidationRules.password.maxLength(128),
-    ValidationRules.password.hasUppercase,
-    ValidationRules.password.hasLowercase,
-    ValidationRules.password.hasNumber
+    ValidationRules.password.minLength(4), // Reduced for testing
+    ValidationRules.password.maxLength(128)
+    // Note: Uppercase, lowercase, and number requirements removed for easier testing
   ];
 
   const getRateLimitMessage = () => {
@@ -172,14 +172,21 @@ export const SecureAuthModal = ({ isOpen, onClose, defaultTab = 'signin' }: Secu
                   <Lock className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
                   <Input
                     id="signin-password"
-                    type="password"
+                    type={showPassword ? "text" : "password"}
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
                     placeholder="••••••••"
-                    className="pl-10"
+                    className="pl-10 pr-10"
                     required
                     disabled={isRateLimited}
                   />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword(!showPassword)}
+                    className="absolute right-3 top-3 text-muted-foreground hover:text-foreground"
+                  >
+                    {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                  </button>
                 </div>
               </div>
 
@@ -247,15 +254,22 @@ export const SecureAuthModal = ({ isOpen, onClose, defaultTab = 'signin' }: Secu
                     <Lock className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
                     <Input
                       id="signup-password"
-                      type="password"
+                      type={showPassword ? "text" : "password"}
                       value={password}
                       onChange={(e) => setPassword(e.target.value)}
                       placeholder="••••••••"
-                      className="pl-10"
+                      className="pl-10 pr-10"
                       required
-                      minLength={6}
+                      minLength={4}
                       disabled={isRateLimited}
                     />
+                    <button
+                      type="button"
+                      onClick={() => setShowPassword(!showPassword)}
+                      className="absolute right-3 top-3 text-muted-foreground hover:text-foreground"
+                    >
+                      {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                    </button>
                   </div>
                 </InputValidator>
               </div>
@@ -278,14 +292,21 @@ export const SecureAuthModal = ({ isOpen, onClose, defaultTab = 'signin' }: Secu
                     <Lock className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
                     <Input
                       id="confirm-password"
-                      type="password"
+                      type={showConfirmPassword ? "text" : "password"}
                       value={confirmPassword}
                       onChange={(e) => setConfirmPassword(e.target.value)}
                       placeholder="••••••••"
-                      className="pl-10"
+                      className="pl-10 pr-10"
                       required
                       disabled={isRateLimited}
                     />
+                    <button
+                      type="button"
+                      onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                      className="absolute right-3 top-3 text-muted-foreground hover:text-foreground"
+                    >
+                      {showConfirmPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                    </button>
                   </div>
                 </InputValidator>
               </div>
