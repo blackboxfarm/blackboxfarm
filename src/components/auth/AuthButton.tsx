@@ -4,7 +4,7 @@ import { AuthModal } from './AuthModal';
 import { useAuth } from '@/hooks/useAuth';
 import { LogIn, User, LogOut, Shield } from 'lucide-react';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
-import { PreviewSuperAdminButton } from './PreviewSuperAdminButton';
+
 import { usePreviewSuperAdmin } from '@/hooks/usePreviewSuperAdmin';
 export const AuthButton = () => {
   const [showAuthModal, setShowAuthModal] = useState(false);
@@ -38,7 +38,6 @@ export const AuthButton = () => {
   if (user) {
     return (
       <div className="flex items-center gap-2">
-        <PreviewSuperAdminButton />
         <DropdownMenu>
         <DropdownMenuTrigger asChild>
           <Button variant="outline" className="glow-soft gap-2">
