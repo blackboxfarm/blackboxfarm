@@ -1,10 +1,10 @@
 /**
- * Shared SOL Price Fetcher - CoinGecko with API Key Authentication
- * Uses the unified CoinGecko helper for authenticated requests.
+ * Shared SOL Price Fetcher - CoinGecko with Fallbacks & Alerts
+ * Uses the unified CoinGecko helper with automatic Jupiter/DexScreener fallback.
  */
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { getSolPrice as getCGSolPrice, getCoinGeckoConfig } from "./coingecko.ts";
+import { getSolPriceWithFallback, getCoinGeckoConfig, PriceResult } from "./coingecko.ts";
 
 interface PriceFetchResult {
   success: boolean;
@@ -14,6 +14,7 @@ interface PriceFetchResult {
   error?: string;
   errorType?: string;
   httpStatus?: number;
+  isFallback?: boolean;
 }
 
 /**
@@ -44,30 +45,54 @@ async function logFetchAttempt(result: PriceFetchResult): Promise<void> {
 }
 
 /**
- * Get SOL price from CoinGecko with authenticated API
- * Returns price or throws if it fails
+ * Get SOL price with fallback support and logging
+ * Tries CoinGecko first, then Jupiter, then DexScreener
  */
-export async function getSolPriceWithLogging(): Promise<{ price: number; source: string; attempts: PriceFetchResult[] }> {
+export async function getSolPriceWithLogging(context = 'sol-price-fetcher'): Promise<{ 
+  price: number; 
+  source: string; 
+  attempts: PriceFetchResult[];
+  isFallback: boolean;
+}> {
   const startTime = Date.now();
   const config = getCoinGeckoConfig();
-  const source = `coingecko_${config.tier}`;
+  const attempts: PriceFetchResult[] = [];
   
   try {
-    const price = await getCGSolPrice();
+    // Use the fallback-aware price getter
+    const result: PriceResult = await getSolPriceWithFallback(context);
     const responseTimeMs = Date.now() - startTime;
     
-    const result: PriceFetchResult = {
+    // Determine source name for logging
+    const sourceName = result.source === 'coingecko' 
+      ? `coingecko_${config.tier}` 
+      : result.source;
+    
+    const fetchResult: PriceFetchResult = {
       success: true,
-      price,
-      source,
+      price: result.price,
+      source: sourceName,
       responseTimeMs,
+      isFallback: result.isFallback,
     };
     
-    // Log success (fire and forget)
-    logFetchAttempt(result);
+    attempts.push(fetchResult);
     
-    console.log(`[SOL Price] ✓ CoinGecko (${config.tier}) returned $${price.toFixed(2)} in ${responseTimeMs}ms`);
-    return { price, source, attempts: [result] };
+    // Log the successful attempt (fire and forget)
+    logFetchAttempt(fetchResult);
+    
+    if (result.isFallback) {
+      console.log(`[SOL Price] ⚠️ Fallback ${result.source} returned $${result.price.toFixed(2)} in ${responseTimeMs}ms`);
+    } else {
+      console.log(`[SOL Price] ✓ CoinGecko (${config.tier}) returned $${result.price.toFixed(2)} in ${responseTimeMs}ms`);
+    }
+    
+    return { 
+      price: result.price, 
+      source: sourceName, 
+      attempts,
+      isFallback: result.isFallback,
+    };
     
   } catch (e) {
     const responseTimeMs = Date.now() - startTime;
@@ -75,28 +100,40 @@ export async function getSolPriceWithLogging(): Promise<{ price: number; source:
     const errorType = error.includes('timeout') ? 'timeout' : 
                       error.includes('DNS') ? 'dns_error' :
                       error.includes('network') ? 'network_error' : 
-                      error.includes('429') ? 'rate_limit' : 'unknown';
+                      error.includes('429') ? 'rate_limit' :
+                      error.includes('401') ? 'auth_failed' :
+                      error.includes('All') ? 'all_sources_failed' : 'unknown';
     
-    const result: PriceFetchResult = {
+    const failedResult: PriceFetchResult = {
       success: false,
       price: null,
-      source,
+      source: `coingecko_${config.tier}`,
       responseTimeMs,
       error,
       errorType,
     };
     
-    logFetchAttempt(result);
-    console.error(`[SOL Price] ✗ CoinGecko (${config.tier}) failed: ${error} (${responseTimeMs}ms)`);
+    attempts.push(failedResult);
+    logFetchAttempt(failedResult);
     
-    throw new Error(`CoinGecko SOL price failed: ${error}`);
+    console.error(`[SOL Price] ✗ All sources failed: ${error} (${responseTimeMs}ms)`);
+    
+    throw new Error(`SOL price fetch failed (all sources): ${error}`);
   }
 }
 
 /**
  * Simple getter that just returns the price (for backward compat)
  */
-export async function getSolPrice(): Promise<number> {
-  const result = await getSolPriceWithLogging();
+export async function getSolPrice(context = 'getSolPrice'): Promise<number> {
+  const result = await getSolPriceWithLogging(context);
+  return result.price;
+}
+
+/**
+ * Quick price check without logging (for high-frequency calls)
+ */
+export async function getSolPriceQuick(): Promise<number> {
+  const result = await getSolPriceWithFallback('quick-check');
   return result.price;
 }

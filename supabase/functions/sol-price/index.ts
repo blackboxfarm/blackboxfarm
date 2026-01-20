@@ -12,12 +12,12 @@ serve(async (req) => {
   }
 
   try {
-    const result = await getSolPriceWithLogging();
+    const result = await getSolPriceWithLogging('sol-price-endpoint');
     
     // Round up to nearest penny
     const solPrice = Math.ceil(result.price * 100) / 100;
     
-    console.log(`[sol-price] ✓ $${solPrice} from ${result.source}`);
+    console.log(`[sol-price] ✓ $${solPrice} from ${result.source}${result.isFallback ? ' (FALLBACK)' : ''}`);
     
     // Log any failed attempts for visibility
     const failures = result.attempts.filter(a => !a.success);
@@ -31,6 +31,7 @@ serve(async (req) => {
         price: solPrice,
         timestamp: new Date().toISOString(),
         source: result.source,
+        isFallback: result.isFallback,
         attempts: result.attempts.length,
         failedAttempts: failures.length,
       }),

@@ -1528,6 +1528,57 @@ export type Database = {
           },
         ]
       }
+      coingecko_error_alerts: {
+        Row: {
+          context: string | null
+          created_at: string | null
+          endpoint: string | null
+          error_code: string
+          fallback_price: number | null
+          fallback_source: string | null
+          http_status: number | null
+          id: string
+          message: string | null
+          notified_at: string | null
+          resolved_at: string | null
+          retry_after_seconds: number | null
+          severity: string | null
+          tier: string | null
+        }
+        Insert: {
+          context?: string | null
+          created_at?: string | null
+          endpoint?: string | null
+          error_code: string
+          fallback_price?: number | null
+          fallback_source?: string | null
+          http_status?: number | null
+          id?: string
+          message?: string | null
+          notified_at?: string | null
+          resolved_at?: string | null
+          retry_after_seconds?: number | null
+          severity?: string | null
+          tier?: string | null
+        }
+        Update: {
+          context?: string | null
+          created_at?: string | null
+          endpoint?: string | null
+          error_code?: string
+          fallback_price?: number | null
+          fallback_source?: string | null
+          http_status?: number | null
+          id?: string
+          message?: string | null
+          notified_at?: string | null
+          resolved_at?: string | null
+          retry_after_seconds?: number | null
+          severity?: string | null
+          tier?: string | null
+        }
+        Relationships: []
+      }
       community_campaign_executions: {
         Row: {
           campaign_id: string
