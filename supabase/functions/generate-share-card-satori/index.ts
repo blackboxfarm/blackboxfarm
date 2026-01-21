@@ -121,21 +121,13 @@ function normalizeForSatori(node: any): any {
   return node;
 }
 
-// Load font for Satori - use a reliable TTF font from a CDN
 async function loadFont(): Promise<ArrayBuffer> {
-  // Use Inter font from jsDelivr CDN (TTF format required by Satori)
-  const fontUrl = 'https://cdn.jsdelivr.net/npm/@fontsource/inter@5.0.16/files/inter-latin-400-normal.woff';
-  
-  const response = await fetch(fontUrl);
-  if (!response.ok) {
-    console.error('Font fetch failed:', response.status, response.statusText);
-    throw new Error(`Failed to fetch font: ${response.status}`);
-  }
-  
-  const contentType = response.headers.get('content-type');
-  console.log('Font content-type:', contentType);
-  
-  return response.arrayBuffer();
+  // Inter TTF (works reliably with satori)
+  const fontUrl =
+    "https://cdn.jsdelivr.net/npm/@fontsource/inter@5.0.16/files/inter-latin-400-normal.ttf";
+  const res = await fetch(fontUrl);
+  if (!res.ok) throw new Error(`Failed to fetch font: ${res.status}`);
+  return await res.arrayBuffer();
 }
 
 serve(async (req) => {
