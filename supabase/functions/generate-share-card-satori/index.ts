@@ -43,15 +43,33 @@ interface TokenStats {
   symbol: string;
   name: string;
   tokenAddress?: string;
+  tokenImage?: string;
   totalHolders: number;
   realHolders: number;
+  // Detailed breakdown
+  trueWhaleCount?: number;
+  babyWhaleCount?: number;
+  superBossCount?: number;
+  kingpinCount?: number;
+  bossCount?: number;
+  largeCount?: number;
+  mediumCount?: number;
+  smallCount?: number;
+  dustCount: number;
+  lpCount?: number;
+  // Aggregated (legacy)
   whaleCount: number;
   strongCount: number;
   activeCount: number;
-  dustCount: number;
   dustPercentage: number;
+  // Concentration
+  top10Percentage?: number;
+  lpPercentage?: number;
+  // Health
   healthScore: number;
   healthGrade: string;
+  // Timestamp
+  generatedAt?: string;
 }
 
 function escapeHtml(s: string) {
@@ -130,10 +148,28 @@ serve(async (req) => {
     console.log('Generating Satori share card for:', tokenStats.symbol);
 
     const gradeColor = getGradeColor(tokenStats.healthGrade);
-    const displayCA = truncateCA(tokenStats.tokenAddress || '');
+    const fullCA = tokenStats.tokenAddress || '';
+    
+    // Format UTC timestamp
+    const timestamp = tokenStats.generatedAt 
+      ? new Date(tokenStats.generatedAt).toUTCString().replace('GMT', 'UTC')
+      : new Date().toUTCString().replace('GMT', 'UTC');
 
     // Load font
     const fontData = await loadFont();
+
+    // Build holder breakdown stats
+    const holderBreakdown = [
+      { emoji: '🐋', label: 'True Whales', count: tokenStats.trueWhaleCount || 0 },
+      { emoji: '🐳', label: 'Baby Whales', count: tokenStats.babyWhaleCount || 0 },
+      { emoji: '👑', label: 'Super Boss', count: tokenStats.superBossCount || 0 },
+      { emoji: '🎯', label: 'Kingpin', count: tokenStats.kingpinCount || 0 },
+      { emoji: '💼', label: 'Boss', count: tokenStats.bossCount || 0 },
+      { emoji: '📈', label: 'Large', count: tokenStats.largeCount || 0 },
+      { emoji: '📊', label: 'Medium', count: tokenStats.mediumCount || 0 },
+      { emoji: '🌱', label: 'Small', count: tokenStats.smallCount || 0 },
+      { emoji: '💨', label: 'Dust', count: tokenStats.dustCount || 0 },
+    ].filter(item => item.count > 0);
 
     // Create the card using Satori JSX-like syntax
     const cardTree = normalizeForSatori({
@@ -145,174 +181,88 @@ serve(async (req) => {
             width: '1200px',
             height: '628px',
             background: 'linear-gradient(135deg, #0a0a0a 0%, #111827 50%, #0f172a 100%)',
-            padding: '40px',
+            padding: '32px 40px',
             fontFamily: 'Inter',
             color: 'white',
             position: 'relative',
           },
           children: [
-            // Header row
+            // Header row with token image, symbol, and branding
             {
               type: 'div',
               props: {
                 style: {
                   display: 'flex',
                   justifyContent: 'space-between',
-                  alignItems: 'flex-start',
+                  alignItems: 'center',
                   width: '100%',
+                  marginBottom: '16px',
                 },
                 children: [
-                  // Logo/branding
+                  // Left: Token image + symbol
                   {
                     type: 'div',
                     props: {
                       style: {
                         display: 'flex',
                         alignItems: 'center',
-                        gap: '12px',
+                        gap: '16px',
                       },
                       children: [
-                        {
+                        // Token image (or placeholder)
+                        tokenStats.tokenImage ? {
+                          type: 'img',
+                          props: {
+                            src: tokenStats.tokenImage,
+                            style: {
+                              width: '64px',
+                              height: '64px',
+                              borderRadius: '50%',
+                              border: '3px solid #3b82f6',
+                            },
+                          },
+                        } : {
                           type: 'div',
                           props: {
                             style: {
-                              width: '48px',
-                              height: '48px',
+                              width: '64px',
+                              height: '64px',
+                              borderRadius: '50%',
                               background: 'linear-gradient(135deg, #8b5cf6, #3b82f6)',
-                              borderRadius: '12px',
                               display: 'flex',
                               alignItems: 'center',
                               justifyContent: 'center',
-                              fontSize: '24px',
+                              fontSize: '28px',
                             },
-                            children: '📊',
+                            children: '🪙',
                           },
                         },
-                        {
-                          type: 'span',
-                          props: {
-                            style: { fontSize: '24px', fontWeight: 700, color: '#a1a1aa' },
-                            children: 'blackbox.farm/holders',
-                          },
-                        },
-                      ],
-                    },
-                  },
-                  // Token symbol and CA
-                  {
-                    type: 'div',
-                    props: {
-                      style: {
-                        display: 'flex',
-                        flexDirection: 'column',
-                        alignItems: 'flex-end',
-                      },
-                      children: [
-                        {
-                          type: 'span',
-                          props: {
-                            style: { fontSize: '48px', fontWeight: 800, color: 'white' },
-                            children: `$${tokenStats.symbol}`,
-                          },
-                        },
-                        {
-                          type: 'span',
-                          props: {
-                            style: { fontSize: '18px', color: '#71717a' },
-                            children: `CA: ${displayCA}`,
-                          },
-                        },
-                      ],
-                    },
-                  },
-                ],
-              },
-            },
-            // Main content
-            {
-              type: 'div',
-              props: {
-                style: {
-                  display: 'flex',
-                  flex: 1,
-                  marginTop: '40px',
-                  gap: '60px',
-                },
-                children: [
-                  // Left: Stats
-                  {
-                    type: 'div',
-                    props: {
-                      style: {
-                        display: 'flex',
-                        flexDirection: 'column',
-                        flex: 1,
-                      },
-                      children: [
                         {
                           type: 'div',
                           props: {
-                            style: { display: 'flex', flexDirection: 'column', marginBottom: '24px' },
+                            style: { display: 'flex', flexDirection: 'column' },
                             children: [
                               {
-                                type: 'div',
+                                type: 'span',
                                 props: {
-                                  style: { fontSize: '18px', color: '#71717a', marginBottom: '4px' },
-                                  children: 'Total Wallets',
+                                  style: { fontSize: '42px', fontWeight: 800, color: 'white' },
+                                  children: `$${tokenStats.symbol}`,
                                 },
                               },
                               {
-                                type: 'div',
+                                type: 'span',
                                 props: {
-                                  style: { fontSize: '72px', fontWeight: 800, color: 'white', lineHeight: 1 },
-                                  children: tokenStats.totalHolders.toLocaleString(),
+                                  style: { fontSize: '14px', color: '#71717a' },
+                                  children: tokenStats.name,
                                 },
                               },
                             ],
                           },
                         },
-                        // Arrow down
-                        {
-                          type: 'div',
-                          props: {
-                            style: { fontSize: '32px', marginBottom: '16px', color: '#10b981' },
-                            children: '↓',
-                          },
-                        },
-                        {
-                          type: 'div',
-                          props: {
-                            style: { display: 'flex', flexDirection: 'column', marginBottom: '24px' },
-                            children: [
-                              {
-                                type: 'div',
-                                props: {
-                                  style: { fontSize: '18px', color: '#71717a', marginBottom: '4px' },
-                                  children: 'Real Holders',
-                                },
-                              },
-                              {
-                                type: 'div',
-                                props: {
-                                  style: { fontSize: '56px', fontWeight: 800, color: '#10b981', lineHeight: 1 },
-                                  children: tokenStats.realHolders.toLocaleString(),
-                                },
-                              },
-                            ],
-                          },
-                        },
-                        // Dust percentage
-                        {
-                          type: 'div',
-                          props: {
-                            style: { fontSize: '28px', fontWeight: 600, color: '#f59e0b' },
-                            children: `${tokenStats.dustPercentage}% Dust`,
-                          },
-                        },
                       ],
                     },
                   },
-                  // Right: Grade
+                  // Right: Health grade box
                   {
                     type: 'div',
                     props: {
@@ -320,16 +270,15 @@ serve(async (req) => {
                         display: 'flex',
                         flexDirection: 'column',
                         alignItems: 'center',
-                        justifyContent: 'center',
                       },
                       children: [
                         {
                           type: 'div',
                           props: {
                             style: {
-                              width: '180px',
-                              height: '180px',
-                              borderRadius: '24px',
+                              width: '100px',
+                              height: '100px',
+                              borderRadius: '16px',
                               background: `linear-gradient(135deg, ${gradeColor}22, ${gradeColor}44)`,
                               border: `3px solid ${gradeColor}`,
                               display: 'flex',
@@ -341,25 +290,18 @@ serve(async (req) => {
                               {
                                 type: 'div',
                                 props: {
-                                  style: { fontSize: '72px', fontWeight: 800, color: gradeColor },
+                                  style: { fontSize: '42px', fontWeight: 800, color: gradeColor, lineHeight: 1 },
                                   children: tokenStats.healthGrade,
                                 },
                               },
                               {
                                 type: 'div',
                                 props: {
-                                  style: { fontSize: '24px', color: gradeColor, marginTop: '-8px' },
+                                  style: { fontSize: '14px', color: gradeColor },
                                   children: `${tokenStats.healthScore}/100`,
                                 },
                               },
                             ],
-                          },
-                        },
-                        {
-                          type: 'div',
-                          props: {
-                            style: { fontSize: '18px', color: '#71717a', marginTop: '16px' },
-                            children: 'Health Score',
                           },
                         },
                       ],
@@ -368,37 +310,316 @@ serve(async (req) => {
                 ],
               },
             },
-            // Bottom row: Holder breakdown
+            // Full CA row
             {
               type: 'div',
               props: {
                 style: {
                   display: 'flex',
-                  gap: '48px',
-                  marginTop: 'auto',
-                  paddingTop: '24px',
-                  borderTop: '1px solid #27272a',
+                  alignItems: 'center',
+                  gap: '8px',
+                  marginBottom: '20px',
+                  padding: '8px 12px',
+                  background: 'rgba(255,255,255,0.05)',
+                  borderRadius: '8px',
                 },
                 children: [
                   {
                     type: 'span',
                     props: {
-                      style: { fontSize: '22px', color: 'white' },
-                      children: `🐋 ${tokenStats.whaleCount} Whales`,
+                      style: { fontSize: '13px', color: '#71717a' },
+                      children: 'CA:',
                     },
                   },
                   {
                     type: 'span',
                     props: {
-                      style: { fontSize: '22px', color: 'white' },
-                      children: `💪 ${tokenStats.strongCount} Strong`,
+                      style: { fontSize: '13px', color: '#a1a1aa', fontFamily: 'monospace' },
+                      children: fullCA,
+                    },
+                  },
+                ],
+              },
+            },
+            // Main content: Stats grid
+            {
+              type: 'div',
+              props: {
+                style: {
+                  display: 'flex',
+                  flex: 1,
+                  gap: '32px',
+                },
+                children: [
+                  // Left column: Key metrics
+                  {
+                    type: 'div',
+                    props: {
+                      style: {
+                        display: 'flex',
+                        flexDirection: 'column',
+                        flex: 1,
+                        gap: '16px',
+                      },
+                      children: [
+                        // Total vs Real holders
+                        {
+                          type: 'div',
+                          props: {
+                            style: { display: 'flex', gap: '24px' },
+                            children: [
+                              {
+                                type: 'div',
+                                props: {
+                                  style: { display: 'flex', flexDirection: 'column' },
+                                  children: [
+                                    {
+                                      type: 'div',
+                                      props: {
+                                        style: { fontSize: '14px', color: '#71717a' },
+                                        children: 'Total Wallets',
+                                      },
+                                    },
+                                    {
+                                      type: 'div',
+                                      props: {
+                                        style: { fontSize: '48px', fontWeight: 800, color: 'white', lineHeight: 1 },
+                                        children: tokenStats.totalHolders.toLocaleString(),
+                                      },
+                                    },
+                                  ],
+                                },
+                              },
+                              {
+                                type: 'div',
+                                props: {
+                                  style: { fontSize: '32px', color: '#10b981', alignSelf: 'center' },
+                                  children: '→',
+                                },
+                              },
+                              {
+                                type: 'div',
+                                props: {
+                                  style: { display: 'flex', flexDirection: 'column' },
+                                  children: [
+                                    {
+                                      type: 'div',
+                                      props: {
+                                        style: { fontSize: '14px', color: '#71717a' },
+                                        children: 'Real Holders',
+                                      },
+                                    },
+                                    {
+                                      type: 'div',
+                                      props: {
+                                        style: { fontSize: '48px', fontWeight: 800, color: '#10b981', lineHeight: 1 },
+                                        children: tokenStats.realHolders.toLocaleString(),
+                                      },
+                                    },
+                                  ],
+                                },
+                              },
+                            ],
+                          },
+                        },
+                        // Concentration stats row
+                        {
+                          type: 'div',
+                          props: {
+                            style: { display: 'flex', gap: '32px', marginTop: '8px' },
+                            children: [
+                              {
+                                type: 'div',
+                                props: {
+                                  style: { display: 'flex', flexDirection: 'column' },
+                                  children: [
+                                    {
+                                      type: 'div',
+                                      props: {
+                                        style: { fontSize: '12px', color: '#71717a' },
+                                        children: 'Top 10 Hold',
+                                      },
+                                    },
+                                    {
+                                      type: 'div',
+                                      props: {
+                                        style: { fontSize: '28px', fontWeight: 700, color: '#f59e0b' },
+                                        children: `${tokenStats.top10Percentage || 0}%`,
+                                      },
+                                    },
+                                  ],
+                                },
+                              },
+                              {
+                                type: 'div',
+                                props: {
+                                  style: { display: 'flex', flexDirection: 'column' },
+                                  children: [
+                                    {
+                                      type: 'div',
+                                      props: {
+                                        style: { fontSize: '12px', color: '#71717a' },
+                                        children: 'Dust Wallets',
+                                      },
+                                    },
+                                    {
+                                      type: 'div',
+                                      props: {
+                                        style: { fontSize: '28px', fontWeight: 700, color: '#ef4444' },
+                                        children: `${tokenStats.dustPercentage}%`,
+                                      },
+                                    },
+                                  ],
+                                },
+                              },
+                              {
+                                type: 'div',
+                                props: {
+                                  style: { display: 'flex', flexDirection: 'column' },
+                                  children: [
+                                    {
+                                      type: 'div',
+                                      props: {
+                                        style: { fontSize: '12px', color: '#71717a' },
+                                        children: 'LP Pools',
+                                      },
+                                    },
+                                    {
+                                      type: 'div',
+                                      props: {
+                                        style: { fontSize: '28px', fontWeight: 700, color: '#3b82f6' },
+                                        children: `${tokenStats.lpCount || 0}`,
+                                      },
+                                    },
+                                  ],
+                                },
+                              },
+                            ],
+                          },
+                        },
+                      ],
+                    },
+                  },
+                  // Right column: Holder breakdown
+                  {
+                    type: 'div',
+                    props: {
+                      style: {
+                        display: 'flex',
+                        flexDirection: 'column',
+                        width: '380px',
+                        background: 'rgba(255,255,255,0.03)',
+                        borderRadius: '12px',
+                        padding: '16px',
+                        border: '1px solid rgba(255,255,255,0.1)',
+                      },
+                      children: [
+                        {
+                          type: 'div',
+                          props: {
+                            style: { fontSize: '14px', color: '#a1a1aa', marginBottom: '12px', fontWeight: 600 },
+                            children: 'Holder Breakdown',
+                          },
+                        },
+                        // Breakdown grid
+                        {
+                          type: 'div',
+                          props: {
+                            style: { display: 'flex', flexWrap: 'wrap', gap: '8px' },
+                            children: holderBreakdown.slice(0, 9).map(item => ({
+                              type: 'div',
+                              props: {
+                                style: {
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  gap: '6px',
+                                  padding: '6px 10px',
+                                  background: 'rgba(255,255,255,0.05)',
+                                  borderRadius: '6px',
+                                  minWidth: '100px',
+                                },
+                                children: [
+                                  {
+                                    type: 'span',
+                                    props: {
+                                      style: { fontSize: '14px' },
+                                      children: item.emoji,
+                                    },
+                                  },
+                                  {
+                                    type: 'span',
+                                    props: {
+                                      style: { fontSize: '12px', color: '#a1a1aa' },
+                                      children: `${item.count}`,
+                                    },
+                                  },
+                                  {
+                                    type: 'span',
+                                    props: {
+                                      style: { fontSize: '11px', color: '#71717a' },
+                                      children: item.label,
+                                    },
+                                  },
+                                ],
+                              },
+                            })),
+                          },
+                        },
+                      ],
+                    },
+                  },
+                ],
+              },
+            },
+            // Footer: Branding + Timestamp
+            {
+              type: 'div',
+              props: {
+                style: {
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'center',
+                  marginTop: 'auto',
+                  paddingTop: '16px',
+                  borderTop: '1px solid #27272a',
+                },
+                children: [
+                  {
+                    type: 'div',
+                    props: {
+                      style: { display: 'flex', alignItems: 'center', gap: '8px' },
+                      children: [
+                        {
+                          type: 'div',
+                          props: {
+                            style: {
+                              width: '28px',
+                              height: '28px',
+                              background: 'linear-gradient(135deg, #00d9ff, #00b8d4)',
+                              borderRadius: '6px',
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              fontSize: '14px',
+                            },
+                            children: '📊',
+                          },
+                        },
+                        {
+                          type: 'span',
+                          props: {
+                            style: { fontSize: '16px', fontWeight: 600, color: '#00d9ff' },
+                            children: 'blackbox.farm/holders',
+                          },
+                        },
+                      ],
                     },
                   },
                   {
                     type: 'span',
                     props: {
-                      style: { fontSize: '22px', color: 'white' },
-                      children: `🌱 ${tokenStats.activeCount} Active`,
+                      style: { fontSize: '12px', color: '#52525b' },
+                      children: timestamp,
                     },
                   },
                 ],
