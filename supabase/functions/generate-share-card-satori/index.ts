@@ -191,11 +191,10 @@ serve(async (req) => {
                         flex: 1,
                       },
                       children: [
-                        // Total Wallets
                         {
                           type: 'div',
                           props: {
-                            style: { marginBottom: '24px' },
+                            style: { display: 'flex', flexDirection: 'column', marginBottom: '24px' },
                             children: [
                               {
                                 type: 'div',
@@ -222,11 +221,10 @@ serve(async (req) => {
                             children: '↓',
                           },
                         },
-                        // Real Holders
                         {
                           type: 'div',
                           props: {
-                            style: { marginBottom: '24px' },
+                            style: { display: 'flex', flexDirection: 'column', marginBottom: '24px' },
                             children: [
                               {
                                 type: 'div',
