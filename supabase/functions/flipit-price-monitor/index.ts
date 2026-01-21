@@ -163,7 +163,13 @@ serve(async (req) => {
         let scalpSellSlippage = effectiveSlippage;
         let scalpSellPriority = priorityFeeMode || 'high';
         
-        if (position.source_channel_id) {
+        // Validate source_channel_id is a proper UUID before querying (catches "undefined" string bug)
+        const isValidUuid = (id: string | null | undefined): boolean => {
+          if (!id || id === "undefined" || id === "null") return false;
+          return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
+        };
+        
+        if (isValidUuid(position.source_channel_id)) {
           const { data: channelConfig } = await supabase
             .from('telegram_channel_config')
             .select('scalp_sell_slippage_bps, scalp_sell_priority_fee')
@@ -175,6 +181,8 @@ serve(async (req) => {
             scalpSellPriority = channelConfig.scalp_sell_priority_fee || 'high';
             console.log(`Scalp position using channel sell settings: slippage=${scalpSellSlippage}bps, priority=${scalpSellPriority}`);
           }
+        } else if (position.source_channel_id) {
+          console.warn(`Invalid source_channel_id format: ${position.source_channel_id} - skipping channel config lookup`);
         }
 
         console.log(`Scalp position ${position.id}: stage=${scalp_stage}, TP=${takeProfitPct}%, SL=${stopLossPct}%, change=${priceChangePercent.toFixed(1)}%${isTestPosition ? ' [TEST]' : ''}`);
