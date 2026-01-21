@@ -1,6 +1,9 @@
 project_id = "apxauapuusmgwbbzjgfl"
 
 # Edge Functions configuration
+[functions.generate-share-card-satori]
+verify_jwt = false
+
 [functions.dexscreener-top-200-scraper]
 verify_jwt = false
 
