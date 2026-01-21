@@ -634,12 +634,12 @@ export function BaglessHoldersReport({ initialToken }: BaglessHoldersReportProps
         largeCount: reportData.holders.filter(h => h.isLargeWallet).length,
         mediumCount: reportData.holders.filter(h => h.isMediumWallet).length,
         smallCount: reportData.holders.filter(h => h.isSmallWallet).length,
-        dustCount: reportData.holders.filter(h => h.isDustWallet).length,
+        dustCount: reportData.simpleTiers?.dust?.count || reportData.holders.filter(h => h.isDustWallet).length,
         lpCount: reportData.liquidityPoolsDetected || reportData.holders.filter(h => h.isLiquidityPool).length,
-        // Legacy aggregated counts
-        whaleCount: reportData.holders.filter(h => h.isTrueWhaleWallet || h.isBabyWhaleWallet).length,
-        strongCount: reportData.holders.filter(h => h.isSuperBossWallet || h.isKingpinWallet || h.isBossWallet).length,
-        activeCount: reportData.holders.filter(h => h.isLargeWallet || h.isMediumWallet).length,
+        // Simple tier counts (matching the exact terminology)
+        whaleCount: reportData.simpleTiers?.whales?.count || 0,   // >$1000
+        strongCount: reportData.simpleTiers?.serious?.count || 0, // $200-$1000
+        activeCount: reportData.simpleTiers?.retail?.count || 0,  // $1-$199
         dustPercentage: Math.round((reportData.holders.filter(h => h.isDustWallet).length / reportData.totalHolders) * 100),
         // Top holder concentration
         top10Percentage: Math.round(top10Holdings * 10) / 10,
