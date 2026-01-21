@@ -200,9 +200,9 @@ function toneColor(tone: "good" | "warn" | "bad") {
 }
 
 async function loadFont(): Promise<ArrayBuffer> {
-  // Inter TTF (works reliably with satori)
+  // Inter TTF - direct CDN link (Satori requires TTF/OTF format)
   const fontUrl =
-    "https://cdn.jsdelivr.net/npm/@fontsource/inter@5.0.16/files/inter-latin-400-normal.ttf";
+    "https://sf6-cdn-tos.douyinstatic.com/obj/eden-cn/slepweh7nupqpognuhbo/Inter-Regular.ttf";
   const res = await fetch(fontUrl);
   if (!res.ok) throw new Error(`Failed to fetch font: ${res.status}`);
   return await res.arrayBuffer();
@@ -242,23 +242,19 @@ serve(async (req) => {
           fontFamily: "Inter",
           color: "white",
           position: "relative",
-          background:
-            "radial-gradient(900px 520px at 18% 10%, rgba(0,217,255,0.16) 0%, rgba(0,0,0,0) 60%)," +
-            "radial-gradient(700px 420px at 85% 25%, rgba(167,139,250,0.16) 0%, rgba(0,0,0,0) 55%)," +
-            "linear-gradient(135deg, #070A12 0%, #0B1224 55%, #070A12 100%)",
+          background: "linear-gradient(135deg, #070A12 0%, #0B1224 50%, #0a0f1a 100%)",
         },
         children: [
-          // faint grid lines (HUD feel)
+          // faint grid overlay (HUD feel) - using simple border instead of repeating-gradient (Satori limitation)
           {
             type: "div",
             props: {
               style: {
                 position: "absolute",
                 inset: 0,
-                opacity: 0.12,
-                background:
-                  "repeating-linear-gradient(0deg, rgba(255,255,255,0.08), rgba(255,255,255,0.08) 1px, transparent 1px, transparent 44px)," +
-                  "repeating-linear-gradient(90deg, rgba(255,255,255,0.08), rgba(255,255,255,0.08) 1px, transparent 1px, transparent 56px)",
+                opacity: 0.08,
+                borderLeft: "1px solid rgba(255,255,255,0.3)",
+                borderTop: "1px solid rgba(255,255,255,0.3)",
               },
             },
           },
