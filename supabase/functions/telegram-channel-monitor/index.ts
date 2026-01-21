@@ -650,14 +650,28 @@ function getBondingCurvePosition(percent: number | null): 'early' | 'mid' | 'lat
   return 'late';
 }
 
-async function enrichTokenData(tokenMint: string, supabase?: any): Promise<EnrichedTokenData> {
-  // Fetch all data in parallel
-  const [jupiterPrice, dexData, metadata, pumpBondingCurve] = await Promise.all([
-    fetchTokenPrice(tokenMint),
-    fetchDexScreenerData(tokenMint),
-    fetchTokenMetadata(tokenMint),
-    checkPumpFunBondingCurve(tokenMint)
+// Timeout wrapper for enrichment calls
+async function withTimeout<T>(promise: Promise<T>, timeoutMs: number, fallback: T): Promise<T> {
+  return Promise.race([
+    promise,
+    new Promise<T>((resolve) => setTimeout(() => resolve(fallback), timeoutMs))
   ]);
+}
+
+async function enrichTokenData(tokenMint: string, supabase?: any, fastMode: boolean = false): Promise<EnrichedTokenData> {
+  console.log(`[telegram-channel-monitor] enrichTokenData: ${tokenMint.slice(0, 8)}... (fastMode=${fastMode})`);
+  
+  // In fast mode, use shorter timeouts and skip expensive checks
+  const apiTimeout = fastMode ? 3000 : 8000;
+  
+  try {
+    // Fetch all data in parallel with timeout protection
+    const [jupiterPrice, dexData, metadata, pumpBondingCurve] = await Promise.all([
+      withTimeout(fetchTokenPrice(tokenMint), apiTimeout, null),
+      withTimeout(fetchDexScreenerData(tokenMint), apiTimeout, { price: null, marketCap: null, pairCreatedAt: null, priceChange5m: null, dexId: null, detectedLaunchpad: null, hasLiquidity: false }),
+      withTimeout(fetchTokenMetadata(tokenMint), apiTimeout, null),
+      withTimeout(checkPumpFunBondingCurve(tokenMint), apiTimeout, { isOnCurve: false, bondingPercent: null, hasGraduated: false, isMayhemMode: false })
+    ]);
 
   const price = jupiterPrice ?? dexData.price;
   const platform = determinePlatform(dexData.dexId);
@@ -688,15 +702,22 @@ async function enrichTokenData(tokenMint: string, supabase?: any): Promise<Enric
   const isApprovedLaunchpad = launchpad ? APPROVED_BONDING_CURVE_LAUNCHPADS.includes(launchpad) : false;
 
   // For graduated tokens (not on bonding curve), check liquidity lock if supabase client provided
+  // Skip this expensive check in fast mode
   let liquidityLocked: boolean | null = null;
   let liquidityLockPercent: number | null = null;
   
-  if (!bondingCurve.isOnCurve && bondingCurve.hasGraduated && supabase) {
-    // Only check liquidity for graduated tokens (on DEX)
-    const lockCheck = await checkLiquidityLockQuick(tokenMint, supabase);
+  if (!fastMode && !bondingCurve.isOnCurve && bondingCurve.hasGraduated && supabase) {
+    // Only check liquidity for graduated tokens (on DEX) - with timeout
+    const lockCheck = await withTimeout(
+      checkLiquidityLockQuick(tokenMint, supabase),
+      3000,
+      { isLocked: null, lockPercent: null }
+    );
     liquidityLocked = lockCheck.isLocked;
     liquidityLockPercent = lockCheck.lockPercent;
   }
+
+  console.log(`[telegram-channel-monitor] enrichTokenData COMPLETE: ${metadata?.symbol || tokenMint.slice(0, 8)} price=$${price?.toFixed(10) || 'N/A'}`);
 
   return {
     symbol: metadata?.symbol || null,
@@ -716,6 +737,28 @@ async function enrichTokenData(tokenMint: string, supabase?: any): Promise<Enric
     liquidityLocked,
     liquidityLockPercent
   };
+  } catch (enrichError) {
+    console.error(`[telegram-channel-monitor] enrichTokenData FAILED for ${tokenMint}:`, enrichError);
+    // Return minimal data so FlipIt can still attempt the buy
+    return {
+      symbol: null,
+      name: null,
+      price: null,
+      marketCap: null,
+      ageMinutes: null,
+      platform: 'unknown',
+      launchpad: null,
+      isOnBondingCurve: false,
+      bondingCurvePercent: null,
+      bondingCurvePosition: null,
+      hasGraduated: false,
+      priceChange5m: null,
+      isMayhemMode: false,
+      isApprovedLaunchpad: true, // Allow by default if check failed
+      liquidityLocked: null,
+      liquidityLockPercent: null
+    };
+  }
 }
 
 // ============================================================================
@@ -1759,16 +1802,37 @@ serve(async (req) => {
 
             const isFirstCall = !existingGlobal;
 
-            // Get token data for this specific token
+            // Get token data for this specific token - use fast mode for FlipIt channels
             let currentTokenData = tokenData;
+            const useFlipItFastMode = config.flipit_enabled && !config.scalp_mode_enabled;
+            
             if (tokenMint !== firstToken) {
-              currentTokenData = await enrichTokenData(tokenMint, supabase);
+              console.log(`[telegram-channel-monitor] Enriching token ${tokenMint.slice(0, 8)}... (FlipIt fastMode=${useFlipItFastMode})`);
+              currentTokenData = await enrichTokenData(tokenMint, supabase, useFlipItFastMode);
             }
 
-            // Evaluate rules for this token
-            const currentRuleResult = currentTokenData
-              ? await evaluateRules(config, currentTokenData, keywordResult, supabase)
-              : ruleResult;
+            // Evaluate rules for this token - with error protection
+            let currentRuleResult = ruleResult;
+            try {
+              currentRuleResult = currentTokenData
+                ? await evaluateRules(config, currentTokenData, keywordResult, supabase)
+                : ruleResult;
+            } catch (ruleError) {
+              console.error(`[telegram-channel-monitor] evaluateRules FAILED for ${tokenMint}, using default:`, ruleError);
+              // Default to buy if FlipIt is enabled and rules evaluation fails
+              if (useFlipItFastMode) {
+                currentRuleResult = {
+                  matchedRule: null,
+                  decision: 'buy',
+                  buyAmount: config.flipit_buy_amount_usd || 10,
+                  sellTarget: config.flipit_sell_multiplier || 2,
+                  stopLoss: null,
+                  stopLossEnabled: false,
+                  reasoning: 'Default buy - rules evaluation failed',
+                  ruleId: null
+                };
+              }
+            }
 
             const status = currentRuleResult.decision === 'skip' || currentRuleResult.decision === 'no_action'
               ? 'skipped'
@@ -1776,38 +1840,47 @@ serve(async (req) => {
 
             // Insert call record if we don't already have one for THIS message
             let callId: string | null = existingCall?.id ?? null;
+            console.log(`[telegram-channel-monitor] 📝 CALL RECORD: Preparing insert for ${tokenMint.slice(0, 8)}... (existingCall=${!!existingCall?.id})`);
+            
             if (!callId) {
-              const { data: insertedCall, error: insertCallError } = await supabase
-                .from('telegram_channel_calls')
-                .insert({
-                  channel_config_id: config.id,
-                  channel_id: channelId,
-                  channel_name: config.channel_name,
-                  message_id: messageId,
-                  token_mint: tokenMint,
-                  token_symbol: currentTokenData?.symbol || null,
-                  token_name: currentTokenData?.name || null,
-                  raw_message: messageText.substring(0, 1000),
-                  contains_ape: keywordResult.hasHighConviction,
-                  price_at_call: currentTokenData?.price,
-                  mint_age_minutes: currentTokenData?.ageMinutes,
-                  buy_tier: currentRuleResult.matchedRule?.name || (currentRuleResult.buyAmount > 50 ? 'large' : 'standard'),
-                  buy_amount_usd: currentRuleResult.buyAmount || null,
-                  sell_multiplier: currentRuleResult.sellTarget || null,
-                  status,
-                  skip_reason: currentRuleResult.decision === 'skip' ? currentRuleResult.reasoning : null,
-                  caller_username: callerUsername || null,
-                  caller_display_name: callerDisplayName || null,
-                  is_first_call: isFirstCall,
-                  message_timestamp: messageDate.toISOString() // Track message post time for stale alpha check
-                })
-                .select('id')
-                .single();
+              try {
+                console.log(`[telegram-channel-monitor] 📝 CALL RECORD: Inserting for ${currentTokenData?.symbol || tokenMint.slice(0, 8)}...`);
+                const { data: insertedCall, error: insertCallError } = await supabase
+                  .from('telegram_channel_calls')
+                  .insert({
+                    channel_config_id: config.id,
+                    channel_id: channelId,
+                    channel_name: config.channel_name,
+                    message_id: messageId,
+                    token_mint: tokenMint,
+                    token_symbol: currentTokenData?.symbol || null,
+                    token_name: currentTokenData?.name || null,
+                    raw_message: messageText.substring(0, 1000),
+                    contains_ape: keywordResult.hasHighConviction,
+                    price_at_call: currentTokenData?.price,
+                    mint_age_minutes: currentTokenData?.ageMinutes,
+                    buy_tier: currentRuleResult.matchedRule?.name || (currentRuleResult.buyAmount > 50 ? 'large' : 'standard'),
+                    buy_amount_usd: currentRuleResult.buyAmount || null,
+                    sell_multiplier: currentRuleResult.sellTarget || null,
+                    status,
+                    skip_reason: currentRuleResult.decision === 'skip' ? currentRuleResult.reasoning : null,
+                    caller_username: callerUsername || null,
+                    caller_display_name: callerDisplayName || null,
+                    is_first_call: isFirstCall,
+                    message_timestamp: messageDate.toISOString() // Track message post time for stale alpha check
+                  })
+                  .select('id')
+                  .single();
 
-              if (insertCallError) {
-                console.error(`[telegram-channel-monitor] Call insert FAILED for ${tokenMint}:`, insertCallError);
-              } else {
-                callId = insertedCall?.id ?? null;
+                if (insertCallError) {
+                  console.error(`[telegram-channel-monitor] 📝 CALL RECORD INSERT FAILED for ${tokenMint}:`, insertCallError);
+                } else {
+                  callId = insertedCall?.id ?? null;
+                  console.log(`[telegram-channel-monitor] 📝 CALL RECORD INSERTED: ${callId} for ${currentTokenData?.symbol || tokenMint.slice(0, 8)}`);
+                }
+              } catch (insertError) {
+                console.error(`[telegram-channel-monitor] 📝 CALL RECORD INSERT EXCEPTION for ${tokenMint}:`, insertError);
+                // Continue even if insert fails - FlipIt should still trigger
               }
             }
 
@@ -2512,76 +2585,66 @@ serve(async (req) => {
             // Only run FlipIt if Scalp Mode is NOT enabled (they are mutually exclusive per channel)
             if (config.flipit_enabled && !config.scalp_mode_enabled) {
               console.log(`[telegram-channel-monitor] 🎯 FlipIt Mode ACTIVE: Processing ${tokenMint} for REAL buy`);
-              // Priority: SOL amount (converted to USD) > USD amount > fallback $10
-              let flipitBuyAmount = 10; // fallback
-              if (config.flipit_buy_amount_sol && config.flipit_buy_amount_sol > 0) {
-                // Convert SOL to USD using live price
-                const solPriceForFlipIt = await fetchSolPriceForConversion();
-                flipitBuyAmount = config.flipit_buy_amount_sol * solPriceForFlipIt;
-                console.log(`[telegram-channel-monitor] FlipIt buy amount: ${config.flipit_buy_amount_sol} SOL = $${flipitBuyAmount.toFixed(2)} USD (SOL @ $${solPriceForFlipIt})`);
-              } else if (config.flipit_buy_amount_usd && config.flipit_buy_amount_usd > 0) {
-                flipitBuyAmount = config.flipit_buy_amount_usd;
-                console.log(`[telegram-channel-monitor] FlipIt buy amount: $${flipitBuyAmount} USD (from USD config)`);
-              } else {
-                console.log(`[telegram-channel-monitor] FlipIt buy amount: $${flipitBuyAmount} USD (default fallback)`);
-              }
-              const flipitSellMultiplier = config.flipit_sell_multiplier || 2;
-              const flipitMaxDaily = config.flipit_max_daily_positions || 5;
-
-              // Check daily position limit
-              const today = new Date();
-              today.setHours(0, 0, 0, 0);
               
-              if (!config?.id) {
-                console.warn('[telegram-channel-monitor] Cannot check daily positions - no config.id');
-                continue;
-              }
-              
-              const { count: todayPositions } = await supabase
-                .from('flip_positions')
-                .select('id', { count: 'exact', head: true })
-                .eq('source', 'telegram')
-                .eq('source_channel_id', config.id)
-                .gte('created_at', today.toISOString());
-
-              if ((todayPositions || 0) >= flipitMaxDaily) {
-                console.log(`[telegram-channel-monitor] FlipIt: Daily limit reached (${todayPositions}/${flipitMaxDaily})`);
-              } else {
-                // FlipIt auto-buy is ON: execute real buys when rules/tier say buy/fantasy_buy.
-                // IMPORTANT: We DO NOT enforce "first call" or "one position per token" here.
-                // You can buy the same token multiple times (buy-in-sets behavior).
-
-                // ============== PRE-BUY CHECKS FOR REAL MONEY ==============
-
-                // Check 1: Launchpad allowlist (for tokens on bonding curve)
-                if (currentTokenData?.isOnBondingCurve && !currentTokenData?.isApprovedLaunchpad) {
-                  const launchpadName = currentTokenData?.launchpad || 'unknown';
-                  console.log(`[telegram-channel-monitor] FlipIt: SKIPPING ${tokenMint} - Unapproved launchpad: ${launchpadName}`);
-                  if (callId) {
-                    await supabase
-                      .from('telegram_channel_calls')
-                      .update({
-                        status: 'skipped',
-                        skip_reason: `FlipIt blocked: Unapproved launchpad on bonding curve: ${launchpadName}`
-                      })
-                      .eq('id', callId);
-                  }
+              try {
+                // Priority: SOL amount (converted to USD) > USD amount > fallback $10
+                let flipitBuyAmount = 10; // fallback
+                if (config.flipit_buy_amount_sol && config.flipit_buy_amount_sol > 0) {
+                  // Convert SOL to USD using live price
+                  const solPriceForFlipIt = await fetchSolPriceForConversion();
+                  flipitBuyAmount = config.flipit_buy_amount_sol * solPriceForFlipIt;
+                  console.log(`[telegram-channel-monitor] FlipIt buy amount: ${config.flipit_buy_amount_sol} SOL = $${flipitBuyAmount.toFixed(2)} USD (SOL @ $${solPriceForFlipIt})`);
+                } else if (config.flipit_buy_amount_usd && config.flipit_buy_amount_usd > 0) {
+                  flipitBuyAmount = config.flipit_buy_amount_usd;
+                  console.log(`[telegram-channel-monitor] FlipIt buy amount: $${flipitBuyAmount} USD (from USD config)`);
                 } else {
-                  // Check 2: Liquidity lock for graduated tokens (only real money buys)
-                  let liquidityCheckPassed = true;
-                  if (currentTokenData?.hasGraduated && !currentTokenData?.isOnBondingCurve) {
+                  console.log(`[telegram-channel-monitor] FlipIt buy amount: $${flipitBuyAmount} USD (default fallback)`);
+                }
+                const flipitSellMultiplier = config.flipit_sell_multiplier || 2;
+                const flipitMaxDaily = config.flipit_max_daily_positions || 5;
+
+                // Check daily position limit
+                const today = new Date();
+                today.setHours(0, 0, 0, 0);
+                
+                if (!config?.id) {
+                  console.warn('[telegram-channel-monitor] Cannot check daily positions - no config.id');
+                  continue;
+                }
+                
+                const { count: todayPositions } = await supabase
+                  .from('flip_positions')
+                  .select('id', { count: 'exact', head: true })
+                  .eq('source', 'telegram')
+                  .eq('source_channel_id', config.id)
+                  .gte('created_at', today.toISOString());
+
+                if ((todayPositions || 0) >= flipitMaxDaily) {
+                  console.log(`[telegram-channel-monitor] FlipIt: Daily limit reached (${todayPositions}/${flipitMaxDaily})`);
+                } else {
+                  // FlipIt auto-buy is ON: execute real buys when rules/tier say buy/fantasy_buy.
+                  // IMPORTANT: We DO NOT enforce "first call" or "one position per token" here.
+                  // You can buy the same token multiple times (buy-in-sets behavior).
+
+                  // ============== PRE-BUY CHECKS FOR REAL MONEY ==============
+                  // Only apply pre-buy checks if we have token data - if enrichment failed, proceed anyway
+                  let skipFlipIt = false;
+                  let skipReason = '';
+
+                  // Check 1: Launchpad allowlist (for tokens on bonding curve) - only if we have data
+                  if (currentTokenData?.isOnBondingCurve === true && currentTokenData?.isApprovedLaunchpad === false) {
+                    const launchpadName = currentTokenData?.launchpad || 'unknown';
+                    console.log(`[telegram-channel-monitor] FlipIt: SKIPPING ${tokenMint} - Unapproved launchpad: ${launchpadName}`);
+                    skipFlipIt = true;
+                    skipReason = `FlipIt blocked: Unapproved launchpad on bonding curve: ${launchpadName}`;
+                  }
+                  
+                  // Check 2: Liquidity lock for graduated tokens (only if we have explicit data)
+                  if (!skipFlipIt && currentTokenData?.hasGraduated === true && currentTokenData?.isOnBondingCurve === false) {
                     if (currentTokenData?.liquidityLocked === false) {
                       console.log(`[telegram-channel-monitor] FlipIt: SKIPPING ${tokenMint} - Liquidity NOT LOCKED`);
-                      liquidityCheckPassed = false;
-                      if (callId) {
-                        await supabase
-                          .from('telegram_channel_calls')
-                          .update({
-                            status: 'skipped',
-                            skip_reason: 'FlipIt blocked: Graduated token with unlocked liquidity - rug risk'
-                          })
-                          .eq('id', callId);
-                      }
+                      skipFlipIt = true;
+                      skipReason = 'FlipIt blocked: Graduated token with unlocked liquidity - rug risk';
                     } else if (currentTokenData?.liquidityLocked === null) {
                       console.log(`[telegram-channel-monitor] FlipIt: WARNING - Liquidity lock status unknown for ${tokenMint}, proceeding with caution`);
                     } else {
@@ -2589,7 +2652,14 @@ serve(async (req) => {
                     }
                   }
 
-                  if (liquidityCheckPassed) {
+                  if (skipFlipIt) {
+                    if (callId) {
+                      await supabase
+                        .from('telegram_channel_calls')
+                        .update({ status: 'skipped', skip_reason: skipReason })
+                        .eq('id', callId);
+                    }
+                  } else {
                     // Use configured wallet if set; otherwise fall back to the single active FlipIt wallet.
                     let walletId = config.flipit_wallet_id as string | null;
 
@@ -2611,9 +2681,9 @@ serve(async (req) => {
                       const launchpadInfo = currentTokenData?.launchpad ? ` [${currentTokenData.launchpad}]` : '';
                       const curveInfo = currentTokenData?.isOnBondingCurve
                         ? ` (${currentTokenData.bondingCurvePercent?.toFixed(0) || '?'}% curve)`
-                        : ' (graduated)';
+                        : (currentTokenData?.hasGraduated ? ' (graduated)' : ' (unknown status)');
 
-                      console.log(`[telegram-channel-monitor] FlipIt: Triggering auto-buy for ${currentTokenData?.symbol || tokenMint}${launchpadInfo}${curveInfo} - $${flipitBuyAmount} @ ${flipitSellMultiplier}x`);
+                      console.log(`[telegram-channel-monitor] 🚀 FlipIt: TRIGGERING auto-buy for ${currentTokenData?.symbol || tokenMint}${launchpadInfo}${curveInfo} - $${flipitBuyAmount} @ ${flipitSellMultiplier}x`);
 
                       const buyRequest = {
                         walletId,
@@ -2629,13 +2699,15 @@ serve(async (req) => {
                         moonbagKeepPct: config.flipit_moonbag_keep_pct ?? 10
                       };
 
+                      console.log(`[telegram-channel-monitor] 🚀 FlipIt: Invoking flipit-execute with walletId=${walletId.slice(0, 8)}...`);
+                      
                       const { data: buyData, error: buyErr } = await supabase.functions.invoke('flipit-execute', {
                         body: buyRequest
                       });
 
                       if (buyErr || buyData?.error) {
                         const msg = buyErr?.message || buyData?.error || 'Unknown FlipIt buy failure';
-                        console.error('[telegram-channel-monitor] FlipIt buy FAILED:', msg);
+                        console.error('[telegram-channel-monitor] 🚀 FlipIt buy FAILED:', msg);
                         if (callId) {
                           await supabase
                             .from('telegram_channel_calls')
@@ -2647,7 +2719,7 @@ serve(async (req) => {
                         }
                       } else {
                         totalBuys++;
-                        console.log('[telegram-channel-monitor] FlipIt: Buy executed successfully', buyData?.signature ? `sig=${String(buyData.signature).slice(0, 10)}...` : '');
+                        console.log('[telegram-channel-monitor] 🚀 FlipIt: Buy executed successfully', buyData?.signature ? `sig=${String(buyData.signature).slice(0, 10)}...` : '');
                         if (callId) {
                           await supabase
                             .from('telegram_channel_calls')
@@ -2671,6 +2743,20 @@ serve(async (req) => {
                       }
                     }
                   }
+                }
+              } catch (flipitError) {
+                console.error(`[telegram-channel-monitor] 🚀 FlipIt EXCEPTION for ${tokenMint}:`, flipitError);
+                // Try to update call record with error
+                if (callId) {
+                  try {
+                    await supabase
+                      .from('telegram_channel_calls')
+                      .update({
+                        status: 'failed',
+                        skip_reason: `FlipIt exception: ${flipitError instanceof Error ? flipitError.message : String(flipitError)}`
+                      })
+                      .eq('id', callId);
+                  } catch {}
                 }
               }
             }
