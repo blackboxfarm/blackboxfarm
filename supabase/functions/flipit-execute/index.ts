@@ -521,9 +521,20 @@ serve(async (req) => {
     
     console.log("FlipIt execute:", { action, tokenMint, walletId, explicitBuyAmountSol, buyAmountUsd, targetMultiplier, positionId, slippageBps: effectiveSlippage, priorityFeeMode, customPriorityFee, source, sourceChannelId, isScalpPosition });
 
+    // Helper to validate UUID format (catches "undefined" string bug)
+    const isValidUuid = (id: string | undefined | null): boolean => {
+      if (!id || id === "undefined" || id === "null") return false;
+      // Basic UUID format check
+      return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
+    };
+
     if (action === "buy") {
       if (!tokenMint || !walletId) {
         return bad("Missing tokenMint or walletId");
+      }
+      if (!isValidUuid(walletId)) {
+        console.error("Invalid walletId format:", walletId);
+        return bad(`Invalid walletId format: ${walletId}`);
       }
 
       // ============================================
@@ -1224,6 +1235,10 @@ serve(async (req) => {
     if (action === "sell") {
       if (!positionId) {
         return bad("Missing positionId");
+      }
+      if (!isValidUuid(positionId)) {
+        console.error("Invalid positionId format:", positionId);
+        return bad(`Invalid positionId format: ${positionId}`);
       }
 
       // Get position
