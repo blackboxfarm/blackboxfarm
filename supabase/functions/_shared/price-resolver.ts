@@ -80,14 +80,14 @@ const SOL_CACHE_TTL_MS = 10000;
 // ============================================
 
 export async function fetchSolPrice(): Promise<number> {
-  // Check cache
+  // Check cache - return immediately without logging
   if (solPriceCache && Date.now() - solPriceCache.timestamp < SOL_CACHE_TTL_MS) {
     return solPriceCache.price;
   }
 
-  // Use the shared SOL price fetcher (5 sources + DB logging)
+  // Use the shared SOL price fetcher with logging (only on cache miss)
   try {
-    const { price } = await getSolPriceWithLogging();
+    const { price } = await getSolPriceWithLogging('price-resolver');
     solPriceCache = { price, timestamp: Date.now() };
     return price;
   } catch (e) {
