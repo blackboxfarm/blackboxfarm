@@ -17,10 +17,23 @@ interface PriceFetchResult {
   isFallback?: boolean;
 }
 
+// Rate-limit logging: only log once per 60 seconds to reduce database spam
+// (multiple UI components and edge functions call this concurrently)
+let lastLogTimestamp = 0;
+const LOG_INTERVAL_MS = 60000; // 60 seconds
+
 /**
- * Log a fetch attempt to the database for analytics
+ * Log a fetch attempt to the database for analytics (rate-limited)
+ * Only logs if 60+ seconds have passed since last log OR if it's a failure
  */
 async function logFetchAttempt(result: PriceFetchResult): Promise<void> {
+  const now = Date.now();
+  
+  // Always log failures, but rate-limit successes
+  if (result.success && now - lastLogTimestamp < LOG_INTERVAL_MS) {
+    return; // Skip logging - too soon since last log
+  }
+  
   try {
     const supabaseUrl = Deno.env.get('SUPABASE_URL');
     const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
@@ -38,6 +51,11 @@ async function logFetchAttempt(result: PriceFetchResult): Promise<void> {
       error_type: result.errorType || null,
       http_status: result.httpStatus || null,
     });
+    
+    // Update last log time on successful insert
+    if (result.success) {
+      lastLogTimestamp = now;
+    }
   } catch (e) {
     // Don't let logging failures break price fetching
     console.log('[SOL Price] Failed to log fetch attempt:', e);
