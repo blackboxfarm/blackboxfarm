@@ -1,12 +1,43 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import satori from "https://esm.sh/satori@0.10.14";
-import { Resvg } from "https://esm.sh/@resvg/resvg-wasm@2.6.0";
+import { Resvg, initWasm } from "https://esm.sh/@resvg/resvg-wasm@2.6.0";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
+
+// Resvg WASM must be initialized once per runtime before using `new Resvg()`
+let resvgInitPromise: Promise<void> | null = null;
+
+function ensureResvgInitialized(): Promise<void> {
+  if (resvgInitPromise) return resvgInitPromise;
+
+  resvgInitPromise = (async () => {
+    const wasmUrls = [
+      "https://cdn.jsdelivr.net/npm/@resvg/resvg-wasm@2.6.0/index_bg.wasm",
+      "https://unpkg.com/@resvg/resvg-wasm@2.6.0/index_bg.wasm",
+    ];
+
+    let lastErr: unknown = null;
+    for (const url of wasmUrls) {
+      try {
+        await initWasm(fetch(url));
+        return;
+      } catch (e) {
+        // In warm containers, a second init can throw; treat as success.
+        const msg = String(e?.message ?? e);
+        if (msg.toLowerCase().includes("already") && msg.toLowerCase().includes("initialized")) return;
+        lastErr = e;
+      }
+    }
+
+    throw lastErr ?? new Error("Failed to initialize Resvg WASM");
+  })();
+
+  return resvgInitPromise;
+}
 
 interface TokenStats {
   symbol: string;
@@ -44,6 +75,34 @@ function truncateCA(addr: string): string {
   return `${addr.slice(0, 6)}...${addr.slice(-4)}`;
 }
 
+// Satori requires any node with multiple children to explicitly set display: 'flex' or 'none'.
+// This normalizer applies a safe default (flex + column) anywhere it's missing.
+function normalizeForSatori(node: any): any {
+  if (!node || typeof node !== 'object') return node;
+  if (!('props' in node)) return node;
+
+  const props = node.props ?? {};
+  const children = props.children;
+
+  if (Array.isArray(children)) {
+    const normalizedChildren = children.map(normalizeForSatori);
+    const style = { ...(props.style ?? {}) };
+
+    if (normalizedChildren.length > 1) {
+      if (!style.display) style.display = 'flex';
+      if (style.display === 'flex' && !style.flexDirection) style.flexDirection = 'column';
+    }
+
+    return { ...node, props: { ...props, style, children: normalizedChildren } };
+  }
+
+  if (children && typeof children === 'object') {
+    return { ...node, props: { ...props, children: normalizeForSatori(children) } };
+  }
+
+  return node;
+}
+
 // Load font for Satori - use a reliable TTF font from a CDN
 async function loadFont(): Promise<ArrayBuffer> {
   // Use Inter font from jsDelivr CDN (TTF format required by Satori)
@@ -77,8 +136,7 @@ serve(async (req) => {
     const fontData = await loadFont();
 
     // Create the card using Satori JSX-like syntax
-    const svg = await satori(
-      {
+    const cardTree = normalizeForSatori({
         type: 'div',
         props: {
           style: {
@@ -348,7 +406,10 @@ serve(async (req) => {
             },
           ],
         },
-      },
+      });
+
+    const svg = await satori(
+      cardTree,
       {
         width: 1200,
         height: 628,
@@ -364,6 +425,8 @@ serve(async (req) => {
     );
 
     console.log('SVG generated, converting to PNG...');
+
+    await ensureResvgInitialized();
 
     // Convert SVG to PNG using Resvg
     const resvg = new Resvg(svg, {
