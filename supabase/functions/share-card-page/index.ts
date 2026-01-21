@@ -14,6 +14,28 @@ function escapeHtml(s: string) {
     .replaceAll("'", "&#039;");
 }
 
+// Known bot/crawler user agents that need OG meta tags
+const BOT_USER_AGENTS = [
+  'twitterbot',
+  'facebookexternalhit',
+  'linkedinbot',
+  'slackbot',
+  'telegrambot',
+  'discordbot',
+  'whatsapp',
+  'applebot',
+  'googlebot',
+  'bingbot',
+  'yandexbot',
+  'duckduckbot',
+];
+
+function isBot(userAgent: string | null): boolean {
+  if (!userAgent) return false;
+  const ua = userAgent.toLowerCase();
+  return BOT_USER_AGENTS.some(bot => ua.includes(bot));
+}
+
 serve(async (req) => {
   // Handle CORS preflight requests
   if (req.method === "OPTIONS") {
@@ -24,6 +46,7 @@ serve(async (req) => {
     const url = new URL(req.url);
     const img = url.searchParams.get("img") || "";
     const symbol = (url.searchParams.get("symbol") || "").toUpperCase();
+    const token = url.searchParams.get("token") || "";
 
     // Basic validation to avoid being an open redirect / arbitrary HTML reflector.
     if (!img || !(img.startsWith("https://") || img.startsWith("http://"))) {
@@ -35,8 +58,22 @@ serve(async (req) => {
 
     const safeSymbol = escapeHtml(symbol || "TOKEN");
 
-    // Where humans should land (canonical + CTA). Keep it stable.
-    const canonical = `https://blackbox.farm/holders`;
+    // Where humans should land (canonical + CTA). Include token if available.
+    const canonical = token 
+      ? `https://blackbox.farm/holders?token=${encodeURIComponent(token)}`
+      : `https://blackbox.farm/holders`;
+
+    // Check if this is a bot/crawler - if not, redirect to the actual page
+    const userAgent = req.headers.get("user-agent");
+    if (!isBot(userAgent)) {
+      return new Response(null, {
+        status: 302,
+        headers: {
+          ...corsHeaders,
+          "Location": canonical,
+        },
+      });
+    }
 
     const title = `Holder Analysis: $${safeSymbol} — BlackBox Farm`;
     const description = `Free holder analysis report for $${safeSymbol}.`;
