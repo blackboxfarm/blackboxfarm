@@ -1247,12 +1247,19 @@ export function FlipItDashboard() {
       setIsLoading(true);
     }
 
-    const maybeToastLoadError = () => {
+    const maybeToastLoadError = (errorMsg?: string) => {
       // If we already have positions on screen, treat the reload failure as non-fatal.
       if (hadExistingData) return;
+      
+      // Don't show toast for auth-related errors (user not logged in yet)
+      if (errorMsg?.includes('JWT') || errorMsg?.includes('auth') || errorMsg?.includes('policy')) {
+        console.log('[FlipIt] Suppressing auth-related error toast:', errorMsg);
+        return;
+      }
 
       const now = Date.now();
-      if (now - lastErrorToastRef.current > 10000) {
+      // Increase debounce to 30 seconds to reduce toast spam
+      if (now - lastErrorToastRef.current > 30000) {
         toast.error('Failed to load positions');
         lastErrorToastRef.current = now;
       }
@@ -1267,9 +1274,10 @@ export function FlipItDashboard() {
       if (error) {
         console.error('[FlipIt] Failed to load positions from database:', error);
         if (!silent) {
-          maybeToastLoadError();
+          maybeToastLoadError(error.message);
           setIsLoading(false);
         }
+        isLoadingPositionsRef.current = false;
         return null;
       }
 
@@ -1341,10 +1349,10 @@ export function FlipItDashboard() {
       }
 
       return loadedPositions;
-    } catch (err) {
+    } catch (err: any) {
       console.error('[FlipIt] Failed to load positions:', err);
       if (!silent) {
-        maybeToastLoadError();
+        maybeToastLoadError(err?.message || String(err));
         setIsLoading(false);
       }
       return null;
