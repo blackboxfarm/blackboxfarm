@@ -752,11 +752,14 @@ serve(async (req) => {
         cacheControl: "3600",
       });
 
-    let sharePageUrl: string | null = null;
+    // Build share URL via blackbox.farm/share proxy for proper Twitter attribution
+    // This routes through Cloudflare Worker -> share-card-page edge function
+    const sharePageUrl = `https://blackbox.farm/share?img=${encodeURIComponent(imagePublicUrl.publicUrl)}&symbol=${encodeURIComponent(tokenStats.symbol)}&token=${encodeURIComponent(tokenStats.tokenAddress || '')}`;
+    console.log('Share page URL (via proxy):', sharePageUrl);
+    
+    // Still upload static HTML page as fallback
     if (!pageUploadError) {
-      const { data: sharePagePublicUrl } = supabase.storage.from(bucket).getPublicUrl(sharePageFileName);
-      sharePageUrl = sharePagePublicUrl.publicUrl;
-      console.log('Share page uploaded:', sharePageUrl);
+      console.log('Static share page also uploaded as fallback');
     }
 
     return new Response(
