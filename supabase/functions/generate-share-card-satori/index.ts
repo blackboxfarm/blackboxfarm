@@ -44,9 +44,20 @@ function truncateCA(addr: string): string {
   return `${addr.slice(0, 6)}...${addr.slice(-4)}`;
 }
 
-// Load font for Satori
+// Load font for Satori - use a reliable TTF font from a CDN
 async function loadFont(): Promise<ArrayBuffer> {
-  const response = await fetch('https://fonts.gstatic.com/s/inter/v13/UcCO3FwrK3iLTeHuS_fvQtMwCp50KnMw2boKoduKmMEVuGKYAZ9hjp-Ek-_EeA.woff2');
+  // Use Inter font from jsDelivr CDN (TTF format required by Satori)
+  const fontUrl = 'https://cdn.jsdelivr.net/npm/@fontsource/inter@5.0.16/files/inter-latin-400-normal.woff';
+  
+  const response = await fetch(fontUrl);
+  if (!response.ok) {
+    console.error('Font fetch failed:', response.status, response.statusText);
+    throw new Error(`Failed to fetch font: ${response.status}`);
+  }
+  
+  const contentType = response.headers.get('content-type');
+  console.log('Font content-type:', contentType);
+  
   return response.arrayBuffer();
 }
 
