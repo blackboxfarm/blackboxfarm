@@ -607,9 +607,15 @@ export function BaglessHoldersReport({ initialToken }: BaglessHoldersReportProps
     
     setIsGeneratingShareCard(true);
     try {
-      // Calculate top 10 percentage for share card
+      // Calculate top 10 and top 25 percentage for share card
       const nonLpHolders = reportData.holders.filter(h => !h.isLiquidityPool);
       const top10Holdings = nonLpHolders.slice(0, 10).reduce((sum, h) => sum + h.percentageOfSupply, 0);
+      const top25Holdings = nonLpHolders.slice(0, 25).reduce((sum, h) => sum + h.percentageOfSupply, 0);
+      
+      // Calculate market cap from price and supply if available
+      const totalSupply = reportData.totalBalance || 0;
+      const priceUsd = reportData.tokenPriceUSD || tokenData?.priceInfo?.priceUsd || 0;
+      const marketCapUsd = priceUsd > 0 && totalSupply > 0 ? priceUsd * totalSupply : undefined;
       
       const tokenStats = {
         symbol: tokenData.metadata.symbol,
@@ -637,15 +643,23 @@ export function BaglessHoldersReport({ initialToken }: BaglessHoldersReportProps
         dustPercentage: Math.round((reportData.holders.filter(h => h.isDustWallet).length / reportData.totalHolders) * 100),
         // Top holder concentration
         top10Percentage: Math.round(top10Holdings * 10) / 10,
+        top25Percentage: Math.round(top25Holdings * 10) / 10,
         lpPercentage: Math.round((reportData.lpPercentageOfSupply || 0) * 10) / 10,
         // Health metrics
         healthScore: reportData.healthScore?.score || 50,
         healthGrade: reportData.healthScore?.grade || 'C',
+        // Market data
+        marketCapUsd: marketCapUsd,
+        priceUsd: priceUsd,
+        // DEX status
+        dexPaid: reportData.dexStatus?.hasDexPaid || false,
+        dexBoosts: reportData.dexStatus?.activeBoosts || 0,
+        hasMarketing: reportData.dexStatus?.hasAds || false,
         // Timestamp
         generatedAt: new Date().toISOString(),
       };
 
-      console.log('⏱️ [PERF] Generating share card image...');
+      console.log('⏱️ [PERF] Generating share card image with stats:', tokenStats);
       const { data, error } = await supabase.functions.invoke('generate-share-card-satori', {
         body: { tokenStats }
       });
