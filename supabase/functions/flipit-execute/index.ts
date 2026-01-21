@@ -1249,13 +1249,26 @@ serve(async (req) => {
         .eq("id", positionId);
 
       try {
+        // FIX: Sell only the specific quantity_tokens for this position, not all tokens
+        // This ensures selling Set 1 doesn't sell tokens from Set 2, 3, etc.
+        const hasRecordedQuantity = position.quantity_tokens && Number(position.quantity_tokens) > 0;
+        if (!hasRecordedQuantity) {
+          console.warn(`⚠️ Position ${positionId} has no quantity_tokens - will fall back to sellAll`);
+        } else {
+          console.log(`📊 Position ${positionId}: Selling exactly ${position.quantity_tokens} tokens (not all)`);
+        }
+
         // Execute sell via raydium-swap using wallet ID for direct lookup
         // CRITICAL: unwrapSol ensures we get native SOL back (no stranded WSOL)
         const { data: swapResult, error: swapError } = await supabase.functions.invoke("raydium-swap", {
           body: {
             side: "sell",
             tokenMint: position.token_mint,
-            sellAll: true,
+            // Use specific quantity if available, otherwise fall back to sellAll
+            ...(hasRecordedQuantity 
+              ? { sellAmount: Number(position.quantity_tokens) }
+              : { sellAll: true }
+            ),
             slippageBps: effectiveSlippage,
             priorityFeeMode: priorityFeeMode || "medium",
             priorityFeeSol: customPriorityFee, // Override with specific SOL amount if provided
