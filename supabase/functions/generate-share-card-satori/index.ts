@@ -76,7 +76,7 @@ function truncateCA(addr: string): string {
 }
 
 // Satori requires any node with multiple children to explicitly set display: 'flex' or 'none'.
-// This normalizer applies a safe default (flex + column) anywhere it's missing.
+// This normalizer adds display:flex ONLY if missing; it never touches flexDirection.
 function normalizeForSatori(node: any): any {
   if (!node || typeof node !== 'object') return node;
   if (!('props' in node)) return node;
@@ -88,9 +88,9 @@ function normalizeForSatori(node: any): any {
     const normalizedChildren = children.map(normalizeForSatori);
     const style = { ...(props.style ?? {}) };
 
-    if (normalizedChildren.length > 1) {
-      if (!style.display) style.display = 'flex';
-      if (style.display === 'flex' && !style.flexDirection) style.flexDirection = 'column';
+    // Only add display: flex if missing AND there are multiple children
+    if (normalizedChildren.length > 1 && !style.display) {
+      style.display = 'flex';
     }
 
     return { ...node, props: { ...props, style, children: normalizedChildren } };
