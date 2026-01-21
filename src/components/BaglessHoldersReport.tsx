@@ -646,7 +646,7 @@ export function BaglessHoldersReport({ initialToken }: BaglessHoldersReportProps
       };
 
       console.log('⏱️ [PERF] Generating share card image...');
-      const { data, error } = await supabase.functions.invoke('generate-share-card-image', {
+      const { data, error } = await supabase.functions.invoke('generate-share-card-satori', {
         body: { tokenStats }
       });
       
