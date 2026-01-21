@@ -607,22 +607,42 @@ export function BaglessHoldersReport({ initialToken }: BaglessHoldersReportProps
     
     setIsGeneratingShareCard(true);
     try {
+      // Calculate top 10 percentage for share card
+      const nonLpHolders = reportData.holders.filter(h => !h.isLiquidityPool);
+      const top10Holdings = nonLpHolders.slice(0, 10).reduce((sum, h) => sum + h.percentageOfSupply, 0);
+      
       const tokenStats = {
         symbol: tokenData.metadata.symbol,
         name: tokenData.metadata.name || tokenData.metadata.symbol,
         tokenAddress: tokenMint.trim(),
+        tokenImage: tokenData.metadata.logoURI || tokenData.metadata.image || '',
         totalHolders: reportData.totalHolders,
         realHolders: reportData.realWallets || 
           reportData.holders.filter(h => !h.isDustWallet && !h.isLiquidityPool).length,
+        // Detailed holder breakdown
+        trueWhaleCount: reportData.holders.filter(h => h.isTrueWhaleWallet).length,
+        babyWhaleCount: reportData.holders.filter(h => h.isBabyWhaleWallet).length,
+        superBossCount: reportData.holders.filter(h => h.isSuperBossWallet).length,
+        kingpinCount: reportData.holders.filter(h => h.isKingpinWallet).length,
+        bossCount: reportData.holders.filter(h => h.isBossWallet).length,
+        largeCount: reportData.holders.filter(h => h.isLargeWallet).length,
+        mediumCount: reportData.holders.filter(h => h.isMediumWallet).length,
+        smallCount: reportData.holders.filter(h => h.isSmallWallet).length,
+        dustCount: reportData.holders.filter(h => h.isDustWallet).length,
+        lpCount: reportData.liquidityPoolsDetected || reportData.holders.filter(h => h.isLiquidityPool).length,
+        // Legacy aggregated counts
         whaleCount: reportData.holders.filter(h => h.isTrueWhaleWallet || h.isBabyWhaleWallet).length,
         strongCount: reportData.holders.filter(h => h.isSuperBossWallet || h.isKingpinWallet || h.isBossWallet).length,
         activeCount: reportData.holders.filter(h => h.isLargeWallet || h.isMediumWallet).length,
-        dustCount: reportData.holders.filter(h => h.isDustWallet).length,
         dustPercentage: Math.round((reportData.holders.filter(h => h.isDustWallet).length / reportData.totalHolders) * 100),
+        // Top holder concentration
+        top10Percentage: Math.round(top10Holdings * 10) / 10,
+        lpPercentage: Math.round((reportData.lpPercentageOfSupply || 0) * 10) / 10,
+        // Health metrics
         healthScore: reportData.healthScore?.score || 50,
         healthGrade: reportData.healthScore?.grade || 'C',
-        price: reportData.tokenPriceUSD || 0,
-        marketCap: 0
+        // Timestamp
+        generatedAt: new Date().toISOString(),
       };
 
       console.log('⏱️ [PERF] Generating share card image...');
