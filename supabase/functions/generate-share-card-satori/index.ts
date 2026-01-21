@@ -121,6 +121,84 @@ function normalizeForSatori(node: any): any {
   return node;
 }
 
+function clamp(n: number, a: number, b: number) {
+  return Math.max(a, Math.min(b, n));
+}
+
+function pct(n: number | undefined) {
+  const v = typeof n === "number" ? n : 0;
+  return `${v.toFixed(2)}%`;
+}
+
+function toInt(n: number | undefined) {
+  return typeof n === "number" ? Math.max(0, Math.floor(n)) : 0;
+}
+
+function buildBreakdown(tokenStats: TokenStats) {
+  // Prefer detailed counts if present, otherwise fall back
+  const dust = toInt(tokenStats.dustCount);
+  const small = toInt(tokenStats.smallCount);
+  const medium = toInt(tokenStats.mediumCount);
+  const large = toInt(tokenStats.largeCount);
+  const boss = toInt(tokenStats.bossCount) + toInt(tokenStats.kingpinCount) + toInt(tokenStats.superBossCount);
+  const whales = toInt(tokenStats.babyWhaleCount) + toInt(tokenStats.trueWhaleCount) + toInt(tokenStats.whaleCount);
+  
+  // If detailed counts are all zero, fall back to legacy buckets
+  const detailedSum = dust + small + medium + large + boss + whales;
+  if (detailedSum === 0) {
+    return [
+      { key: "Whales", count: toInt(tokenStats.whaleCount), color: "#fb7185" },
+      { key: "Strong", count: toInt(tokenStats.strongCount), color: "#f59e0b" },
+      { key: "Active", count: toInt(tokenStats.activeCount), color: "#22c55e" },
+      { key: "Dust", count: toInt(tokenStats.dustCount), color: "#60a5fa" },
+    ].filter(x => x.count > 0);
+  }
+  return [
+    { key: "Dust",   count: dust,   color: "#60a5fa" },
+    { key: "Small",  count: small,  color: "#34d399" },
+    { key: "Medium", count: medium, color: "#fbbf24" },
+    { key: "Large",  count: large,  color: "#fb923c" },
+    { key: "Boss",   count: boss,   color: "#a78bfa" },
+    { key: "Whales", count: whales, color: "#fb7185" },
+  ].filter(x => x.count > 0);
+}
+
+function computeSignals(tokenStats: TokenStats) {
+  const dust = tokenStats.dustPercentage ?? 0;
+  const top10 = tokenStats.top10Percentage ?? 0;
+  const lp = tokenStats.lpPercentage ?? 0;
+  const grade = tokenStats.healthGrade || "D";
+  const signals: { label: string; tone: "good" | "warn" | "bad" }[] = [];
+  
+  // Dust
+  if (dust >= 70) signals.push({ label: "High dust layer", tone: "bad" });
+  else if (dust >= 45) signals.push({ label: "Dust-heavy", tone: "warn" });
+  else signals.push({ label: "Dust under control", tone: "good" });
+  
+  // Concentration
+  if (top10 >= 45) signals.push({ label: "Concentration risk (Top 10)", tone: "bad" });
+  else if (top10 >= 30) signals.push({ label: "Moderate concentration", tone: "warn" });
+  else signals.push({ label: "Low top-10 concentration", tone: "good" });
+  
+  // LP (if available)
+  if (lp >= 25) signals.push({ label: "LP share is meaningful", tone: "good" });
+  else if (lp > 0) signals.push({ label: "LP share is thin", tone: "warn" });
+  
+  // Grade
+  if (grade.startsWith("A")) signals.push({ label: "Distribution looks healthy", tone: "good" });
+  else if (grade.startsWith("B")) signals.push({ label: "Acceptable structure", tone: "good" });
+  else if (grade.startsWith("C")) signals.push({ label: "Watch structure / churn", tone: "warn" });
+  else signals.push({ label: "High risk distribution", tone: "bad" });
+  
+  return signals.slice(0, 4);
+}
+
+function toneColor(tone: "good" | "warn" | "bad") {
+  if (tone === "good") return "#22c55e";
+  if (tone === "warn") return "#f59e0b";
+  return "#ef4444";
+}
+
 async function loadFont(): Promise<ArrayBuffer> {
   // Inter TTF (works reliably with satori)
   const fontUrl =
