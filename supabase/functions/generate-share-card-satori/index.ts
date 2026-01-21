@@ -184,10 +184,10 @@ serve(async (req) => {
                   { type: "div", props: { style: { fontSize: "12px", color: "rgba(255,255,255,0.5)", marginBottom: "4px" }, children: "MARKET CAP" } },
                   { type: "div", props: { style: { fontSize: "28px", fontWeight: "bold", color: "#3b82f6" }, children: marketCap } },
                 ] } },
-                // Top 25
+                // Top 25 - exact sentence format
                 { type: "div", props: { style: { flex: 1, padding: "16px", borderRadius: "12px", background: "rgba(255,255,255,0.05)" }, children: [
-                  { type: "div", props: { style: { fontSize: "12px", color: "rgba(255,255,255,0.5)", marginBottom: "4px" }, children: "TOP 25 HOLD" } },
-                  { type: "div", props: { style: { fontSize: "28px", fontWeight: "bold", color: "#f59e0b" }, children: `${top25Pct.toFixed(1)}%` } },
+                  { type: "div", props: { style: { fontSize: "12px", color: "rgba(255,255,255,0.5)", marginBottom: "4px" }, children: "TOP 25 CONCENTRATION" } },
+                  { type: "div", props: { style: { fontSize: "16px", fontWeight: "bold", color: "#f59e0b" }, children: `Top 25 wallets hold ${top25Pct.toFixed(1)}% of total supply` } },
                 ] } },
               ],
             },
