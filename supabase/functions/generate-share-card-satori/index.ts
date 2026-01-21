@@ -218,487 +218,636 @@ serve(async (req) => {
     console.log('Generating Satori share card for:', tokenStats.symbol);
 
     const gradeColor = getGradeColor(tokenStats.healthGrade);
-    const fullCA = tokenStats.tokenAddress || '';
-    
-    // Format UTC timestamp
-    const timestamp = tokenStats.generatedAt 
-      ? new Date(tokenStats.generatedAt).toUTCString().replace('GMT', 'UTC')
-      : new Date().toUTCString().replace('GMT', 'UTC');
+    const fullCA = tokenStats.tokenAddress || "";
+    const shortCA = truncateCA(fullCA);
+    const timestamp = tokenStats.generatedAt
+      ? new Date(tokenStats.generatedAt).toUTCString().replace("GMT", "UTC")
+      : new Date().toUTCString().replace("GMT", "UTC");
+    const breakdown = buildBreakdown(tokenStats);
+    const totalForBreakdown = breakdown.reduce((a, b) => a + b.count, 0) || 1;
+    const signals = computeSignals(tokenStats);
 
     // Load font
     const fontData = await loadFont();
 
-    // Build holder breakdown stats
-    const holderBreakdown = [
-      { emoji: '🐋', label: 'True Whales', count: tokenStats.trueWhaleCount || 0 },
-      { emoji: '🐳', label: 'Baby Whales', count: tokenStats.babyWhaleCount || 0 },
-      { emoji: '👑', label: 'Super Boss', count: tokenStats.superBossCount || 0 },
-      { emoji: '🎯', label: 'Kingpin', count: tokenStats.kingpinCount || 0 },
-      { emoji: '💼', label: 'Boss', count: tokenStats.bossCount || 0 },
-      { emoji: '📈', label: 'Large', count: tokenStats.largeCount || 0 },
-      { emoji: '📊', label: 'Medium', count: tokenStats.mediumCount || 0 },
-      { emoji: '🌱', label: 'Small', count: tokenStats.smallCount || 0 },
-      { emoji: '💨', label: 'Dust', count: tokenStats.dustCount || 0 },
-    ].filter(item => item.count > 0);
-
-    // Create the card using Satori JSX-like syntax
     const cardTree = normalizeForSatori({
-        type: 'div',
-        props: {
-          style: {
-            display: 'flex',
-            flexDirection: 'column',
-            width: '1200px',
-            height: '628px',
-            background: 'linear-gradient(135deg, #0a0a0a 0%, #111827 50%, #0f172a 100%)',
-            padding: '32px 40px',
-            fontFamily: 'Inter',
-            color: 'white',
-            position: 'relative',
+      type: "div",
+      props: {
+        style: {
+          display: "flex",
+          flexDirection: "column",
+          width: "1200px",
+          height: "628px",
+          padding: "28px 30px",
+          fontFamily: "Inter",
+          color: "white",
+          position: "relative",
+          background:
+            "radial-gradient(900px 520px at 18% 10%, rgba(0,217,255,0.16) 0%, rgba(0,0,0,0) 60%)," +
+            "radial-gradient(700px 420px at 85% 25%, rgba(167,139,250,0.16) 0%, rgba(0,0,0,0) 55%)," +
+            "linear-gradient(135deg, #070A12 0%, #0B1224 55%, #070A12 100%)",
+        },
+        children: [
+          // faint grid lines (HUD feel)
+          {
+            type: "div",
+            props: {
+              style: {
+                position: "absolute",
+                inset: 0,
+                opacity: 0.12,
+                background:
+                  "repeating-linear-gradient(0deg, rgba(255,255,255,0.08), rgba(255,255,255,0.08) 1px, transparent 1px, transparent 44px)," +
+                  "repeating-linear-gradient(90deg, rgba(255,255,255,0.08), rgba(255,255,255,0.08) 1px, transparent 1px, transparent 56px)",
+              },
+            },
           },
-          children: [
-            // Header row with token image, symbol, and branding
-            {
-              type: 'div',
-              props: {
-                style: {
-                  display: 'flex',
-                  justifyContent: 'space-between',
-                  alignItems: 'center',
-                  width: '100%',
-                  marginBottom: '16px',
-                },
-                children: [
-                  // Left: Token image + symbol
-                  {
-                    type: 'div',
-                    props: {
-                      style: {
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: '16px',
-                      },
-                      children: [
-                        // Token image (or placeholder)
-                        tokenStats.tokenImage ? {
-                          type: 'img',
-                          props: {
-                            src: tokenStats.tokenImage,
-                            style: {
-                              width: '64px',
-                              height: '64px',
-                              borderRadius: '50%',
-                              border: '3px solid #3b82f6',
-                            },
-                          },
-                        } : {
-                          type: 'div',
-                          props: {
-                            style: {
-                              width: '64px',
-                              height: '64px',
-                              borderRadius: '50%',
-                              background: 'linear-gradient(135deg, #8b5cf6, #3b82f6)',
-                              display: 'flex',
-                              alignItems: 'center',
-                              justifyContent: 'center',
-                              fontSize: '28px',
-                            },
-                            children: '🪙',
-                          },
-                        },
-                        {
-                          type: 'div',
-                          props: {
-                            style: { display: 'flex', flexDirection: 'column' },
-                            children: [
-                              {
-                                type: 'span',
-                                props: {
-                                  style: { fontSize: '42px', fontWeight: 800, color: 'white' },
-                                  children: `$${tokenStats.symbol}`,
-                                },
-                              },
-                              {
-                                type: 'span',
-                                props: {
-                                  style: { fontSize: '14px', color: '#71717a' },
-                                  children: tokenStats.name,
-                                },
-                              },
-                            ],
-                          },
-                        },
-                      ],
-                    },
-                  },
-                  // Right: Health grade box
-                  {
-                    type: 'div',
-                    props: {
-                      style: {
-                        display: 'flex',
-                        flexDirection: 'column',
-                        alignItems: 'center',
-                      },
-                      children: [
-                        {
-                          type: 'div',
-                          props: {
-                            style: {
-                              width: '100px',
-                              height: '100px',
-                              borderRadius: '16px',
-                              background: `linear-gradient(135deg, ${gradeColor}22, ${gradeColor}44)`,
-                              border: `3px solid ${gradeColor}`,
-                              display: 'flex',
-                              flexDirection: 'column',
-                              alignItems: 'center',
-                              justifyContent: 'center',
-                            },
-                            children: [
-                              {
-                                type: 'div',
-                                props: {
-                                  style: { fontSize: '42px', fontWeight: 800, color: gradeColor, lineHeight: 1 },
-                                  children: tokenStats.healthGrade,
-                                },
-                              },
-                              {
-                                type: 'div',
-                                props: {
-                                  style: { fontSize: '14px', color: gradeColor },
-                                  children: `${tokenStats.healthScore}/100`,
-                                },
-                              },
-                            ],
-                          },
-                        },
-                      ],
-                    },
-                  },
-                ],
+          // Header
+          {
+            type: "div",
+            props: {
+              style: {
+                display: "flex",
+                justifyContent: "space-between",
+                alignItems: "center",
+                marginBottom: "16px",
+                position: "relative",
+                zIndex: 2,
               },
-            },
-            // Full CA row
-            {
-              type: 'div',
-              props: {
-                style: {
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '8px',
-                  marginBottom: '20px',
-                  padding: '8px 12px',
-                  background: 'rgba(255,255,255,0.05)',
-                  borderRadius: '8px',
-                },
-                children: [
-                  {
-                    type: 'span',
-                    props: {
-                      style: { fontSize: '13px', color: '#71717a' },
-                      children: 'CA:',
-                    },
-                  },
-                  {
-                    type: 'span',
-                    props: {
-                      style: { fontSize: '13px', color: '#a1a1aa', fontFamily: 'monospace' },
-                      children: fullCA,
-                    },
-                  },
-                ],
-              },
-            },
-            // Main content: Stats grid
-            {
-              type: 'div',
-              props: {
-                style: {
-                  display: 'flex',
-                  flex: 1,
-                  gap: '32px',
-                },
-                children: [
-                  // Left column: Key metrics
-                  {
-                    type: 'div',
-                    props: {
-                      style: {
-                        display: 'flex',
-                        flexDirection: 'column',
-                        flex: 1,
-                        gap: '16px',
-                      },
-                      children: [
-                        // Total vs Real holders
-                        {
-                          type: 'div',
-                          props: {
-                            style: { display: 'flex', gap: '24px' },
-                            children: [
-                              {
-                                type: 'div',
-                                props: {
-                                  style: { display: 'flex', flexDirection: 'column' },
-                                  children: [
-                                    {
-                                      type: 'div',
-                                      props: {
-                                        style: { fontSize: '14px', color: '#71717a' },
-                                        children: 'Total Wallets',
-                                      },
-                                    },
-                                    {
-                                      type: 'div',
-                                      props: {
-                                        style: { fontSize: '48px', fontWeight: 800, color: 'white', lineHeight: 1 },
-                                        children: tokenStats.totalHolders.toLocaleString(),
-                                      },
-                                    },
-                                  ],
-                                },
+              children: [
+                {
+                  type: "div",
+                  props: {
+                    style: { display: "flex", alignItems: "center", gap: "14px" },
+                    children: [
+                      tokenStats.tokenImage
+                        ? {
+                            type: "img",
+                            props: {
+                              src: tokenStats.tokenImage,
+                              style: {
+                                width: "60px",
+                                height: "60px",
+                                borderRadius: "16px",
+                                border: "1px solid rgba(255,255,255,0.16)",
                               },
-                              {
-                                type: 'div',
-                                props: {
-                                  style: { fontSize: '32px', color: '#10b981', alignSelf: 'center' },
-                                  children: '→',
-                                },
+                            },
+                          }
+                        : {
+                            type: "div",
+                            props: {
+                              style: {
+                                width: "60px",
+                                height: "60px",
+                                borderRadius: "16px",
+                                background:
+                                  "linear-gradient(135deg, rgba(0,217,255,0.25), rgba(167,139,250,0.25))",
+                                border: "1px solid rgba(255,255,255,0.16)",
+                                display: "flex",
+                                alignItems: "center",
+                                justifyContent: "center",
+                                fontSize: "18px",
+                                color: "rgba(255,255,255,0.85)",
                               },
-                              {
-                                type: 'div',
-                                props: {
-                                  style: { display: 'flex', flexDirection: 'column' },
-                                  children: [
-                                    {
-                                      type: 'div',
-                                      props: {
-                                        style: { fontSize: '14px', color: '#71717a' },
-                                        children: 'Real Holders',
-                                      },
-                                    },
-                                    {
-                                      type: 'div',
-                                      props: {
-                                        style: { fontSize: '48px', fontWeight: 800, color: '#10b981', lineHeight: 1 },
-                                        children: tokenStats.realHolders.toLocaleString(),
-                                      },
-                                    },
-                                  ],
-                                },
-                              },
-                            ],
+                              children: "BB",
+                            },
                           },
-                        },
-                        // Concentration stats row
-                        {
-                          type: 'div',
-                          props: {
-                            style: { display: 'flex', gap: '32px', marginTop: '8px' },
-                            children: [
-                              {
-                                type: 'div',
-                                props: {
-                                  style: { display: 'flex', flexDirection: 'column' },
-                                  children: [
-                                    {
-                                      type: 'div',
-                                      props: {
-                                        style: { fontSize: '12px', color: '#71717a' },
-                                        children: 'Top 10 Hold',
-                                      },
-                                    },
-                                    {
-                                      type: 'div',
-                                      props: {
-                                        style: { fontSize: '28px', fontWeight: 700, color: '#f59e0b' },
-                                        children: `${tokenStats.top10Percentage || 0}%`,
-                                      },
-                                    },
-                                  ],
-                                },
-                              },
-                              {
-                                type: 'div',
-                                props: {
-                                  style: { display: 'flex', flexDirection: 'column' },
-                                  children: [
-                                    {
-                                      type: 'div',
-                                      props: {
-                                        style: { fontSize: '12px', color: '#71717a' },
-                                        children: 'Dust Wallets',
-                                      },
-                                    },
-                                    {
-                                      type: 'div',
-                                      props: {
-                                        style: { fontSize: '28px', fontWeight: 700, color: '#ef4444' },
-                                        children: `${tokenStats.dustPercentage}%`,
-                                      },
-                                    },
-                                  ],
-                                },
-                              },
-                              {
-                                type: 'div',
-                                props: {
-                                  style: { display: 'flex', flexDirection: 'column' },
-                                  children: [
-                                    {
-                                      type: 'div',
-                                      props: {
-                                        style: { fontSize: '12px', color: '#71717a' },
-                                        children: 'LP Pools',
-                                      },
-                                    },
-                                    {
-                                      type: 'div',
-                                      props: {
-                                        style: { fontSize: '28px', fontWeight: 700, color: '#3b82f6' },
-                                        children: `${tokenStats.lpCount || 0}`,
-                                      },
-                                    },
-                                  ],
-                                },
-                              },
-                            ],
-                          },
-                        },
-                      ],
-                    },
-                  },
-                  // Right column: Holder breakdown
-                  {
-                    type: 'div',
-                    props: {
-                      style: {
-                        display: 'flex',
-                        flexDirection: 'column',
-                        width: '380px',
-                        background: 'rgba(255,255,255,0.03)',
-                        borderRadius: '12px',
-                        padding: '16px',
-                        border: '1px solid rgba(255,255,255,0.1)',
-                      },
-                      children: [
-                        {
-                          type: 'div',
-                          props: {
-                            style: { fontSize: '14px', color: '#a1a1aa', marginBottom: '12px', fontWeight: 600 },
-                            children: 'Holder Breakdown',
-                          },
-                        },
-                        // Breakdown grid
-                        {
-                          type: 'div',
-                          props: {
-                            style: { display: 'flex', flexWrap: 'wrap', gap: '8px' },
-                            children: holderBreakdown.slice(0, 9).map(item => ({
-                              type: 'div',
+                      {
+                        type: "div",
+                        props: {
+                          style: { display: "flex", flexDirection: "column" },
+                          children: [
+                            {
+                              type: "div",
                               props: {
                                 style: {
-                                  display: 'flex',
-                                  alignItems: 'center',
-                                  gap: '6px',
-                                  padding: '6px 10px',
-                                  background: 'rgba(255,255,255,0.05)',
-                                  borderRadius: '6px',
-                                  minWidth: '100px',
+                                  display: "flex",
+                                  alignItems: "baseline",
+                                  gap: "10px",
                                 },
                                 children: [
                                   {
-                                    type: 'span',
+                                    type: "div",
                                     props: {
-                                      style: { fontSize: '14px' },
-                                      children: item.emoji,
+                                      style: {
+                                        fontSize: "40px",
+                                        fontWeight: 900,
+                                        letterSpacing: "0.2px",
+                                      },
+                                      children: `$${tokenStats.symbol}`,
                                     },
                                   },
                                   {
-                                    type: 'span',
+                                    type: "div",
                                     props: {
-                                      style: { fontSize: '12px', color: '#a1a1aa' },
-                                      children: `${item.count}`,
-                                    },
-                                  },
-                                  {
-                                    type: 'span',
-                                    props: {
-                                      style: { fontSize: '11px', color: '#71717a' },
-                                      children: item.label,
+                                      style: {
+                                        fontSize: "14px",
+                                        color: "rgba(255,255,255,0.55)",
+                                      },
+                                      children: tokenStats.name || "Token",
                                     },
                                   },
                                 ],
                               },
-                            })),
-                          },
-                        },
-                      ],
-                    },
-                  },
-                ],
-              },
-            },
-            // Footer: Branding + Timestamp
-            {
-              type: 'div',
-              props: {
-                style: {
-                  display: 'flex',
-                  justifyContent: 'space-between',
-                  alignItems: 'center',
-                  marginTop: 'auto',
-                  paddingTop: '16px',
-                  borderTop: '1px solid #27272a',
-                },
-                children: [
-                  {
-                    type: 'div',
-                    props: {
-                      style: { display: 'flex', alignItems: 'center', gap: '8px' },
-                      children: [
-                        {
-                          type: 'div',
-                          props: {
-                            style: {
-                              width: '28px',
-                              height: '28px',
-                              background: 'linear-gradient(135deg, #00d9ff, #00b8d4)',
-                              borderRadius: '6px',
-                              display: 'flex',
-                              alignItems: 'center',
-                              justifyContent: 'center',
-                              fontSize: '14px',
                             },
-                            children: '📊',
-                          },
+                            {
+                              type: "div",
+                              props: {
+                                style: {
+                                  fontSize: "12px",
+                                  color: "rgba(255,255,255,0.50)",
+                                  display: "flex",
+                                  gap: "12px",
+                                },
+                                children: [
+                                  `CA: ${shortCA}`,
+                                  "•",
+                                  "HOLDERS INTEL",
+                                ],
+                              },
+                            },
+                          ],
                         },
-                        {
-                          type: 'span',
-                          props: {
-                            style: { fontSize: '16px', fontWeight: 600, color: '#00d9ff' },
-                            children: 'blackbox.farm/holders',
-                          },
+                      },
+                    ],
+                  },
+                },
+                // Grade ring (SVG)
+                {
+                  type: "div",
+                  props: {
+                    style: {
+                      width: "122px",
+                      height: "122px",
+                      borderRadius: "20px",
+                      background: "rgba(255,255,255,0.04)",
+                      border: "1px solid rgba(255,255,255,0.12)",
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                    },
+                    children: [
+                      {
+                        type: "svg",
+                        props: {
+                          width: 110,
+                          height: 110,
+                          viewBox: "0 0 110 110",
+                          children: [
+                            {
+                              type: "circle",
+                              props: {
+                                cx: 55,
+                                cy: 55,
+                                r: 42,
+                                fill: "none",
+                                stroke: "rgba(255,255,255,0.10)",
+                                strokeWidth: 10,
+                              },
+                            },
+                            {
+                              type: "circle",
+                              props: {
+                                cx: 55,
+                                cy: 55,
+                                r: 42,
+                                fill: "none",
+                                stroke: gradeColor,
+                                strokeWidth: 10,
+                                strokeLinecap: "round",
+                                transform: "rotate(-90 55 55)",
+                                strokeDasharray: `${(clamp(tokenStats.healthScore, 0, 100) / 100) * (2 * Math.PI * 42)} ${2 * Math.PI * 42}`,
+                              },
+                            },
+                            {
+                              type: "text",
+                              props: {
+                                x: 55,
+                                y: 55,
+                                textAnchor: "middle",
+                                dominantBaseline: "central",
+                                fill: "white",
+                                style: { fontSize: "34px", fontWeight: 900 },
+                                children: tokenStats.healthGrade,
+                              },
+                            },
+                            {
+                              type: "text",
+                              props: {
+                                x: 55,
+                                y: 78,
+                                textAnchor: "middle",
+                                dominantBaseline: "central",
+                                fill: "rgba(255,255,255,0.60)",
+                                style: { fontSize: "12px", fontWeight: 600 },
+                                children: `${tokenStats.healthScore}/100`,
+                              },
+                            },
+                          ],
                         },
-                      ],
-                    },
+                      },
+                    ],
                   },
-                  {
-                    type: 'span',
-                    props: {
-                      style: { fontSize: '12px', color: '#52525b' },
-                      children: timestamp,
-                    },
-                  },
-                ],
-              },
+                },
+              ],
             },
-          ],
-        },
-      });
-
+          },
+          // Body grid
+          {
+            type: "div",
+            props: {
+              style: {
+                display: "flex",
+                flex: 1,
+                gap: "16px",
+                position: "relative",
+                zIndex: 2,
+              },
+              children: [
+                // LEFT: big metrics + mini tiles
+                {
+                  type: "div",
+                  props: {
+                    style: {
+                      display: "flex",
+                      flexDirection: "column",
+                      flex: 1,
+                      gap: "14px",
+                      padding: "16px",
+                      borderRadius: "18px",
+                      border: "1px solid rgba(255,255,255,0.12)",
+                      background: "linear-gradient(180deg, rgba(255,255,255,0.06), rgba(255,255,255,0.03))",
+                    },
+                    children: [
+                      // Total -> Real hero
+                      {
+                        type: "div",
+                        props: {
+                          style: { display: "flex", alignItems: "flex-end", justifyContent: "space-between" },
+                          children: [
+                            {
+                              type: "div",
+                              props: {
+                                style: { display: "flex", flexDirection: "column" },
+                                children: [
+                                  { type: "div", props: { style: { fontSize: "12px", color: "rgba(255,255,255,0.55)" }, children: "TOTAL WALLETS" } },
+                                  { type: "div", props: { style: { fontSize: "56px", fontWeight: 900, lineHeight: 1 }, children: tokenStats.totalHolders.toLocaleString() } },
+                                ],
+                              },
+                            },
+                            {
+                              type: "div",
+                              props: {
+                                style: {
+                                  width: "54px",
+                                  height: "54px",
+                                  borderRadius: "16px",
+                                  background: "rgba(0,217,255,0.10)",
+                                  border: "1px solid rgba(0,217,255,0.22)",
+                                  display: "flex",
+                                  alignItems: "center",
+                                  justifyContent: "center",
+                                  fontSize: "24px",
+                                  color: "rgba(0,217,255,0.9)",
+                                },
+                                children: "→",
+                              },
+                            },
+                            {
+                              type: "div",
+                              props: {
+                                style: { display: "flex", flexDirection: "column", alignItems: "flex-end" },
+                                children: [
+                                  { type: "div", props: { style: { fontSize: "12px", color: "rgba(255,255,255,0.55)" }, children: "REAL HOLDERS" } },
+                                  { type: "div", props: { style: { fontSize: "56px", fontWeight: 900, lineHeight: 1, color: "#22c55e" }, children: tokenStats.realHolders.toLocaleString() } },
+                                ],
+                              },
+                            },
+                          ],
+                        },
+                      },
+                      // Mini tiles row
+                      {
+                        type: "div",
+                        props: {
+                          style: { display: "flex", gap: "12px" },
+                          children: [
+                            // Dust
+                            {
+                              type: "div",
+                              props: {
+                                style: {
+                                  flex: 1,
+                                  padding: "12px",
+                                  borderRadius: "14px",
+                                  border: "1px solid rgba(255,255,255,0.10)",
+                                  background: "rgba(255,255,255,0.03)",
+                                },
+                                children: [
+                                  { type: "div", props: { style: { fontSize: "12px", color: "rgba(255,255,255,0.55)" }, children: "DUST %" } },
+                                  { type: "div", props: { style: { fontSize: "28px", fontWeight: 900, color: "#ef4444" }, children: pct(tokenStats.dustPercentage) } },
+                                ],
+                              },
+                            },
+                            // Top10
+                            {
+                              type: "div",
+                              props: {
+                                style: {
+                                  flex: 1,
+                                  padding: "12px",
+                                  borderRadius: "14px",
+                                  border: "1px solid rgba(255,255,255,0.10)",
+                                  background: "rgba(255,255,255,0.03)",
+                                },
+                                children: [
+                                  { type: "div", props: { style: { fontSize: "12px", color: "rgba(255,255,255,0.55)" }, children: "TOP 10 HOLD" } },
+                                  { type: "div", props: { style: { fontSize: "28px", fontWeight: 900, color: "#f59e0b" }, children: pct(tokenStats.top10Percentage) } },
+                                ],
+                              },
+                            },
+                            // LP Pools
+                            {
+                              type: "div",
+                              props: {
+                                style: {
+                                  width: "150px",
+                                  padding: "12px",
+                                  borderRadius: "14px",
+                                  border: "1px solid rgba(255,255,255,0.10)",
+                                  background: "rgba(255,255,255,0.03)",
+                                },
+                                children: [
+                                  { type: "div", props: { style: { fontSize: "12px", color: "rgba(255,255,255,0.55)" }, children: "LP POOLS" } },
+                                  { type: "div", props: { style: { fontSize: "28px", fontWeight: 900, color: "#60a5fa" }, children: `${tokenStats.lpCount || 0}` } },
+                                ],
+                              },
+                            },
+                          ],
+                        },
+                      },
+                      // Signals
+                      {
+                        type: "div",
+                        props: {
+                          style: {
+                            display: "flex",
+                            flexDirection: "column",
+                            gap: "8px",
+                            marginTop: "6px",
+                          },
+                          children: [
+                            { type: "div", props: { style: { fontSize: "12px", color: "rgba(255,255,255,0.55)", letterSpacing: "0.8px" }, children: "SIGNALS" } },
+                            {
+                              type: "div",
+                              props: {
+                                style: { display: "flex", flexWrap: "wrap", gap: "8px" },
+                                children: signals.map(s => ({
+                                  type: "div",
+                                  props: {
+                                    style: {
+                                      display: "flex",
+                                      alignItems: "center",
+                                      gap: "8px",
+                                      padding: "8px 10px",
+                                      borderRadius: "999px",
+                                      background: "rgba(255,255,255,0.03)",
+                                      border: "1px solid rgba(255,255,255,0.10)",
+                                    },
+                                    children: [
+                                      {
+                                        type: "div",
+                                        props: {
+                                          style: {
+                                            width: "8px",
+                                            height: "8px",
+                                            borderRadius: "999px",
+                                            background: toneColor(s.tone),
+                                          },
+                                        },
+                                      },
+                                      {
+                                        type: "div",
+                                        props: {
+                                          style: { fontSize: "12px", color: "rgba(255,255,255,0.78)", fontWeight: 600 },
+                                          children: s.label,
+                                        },
+                                      },
+                                    ],
+                                  },
+                                })),
+                              },
+                            },
+                          ],
+                        },
+                      },
+                    ],
+                  },
+                },
+                // RIGHT: Distribution layering + counts
+                {
+                  type: "div",
+                  props: {
+                    style: {
+                      width: "410px",
+                      padding: "16px",
+                      borderRadius: "18px",
+                      border: "1px solid rgba(255,255,255,0.12)",
+                      background: "linear-gradient(180deg, rgba(255,255,255,0.05), rgba(255,255,255,0.03))",
+                      display: "flex",
+                      flexDirection: "column",
+                      gap: "12px",
+                    },
+                    children: [
+                      {
+                        type: "div",
+                        props: {
+                          style: { display: "flex", justifyContent: "space-between", alignItems: "baseline" },
+                          children: [
+                            { type: "div", props: { style: { fontSize: "13px", color: "rgba(255,255,255,0.70)", fontWeight: 800, letterSpacing: "0.8px" }, children: "DISTRIBUTION LAYERING" } },
+                            { type: "div", props: { style: { fontSize: "11px", color: "rgba(255,255,255,0.45)" }, children: `${tokenStats.realHolders.toLocaleString()} real / ${tokenStats.totalHolders.toLocaleString()} total` } },
+                          ],
+                        },
+                      },
+                      // Stacked bar
+                      {
+                        type: "div",
+                        props: {
+                          style: {
+                            display: "flex",
+                            height: "16px",
+                            borderRadius: "999px",
+                            overflow: "hidden",
+                            border: "1px solid rgba(255,255,255,0.12)",
+                            background: "rgba(255,255,255,0.05)",
+                          },
+                          children: breakdown.map(seg => ({
+                            type: "div",
+                            props: {
+                              style: {
+                                width: `${(seg.count / totalForBreakdown) * 100}%`,
+                                background: seg.color,
+                                opacity: 0.9,
+                              },
+                            },
+                          })),
+                        },
+                      },
+                      // Breakdown list
+                      {
+                        type: "div",
+                        props: {
+                          style: {
+                            display: "flex",
+                            flexDirection: "column",
+                            gap: "8px",
+                            marginTop: "4px",
+                          },
+                          children: breakdown.slice(0, 8).map(seg => ({
+                            type: "div",
+                            props: {
+                              style: {
+                                display: "flex",
+                                justifyContent: "space-between",
+                                alignItems: "center",
+                                padding: "10px 10px",
+                                borderRadius: "12px",
+                                background: "rgba(255,255,255,0.03)",
+                                border: "1px solid rgba(255,255,255,0.08)",
+                              },
+                              children: [
+                                {
+                                  type: "div",
+                                  props: {
+                                    style: { display: "flex", alignItems: "center", gap: "10px" },
+                                    children: [
+                                      { type: "div", props: { style: { width: "10px", height: "10px", borderRadius: "3px", background: seg.color } } },
+                                      { type: "div", props: { style: { fontSize: "12px", fontWeight: 800, color: "rgba(255,255,255,0.82)" }, children: seg.key } },
+                                    ],
+                                  },
+                                },
+                                {
+                                  type: "div",
+                                  props: {
+                                    style: { fontSize: "12px", fontWeight: 900, color: "rgba(255,255,255,0.85)" },
+                                    children: seg.count.toLocaleString(),
+                                  },
+                                },
+                              ],
+                            },
+                          })),
+                        },
+                      },
+                      // CTA block
+                      {
+                        type: "div",
+                        props: {
+                          style: {
+                            marginTop: "auto",
+                            padding: "12px",
+                            borderRadius: "14px",
+                            background: "rgba(0,217,255,0.07)",
+                            border: "1px solid rgba(0,217,255,0.20)",
+                            display: "flex",
+                            flexDirection: "column",
+                            gap: "6px",
+                          },
+                          children: [
+                            {
+                              type: "div",
+                              props: {
+                                style: { fontSize: "13px", fontWeight: 900, color: "rgba(255,255,255,0.90)" },
+                                children: "Scan any Solana token → get holders intel",
+                              },
+                            },
+                            {
+                              type: "div",
+                              props: {
+                                style: { fontSize: "12px", color: "rgba(255,255,255,0.65)" },
+                                children: "Not mint stats. Not hype. Wallet distribution, dust, whales, concentration.",
+                              },
+                            },
+                          ],
+                        },
+                      },
+                    ],
+                  },
+                },
+              ],
+            },
+          },
+          // Footer
+          {
+            type: "div",
+            props: {
+              style: {
+                display: "flex",
+                justifyContent: "space-between",
+                alignItems: "center",
+                marginTop: "14px",
+                paddingTop: "12px",
+                borderTop: "1px solid rgba(255,255,255,0.10)",
+                position: "relative",
+                zIndex: 2,
+              },
+              children: [
+                {
+                  type: "div",
+                  props: {
+                    style: { display: "flex", alignItems: "center", gap: "10px" },
+                    children: [
+                      {
+                        type: "div",
+                        props: {
+                          style: {
+                            width: "26px",
+                            height: "26px",
+                            borderRadius: "8px",
+                            background: "linear-gradient(135deg, rgba(0,217,255,0.35), rgba(167,139,250,0.35))",
+                            border: "1px solid rgba(255,255,255,0.16)",
+                            display: "flex",
+                            alignItems: "center",
+                            justifyContent: "center",
+                            fontSize: "12px",
+                            fontWeight: 900,
+                          },
+                          children: "BB",
+                        },
+                      },
+                      {
+                        type: "div",
+                        props: {
+                          style: { fontSize: "14px", fontWeight: 900, color: "rgba(0,217,255,0.95)" },
+                          children: "blackbox.farm/holders",
+                        },
+                      },
+                      {
+                        type: "div",
+                        props: {
+                          style: { fontSize: "12px", color: "rgba(255,255,255,0.45)" },
+                          children: `• ${timestamp}`,
+                        },
+                      },
+                    ],
+                  },
+                },
+                {
+                  type: "div",
+                  props: {
+                    style: {
+                      fontSize: "12px",
+                      color: "rgba(255,255,255,0.55)",
+                      fontWeight: 700,
+                    },
+                    children: fullCA ? `CA: ${fullCA}` : "",
+                  },
+                },
+              ],
+            },
+          },
+        ],
+      },
+    });
     const svg = await satori(
       cardTree,
       {
