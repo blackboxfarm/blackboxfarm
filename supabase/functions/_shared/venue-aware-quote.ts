@@ -459,36 +459,7 @@ async function checkMeteoraDBC(tokenMint: string, heliusApiKey: string): Promise
       }
     }
 
-    // No pool found with any size filter - try without dataSize filter as last resort
-    try {
-      console.log(`[checkMeteoraDBC] Trying without dataSize filter...`);
-      const accounts = await connection.getProgramAccounts(programId, {
-        commitment: 'confirmed',
-      });
-
-      console.log(`[checkMeteoraDBC] Found ${accounts.length} total accounts`);
-
-      for (const { pubkey, account } of accounts.slice(0, 100)) { // Limit to first 100
-        const data = account.data;
-        if (data.length < 80) continue;
-
-        const dataHex = toHex(data);
-        if (!dataHex.includes(tokenMintHex)) continue;
-
-        console.log(`[checkMeteoraDBC] Found matching pool (no filter): ${pubkey.toBase58()}, size=${data.length}`);
-        
-        return {
-          isOnCurve: true, // Found pool = on curve
-          poolData: {
-            poolPda: pubkey.toBase58(),
-            dataSize: data.length
-          }
-        };
-      }
-    } catch (e) {
-      console.log(`[checkMeteoraDBC] No-filter search failed:`, e);
-    }
-
+    // Skip the expensive no-filter fallback - it exceeds memory limits
     console.log(`[checkMeteoraDBC] No pool found for ${tokenMint.slice(0, 8)}`);
     return null;
   } catch (e) {
