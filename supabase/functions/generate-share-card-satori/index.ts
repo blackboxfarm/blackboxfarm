@@ -368,7 +368,7 @@ serve(async (req) => {
                     ],
                   },
                 },
-                // Grade ring (SVG)
+                // Grade display (div-based, no SVG text)
                 {
                   type: "div",
                   props: {
@@ -377,69 +377,35 @@ serve(async (req) => {
                       height: "122px",
                       borderRadius: "20px",
                       background: "rgba(255,255,255,0.04)",
-                      border: "1px solid rgba(255,255,255,0.12)",
+                      border: `3px solid ${gradeColor}`,
                       display: "flex",
+                      flexDirection: "column",
                       alignItems: "center",
                       justifyContent: "center",
+                      gap: "4px",
                     },
                     children: [
                       {
-                        type: "svg",
+                        type: "div",
                         props: {
-                          width: 110,
-                          height: 110,
-                          viewBox: "0 0 110 110",
-                          children: [
-                            {
-                              type: "circle",
-                              props: {
-                                cx: 55,
-                                cy: 55,
-                                r: 42,
-                                fill: "none",
-                                stroke: "rgba(255,255,255,0.10)",
-                                strokeWidth: 10,
-                              },
-                            },
-                            {
-                              type: "circle",
-                              props: {
-                                cx: 55,
-                                cy: 55,
-                                r: 42,
-                                fill: "none",
-                                stroke: gradeColor,
-                                strokeWidth: 10,
-                                strokeLinecap: "round",
-                                transform: "rotate(-90 55 55)",
-                                strokeDasharray: `${(clamp(tokenStats.healthScore, 0, 100) / 100) * (2 * Math.PI * 42)} ${2 * Math.PI * 42}`,
-                              },
-                            },
-                            {
-                              type: "text",
-                              props: {
-                                x: 55,
-                                y: 55,
-                                textAnchor: "middle",
-                                dominantBaseline: "central",
-                                fill: "white",
-                                style: { fontSize: "34px", fontWeight: 900 },
-                                children: tokenStats.healthGrade,
-                              },
-                            },
-                            {
-                              type: "text",
-                              props: {
-                                x: 55,
-                                y: 78,
-                                textAnchor: "middle",
-                                dominantBaseline: "central",
-                                fill: "rgba(255,255,255,0.60)",
-                                style: { fontSize: "12px", fontWeight: 600 },
-                                children: `${tokenStats.healthScore}/100`,
-                              },
-                            },
-                          ],
+                          style: {
+                            fontSize: "42px",
+                            fontWeight: 900,
+                            color: gradeColor,
+                            lineHeight: 1,
+                          },
+                          children: tokenStats.healthGrade,
+                        },
+                      },
+                      {
+                        type: "div",
+                        props: {
+                          style: {
+                            fontSize: "14px",
+                            fontWeight: 600,
+                            color: "rgba(255,255,255,0.60)",
+                          },
+                          children: `${tokenStats.healthScore}/100`,
                         },
                       },
                     ],
