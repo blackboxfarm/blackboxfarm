@@ -4,6 +4,7 @@ import { BaglessHoldersReport } from "@/components/BaglessHoldersReport";
 import { AuthButton } from "@/components/auth/AuthButton";
 import { FarmBanner } from "@/components/FarmBanner";
 import { NotificationCenter } from "@/components/NotificationCenter";
+import { UserSettingsDropdown } from "@/components/settings/UserSettingsDropdown";
 import { useAuth } from "@/hooks/useAuth";
 import { useUserRoles } from "@/hooks/useUserRoles";
 import { Button } from "@/components/ui/button";
@@ -50,11 +51,15 @@ export default function Holders() {
             <p className="text-lg md:text-xl text-muted-foreground max-w-2xl mx-auto md:mx-0">
               Analyze token holder distribution and wallet categories
             </p>
-            <div className="flex justify-center md:hidden space-x-3 hidden">
-              <AuthButton />
+            {/* Mobile header actions */}
+            <div className="flex justify-center md:hidden items-center gap-2">
+              <NotificationCenter />
+              {user && <UserSettingsDropdown />}
+              {!user && <AuthButton />}
             </div>
           </div>
-          <div className="hidden md:flex flex-shrink-0 items-center gap-3">
+          {/* Desktop header actions */}
+          <div className="hidden md:flex flex-shrink-0 items-center gap-2">
             {isSuperAdmin && (
               <Button 
                 onClick={() => navigate("/super-admin")}
@@ -67,9 +72,8 @@ export default function Holders() {
               </Button>
             )}
             <NotificationCenter />
-            <div className="hidden">
-              <AuthButton />
-            </div>
+            {user && <UserSettingsDropdown />}
+            {!user && <AuthButton />}
           </div>
         </div>
 
