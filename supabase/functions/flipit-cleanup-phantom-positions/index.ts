@@ -108,17 +108,20 @@ serve(async (req) => {
         }).catch(() => ({ value: [] }));
 
         // Build map of actual token holdings
+        // IMPORTANT: Ignore dust amounts (< 1 token) as these are artifacts from failed sells
         const actualHoldings = new Map<string, number>();
+        const DUST_THRESHOLD = 1; // Ignore balances less than 1 token
         
         for (const account of [...tokenAccounts.value, ...token2022Accounts.value]) {
           const info = account.account.data.parsed?.info;
-          if (info?.mint && info?.tokenAmount?.uiAmount > 0) {
+          if (info?.mint && info?.tokenAmount?.uiAmount >= DUST_THRESHOLD) {
             actualHoldings.set(info.mint, info.tokenAmount.uiAmount);
           }
         }
+        
+        console.log(`Wallet ${pubkey} has ${actualHoldings.size} tokens on-chain (excluding dust < ${DUST_THRESHOLD})`);
 
-        console.log(`Wallet ${pubkey} has ${actualHoldings.size} tokens on-chain`);
-        console.log("On-chain tokens:", Array.from(actualHoldings.keys()));
+        console.log("On-chain tokens (excluding dust):", Array.from(actualHoldings.keys()));
 
         // IMPORTANT: User can have multiple positions for the same token
         // We should NOT mark positions as phantom if there's ANY balance for that token
