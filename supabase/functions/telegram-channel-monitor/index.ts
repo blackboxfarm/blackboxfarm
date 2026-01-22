@@ -1498,9 +1498,9 @@ serve(async (req) => {
       // Check if channel_id is a numeric chat_id (private channel/group)
       const isChannelIdNumeric = channelId && /^-?\d+$/.test(channelId.toString());
       
-      // For groups or private channels (numeric ID), we can use channel_id if username is missing
-      // For public channels, we need the username for scraping
-      const effectiveIdentifier = channelUsername || (isChannelIdNumeric ? channelId : null);
+      // PRIORITY: Use numeric channel_id first (immutable), fall back to username
+      // Numeric IDs are permanent - usernames can change when owners rename channels
+      const effectiveIdentifier = isChannelIdNumeric ? channelId : (channelUsername || null);
       
       // Detect if this needs MTProto (groups or any numeric chat_id)
       const needsMtproto = channelType === 'group' || isChannelIdNumeric;
