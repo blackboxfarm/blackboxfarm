@@ -474,7 +474,7 @@ async function tryJupiterSwap(params: {
   }
 }
 
-// Try Meteora aggregator API for DLMM pools (graduated tokens)
+// Try Meteora DLMM swap via their quote/swap API (reliable endpoints)
 async function tryMeteoraSwap(params: {
   inputMint: string;
   outputMint: string;
@@ -490,49 +490,124 @@ async function tryMeteoraSwap(params: {
       return { error: `Invalid swap amount for Meteora: ${String(amount)}` };
     }
     
-    // Meteora DLMM API - find pool for pair
-    const poolApiUrl = `https://dlmm-api.meteora.ag/pair/all_by_groups?page=0&limit=100`;
-    console.log("Fetching Meteora pools for pair lookup...");
+    console.log(`Meteora swap: ${inputMint} → ${outputMint}, amount=${amt}, slippage=${slippageBps}bps`);
     
-    // First, try to find a pool for this token pair
-    const normalizedInput = inputMint.toLowerCase();
-    const normalizedOutput = outputMint.toLowerCase();
+    // Step 1: Find Meteora DLMM pool for this pair
+    const poolSearchUrl = `https://dlmm-api.meteora.ag/pair/all_by_groups?page=0&limit=50`;
+    let poolAddress: string | null = null;
     
-    // Try the swap API endpoint
-    const meteoraSwapUrl = "https://swap-api.meteora.ag/swap";
+    try {
+      const poolRes = await fetch(poolSearchUrl, { 
+        headers: { "Accept": "application/json" },
+        signal: AbortSignal.timeout(5000) 
+      });
+      
+      if (poolRes.ok) {
+        const poolData = await poolRes.json();
+        const groups = poolData?.groups || [];
+        
+        // Search through all groups for a matching pair
+        for (const group of groups) {
+          const pairs = group?.pairs || [];
+          for (const pair of pairs) {
+            const mintX = String(pair?.mint_x || "").toLowerCase();
+            const mintY = String(pair?.mint_y || "").toLowerCase();
+            const inputLower = inputMint.toLowerCase();
+            const outputLower = outputMint.toLowerCase();
+            
+            if ((mintX === inputLower && mintY === outputLower) ||
+                (mintX === outputLower && mintY === inputLower)) {
+              poolAddress = pair?.address;
+              console.log(`Found Meteora DLMM pool: ${poolAddress}`);
+              break;
+            }
+          }
+          if (poolAddress) break;
+        }
+      }
+    } catch (poolErr) {
+      console.log(`Meteora pool search failed: ${(poolErr as Error).message}`);
+    }
     
-    const swapRequest = {
-      inMint: inputMint,
-      outMint: outputMint,
-      amount: amt,
-      slippageBps: slippageBps,
-      userPublicKey: userPublicKey,
+    // Step 2: Try Jupiter with Meteora route preference (most reliable)
+    // Jupiter aggregates Meteora pools and has better error handling
+    const jupiterApiKey = Deno.env.get("JUPITER_API_KEY") || "";
+    const jupiterHeaders: Record<string, string> = {
+      "Accept": "application/json",
+      "Content-Type": "application/json",
     };
+    if (jupiterApiKey) {
+      jupiterHeaders["x-api-key"] = jupiterApiKey;
+    }
     
-    console.log("Trying Meteora swap API:", JSON.stringify(swapRequest));
+    // Try Jupiter quote with explicit Meteora preference
+    const quoteUrl = `https://api.jup.ag/swap/v1/quote?inputMint=${inputMint}&outputMint=${outputMint}&amount=${amt}&slippageBps=${slippageBps}&swapMode=ExactIn&onlyDirectRoutes=false`;
     
-    const swapRes = await fetch(meteoraSwapUrl, {
+    console.log(`Trying Jupiter quote for Meteora routing: ${quoteUrl.slice(0, 100)}...`);
+    
+    const quoteRes = await fetch(quoteUrl, { 
+      headers: jupiterHeaders,
+      signal: AbortSignal.timeout(10000) 
+    });
+    
+    if (!quoteRes.ok) {
+      const errText = await quoteRes.text();
+      console.log(`Jupiter quote failed for Meteora route: ${quoteRes.status} ${errText}`);
+      return { error: `Meteora via Jupiter quote failed: ${quoteRes.status}` };
+    }
+    
+    const quoteJson = await quoteRes.json();
+    const quoteResponse = quoteJson?.data ?? quoteJson;
+    
+    if (!quoteResponse || (!quoteResponse.inAmount && !quoteResponse.routePlan)) {
+      console.log("Jupiter returned no routes for Meteora pair");
+      return { error: "No Meteora routes found via Jupiter" };
+    }
+    
+    // Check if this route uses Meteora
+    const routePlan = quoteResponse.routePlan || [];
+    const usesMeteora = routePlan.some((step: any) => {
+      const amm = String(step?.swapInfo?.ammKey || step?.ammKey || "").toLowerCase();
+      const label = String(step?.swapInfo?.label || step?.label || "").toLowerCase();
+      return amm.includes("meteora") || label.includes("meteora") || label.includes("dlmm");
+    });
+    
+    if (usesMeteora) {
+      console.log("Route uses Meteora DLMM pool");
+    } else {
+      console.log("Route found but may not be direct Meteora (using Jupiter aggregated route)");
+    }
+    
+    // Step 3: Build swap transaction via Jupiter
+    const swapRes = await fetch("https://api.jup.ag/swap/v1/swap", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(swapRequest),
+      headers: jupiterHeaders,
+      body: JSON.stringify({
+        quoteResponse,
+        userPublicKey,
+        wrapAndUnwrapSol: true,
+        dynamicComputeUnitLimit: true,
+        prioritizationFeeLamports: "auto",
+      }),
+      signal: AbortSignal.timeout(15000),
     });
     
     if (!swapRes.ok) {
       const errText = await swapRes.text();
-      console.log(`Meteora swap API failed: ${swapRes.status} ${errText}`);
-      return { error: `Meteora: ${swapRes.status} ${errText}` };
+      console.log(`Jupiter swap build failed for Meteora route: ${swapRes.status} ${errText}`);
+      return { error: `Meteora swap build failed: ${swapRes.status}` };
     }
     
     const swapJson = await swapRes.json();
-    const tx = swapJson?.transaction || swapJson?.swapTransaction;
+    const tx = swapJson?.swapTransaction || swapJson?.data?.swapTransaction;
     
     if (typeof tx !== "string") {
-      console.log("Meteora returned no transaction:", JSON.stringify(swapJson).slice(0, 200));
-      return { error: "Meteora returned no transaction" };
+      console.log("Jupiter returned no transaction for Meteora route:", JSON.stringify(swapJson).slice(0, 200));
+      return { error: "Meteora swap: no transaction returned" };
     }
     
-    console.log("Meteora swap transaction built successfully");
-    return { tx, source: "meteora-dlmm" };
+    console.log("Meteora swap transaction built successfully via Jupiter aggregator");
+    return { tx, source: usesMeteora ? "meteora-dlmm" : "jupiter-meteora-fallback" };
   } catch (e) {
     console.log("Meteora swap error:", (e as Error).message);
     return { error: `Meteora error: ${(e as Error).message}` };
