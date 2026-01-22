@@ -1279,9 +1279,10 @@ serve(async (req) => {
           body: {
             side: "sell",
             tokenMint: position.token_mint,
+            // FIX: Use 'amount' (not 'sellAmount') - raydium-swap expects 'amount' parameter
             // Use specific quantity if available, otherwise fall back to sellAll
             ...(hasRecordedQuantity 
-              ? { sellAmount: Number(position.quantity_tokens) }
+              ? { amount: Number(position.quantity_tokens) }
               : { sellAll: true }
             ),
             slippageBps: effectiveSlippage,
