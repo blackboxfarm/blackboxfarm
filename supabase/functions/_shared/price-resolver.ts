@@ -692,15 +692,29 @@ export async function resolvePrice(
     try {
       const bagsRes = await fetch(`https://api.bags.fm/api/v1/token/${tokenMint}`, {
         headers: { 'Accept': 'application/json' },
-        signal: AbortSignal.timeout(3000)
+        signal: AbortSignal.timeout(5000)
       });
+      
+      console.log(`[${tokenMint.slice(0, 8)}] bags.fm API status: ${bagsRes.status}`);
       
       if (bagsRes.ok) {
         const bagsData = await bagsRes.json();
-        const isGraduated = bagsData.graduated === true || bagsData.migrated === true;
-        console.log(`[${tokenMint.slice(0, 8)}] bags.fm API: graduated=${isGraduated}`);
+        console.log(`[${tokenMint.slice(0, 8)}] bags.fm API response:`, JSON.stringify(bagsData).slice(0, 500));
         
-        if (!isGraduated) {
+        // Check multiple possible graduation flags
+        const isGraduated = bagsData.graduated === true || 
+                           bagsData.migrated === true || 
+                           bagsData.status === 'graduated' ||
+                           bagsData.bondingCurve?.completed === true;
+        
+        // Also check for explicit on-curve indicators
+        const hasActivePool = bagsData.pool || bagsData.bondingCurve;
+        const curveProgress = bagsData.bondingCurve?.progress ?? bagsData.progress;
+        
+        console.log(`[${tokenMint.slice(0, 8)}] bags.fm API: graduated=${isGraduated}, hasPool=${!!hasActivePool}, progress=${curveProgress}`);
+        
+        // If NOT graduated OR has active pool with progress < 100
+        if (!isGraduated || (curveProgress !== undefined && curveProgress < 100)) {
           // Token is on bags.fm curve - mark as on curve even if on-chain scan failed
           const dexPrice = await fetchDexScreenerPrice(tokenMint);
           const price = dexPrice?.price || 0;
@@ -711,17 +725,52 @@ export async function resolvePrice(
             fetchedAt: new Date().toISOString(),
             latencyMs: 0,
             isOnCurve: true,
-            bondingCurveProgress: undefined, // Unknown progress since on-chain scan failed
+            bondingCurveProgress: curveProgress,
             confidence: price > 0 ? 'medium' : 'low'
           };
           
-          console.log(`[${tokenMint.slice(0, 8)}] bags.fm API confirms on-curve: $${price.toFixed(10)}`);
+          console.log(`[${tokenMint.slice(0, 8)}] bags.fm API confirms on-curve: $${price.toFixed(10)}, progress=${curveProgress}`);
           priceCache.set(tokenMint, { result, timestamp: Date.now() });
           return result;
         }
+      } else {
+        // If API returns error, assume on-curve for BAGS suffix tokens (fail-open for curve detection)
+        console.log(`[${tokenMint.slice(0, 8)}] bags.fm API error - assuming on-curve for BAGS token`);
+        const dexPrice = await fetchDexScreenerPrice(tokenMint);
+        const price = dexPrice?.price || 0;
+        
+        const result: PriceResult = {
+          price,
+          source: 'bags_fm_fallback',
+          fetchedAt: new Date().toISOString(),
+          latencyMs: 0,
+          isOnCurve: true,
+          bondingCurveProgress: undefined,
+          confidence: 'low'
+        };
+        
+        priceCache.set(tokenMint, { result, timestamp: Date.now() });
+        return result;
       }
     } catch (bagsErr) {
       console.log(`[${tokenMint.slice(0, 8)}] bags.fm API fallback failed:`, bagsErr instanceof Error ? bagsErr.message : String(bagsErr));
+      // On error, assume on-curve for BAGS suffix tokens
+      console.log(`[${tokenMint.slice(0, 8)}] Assuming on-curve due to API failure`);
+      const dexPrice = await fetchDexScreenerPrice(tokenMint);
+      const price = dexPrice?.price || 0;
+      
+      const result: PriceResult = {
+        price,
+        source: 'bags_fm_error_fallback',
+        fetchedAt: new Date().toISOString(),
+        latencyMs: 0,
+        isOnCurve: true,
+        bondingCurveProgress: undefined,
+        confidence: 'low'
+      };
+      
+      priceCache.set(tokenMint, { result, timestamp: Date.now() });
+      return result;
     }
   }
 
