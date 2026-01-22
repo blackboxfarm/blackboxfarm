@@ -56,7 +56,7 @@ Some inflate the count.
 BlackBox.farm shows what actually grows — and what gets culled.`;
     
     // OG image for /holders page
-    const ogImage = "https://blackbox.farm/holders-og.png";
+    const ogImage = "https://apxauapuusmgwbbzjgfl.supabase.co/storage/v1/object/public/OG/holders_og.png";
 
     const html = `<!doctype html>
 <html lang="en">
