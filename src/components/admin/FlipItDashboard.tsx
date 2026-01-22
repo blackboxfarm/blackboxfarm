@@ -3986,11 +3986,8 @@ export function FlipItDashboard() {
                                   {bondingCurveData[position.token_mint].toFixed(0)}%
                                 </span>
                               ) : position.is_on_curve === false ? (
-                                <span 
-                                  className="inline-flex items-center justify-center px-1.5 h-4 text-[9px] font-bold text-green-400 bg-green-500/20 border border-green-500/40 rounded-full"
-                                  title="Token has graduated from bonding curve"
-                                >
-                                  Graduated
+                                <span title="Token has graduated from bonding curve">
+                                  <CheckCircle2 className="h-4 w-4 text-green-500" />
                                 </span>
                               ) : null}
                             </div>
