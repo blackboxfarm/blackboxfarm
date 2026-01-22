@@ -116,11 +116,10 @@ export function ShareCardDemo({ tokenStats = mockTokenStats }: { tokenStats?: To
       .replace(/\{timestamp\}/g, utcTimestamp);
   };
 
-  // Open Twitter with custom text and share URL
+  // Open Twitter with custom text only (no appended URL)
   const shareToTwitter = () => {
     const tweetText = processTemplate(tweetTemplate);
-    const url = getShareUrl();
-    const twitterUrl = `https://twitter.com/intent/tweet?text=${encodeURIComponent(tweetText)}&url=${encodeURIComponent(url)}`;
+    const twitterUrl = `https://twitter.com/intent/tweet?text=${encodeURIComponent(tweetText)}`;
     window.open(twitterUrl, '_blank', 'width=550,height=420');
   };
 
