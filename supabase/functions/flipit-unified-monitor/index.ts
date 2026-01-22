@@ -21,10 +21,26 @@ function bad(message: string, status = 400) {
   });
 }
 
-// Fetch prices from Jupiter with DexScreener fallback
-async function fetchTokenPrices(tokenMints: string[]): Promise<Record<string, number>> {
+// Market data for volume/price change indicators
+interface MarketData {
+  price: number;
+  priceChange5m?: number;
+  priceChange1h?: number;
+  priceChange24h?: number;
+  volume5m?: number;
+  volume1h?: number;
+  volume24h?: number;
+  volumeSurgeRatio?: number; // 5m volume vs 1h average
+}
+
+// Fetch prices and market data from Jupiter with DexScreener fallback
+async function fetchTokenPricesAndMarketData(tokenMints: string[]): Promise<{
+  prices: Record<string, number>;
+  marketData: Record<string, MarketData>;
+}> {
   const prices: Record<string, number> = {};
-  if (tokenMints.length === 0) return prices;
+  const marketData: Record<string, MarketData> = {};
+  if (tokenMints.length === 0) return { prices, marketData };
 
   try {
     const ids = tokenMints.join(',');
@@ -41,24 +57,56 @@ async function fetchTokenPrices(tokenMints: string[]): Promise<Record<string, nu
     console.error('Jupiter price fetch failed:', e);
   }
 
-  // Fallback to DexScreener for missing prices
-  const missingMints = tokenMints.filter(m => !prices[m]);
-  for (const mint of missingMints) {
+  // Fetch from DexScreener for missing prices AND to get market data (volume, price changes)
+  // DexScreener provides much richer data than Jupiter
+  const mintsForDex = tokenMints.filter(m => !prices[m] || !marketData[m]);
+  
+  // Batch fetch for all tokens to get market data
+  await Promise.all(tokenMints.map(async (mint) => {
     try {
       const dexRes = await fetch(`https://api.dexscreener.com/latest/dex/tokens/${mint}`);
       if (dexRes.ok) {
         const dexData = await dexRes.json();
-        const pair = dexData.pairs?.[0];
-        if (pair?.priceUsd) {
-          prices[mint] = parseFloat(pair.priceUsd);
+        // Sort by liquidity and get best pair
+        const pairs = dexData.pairs || [];
+        const sortedPairs = pairs.sort((a: any, b: any) => 
+          (Number(b.liquidity?.usd) || 0) - (Number(a.liquidity?.usd) || 0)
+        );
+        const pair = sortedPairs[0];
+        
+        if (pair) {
+          // Set price if not already set
+          if (!prices[mint] && pair.priceUsd) {
+            prices[mint] = parseFloat(pair.priceUsd);
+          }
+          
+          // Extract market data
+          const volume5m = parseFloat(pair.volume?.m5) || 0;
+          const volume1h = parseFloat(pair.volume?.h1) || 0;
+          const volume24h = parseFloat(pair.volume?.h24) || 0;
+          
+          // Calculate volume surge ratio: 5m volume vs average 5m from 1h
+          const avg5mFromHour = volume1h / 12;
+          const volumeSurgeRatio = avg5mFromHour > 0 ? volume5m / avg5mFromHour : 0;
+          
+          marketData[mint] = {
+            price: parseFloat(pair.priceUsd) || 0,
+            priceChange5m: parseFloat(pair.priceChange?.m5) || 0,
+            priceChange1h: parseFloat(pair.priceChange?.h1) || 0,
+            priceChange24h: parseFloat(pair.priceChange?.h24) || 0,
+            volume5m,
+            volume1h,
+            volume24h,
+            volumeSurgeRatio,
+          };
         }
       }
     } catch (e) {
-      console.error(`DexScreener fallback failed for ${mint}:`, e);
+      console.error(`DexScreener fetch failed for ${mint}:`, e);
     }
-  }
+  }));
 
-  return prices;
+  return { prices, marketData };
 }
 
 async function fetchSolPrice(): Promise<number> {
@@ -108,6 +156,7 @@ serve(async (req) => {
 
     const results = {
       prices: {} as Record<string, number>,
+      marketData: {} as Record<string, MarketData>,
       bondingCurveData: {} as Record<string, number>,
       checkedAt: new Date().toISOString(),
       priceMonitor: { checked: 0, executed: [] as string[] },
@@ -204,10 +253,11 @@ serve(async (req) => {
     (rebuyPositions || []).forEach(p => allMints.add(p.token_mint));
     (limitOrders || []).forEach(o => allMints.add(o.token_mint));
 
-    // Fetch all prices in one batch
-    const prices = await fetchTokenPrices(Array.from(allMints));
+    // Fetch all prices and market data in one batch
+    const { prices, marketData } = await fetchTokenPricesAndMarketData(Array.from(allMints));
     const solPrice = await fetchSolPrice();
     results.prices = prices;
+    results.marketData = marketData;
 
     // 4. Check price targets for holding positions
     results.priceMonitor.checked = holdingPositions?.length || 0;
