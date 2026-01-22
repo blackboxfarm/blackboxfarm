@@ -3832,13 +3832,33 @@ export function FlipItDashboard() {
                               const priceUp1h = (md.priceChange1h || 0) > 15; // >15% up in 1h
                               const priceDown1h = (md.priceChange1h || 0) < -15; // >15% down in 1h
                               
+                              // Determine if high volume is bullish or bearish based on price action
+                              const isPriceDumping = priceDown5m || priceDown1h || (md.priceChange5m || 0) < -2;
+                              const isPricePumping = priceUp5m || priceUp1h || (md.priceChange5m || 0) > 2;
+                              
+                              // Context-aware volume labels
+                              const getVolumeLabel = (ratio: number, isSpikeLevel: boolean) => {
+                                if (isPriceDumping) {
+                                  return isSpikeLevel ? 'Sell Pressure!' : 'Sell Volume';
+                                } else if (isPricePumping) {
+                                  return isSpikeLevel ? 'Buy Surge!' : 'Buy Volume';
+                                }
+                                return isSpikeLevel ? 'Volume Spike!' : 'High Volume';
+                              };
+                              
                               return (
                                 <>
-                                  {/* Volume Spike Indicator */}
+                                  {/* Volume Spike Indicator - context aware */}
                                   {hasVolumeSpike && (
                                     <span 
-                                      className="inline-flex items-center gap-0.5 px-1 py-0 text-[9px] font-bold text-yellow-400 bg-yellow-500/20 border border-yellow-500/40 rounded animate-pulse"
-                                      title={`Volume Spike! ${md.volumeSurgeRatio?.toFixed(1)}x avg (5m: $${(md.volume5m || 0).toLocaleString()})`}
+                                      className={`inline-flex items-center gap-0.5 px-1 py-0 text-[9px] font-bold rounded animate-pulse ${
+                                        isPriceDumping 
+                                          ? 'text-red-400 bg-red-500/20 border border-red-500/40' 
+                                          : isPricePumping
+                                            ? 'text-green-400 bg-green-500/20 border border-green-500/40'
+                                            : 'text-yellow-400 bg-yellow-500/20 border border-yellow-500/40'
+                                      }`}
+                                      title={`${getVolumeLabel(md.volumeSurgeRatio!, true)} ${md.volumeSurgeRatio?.toFixed(1)}x avg (5m: $${(md.volume5m || 0).toLocaleString()})`}
                                     >
                                       <BarChart3 className="h-2 w-2" />
                                       {md.volumeSurgeRatio?.toFixed(0)}x
@@ -3846,8 +3866,14 @@ export function FlipItDashboard() {
                                   )}
                                   {hasVolumeSurge && !hasVolumeSpike && (
                                     <span 
-                                      className="inline-flex items-center gap-0.5 px-1 py-0 text-[9px] font-medium text-blue-400 bg-blue-500/20 border border-blue-500/40 rounded"
-                                      title={`Volume Surge: ${md.volumeSurgeRatio?.toFixed(1)}x avg (5m: $${(md.volume5m || 0).toLocaleString()})`}
+                                      className={`inline-flex items-center gap-0.5 px-1 py-0 text-[9px] font-medium rounded ${
+                                        isPriceDumping 
+                                          ? 'text-red-400 bg-red-500/20 border border-red-500/40' 
+                                          : isPricePumping
+                                            ? 'text-green-400 bg-green-500/20 border border-green-500/40'
+                                            : 'text-blue-400 bg-blue-500/20 border border-blue-500/40'
+                                      }`}
+                                      title={`${getVolumeLabel(md.volumeSurgeRatio!, false)}: ${md.volumeSurgeRatio?.toFixed(1)}x avg (5m: $${(md.volume5m || 0).toLocaleString()})`}
                                     >
                                       <BarChart3 className="h-2 w-2" />
                                     </span>
