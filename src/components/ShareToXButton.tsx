@@ -60,8 +60,7 @@ Health: ${healthGrade} (${healthScore}/100)
 😎 ${serious} Serious ($200-$1K)
 🏪 ${retail.toLocaleString()} Retail ($1-$199)
 💨 ${dustWallets.toLocaleString()} Dust (<$1) = ${dustPct}% Dust
-More Holder Intel 👉 ${holdersUrlForX}
-Charts on Trader 👉 https://trade.padre.gg/rk=blackbox`;
+More Holder Intel 👉 ${holdersUrlForX}`;
 
   const handleShareToX = () => {
     window.open(
@@ -78,8 +77,7 @@ Charts on Trader 👉 https://trade.padre.gg/rk=blackbox`;
 🏛 ${totalWallets.toLocaleString()} Total Wallets
 🐋 ${whales} Whales (>$1K) | 😎 ${serious} Serious | 🏪 ${retail.toLocaleString()} Retail | 💨 ${dustWallets.toLocaleString()} Dust
 ⏱️ ${utcTimestamp}
-More Holder Intel 👉 blackbox.farm/holders
-Charts on Trader 👉 padre.gg/rk=blackbox`;
+More Holder Intel 👉 blackbox.farm/holders`;
     navigator.clipboard.writeText(discordText);
     toast({
       title: "Copied!",

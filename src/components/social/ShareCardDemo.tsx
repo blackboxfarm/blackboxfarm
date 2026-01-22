@@ -60,9 +60,10 @@ Health: {healthGrade} ({healthScore}/100)
 
 💨 {dust} Dust (<$1) = {dustPct}% Dust
 
-More Holder Intel👉 https://blackbox.farm/holders-og/
+More Holder Intel👉 https://blackbox.farm/holders`;
 
-Charts on Trader 👉 https://padre.gg/rk=blackbox`;
+// Bump storage key to force reset of old templates
+const TEMPLATE_STORAGE_KEY = 'share-tweet-template-v2';
 
 const TEMPLATE_VARIABLES = [
   { var: '{ticker}', desc: 'Token symbol' },
@@ -82,28 +83,17 @@ const TEMPLATE_VARIABLES = [
 
 export function ShareCardDemo({ tokenStats = mockTokenStats }: { tokenStats?: TokenStats }) {
   const [tweetTemplate, setTweetTemplate] = useState(() => {
-    const saved = localStorage.getItem('share-tweet-template');
+    const saved = localStorage.getItem(TEMPLATE_STORAGE_KEY);
     return saved || DEFAULT_TWEET_TEMPLATE;
   });
 
-  // One-time migration: old templates used the SPA route (/holders) which doesn't serve OG tags.
-  useEffect(() => {
-    const saved = localStorage.getItem('share-tweet-template');
-    if (!saved) return;
-    if (saved.includes('https://blackbox.farm/holders-og/')) return;
-    if (!saved.includes('https://blackbox.farm/holders')) return;
-
-    const migrated = saved.replace(/https:\/\/blackbox\.farm\/holders(?!-og\/)\/?/g, 'https://blackbox.farm/holders-og/');
-    setTweetTemplate(migrated);
-  }, []);
-
   // Persist template to localStorage whenever it changes
   useEffect(() => {
-    localStorage.setItem('share-tweet-template', tweetTemplate);
+    localStorage.setItem(TEMPLATE_STORAGE_KEY, tweetTemplate);
   }, [tweetTemplate]);
 
   const getShareUrl = () => {
-    return `https://blackbox.farm/holders-og/?token=${encodeURIComponent(tokenStats.tokenAddress)}`;
+    return `https://blackbox.farm/holders?token=${encodeURIComponent(tokenStats.tokenAddress)}`;
   };
 
   // Process template with actual values
