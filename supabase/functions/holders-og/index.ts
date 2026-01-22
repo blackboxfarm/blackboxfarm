@@ -55,7 +55,7 @@ Some roots hold.
 Some inflate the count.
 BlackBox.farm shows what actually grows — and what gets culled.`;
     
-    // TODO: Replace with actual OG image URL once provided
+    // OG image for /holders page
     const ogImage = "https://blackbox.farm/holders-og.png";
 
     const html = `<!doctype html>
