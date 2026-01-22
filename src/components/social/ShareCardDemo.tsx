@@ -4,8 +4,10 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
-import { Copy, RotateCcw, Share2 } from 'lucide-react';
+import { Input } from '@/components/ui/input';
+import { Copy, RotateCcw, Share2, Search, Send, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
+import { supabase } from '@/integrations/supabase/client';
 import {
   DEFAULT_TWEET_TEMPLATE,
   TEMPLATE_STORAGE_KEY,
@@ -34,7 +36,7 @@ interface TokenStats {
   dustPercentage: number;
 }
 
-// Mock data for demo
+// Mock data for demo (used when no token is fetched)
 const mockTokenStats: TokenStats = {
   symbol: 'DEMO',
   name: 'Demo Token',
@@ -52,8 +54,15 @@ const mockTokenStats: TokenStats = {
   dustPercentage: 50,
 };
 
-export function ShareCardDemo({ tokenStats = mockTokenStats }: { tokenStats?: TokenStats }) {
+export function ShareCardDemo({ tokenStats: initialTokenStats = mockTokenStats }: { tokenStats?: TokenStats }) {
   const [tweetTemplate, setTweetTemplate] = useState(() => getTemplate());
+  const [tokenMint, setTokenMint] = useState('');
+  const [isFetching, setIsFetching] = useState(false);
+  const [isPosting, setIsPosting] = useState(false);
+  const [fetchedStats, setFetchedStats] = useState<TokenStats | null>(null);
+
+  // Use fetched stats if available, otherwise use initial/mock
+  const tokenStats = fetchedStats || initialTokenStats;
 
   // Persist template to localStorage whenever it changes
   useEffect(() => {
@@ -74,6 +83,91 @@ export function ShareCardDemo({ tokenStats = mockTokenStats }: { tokenStats?: To
     retail: tokenStats.activeCount,
     healthGrade: tokenStats.healthGrade,
     healthScore: tokenStats.healthScore,
+  };
+
+  // Fetch holder data using the same edge function as /holders page
+  const handleFetch = async () => {
+    if (!tokenMint.trim()) {
+      toast.error('Please enter a token address');
+      return;
+    }
+
+    setIsFetching(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('bagless-holders-report', {
+        body: { tokenMint: tokenMint.trim() }
+      });
+
+      if (error) throw error;
+
+      if (!data || !data.holders) {
+        throw new Error('No holder data returned');
+      }
+
+      // Transform the response into TokenStats format
+      const stats: TokenStats = {
+        symbol: data.tokenSymbol || 'UNKNOWN',
+        name: data.tokenName || data.tokenSymbol || 'Unknown Token',
+        tokenAddress: tokenMint.trim(),
+        price: data.tokenPriceUSD || 0,
+        marketCap: data.marketCap || 0,
+        healthScore: data.stabilityScore || 0,
+        healthGrade: data.stabilityGrade || 'N/A',
+        totalHolders: data.totalHolders || 0,
+        realHolders: data.realHolders || 0,
+        whaleCount: data.tierBreakdown?.whale || 0,
+        strongCount: data.tierBreakdown?.serious || data.tierBreakdown?.boss || 0,
+        activeCount: data.tierBreakdown?.retail || data.tierBreakdown?.real || 0,
+        dustCount: data.tierBreakdown?.dust || 0,
+        dustPercentage: data.dustPercentage || 0,
+      };
+
+      setFetchedStats(stats);
+      toast.success(`Fetched data for $${stats.symbol}`);
+    } catch (err: any) {
+      console.error('Fetch error:', err);
+      toast.error(err.message || 'Failed to fetch token data');
+    } finally {
+      setIsFetching(false);
+    }
+  };
+
+  // Post to Twitter via edge function using @HoldersIntent credentials
+  const handlePostToTwitter = async () => {
+    if (!fetchedStats) {
+      toast.error('Please fetch token data first');
+      return;
+    }
+
+    setIsPosting(true);
+    try {
+      // Get the processed tweet text from the template
+      const tweetText = processTemplate(tweetTemplate, tokenData);
+
+      const { data, error } = await supabase.functions.invoke('post-share-card-twitter', {
+        body: { 
+          tweetText,
+          twitterHandle: 'HoldersIntent'
+        }
+      });
+
+      if (error) throw error;
+
+      if (data?.success) {
+        toast.success(
+          <div>
+            Tweet posted! <a href={data.tweetUrl} target="_blank" rel="noopener noreferrer" className="underline">View tweet</a>
+          </div>
+        );
+      } else {
+        throw new Error(data?.error || 'Failed to post tweet');
+      }
+    } catch (err: any) {
+      console.error('Post error:', err);
+      toast.error(err.message || 'Failed to post to Twitter');
+    } finally {
+      setIsPosting(false);
+    }
   };
 
   // Open Twitter with custom text only (no appended URL)
@@ -132,7 +226,7 @@ export function ShareCardDemo({ tokenStats = mockTokenStats }: { tokenStats?: To
             </div>
           </div>
           <div className="space-y-2">
-            <Label>Preview</Label>
+            <Label>Preview {fetchedStats && <Badge variant="secondary" className="ml-2">${fetchedStats.symbol}</Badge>}</Label>
             <div className="p-3 bg-muted/50 rounded-lg border text-sm whitespace-pre-wrap min-h-[300px]">
               {processTemplate(tweetTemplate, tokenData)}
             </div>
@@ -168,6 +262,44 @@ export function ShareCardDemo({ tokenStats = mockTokenStats }: { tokenStats?: To
           >
             <Share2 className="h-4 w-4 mr-2" />
             Share to X (Twitter)
+          </Button>
+        </div>
+
+        {/* Token Fetch + API Post Section */}
+        <div className="pt-4 border-t border-border space-y-3">
+          <Label className="text-sm font-medium">Manual API Post (@HoldersIntent)</Label>
+          <div className="flex gap-2">
+            <Input
+              placeholder="Enter token address..."
+              value={tokenMint}
+              onChange={(e) => setTokenMint(e.target.value)}
+              className="flex-1 font-mono text-sm"
+            />
+            <Button
+              variant="outline"
+              onClick={handleFetch}
+              disabled={isFetching || !tokenMint.trim()}
+            >
+              {isFetching ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <Search className="h-4 w-4" />
+              )}
+              <span className="ml-2">Fetch</span>
+            </Button>
+          </div>
+          
+          <Button 
+            className="w-full bg-emerald-600 hover:bg-emerald-700"
+            onClick={handlePostToTwitter}
+            disabled={isPosting || !fetchedStats}
+          >
+            {isPosting ? (
+              <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+            ) : (
+              <Send className="h-4 w-4 mr-2" />
+            )}
+            Post to @HoldersIntent
           </Button>
         </div>
       </CardContent>
