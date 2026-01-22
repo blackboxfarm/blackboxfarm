@@ -82,13 +82,32 @@ async function getConfig(supabase: any): Promise<FantasyConfig> {
 
 // Get SOL price in USD
 async function getSolPrice(): Promise<number> {
+  // Try Jupiter first
   try {
     const response = await fetch('https://api.jup.ag/price/v2?ids=So11111111111111111111111111111111111111112');
     const data = await response.json();
-    return data?.data?.['So11111111111111111111111111111111111111112']?.price || 200;
-  } catch {
-    return 200; // Fallback
+    const price = data?.data?.['So11111111111111111111111111111111111111112']?.price;
+    if (price && price > 0) return price;
+  } catch (e) {
+    console.error('Jupiter SOL price failed:', e);
   }
+  
+  // Try CoinGecko as backup
+  try {
+    const apiKey = Deno.env.get('COINGECKO_API_KEY');
+    const headers: Record<string, string> = { 'Accept': 'application/json' };
+    if (apiKey) headers['x-cg-demo-api-key'] = apiKey;
+    const res = await fetch('https://api.coingecko.com/api/v3/simple/price?ids=solana&vs_currencies=usd', { headers });
+    if (res.ok) {
+      const data = await res.json();
+      if (data?.solana?.usd) return data.solana.usd;
+    }
+  } catch (e) {
+    console.error('CoinGecko SOL price failed:', e);
+  }
+  
+  // NO FALLBACK - throw error
+  throw new Error('CRITICAL: Cannot fetch SOL price from any source');
 }
 
 // Get token price from Jupiter

@@ -178,9 +178,12 @@ async function processCopyTrade(
     }
   }
 
-  // Get current SOL price for calculations
-  const { data: solPriceResponse } = await supabase.functions.invoke('sol-price')
-  const solPrice = solPriceResponse?.price || 233
+  // Get current SOL price for calculations - NO FALLBACK
+  const { data: solPriceResponse, error: solPriceError } = await supabase.functions.invoke('sol-price')
+  if (solPriceError || !solPriceResponse?.price) {
+    throw new Error(`CRITICAL: Cannot get SOL price - refusing to trade. Error: ${solPriceError?.message || 'No price returned'}`)
+  }
+  const solPrice = solPriceResponse.price
 
   const copyAmountSol = copyAmountUsd / solPrice
 

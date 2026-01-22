@@ -127,9 +127,12 @@ serve(async (req) => {
       // Execute REAL buy transaction using Jupiter/Raydium
       const config = commandData.config;
       
-      // Get current SOL price for conversion
-      const { data: solPriceData } = await supabaseClient.functions.invoke('sol-price');
-      const solPrice = solPriceData?.price || 201; // Fallback price
+      // Get current SOL price for conversion - NO FALLBACK, must have real price
+      const { data: solPriceData, error: solPriceError } = await supabaseClient.functions.invoke('sol-price');
+      if (solPriceError || !solPriceData?.price) {
+        throw new Error(`CRITICAL: Cannot get SOL price - refusing to trade with unknown price. Error: ${solPriceError?.message || 'No price returned'}`);
+      }
+      const solPrice = solPriceData.price;
       
       // Handle both new USD format and legacy SOL format for backwards compatibility
       let buyAmountUSD: number;

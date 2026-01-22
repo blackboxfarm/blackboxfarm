@@ -322,7 +322,7 @@ export function LiveActivityMonitor({ campaignId }: LiveActivityMonitorProps) {
                             {tx.transaction_type.toUpperCase()}
                           </Badge>
                           <span className="text-sm font-mono">
-                            ${(Number(tx.amount_sol) * 150).toFixed(4)} USD ({Number(tx.amount_sol).toFixed(9)} SOL)
+                            {Number(tx.amount_sol).toFixed(6)} SOL
                           </span>
                         </div>
                         <div className="text-xs text-muted-foreground">

@@ -89,7 +89,8 @@ async function fetchSolPrice(): Promise<number> {
     console.error('CoinGecko SOL price failed:', e);
   }
   
-  return 150; // fallback
+  // NO FALLBACK - throw error instead of using fake price
+  throw new Error('CRITICAL: All SOL price sources failed - cannot proceed with stale price');
 }
 
 serve(async (req) => {
