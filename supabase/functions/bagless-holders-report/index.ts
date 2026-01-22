@@ -70,6 +70,15 @@ serve(async (req) => {
     launchpadInfo = dexResult.launchpadInfo;
     const socials = dexResult.socials;
     const dexStatus = dexResult.dexStatus;
+
+    // Best-effort token metadata from DexScreener (used by UI + share template)
+    const dexPair0: any = Array.isArray(dexResult.pairs) ? dexResult.pairs[0] : null;
+    const tokenSymbol: string = (dexPair0?.baseToken?.symbol || dexPair0?.baseToken?.name || '').toString();
+    const tokenName: string = (dexPair0?.baseToken?.name || dexPair0?.baseToken?.symbol || '').toString();
+    const dexMarketCapRaw = dexPair0?.marketCap ?? dexPair0?.fdv;
+    const dexMarketCapUSD = typeof dexMarketCapRaw === 'number'
+      ? dexMarketCapRaw
+      : (dexMarketCapRaw ? Number(dexMarketCapRaw) : 0);
     
     // Use DexScreener price if available
     if (!manualPrice && dexResult.priceUsd > 0) {
@@ -332,6 +341,12 @@ serve(async (req) => {
     const nonLpBalance = nonLpHolders.reduce((sum, h) => sum + h.balance, 0);
     const circulatingSupplyExcludingLP = nonLpBalance;
     const circulatingPercentage = totalBalance > 0 ? (nonLpBalance / totalBalance) * 100 : 0;
+
+    const inferredMarketCapUSD = (
+      !Number.isNaN(dexMarketCapUSD) && dexMarketCapUSD > 0
+    )
+      ? dexMarketCapUSD
+      : (totalBalance > 0 && tokenPriceUSD > 0 ? totalBalance * tokenPriceUSD : 0);
     
     // === RISK FLAGS ===
     const riskFlags: string[] = [];
@@ -402,6 +417,15 @@ serve(async (req) => {
 
     const result = {
       tokenMint,
+
+      // Metadata (best-effort)
+      symbol: tokenSymbol || null,
+      name: tokenName || null,
+      // Back-compat aliases (some clients historically used these)
+      tokenSymbol: tokenSymbol || null,
+      tokenName: tokenName || null,
+      marketCap: inferredMarketCapUSD,
+
       totalHolders: rankedHolders.length,
       liquidityPoolsDetected: lpWallets.length,
       lpBalance,
@@ -420,6 +444,19 @@ serve(async (req) => {
       dexStatus,
       creatorInfo: Object.keys(creatorInfo).length > 0 ? creatorInfo : undefined,
       insidersGraph: insidersResult.hasInsiders ? insidersResult : undefined,
+
+      // Back-compat fields for UI widgets
+      realHolders: realWallets,
+      dustPercentage: simpleTiers.dust.percentage,
+      tierBreakdown: {
+        dust: simpleTiers.dust.count,
+        retail: simpleTiers.retail.count,
+        serious: simpleTiers.serious.count,
+        whale: simpleTiers.whales.count,
+      },
+      stabilityScore: healthScore,
+      stabilityGrade: healthGrade,
+
       // NEW: Simplified tiers
       simpleTiers,
       // NEW: Distribution stats
