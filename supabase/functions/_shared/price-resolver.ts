@@ -321,7 +321,12 @@ export async function fetchMeteoraDBC(
  * Fetch bonding curve progress directly from a Meteora pool account
  * This is more reliable than scanning all program accounts
  * 
- * Migration threshold is ~85 SOL for bags.fm
+ * bags.fm Meteora DBC pool layout (based on observed data):
+ * - The pool contains multiple SOL-like values at different offsets
+ * - We need to find the QUOTE RESERVE (SOL deposited into curve)
+ * 
+ * Migration threshold for bags.fm: ~60 SOL (not 85 SOL like Raydium Launchlab)
+ * bags.fm uses a lower threshold than Raydium Launchlab
  */
 async function fetchMeteoraCurveProgressFromPool(
   poolAddress: string,
@@ -344,19 +349,26 @@ async function fetchMeteoraCurveProgressFromPool(
     }
 
     const data = accountInfo.data;
-    console.log(`[MeteoraCurve] Pool account size: ${data.length} bytes, owner: ${accountInfo.owner.toBase58().slice(0, 8)}...`);
+    const ownerProgram = accountInfo.owner.toBase58();
+    console.log(`[MeteoraCurve] Pool account size: ${data.length} bytes, owner: ${ownerProgram.slice(0, 8)}...`);
+    
+    // Check if this is a Meteora DBC pool
+    if (!ownerProgram.startsWith('dbcij3LW')) {
+      console.log(`[MeteoraCurve] Pool is NOT Meteora DBC (owner: ${ownerProgram}), skipping progress calc`);
+      return undefined;
+    }
     
     const view = new DataView(data.buffer, data.byteOffset, data.byteLength);
     
     // Scan the entire pool for values that look like SOL reserves
-    // Reasonable SOL reserve range: > 0.5 SOL and < 100 SOL in lamports (500M - 100B lamports)
+    // Reasonable SOL reserve range for on-curve: > 0.1 SOL and < 85 SOL in lamports
     const candidates: { offset: number; value: bigint; sol: number }[] = [];
     
     for (let offset = 0; offset <= data.length - 8; offset += 8) {
       try {
         const val = view.getBigUint64(offset, true);
-        // Look for values between 0.5 SOL and 100 SOL (bonding curve range)
-        if (val >= 500_000_000n && val <= 100_000_000_000n) {
+        // Look for values between 0.1 SOL and 85 SOL (bonding curve range)
+        if (val >= 100_000_000n && val <= 85_000_000_000n) {
           const solValue = Number(val) / 1e9;
           candidates.push({ offset, value: val, sol: solValue });
         }
@@ -364,11 +376,11 @@ async function fetchMeteoraCurveProgressFromPool(
     }
     
     console.log(`[MeteoraCurve] Found ${candidates.length} potential SOL reserve candidates:`, 
-      candidates.map(c => `offset ${c.offset}: ${c.sol.toFixed(2)} SOL`).join(', ')
+      candidates.slice(0, 6).map(c => `offset ${c.offset}: ${c.sol.toFixed(2)} SOL`).join(', ')
     );
     
     if (candidates.length === 0) {
-      // Try broader scan for smaller values (early curve might have less than 0.5 SOL)
+      // Try broader scan for smaller values (early curve might have less than 0.1 SOL)
       for (let offset = 0; offset <= data.length - 8; offset += 8) {
         try {
           const val = view.getBigUint64(offset, true);
@@ -389,22 +401,32 @@ async function fetchMeteoraCurveProgressFromPool(
       return undefined;
     }
 
-    // Use the largest candidate as the quote reserve (most likely to be the actual reserve)
-    const bestCandidate = candidates.sort((a, b) => Number(b.value - a.value))[0];
-    const quoteReserve = bestCandidate.value;
+    // For bags.fm, the quote reserve is typically the LARGEST value in the reasonable range
+    // But we need to be careful - there might be multiple reserves (virtual vs real)
+    // Sort by offset to understand the layout, then pick the most likely quote reserve
+    candidates.sort((a, b) => a.offset - b.offset);
+    console.log(`[MeteoraCurve] Candidates by offset:`, 
+      candidates.map(c => `[${c.offset}]=${c.sol.toFixed(2)}`).join(', ')
+    );
     
-    console.log(`[MeteoraCurve] Using quoteReserve at offset ${bestCandidate.offset}: ${bestCandidate.sol.toFixed(4)} SOL`);
+    // Use the largest candidate as the quote reserve
+    const largestCandidate = candidates.reduce((a, b) => a.value > b.value ? a : b);
+    const quoteReserve = largestCandidate.value;
+    
+    console.log(`[MeteoraCurve] Using quoteReserve at offset ${largestCandidate.offset}: ${largestCandidate.sol.toFixed(4)} SOL`);
 
-    // Migration threshold is ~85 SOL for bags.fm
-    const migrationThreshold = 85_000_000_000n; // 85 SOL in lamports
+    // bags.fm migration threshold is ~60 SOL (verified from padre.gg showing 89% at ~53 SOL)
+    // Formula: progress = (quoteReserve / threshold) * 100
+    // If ~53 SOL = 89%, then threshold ≈ 59.5 SOL (let's use 60 SOL)
+    const migrationThreshold = 60_000_000_000n; // 60 SOL in lamports for bags.fm
     
-    // Calculate progress: (SOL deposited / 85) * 100
+    // Calculate progress: (SOL deposited / 60) * 100
     const progress = Math.min(
       Math.max(Number((quoteReserve * 100n) / migrationThreshold), 0),
       100
     );
 
-    console.log(`[MeteoraCurve] Progress: ${progress.toFixed(1)}% (${Number(quoteReserve) / 1e9} / 85 SOL)`);
+    console.log(`[MeteoraCurve] Progress: ${progress.toFixed(1)}% (${Number(quoteReserve) / 1e9} / 60 SOL threshold)`);
     
     return progress;
   } catch (e) {
@@ -587,8 +609,17 @@ async function fetchPumpFunApiPrice(tokenMint: string, solPriceUsd: number): Pro
 /**
  * Fetch price from DexScreener
  * CRITICAL FIX: Select HIGHEST USD LIQUIDITY pair to avoid spoofed/low-liquidity pairs
+ * 
+ * Returns additional metadata for graduation detection:
+ * - dexId: "bags" = on bonding curve, "meteora"/"raydium" = graduated
+ * - liquidity: Real AMM pools have substantial liquidity (>$1000)
  */
-async function fetchDexScreenerPrice(tokenMint: string): Promise<PriceResult | null> {
+interface DexScreenerResult extends PriceResult {
+  dexId?: string;
+  liquidityUsd?: number;
+}
+
+async function fetchDexScreenerPrice(tokenMint: string): Promise<DexScreenerResult | null> {
   const start = Date.now();
   
   try {
@@ -623,17 +654,20 @@ async function fetchDexScreenerPrice(tokenMint: string): Promise<PriceResult | n
 
     const latencyMs = Date.now() - start;
     const liquidity = Number(bestPair.liquidity?.usd) || 0;
+    const dexId = bestPair.dexId || 'unknown';
 
-    console.log(`[DexScreener] Selected pair with $${liquidity.toFixed(0)} liquidity from ${pairs.length} pairs`);
+    console.log(`[DexScreener] Selected pair: dexId=${dexId}, $${liquidity.toFixed(0)} liquidity from ${pairs.length} pairs`);
 
     return {
       price: Number(bestPair.priceUsd),
       source: 'dexscreener',
       fetchedAt: new Date().toISOString(),
       latencyMs,
-      isOnCurve: false, // DexScreener only has graduated tokens
+      isOnCurve: false, // Will be overridden by caller if needed
       confidence: liquidity > 10000 ? 'high' : liquidity > 1000 ? 'medium' : 'low',
-      pairAddress: bestPair.pairAddress || undefined
+      pairAddress: bestPair.pairAddress || undefined,
+      dexId,
+      liquidityUsd: liquidity
     };
   } catch (e) {
     console.log('DexScreener failed:', e instanceof Error ? e.message : String(e));
@@ -836,14 +870,40 @@ export async function resolvePrice(
           return result;
         }
       } else {
-        // If API returns error, try to calculate progress from DexScreener pool data
-        console.log(`[${tokenMint.slice(0, 8)}] bags.fm API error - trying direct pool lookup`);
+        // If API returns 404, token may have GRADUATED - check DexScreener for evidence
+        console.log(`[${tokenMint.slice(0, 8)}] bags.fm API error (status ${bagsRes.status}) - checking graduation status`);
         const dexPrice = await fetchDexScreenerPrice(tokenMint);
         const price = dexPrice?.price || 0;
         
-        // Try to calculate bonding curve progress from pool liquidity
+        // CRITICAL: Check if token has graduated to Meteora AMM
+        // Graduated tokens have: dexId="meteora" (not "bags") AND real liquidity
+        const dexId = (dexPrice as any)?.dexId || 'unknown';
+        const liquidityUsd = (dexPrice as any)?.liquidityUsd || 0;
+        const isGraduatedToAMM = dexId === 'meteora' && liquidityUsd > 1000;
+        
+        console.log(`[${tokenMint.slice(0, 8)}] DexScreener: dexId=${dexId}, liquidity=$${liquidityUsd.toFixed(0)}, graduated=${isGraduatedToAMM}`);
+        
+        if (isGraduatedToAMM) {
+          // Token has GRADUATED - return as graduated, not on curve
+          const result: PriceResult = {
+            price,
+            source: 'dexscreener',
+            fetchedAt: new Date().toISOString(),
+            latencyMs: 0,
+            isOnCurve: false,
+            bondingCurveProgress: 100, // Graduated = 100%
+            confidence: 'high',
+            pairAddress: dexPrice?.pairAddress
+          };
+          
+          console.log(`[${tokenMint.slice(0, 8)}] GRADUATED to Meteora AMM: $${price.toFixed(10)}`);
+          priceCache.set(tokenMint, { result, timestamp: Date.now() });
+          return result;
+        }
+        
+        // Still on curve (dexId="bags") - try to calculate progress from pool data
         let bondingCurveProgress: number | undefined;
-        if (heliusApiKey && dexPrice?.pairAddress) {
+        if (heliusApiKey && dexPrice?.pairAddress && dexId === 'bags') {
           bondingCurveProgress = await fetchMeteoraCurveProgressFromPool(dexPrice.pairAddress, heliusApiKey);
           console.log(`[${tokenMint.slice(0, 8)}] Meteora pool progress: ${bondingCurveProgress?.toFixed(1) ?? 'unknown'}%`);
         }
@@ -853,7 +913,7 @@ export async function resolvePrice(
           source: 'bags_fm_fallback',
           fetchedAt: new Date().toISOString(),
           latencyMs: 0,
-          isOnCurve: true,
+          isOnCurve: dexId === 'bags', // Only on-curve if dexId is "bags"
           bondingCurveProgress,
           confidence: bondingCurveProgress !== undefined ? 'medium' : 'low'
         };
@@ -863,14 +923,37 @@ export async function resolvePrice(
       }
     } catch (bagsErr) {
       console.log(`[${tokenMint.slice(0, 8)}] bags.fm API fallback failed:`, bagsErr instanceof Error ? bagsErr.message : String(bagsErr));
-      // On error, try direct pool lookup for progress
-      console.log(`[${tokenMint.slice(0, 8)}] Assuming on-curve due to API failure, trying pool lookup`);
+      // On error, check DexScreener for graduation status
       const dexPrice = await fetchDexScreenerPrice(tokenMint);
       const price = dexPrice?.price || 0;
       
-      // Try to calculate bonding curve progress from pool liquidity
+      // Check graduation status from DexScreener
+      const dexId = (dexPrice as any)?.dexId || 'unknown';
+      const liquidityUsd = (dexPrice as any)?.liquidityUsd || 0;
+      const isGraduatedToAMM = dexId === 'meteora' && liquidityUsd > 1000;
+      
+      console.log(`[${tokenMint.slice(0, 8)}] DexScreener fallback: dexId=${dexId}, liquidity=$${liquidityUsd.toFixed(0)}, graduated=${isGraduatedToAMM}`);
+      
+      if (isGraduatedToAMM) {
+        const result: PriceResult = {
+          price,
+          source: 'dexscreener',
+          fetchedAt: new Date().toISOString(),
+          latencyMs: 0,
+          isOnCurve: false,
+          bondingCurveProgress: 100,
+          confidence: 'high',
+          pairAddress: dexPrice?.pairAddress
+        };
+        
+        console.log(`[${tokenMint.slice(0, 8)}] GRADUATED to Meteora AMM: $${price.toFixed(10)}`);
+        priceCache.set(tokenMint, { result, timestamp: Date.now() });
+        return result;
+      }
+      
+      // Still on curve - try pool lookup for progress
       let bondingCurveProgress: number | undefined;
-      if (heliusApiKey && dexPrice?.pairAddress) {
+      if (heliusApiKey && dexPrice?.pairAddress && dexId === 'bags') {
         bondingCurveProgress = await fetchMeteoraCurveProgressFromPool(dexPrice.pairAddress, heliusApiKey);
         console.log(`[${tokenMint.slice(0, 8)}] Meteora pool progress: ${bondingCurveProgress?.toFixed(1) ?? 'unknown'}%`);
       }
@@ -880,7 +963,7 @@ export async function resolvePrice(
         source: 'bags_fm_error_fallback',
         fetchedAt: new Date().toISOString(),
         latencyMs: 0,
-        isOnCurve: true,
+        isOnCurve: dexId === 'bags',
         bondingCurveProgress,
         confidence: bondingCurveProgress !== undefined ? 'medium' : 'low'
       };
