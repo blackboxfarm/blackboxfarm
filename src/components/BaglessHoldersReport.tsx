@@ -1629,6 +1629,7 @@ export function BaglessHoldersReport({ initialToken }: BaglessHoldersReportProps
               <div className="mb-4">
                 <ShareToXButton
                   ticker={tokenData?.metadata?.symbol || 'TOKEN'}
+                  tokenName={tokenData?.metadata?.name || 'Unknown Token'}
                   tokenMint={tokenMint.trim()}
                   totalWallets={report?.totalHolders || 0}
                   realHolders={report?.realWallets || 0}
@@ -2332,6 +2333,7 @@ export function BaglessHoldersReport({ initialToken }: BaglessHoldersReportProps
                 <div className="mt-4">
                   <ShareToXButton
                     ticker={tokenData?.metadata?.symbol || 'TOKEN'}
+                    tokenName={tokenData?.metadata?.name || 'Unknown Token'}
                     tokenMint={tokenMint.trim()}
                     totalWallets={report?.totalHolders || 0}
                     realHolders={report?.realWallets || 0}
