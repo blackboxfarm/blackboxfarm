@@ -8,10 +8,11 @@
     "logoUrl": "https://pump.fun/icon.png",
     "api": {
       "enabled": true,
-      "provider": "helius",
-      "method": "enhancedTransactions",
-      "envKey": "HELIUS_API_KEY"
-    }
+      "provider": "pumpportal",
+      "method": "trade-local",
+      "pool": "pump"
+    },
+    "priority": 1
   },
   "bonkfun": {
     "name": "bonkfun",
@@ -25,7 +26,8 @@
       "provider": "pumpportal",
       "method": "trade-local",
       "pool": "bonk"
-    }
+    },
+    "priority": 2
   },
   "bagsfm": {
     "name": "bagsfm",
@@ -35,20 +37,72 @@
     ],
     "logoUrl": "https://bags.fm/favicon.ico",
     "api": {
-      "enabled": false
-    }
+      "enabled": true,
+      "provider": "pumpportal",
+      "method": "trade-local",
+      "pool": "pump"
+    },
+    "priority": 3
+  },
+  "jupiter": {
+    "name": "jupiter",
+    "type": "aggregator",
+    "programIds": [
+      "JUP6LkbZbjS1jKKwapdHNy74zcZ3tLUZoi5QNyVTaV4",
+      "jupoNjAxXgZ4rjzxzPMP4oxduvQsQtZzyknqvzYNrNu"
+    ],
+    "logoUrl": "https://jup.ag/favicon.ico",
+    "api": {
+      "enabled": true,
+      "provider": "jupiter",
+      "endpoints": [
+        "https://api.jup.ag/swap/v1",
+        "https://api.jup.ag/v6"
+      ],
+      "envKey": "JUPITER_API_KEY"
+    },
+    "priority": 4,
+    "description": "Aggregates Raydium, Orca, Meteora, OpenBook, and more"
   },
   "raydium": {
     "name": "raydium",
     "type": "amm",
     "programIds": [
       "675kPX9MHTjS2zt1qfr1NYHuzeLXfQM9H24wFSUt1Mp8",
-      "CAMMCzo5YL8w4VFF8KVHrK22GGUsp5VTaW7grrKgrWqK"
+      "CAMMCzo5YL8w4VFF8KVHrK22GGUsp5VTaW7grrKgrWqK",
+      "CPMMoo8L3F4NbTegBCKVNunggL7H1ZpdTHKxQB5qKP1C"
     ],
     "logoUrl": "https://raydium.io/logo.png",
     "api": {
-      "enabled": false
-    }
+      "enabled": true,
+      "provider": "raydium",
+      "endpoints": [
+        "https://transaction-v1.raydium.io/compute/swap-base-in",
+        "https://transaction-v1.raydium.io/transaction/swap-base-in"
+      ]
+    },
+    "priority": 5
+  },
+  "meteora": {
+    "name": "meteora",
+    "type": "amm",
+    "programIds": [
+      "LBUZKhRxPF3XUpBCjp4YzTKgLccjZhTSDM9YuVaPwxo",
+      "Eo7WjKq67rjJQSZxS6z3YkapzY3eMj6Xy8X5EQVn5UaB",
+      "EyGdBX4EHWvZhG8kEF39yvEPBHcEF2ZaKGrYdcBCTm6h",
+      "Gswppe6ERWKpUTXvRPfXdzHhiCyJvLadVvXGfdpBqcE1"
+    ],
+    "logoUrl": "https://meteora.ag/favicon.ico",
+    "api": {
+      "enabled": true,
+      "provider": "meteora",
+      "endpoints": [
+        "https://dlmm-api.meteora.ag",
+        "https://swap-api.meteora.ag"
+      ]
+    },
+    "priority": 6,
+    "description": "DLMM pools, graduated pump.fun tokens"
   },
   "orca": {
     "name": "orca",
@@ -59,18 +113,53 @@
     ],
     "logoUrl": "https://www.orca.so/favicon.ico",
     "api": {
-      "enabled": false
-    }
+      "enabled": true,
+      "provider": "orca",
+      "endpoints": [
+        "https://api.orca.so"
+      ],
+      "notes": "Covered via Jupiter aggregation"
+    },
+    "priority": 7
   },
-  "meteora": {
-    "name": "meteora",
+  "openbook": {
+    "name": "openbook",
+    "type": "orderbook",
+    "programIds": [
+      "opnb2LAfJYbRMAHHvqjCwQxanZn7ReEHp1k81EohpZb",
+      "srmqPvymJeFKQ4zGQed1GFppgkRHL9kaELCbyksJtPX"
+    ],
+    "logoUrl": "https://www.openbook.dev/favicon.ico",
+    "api": {
+      "enabled": false,
+      "notes": "Covered via Jupiter aggregation"
+    },
+    "priority": 8
+  },
+  "fluxbeam": {
+    "name": "fluxbeam",
     "type": "amm",
     "programIds": [
-      "LBUZKhRxPF3XUpBCjp4YzTKgLccjZhTSDM9YuVaPwxo"
+      "FLUXubRmkEi2q6K3Y9kBPg9248ggaZVsoSFhtJHSrm1X"
     ],
-    "logoUrl": "https://meteora.ag/favicon.ico",
+    "logoUrl": "https://fluxbeam.xyz/favicon.ico",
     "api": {
-      "enabled": false
-    }
+      "enabled": false,
+      "notes": "Covered via Jupiter aggregation"
+    },
+    "priority": 9
+  },
+  "lifinity": {
+    "name": "lifinity",
+    "type": "amm",
+    "programIds": [
+      "EewxydAPCCVuNEyrVN68PuSYdQ7wKn27V9Gjeoi8dy3S"
+    ],
+    "logoUrl": "https://lifinity.io/favicon.ico",
+    "api": {
+      "enabled": false,
+      "notes": "Covered via Jupiter aggregation"
+    },
+    "priority": 10
   }
 }
