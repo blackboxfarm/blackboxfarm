@@ -96,10 +96,25 @@ async function sendTweet(
 
   if (!response.ok) {
     console.error("Twitter API error:", responseText);
+    // Bubble up the raw response for better troubleshooting
     throw new Error(`Twitter API error: ${response.status} - ${responseText}`);
   }
 
   return JSON.parse(responseText);
+}
+
+function formatTwitterErrorMessage(err: unknown): string {
+  const msg = err instanceof Error ? err.message : String(err);
+
+  // Common X/Twitter misconfiguration: app has Read-only permissions.
+  if (msg.includes('oauth1-permissions') || msg.includes('not configured with the appropriate oauth1 app permissions')) {
+    return [
+      msg,
+      "\n\nFIX: In the X Developer Portal, set your App permissions to 'Read and Write', then regenerate the Access Token & Secret used for this account.",
+    ].join('');
+  }
+
+  return msg;
 }
 
 Deno.serve(async (req) => {
@@ -200,9 +215,12 @@ Free report 👉 blackbox.farm/holders`;
     );
   } catch (error: any) {
     console.error("Error posting tweet:", error);
+    const friendly = formatTwitterErrorMessage(error);
     return new Response(
-      JSON.stringify({ success: false, error: error.message }),
-      { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      // IMPORTANT: return 200 so supabase-js doesn't throw FunctionsHttpError,
+      // allowing the client to show the real error message.
+      JSON.stringify({ success: false, error: friendly }),
+      { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   }
 });

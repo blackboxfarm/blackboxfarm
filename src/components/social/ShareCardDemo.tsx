@@ -107,22 +107,26 @@ export function ShareCardDemo({ tokenStats: initialTokenStats = mockTokenStats }
       console.log('Holder report response:', data);
 
       // Transform the response into TokenStats format
-      // The edge function returns: symbol (from metadata), tokenSymbol (fallback)
+      // NOTE: bagless-holders-report historically evolved; support both old/new keys.
       const stats: TokenStats = {
-        symbol: data.symbol || data.tokenSymbol || 'UNKNOWN',
-        name: data.name || data.tokenName || data.symbol || 'Unknown Token',
+        symbol: data.tokenSymbol || data.symbol || 'UNKNOWN',
+        name: data.tokenName || data.name || data.tokenSymbol || data.symbol || 'Unknown Token',
         tokenAddress: tokenMint.trim(),
         price: data.tokenPriceUSD || 0,
-        marketCap: data.marketCap || 0,
-        healthScore: data.stabilityScore || 0,
-        healthGrade: data.stabilityGrade || 'N/A',
+        marketCap:
+          data.marketCap ||
+          (typeof data.totalBalance === 'number' && typeof data.tokenPriceUSD === 'number'
+            ? data.totalBalance * data.tokenPriceUSD
+            : 0),
+        healthScore: data.stabilityScore ?? data.healthScore?.score ?? 0,
+        healthGrade: data.stabilityGrade ?? data.healthScore?.grade ?? 'N/A',
         totalHolders: data.totalHolders || 0,
-        realHolders: data.realHolders || 0,
-        whaleCount: data.tierBreakdown?.whale || 0,
-        strongCount: data.tierBreakdown?.serious || data.tierBreakdown?.boss || 0,
-        activeCount: data.tierBreakdown?.retail || data.tierBreakdown?.real || 0,
-        dustCount: data.tierBreakdown?.dust || 0,
-        dustPercentage: data.dustPercentage || 0,
+        realHolders: data.realHolders ?? data.realWallets ?? 0,
+        whaleCount: data.tierBreakdown?.whale ?? data.simpleTiers?.whales?.count ?? 0,
+        strongCount: data.tierBreakdown?.serious ?? data.simpleTiers?.serious?.count ?? 0,
+        activeCount: data.tierBreakdown?.retail ?? data.simpleTiers?.retail?.count ?? 0,
+        dustCount: data.tierBreakdown?.dust ?? data.simpleTiers?.dust?.count ?? 0,
+        dustPercentage: data.dustPercentage ?? data.simpleTiers?.dust?.percentage ?? 0,
       };
 
       setFetchedStats(stats);
@@ -150,7 +154,8 @@ export function ShareCardDemo({ tokenStats: initialTokenStats = mockTokenStats }
       const { data, error } = await supabase.functions.invoke('post-share-card-twitter', {
         body: { 
           tweetText,
-          twitterHandle: 'HoldersIntel'  // Correct handle from twitter_accounts table
+          // This must match a username in public.twitter_accounts (currently: HoldersIntel)
+          twitterHandle: 'HoldersIntel'
         }
       });
 
@@ -270,7 +275,7 @@ export function ShareCardDemo({ tokenStats: initialTokenStats = mockTokenStats }
 
         {/* Token Fetch + API Post Section */}
         <div className="pt-4 border-t border-border space-y-3">
-          <Label className="text-sm font-medium">Manual API Post (@HoldersIntent)</Label>
+          <Label className="text-sm font-medium">Manual API Post (@HoldersIntel)</Label>
           <div className="flex gap-2">
             <Input
               placeholder="Enter token address..."
@@ -302,7 +307,7 @@ export function ShareCardDemo({ tokenStats: initialTokenStats = mockTokenStats }
             ) : (
               <Send className="h-4 w-4 mr-2" />
             )}
-            Post to @HoldersIntent
+            Post to @HoldersIntel
           </Button>
         </div>
       </CardContent>
