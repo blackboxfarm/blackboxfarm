@@ -47,18 +47,18 @@ export function ShareToXButton({
   const now = new Date();
   const utcTimestamp = now.toISOString().replace('T', ' ').slice(0, 19) + ' UTC';
   
-  const tweetText = `🔎 HOLDER INTEL: $${ticker} (${tokenName})
+  const tweetText = `🪙 HOLDER INTEL: $${ticker} (${tokenName})
 CA: ${tokenMint}
 Health: ${healthGrade} (${healthScore}/100)
 ✅ ${realHolders.toLocaleString()} Real Holders (${dustPct}% Dust)
 🏛 ${totalWallets.toLocaleString()} Total Wallets
+⏱️ [${utcTimestamp}] ⏱️
 🐋 ${whales} Whales (>$1K)
 😎 ${serious} Serious ($200-$1K)
 🏪 ${retail.toLocaleString()} Retail ($1-$199)
-💨 ${dustWallets.toLocaleString()} Dust (<$1)
-⏱️ ${utcTimestamp}
-More Holder Intel 👉 blackbox.farm/holders
-Charts on Trader 👉 padre.gg/rk=blackbox`;
+💨 ${dustWallets.toLocaleString()} Dust (<$1) = ${dustPct}% Dust
+More Holder Intel 👉 https://blackbox.farm/holders
+Charts on Trader 👉 https://trade.padre.gg/rk=blackbox`;
 
   const handleShareToX = () => {
     window.open(
