@@ -24,6 +24,15 @@ interface TokenStats {
   dustPercentage: number;
 }
 
+// X/Twitter caches cards aggressively per-URL; bumping `v` forces a re-scrape.
+// Keep this stable unless OG metadata changes.
+const HOLDERS_SHARE_VERSION = "20260122";
+const HOLDERS_SHARE_URL = (() => {
+  const url = new URL("https://blackbox.farm/holders");
+  url.searchParams.set("v", HOLDERS_SHARE_VERSION);
+  return url.toString();
+})();
+
 // Mock data for demo
 const mockTokenStats: TokenStats = {
   symbol: 'DEMO',
@@ -60,10 +69,10 @@ Health: {healthGrade} ({healthScore}/100)
 
 💨 {dust} Dust (<$1) = {dustPct}% Dust
 
-More Holder Intel👉 https://blackbox.farm/holders`;
+More Holder Intel👉 ${HOLDERS_SHARE_URL}`;
 
 // Bump storage key to force reset of old templates
-const TEMPLATE_STORAGE_KEY = 'share-tweet-template-v2';
+const TEMPLATE_STORAGE_KEY = 'share-tweet-template-v3';
 
 const TEMPLATE_VARIABLES = [
   { var: '{ticker}', desc: 'Token symbol' },
@@ -93,7 +102,10 @@ export function ShareCardDemo({ tokenStats = mockTokenStats }: { tokenStats?: To
   }, [tweetTemplate]);
 
   const getShareUrl = () => {
-    return `https://blackbox.farm/holders?token=${encodeURIComponent(tokenStats.tokenAddress)}`;
+    const url = new URL("https://blackbox.farm/holders");
+    url.searchParams.set("token", tokenStats.tokenAddress);
+    url.searchParams.set("v", HOLDERS_SHARE_VERSION);
+    return url.toString();
   };
 
   // Process template with actual values
