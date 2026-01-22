@@ -10,6 +10,7 @@ import { useToast } from "@/hooks/use-toast";
 
 interface ShareToXButtonProps {
   ticker: string;
+  tokenName: string;
   tokenMint: string;
   totalWallets: number;
   realHolders: number;
@@ -24,14 +25,9 @@ interface ShareToXButtonProps {
   variant?: "full" | "icon";
 }
 
-// Truncate CA for display: first 4 + last 4 chars
-function truncateCA(ca: string): string {
-  if (ca.length <= 10) return ca;
-  return `${ca.slice(0, 4)}...${ca.slice(-4)}`;
-}
-
 export function ShareToXButton({
   ticker,
+  tokenName,
   tokenMint,
   totalWallets,
   realHolders,
@@ -48,45 +44,39 @@ export function ShareToXButton({
   const { toast } = useToast();
   
   const dustPct = totalWallets > 0 ? Math.round((dustWallets / totalWallets) * 100) : 0;
+  const now = new Date();
+  const utcTimestamp = now.toISOString().replace('T', ' ').slice(0, 19) + ' UTC';
   
-  const tweetText = `🔎 HOLDER INTEL: $${ticker}
-
-CA: ${truncateCA(tokenMint)}
-
+  const tweetText = `🔎 HOLDER INTEL: $${ticker} (${tokenName})
+CA: ${tokenMint}
 Health: ${healthGrade} (${healthScore}/100)
-
 ✅ ${realHolders.toLocaleString()} Real Holders (${dustPct}% Dust)
 🏛 ${totalWallets.toLocaleString()} Total Wallets
-
 🐋 ${whales} Whales (>$1K)
 😎 ${serious} Serious ($200-$1K)
 🏪 ${retail.toLocaleString()} Retail ($1-$199)
 💨 ${dustWallets.toLocaleString()} Dust (<$1)
-
+⏱️ ${utcTimestamp}
 More Holder Intel 👉 blackbox.farm/holders
 Charts on Trader 👉 padre.gg/rk=blackbox`;
 
-  const shareUrl = shareCardPageUrl || `https://blackbox.farm/holders?token=${encodeURIComponent(tokenMint)}`;
-
   const handleShareToX = () => {
     window.open(
-      `https://twitter.com/intent/tweet?text=${encodeURIComponent(tweetText)}&url=${encodeURIComponent(shareUrl)}`,
+      `https://twitter.com/intent/tweet?text=${encodeURIComponent(tweetText)}`,
       '_blank'
     );
   };
 
   const handleCopyForDiscord = () => {
-    const discordText = `🔎 **HOLDER INTEL: $${ticker}**
-
-**CA:** \`${truncateCA(tokenMint)}\`
+    const discordText = `🔎 **HOLDER INTEL: $${ticker} (${tokenName})**
+**CA:** \`${tokenMint}\`
 **Health:** ${healthGrade} (${healthScore}/100)
-
 ✅ ${realHolders.toLocaleString()} Real Holders (${dustPct}% Dust)
 🏛 ${totalWallets.toLocaleString()} Total Wallets
-
 🐋 ${whales} Whales (>$1K) | 😎 ${serious} Serious | 🏪 ${retail.toLocaleString()} Retail | 💨 ${dustWallets.toLocaleString()} Dust
-
-More Intel 👉 ${shareUrl}`;
+⏱️ ${utcTimestamp}
+More Holder Intel 👉 blackbox.farm/holders
+Charts on Trader 👉 padre.gg/rk=blackbox`;
     navigator.clipboard.writeText(discordText);
     toast({
       title: "Copied!",
@@ -95,9 +85,9 @@ More Intel 👉 ${shareUrl}`;
   };
 
   const handleShareToTelegram = () => {
-    const telegramText = `🔎 HOLDER INTEL: $${ticker} | ${healthGrade} (${healthScore}/100) | ${realHolders.toLocaleString()} Real Holders | 🐋${whales} 😎${serious} 🏪${retail}`;
+    const telegramText = `🔎 HOLDER INTEL: $${ticker} (${tokenName}) | ${healthGrade} (${healthScore}/100) | ${realHolders.toLocaleString()} Real Holders | 🐋${whales} 😎${serious} 🏪${retail} | ${utcTimestamp}`;
     window.open(
-      `https://t.me/share/url?url=${encodeURIComponent(shareUrl)}&text=${encodeURIComponent(telegramText)}`,
+      `https://t.me/share/url?url=${encodeURIComponent('https://blackbox.farm/holders')}&text=${encodeURIComponent(telegramText)}`,
       '_blank'
     );
   };

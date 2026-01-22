@@ -643,6 +643,7 @@ export function TokenMetadataDisplay({
           {/* Share Report Button */}
           <ShareToXButton
             ticker={metadata.symbol || 'TOKEN'}
+            tokenName={metadata.name || 'Unknown Token'}
             tokenMint={metadata.mint}
             totalWallets={shareData?.totalHolders || 0}
             realHolders={shareData?.realWallets || 0}
