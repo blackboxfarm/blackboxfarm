@@ -47,6 +47,9 @@ export function ShareToXButton({
   const now = new Date();
   const utcTimestamp = now.toISOString().replace('T', ' ').slice(0, 19) + ' UTC';
   
+  // Add a query param to force X/Twitter to re-scrape OG metadata (it caches aggressively)
+  const holdersUrlForX = "https://blackbox.farm/holders?utm_source=x";
+
   const tweetText = `🪙 HOLDER INTEL: $${ticker} (${tokenName})
 CA: ${tokenMint}
 Health: ${healthGrade} (${healthScore}/100)
@@ -57,7 +60,7 @@ Health: ${healthGrade} (${healthScore}/100)
 😎 ${serious} Serious ($200-$1K)
 🏪 ${retail.toLocaleString()} Retail ($1-$199)
 💨 ${dustWallets.toLocaleString()} Dust (<$1) = ${dustPct}% Dust
-More Holder Intel 👉 https://blackbox.farm/holders
+ More Holder Intel 👉 ${holdersUrlForX}
 Charts on Trader 👉 https://trade.padre.gg/rk=blackbox`;
 
   const handleShareToX = () => {
