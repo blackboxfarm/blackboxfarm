@@ -12,7 +12,7 @@ import { Separator } from '@/components/ui/separator';
 import { Switch } from '@/components/ui/switch';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
-import { Flame, RefreshCw, TrendingUp, DollarSign, Wallet, Clock, CheckCircle2, XCircle, Loader2, Plus, Copy, ArrowUpRight, Key, Settings, Zap, Activity, Radio, Pencil, ChevronDown, Coins, Eye, EyeOff, RotateCcw, AlertTriangle, Trash2, Globe, Send, Rocket, Megaphone, Users, Shield, ClipboardPaste, FlaskConical, Lock, LockOpen } from 'lucide-react';
+import { Flame, RefreshCw, TrendingUp, TrendingDown, DollarSign, Wallet, Clock, CheckCircle2, XCircle, Loader2, Plus, Copy, ArrowUpRight, Key, Settings, Zap, Activity, Radio, Pencil, ChevronDown, Coins, Eye, EyeOff, RotateCcw, AlertTriangle, Trash2, Globe, Send, Rocket, Megaphone, Users, Shield, ClipboardPaste, FlaskConical, Lock, LockOpen, BarChart3 } from 'lucide-react';
 import { SocialIcon } from '@/components/token/SocialIcon';
 import { detectSocialPlatform } from '@/utils/socialPlatformDetector';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
@@ -184,6 +184,15 @@ export function FlipItDashboard() {
   const [isManualRefreshing, setIsManualRefreshing] = useState(false);
   const [currentPrices, setCurrentPrices] = useState<Record<string, number>>({});
   const [bondingCurveData, setBondingCurveData] = useState<Record<string, number>>({});
+  const [marketData, setMarketData] = useState<Record<string, {
+    priceChange5m?: number;
+    priceChange1h?: number;
+    priceChange24h?: number;
+    volume5m?: number;
+    volume1h?: number;
+    volume24h?: number;
+    volumeSurgeRatio?: number;
+  }>>({});
   const [tokenImages, setTokenImages] = useState<Record<string, string>>({});
   const [isGeneratingWallet, setIsGeneratingWallet] = useState(false);
   const [isWithdrawing, setIsWithdrawing] = useState(false);
@@ -472,9 +481,12 @@ export function FlipItDashboard() {
         summary: data?.summary
       });
 
-      // Update prices
+      // Update prices and market data
       if (data?.prices) {
         setCurrentPrices(data.prices);
+      }
+      if (data?.marketData) {
+        setMarketData(prev => ({ ...prev, ...data.marketData }));
       }
       if (data?.bondingCurveData) {
         setBondingCurveData(prev => ({ ...prev, ...data.bondingCurveData }));
@@ -1895,6 +1907,9 @@ export function FlipItDashboard() {
 
       if (data?.prices) {
         setCurrentPrices(data.prices);
+      }
+      if (data?.marketData) {
+        setMarketData((prev) => ({ ...prev, ...data.marketData }));
       }
       if (data?.bondingCurveData) {
         setBondingCurveData((prev) => ({ ...prev, ...data.bondingCurveData }));
@@ -3802,6 +3817,77 @@ export function FlipItDashboard() {
                               {position.token_symbol || position.token_mint.slice(0, 8) + '...'}
                               <ArrowUpRight className="h-3 w-3 opacity-50" />
                             </a>
+                            {/* Volume/Price Surge Indicators */}
+                            {(() => {
+                              const md = marketData[position.token_mint];
+                              if (!md) return null;
+                              
+                              // Volume surge: 5m volume > 2x hourly average
+                              const hasVolumeSurge = md.volumeSurgeRatio && md.volumeSurgeRatio > 2;
+                              const hasVolumeSpike = md.volumeSurgeRatio && md.volumeSurgeRatio > 5;
+                              
+                              // Price momentum: significant 5m or 1h change
+                              const priceUp5m = (md.priceChange5m || 0) > 5; // >5% up in 5m
+                              const priceDown5m = (md.priceChange5m || 0) < -5; // >5% down in 5m
+                              const priceUp1h = (md.priceChange1h || 0) > 15; // >15% up in 1h
+                              const priceDown1h = (md.priceChange1h || 0) < -15; // >15% down in 1h
+                              
+                              return (
+                                <>
+                                  {/* Volume Spike Indicator */}
+                                  {hasVolumeSpike && (
+                                    <span 
+                                      className="inline-flex items-center gap-0.5 px-1 py-0 text-[9px] font-bold text-yellow-400 bg-yellow-500/20 border border-yellow-500/40 rounded animate-pulse"
+                                      title={`Volume Spike! ${md.volumeSurgeRatio?.toFixed(1)}x avg (5m: $${(md.volume5m || 0).toLocaleString()})`}
+                                    >
+                                      <BarChart3 className="h-2 w-2" />
+                                      {md.volumeSurgeRatio?.toFixed(0)}x
+                                    </span>
+                                  )}
+                                  {hasVolumeSurge && !hasVolumeSpike && (
+                                    <span 
+                                      className="inline-flex items-center gap-0.5 px-1 py-0 text-[9px] font-medium text-blue-400 bg-blue-500/20 border border-blue-500/40 rounded"
+                                      title={`Volume Surge: ${md.volumeSurgeRatio?.toFixed(1)}x avg (5m: $${(md.volume5m || 0).toLocaleString()})`}
+                                    >
+                                      <BarChart3 className="h-2 w-2" />
+                                    </span>
+                                  )}
+                                  {/* Price Movement Indicator */}
+                                  {priceUp5m && (
+                                    <span 
+                                      className="inline-flex items-center gap-0.5 text-green-500"
+                                      title={`+${md.priceChange5m?.toFixed(1)}% (5m)`}
+                                    >
+                                      <TrendingUp className="h-3 w-3" />
+                                    </span>
+                                  )}
+                                  {priceDown5m && (
+                                    <span 
+                                      className="inline-flex items-center gap-0.5 text-red-500"
+                                      title={`${md.priceChange5m?.toFixed(1)}% (5m)`}
+                                    >
+                                      <TrendingDown className="h-3 w-3" />
+                                    </span>
+                                  )}
+                                  {!priceUp5m && !priceDown5m && priceUp1h && (
+                                    <span 
+                                      className="inline-flex items-center gap-0.5 text-green-400/70"
+                                      title={`+${md.priceChange1h?.toFixed(1)}% (1h)`}
+                                    >
+                                      <TrendingUp className="h-2.5 w-2.5" />
+                                    </span>
+                                  )}
+                                  {!priceUp5m && !priceDown5m && priceDown1h && (
+                                    <span 
+                                      className="inline-flex items-center gap-0.5 text-red-400/70"
+                                      title={`${md.priceChange1h?.toFixed(1)}% (1h)`}
+                                    >
+                                      <TrendingDown className="h-2.5 w-2.5" />
+                                    </span>
+                                  )}
+                                </>
+                              );
+                            })()}
                             {isFromRebuy && (
                               <Badge variant="secondary" className="text-[9px] px-1 py-0 gap-0.5">
                                 <RotateCcw className="h-2 w-2" />
