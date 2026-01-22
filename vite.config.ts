@@ -15,6 +15,7 @@ export default defineConfig(({ mode }) => ({
     mode === 'development' && componentTagger(),
     VitePWA({
       registerType: 'autoUpdate',
+      injectRegister: false,
       includeAssets: ['favicon-barn.png', 'farm-banner.svg', 'blackbox-cube-logo.png'],
       manifest: {
         name: 'BlackBox Farm',
@@ -46,8 +47,12 @@ export default defineConfig(({ mode }) => ({
         ]
       },
       workbox: {
+        cleanupOutdatedCaches: true,
+        clientsClaim: true,
+        skipWaiting: true,
         maximumFileSizeToCacheInBytes: 10 * 1024 * 1024,
-        globPatterns: ['**/*.{js,css,html,ico,png,svg,woff,woff2}'],
+        // Don't precache HTML; it can cause clients to get stuck on old deployments.
+        globPatterns: ['**/*.{js,css,ico,png,svg,woff,woff2}'],
         runtimeCaching: [
           {
             urlPattern: /^https:\/\/api\.helius\.xyz\/.*/i,
