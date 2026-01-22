@@ -47,8 +47,9 @@ export function ShareToXButton({
   const now = new Date();
   const utcTimestamp = now.toISOString().replace('T', ' ').slice(0, 19) + ' UTC';
   
-  // Add a query param to force X/Twitter to re-scrape OG metadata (it caches aggressively)
-  const holdersUrlForX = "https://blackbox.farm/holders?utm_source=x";
+  // Use a dedicated OG URL that serves crawler meta tags (SPA routes won't).
+  // Add a query param to force X/Twitter to re-scrape (it caches aggressively).
+  const holdersUrlForX = "https://blackbox.farm/holders-og/?utm_source=x";
 
   const tweetText = `🪙 HOLDER INTEL: $${ticker} (${tokenName})
 CA: ${tokenMint}
@@ -78,7 +79,7 @@ Charts on Trader 👉 https://trade.padre.gg/rk=blackbox`;
 🏛 ${totalWallets.toLocaleString()} Total Wallets
 🐋 ${whales} Whales (>$1K) | 😎 ${serious} Serious | 🏪 ${retail.toLocaleString()} Retail | 💨 ${dustWallets.toLocaleString()} Dust
 ⏱️ ${utcTimestamp}
-More Holder Intel 👉 blackbox.farm/holders
+More Holder Intel 👉 blackbox.farm/holders-og/
 Charts on Trader 👉 padre.gg/rk=blackbox`;
     navigator.clipboard.writeText(discordText);
     toast({
@@ -90,7 +91,7 @@ Charts on Trader 👉 padre.gg/rk=blackbox`;
   const handleShareToTelegram = () => {
     const telegramText = `🔎 HOLDER INTEL: $${ticker} (${tokenName}) | ${healthGrade} (${healthScore}/100) | ${realHolders.toLocaleString()} Real Holders | 🐋${whales} 😎${serious} 🏪${retail} | ${utcTimestamp}`;
     window.open(
-      `https://t.me/share/url?url=${encodeURIComponent('https://blackbox.farm/holders')}&text=${encodeURIComponent(telegramText)}`,
+      `https://t.me/share/url?url=${encodeURIComponent('https://blackbox.farm/holders-og/')}&text=${encodeURIComponent(telegramText)}`,
       '_blank'
     );
   };
