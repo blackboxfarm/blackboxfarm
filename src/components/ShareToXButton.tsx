@@ -60,7 +60,7 @@ Health: ${healthGrade} (${healthScore}/100)
 😎 ${serious} Serious ($200-$1K)
 🏪 ${retail.toLocaleString()} Retail ($1-$199)
 💨 ${dustWallets.toLocaleString()} Dust (<$1) = ${dustPct}% Dust
- More Holder Intel 👉 ${holdersUrlForX}
+More Holder Intel 👉 ${holdersUrlForX}
 Charts on Trader 👉 https://trade.padre.gg/rk=blackbox`;
 
   const handleShareToX = () => {
