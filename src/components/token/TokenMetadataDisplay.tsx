@@ -3,7 +3,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
 import { DeveloperRiskBadge } from "./DeveloperRiskBadge";
-import { ExternalLink, TrendingUp, TrendingDown, Zap, Clock } from "lucide-react";
+import { ExternalLink, TrendingUp, TrendingDown, Zap, Clock, CheckCircle2 } from "lucide-react";
 import { Separator } from "@/components/ui/separator";
 import { useEffect, useState } from "react";
 import { SocialIcon, DexScreenerIcon } from "./SocialIcon";
@@ -504,9 +504,9 @@ export function TokenMetadataDisplay({
                   </Badge>
                 )}
                 {creatorInfo.bondingCurveProgress !== undefined && creatorInfo.bondingCurveProgress >= 100 && (
-                  <Badge variant="outline" className="text-[10px] px-1.5 bg-green-500/20 text-green-600">
-                    Graduated
-                  </Badge>
+                  <span title="Graduated">
+                    <CheckCircle2 className="h-4 w-4 text-green-500" />
+                  </span>
                 )}
               </p>
               <div className="flex items-center gap-2 flex-wrap">
