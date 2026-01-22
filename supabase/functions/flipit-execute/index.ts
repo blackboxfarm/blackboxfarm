@@ -8,6 +8,7 @@ import {
 import { parseBuyFromSolscan } from "../_shared/solscan-api.ts";
 import { validateBuyQuote, getTradeGuardConfig } from "../_shared/trade-guard.ts";
 import { verifyBuyTransaction, updatePositionWithVerifiedBuy } from "../_shared/helius-verify.ts";
+import { createExecutionLogger, type ExecutionLogger } from "../_shared/execution-logger.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -529,17 +530,33 @@ serve(async (req) => {
     };
 
     if (action === "buy") {
+      // Initialize execution logger for comprehensive tracking
+      const execLog = createExecutionLogger('buy', tokenMint || 'unknown');
+      
       if (!tokenMint || !walletId) {
+        execLog.logFailure('Missing tokenMint or walletId');
         return bad("Missing tokenMint or walletId");
       }
       if (!isValidUuid(walletId)) {
-        console.error("Invalid walletId format:", walletId);
+        execLog.logFailure('Invalid walletId format', { walletId });
         return bad(`Invalid walletId format: ${walletId}`);
       }
+
+      execLog.log('PARAMS', {
+        tokenMint: tokenMint.slice(0, 12),
+        walletId: walletId.slice(0, 8),
+        buyAmountSol: explicitBuyAmountSol,
+        buyAmountUsd,
+        targetMultiplier,
+        slippageBps: effectiveSlippage,
+        priorityFeeMode,
+        source
+      });
 
       // ============================================
       // BLACKLIST CHECK: Block buys for blacklisted tokens/devs
       // ============================================
+      execLog.logPhaseStart('BLACKLIST_CHECK');
       try {
         const { data: blacklisted } = await supabase
           .from("pumpfun_blacklist")
@@ -549,19 +566,20 @@ serve(async (req) => {
           .maybeSingle();
         
         if (blacklisted && blacklisted.risk_level === "high") {
-          console.error("BLOCKED: Token is blacklisted with DANGER rating:", blacklisted);
+          execLog.logFailure('Token blacklisted', { reason: blacklisted.blacklist_reason });
           return bad(`BLOCKED: This token is blacklisted (${blacklisted.blacklist_reason || 'DANGER rating'})`);
         }
         
         if (blacklisted) {
-          console.warn("WARNING: Token flagged but not blocked:", blacklisted);
+          execLog.log('BLACKLIST_WARNING', { riskLevel: blacklisted.risk_level });
         }
+        execLog.logPhaseEnd('BLACKLIST_CHECK', { passed: true });
       } catch (blErr) {
-        console.warn("Blacklist check failed, continuing:", blErr);
+        execLog.log('BLACKLIST_CHECK_FAILED', { error: String(blErr) });
       }
 
       // Get wallet details
-      console.log("Looking up wallet:", walletId);
+      execLog.logPhaseStart('WALLET_LOOKUP');
       const { data: wallet, error: walletError } = await supabase
         .from("super_admin_wallets")
         .select("id, pubkey, secret_key_encrypted")
@@ -569,32 +587,32 @@ serve(async (req) => {
         .single();
 
       if (walletError) {
-        console.error("Wallet lookup error:", walletError);
+        execLog.logFailure('Wallet lookup failed', { error: walletError.message });
         return bad(`Wallet not found: ${walletError.message}`);
       }
       
       if (!wallet) {
-        console.error("Wallet not found in DB for ID:", walletId);
+        execLog.logFailure('Wallet not found in DB');
         return bad("Wallet not found in database");
       }
-      
-      console.log("Found wallet:", wallet.pubkey);
+      execLog.logPhaseEnd('WALLET_LOOKUP', { pubkey: wallet.pubkey.slice(0, 12) });
 
       // ============================================
       // CRITICAL: CHECK BALANCE BEFORE ANYTHING ELSE
       // ============================================
-      // CRITICAL FIX: Require buyAmountSol - frontend MUST convert USD→SOL using displayed price
-      // This prevents mismatch where backend uses a different/fallback SOL price
+      execLog.logPhaseStart('BALANCE_CHECK');
+      
       if (!explicitBuyAmountSol || explicitBuyAmountSol <= 0) {
-        console.error("buyAmountSol is required - frontend must convert USD to SOL before calling");
+        execLog.logFailure('buyAmountSol required', { explicitBuyAmountSol });
         return bad("buyAmountSol is required and must be positive (frontend must convert USD→SOL)");
       }
       const buyAmountSol = explicitBuyAmountSol;
       
       // Fetch SOL price for USD display/logging only (NOT for buy amount calculation)
       const solPrice = await fetchSolPrice();
-      console.log("Buy amount (SOL-only mode):", { buyAmountSol, solPriceForDisplay: solPrice });
-      const gasFeeBuffer = 0.005; // 0.005 SOL buffer for gas fees (reduced from 0.01)
+      execLog.log('SOL_PRICE', { solPrice, buyAmountSol, buyAmountUsd: buyAmountSol * solPrice });
+      
+      const gasFeeBuffer = 0.005;
       const requiredSol = buyAmountSol + gasFeeBuffer;
       
       // Always fetch fresh balance from RPC (fail closed if RPC errors)
@@ -608,10 +626,11 @@ serve(async (req) => {
       ];
 
       let lastBalanceErr: unknown = null;
+      let rpcUsed = "";
 
       for (const rpcUrl of rpcUrls) {
         try {
-          console.log("Fetching fresh wallet balance for:", wallet.pubkey, "via", rpcUrl);
+          execLog.log('RPC_ATTEMPT', { rpc: rpcUrl.split('?')[0].split('//')[1]?.slice(0, 20) });
 
           const balanceRes = await fetch(rpcUrl, {
             method: "POST",
@@ -639,38 +658,45 @@ serve(async (req) => {
             throw new Error(`Unexpected RPC response: ${raw.slice(0, 200)}`);
           }
 
-          walletBalance = lamports / 1e9; // Convert lamports to SOL
-          console.log("Fresh wallet balance:", walletBalance, "SOL");
+          walletBalance = lamports / 1e9;
+          rpcUsed = rpcUrl.split('?')[0];
           break;
         } catch (balanceErr) {
           lastBalanceErr = balanceErr;
-          console.warn("Balance RPC failed:", rpcUrl, balanceErr);
+          execLog.log('RPC_FAILED', { error: String(balanceErr).slice(0, 50) });
         }
       }
 
       if (walletBalance === null) {
-        console.error("Failed to fetch wallet balance from all RPC endpoints:", lastBalanceErr);
+        execLog.logFailure('All RPC endpoints failed', { lastError: String(lastBalanceErr) });
         return bad("Failed to fetch wallet balance (RPC error)");
       }
       
+      execLog.log('BALANCE_FETCHED', { walletBalance, requiredSol, rpc: rpcUsed.slice(0, 30) });
+      
       // Check if we have enough funds
       if (walletBalance < requiredSol) {
-        console.error(`INSUFFICIENT FUNDS: Wallet has ${walletBalance.toFixed(4)} SOL, need ${requiredSol.toFixed(4)} SOL (${buyAmountSol.toFixed(4)} buy + ${gasFeeBuffer} gas)`);
+        execLog.logFailure('Insufficient funds', { walletBalance, requiredSol, shortfall: requiredSol - walletBalance });
         return bad(`Insufficient funds: wallet has ${walletBalance.toFixed(4)} SOL, need ${requiredSol.toFixed(4)} SOL`);
       }
-      
-      console.log(`Balance check passed: ${walletBalance.toFixed(4)} SOL >= ${requiredSol.toFixed(4)} SOL required`);
+      execLog.logPhaseEnd('BALANCE_CHECK', { passed: true, surplus: walletBalance - requiredSol });
 
-      // CRITICAL: Fetch FRESH token price - bypass cache to avoid stale prices
-      // This ensures the buy executes at current market price, not a cached quote
+      // CRITICAL: Fetch FRESH token price
+      execLog.logPhaseStart('PRICE_FETCH');
       const priceResult = await fetchTokenPrice(tokenMint, { forceFresh: true });
       if (!priceResult) {
+        execLog.logFailure('Could not fetch token price');
         return bad("Could not fetch token price");
       }
       
       const currentPrice = priceResult.price;
       const priceMetadata = priceResult.metadata;
-      console.log(`FRESH price for buy: $${currentPrice.toFixed(10)} from ${priceMetadata.source}`);
+      execLog.logPhaseEnd('PRICE_FETCH', { 
+        price: currentPrice, 
+        source: priceMetadata.source,
+        isOnCurve: priceMetadata.isOnCurve,
+        curveProgress: priceMetadata.bondingCurveProgress
+      });
 
       // Fetch token metadata
       const metadata = await fetchTokenMetadata(tokenMint);
@@ -751,6 +777,7 @@ serve(async (req) => {
         console.log(`Creating QUICK FLIP position: ${mult}x target, no moonbag`);
       }
 
+      execLog.logPhaseStart('CREATE_POSITION');
       const { data: position, error: posError } = await supabase
         .from("flip_positions")
         .insert(positionData)
@@ -758,12 +785,13 @@ serve(async (req) => {
         .single();
 
       if (posError) {
-        console.error("Failed to create position:", posError);
+        execLog.logFailure('Failed to create position', { error: posError.message });
         return bad("Failed to create position: " + posError.message);
       }
+      execLog.logPhaseEnd('CREATE_POSITION', { positionId: position.id.slice(0, 8) });
 
       // CRITICAL: Capture pre-buy token balance to calculate delta later
-      // This ensures accurate quantity tracking when buying more of a token we already hold
+      execLog.logPhaseStart('PRE_BUY_BALANCE');
       let preBuyTokenBalance: string | null = null;
       try {
         const heliusKey = Deno.env.get("HELIUS_API_KEY");
@@ -792,33 +820,32 @@ serve(async (req) => {
           if (accounts.length > 0) {
             const tokenAmount = accounts[0]?.account?.data?.parsed?.info?.tokenAmount;
             preBuyTokenBalance = tokenAmount?.amount || "0";
-            console.log("Pre-buy token balance captured:", preBuyTokenBalance);
           } else {
             preBuyTokenBalance = "0";
-            console.log("No existing token account, pre-buy balance is 0");
           }
         }
+        execLog.logPhaseEnd('PRE_BUY_BALANCE', { preBuyTokenBalance: preBuyTokenBalance?.slice(0, 15) });
       } catch (preBuyErr) {
-        console.warn("Failed to capture pre-buy balance:", preBuyErr);
+        execLog.log('PRE_BUY_BALANCE_FAILED', { error: String(preBuyErr).slice(0, 50) });
         preBuyTokenBalance = "0";
       }
 
       // ========================================================
       // TRADE GUARD: Pre-Trade Quote Validation
-      // Blocks trades if executable price exceeds display price by threshold
-      // CRITICAL: Pass the REAL slippage and wallet pubkey for venue-aware quotes
       // ========================================================
+      execLog.logPhaseStart('TRADE_GUARD');
       let quoteValidation: { isValid: boolean; blockReason?: string; premiumPct: number; priceImpactPct: number; priceImpact?: number } | null = null;
       try {
         const tradeGuardConfig = await getTradeGuardConfig(supabase);
-        console.log("[TradeGuard] Config:", JSON.stringify(tradeGuardConfig));
-        console.log("[TradeGuard] Using slippage:", effectiveSlippage, "bps");
+        execLog.log('TRADE_GUARD_CONFIG', { 
+          maxPremiumPct: tradeGuardConfig.maxPremiumPct,
+          maxPriceImpactPct: tradeGuardConfig.maxPriceImpactPct 
+        });
 
         const displayPriceForGuard = (Number.isFinite(Number(displayPriceUsd)) && Number(displayPriceUsd) > 0)
           ? Number(displayPriceUsd)
           : currentPrice;
 
-        // CRITICAL FIX: Pass the ACTUAL slippage and wallet for accurate venue-aware quotes
         quoteValidation = await validateBuyQuote(
           tokenMint,
           buyAmountSol,
@@ -831,9 +858,12 @@ serve(async (req) => {
         );
         
         if (!quoteValidation.isValid) {
-          console.error("[TradeGuard] ❌ TRADE BLOCKED:", quoteValidation.blockReason);
+          execLog.logFailure('Trade blocked by TradeGuard', { 
+            reason: quoteValidation.blockReason,
+            premiumPct: quoteValidation.premiumPct,
+            priceImpactPct: quoteValidation.priceImpactPct
+          });
           
-          // Update position with block reason
           await supabase
             .from("flip_positions")
             .update({
@@ -845,10 +875,13 @@ serve(async (req) => {
           return bad(`Trade blocked: ${quoteValidation.blockReason}`);
         }
         
-        console.log(`[TradeGuard] ✅ PASSED: Premium ${quoteValidation.premiumPct.toFixed(1)}%, Impact ${quoteValidation.priceImpactPct.toFixed(1)}%`);
+        execLog.logPhaseEnd('TRADE_GUARD', { 
+          passed: true,
+          premiumPct: quoteValidation.premiumPct,
+          priceImpactPct: quoteValidation.priceImpactPct
+        });
       } catch (guardErr) {
-        // CRITICAL FIX: Trade guard errors MUST block trades - fail closed for safety
-        console.error("[TradeGuard] ❌ Critical validation error - blocking trade:", guardErr);
+        execLog.logFailure('TradeGuard validation error', { error: String(guardErr) });
         
         await supabase
           .from("flip_positions")
@@ -862,22 +895,26 @@ serve(async (req) => {
       }
 
       // Execute the buy via raydium-swap
+      execLog.logPhaseStart('SWAP_EXECUTION');
       try {
-        // CRITICAL: Avoid SOL↔USD double conversion (it caused mismatched spend amounts).
-        // We pass the exact SOL amount (lamports) we intend to spend.
         const buyLamportsForSwap = Math.floor(buyAmountSol * 1_000_000_000);
-        const buyUsdForSwap = buyAmountSol * solPrice; // informational only (backwards compat)
+        const buyUsdForSwap = buyAmountSol * solPrice;
 
-        console.log("Executing SOL swap with:", { buyAmountSol, buyLamportsForSwap, buyUsdForSwap, solPrice });
+        execLog.log('SWAP_INVOKE', { 
+          buyAmountSol, 
+          buyLamportsForSwap, 
+          buyUsdForSwap,
+          slippageBps: effectiveSlippage,
+          priorityFeeMode
+        });
 
+        const swapStartTime = Date.now();
         const { data: swapResult, error: swapError } = await supabase.functions.invoke("raydium-swap", {
           body: {
             side: "buy",
             tokenMint: tokenMint,
             buyWithSol: true,
-            // NEW: exact SOL spend (prevents the swap function from recomputing SOL from USD)
             solAmountLamports: buyLamportsForSwap,
-            // Keep legacy field for other callers / logs
             usdcAmount: buyUsdForSwap,
             slippageBps: effectiveSlippage,
             priorityFeeMode: priorityFeeMode || "medium",
@@ -886,29 +923,44 @@ serve(async (req) => {
             "x-owner-secret": wallet.secret_key_encrypted,
           },
         });
+        const swapDuration = Date.now() - swapStartTime;
 
         if (swapError) {
+          execLog.logFailure('Swap invocation error', { error: swapError.message, durationMs: swapDuration });
           throw new Error(swapError.message);
         }
 
-        // Handle soft errors (200 with error_code)
         if (swapResult?.error_code) {
+          execLog.logFailure('Swap soft error', { errorCode: swapResult.error_code, error: swapResult.error, durationMs: swapDuration });
           throw new Error(`[${swapResult.error_code}] ${swapResult.error}`);
         }
 
         if (swapResult?.error) {
+          execLog.logFailure('Swap returned error', { error: swapResult.error, durationMs: swapDuration });
           throw new Error(swapResult.error);
         }
+        
         const signature = firstSignature(swapResult);
         if (!signature) {
+          execLog.logFailure('No signature returned', { durationMs: swapDuration });
           throw new Error("Swap returned no signature (buy did not confirm)");
         }
 
+        execLog.log('SWAP_SUCCESS', { 
+          signature: signature.slice(0, 20),
+          source: (swapResult as any)?.source,
+          venue: (swapResult as any)?.venue,
+          durationMs: swapDuration
+        });
+
         // Get estimated outAmount from swap response as initial fallback
         let quantityTokens = (swapResult as any)?.outAmount ?? null;
-        let quantityTokensRaw: string | null = null; // Raw BigInt string for precision
+        let quantityTokensRaw: string | null = null;
         let tokenDecimals: number | null = null;
-        console.log("Swap outAmount from response:", quantityTokens, "source:", (swapResult as any)?.source);
+        execLog.log('SWAP_RESULT', { 
+          outAmount: quantityTokens,
+          solInputLamports: (swapResult as any)?.solInputLamports
+        });
 
         // CRITICAL: Use Helius Parse Transaction API to get EXACT tokens received from THIS swap
         // This is the only reliable way to know exactly how many tokens this specific buy received
@@ -1047,29 +1099,34 @@ serve(async (req) => {
           }
         }
         
-        console.log("Final quantity_tokens to store:", quantityTokens);
+        execLog.log('QUANTITY_RESOLVED', { 
+          quantityTokens: quantityTokens?.slice(0, 15),
+          quantityTokensRaw: quantityTokensRaw?.slice(0, 15),
+          tokenDecimals
+        });
 
-        // CRITICAL: Use the ACTUAL SOL input used by the swap (raydium-swap may cap spendable balance)
+        // Calculate actual values from swap
         const solInputLamports = Number.isFinite(Number((swapResult as any)?.solInputLamports))
           ? Number((swapResult as any)?.solInputLamports)
           : buyLamportsForSwap;
         const solSpentSol = solInputLamports / 1_000_000_000;
-
-        // CRITICAL: Calculate ACTUAL buy price from swap result immediately
-        // This ensures displayed price matches what user actually paid, not stale quote
-        let actualBuyPriceUsd = currentPrice; // Fallback to quote if calculation fails
         const actualBuyAmountUsd = solSpentSol * solPrice;
 
+        let actualBuyPriceUsd = currentPrice;
         if (quantityTokens && Number(quantityTokens) > 0) {
           actualBuyPriceUsd = actualBuyAmountUsd / Number(quantityTokens);
-          console.log(
-            `INLINE PRICE: Spent ${solSpentSol.toFixed(6)} SOL ($${actualBuyAmountUsd.toFixed(
-              4
-            )}) for ${quantityTokens} tokens = $${actualBuyPriceUsd.toFixed(10)}/token`
-          );
         }
 
-        // Update position with buy result AND inline-calculated price
+        execLog.log('PRICE_CALCULATED', { 
+          solSpentSol,
+          actualBuyAmountUsd,
+          actualBuyPriceUsd,
+          quantityTokens: quantityTokens?.slice(0, 12),
+          targetPriceUsd: mult > 0 ? actualBuyPriceUsd * mult : 0
+        });
+
+        // Update position with buy result
+        execLog.logPhaseStart('DB_UPDATE');
         await supabase
           .from("flip_positions")
           .update({
@@ -1079,15 +1136,14 @@ serve(async (req) => {
             quantity_tokens_raw: quantityTokensRaw,
             token_decimals: tokenDecimals,
             buy_amount_sol: solSpentSol,
-            buy_price_usd: actualBuyPriceUsd, // Use calculated price, not stale quote
+            buy_price_usd: actualBuyPriceUsd,
             buy_amount_usd: actualBuyAmountUsd,
-            // CRITICAL: target must be based on the REAL entry price (not the pre-buy quote)
-            // If mult is 0 (no auto-sell), target_price_usd = 0
             target_price_usd: mult > 0 ? actualBuyPriceUsd * mult : 0,
             status: "holding",
             error_message: null,
           })
           .eq("id", position.id);
+        execLog.logPhaseEnd('DB_UPDATE', { status: 'holding' });
 
         // AUTO-VERIFY ENTRY: Use Solscan for accurate on-chain truth (with retry logic)
         const solscanApiKey = Deno.env.get("SOLSCAN_API_KEY");
@@ -1210,6 +1266,9 @@ serve(async (req) => {
           console.error("Developer tracking failed:", e)
         );
 
+        execLog.logSuccess(signature);
+        execLog.logPhaseEnd('SWAP_EXECUTION');
+
         return ok({
           success: true,
           positionId: position.id,
@@ -1219,34 +1278,45 @@ serve(async (req) => {
           targetPrice: actualBuyPriceUsd * mult,
           multiplier: mult,
           quantityTokens: quantityTokens,
+          executionLog: execLog.getLogString()
         });
 
       } catch (buyErr: any) {
         const errMsg = buyErr?.message || String(buyErr);
+        execLog.logFailure(errMsg);
 
-        // User asked: don't insert rows when a buy fails.
-        // Delete the pending position so failed attempts don't show up as "holding"/"failed" positions.
+        // Delete the pending position
         try {
           await supabase.from("flip_positions").delete().eq("id", position.id);
         } catch (delErr) {
-          console.error("Failed to delete failed buy position:", delErr);
+          execLog.log('DELETE_FAILED_POSITION_ERROR', { error: String(delErr) });
         }
 
-        console.error("Buy failed:", errMsg);
-        return ok({ success: false, error: `Buy failed: ${errMsg}` });
+        return ok({ success: false, error: `Buy failed: ${errMsg}`, executionLog: execLog.getLogString() });
       }
     }
 
     if (action === "sell") {
+      // Initialize execution logger for sell
+      const execLog = createExecutionLogger('sell', tokenMint || 'unknown', positionId);
+      
       if (!positionId) {
+        execLog.logFailure('Missing positionId');
         return bad("Missing positionId");
       }
       if (!isValidUuid(positionId)) {
-        console.error("Invalid positionId format:", positionId);
+        execLog.logFailure('Invalid positionId format', { positionId });
         return bad(`Invalid positionId format: ${positionId}`);
       }
 
+      execLog.log('PARAMS', { 
+        positionId: positionId.slice(0, 8),
+        slippageBps: effectiveSlippage,
+        priorityFeeMode
+      });
+
       // Get position
+      execLog.logPhaseStart('FETCH_POSITION');
       const { data: position, error: posErr } = await supabase
         .from("flip_positions")
         .select("*, super_admin_wallets!flip_positions_wallet_id_fkey(secret_key_encrypted)")
@@ -1254,11 +1324,20 @@ serve(async (req) => {
         .single();
 
       if (posErr || !position) {
+        execLog.logFailure('Position not found', { error: posErr?.message });
         return bad("Position not found");
       }
 
-      // Allow retry when the UI/database incorrectly marked a sell without a signature.
+      execLog.logPhaseEnd('FETCH_POSITION', { 
+        tokenMint: position.token_mint?.slice(0, 12),
+        status: position.status,
+        quantityTokens: position.quantity_tokens?.slice(0, 12),
+        quantityTokensRaw: position.quantity_tokens_raw?.slice(0, 15),
+        tokenDecimals: position.token_decimals
+      });
+
       if (position.status !== "holding" && !(position.status === "sold" && !position.sell_signature)) {
+        execLog.logFailure('Position not in holding status', { currentStatus: position.status });
         return bad("Position is not in holding status");
       }
 
@@ -1268,15 +1347,19 @@ serve(async (req) => {
         .update({ status: "pending_sell" })
         .eq("id", positionId);
 
+      execLog.logPhaseStart('SWAP_EXECUTION');
       try {
-        // FIX: Sell only the specific quantity_tokens for this position, not all tokens
-        // This ensures selling Set 1 doesn't sell tokens from Set 2, 3, etc.
         const hasRecordedQuantity = position.quantity_tokens && Number(position.quantity_tokens) > 0;
-        if (!hasRecordedQuantity) {
-          console.warn(`⚠️ Position ${positionId} has no quantity_tokens - will fall back to sellAll`);
-        } else {
-          console.log(`📊 Position ${positionId}: Selling exactly ${position.quantity_tokens} tokens (not all)`);
-        }
+        const hasRawQuantity = position.quantity_tokens_raw && position.quantity_tokens_raw !== "0";
+        
+        execLog.log('SELL_QUANTITY', { 
+          hasRecordedQuantity,
+          hasRawQuantity,
+          quantityTokens: position.quantity_tokens?.slice(0, 12),
+          quantityTokensRaw: position.quantity_tokens_raw?.slice(0, 15),
+          tokenDecimals: position.token_decimals,
+          willSellAll: !hasRecordedQuantity
+        });
 
         // Execute sell via raydium-swap using wallet ID for direct lookup
         // CRITICAL: unwrapSol ensures we get native SOL back (no stranded WSOL)
