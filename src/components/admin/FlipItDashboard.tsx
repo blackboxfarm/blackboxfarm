@@ -4531,7 +4531,7 @@ export function FlipItDashboard() {
                 <Button
                   variant="default"
                   size="sm"
-                  className="gap-2 bg-orange-600 hover:bg-orange-700"
+                  className="gap-2"
                   onClick={() => {
                     if (window.confirm(
                       'This will mark positions as "sold" if their tokens are no longer in the wallet on-chain.\n\n' +

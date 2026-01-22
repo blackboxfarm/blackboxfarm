@@ -1100,7 +1100,7 @@ serve(async (req) => {
         }
         
         execLog.log('QUANTITY_RESOLVED', { 
-          quantityTokens: quantityTokens?.slice(0, 15),
+          quantityTokens: quantityTokens == null ? null : String(quantityTokens).slice(0, 15),
           quantityTokensRaw: quantityTokensRaw?.slice(0, 15),
           tokenDecimals
         });
@@ -1121,7 +1121,7 @@ serve(async (req) => {
           solSpentSol,
           actualBuyAmountUsd,
           actualBuyPriceUsd,
-          quantityTokens: quantityTokens?.slice(0, 12),
+          quantityTokens: quantityTokens == null ? null : String(quantityTokens).slice(0, 12),
           targetPriceUsd: mult > 0 ? actualBuyPriceUsd * mult : 0
         });
 
@@ -1331,7 +1331,8 @@ serve(async (req) => {
       execLog.logPhaseEnd('FETCH_POSITION', { 
         tokenMint: position.token_mint?.slice(0, 12),
         status: position.status,
-        quantityTokens: position.quantity_tokens?.slice(0, 12),
+        // quantity_tokens is numeric in DB; stringify before slicing for log preview
+        quantityTokens: position.quantity_tokens == null ? null : String(position.quantity_tokens).slice(0, 12),
         quantityTokensRaw: position.quantity_tokens_raw?.slice(0, 15),
         tokenDecimals: position.token_decimals
       });
@@ -1355,7 +1356,8 @@ serve(async (req) => {
         execLog.log('SELL_QUANTITY', { 
           hasRecordedQuantity,
           hasRawQuantity,
-          quantityTokens: position.quantity_tokens?.slice(0, 12),
+          // quantity_tokens is numeric in DB; stringify before slicing for log preview
+          quantityTokens: position.quantity_tokens == null ? null : String(position.quantity_tokens).slice(0, 12),
           quantityTokensRaw: position.quantity_tokens_raw?.slice(0, 15),
           tokenDecimals: position.token_decimals,
           willSellAll: !hasRecordedQuantity
