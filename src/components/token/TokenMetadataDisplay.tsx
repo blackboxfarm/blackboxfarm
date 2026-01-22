@@ -73,6 +73,18 @@ interface CreatorInfo {
   feeSplit?: { wallet1?: string; wallet2?: string; splitPercent?: number };
 }
 
+interface SimpleTier {
+  count: number;
+  percentage: number;
+}
+
+interface SimpleTiers {
+  dust: SimpleTier;
+  retail: SimpleTier;
+  serious: SimpleTier;
+  whales: SimpleTier;
+}
+
 interface ShareData {
   totalHolders?: number;
   realWallets?: number;
@@ -85,6 +97,7 @@ interface ShareData {
   largeWallets?: number;
   mediumWallets?: number;
   healthScore?: { grade: string; score: number };
+  simpleTiers?: SimpleTiers;
 }
 
 interface TokenMetadataDisplayProps {
@@ -634,9 +647,9 @@ export function TokenMetadataDisplay({
             totalWallets={shareData?.totalHolders || 0}
             realHolders={shareData?.realWallets || 0}
             dustWallets={shareData?.dustWallets || 0}
-            whales={(shareData?.trueWhaleWallets || 0) + (shareData?.babyWhaleWallets || 0)}
-            strong={(shareData?.superBossWallets || 0) + (shareData?.kingpinWallets || 0) + (shareData?.bossWallets || 0)}
-            active={(shareData?.largeWallets || 0) + (shareData?.mediumWallets || 0)}
+            whales={shareData?.simpleTiers?.whales?.count || 0}
+            serious={shareData?.simpleTiers?.serious?.count || 0}
+            retail={shareData?.simpleTiers?.retail?.count || 0}
             healthGrade={shareData?.healthScore?.grade || 'C'}
             healthScore={shareData?.healthScore?.score || 50}
             shareCardPageUrl={shareCardPageUrl}

@@ -1633,9 +1633,9 @@ export function BaglessHoldersReport({ initialToken }: BaglessHoldersReportProps
                   totalWallets={report?.totalHolders || 0}
                   realHolders={report?.realWallets || 0}
                   dustWallets={report?.dustWallets || 0}
-                  whales={(report?.trueWhaleWallets || 0) + (report?.babyWhaleWallets || 0)}
-                  strong={(report?.superBossWallets || 0) + (report?.kingpinWallets || 0) + (report?.bossWallets || 0)}
-                  active={(report?.largeWallets || 0) + (report?.mediumWallets || 0)}
+                  whales={report?.simpleTiers?.whales?.count || 0}
+                  serious={report?.simpleTiers?.serious?.count || 0}
+                  retail={report?.simpleTiers?.retail?.count || 0}
                   healthGrade={report?.healthScore?.grade || 'C'}
                   healthScore={report?.healthScore?.score || 50}
                   shareCardPageUrl={shareCardPageUrl}
@@ -2336,9 +2336,9 @@ export function BaglessHoldersReport({ initialToken }: BaglessHoldersReportProps
                     totalWallets={report?.totalHolders || 0}
                     realHolders={report?.realWallets || 0}
                     dustWallets={report?.dustWallets || 0}
-                    whales={(report?.trueWhaleWallets || 0) + (report?.babyWhaleWallets || 0)}
-                    strong={(report?.superBossWallets || 0) + (report?.kingpinWallets || 0) + (report?.bossWallets || 0)}
-                    active={(report?.largeWallets || 0) + (report?.mediumWallets || 0)}
+                    whales={report?.simpleTiers?.whales?.count || 0}
+                    serious={report?.simpleTiers?.serious?.count || 0}
+                    retail={report?.simpleTiers?.retail?.count || 0}
                     healthGrade={report?.healthScore?.grade || 'C'}
                     healthScore={report?.healthScore?.score || 50}
                     shareCardPageUrl={shareCardPageUrl}
