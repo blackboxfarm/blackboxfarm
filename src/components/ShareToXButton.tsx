@@ -46,9 +46,15 @@ export function ShareToXButton({
   const dustPct = totalWallets > 0 ? Math.round((dustWallets / totalWallets) * 100) : 0;
   const now = new Date();
   const utcTimestamp = now.toISOString().replace('T', ' ').slice(0, 19) + ' UTC';
-  
-  // Use the main holders URL - OG tags are in root index.html
-  const holdersUrlForX = "https://blackbox.farm/holders";
+
+  // X/Twitter caches cards aggressively per-URL; bumping `v` forces a re-scrape.
+  // Keep this stable unless OG metadata changes.
+  const HOLDERS_SHARE_VERSION = "20260122";
+  const holdersUrlForX = (() => {
+    const url = new URL("https://blackbox.farm/holders");
+    url.searchParams.set("v", HOLDERS_SHARE_VERSION);
+    return url.toString();
+  })();
 
   const tweetText = `🪙 HOLDER INTEL: $${ticker} (${tokenName})
 CA: ${tokenMint}
@@ -77,7 +83,7 @@ More Holder Intel 👉 ${holdersUrlForX}`;
 🏛 ${totalWallets.toLocaleString()} Total Wallets
 🐋 ${whales} Whales (>$1K) | 😎 ${serious} Serious | 🏪 ${retail.toLocaleString()} Retail | 💨 ${dustWallets.toLocaleString()} Dust
 ⏱️ ${utcTimestamp}
-More Holder Intel 👉 blackbox.farm/holders`;
+More Holder Intel 👉 ${holdersUrlForX}`;
     navigator.clipboard.writeText(discordText);
     toast({
       title: "Copied!",
@@ -88,7 +94,7 @@ More Holder Intel 👉 blackbox.farm/holders`;
   const handleShareToTelegram = () => {
     const telegramText = `🔎 HOLDER INTEL: $${ticker} (${tokenName}) | ${healthGrade} (${healthScore}/100) | ${realHolders.toLocaleString()} Real Holders | 🐋${whales} 😎${serious} 🏪${retail} | ${utcTimestamp}`;
     window.open(
-      `https://t.me/share/url?url=${encodeURIComponent('https://blackbox.farm/holders')}&text=${encodeURIComponent(telegramText)}`,
+      `https://t.me/share/url?url=${encodeURIComponent(holdersUrlForX)}&text=${encodeURIComponent(telegramText)}`,
       '_blank'
     );
   };
