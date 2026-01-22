@@ -441,7 +441,7 @@ async function checkMeteoraDBC(tokenMint: string, heliusApiKey: string): Promise
           }
 
           // If we found a pool, it's likely still on curve unless reserves are depleted
-          const migrationThreshold = 85_000_000_000n; // 85 SOL
+          const migrationThreshold = 60_000_000_000n; // 60 SOL for bags.fm (per padre.gg)
           const isOnCurve = quoteReserve > 0n && quoteReserve < migrationThreshold;
           
           return {
