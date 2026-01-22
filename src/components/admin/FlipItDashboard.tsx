@@ -329,6 +329,15 @@ export function FlipItDashboard() {
   const [isExecutingLimitOrder, setIsExecutingLimitOrder] = useState<string | null>(null);
   const [notificationEmail, setNotificationEmail] = useState('wilsondavid@live.ca');
 
+  // Chain sync state
+  const [isSyncingWithChain, setIsSyncingWithChain] = useState(false);
+  const [lastSyncResult, setLastSyncResult] = useState<{
+    phantomCount: number;
+    cleanedCount: number;
+    validCount: number;
+    timestamp: string;
+  } | null>(null);
+
   useEffect(() => {
     // RLS is enforced by Supabase using your auth session.
     // "Preview admin" only affects UI gating; it does NOT create an auth session.
@@ -1909,6 +1918,50 @@ export function FlipItDashboard() {
       toast.error(err.message || 'Failed to refresh');
     } finally {
       setIsMonitoring(false);
+    }
+  };
+
+  // Sync with Chain - reconcile positions with actual on-chain balances
+  const handleSyncWithChain = async (dryRun = false) => {
+    setIsSyncingWithChain(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('flipit-cleanup-phantom-positions', {
+        body: { dryRun }
+      });
+
+      if (error) throw error;
+
+      setLastSyncResult({
+        phantomCount: data?.phantomCount || 0,
+        cleanedCount: data?.cleanedCount || 0,
+        validCount: data?.validCount || 0,
+        timestamp: new Date().toISOString()
+      });
+
+      if (dryRun) {
+        if (data?.phantomCount > 0) {
+          toast.info(
+            `Found ${data.phantomCount} phantom position(s) with no on-chain tokens. Click "Sync & Clean" to mark them as sold.`,
+            { duration: 8000 }
+          );
+        } else {
+          toast.success('All positions are in sync with on-chain data!');
+        }
+      } else {
+        if (data?.cleanedCount > 0) {
+          toast.success(`Cleaned ${data.cleanedCount} phantom position(s). Reloading...`);
+          await loadPositions({ silent: false });
+        } else if (data?.phantomCount > 0) {
+          toast.info(`Found ${data.phantomCount} phantom positions but none were cleaned (check logs)`);
+        } else {
+          toast.success('All positions in sync - nothing to clean');
+        }
+      }
+    } catch (err: any) {
+      console.error('[SyncWithChain] Error:', err);
+      toast.error(err.message || 'Failed to sync with chain');
+    } finally {
+      setIsSyncingWithChain(false);
     }
   };
 
@@ -4457,6 +4510,59 @@ export function FlipItDashboard() {
                 })}
               </TableBody>
             </Table>
+            
+            {/* Chain Sync Section */}
+            <div className="mt-4 pt-4 border-t border-border/50 flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="gap-2"
+                  onClick={() => handleSyncWithChain(true)}
+                  disabled={isSyncingWithChain}
+                >
+                  {isSyncingWithChain ? (
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                  ) : (
+                    <RefreshCw className="h-3.5 w-3.5" />
+                  )}
+                  Check Sync
+                </Button>
+                <Button
+                  variant="default"
+                  size="sm"
+                  className="gap-2 bg-orange-600 hover:bg-orange-700"
+                  onClick={() => {
+                    if (window.confirm(
+                      'This will mark positions as "sold" if their tokens are no longer in the wallet on-chain.\n\n' +
+                      'Use this after manual sells in Phantom or when the system failed to track a sale.\n\n' +
+                      'Continue?'
+                    )) {
+                      handleSyncWithChain(false);
+                    }
+                  }}
+                  disabled={isSyncingWithChain}
+                >
+                  {isSyncingWithChain ? (
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                  ) : (
+                    <Activity className="h-3.5 w-3.5" />
+                  )}
+                  Sync & Clean
+                </Button>
+              </div>
+              {lastSyncResult && (
+                <div className="text-xs text-muted-foreground flex items-center gap-2">
+                  <span>
+                    Last sync: {lastSyncResult.validCount} valid, {lastSyncResult.phantomCount} phantom
+                    {lastSyncResult.cleanedCount > 0 && `, ${lastSyncResult.cleanedCount} cleaned`}
+                  </span>
+                  <span className="text-[10px]">
+                    ({new Date(lastSyncResult.timestamp).toLocaleTimeString()})
+                  </span>
+                </div>
+              )}
+            </div>
           </CardContent>
         </Card>
       )}
