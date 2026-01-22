@@ -805,8 +805,9 @@ async function enrichTokenBatch(
       : null;
     const volumeSol = pumpData?.volume_24h || 0;
     const marketCapUsd = pumpData?.usd_market_cap || null;
-    const liquidityUsd = pumpData?.virtual_sol_reserves
-      ? (pumpData.virtual_sol_reserves / 1e9) * (pumpData?.sol_price || 150) 
+    // Use actual sol_price from pump API response - if not available, skip liquidity calc
+    const liquidityUsd = (pumpData?.virtual_sol_reserves && pumpData?.sol_price)
+      ? (pumpData.virtual_sol_reserves / 1e9) * pumpData.sol_price 
       : null;
     
     console.log(`   Price: $${priceUsd?.toFixed(8) || 'N/A'}, Volume: ${volumeSol} SOL, MCap: $${marketCapUsd || 'N/A'}`);

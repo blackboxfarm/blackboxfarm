@@ -26,13 +26,32 @@ const PRICE_CACHE_TTL_MS = 3000; // Cache prices for 3 seconds
 const priceCache = new Map<string, { price: number; timestamp: number }>();
 
 async function fetchSolPrice(): Promise<number> {
+  // Try Jupiter v2 API first
   try {
-    const res = await fetch("https://price.jup.ag/v6/price?ids=SOL");
+    const res = await fetch("https://api.jup.ag/price/v2?ids=So11111111111111111111111111111111111111112");
     const json = await res.json();
-    return Number(json?.data?.SOL?.price) || 150;
-  } catch {
-    return 150;
+    const price = Number(json?.data?.['So11111111111111111111111111111111111111112']?.price);
+    if (price && price > 0) return price;
+  } catch (e) {
+    console.error('Jupiter SOL price failed:', e);
   }
+  
+  // Try CoinGecko as backup
+  try {
+    const apiKey = Deno.env.get('COINGECKO_API_KEY');
+    const headers: Record<string, string> = { 'Accept': 'application/json' };
+    if (apiKey) headers['x-cg-demo-api-key'] = apiKey;
+    const res = await fetch('https://api.coingecko.com/api/v3/simple/price?ids=solana&vs_currencies=usd', { headers });
+    if (res.ok) {
+      const data = await res.json();
+      if (data?.solana?.usd) return data.solana.usd;
+    }
+  } catch (e) {
+    console.error('CoinGecko SOL price failed:', e);
+  }
+  
+  // NO FALLBACK - throw error
+  throw new Error('CRITICAL: Cannot fetch SOL price from any source');
 }
 
 async function fetchTokenPrices(tokenMints: string[]): Promise<Record<string, number>> {
