@@ -104,10 +104,13 @@ export function ShareCardDemo({ tokenStats: initialTokenStats = mockTokenStats }
         throw new Error('No holder data returned');
       }
 
+      console.log('Holder report response:', data);
+
       // Transform the response into TokenStats format
+      // The edge function returns: symbol (from metadata), tokenSymbol (fallback)
       const stats: TokenStats = {
-        symbol: data.tokenSymbol || 'UNKNOWN',
-        name: data.tokenName || data.tokenSymbol || 'Unknown Token',
+        symbol: data.symbol || data.tokenSymbol || 'UNKNOWN',
+        name: data.name || data.tokenName || data.symbol || 'Unknown Token',
         tokenAddress: tokenMint.trim(),
         price: data.tokenPriceUSD || 0,
         marketCap: data.marketCap || 0,
@@ -147,7 +150,7 @@ export function ShareCardDemo({ tokenStats: initialTokenStats = mockTokenStats }
       const { data, error } = await supabase.functions.invoke('post-share-card-twitter', {
         body: { 
           tweetText,
-          twitterHandle: 'HoldersIntent'
+          twitterHandle: 'HoldersIntel'  // Correct handle from twitter_accounts table
         }
       });
 
