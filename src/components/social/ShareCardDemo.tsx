@@ -77,6 +77,7 @@ const TEMPLATE_VARIABLES = [
   { var: '{dust}', desc: 'Dust holder count (<$1)' },
   { var: '{healthGrade}', desc: 'Grade (A+, B+, etc)' },
   { var: '{healthScore}', desc: 'Score (0-100)' },
+  { var: '{timestamp}', desc: 'Current UTC timestamp' },
 ];
 
 export function ShareCardDemo({ tokenStats = mockTokenStats }: { tokenStats?: TokenStats }) {
@@ -96,6 +97,9 @@ export function ShareCardDemo({ tokenStats = mockTokenStats }: { tokenStats?: To
 
   // Process template with actual values
   const processTemplate = (template: string): string => {
+    const now = new Date();
+    const utcTimestamp = now.toISOString().replace('T', ' ').slice(0, 19) + ' UTC';
+    
     return template
       .replace(/\{ticker\}/g, tokenStats.symbol)
       .replace(/\{name\}/g, tokenStats.name)
@@ -108,7 +112,8 @@ export function ShareCardDemo({ tokenStats = mockTokenStats }: { tokenStats?: To
       .replace(/\{retail\}/g, tokenStats.activeCount.toLocaleString())
       .replace(/\{dust\}/g, tokenStats.dustCount.toLocaleString())
       .replace(/\{healthGrade\}/g, tokenStats.healthGrade)
-      .replace(/\{healthScore\}/g, tokenStats.healthScore.toString());
+      .replace(/\{healthScore\}/g, tokenStats.healthScore.toString())
+      .replace(/\{timestamp\}/g, utcTimestamp);
   };
 
   // Open Twitter with custom text and share URL
