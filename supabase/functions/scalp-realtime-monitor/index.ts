@@ -26,9 +26,12 @@ const PRICE_CACHE_TTL_MS = 3000; // Cache prices for 3 seconds
 const priceCache = new Map<string, { price: number; timestamp: number }>();
 
 async function fetchSolPrice(): Promise<number> {
-  // Try Jupiter v2 API first
+  const jupiterApiKey = Deno.env.get("JUPITER_API_KEY") || "";
+  // Try Jupiter v2 API first with auth
   try {
-    const res = await fetch("https://api.jup.ag/price/v2?ids=So11111111111111111111111111111111111111112");
+    const res = await fetch("https://api.jup.ag/price/v2?ids=So11111111111111111111111111111111111111112", {
+      headers: jupiterApiKey ? { "x-api-key": jupiterApiKey } : {}
+    });
     const json = await res.json();
     const price = Number(json?.data?.['So11111111111111111111111111111111111111112']?.price);
     if (price && price > 0) return price;
@@ -73,10 +76,13 @@ async function fetchTokenPrices(tokenMints: string[]): Promise<Record<string, nu
     return prices;
   }
 
-  // Batch fetch from Jupiter
+  // Batch fetch from Jupiter with auth
+  const jupiterApiKey = Deno.env.get("JUPITER_API_KEY") || "";
   try {
     const ids = mintsToFetch.join(",");
-    const res = await fetch(`https://price.jup.ag/v6/price?ids=${ids}`);
+    const res = await fetch(`https://api.jup.ag/price/v2?ids=${ids}`, {
+      headers: jupiterApiKey ? { "x-api-key": jupiterApiKey } : {}
+    });
     const json = await res.json();
 
     for (const mint of mintsToFetch) {

@@ -26,10 +26,13 @@ async function fetchTokenPrices(tokenMints: string[]): Promise<Record<string, nu
     chunks.push(tokenMints.slice(i, i + 100));
   }
 
+  const jupiterApiKey = Deno.env.get("JUPITER_API_KEY") || "";
   for (const chunk of chunks) {
     try {
       const ids = chunk.join(",");
-      const res = await fetch(`https://price.jup.ag/v6/price?ids=${ids}`);
+      const res = await fetch(`https://api.jup.ag/price/v2?ids=${ids}`, {
+        headers: jupiterApiKey ? { "x-api-key": jupiterApiKey } : {}
+      });
       const json = await res.json();
       
       for (const mint of chunk) {
@@ -64,10 +67,13 @@ async function fetchTokenPrices(tokenMints: string[]): Promise<Record<string, nu
 }
 
 async function fetchSolPrice(): Promise<number> {
+  const jupiterApiKey = Deno.env.get("JUPITER_API_KEY") || "";
   try {
-    const res = await fetch("https://price.jup.ag/v6/price?ids=SOL");
+    const res = await fetch("https://api.jup.ag/price/v2?ids=So11111111111111111111111111111111111111112", {
+      headers: jupiterApiKey ? { "x-api-key": jupiterApiKey } : {}
+    });
     const json = await res.json();
-    const price = json?.data?.SOL?.price;
+    const price = json?.data?.['So11111111111111111111111111111111111111112']?.price;
     if (price) return Number(price);
   } catch (e) {
     console.error("Jupiter SOL price failed:", e);

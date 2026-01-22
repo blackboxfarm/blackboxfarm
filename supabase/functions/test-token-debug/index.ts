@@ -34,12 +34,15 @@ serve(async (req) => {
       computeResult = { error: "Failed to parse JSON", raw: computeText };
     }
     
-    // Test Jupiter quote
-    const jupiterUrl = `https://quote-api.jup.ag/v6/quote?inputMint=So11111111111111111111111111111111111111112&outputMint=${tokenMint}&amount=1000000&slippageBps=100`;
+    // Test Jupiter quote with auth
+    const jupiterApiKey = Deno.env.get("JUPITER_API_KEY") || "";
+    const jupiterUrl = `https://api.jup.ag/swap/v1/quote?inputMint=So11111111111111111111111111111111111111112&outputMint=${tokenMint}&amount=1000000&slippageBps=100`;
     
     console.log("Testing Jupiter quote with URL:", jupiterUrl);
     
-    const jupiterRes = await fetch(jupiterUrl);
+    const jupiterRes = await fetch(jupiterUrl, {
+      headers: jupiterApiKey ? { "x-api-key": jupiterApiKey } : {}
+    });
     const jupiterText = await jupiterRes.text();
     
     console.log("Jupiter response status:", jupiterRes.status);
