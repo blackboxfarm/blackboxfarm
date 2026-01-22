@@ -13,13 +13,15 @@ export interface VerifiedBuy {
   signature: string;
   tokenMint: string;
   walletAddress: string;
-  solSpent: number;       // Actual SOL deducted from wallet
-  tokensReceived: number; // Actual tokens received
-  entryPriceUsd: number;  // True entry price: (solSpent * solPrice) / tokens
-  solPrice: number;       // SOL price at verification time
-  feesPaid: number;       // Transaction fees in SOL
-  timestamp: number;      // Transaction timestamp
-  platform: string;       // Detected DEX (Jupiter, Raydium, PumpFun, etc.)
+  solSpent: number;         // Actual SOL deducted from wallet
+  tokensReceived: number;   // Actual tokens received (human-readable)
+  tokensReceivedRaw: string; // Raw token amount as string for BigInt precision
+  tokenDecimals: number;    // Token decimal places
+  entryPriceUsd: number;    // True entry price: (solSpent * solPrice) / tokens
+  solPrice: number;         // SOL price at verification time
+  feesPaid: number;         // Transaction fees in SOL
+  timestamp: number;        // Transaction timestamp
+  platform: string;         // Detected DEX (Jupiter, Raydium, PumpFun, etc.)
   verified: boolean;
 }
 
@@ -143,6 +145,7 @@ export async function verifyBuyTransaction(
       
       let solSpent = 0;
       let tokensReceived = 0;
+      let tokensReceivedRaw = "0";
       let tokenDecimals = 6;
       
       // METHOD 1: Swap event (most reliable for DEX trades)
@@ -159,8 +162,9 @@ export async function verifyBuyTransaction(
         const tokenOut = swap.tokenOutputs?.find(t => t.mint === tokenMint);
         if (tokenOut) {
           tokenDecimals = tokenOut.rawTokenAmount.decimals;
-          tokensReceived = Number(tokenOut.rawTokenAmount.tokenAmount) / Math.pow(10, tokenDecimals);
-          console.log(`[HeliusVerify] Swap tokenOutput: ${tokensReceived} tokens`);
+          tokensReceivedRaw = tokenOut.rawTokenAmount.tokenAmount;
+          tokensReceived = Number(tokensReceivedRaw) / Math.pow(10, tokenDecimals);
+          console.log(`[HeliusVerify] Swap tokenOutput: ${tokensReceived} tokens (raw=${tokensReceivedRaw})`);
         }
       }
       
@@ -183,7 +187,8 @@ export async function verifyBuyTransaction(
           const tokenChange = walletData.tokenBalanceChanges?.find(t => t.mint === tokenMint);
           if (tokenChange) {
             tokenDecimals = tokenChange.rawTokenAmount.decimals;
-            const rawAmount = Number(tokenChange.rawTokenAmount.tokenAmount);
+            tokensReceivedRaw = tokenChange.rawTokenAmount.tokenAmount;
+            const rawAmount = Number(tokensReceivedRaw);
             if (rawAmount > 0) {
               tokensReceived = rawAmount / Math.pow(10, tokenDecimals);
             }
@@ -198,8 +203,9 @@ export async function verifyBuyTransaction(
             );
             if (tc && Number(tc.rawTokenAmount.tokenAmount) > 0) {
               tokenDecimals = tc.rawTokenAmount.decimals;
-              tokensReceived = Number(tc.rawTokenAmount.tokenAmount) / Math.pow(10, tokenDecimals);
-              console.log(`[HeliusVerify] Found token in other account: ${tokensReceived}`);
+              tokensReceivedRaw = tc.rawTokenAmount.tokenAmount;
+              tokensReceived = Number(tokensReceivedRaw) / Math.pow(10, tokenDecimals);
+              console.log(`[HeliusVerify] Found token in other account: ${tokensReceived} (raw=${tokensReceivedRaw})`);
               break;
             }
           }
@@ -229,6 +235,8 @@ export async function verifyBuyTransaction(
         walletAddress,
         solSpent,
         tokensReceived,
+        tokensReceivedRaw,
+        tokenDecimals,
         entryPriceUsd,
         solPrice,
         feesPaid: tx.fee / 1e9,
@@ -377,6 +385,8 @@ export async function updatePositionWithVerifiedBuy(
         buy_amount_usd: verifiedBuy.solSpent * verifiedBuy.solPrice,
         buy_price_usd: verifiedBuy.entryPriceUsd,
         quantity_tokens: verifiedBuy.tokensReceived,
+        quantity_tokens_raw: verifiedBuy.tokensReceivedRaw,
+        token_decimals: verifiedBuy.tokenDecimals,
         verified_on_chain: true,
         verification_source: 'helius',
         verified_at: new Date().toISOString(),

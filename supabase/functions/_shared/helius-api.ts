@@ -10,6 +10,7 @@ export interface HeliusSwapInfo {
   tokenSymbol?: string;
   tokenDecimals: number;
   tokensReceived: number;
+  tokensReceivedRaw: string; // Raw BigInt as string to preserve precision
   solSpent: number;
   fee: number;
   timestamp: number;
@@ -103,13 +104,15 @@ export async function parseBuyFromHelius(
 
       // Tokens received (tokenOutputs)
       let tokensReceived = 0;
+      let tokensReceivedRaw = "0";
       let tokenDecimals = 6;
       
       const tokenOut = swap.tokenOutputs?.find(t => t.mint === tokenMint);
       if (tokenOut) {
         tokenDecimals = tokenOut.rawTokenAmount.decimals;
-        tokensReceived = Number(tokenOut.rawTokenAmount.tokenAmount) / Math.pow(10, tokenDecimals);
-        console.log(`Swap tokenOutput: ${tokensReceived} tokens (${tokenDecimals} decimals)`);
+        tokensReceivedRaw = tokenOut.rawTokenAmount.tokenAmount;
+        tokensReceived = Number(tokensReceivedRaw) / Math.pow(10, tokenDecimals);
+        console.log(`Swap tokenOutput: ${tokensReceived} tokens (raw=${tokensReceivedRaw}, ${tokenDecimals} decimals)`);
       }
 
       if (solSpent > 0 && tokensReceived > 0) {
@@ -118,6 +121,7 @@ export async function parseBuyFromHelius(
           tokenMint,
           tokenDecimals,
           tokensReceived,
+          tokensReceivedRaw,
           solSpent,
           fee: tx.fee / 1e9,
           timestamp: tx.timestamp,
@@ -139,12 +143,14 @@ export async function parseBuyFromHelius(
 
         // Token received
         let tokensReceived = 0;
+        let tokensReceivedRaw = "0";
         let tokenDecimals = 6;
 
         const tokenChange = walletData.tokenBalanceChanges?.find(t => t.mint === tokenMint);
         if (tokenChange) {
           tokenDecimals = tokenChange.rawTokenAmount.decimals;
-          tokensReceived = Number(tokenChange.rawTokenAmount.tokenAmount) / Math.pow(10, tokenDecimals);
+          tokensReceivedRaw = tokenChange.rawTokenAmount.tokenAmount;
+          tokensReceived = Number(tokensReceivedRaw) / Math.pow(10, tokenDecimals);
         }
 
         // Also check other accounts for token transfers TO our wallet
@@ -155,7 +161,8 @@ export async function parseBuyFromHelius(
             );
             if (tc && Number(tc.rawTokenAmount.tokenAmount) > 0) {
               tokenDecimals = tc.rawTokenAmount.decimals;
-              tokensReceived = Number(tc.rawTokenAmount.tokenAmount) / Math.pow(10, tokenDecimals);
+              tokensReceivedRaw = tc.rawTokenAmount.tokenAmount;
+              tokensReceived = Number(tokensReceivedRaw) / Math.pow(10, tokenDecimals);
               break;
             }
           }
@@ -167,6 +174,7 @@ export async function parseBuyFromHelius(
             tokenMint,
             tokenDecimals,
             tokensReceived,
+            tokensReceivedRaw,
             solSpent,
             fee: tx.fee / 1e9,
             timestamp: tx.timestamp,
