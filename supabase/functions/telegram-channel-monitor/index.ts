@@ -1498,29 +1498,33 @@ serve(async (req) => {
       // Check if channel_id is a numeric chat_id (private channel/group)
       const isChannelIdNumeric = channelId && /^-?\d+$/.test(channelId.toString());
       
-      // PRIORITY: Use numeric channel_id first (immutable), fall back to username
+      // TRACKING: Use numeric channel_id for identity (immutable) when available
       // Numeric IDs are permanent - usernames can change when owners rename channels
-      const effectiveIdentifier = isChannelIdNumeric ? channelId : (channelUsername || null);
+      const trackingIdentifier = isChannelIdNumeric ? channelId : (channelUsername || null);
+      
+      // FETCHING: MTProto prefers username for peer resolution (caches access_hash)
+      // Only fall back to numeric ID if no username is available
+      const fetchIdentifier = channelUsername || (isChannelIdNumeric ? channelId : null);
       
       // Detect if this needs MTProto (groups or any numeric chat_id)
       const needsMtproto = channelType === 'group' || isChannelIdNumeric;
       
-      console.log(`[telegram-channel-monitor] Processing: ${effectiveIdentifier || 'NO_IDENTIFIER'} (${config.channel_name || 'unnamed'}) - Type: ${channelType} - Mode: ${tradingMode} - Fantasy: ${isFantasyMode} - MTProto: ${needsMtproto}`);
+      console.log(`[telegram-channel-monitor] Processing: ${trackingIdentifier || 'NO_IDENTIFIER'} (${config.channel_name || 'unnamed'}) - Type: ${channelType} - Mode: ${tradingMode} - Fantasy: ${isFantasyMode} - MTProto: ${needsMtproto} - FetchVia: ${fetchIdentifier}`);
 
       try {
         let channelMessages: Array<{ messageId: string; text: string; date: Date; callerUsername?: string; callerDisplayName?: string }> = [];
         let groupWarning: string | null = null;
         
         // Fetch messages - for groups/private channels use MTProto, for public channels use web scraping
-        if (!effectiveIdentifier) {
+        if (!fetchIdentifier) {
           groupWarning = needsMtproto 
             ? 'Missing channel username or chat_id in config' 
             : 'Missing channel username in config';
         } else if (needsMtproto) {
-          // MTProto for groups - can use username or chat_id
+          // MTProto for groups - prefer username for peer resolution, fall back to numeric ID
           try {
             const { data: mtData, error: mtError } = await supabase.functions.invoke('telegram-mtproto-auth', {
-              body: { action: 'fetch_recent_messages', channelUsername: effectiveIdentifier, limit: 50 }
+              body: { action: 'fetch_recent_messages', channelUsername: fetchIdentifier, limit: 50 }
             });
 
             if (mtError) throw mtError;
@@ -1587,7 +1591,7 @@ serve(async (req) => {
           }
         } else {
           // Public channel - use username for web scraping
-          channelMessages = await scrapePublicChannel(effectiveIdentifier!);
+          channelMessages = await scrapePublicChannel(fetchIdentifier!);
         }
 
         totalRawMessages += channelMessages.length;
