@@ -108,6 +108,14 @@ export function ShareCardDemo({ tokenStats: initialTokenStats = mockTokenStats }
 
       // Transform the response into TokenStats format
       // NOTE: bagless-holders-report historically evolved; support both old/new keys.
+      const totalHolders = data.totalHolders || 0;
+      const dustCount = data.tierBreakdown?.dust ?? data.dustWallets ?? data.simpleTiers?.dust?.count ?? 0;
+      
+      // Calculate dust percentage as (dustCount / totalHolders) * 100
+      const dustPercentage = totalHolders > 0 
+        ? parseFloat(((dustCount / totalHolders) * 100).toFixed(2))
+        : 0;
+
       const stats: TokenStats = {
         symbol: data.tokenSymbol || data.symbol || 'UNKNOWN',
         name: data.tokenName || data.name || data.tokenSymbol || data.symbol || 'Unknown Token',
@@ -120,13 +128,13 @@ export function ShareCardDemo({ tokenStats: initialTokenStats = mockTokenStats }
             : 0),
         healthScore: data.stabilityScore ?? data.healthScore?.score ?? 0,
         healthGrade: data.stabilityGrade ?? data.healthScore?.grade ?? 'N/A',
-        totalHolders: data.totalHolders || 0,
+        totalHolders,
         realHolders: data.realHolders ?? data.realWallets ?? 0,
         whaleCount: data.tierBreakdown?.whale ?? data.simpleTiers?.whales?.count ?? 0,
         strongCount: data.tierBreakdown?.serious ?? data.simpleTiers?.serious?.count ?? 0,
         activeCount: data.tierBreakdown?.retail ?? data.simpleTiers?.retail?.count ?? 0,
-        dustCount: data.tierBreakdown?.dust ?? data.simpleTiers?.dust?.count ?? 0,
-        dustPercentage: data.dustPercentage ?? data.simpleTiers?.dust?.percentage ?? 0,
+        dustCount,
+        dustPercentage,
       };
 
       setFetchedStats(stats);
