@@ -6,6 +6,16 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Copy, RotateCcw, Share2 } from 'lucide-react';
 import { toast } from 'sonner';
+import {
+  DEFAULT_TWEET_TEMPLATE,
+  TEMPLATE_STORAGE_KEY,
+  TEMPLATE_VARIABLES,
+  getTemplate,
+  saveTemplate,
+  processTemplate,
+  getShareUrl,
+  type TokenShareData,
+} from '@/lib/share-template';
 
 interface TokenStats {
   symbol: string;
@@ -23,15 +33,6 @@ interface TokenStats {
   dustCount: number;    // Dust (<$1)
   dustPercentage: number;
 }
-
-// X/Twitter caches cards aggressively per-URL; bumping `v` forces a re-scrape.
-// Keep this stable unless OG metadata changes.
-const HOLDERS_SHARE_VERSION = "20260122";
-const HOLDERS_SHARE_URL = (() => {
-  const url = new URL("https://blackbox.farm/holders");
-  url.searchParams.set("v", HOLDERS_SHARE_VERSION);
-  return url.toString();
-})();
 
 // Mock data for demo
 const mockTokenStats: TokenStats = {
@@ -51,93 +52,39 @@ const mockTokenStats: TokenStats = {
   dustPercentage: 50,
 };
 
-const DEFAULT_TWEET_TEMPLATE = `🔎 Holder Analysis: $\{ticker}
-
-CA:{ca}
-
-Health: {healthGrade} ({healthScore}/100)
-
-✅ {realHolders} Real Holders ({dustPct}% Dust)
-
-🏛 {totalWallets} Total Wallets
-
-🐋 {whales} Whales (>$1K)
-
-😎 {serious} Serious ($200-$1K)
-
-🏪 {retail} Retail ($1-$199)
-
-💨 {dust} Dust (<$1) = {dustPct}% Dust
-
-More Holder Intel👉 ${HOLDERS_SHARE_URL}`;
-
-// Bump storage key to force reset of old templates
-const TEMPLATE_STORAGE_KEY = 'share-tweet-template-v3';
-
-const TEMPLATE_VARIABLES = [
-  { var: '{ticker}', desc: 'Token symbol' },
-  { var: '{name}', desc: 'Token full name' },
-  { var: '{ca}', desc: 'Contract address' },
-  { var: '{totalWallets}', desc: 'Total wallet count' },
-  { var: '{realHolders}', desc: 'Real holder count' },
-  { var: '{dustPct}', desc: 'Dust percentage' },
-  { var: '{whales}', desc: 'Whale count (>$1K)' },
-  { var: '{serious}', desc: 'Serious holder count ($200-$1K)' },
-  { var: '{retail}', desc: 'Retail holder count ($1-$199)' },
-  { var: '{dust}', desc: 'Dust holder count (<$1)' },
-  { var: '{healthGrade}', desc: 'Grade (A+, B+, etc)' },
-  { var: '{healthScore}', desc: 'Score (0-100)' },
-  { var: '{timestamp}', desc: 'Current UTC timestamp' },
-];
-
 export function ShareCardDemo({ tokenStats = mockTokenStats }: { tokenStats?: TokenStats }) {
-  const [tweetTemplate, setTweetTemplate] = useState(() => {
-    const saved = localStorage.getItem(TEMPLATE_STORAGE_KEY);
-    return saved || DEFAULT_TWEET_TEMPLATE;
-  });
+  const [tweetTemplate, setTweetTemplate] = useState(() => getTemplate());
 
   // Persist template to localStorage whenever it changes
   useEffect(() => {
-    localStorage.setItem(TEMPLATE_STORAGE_KEY, tweetTemplate);
+    saveTemplate(tweetTemplate);
   }, [tweetTemplate]);
 
-  const getShareUrl = () => {
-    const url = new URL("https://blackbox.farm/holders");
-    url.searchParams.set("token", tokenStats.tokenAddress);
-    url.searchParams.set("v", HOLDERS_SHARE_VERSION);
-    return url.toString();
-  };
-
-  // Process template with actual values
-  const processTemplate = (template: string): string => {
-    const now = new Date();
-    const utcTimestamp = now.toISOString().replace('T', ' ').slice(0, 19) + ' UTC';
-    
-    return template
-      .replace(/\{ticker\}/g, tokenStats.symbol)
-      .replace(/\{name\}/g, tokenStats.name)
-      .replace(/\{ca\}/g, tokenStats.tokenAddress)
-      .replace(/\{totalWallets\}/g, tokenStats.totalHolders.toLocaleString())
-      .replace(/\{realHolders\}/g, tokenStats.realHolders.toLocaleString())
-      .replace(/\{dustPct\}/g, tokenStats.dustPercentage.toString())
-      .replace(/\{whales\}/g, tokenStats.whaleCount.toLocaleString())
-      .replace(/\{serious\}/g, tokenStats.strongCount.toLocaleString())
-      .replace(/\{retail\}/g, tokenStats.activeCount.toLocaleString())
-      .replace(/\{dust\}/g, tokenStats.dustCount.toLocaleString())
-      .replace(/\{healthGrade\}/g, tokenStats.healthGrade)
-      .replace(/\{healthScore\}/g, tokenStats.healthScore.toString())
-      .replace(/\{timestamp\}/g, utcTimestamp);
+  // Convert TokenStats to TokenShareData format
+  const tokenData: TokenShareData = {
+    ticker: tokenStats.symbol,
+    name: tokenStats.name,
+    tokenAddress: tokenStats.tokenAddress,
+    totalWallets: tokenStats.totalHolders,
+    realHolders: tokenStats.realHolders,
+    dustCount: tokenStats.dustCount,
+    dustPercentage: tokenStats.dustPercentage,
+    whales: tokenStats.whaleCount,
+    serious: tokenStats.strongCount,
+    retail: tokenStats.activeCount,
+    healthGrade: tokenStats.healthGrade,
+    healthScore: tokenStats.healthScore,
   };
 
   // Open Twitter with custom text only (no appended URL)
   const shareToTwitter = () => {
-    const tweetText = processTemplate(tweetTemplate);
+    const tweetText = processTemplate(tweetTemplate, tokenData);
     const twitterUrl = `https://twitter.com/intent/tweet?text=${encodeURIComponent(tweetText)}`;
     window.open(twitterUrl, '_blank', 'width=550,height=420');
   };
 
   const copyTemplate = () => {
-    navigator.clipboard.writeText(processTemplate(tweetTemplate));
+    navigator.clipboard.writeText(processTemplate(tweetTemplate, tokenData));
     toast.success('Tweet text copied!');
   };
 
@@ -187,7 +134,7 @@ export function ShareCardDemo({ tokenStats = mockTokenStats }: { tokenStats?: To
           <div className="space-y-2">
             <Label>Preview</Label>
             <div className="p-3 bg-muted/50 rounded-lg border text-sm whitespace-pre-wrap min-h-[300px]">
-              {processTemplate(tweetTemplate)}
+              {processTemplate(tweetTemplate, tokenData)}
             </div>
           </div>
         </div>

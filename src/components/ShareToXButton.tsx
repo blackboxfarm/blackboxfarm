@@ -7,6 +7,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { useToast } from "@/hooks/use-toast";
+import { getTemplate, processTemplate, HOLDERS_SHARE_URL, type TokenShareData } from "@/lib/share-template";
 
 interface ShareToXButtonProps {
   ticker: string;
@@ -44,31 +45,31 @@ export function ShareToXButton({
   const { toast } = useToast();
   
   const dustPct = totalWallets > 0 ? Math.round((dustWallets / totalWallets) * 100) : 0;
-  const now = new Date();
-  const utcTimestamp = now.toISOString().replace('T', ' ').slice(0, 19) + ' UTC';
 
-  // X/Twitter caches cards aggressively per-URL; bumping `v` forces a re-scrape.
-  // Keep this stable unless OG metadata changes.
-  const HOLDERS_SHARE_VERSION = "20260122";
-  const holdersUrlForX = (() => {
-    const url = new URL("https://blackbox.farm/holders");
-    url.searchParams.set("v", HOLDERS_SHARE_VERSION);
-    return url.toString();
-  })();
+  // Build token data for template processing
+  const tokenData: TokenShareData = {
+    ticker,
+    name: tokenName,
+    tokenAddress: tokenMint,
+    totalWallets,
+    realHolders,
+    dustCount: dustWallets,
+    dustPercentage: dustPct,
+    whales,
+    serious,
+    retail,
+    healthGrade,
+    healthScore,
+  };
 
-  const tweetText = `🪙 HOLDER INTEL: $${ticker} (${tokenName})
-CA: ${tokenMint}
-Health: ${healthGrade} (${healthScore}/100)
-✅ ${realHolders.toLocaleString()} Real Holders (${dustPct}% Dust)
-🏛 ${totalWallets.toLocaleString()} Total Wallets
-⏱️ [${utcTimestamp}] ⏱️
-🐋 ${whales} Whales (>$1K)
-😎 ${serious} Serious ($200-$1K)
-🏪 ${retail.toLocaleString()} Retail ($1-$199)
-💨 ${dustWallets.toLocaleString()} Dust (<$1) = ${dustPct}% Dust
-More Holder Intel 👉 ${holdersUrlForX}`;
+  // Get processed share text from the single template
+  const getShareText = () => {
+    const template = getTemplate();
+    return processTemplate(template, tokenData);
+  };
 
   const handleShareToX = () => {
+    const tweetText = getShareText();
     window.open(
       `https://twitter.com/intent/tweet?text=${encodeURIComponent(tweetText)}`,
       '_blank'
@@ -76,25 +77,18 @@ More Holder Intel 👉 ${holdersUrlForX}`;
   };
 
   const handleCopyForDiscord = () => {
-    const discordText = `🔎 **HOLDER INTEL: $${ticker} (${tokenName})**
-**CA:** \`${tokenMint}\`
-**Health:** ${healthGrade} (${healthScore}/100)
-✅ ${realHolders.toLocaleString()} Real Holders (${dustPct}% Dust)
-🏛 ${totalWallets.toLocaleString()} Total Wallets
-🐋 ${whales} Whales (>$1K) | 😎 ${serious} Serious | 🏪 ${retail.toLocaleString()} Retail | 💨 ${dustWallets.toLocaleString()} Dust
-⏱️ ${utcTimestamp}
-More Holder Intel 👉 ${holdersUrlForX}`;
-    navigator.clipboard.writeText(discordText);
+    const shareText = getShareText();
+    navigator.clipboard.writeText(shareText);
     toast({
       title: "Copied!",
-      description: "Discord message copied to clipboard",
+      description: "Share text copied to clipboard",
     });
   };
 
   const handleShareToTelegram = () => {
-    const telegramText = `🔎 HOLDER INTEL: $${ticker} (${tokenName}) | ${healthGrade} (${healthScore}/100) | ${realHolders.toLocaleString()} Real Holders | 🐋${whales} 😎${serious} 🏪${retail} | ${utcTimestamp}`;
+    const shareText = getShareText();
     window.open(
-      `https://t.me/share/url?url=${encodeURIComponent(holdersUrlForX)}&text=${encodeURIComponent(telegramText)}`,
+      `https://t.me/share/url?url=${encodeURIComponent(HOLDERS_SHARE_URL)}&text=${encodeURIComponent(shareText)}`,
       '_blank'
     );
   };
