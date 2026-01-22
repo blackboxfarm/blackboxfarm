@@ -906,6 +906,8 @@ serve(async (req) => {
 
         // Get estimated outAmount from swap response as initial fallback
         let quantityTokens = (swapResult as any)?.outAmount ?? null;
+        let quantityTokensRaw: string | null = null; // Raw BigInt string for precision
+        let tokenDecimals: number | null = null;
         console.log("Swap outAmount from response:", quantityTokens, "source:", (swapResult as any)?.source);
 
         // CRITICAL: Use Helius Parse Transaction API to get EXACT tokens received from THIS swap
@@ -941,11 +943,11 @@ serve(async (req) => {
                 
                 if (tokenOutput?.rawTokenAmount?.tokenAmount) {
                   // Apply decimals to get human-readable amount
-                  const rawAmount = BigInt(tokenOutput.rawTokenAmount.tokenAmount);
-                  const decimals = tokenOutput.rawTokenAmount.decimals ?? 9;
-                  const humanAmount = Number(rawAmount) / Math.pow(10, decimals);
+                  quantityTokensRaw = tokenOutput.rawTokenAmount.tokenAmount;
+                  tokenDecimals = tokenOutput.rawTokenAmount.decimals ?? 9;
+                  const humanAmount = Number(quantityTokensRaw) / Math.pow(10, tokenDecimals);
                   quantityTokens = String(humanAmount);
-                  console.log(`Got token quantity from swap event: raw=${rawAmount}, decimals=${decimals}, human=${humanAmount}`);
+                  console.log(`Got token quantity from swap event: raw=${quantityTokensRaw}, decimals=${tokenDecimals}, human=${humanAmount}`);
                 } else if (tokenOutput?.tokenAmount) {
                   // tokenAmount is already human-readable
                   quantityTokens = String(tokenOutput.tokenAmount);
@@ -978,10 +980,11 @@ serve(async (req) => {
                     // Only use positive changes (tokens received)
                     if (rawAmount > 0n) {
                       // Apply decimals to get human-readable amount
-                      const decimals = tokenChange.rawTokenAmount.decimals ?? 9;
-                      const humanAmount = Number(rawAmount) / Math.pow(10, decimals);
+                      quantityTokensRaw = tokenChange.rawTokenAmount.tokenAmount;
+                      tokenDecimals = tokenChange.rawTokenAmount.decimals ?? 9;
+                      const humanAmount = Number(rawAmount) / Math.pow(10, tokenDecimals);
                       quantityTokens = String(humanAmount);
-                      console.log(`Got token quantity from accountData: raw=${rawAmount}, decimals=${decimals}, human=${humanAmount}`);
+                      console.log(`Got token quantity from accountData: raw=${quantityTokensRaw}, decimals=${tokenDecimals}, human=${humanAmount}`);
                       break;
                     }
                   }
@@ -1073,6 +1076,8 @@ serve(async (req) => {
             buy_signature: signature,
             buy_executed_at: new Date().toISOString(),
             quantity_tokens: quantityTokens,
+            quantity_tokens_raw: quantityTokensRaw,
+            token_decimals: tokenDecimals,
             buy_amount_sol: solSpentSol,
             buy_price_usd: actualBuyPriceUsd, // Use calculated price, not stale quote
             buy_amount_usd: actualBuyAmountUsd,

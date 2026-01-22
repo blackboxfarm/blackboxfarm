@@ -223,6 +223,8 @@ serve(async (req) => {
           buy_amount_sol: buyData.solSpent,
           buy_price_usd: buyPriceUsd,
           quantity_tokens: String(buyData.tokensReceived),
+          quantity_tokens_raw: buyData.tokensReceivedRaw, // Raw BigInt string for precision
+          token_decimals: buyData.tokenDecimals,
           buy_signature: buySignature,
           buy_executed_at: new Date().toISOString(),
           target_multiplier: targetMultiplier,

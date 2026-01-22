@@ -2837,6 +2837,7 @@ export type Database = {
           price_source: string | null
           profit_usd: number | null
           quantity_tokens: number | null
+          quantity_tokens_raw: string | null
           rebuy_amount_usd: number | null
           rebuy_enabled: boolean | null
           rebuy_executed_at: string | null
@@ -2860,6 +2861,7 @@ export type Database = {
           target_multiplier: number | null
           target_price_usd: number | null
           telegram_url: string | null
+          token_decimals: number | null
           token_image: string | null
           token_mint: string
           token_name: string | null
@@ -2914,6 +2916,7 @@ export type Database = {
           price_source?: string | null
           profit_usd?: number | null
           quantity_tokens?: number | null
+          quantity_tokens_raw?: string | null
           rebuy_amount_usd?: number | null
           rebuy_enabled?: boolean | null
           rebuy_executed_at?: string | null
@@ -2937,6 +2940,7 @@ export type Database = {
           target_multiplier?: number | null
           target_price_usd?: number | null
           telegram_url?: string | null
+          token_decimals?: number | null
           token_image?: string | null
           token_mint: string
           token_name?: string | null
@@ -2991,6 +2995,7 @@ export type Database = {
           price_source?: string | null
           profit_usd?: number | null
           quantity_tokens?: number | null
+          quantity_tokens_raw?: string | null
           rebuy_amount_usd?: number | null
           rebuy_enabled?: boolean | null
           rebuy_executed_at?: string | null
@@ -3014,6 +3019,7 @@ export type Database = {
           target_multiplier?: number | null
           target_price_usd?: number | null
           telegram_url?: string | null
+          token_decimals?: number | null
           token_image?: string | null
           token_mint?: string
           token_name?: string | null

@@ -166,6 +166,8 @@ serve(async (req) => {
             // USD values are NOT updated - they're calculated live in UI
             const updateData: any = {
               quantity_tokens: String(buyData.tokensReceived),
+              quantity_tokens_raw: buyData.tokensReceivedRaw,
+              token_decimals: buyData.tokenDecimals,
               buy_amount_sol: buyData.solSpent,
               entry_verified: true,
               error_message: null
@@ -316,6 +318,8 @@ serve(async (req) => {
               .from("flip_positions")
               .update({
                 quantity_tokens: String(buyData.tokensReceived),
+                quantity_tokens_raw: buyData.tokensReceivedRaw,
+                token_decimals: buyData.tokenDecimals,
                 buy_amount_usd: correctBuyAmountUsd,
                 buy_price_usd: correctBuyPriceUsd,
                 buy_amount_sol: buyData.solSpent,
