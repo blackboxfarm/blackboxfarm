@@ -1,21 +1,16 @@
 import { createHmac } from "node:crypto";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
-const API_KEY = Deno.env.get("TWITTER_CONSUMER_KEY")?.trim();
-const API_SECRET = Deno.env.get("TWITTER_CONSUMER_SECRET")?.trim();
-const ACCESS_TOKEN = Deno.env.get("TWITTER_ACCESS_TOKEN")?.trim();
-const ACCESS_TOKEN_SECRET = Deno.env.get("TWITTER_ACCESS_TOKEN_SECRET")?.trim();
-
-function validateEnvironmentVariables() {
-  if (!API_KEY) throw new Error("Missing TWITTER_CONSUMER_KEY");
-  if (!API_SECRET) throw new Error("Missing TWITTER_CONSUMER_SECRET");
-  if (!ACCESS_TOKEN) throw new Error("Missing TWITTER_ACCESS_TOKEN");
-  if (!ACCESS_TOKEN_SECRET) throw new Error("Missing TWITTER_ACCESS_TOKEN_SECRET");
-}
+// Default env credentials (for backward compat)
+const DEFAULT_API_KEY = Deno.env.get("TWITTER_CONSUMER_KEY")?.trim();
+const DEFAULT_API_SECRET = Deno.env.get("TWITTER_CONSUMER_SECRET")?.trim();
+const DEFAULT_ACCESS_TOKEN = Deno.env.get("TWITTER_ACCESS_TOKEN")?.trim();
+const DEFAULT_ACCESS_TOKEN_SECRET = Deno.env.get("TWITTER_ACCESS_TOKEN_SECRET")?.trim();
 
 function generateOAuthSignature(
   method: string,
@@ -35,13 +30,20 @@ function generateOAuthSignature(
   return hmacSha1.update(signatureBaseString).digest("base64");
 }
 
-function generateOAuthHeader(method: string, url: string): string {
+function generateOAuthHeader(
+  method: string, 
+  url: string,
+  apiKey: string,
+  apiSecret: string,
+  accessToken: string,
+  accessTokenSecret: string
+): string {
   const oauthParams = {
-    oauth_consumer_key: API_KEY!,
+    oauth_consumer_key: apiKey,
     oauth_nonce: Math.random().toString(36).substring(2),
     oauth_signature_method: "HMAC-SHA1",
     oauth_timestamp: Math.floor(Date.now() / 1000).toString(),
-    oauth_token: ACCESS_TOKEN!,
+    oauth_token: accessToken,
     oauth_version: "1.0",
   };
 
@@ -49,8 +51,8 @@ function generateOAuthHeader(method: string, url: string): string {
     method,
     url,
     oauthParams,
-    API_SECRET!,
-    ACCESS_TOKEN_SECRET!
+    apiSecret,
+    accessTokenSecret
   );
 
   const signedOAuthParams = {
@@ -67,10 +69,16 @@ function generateOAuthHeader(method: string, url: string): string {
   );
 }
 
-async function sendTweet(tweetText: string): Promise<any> {
+async function sendTweet(
+  tweetText: string,
+  apiKey: string,
+  apiSecret: string,
+  accessToken: string,
+  accessTokenSecret: string
+): Promise<any> {
   const url = "https://api.x.com/2/tweets";
   const method = "POST";
-  const oauthHeader = generateOAuthHeader(method, url);
+  const oauthHeader = generateOAuthHeader(method, url, apiKey, apiSecret, accessToken, accessTokenSecret);
 
   console.log("Sending tweet:", tweetText.substring(0, 50) + "...");
 
@@ -101,21 +109,19 @@ Deno.serve(async (req) => {
   }
 
   try {
-    validateEnvironmentVariables();
-
     const body = await req.json();
-    const { tokenStats } = body;
+    const { tweetText, twitterHandle, tokenStats } = body;
 
-    if (!tokenStats) {
-      throw new Error("Missing tokenStats in request body");
-    }
+    // Determine tweet content
+    let finalTweetText: string;
 
-    console.log("Generating tweet for token:", tokenStats.symbol);
-
-    // Build the tweet text with holder analysis data
-    const dustPct = tokenStats.dustPercentage || Math.round((tokenStats.dustCount / tokenStats.totalHolders) * 100);
-    
-    const tweetText = `🔍 $${tokenStats.symbol} Holder Analysis
+    if (tweetText) {
+      // Use the provided template-processed tweet text directly
+      finalTweetText = tweetText;
+    } else if (tokenStats) {
+      // Legacy: build tweet from tokenStats (backward compat)
+      const dustPct = tokenStats.dustPercentage || Math.round((tokenStats.dustCount / tokenStats.totalHolders) * 100);
+      finalTweetText = `🔍 $${tokenStats.symbol} Holder Analysis
 
 📊 ${tokenStats.totalHolders.toLocaleString()} Total Wallets
 ↓
@@ -131,10 +137,56 @@ ${dustPct}% are dust wallets from failed txns
 Health Grade: ${tokenStats.healthGrade} (${tokenStats.healthScore}/100)
 
 Free report 👉 blackbox.farm/holders`;
+    } else {
+      throw new Error("Missing tweetText or tokenStats in request body");
+    }
 
-    console.log("Tweet length:", tweetText.length);
+    // Determine credentials
+    let apiKey = DEFAULT_API_KEY;
+    let apiSecret = DEFAULT_API_SECRET;
+    let accessToken = DEFAULT_ACCESS_TOKEN;
+    let accessTokenSecret = DEFAULT_ACCESS_TOKEN_SECRET;
 
-    const result = await sendTweet(tweetText);
+    // If a specific twitter handle is requested, fetch credentials from DB
+    if (twitterHandle) {
+      console.log(`Looking up credentials for @${twitterHandle}`);
+      
+      const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
+      const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+      const supabase = createClient(supabaseUrl, supabaseServiceKey);
+
+      const { data: account, error } = await supabase
+        .from('twitter_accounts')
+        .select('api_key_encrypted, api_secret_encrypted, access_token_encrypted, access_token_secret_encrypted')
+        .eq('username', twitterHandle)
+        .single();
+
+      if (error || !account) {
+        console.error('Failed to fetch twitter account:', error);
+        throw new Error(`Twitter account @${twitterHandle} not found or missing credentials`);
+      }
+
+      if (!account.api_key_encrypted || !account.access_token_encrypted) {
+        throw new Error(`Twitter account @${twitterHandle} is missing API credentials`);
+      }
+
+      // Use the account's credentials (they're stored as plaintext with "_encrypted" suffix)
+      apiKey = account.api_key_encrypted;
+      apiSecret = account.api_secret_encrypted;
+      accessToken = account.access_token_encrypted;
+      accessTokenSecret = account.access_token_secret_encrypted;
+
+      console.log(`Using credentials for @${twitterHandle}`);
+    }
+
+    // Validate credentials
+    if (!apiKey || !apiSecret || !accessToken || !accessTokenSecret) {
+      throw new Error("Missing Twitter API credentials");
+    }
+
+    console.log("Tweet length:", finalTweetText.length);
+
+    const result = await sendTweet(finalTweetText, apiKey, apiSecret, accessToken, accessTokenSecret);
 
     console.log("Tweet posted successfully:", result.data?.id);
 
