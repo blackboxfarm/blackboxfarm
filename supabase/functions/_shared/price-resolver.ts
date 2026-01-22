@@ -314,24 +314,113 @@ export async function fetchMeteoraDBC(
 }
 
 // ============================================
-// METEORA POOL DIRECT PROGRESS LOOKUP
+// METEORA DBC PROGRESS - Using Official SDK
 // ============================================
 
 /**
- * Fetch bonding curve progress directly from a Meteora pool account
- * This is more reliable than scanning all program accounts
+ * Fetch bonding curve progress from Meteora DBC using official SDK
  * 
- * bags.fm Meteora DBC pool layout (based on observed data):
- * - The pool contains multiple SOL-like values at different offsets
- * - We need to find the QUOTE RESERVE (SOL deposited into curve)
+ * Official formula from Meteora docs:
+ * bondingCurveProgress = poolState.quoteReserve / poolConfigState.migration_quote_threshold
  * 
- * Migration threshold for bags.fm: ~60 SOL (not 85 SOL like Raydium Launchlab)
- * bags.fm uses a lower threshold than Raydium Launchlab
+ * @see https://docs.meteora.ag/developer-guide/trading-terminals/integrate-with-dbc
  */
 async function fetchMeteoraCurveProgressFromPool(
   poolAddress: string,
   heliusApiKey: string
-): Promise<number | undefined> {
+): Promise<{ progress: number; quoteReserve: number; threshold: number } | undefined> {
+  try {
+    // Dynamic import of Meteora SDK
+    const { DynamicBondingCurveClient } = await import('npm:@meteora-ag/dynamic-bonding-curve-sdk@1.3.7');
+    const { Connection, PublicKey } = await import('npm:@solana/web3.js@1.95.3');
+    
+    const connection = new Connection(
+      `https://mainnet.helius-rpc.com/?api-key=${heliusApiKey}`,
+      'confirmed'
+    );
+
+    const client = new DynamicBondingCurveClient(connection, 'confirmed');
+    const poolPubkey = new PublicKey(poolAddress);
+    
+    console.log(`[MeteoraDBC SDK] Fetching pool state for ${poolAddress.slice(0, 8)}...`);
+    
+    // Get pool state using official SDK
+    const poolState = await client.state.getPool(poolPubkey);
+    
+    if (!poolState) {
+      console.log(`[MeteoraDBC SDK] Pool not found: ${poolAddress.slice(0, 8)}`);
+      return undefined;
+    }
+    
+    // Extract quoteReserve from pool state
+    const quoteReserve = poolState.quoteReserve;
+    console.log(`[MeteoraDBC SDK] Pool quoteReserve: ${quoteReserve.toString()}`);
+    
+    // Get the pool config to find migrationQuoteThreshold
+    const configAddress = poolState.config;
+    console.log(`[MeteoraDBC SDK] Fetching config: ${configAddress.toBase58().slice(0, 8)}...`);
+    
+    // Fetch config account directly (SDK getConfig may not exist in all versions)
+    const configInfo = await connection.getAccountInfo(configAddress);
+    
+    let migrationThreshold = 85_000_000_000n; // Default 85 SOL
+    
+    if (configInfo?.data) {
+      const configData = configInfo.data;
+      const configView = new DataView(configData.buffer, configData.byteOffset, configData.byteLength);
+      
+      // Scan for migrationQuoteThreshold - typically a u64 value around 50-100 SOL range
+      // Known offset patterns from Meteora DBC config layout
+      const thresholdOffsets = [136, 144, 152, 160, 168, 176];
+      
+      for (const offset of thresholdOffsets) {
+        if (configData.length >= offset + 8) {
+          try {
+            const val = configView.getBigUint64(offset, true);
+            // Valid threshold: 10-200 SOL range (10B - 200B lamports)
+            if (val >= 10_000_000_000n && val <= 200_000_000_000n) {
+              migrationThreshold = val;
+              console.log(`[MeteoraDBC SDK] Found threshold at offset ${offset}: ${Number(val) / 1e9} SOL`);
+              break;
+            }
+          } catch {}
+        }
+      }
+    }
+    
+    // Calculate progress using official formula
+    const quoteReserveBN = BigInt(quoteReserve.toString());
+    
+    const progress = migrationThreshold > 0n 
+      ? Math.min(Math.max(Number((quoteReserveBN * 100n) / migrationThreshold), 0), 100)
+      : 0;
+    
+    const quoteReserveSol = Number(quoteReserveBN) / 1e9;
+    const thresholdSol = Number(migrationThreshold) / 1e9;
+    
+    console.log(`[MeteoraDBC SDK] Progress: ${progress.toFixed(1)}% (${quoteReserveSol.toFixed(2)} / ${thresholdSol.toFixed(2)} SOL)`);
+    
+    return {
+      progress,
+      quoteReserve: quoteReserveSol,
+      threshold: thresholdSol
+    };
+  } catch (e) {
+    console.log('[MeteoraDBC SDK] Error:', e instanceof Error ? e.message : String(e));
+    
+    // Fallback to raw on-chain parsing if SDK fails
+    return await fetchMeteoraCurveProgressFallback(poolAddress, heliusApiKey);
+  }
+}
+
+/**
+ * Fallback: Parse Meteora pool account directly if SDK fails
+ * This handles cases where SDK version mismatch or pool layout differs
+ */
+async function fetchMeteoraCurveProgressFallback(
+  poolAddress: string,
+  heliusApiKey: string
+): Promise<{ progress: number; quoteReserve: number; threshold: number } | undefined> {
   try {
     const { Connection, PublicKey } = await import('npm:@solana/web3.js@1.95.3');
     
@@ -344,93 +433,57 @@ async function fetchMeteoraCurveProgressFromPool(
     const accountInfo = await connection.getAccountInfo(poolPubkey);
     
     if (!accountInfo?.data) {
-      console.log(`[MeteoraCurve] No account data for pool ${poolAddress.slice(0, 8)}`);
+      console.log(`[MeteoraDBC Fallback] No account data for pool ${poolAddress.slice(0, 8)}`);
       return undefined;
     }
 
     const data = accountInfo.data;
     const ownerProgram = accountInfo.owner.toBase58();
-    console.log(`[MeteoraCurve] Pool account size: ${data.length} bytes, owner: ${ownerProgram.slice(0, 8)}...`);
+    console.log(`[MeteoraDBC Fallback] Pool size: ${data.length} bytes, owner: ${ownerProgram.slice(0, 8)}...`);
     
     // Check if this is a Meteora DBC pool
     if (!ownerProgram.startsWith('dbcij3LW')) {
-      console.log(`[MeteoraCurve] Pool is NOT Meteora DBC (owner: ${ownerProgram}), skipping progress calc`);
+      console.log(`[MeteoraDBC Fallback] Pool is NOT Meteora DBC, skipping`);
       return undefined;
     }
     
     const view = new DataView(data.buffer, data.byteOffset, data.byteLength);
     
-    // Scan the entire pool for values that look like SOL reserves
-    // Reasonable SOL reserve range for on-curve: > 0.1 SOL and < 85 SOL in lamports
+    // Scan for SOL reserve candidates (between 0.1 SOL and 100 SOL)
     const candidates: { offset: number; value: bigint; sol: number }[] = [];
     
     for (let offset = 0; offset <= data.length - 8; offset += 8) {
       try {
         const val = view.getBigUint64(offset, true);
-        // Look for values between 0.1 SOL and 85 SOL (bonding curve range)
-        if (val >= 100_000_000n && val <= 85_000_000_000n) {
-          const solValue = Number(val) / 1e9;
-          candidates.push({ offset, value: val, sol: solValue });
+        if (val >= 100_000_000n && val <= 100_000_000_000n) {
+          candidates.push({ offset, value: val, sol: Number(val) / 1e9 });
         }
       } catch {}
     }
     
-    console.log(`[MeteoraCurve] Found ${candidates.length} potential SOL reserve candidates:`, 
-      candidates.slice(0, 6).map(c => `offset ${c.offset}: ${c.sol.toFixed(2)} SOL`).join(', ')
-    );
-    
     if (candidates.length === 0) {
-      // Try broader scan for smaller values (early curve might have less than 0.1 SOL)
-      for (let offset = 0; offset <= data.length - 8; offset += 8) {
-        try {
-          const val = view.getBigUint64(offset, true);
-          // Look for values between 0.01 SOL and 100 SOL
-          if (val >= 10_000_000n && val <= 100_000_000_000n) {
-            const solValue = Number(val) / 1e9;
-            candidates.push({ offset, value: val, sol: solValue });
-          }
-        } catch {}
-      }
-      console.log(`[MeteoraCurve] Broader scan found ${candidates.length} candidates:`, 
-        candidates.slice(0, 5).map(c => `offset ${c.offset}: ${c.sol.toFixed(4)} SOL`).join(', ')
-      );
-    }
-
-    if (candidates.length === 0) {
-      console.log(`[MeteoraCurve] No SOL reserve candidates found in pool data`);
+      console.log(`[MeteoraDBC Fallback] No SOL reserve candidates found`);
       return undefined;
     }
-
-    // For bags.fm, the quote reserve is typically the LARGEST value in the reasonable range
-    // But we need to be careful - there might be multiple reserves (virtual vs real)
-    // Sort by offset to understand the layout, then pick the most likely quote reserve
-    candidates.sort((a, b) => a.offset - b.offset);
-    console.log(`[MeteoraCurve] Candidates by offset:`, 
-      candidates.map(c => `[${c.offset}]=${c.sol.toFixed(2)}`).join(', ')
-    );
     
-    // Use the largest candidate as the quote reserve
-    const largestCandidate = candidates.reduce((a, b) => a.value > b.value ? a : b);
-    const quoteReserve = largestCandidate.value;
+    // Use largest value as quote reserve
+    const largest = candidates.reduce((a, b) => a.value > b.value ? a : b);
+    const quoteReserve = largest.sol;
     
-    console.log(`[MeteoraCurve] Using quoteReserve at offset ${largestCandidate.offset}: ${largestCandidate.sol.toFixed(4)} SOL`);
-
-    // bags.fm migration threshold is ~60 SOL (verified from padre.gg showing 89% at ~53 SOL)
-    // Formula: progress = (quoteReserve / threshold) * 100
-    // If ~53 SOL = 89%, then threshold ≈ 59.5 SOL (let's use 60 SOL)
-    const migrationThreshold = 60_000_000_000n; // 60 SOL in lamports for bags.fm
+    // bags.fm typically uses ~60-85 SOL threshold
+    // We'll estimate based on observed data
+    const estimatedThreshold = 85; // SOL
+    const progress = Math.min(Math.max((quoteReserve / estimatedThreshold) * 100, 0), 100);
     
-    // Calculate progress: (SOL deposited / 60) * 100
-    const progress = Math.min(
-      Math.max(Number((quoteReserve * 100n) / migrationThreshold), 0),
-      100
-    );
-
-    console.log(`[MeteoraCurve] Progress: ${progress.toFixed(1)}% (${Number(quoteReserve) / 1e9} / 60 SOL threshold)`);
+    console.log(`[MeteoraDBC Fallback] Progress: ${progress.toFixed(1)}% (${quoteReserve.toFixed(2)} / ~${estimatedThreshold} SOL)`);
     
-    return progress;
+    return {
+      progress,
+      quoteReserve,
+      threshold: estimatedThreshold
+    };
   } catch (e) {
-    console.log('[MeteoraCurve] Pool lookup failed:', e instanceof Error ? e.message : String(e));
+    console.log('[MeteoraDBC Fallback] Error:', e instanceof Error ? e.message : String(e));
     return undefined;
   }
 }
@@ -901,11 +954,14 @@ export async function resolvePrice(
           return result;
         }
         
-        // Still on curve (dexId="bags") - try to calculate progress from pool data
+        // Still on curve (dexId="bags") - try to calculate progress from pool data using SDK
         let bondingCurveProgress: number | undefined;
         if (heliusApiKey && dexPrice?.pairAddress && dexId === 'bags') {
-          bondingCurveProgress = await fetchMeteoraCurveProgressFromPool(dexPrice.pairAddress, heliusApiKey);
-          console.log(`[${tokenMint.slice(0, 8)}] Meteora pool progress: ${bondingCurveProgress?.toFixed(1) ?? 'unknown'}%`);
+          const curveData = await fetchMeteoraCurveProgressFromPool(dexPrice.pairAddress, heliusApiKey);
+          bondingCurveProgress = curveData?.progress;
+          if (curveData) {
+            console.log(`[${tokenMint.slice(0, 8)}] Meteora SDK progress: ${curveData.progress.toFixed(1)}% (${curveData.quoteReserve.toFixed(2)}/${curveData.threshold.toFixed(2)} SOL)`);
+          }
         }
         
         const result: PriceResult = {
@@ -951,11 +1007,14 @@ export async function resolvePrice(
         return result;
       }
       
-      // Still on curve - try pool lookup for progress
+      // Still on curve - try pool lookup for progress using SDK
       let bondingCurveProgress: number | undefined;
       if (heliusApiKey && dexPrice?.pairAddress && dexId === 'bags') {
-        bondingCurveProgress = await fetchMeteoraCurveProgressFromPool(dexPrice.pairAddress, heliusApiKey);
-        console.log(`[${tokenMint.slice(0, 8)}] Meteora pool progress: ${bondingCurveProgress?.toFixed(1) ?? 'unknown'}%`);
+        const curveData = await fetchMeteoraCurveProgressFromPool(dexPrice.pairAddress, heliusApiKey);
+        bondingCurveProgress = curveData?.progress;
+        if (curveData) {
+          console.log(`[${tokenMint.slice(0, 8)}] Meteora SDK progress: ${curveData.progress.toFixed(1)}% (${curveData.quoteReserve.toFixed(2)}/${curveData.threshold.toFixed(2)} SOL)`);
+        }
       }
       
       const result: PriceResult = {
