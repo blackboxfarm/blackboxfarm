@@ -686,6 +686,43 @@ export async function resolvePrice(
       priceCache.set(tokenMint, { result, timestamp: Date.now() });
       return result;
     }
+    
+    // On-chain scan failed - try bags.fm API as fallback to check graduation status
+    console.log(`[${tokenMint.slice(0, 8)}] Meteora scan failed, trying bags.fm API fallback`);
+    try {
+      const bagsRes = await fetch(`https://api.bags.fm/api/v1/token/${tokenMint}`, {
+        headers: { 'Accept': 'application/json' },
+        signal: AbortSignal.timeout(3000)
+      });
+      
+      if (bagsRes.ok) {
+        const bagsData = await bagsRes.json();
+        const isGraduated = bagsData.graduated === true || bagsData.migrated === true;
+        console.log(`[${tokenMint.slice(0, 8)}] bags.fm API: graduated=${isGraduated}`);
+        
+        if (!isGraduated) {
+          // Token is on bags.fm curve - mark as on curve even if on-chain scan failed
+          const dexPrice = await fetchDexScreenerPrice(tokenMint);
+          const price = dexPrice?.price || 0;
+          
+          const result: PriceResult = {
+            price,
+            source: 'bags_fm_api',
+            fetchedAt: new Date().toISOString(),
+            latencyMs: 0,
+            isOnCurve: true,
+            bondingCurveProgress: undefined, // Unknown progress since on-chain scan failed
+            confidence: price > 0 ? 'medium' : 'low'
+          };
+          
+          console.log(`[${tokenMint.slice(0, 8)}] bags.fm API confirms on-curve: $${price.toFixed(10)}`);
+          priceCache.set(tokenMint, { result, timestamp: Date.now() });
+          return result;
+        }
+      }
+    } catch (bagsErr) {
+      console.log(`[${tokenMint.slice(0, 8)}] bags.fm API fallback failed:`, bagsErr instanceof Error ? bagsErr.message : String(bagsErr));
+    }
   }
 
   // STEP 4: Try Raydium Launchlab (Bonk.fun tokens) - ONLY for BONK suffix tokens
