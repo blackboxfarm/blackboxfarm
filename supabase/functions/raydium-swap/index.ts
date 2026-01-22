@@ -1125,7 +1125,9 @@ serve(async (req) => {
         return {
           dexIds: Array.from(set),
           hasRaydium: set.has("raydium"),
-          hasPumpFun: set.has("pumpfun") || set.has("pump"),
+          // DexScreener uses `pumpswap` for Pump.fun's in-ecosystem venue.
+          // Treat it as Pump.fun so we route via PumpPortal when Jupiter/Raydium have no route.
+          hasPumpFun: set.has("pumpfun") || set.has("pump") || set.has("pumpswap"),
           hasBonkFun: set.has("bonkfun") || set.has("bonk"),
           hasBagsFm: set.has("bagsfm") || set.has("bags") || hasBagsFmUrl,
           hasMeteora: set.has("meteora") || set.has("meteora_dlmm") || set.has("meteoradlmm"),
@@ -1479,7 +1481,12 @@ serve(async (req) => {
     // Jupiter fallback if Raydium compute failed at compute stage
     if (needJupiter) {
       // For pump.fun tokens, use higher slippage (10% minimum) due to volatility
-      const isPumpToken = tokenMint?.endsWith?.('pump') || String(outputMint).endsWith('pump') || String(inputMint).endsWith('pump');
+      const isPumpToken =
+        Boolean(venueHint?.hasPumpFun) ||
+        String(venueHint?.bestDex || '').toLowerCase() === 'pumpswap' ||
+        tokenMint?.endsWith?.('pump') ||
+        String(outputMint).endsWith('pump') ||
+        String(inputMint).endsWith('pump');
       const baseSlippage = Number(slippageBps);
       const effectiveSlippage = isPumpToken ? Math.max(baseSlippage, 1000) : baseSlippage; // 10% min for pump tokens
       const maxRetrySlippage = isPumpToken ? 5000 : 2500; // up to 50% for pump tokens
