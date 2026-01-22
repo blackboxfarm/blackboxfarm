@@ -351,6 +351,7 @@ async function tryPumpPortalTrade(params: {
   }
 }
 
+// Enhanced multi-DEX routing: Jupiter → Meteora fallback
 async function tryJupiterSwap(params: {
   inputMint: string;
   outputMint: string;
@@ -359,7 +360,7 @@ async function tryJupiterSwap(params: {
   userPublicKey: string;
   computeUnitPriceMicroLamports: number;
   asLegacy: boolean;
-}): Promise<{ txs: string[] } | { error: string }> {
+}): Promise<{ txs: string[]; source?: string } | { error: string }> {
   try {
     const {
       inputMint,
@@ -458,7 +459,7 @@ async function tryJupiterSwap(params: {
           }
 
           console.log(`Jupiter swap transaction built successfully (${variant.name}, ${host})`);
-          return { txs: [tx] };
+          return { txs: [tx], source: `jupiter-${variant.name}` };
         } catch (e) {
           lastError = `Jupiter error (${variant.name}, ${host}): ${(e as Error).message}`;
           console.log(lastError);
@@ -470,6 +471,99 @@ async function tryJupiterSwap(params: {
     return { error: `All Jupiter endpoints failed. Last error: ${lastError}` };
   } catch (e) {
     return { error: `Jupiter error: ${(e as Error).message}` };
+  }
+}
+
+// Try Meteora aggregator API for DLMM pools (graduated tokens)
+async function tryMeteoraSwap(params: {
+  inputMint: string;
+  outputMint: string;
+  amount: number | string;
+  slippageBps: number;
+  userPublicKey: string;
+}): Promise<{ tx: string; source: string } | { error: string }> {
+  try {
+    const { inputMint, outputMint, amount, slippageBps, userPublicKey } = params;
+    
+    const amt = Math.floor(Number(amount));
+    if (!Number.isFinite(amt) || amt <= 0) {
+      return { error: `Invalid swap amount for Meteora: ${String(amount)}` };
+    }
+    
+    // Meteora DLMM API - find pool for pair
+    const poolApiUrl = `https://dlmm-api.meteora.ag/pair/all_by_groups?page=0&limit=100`;
+    console.log("Fetching Meteora pools for pair lookup...");
+    
+    // First, try to find a pool for this token pair
+    const normalizedInput = inputMint.toLowerCase();
+    const normalizedOutput = outputMint.toLowerCase();
+    
+    // Try the swap API endpoint
+    const meteoraSwapUrl = "https://swap-api.meteora.ag/swap";
+    
+    const swapRequest = {
+      inMint: inputMint,
+      outMint: outputMint,
+      amount: amt,
+      slippageBps: slippageBps,
+      userPublicKey: userPublicKey,
+    };
+    
+    console.log("Trying Meteora swap API:", JSON.stringify(swapRequest));
+    
+    const swapRes = await fetch(meteoraSwapUrl, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(swapRequest),
+    });
+    
+    if (!swapRes.ok) {
+      const errText = await swapRes.text();
+      console.log(`Meteora swap API failed: ${swapRes.status} ${errText}`);
+      return { error: `Meteora: ${swapRes.status} ${errText}` };
+    }
+    
+    const swapJson = await swapRes.json();
+    const tx = swapJson?.transaction || swapJson?.swapTransaction;
+    
+    if (typeof tx !== "string") {
+      console.log("Meteora returned no transaction:", JSON.stringify(swapJson).slice(0, 200));
+      return { error: "Meteora returned no transaction" };
+    }
+    
+    console.log("Meteora swap transaction built successfully");
+    return { tx, source: "meteora-dlmm" };
+  } catch (e) {
+    console.log("Meteora swap error:", (e as Error).message);
+    return { error: `Meteora error: ${(e as Error).message}` };
+  }
+}
+
+// Try Orca Whirlpool API
+async function tryOrcaSwap(params: {
+  inputMint: string;
+  outputMint: string;
+  amount: number | string;
+  slippageBps: number;
+  userPublicKey: string;
+}): Promise<{ tx: string; source: string } | { error: string }> {
+  try {
+    const { inputMint, outputMint, amount, slippageBps, userPublicKey } = params;
+    
+    const amt = Math.floor(Number(amount));
+    if (!Number.isFinite(amt) || amt <= 0) {
+      return { error: `Invalid swap amount for Orca: ${String(amount)}` };
+    }
+    
+    // Orca Whirlpool API
+    const orcaApiUrl = "https://api.orca.so/allPools";
+    
+    // For now, Orca is covered via Jupiter aggregation
+    // This function serves as a placeholder for direct Orca integration if needed
+    console.log("Orca direct swap not implemented, covered by Jupiter aggregation");
+    return { error: "Orca direct swap not implemented - use Jupiter" };
+  } catch (e) {
+    return { error: `Orca error: ${(e as Error).message}` };
   }
 }
 
@@ -913,12 +1007,18 @@ serve(async (req) => {
     // Detect venue for tokenMint without assuming by suffix.
     // DexScreener is used as a fast hint so we don't waste fees submitting
     // PumpPortal txs for tokens that already have Raydium/Jupiter liquidity.
+    // Now includes Meteora, Orca detection for smarter routing.
     async function getDexVenueHint(mintAddress: string): Promise<{
       dexIds: string[];
       hasRaydium: boolean;
       hasPumpFun: boolean;
       hasBonkFun: boolean;
       hasBagsFm: boolean;
+      hasMeteora: boolean;
+      hasOrca: boolean;
+      hasJupiter: boolean;
+      bestDex: string | null;
+      highestLiquidity: number;
     } | null> {
       try {
         const res = await fetch(`https://api.dexscreener.com/latest/dex/tokens/${mintAddress}`);
@@ -935,6 +1035,17 @@ serve(async (req) => {
         const hasBagsFmUrl = pairs.some((p: any) => 
           String(p?.url || "").toLowerCase().includes("bags.fm")
         );
+        
+        // Find best DEX by liquidity
+        let bestDex: string | null = null;
+        let highestLiquidity = 0;
+        for (const pair of pairs) {
+          const liq = Number(pair?.liquidity?.usd || 0);
+          if (liq > highestLiquidity) {
+            highestLiquidity = liq;
+            bestDex = String(pair?.dexId || "").toLowerCase();
+          }
+        }
 
         return {
           dexIds: Array.from(set),
@@ -942,6 +1053,11 @@ serve(async (req) => {
           hasPumpFun: set.has("pumpfun") || set.has("pump"),
           hasBonkFun: set.has("bonkfun") || set.has("bonk"),
           hasBagsFm: set.has("bagsfm") || set.has("bags") || hasBagsFmUrl,
+          hasMeteora: set.has("meteora") || set.has("meteora_dlmm") || set.has("meteoradlmm"),
+          hasOrca: set.has("orca") || set.has("whirlpool"),
+          hasJupiter: set.has("jupiter"),
+          bestDex,
+          highestLiquidity,
         };
       } catch (e) {
         console.log("DexScreener venue hint failed:", (e as Error)?.message?.slice(0, 120));
@@ -971,12 +1087,15 @@ serve(async (req) => {
     const suffixBonk = tokenMint ? isBonkFunToken(String(tokenMint)) : false;
 
     const isRaydiumToken = Boolean(venueHint?.hasRaydium);
+    const isMeteoraToken = Boolean(venueHint?.hasMeteora);
+    const isOrcaToken = Boolean(venueHint?.hasOrca);
     const isPumpToken = Boolean(venueHint?.hasPumpFun) || suffixPump;
     const isBonkToken = Boolean(venueHint?.hasBonkFun) || suffixBonk;
     const isBagsToken = Boolean(venueHint?.hasBagsFm);
 
-    // Bonding-curve tokens are only those WITHOUT Raydium liquidity.
-    const isBondingCurveToken = !isRaydiumToken && (isPumpToken || isBonkToken || isBagsToken);
+    // Bonding-curve tokens are only those WITHOUT AMM liquidity (Raydium/Meteora/Orca).
+    const hasAmmLiquidity = isRaydiumToken || isMeteoraToken || isOrcaToken;
+    const isBondingCurveToken = !hasAmmLiquidity && (isPumpToken || isBonkToken || isBagsToken);
 
     // Determine which pool to use for PumpPortal
     // bags.fm uses 'pump' pool via PumpPortal API
@@ -988,10 +1107,43 @@ serve(async (req) => {
       if (suffixBonk) return 'bonk';
       return 'auto';
     };
+    
+    // Determine routing priority based on detected DEXes
+    // Priority: PumpPortal (bonding) → Best DEX by liquidity → Jupiter (aggregator) → Raydium → Meteora
+    const getRoutingPriority = (): string[] => {
+      const routes: string[] = [];
+      
+      if (isBondingCurveToken) {
+        routes.push('pumpportal');
+      }
+      
+      // Add best DEX first if it has significant liquidity
+      if (venueHint?.bestDex && venueHint.highestLiquidity > 1000) {
+        if (venueHint.bestDex === 'raydium' && !routes.includes('raydium')) routes.push('raydium');
+        if (venueHint.bestDex.includes('meteora') && !routes.includes('meteora')) routes.push('meteora');
+        if (venueHint.bestDex === 'orca' && !routes.includes('jupiter')) routes.push('jupiter'); // Orca via Jupiter
+      }
+      
+      // Jupiter aggregator covers most DEXes including Orca
+      if (!routes.includes('jupiter')) routes.push('jupiter');
+      
+      // Raydium direct
+      if (!routes.includes('raydium')) routes.push('raydium');
+      
+      // Meteora direct fallback
+      if (!routes.includes('meteora')) routes.push('meteora');
+      
+      return routes;
+    };
 
-    // Log routing decision
+    const routingPriority = getRoutingPriority();
+
+    // Log routing decision with full venue info
     console.log(
-      `Routing decision: token=${tokenMint}, raydium=${isRaydiumToken}, pump=${isPumpToken}, bonk=${isBonkToken}, bags=${isBagsToken}, side=${side}`
+      `Routing decision: token=${tokenMint}, routes=[${routingPriority.join(' → ')}], ` +
+      `raydium=${isRaydiumToken}, meteora=${isMeteoraToken}, orca=${isOrcaToken}, ` +
+      `pump=${isPumpToken}, bonk=${isBonkToken}, bags=${isBagsToken}, side=${side}, ` +
+      `bestDex=${venueHint?.bestDex || 'unknown'}, liq=$${venueHint?.highestLiquidity?.toFixed(0) || 0}`
     );
 
     // Get ATAs when not SOL
@@ -1404,9 +1556,54 @@ serve(async (req) => {
             : null;
         return ok({ signatures: sigs, source: "jupiter", outAmount: null, solInputLamports });
       } else {
-        // Jupiter also failed - try PumpPortal as LAST RESORT for ANY token
+        // Jupiter also failed - try Meteora direct API for DLMM pools (graduated tokens)
+        console.log(`Jupiter failed (${j.error}), trying Meteora direct API...`);
+        
+        const meteoraResult = await tryMeteoraSwap({
+          inputMint: String(inputMint),
+          outputMint: String(outputMint),
+          amount: amount as any,
+          slippageBps: Number(slippageBps),
+          userPublicKey: owner.publicKey.toBase58(),
+        });
+        
+        if ("tx" in meteoraResult) {
+          try {
+            const u8 = b64ToU8(meteoraResult.tx);
+            const vtx = VersionedTransaction.deserialize(u8);
+            
+            const HELIUS_API_KEY = Deno.env.get('HELIUS_API_KEY');
+            const txRpc = HELIUS_API_KEY 
+              ? new Connection(`https://mainnet.helius-rpc.com/?api-key=${HELIUS_API_KEY}`, { commitment: "confirmed" })
+              : connection;
+            
+            const { blockhash, lastValidBlockHeight } = await txRpc.getLatestBlockhash("confirmed");
+            (vtx as any).message.recentBlockhash = blockhash;
+            vtx.sign([owner]);
+            
+            const sig = await txRpc.sendTransaction(vtx, { skipPreflight: true, maxRetries: 3 });
+            const confirmResult = await hardConfirmTransaction(txRpc, sig, blockhash, lastValidBlockHeight, 30000);
+            
+            if (confirmResult.confirmed) {
+              console.log(`Meteora ${side} successful:`, sig);
+              const solInputLamports =
+                side === "buy" && String(inputMint) === NATIVE_MINT.toBase58() && Number.isFinite(Number(amount))
+                  ? Number(amount)
+                  : null;
+              return ok({ signatures: [sig], source: meteoraResult.source, outAmount: null, solInputLamports });
+            } else {
+              console.log(`Meteora tx failed: ${confirmResult.error}`);
+            }
+          } catch (meteoraSendErr) {
+            console.log(`Meteora send error: ${(meteoraSendErr as Error).message}`);
+          }
+        } else {
+          console.log(`Meteora API failed: ${meteoraResult.error}`);
+        }
+        
+        // Meteora also failed - try PumpPortal as LAST RESORT for ANY token
         // PumpPortal will quickly fail if the token is not on pump.fun bonding curve
-        console.log(`Raydium and Jupiter failed, trying PumpPortal as last resort for any bonding curve token (${side})...`);
+        console.log(`All DEX APIs failed, trying PumpPortal as last resort for any bonding curve token (${side})...`);
         
         // Calculate the SOL amount for buys from lamports
         let pumpAmount: string;
@@ -1455,7 +1652,7 @@ serve(async (req) => {
                 console.error("PumpPortal fallback tx failed:", confirmResult.error);
                 return softError(
                   "SWAP_FAILED",
-                  `All swap methods failed. Raydium: ${jupReason}; Jupiter: ${j.error}; PumpPortal: ${confirmResult.error}`
+                  `All swap methods failed. Raydium: ${jupReason}; Jupiter: ${j.error}; Meteora: ${meteoraResult.error || 'tx failed'}; PumpPortal: ${confirmResult.error}`
                 );
               }
               
@@ -1469,7 +1666,7 @@ serve(async (req) => {
               console.error("PumpPortal transaction send failed:", (sendError as Error).message);
               return softError(
                 "SWAP_FAILED",
-                `All swap methods failed. Raydium: ${jupReason}; Jupiter: ${j.error}; PumpPortal send: ${(sendError as Error).message}`
+                `All swap methods failed. Raydium: ${jupReason}; Jupiter: ${j.error}; Meteora: ${meteoraResult.error || 'n/a'}; PumpPortal send: ${(sendError as Error).message}`
               );
             }
           } else {
@@ -1477,14 +1674,14 @@ serve(async (req) => {
             console.log("PumpPortal also failed:", pumpResult.error);
             return softError(
               "SWAP_FAILED",
-              `All swap methods failed. Raydium: ${jupReason}; Jupiter: ${j.error}; PumpPortal: ${pumpResult.error}`
+              `All swap methods failed. Raydium: ${jupReason}; Jupiter: ${j.error}; Meteora: ${meteoraResult.error || 'n/a'}; PumpPortal: ${pumpResult.error}`
             );
           }
         } catch (pumpError) {
           console.error("PumpPortal attempt failed:", (pumpError as Error).message);
           return softError(
             "SWAP_FAILED",
-            `All swap methods failed. Raydium: ${jupReason}; Jupiter: ${j.error}; PumpPortal error: ${(pumpError as Error).message}`
+            `All swap methods failed. Raydium: ${jupReason}; Jupiter: ${j.error}; Meteora: ${meteoraResult.error || 'n/a'}; PumpPortal error: ${(pumpError as Error).message}`
           );
         }
       }
