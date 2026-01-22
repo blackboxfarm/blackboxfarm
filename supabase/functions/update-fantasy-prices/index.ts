@@ -51,11 +51,13 @@ Deno.serve(async (req) => {
     // Fetch current prices from Jupiter
     const priceUpdates: Record<string, number> = {}
 
+    const jupiterApiKey = Deno.env.get("JUPITER_API_KEY") || "";
     for (const mint of tokenMints) {
       try {
-        // Use Jupiter price API
+        // Use Jupiter price API with auth
         const priceRes = await fetch(
-          `https://price.jup.ag/v6/price?ids=${mint}&vsToken=So11111111111111111111111111111111111111112`
+          `https://api.jup.ag/price/v2?ids=${mint}`,
+          { headers: jupiterApiKey ? { "x-api-key": jupiterApiKey } : {} }
         )
         
         if (priceRes.ok) {

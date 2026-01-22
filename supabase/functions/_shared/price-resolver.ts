@@ -545,10 +545,12 @@ async function fetchDexScreenerPrice(tokenMint: string): Promise<PriceResult | n
 
 async function fetchJupiterPrice(tokenMint: string): Promise<PriceResult | null> {
   const start = Date.now();
+  const jupiterApiKey = Deno.env.get("JUPITER_API_KEY") || "";
   
   try {
     const res = await fetch(`https://api.jup.ag/price/v2?ids=${tokenMint}`, {
-      signal: AbortSignal.timeout(5000)
+      signal: AbortSignal.timeout(5000),
+      headers: jupiterApiKey ? { "x-api-key": jupiterApiKey } : {}
     });
 
     if (!res.ok) {

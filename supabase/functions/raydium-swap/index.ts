@@ -274,10 +274,13 @@ async function getPriorityFeeMicroLamports(connection: Connection): Promise<numb
 }
 
 async function fetchSolUsdPrice(): Promise<number> {
+  const jupiterApiKey = Deno.env.get("JUPITER_API_KEY") || "";
   try {
-    const r = await fetch("https://price.jup.ag/v6/price?ids=SOL");
+    const r = await fetch("https://api.jup.ag/price/v2?ids=So11111111111111111111111111111111111111112", {
+      headers: jupiterApiKey ? { "x-api-key": jupiterApiKey } : {}
+    });
     const j = await r.json();
-    const p = Number(j?.data?.SOL?.price ?? j?.data?.wSOL?.price ?? j?.SOL?.price);
+    const p = Number(j?.data?.['So11111111111111111111111111111111111111112']?.price);
     if (Number.isFinite(p) && p > 0) return p;
   } catch (_) {}
   return 0;
@@ -373,12 +376,11 @@ async function tryJupiterSwap(params: {
       return { error: `Invalid swap amount for Jupiter: ${String(amount)}` };
     }
 
-    // Try multiple Jupiter hosts - some may have DNS issues in edge environments
+    // Use primary Jupiter API with authentication
     const jupiterHosts = [
-      "https://lite-api.jup.ag",
-      "https://quote-api.jup.ag", 
       "https://api.jup.ag"
     ];
+    const jupiterApiKey = Deno.env.get("JUPITER_API_KEY") || "";
 
     // Try the newer swap API first, then v6 (many examples still use v6).
     const apiVariants = [
@@ -386,10 +388,13 @@ async function tryJupiterSwap(params: {
       { name: "v6", quotePath: "/v6/quote", swapPath: "/v6/swap" },
     ] as const;
 
-    const baseHeaders = {
+    const baseHeaders: Record<string, string> = {
       Accept: "application/json",
       "User-Agent": "blackbox-farm/flipit-edge",
-    } as const;
+    };
+    if (jupiterApiKey) {
+      baseHeaders["x-api-key"] = jupiterApiKey;
+    }
 
     let lastError = "";
 

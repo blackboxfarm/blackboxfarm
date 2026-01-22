@@ -82,9 +82,12 @@ async function getConfig(supabase: any): Promise<FantasyConfig> {
 
 // Get SOL price in USD
 async function getSolPrice(): Promise<number> {
-  // Try Jupiter first
+  const jupiterApiKey = Deno.env.get("JUPITER_API_KEY") || "";
+  // Try Jupiter first with auth
   try {
-    const response = await fetch('https://api.jup.ag/price/v2?ids=So11111111111111111111111111111111111111112');
+    const response = await fetch('https://api.jup.ag/price/v2?ids=So11111111111111111111111111111111111111112', {
+      headers: jupiterApiKey ? { "x-api-key": jupiterApiKey } : {}
+    });
     const data = await response.json();
     const price = data?.data?.['So11111111111111111111111111111111111111112']?.price;
     if (price && price > 0) return price;
@@ -112,8 +115,11 @@ async function getSolPrice(): Promise<number> {
 
 // Get token price from Jupiter
 async function getTokenPrice(mint: string, solPrice: number): Promise<{ priceUsd: number; priceSol: number } | null> {
+  const jupiterApiKey = Deno.env.get("JUPITER_API_KEY") || "";
   try {
-    const response = await fetch(`https://api.jup.ag/price/v2?ids=${mint}`);
+    const response = await fetch(`https://api.jup.ag/price/v2?ids=${mint}`, {
+      headers: jupiterApiKey ? { "x-api-key": jupiterApiKey } : {}
+    });
     const data = await response.json();
     const priceUsd = data?.data?.[mint]?.price;
     

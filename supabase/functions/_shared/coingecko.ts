@@ -130,16 +130,20 @@ export async function fetchCoinGecko<T = any>(
 // ============= FALLBACK PRICE SOURCES =============
 
 /**
- * Fetch SOL price from Jupiter API
+ * Fetch SOL price from Jupiter API with auth
  */
 async function fetchJupiterSolPrice(): Promise<number> {
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), 5000);
+  const jupiterApiKey = Deno.env.get("JUPITER_API_KEY") || "";
   
   try {
     const response = await fetch(
       'https://api.jup.ag/price/v2?ids=So11111111111111111111111111111111111111112',
-      { signal: controller.signal }
+      { 
+        signal: controller.signal,
+        headers: jupiterApiKey ? { "x-api-key": jupiterApiKey } : {}
+      }
     );
     clearTimeout(timeoutId);
     
