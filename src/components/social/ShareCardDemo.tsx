@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -83,7 +83,16 @@ export function ShareCardDemo({ tokenStats = mockTokenStats }: { tokenStats?: To
   
   // Selection and template state
   const [selectedApproach, setSelectedApproach] = useState<'A' | 'B' | null>(null);
-  const [tweetTemplate, setTweetTemplate] = useState(DEFAULT_TWEET_TEMPLATE);
+  const [tweetTemplate, setTweetTemplate] = useState(() => {
+    // Load saved template from localStorage on initial render
+    const saved = localStorage.getItem('share-tweet-template');
+    return saved || DEFAULT_TWEET_TEMPLATE;
+  });
+
+  // Persist template to localStorage whenever it changes
+  useEffect(() => {
+    localStorage.setItem('share-tweet-template', tweetTemplate);
+  }, [tweetTemplate]);
 
   const getShareUrl = () => {
     return `https://blackbox.farm/holders?token=${encodeURIComponent(tokenStats.tokenAddress)}`;
