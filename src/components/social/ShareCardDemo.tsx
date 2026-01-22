@@ -68,8 +68,6 @@ const TEMPLATE_VARIABLES = [
   { var: '{ticker}', desc: 'Token symbol' },
   { var: '{name}', desc: 'Token full name' },
   { var: '{ca}', desc: 'Contract address' },
-  { var: '{price}', desc: 'Token price (USD)' },
-  { var: '{marketCap}', desc: 'Market cap (formatted)' },
   { var: '{totalWallets}', desc: 'Total wallet count' },
   { var: '{realHolders}', desc: 'Real holder count' },
   { var: '{dustPct}', desc: 'Dust percentage' },
@@ -96,21 +94,12 @@ export function ShareCardDemo({ tokenStats = mockTokenStats }: { tokenStats?: To
     return `https://blackbox.farm/holders?token=${encodeURIComponent(tokenStats.tokenAddress)}`;
   };
 
-  // Format market cap for display
-  const formatMarketCap = (value: number): string => {
-    if (value >= 1_000_000) return `$${(value / 1_000_000).toFixed(2)}M`;
-    if (value >= 1_000) return `$${(value / 1_000).toFixed(1)}K`;
-    return `$${value.toFixed(2)}`;
-  };
-
   // Process template with actual values
   const processTemplate = (template: string): string => {
     return template
       .replace(/\{ticker\}/g, tokenStats.symbol)
       .replace(/\{name\}/g, tokenStats.name)
       .replace(/\{ca\}/g, tokenStats.tokenAddress)
-      .replace(/\{price\}/g, `$${tokenStats.price.toFixed(8)}`)
-      .replace(/\{marketCap\}/g, formatMarketCap(tokenStats.marketCap))
       .replace(/\{totalWallets\}/g, tokenStats.totalHolders.toLocaleString())
       .replace(/\{realHolders\}/g, tokenStats.realHolders.toLocaleString())
       .replace(/\{dustPct\}/g, tokenStats.dustPercentage.toString())
