@@ -15,13 +15,19 @@ interface ShareToXButtonProps {
   realHolders: number;
   dustWallets: number;
   whales: number;
-  strong: number;
-  active: number;
+  serious: number;
+  retail: number;
   healthGrade: string;
   healthScore: number;
   shareCardPageUrl?: string;
   isGenerating?: boolean;
   variant?: "full" | "icon";
+}
+
+// Truncate CA for display: first 4 + last 4 chars
+function truncateCA(ca: string): string {
+  if (ca.length <= 10) return ca;
+  return `${ca.slice(0, 4)}...${ca.slice(-4)}`;
 }
 
 export function ShareToXButton({
@@ -31,8 +37,8 @@ export function ShareToXButton({
   realHolders,
   dustWallets,
   whales,
-  strong,
-  active,
+  serious,
+  retail,
   healthGrade,
   healthScore,
   shareCardPageUrl,
@@ -43,17 +49,22 @@ export function ShareToXButton({
   
   const dustPct = totalWallets > 0 ? Math.round((dustWallets / totalWallets) * 100) : 0;
   
-  const tweetText = `🔎 Holder Analysis: $${ticker}
+  const tweetText = `🔎 HOLDER INTEL: $${ticker}
 
-🏛 ${totalWallets.toLocaleString()} Total Wallets
-✅ ${realHolders.toLocaleString()} Real Holders
-🌫 ${dustPct}% Dust
-
-🐋 ${whales} Whales | 💪 ${strong} Strong | 🌱 ${active.toLocaleString()} Active
+CA: ${truncateCA(tokenMint)}
 
 Health: ${healthGrade} (${healthScore}/100)
 
-Free holder report on BlackBox Farm`;
+✅ ${realHolders.toLocaleString()} Real Holders (${dustPct}% Dust)
+🏛 ${totalWallets.toLocaleString()} Total Wallets
+
+🐋 ${whales} Whales (>$1K)
+😎 ${serious} Serious ($200-$1K)
+🏪 ${retail.toLocaleString()} Retail ($1-$199)
+💨 ${dustWallets.toLocaleString()} Dust (<$1)
+
+More Holder Intel 👉 blackbox.farm/holders
+Charts on Trader 👉 padre.gg/rk=blackbox`;
 
   const shareUrl = shareCardPageUrl || `https://blackbox.farm/holders?token=${encodeURIComponent(tokenMint)}`;
 
@@ -65,12 +76,17 @@ Free holder report on BlackBox Farm`;
   };
 
   const handleCopyForDiscord = () => {
-    const discordText = `🔍 **Holder/Wallet Analysis: $${ticker}**
+    const discordText = `🔎 **HOLDER INTEL: $${ticker}**
 
-📊 ${totalWallets.toLocaleString()} Wallets → ✅ ${realHolders.toLocaleString()} Real Holders
-💨 ${dustPct}% Dust
+**CA:** \`${truncateCA(tokenMint)}\`
+**Health:** ${healthGrade} (${healthScore}/100)
 
-🔗 ${shareUrl}`;
+✅ ${realHolders.toLocaleString()} Real Holders (${dustPct}% Dust)
+🏛 ${totalWallets.toLocaleString()} Total Wallets
+
+🐋 ${whales} Whales (>$1K) | 😎 ${serious} Serious | 🏪 ${retail.toLocaleString()} Retail | 💨 ${dustWallets.toLocaleString()} Dust
+
+More Intel 👉 ${shareUrl}`;
     navigator.clipboard.writeText(discordText);
     toast({
       title: "Copied!",
@@ -79,7 +95,7 @@ Free holder report on BlackBox Farm`;
   };
 
   const handleShareToTelegram = () => {
-    const telegramText = `🔍 Holder Analysis: $${ticker} - ${totalWallets.toLocaleString()} wallets, ${realHolders.toLocaleString()} real holders`;
+    const telegramText = `🔎 HOLDER INTEL: $${ticker} | ${healthGrade} (${healthScore}/100) | ${realHolders.toLocaleString()} Real Holders | 🐋${whales} 😎${serious} 🏪${retail}`;
     window.open(
       `https://t.me/share/url?url=${encodeURIComponent(shareUrl)}&text=${encodeURIComponent(telegramText)}`,
       '_blank'
