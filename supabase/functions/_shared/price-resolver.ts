@@ -272,8 +272,8 @@ export async function fetchMeteoraDBC(
               }
             }
 
-            // Migration threshold is typically ~85 SOL for bags.fm
-            const migrationThreshold = 85_000_000_000n; // 85 SOL in lamports
+            // Migration threshold is 60 SOL for bags.fm (per padre.gg)
+            const migrationThreshold = 60_000_000_000n; // 60 SOL in lamports
             
             // Calculate progress
             const progress = Math.min(
@@ -314,110 +314,16 @@ export async function fetchMeteoraDBC(
 }
 
 // ============================================
-// METEORA DBC PROGRESS - Using Official SDK
+// METEORA DBC PROGRESS - Direct On-Chain Parsing
 // ============================================
 
 /**
- * Fetch bonding curve progress from Meteora DBC using official SDK
+ * Fetch bonding curve progress from Meteora DBC pool
  * 
- * Official formula from Meteora docs:
- * bondingCurveProgress = poolState.quoteReserve / poolConfigState.migration_quote_threshold
- * 
- * @see https://docs.meteora.ag/developer-guide/trading-terminals/integrate-with-dbc
+ * bags.fm uses 60 SOL migration threshold based on padre.gg observations.
+ * This parses the pool account directly to extract quoteReserve.
  */
 async function fetchMeteoraCurveProgressFromPool(
-  poolAddress: string,
-  heliusApiKey: string
-): Promise<{ progress: number; quoteReserve: number; threshold: number } | undefined> {
-  try {
-    // Dynamic import of Meteora SDK
-    const { DynamicBondingCurveClient } = await import('npm:@meteora-ag/dynamic-bonding-curve-sdk@1.3.7');
-    const { Connection, PublicKey } = await import('npm:@solana/web3.js@1.95.3');
-    
-    const connection = new Connection(
-      `https://mainnet.helius-rpc.com/?api-key=${heliusApiKey}`,
-      'confirmed'
-    );
-
-    const client = new DynamicBondingCurveClient(connection, 'confirmed');
-    const poolPubkey = new PublicKey(poolAddress);
-    
-    console.log(`[MeteoraDBC SDK] Fetching pool state for ${poolAddress.slice(0, 8)}...`);
-    
-    // Get pool state using official SDK
-    const poolState = await client.state.getPool(poolPubkey);
-    
-    if (!poolState) {
-      console.log(`[MeteoraDBC SDK] Pool not found: ${poolAddress.slice(0, 8)}`);
-      return undefined;
-    }
-    
-    // Extract quoteReserve from pool state
-    const quoteReserve = poolState.quoteReserve;
-    console.log(`[MeteoraDBC SDK] Pool quoteReserve: ${quoteReserve.toString()}`);
-    
-    // Get the pool config to find migrationQuoteThreshold
-    const configAddress = poolState.config;
-    console.log(`[MeteoraDBC SDK] Fetching config: ${configAddress.toBase58().slice(0, 8)}...`);
-    
-    // Fetch config account directly (SDK getConfig may not exist in all versions)
-    const configInfo = await connection.getAccountInfo(configAddress);
-    
-    let migrationThreshold = 85_000_000_000n; // Default 85 SOL
-    
-    if (configInfo?.data) {
-      const configData = configInfo.data;
-      const configView = new DataView(configData.buffer, configData.byteOffset, configData.byteLength);
-      
-      // Scan for migrationQuoteThreshold - typically a u64 value around 50-100 SOL range
-      // Known offset patterns from Meteora DBC config layout
-      const thresholdOffsets = [136, 144, 152, 160, 168, 176];
-      
-      for (const offset of thresholdOffsets) {
-        if (configData.length >= offset + 8) {
-          try {
-            const val = configView.getBigUint64(offset, true);
-            // Valid threshold: 10-200 SOL range (10B - 200B lamports)
-            if (val >= 10_000_000_000n && val <= 200_000_000_000n) {
-              migrationThreshold = val;
-              console.log(`[MeteoraDBC SDK] Found threshold at offset ${offset}: ${Number(val) / 1e9} SOL`);
-              break;
-            }
-          } catch {}
-        }
-      }
-    }
-    
-    // Calculate progress using official formula
-    const quoteReserveBN = BigInt(quoteReserve.toString());
-    
-    const progress = migrationThreshold > 0n 
-      ? Math.min(Math.max(Number((quoteReserveBN * 100n) / migrationThreshold), 0), 100)
-      : 0;
-    
-    const quoteReserveSol = Number(quoteReserveBN) / 1e9;
-    const thresholdSol = Number(migrationThreshold) / 1e9;
-    
-    console.log(`[MeteoraDBC SDK] Progress: ${progress.toFixed(1)}% (${quoteReserveSol.toFixed(2)} / ${thresholdSol.toFixed(2)} SOL)`);
-    
-    return {
-      progress,
-      quoteReserve: quoteReserveSol,
-      threshold: thresholdSol
-    };
-  } catch (e) {
-    console.log('[MeteoraDBC SDK] Error:', e instanceof Error ? e.message : String(e));
-    
-    // Fallback to raw on-chain parsing if SDK fails
-    return await fetchMeteoraCurveProgressFallback(poolAddress, heliusApiKey);
-  }
-}
-
-/**
- * Fallback: Parse Meteora pool account directly if SDK fails
- * This handles cases where SDK version mismatch or pool layout differs
- */
-async function fetchMeteoraCurveProgressFallback(
   poolAddress: string,
   heliusApiKey: string
 ): Promise<{ progress: number; quoteReserve: number; threshold: number } | undefined> {
@@ -433,57 +339,103 @@ async function fetchMeteoraCurveProgressFallback(
     const accountInfo = await connection.getAccountInfo(poolPubkey);
     
     if (!accountInfo?.data) {
-      console.log(`[MeteoraDBC Fallback] No account data for pool ${poolAddress.slice(0, 8)}`);
+      console.log(`[MeteoraCurve] No account data for pool ${poolAddress.slice(0, 8)}`);
       return undefined;
     }
 
     const data = accountInfo.data;
     const ownerProgram = accountInfo.owner.toBase58();
-    console.log(`[MeteoraDBC Fallback] Pool size: ${data.length} bytes, owner: ${ownerProgram.slice(0, 8)}...`);
+    console.log(`[MeteoraCurve] Pool account size: ${data.length} bytes, owner: ${ownerProgram.slice(0, 8)}...`);
     
     // Check if this is a Meteora DBC pool
     if (!ownerProgram.startsWith('dbcij3LW')) {
-      console.log(`[MeteoraDBC Fallback] Pool is NOT Meteora DBC, skipping`);
+      console.log(`[MeteoraCurve] Pool is NOT Meteora DBC, skipping`);
       return undefined;
     }
     
     const view = new DataView(data.buffer, data.byteOffset, data.byteLength);
     
-    // Scan for SOL reserve candidates (between 0.1 SOL and 100 SOL)
-    const candidates: { offset: number; value: bigint; sol: number }[] = [];
+    // bags.fm migration threshold is 60 SOL (confirmed via padre.gg)
+    const MIGRATION_THRESHOLD_SOL = 60;
+    const migrationThreshold = BigInt(MIGRATION_THRESHOLD_SOL * 1_000_000_000);
     
-    for (let offset = 0; offset <= data.length - 8; offset += 8) {
-      try {
-        const val = view.getBigUint64(offset, true);
-        if (val >= 100_000_000n && val <= 100_000_000_000n) {
-          candidates.push({ offset, value: val, sol: Number(val) / 1e9 });
-        }
-      } catch {}
+    // Scan for quoteReserve (SOL amount in pool)
+    // Known offsets for different pool layouts: 240, 256, 296, 320, 336
+    const candidates: { offset: number; value: bigint; sol: number }[] = [];
+    const knownOffsets = [240, 256, 296, 320, 336];
+    
+    for (const offset of knownOffsets) {
+      if (data.length >= offset + 8) {
+        try {
+          const val = view.getBigUint64(offset, true);
+          const sol = Number(val) / 1e9;
+          // Valid range: 0.1 SOL to 100 SOL
+          if (sol >= 0.1 && sol <= 100) {
+            candidates.push({ offset, value: val, sol });
+          }
+        } catch {}
+      }
     }
     
     if (candidates.length === 0) {
-      console.log(`[MeteoraDBC Fallback] No SOL reserve candidates found`);
+      console.log(`[MeteoraCurve] No SOL reserve candidates found`);
       return undefined;
     }
     
-    // Use largest value as quote reserve
-    const largest = candidates.reduce((a, b) => a.value > b.value ? a : b);
-    const quoteReserve = largest.sol;
+    // Log all candidates for debugging
+    const candidateStr = candidates.map(c => `offset ${c.offset}: ${c.sol.toFixed(2)} SOL`).join(', ');
+    console.log(`[MeteoraCurve] Found ${candidates.length} potential SOL reserve candidates: ${candidateStr}`);
     
-    // bags.fm typically uses ~60-85 SOL threshold
-    // We'll estimate based on observed data
-    const estimatedThreshold = 85; // SOL
-    const progress = Math.min(Math.max((quoteReserve / estimatedThreshold) * 100, 0), 100);
+    // Log by offset for debugging
+    const offsetMap = candidates.map(c => `[${c.offset}]=${c.sol.toFixed(2)}`).join(', ');
+    console.log(`[MeteoraCurve] Candidates by offset: ${offsetMap}`);
     
-    console.log(`[MeteoraDBC Fallback] Progress: ${progress.toFixed(1)}% (${quoteReserve.toFixed(2)} / ~${estimatedThreshold} SOL)`);
+    // Select the candidate closest to but not exceeding the threshold
+    // If multiple valid, prefer offset 240 (most common for quoteReserve)
+    let quoteReserve: bigint;
+    const offset240Candidate = candidates.find(c => c.offset === 240);
+    
+    if (offset240Candidate && offset240Candidate.sol <= MIGRATION_THRESHOLD_SOL) {
+      quoteReserve = offset240Candidate.value;
+      console.log(`[MeteoraCurve] Using quoteReserve at offset 240: ${offset240Candidate.sol.toFixed(4)} SOL`);
+    } else {
+      // Fall back to largest value under threshold
+      const validCandidates = candidates.filter(c => c.sol <= MIGRATION_THRESHOLD_SOL);
+      if (validCandidates.length === 0) {
+        // All candidates exceed threshold - pool may be graduated or data is wrong
+        const largest = candidates.reduce((a, b) => a.value > b.value ? a : b);
+        if (largest.sol >= MIGRATION_THRESHOLD_SOL) {
+          // Graduated - return 100%
+          console.log(`[MeteoraCurve] Pool appears graduated (${largest.sol.toFixed(2)} SOL >= ${MIGRATION_THRESHOLD_SOL} SOL threshold)`);
+          return {
+            progress: 100,
+            quoteReserve: largest.sol,
+            threshold: MIGRATION_THRESHOLD_SOL
+          };
+        }
+      }
+      const largest = validCandidates.reduce((a, b) => a.value > b.value ? a : b, validCandidates[0]);
+      quoteReserve = largest.value;
+      console.log(`[MeteoraCurve] Using quoteReserve at offset ${largest.offset}: ${largest.sol.toFixed(4)} SOL`);
+    }
+    
+    // Calculate progress
+    const progress = Math.min(
+      Math.max(Number((quoteReserve * 100n) / migrationThreshold), 0),
+      100
+    );
+    
+    const quoteReserveSol = Number(quoteReserve) / 1e9;
+    
+    console.log(`[MeteoraCurve] Progress: ${progress.toFixed(1)}% (${quoteReserveSol.toFixed(9)} / ${MIGRATION_THRESHOLD_SOL} SOL threshold)`);
     
     return {
       progress,
-      quoteReserve,
-      threshold: estimatedThreshold
+      quoteReserve: quoteReserveSol,
+      threshold: MIGRATION_THRESHOLD_SOL
     };
   } catch (e) {
-    console.log('[MeteoraDBC Fallback] Error:', e instanceof Error ? e.message : String(e));
+    console.log('[MeteoraCurve] Error:', e instanceof Error ? e.message : String(e));
     return undefined;
   }
 }
