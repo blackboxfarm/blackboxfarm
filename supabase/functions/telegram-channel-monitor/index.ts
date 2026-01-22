@@ -1343,6 +1343,60 @@ serve(async (req) => {
 
     console.log(`[telegram-channel-monitor] Action: ${action || 'scan'}, singleChannel: ${singleChannel}, channelId: ${requestChannelId}, deepScan: ${deepScan}`);
     
+    // ========================================================================
+    // ACTION: update_channel - Update channel configuration
+    // ========================================================================
+    if (action === 'update_channel') {
+      const { config_id, updates } = body;
+      
+      if (!config_id) {
+        return new Response(JSON.stringify({
+          success: false,
+          error: 'config_id is required'
+        }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 400 });
+      }
+      
+      // Allowed fields to update
+      const allowedFields = ['channel_name', 'channel_username', 'last_message_id', 'is_active'];
+      const sanitizedUpdates: Record<string, any> = {};
+      
+      for (const field of allowedFields) {
+        if (field in updates) {
+          sanitizedUpdates[field] = updates[field];
+        }
+      }
+      
+      if (Object.keys(sanitizedUpdates).length === 0) {
+        return new Response(JSON.stringify({
+          success: false,
+          error: 'No valid fields to update'
+        }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 400 });
+      }
+      
+      const { data: updatedConfig, error: updateError } = await supabase
+        .from('telegram_channel_config')
+        .update(sanitizedUpdates)
+        .eq('id', config_id)
+        .select()
+        .single();
+      
+      if (updateError) {
+        console.error('[telegram-channel-monitor] Error updating channel:', updateError);
+        return new Response(JSON.stringify({
+          success: false,
+          error: updateError.message
+        }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 500 });
+      }
+      
+      console.log(`[telegram-channel-monitor] Updated channel ${config_id}:`, sanitizedUpdates);
+      
+      return new Response(JSON.stringify({
+        success: true,
+        message: 'Channel configuration updated',
+        config: updatedConfig
+      }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+    }
+    
     // Check if MTProto session is valid before proceeding
     const { data: sessionData } = await supabase
       .from('telegram_mtproto_session')
