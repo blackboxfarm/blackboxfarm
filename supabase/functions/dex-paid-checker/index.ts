@@ -114,6 +114,9 @@ async function fetchDexScreenerData(tokenMint: string): Promise<{ boosts: number
   }
 }
 
+// Ads typically last 3-7 days max, so filter out ads older than 2 weeks
+const AD_STALENESS_THRESHOLD_MS = 14 * 24 * 60 * 60 * 1000; // 2 weeks
+
 async function checkDexPaidStatus(tokenMint: string): Promise<DexPaidStatus> {
   console.log(`Checking DEX paid status for ${tokenMint}`);
   
@@ -125,9 +128,22 @@ async function checkDexPaidStatus(tokenMint: string): Promise<DexPaidStatus> {
   
   // Analyze orders
   const approvedOrders = orders.filter(o => o.status === 'approved');
+  const now = Date.now();
   
   const hasPaidProfile = approvedOrders.some(o => o.type === 'tokenProfile');
-  const hasActiveAds = approvedOrders.some(o => o.type === 'tokenAd' || o.type === 'trendingBarAd');
+  
+  // For ads, only consider them "active" if paid within the last 2 weeks
+  const hasActiveAds = approvedOrders.some(o => {
+    if (o.type !== 'tokenAd' && o.type !== 'trendingBarAd') return false;
+    if (!o.paymentTimestamp) return false;
+    const ageMs = now - o.paymentTimestamp;
+    const isRecent = ageMs < AD_STALENESS_THRESHOLD_MS;
+    if (!isRecent) {
+      console.log(`[dex-paid-checker] Ignoring stale ad for ${tokenMint} - paid ${Math.round(ageMs / (24 * 60 * 60 * 1000))} days ago`);
+    }
+    return isRecent;
+  });
+  
   const hasCTO = approvedOrders.some(o => o.type === 'communityTakeover');
   
   const result: DexPaidStatus = {
