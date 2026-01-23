@@ -11,6 +11,7 @@ import { Button } from "@/components/ui/button";
 import { useNavigate } from "react-router-dom";
 import { Shield } from "lucide-react";
 import { SolPriceDisplay } from "@/components/SolPriceDisplay";
+import { TelegramWebViewBanner } from "@/components/TelegramWebViewBanner";
 import holdersLogo from "@/assets/holders-logo.png";
 
 export default function Holders() {
@@ -29,6 +30,9 @@ export default function Holders() {
 
   return (
     <div className="min-h-screen bg-background">
+      {/* Telegram WebView Banner */}
+      <TelegramWebViewBanner />
+      
       {/* Farm Banner Header */}
       <FarmBanner />
       <div className="mx-auto py-6 space-y-4 px-2 md:px-4 max-w-6xl">
@@ -81,7 +85,6 @@ export default function Holders() {
         <div className="w-full">
           <BaglessHoldersReport initialToken={tokenFromUrl} />
         </div>
-
       </div>
     </div>
   );
