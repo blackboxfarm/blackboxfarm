@@ -199,6 +199,9 @@ export function FlipItDashboard() {
   const [walletBalance, setWalletBalance] = useState<number | null>(null);
   const [isRefreshingBalance, setIsRefreshingBalance] = useState(false);
   
+  // Withdraw amount state
+  const [withdrawAmount, setWithdrawAmount] = useState<string>('');
+  
   // Private key modal state
   const [showKeysModal, setShowKeysModal] = useState(false);
   const [decryptedPrivateKey, setDecryptedPrivateKey] = useState<string | null>(null);
@@ -1167,10 +1170,20 @@ export function FlipItDashboard() {
       return;
     }
 
+    // Parse custom amount if provided
+    const customAmount = withdrawAmount.trim() ? parseFloat(withdrawAmount) : null;
+    if (customAmount !== null && (isNaN(customAmount) || customAmount <= 0)) {
+      toast.error('Please enter a valid SOL amount');
+      return;
+    }
+
     setIsWithdrawing(true);
     try {
       const { data, error } = await supabase.functions.invoke('flipit-wallet-withdrawal', {
-        body: { walletId: selectedWallet }
+        body: { 
+          walletId: selectedWallet,
+          amount: customAmount // null means withdraw all
+        }
       });
 
       if (error) throw error;
@@ -1179,6 +1192,7 @@ export function FlipItDashboard() {
         toast.error(data.error);
       } else {
         toast.success(`Withdrawn ${data.amountSol.toFixed(4)} SOL! TX: ${data.signature.slice(0, 8)}...`);
+        setWithdrawAmount(''); // Clear input after success
         refreshWalletBalance();
       }
     } catch (err: any) {
@@ -2843,19 +2857,31 @@ export function FlipItDashboard() {
                               </Button>
                             </div>
 
-                            <Button
-                              size="sm"
-                              variant="destructive"
-                              onClick={handleWithdraw}
-                              disabled={isWithdrawing || !walletBalance || walletBalance < 0.001}
-                            >
-                              {isWithdrawing ? (
-                                <Loader2 className="h-4 w-4 mr-1 animate-spin" />
-                              ) : (
-                                <ArrowUpRight className="h-4 w-4 mr-1" />
-                              )}
-                              Withdraw All
-                            </Button>
+                            <div className="flex items-center gap-2">
+                              <Input
+                                type="number"
+                                step="0.001"
+                                min="0"
+                                placeholder="SOL amount (empty = all)"
+                                value={withdrawAmount}
+                                onChange={(e) => setWithdrawAmount(e.target.value)}
+                                className="w-40 h-8 text-sm"
+                                disabled={isWithdrawing}
+                              />
+                              <Button
+                                size="sm"
+                                variant="destructive"
+                                onClick={handleWithdraw}
+                                disabled={isWithdrawing || !walletBalance || walletBalance < 0.001}
+                              >
+                                {isWithdrawing ? (
+                                  <Loader2 className="h-4 w-4 mr-1 animate-spin" />
+                                ) : (
+                                  <ArrowUpRight className="h-4 w-4 mr-1" />
+                                )}
+                                {withdrawAmount.trim() ? 'Withdraw' : 'Withdraw All'}
+                              </Button>
+                            </div>
                           </div>
                         </div>
                       ) : (

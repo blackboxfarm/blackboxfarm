@@ -93,13 +93,23 @@ serve(async (req) => {
       );
     }
 
-    const { walletId, destinationAddress } = await req.json();
+    const { walletId, destinationAddress, amount } = await req.json();
 
     if (!walletId) {
       return new Response(
         JSON.stringify({ error: "Wallet ID required" }),
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
+    }
+
+    // Validate custom amount if provided
+    if (amount !== undefined && amount !== null) {
+      if (typeof amount !== 'number' || amount <= 0) {
+        return new Response(
+          JSON.stringify({ error: "Invalid amount. Must be a positive number." }),
+          { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
     }
 
     console.log(`[flipit-withdrawal] Processing withdrawal for wallet: ${walletId}`);
@@ -160,9 +170,31 @@ serve(async (req) => {
       console.log(`[flipit-withdrawal] Found original funder: ${destination.toBase58()}`);
     }
 
-    // Calculate amount to send (leave rent-exempt minimum + fee buffer)
+    // Calculate amount to send
     const feeBuffer = 10000; // 0.00001 SOL for fees
-    const amountToSend = balance - feeBuffer;
+    let amountToSend: number;
+
+    if (amount !== undefined && amount !== null) {
+      // Custom amount specified (convert SOL to lamports)
+      amountToSend = Math.floor(amount * LAMPORTS_PER_SOL);
+      
+      // Verify we have enough balance for the custom amount + fees
+      if (amountToSend + feeBuffer > balance) {
+        return new Response(
+          JSON.stringify({ 
+            error: `Insufficient balance. Requested ${amount} SOL but only ${((balance - feeBuffer) / LAMPORTS_PER_SOL).toFixed(4)} SOL available.`,
+            balance: solBalance 
+          }),
+          { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+      
+      console.log(`[flipit-withdrawal] Using custom amount: ${amount} SOL (${amountToSend} lamports)`);
+    } else {
+      // Withdraw all (minus fee buffer)
+      amountToSend = balance - feeBuffer;
+      console.log(`[flipit-withdrawal] Withdrawing all: ${amountToSend / LAMPORTS_PER_SOL} SOL`);
+    }
 
     if (amountToSend <= 0) {
       return new Response(
