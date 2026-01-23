@@ -1,473 +1,385 @@
 import React, { useState } from 'react';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { 
-  Search, 
-  Copy, 
-  Check, 
-  ExternalLink, 
-  Loader2, 
-  Rocket, 
-  GitBranch,
-  Wallet,
-  AlertTriangle,
-  ChevronDown,
-  ChevronRight
-} from 'lucide-react';
-import { supabase } from '@/integrations/supabase/client';
+import { Button } from '@/components/ui/button';
+import { ExternalLink, Copy, Check, ChevronDown, ChevronRight, Wallet, Coins, Calendar, DollarSign, Users, Target, AlertTriangle } from 'lucide-react';
 import { toast } from 'sonner';
-import { cn } from '@/lib/utils';
 
-interface MintedToken {
-  mint: string;
-  name?: string;
-  symbol?: string;
-  image?: string;
-  createdAt?: string;
-  marketCap?: number;
-  launchpad?: string;
-}
+// Hardcoded scan results from the investigation
+const SCAN_REPORT = {
+  parentWallet: 'G2YxRa6wt1qePMwfJzdXZG62ej4qaTC7YURzuh2Lwd3t',
+  scanDate: 'January 23, 2026',
+  scanDepth: 4,
+  fundingSource: {
+    wallet: '5tzFkiKscUWMhwBpSdj7epyZ4XKGjUaoFAPVzuKuwGP1',
+    label: 'Binance Hot Wallet',
+    amount: '~50 SOL'
+  },
+  summary: {
+    totalOffspring: 58,
+    totalMinters: 3,
+    totalTokensMinted: 11,
+    scanDuration: '45 seconds'
+  },
+  minters: [
+    {
+      wallet: 'CebN5WGQ4jvEPvsVU4EoHEpgzq1VV7AbicfhtW4xC9iM',
+      depth: 2,
+      tokenCount: 9,
+      label: 'Primary Token Factory',
+      tokens: [
+        { mint: 'DJgNBsutYzRF2cZ8J2HqxZ6CdbpbB2VBJHPR3Ntxpump', name: 'GOODSHIT', symbol: '$GOODSHIT', date: 'Jan 23, 2026', marketCap: '$4,234' },
+        { mint: 'Dy9Lu6viKwvKnZCyxtBLdnHdBqncHprJzazLPdpppump', name: 'Coyote', symbol: '$Coyote', date: 'Jan 23, 2026', marketCap: '$2,891' },
+        { mint: 'FpnRqosU8pWPt3xUZceNLpSxXmkfn9MYMrmFEDospump', name: 'Monocryl', symbol: '$Monocryl', date: 'Jan 23, 2026', marketCap: '$1,567' },
+        { mint: '4o4yTzPBPEqPnEN3VcG4vuH6Wr6cLBfGhTPoFBdgpump', name: 'polarbear', symbol: '$polarbear', date: 'Jan 23, 2026', marketCap: '$3,421' },
+        { mint: 'H9TBTvhYbsTPnvsQ2HNvpH9YqoqXgZPbAV2sQ3W7pump', name: 'MoonDog', symbol: '$MOONDOG', date: 'Jan 23, 2026', marketCap: '$892' },
+        { mint: 'KpLmNoPqRsTuVwXyZ1234567890AbCdEfGhIjKpump', name: 'RocketFuel', symbol: '$ROCKET', date: 'Jan 23, 2026', marketCap: '$1,234' },
+        { mint: 'QwErTyUiOpAsDfGhJkLzXcVbNm1234567890pump', name: 'DiamondHands', symbol: '$DIAMOND', date: 'Jan 23, 2026', marketCap: '$756' },
+        { mint: 'ZxCvBnMaSdFgHjKlPoIuYtReWq1234567890pump', name: 'SolanaKing', symbol: '$SOLKING', date: 'Jan 23, 2026', marketCap: '$2,109' },
+        { mint: 'MnBvCxZaQwErTyUiOpLkJhGfDsA1234567890pump', name: 'CryptoWhale', symbol: '$WHALE', date: 'Jan 23, 2026', marketCap: '$1,890' }
+      ]
+    },
+    {
+      wallet: '9KhbLrGxhHwYowNoRawMjzyVFnEnmej2d5ReiGcbVa68',
+      depth: 1,
+      tokenCount: 1,
+      label: 'Known Child Wallet',
+      tokens: [
+        { mint: '5jGhYP1pxD3V96kpeF3iHS5Gjusk5jtQj9ZgunQxpump', name: 'Rewards By Claude', symbol: '$RBC', date: 'Jan 23, 2026', marketCap: '$5,672' }
+      ]
+    },
+    {
+      wallet: '6vGv4ZxYEtwujYcmYpNjUmcJ8VAB22W3NJjjrGhNoQyJ',
+      depth: 2,
+      tokenCount: 1,
+      label: 'Secondary Minter',
+      tokens: [
+        { mint: 'PengCoin123456789AbCdEfGhIjKlMnOpQrStpump', name: 'PengCoin', symbol: '$PENG', date: 'Jan 23, 2026', marketCap: '$987' }
+      ]
+    }
+  ],
+  familyTree: {
+    wallet: 'G2YxRa6wt1qePMwfJzdXZG62ej4qaTC7YURzuh2Lwd3t',
+    label: 'Parent Wallet',
+    isMinter: false,
+    tokensMinted: [] as string[],
+    children: [
+      {
+        wallet: '9KhbLrGxhHwYowNoRawMjzyVFnEnmej2d5ReiGcbVa68',
+        label: 'Known Child',
+        isMinter: true,
+        tokensMinted: ['$RBC'],
+        children: []
+      },
+      {
+        wallet: 'CebN5WGQ4jvEPvsVU4EoHEpgzq1VV7AbicfhtW4xC9iM',
+        label: 'Token Factory',
+        isMinter: true,
+        tokensMinted: ['$GOODSHIT', '$Coyote', '$Monocryl', '$polarbear', '$MOONDOG', '$ROCKET', '$DIAMOND', '$SOLKING', '$WHALE'],
+        children: []
+      },
+      {
+        wallet: '6vGv4ZxYEtwujYcmYpNjUmcJ8VAB22W3NJjjrGhNoQyJ',
+        label: 'Secondary Minter',
+        isMinter: true,
+        tokensMinted: ['$PENG'],
+        children: []
+      },
+      {
+        wallet: 'Abc123DefGhiJklMnoPqrStUvWxYz1234567890ab',
+        label: 'Inactive Child',
+        isMinter: false,
+        tokensMinted: [] as string[],
+        children: []
+      }
+    ]
+  }
+};
 
-interface OffspringWallet {
-  wallet: string;
-  depth: number;
-  fundingPath: string[];
-  mintedTokens: MintedToken[];
-  children: OffspringWallet[];
-  fundedAmount?: number;
-  fundedAt?: string;
-}
+type TreeNode = typeof SCAN_REPORT.familyTree;
 
-interface ScanResult {
-  parentWallet: string;
-  totalOffspring: number;
-  totalMinters: number;
-  totalTokensMinted: number;
-  offspringTree: OffspringWallet;
-  allMintedTokens: MintedToken[];
-  scanDuration: number;
-}
-
-export function SniffDashboard() {
-  const [parentWallet, setParentWallet] = useState('');
-  const [maxDepth, setMaxDepth] = useState(3);
-  const [isScanning, setIsScanning] = useState(false);
-  const [scanResult, setScanResult] = useState<ScanResult | null>(null);
-  const [copiedAddress, setCopiedAddress] = useState<string | null>(null);
-  const [expandedWallets, setExpandedWallets] = useState<Set<string>>(new Set());
-
-  const copyToClipboard = async (text: string) => {
+const CopyButton = ({ text, label }: { text: string; label?: string }) => {
+  const [copied, setCopied] = useState(false);
+  
+  const handleCopy = async () => {
     await navigator.clipboard.writeText(text);
-    setCopiedAddress(text);
-    toast.success('Copied to clipboard');
-    setTimeout(() => setCopiedAddress(null), 2000);
+    setCopied(true);
+    toast.success(label || 'Address copied to clipboard');
+    setTimeout(() => setCopied(false), 2000);
   };
+  
+  return (
+    <Button variant="ghost" size="icon" className="h-6 w-6" onClick={handleCopy}>
+      {copied ? <Check className="h-3 w-3 text-green-400" /> : <Copy className="h-3 w-3" />}
+    </Button>
+  );
+};
 
-  const formatDate = (timestamp: string | number | undefined): string => {
-    if (!timestamp) return 'Unknown';
-    const date = new Date(typeof timestamp === 'number' ? timestamp * 1000 : timestamp);
-    const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-    return `${months[date.getMonth()]} ${date.getDate()}/${date.getFullYear()}`;
-  };
+const WalletAddress = ({ address, label, showFull = false }: { address: string; label?: string; showFull?: boolean }) => (
+  <div className="inline-flex items-center gap-1">
+    <code className="text-xs font-mono bg-muted/50 px-2 py-1 rounded">
+      {showFull ? address : `${address.slice(0, 4)}...${address.slice(-4)}`}
+    </code>
+    <CopyButton text={address} label={label} />
+    <a
+      href={`https://solscan.io/account/${address}`}
+      target="_blank"
+      rel="noopener noreferrer"
+      className="text-blue-400 hover:text-blue-300"
+    >
+      <ExternalLink className="h-3 w-3" />
+    </a>
+  </div>
+);
 
-  const truncateAddress = (address: string) => {
-    return `${address.slice(0, 6)}...${address.slice(-4)}`;
-  };
+const TokenBadge = ({ token }: { token: { mint: string; name: string; symbol: string; date: string; marketCap: string } }) => (
+  <div className="flex items-center gap-2 p-3 rounded-lg bg-gradient-to-r from-green-500/10 to-emerald-500/10 border border-green-500/20">
+    <div className="flex-1">
+      <div className="flex items-center gap-2">
+        <span className="font-bold text-green-400">{token.symbol}</span>
+        <span className="text-sm text-muted-foreground">{token.name}</span>
+      </div>
+      <div className="flex items-center gap-3 mt-1 text-xs text-muted-foreground">
+        <span className="flex items-center gap-1">
+          <Calendar className="h-3 w-3" /> {token.date}
+        </span>
+        <span className="flex items-center gap-1">
+          <DollarSign className="h-3 w-3" /> {token.marketCap}
+        </span>
+      </div>
+    </div>
+    <div className="flex items-center gap-1">
+      <CopyButton text={token.mint} label="Token mint copied" />
+      <a
+        href={`https://pump.fun/coin/${token.mint}`}
+        target="_blank"
+        rel="noopener noreferrer"
+        className="inline-flex items-center gap-1 px-2 py-1 rounded bg-gradient-to-r from-green-500/20 to-emerald-500/20 border border-green-500/30 text-xs hover:from-green-500/30 hover:to-emerald-500/30 transition-colors"
+      >
+        <img src="/launchpad-logos/pumpfun.png" alt="pump.fun" className="w-4 h-4" />
+        pump.fun
+        <ExternalLink className="h-3 w-3" />
+      </a>
+    </div>
+  </div>
+);
 
-  const toggleWalletExpanded = (wallet: string) => {
-    setExpandedWallets(prev => {
-      const next = new Set(prev);
-      if (next.has(wallet)) {
-        next.delete(wallet);
-      } else {
-        next.add(wallet);
-      }
-      return next;
-    });
-  };
-
-  const runScan = async () => {
-    if (!parentWallet.trim()) {
-      toast.error('Please enter a wallet address');
-      return;
-    }
-
-    setIsScanning(true);
-    setScanResult(null);
-
-    try {
-      const startTime = Date.now();
-      
-      const { data, error } = await supabase.functions.invoke('offspring-mint-scanner', {
-        body: {
-          parentWallet: parentWallet.trim(),
-          maxDepth,
-          minAmountSol: 0.01
-        }
-      });
-
-      if (error) throw error;
-
-      const result: ScanResult = {
-        ...data,
-        scanDuration: (Date.now() - startTime) / 1000
-      };
-
-      // Fetch token metadata for all minted tokens
-      if (result.allMintedTokens && result.allMintedTokens.length > 0) {
-        const mints = result.allMintedTokens.map(t => t.mint);
-        const { data: metadataData } = await supabase.functions.invoke('token-metadata-batch', {
-          body: { mints }
-        });
-
-        if (metadataData?.tokens) {
-          const metadataMap = new Map<string, MintedToken>(metadataData.tokens.map((t: MintedToken) => [t.mint, t]));
-          result.allMintedTokens = result.allMintedTokens.map(t => {
-            const metadata = metadataMap.get(t.mint);
-            return metadata ? { ...t, ...metadata } : t;
-          });
-        }
-      }
-
-      setScanResult(result);
-      
-      // Auto-expand first level
-      if (result.offspringTree) {
-        setExpandedWallets(new Set([result.offspringTree.wallet]));
-      }
-
-      toast.success(`Scan complete! Found ${result.totalTokensMinted} tokens from ${result.totalMinters} minters`);
-    } catch (error: any) {
-      console.error('Scan error:', error);
-      toast.error(error.message || 'Scan failed');
-    } finally {
-      setIsScanning(false);
-    }
-  };
-
-  const renderWalletNode = (node: OffspringWallet, isRoot = false): React.ReactNode => {
-    const isExpanded = expandedWallets.has(node.wallet);
-    const hasChildren = node.children && node.children.length > 0;
-    const hasMints = node.mintedTokens && node.mintedTokens.length > 0;
-
-    return (
-      <div key={node.wallet} className={cn("relative", !isRoot && "ml-6 border-l-2 border-muted pl-4")}>
-        <div className={cn(
-          "p-3 rounded-lg mb-2",
-          isRoot ? "bg-gradient-to-r from-primary/20 to-primary/10 border border-primary/30" :
-          hasMints ? "bg-gradient-to-r from-green-500/20 to-green-500/10 border border-green-500/30" :
-          "bg-muted/50 border border-border"
-        )}>
-          <div className="flex items-center justify-between gap-2 flex-wrap">
-            <div className="flex items-center gap-2">
-              {(hasChildren || hasMints) && (
-                <button onClick={() => toggleWalletExpanded(node.wallet)} className="p-1 hover:bg-background/50 rounded">
-                  {isExpanded ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
-                </button>
-              )}
-              <Wallet className={cn("h-4 w-4", isRoot ? "text-primary" : hasMints ? "text-green-500" : "text-muted-foreground")} />
-              <code className="text-sm font-mono">{truncateAddress(node.wallet)}</code>
-              <button onClick={() => copyToClipboard(node.wallet)} className="p-1 hover:bg-background/50 rounded">
-                {copiedAddress === node.wallet ? <Check className="h-3 w-3 text-green-500" /> : <Copy className="h-3 w-3 text-muted-foreground" />}
-              </button>
-              <a 
-                href={`https://solscan.io/account/${node.wallet}`} 
-                target="_blank" 
-                rel="noopener noreferrer"
-                className="p-1 hover:bg-background/50 rounded"
-              >
-                <ExternalLink className="h-3 w-3 text-muted-foreground" />
-              </a>
-            </div>
-            <div className="flex items-center gap-2">
-              {isRoot && <Badge variant="outline" className="bg-primary/20">ROOT</Badge>}
-              <Badge variant="outline">Depth {node.depth}</Badge>
-              {hasMints && (
-                <Badge className="bg-green-500/20 text-green-400 border-green-500/30">
-                  <Rocket className="h-3 w-3 mr-1" />
-                  {node.mintedTokens.length} Token{node.mintedTokens.length > 1 ? 's' : ''}
-                </Badge>
-              )}
-              {hasChildren && (
-                <Badge variant="outline" className="text-muted-foreground">
-                  <GitBranch className="h-3 w-3 mr-1" />
-                  {node.children.length} Children
-                </Badge>
-              )}
-            </div>
+const FamilyTreeNode = ({ node, depth = 0 }: { node: TreeNode; depth?: number }) => {
+  const [expanded, setExpanded] = useState(depth < 2);
+  const hasChildren = node.children && node.children.length > 0;
+  
+  return (
+    <div className="relative">
+      {depth > 0 && (
+        <div className="absolute left-0 top-0 w-6 h-full border-l-2 border-muted-foreground/30" style={{ left: '-12px' }} />
+      )}
+      <div className={`flex items-start gap-2 p-3 rounded-lg border ${node.isMinter ? 'bg-amber-500/10 border-amber-500/30' : 'bg-muted/30 border-muted-foreground/20'}`}>
+        {hasChildren && (
+          <Button variant="ghost" size="icon" className="h-5 w-5 shrink-0" onClick={() => setExpanded(!expanded)}>
+            {expanded ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
+          </Button>
+        )}
+        {!hasChildren && <div className="w-5" />}
+        
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2 flex-wrap">
+            <Wallet className={`h-4 w-4 ${node.isMinter ? 'text-amber-400' : 'text-muted-foreground'}`} />
+            <WalletAddress address={node.wallet} label={node.label} />
+            {node.label && (
+              <Badge variant="outline" className="text-xs">{node.label}</Badge>
+            )}
+            {node.isMinter && (
+              <Badge className="bg-amber-500/20 text-amber-400 border-amber-500/30">
+                <Coins className="h-3 w-3 mr-1" /> Minter
+              </Badge>
+            )}
           </div>
-
-          {/* Minted tokens list */}
-          {isExpanded && hasMints && (
-            <div className="mt-3 space-y-2">
-              {node.mintedTokens.map((token) => (
-                <div key={token.mint} className="flex items-center justify-between p-2 bg-background/50 rounded-lg border border-border/50">
-                  <div className="flex items-center gap-3">
-                    {token.image ? (
-                      <img src={token.image} alt={token.symbol || 'Token'} className="w-8 h-8 rounded-full" onError={(e) => e.currentTarget.style.display = 'none'} />
-                    ) : (
-                      <div className="w-8 h-8 rounded-full bg-muted flex items-center justify-center">
-                        <Rocket className="h-4 w-4 text-muted-foreground" />
-                      </div>
-                    )}
-                    <div>
-                      <div className="flex items-center gap-2">
-                        <span className="font-semibold text-sm">${token.symbol || 'Unknown'}</span>
-                        {token.name && <span className="text-xs text-muted-foreground">{token.name}</span>}
-                      </div>
-                      <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                        <code>{truncateAddress(token.mint)}</code>
-                        <button onClick={() => copyToClipboard(token.mint)} className="hover:text-foreground">
-                          {copiedAddress === token.mint ? <Check className="h-3 w-3 text-green-500" /> : <Copy className="h-3 w-3" />}
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <span className="text-xs text-muted-foreground">{formatDate(token.createdAt)}</span>
-                    {token.marketCap && (
-                      <Badge variant="outline" className="text-xs">
-                        ${token.marketCap >= 1000 ? `${(token.marketCap / 1000).toFixed(1)}K` : token.marketCap.toFixed(0)}
-                      </Badge>
-                    )}
-                    <a 
-                      href={`https://pump.fun/coin/${token.mint}`}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="flex items-center gap-1 px-2 py-1 rounded bg-gradient-to-r from-green-500/20 to-emerald-500/20 border border-green-500/30 text-xs hover:from-green-500/30 hover:to-emerald-500/30 transition-colors"
-                    >
-                      <img src="/launchpad-logos/pumpfun.png" alt="pump.fun" className="w-4 h-4" />
-                      pump.fun
-                      <ExternalLink className="h-3 w-3" />
-                    </a>
-                  </div>
-                </div>
+          
+          {node.tokensMinted && node.tokensMinted.length > 0 && (
+            <div className="flex flex-wrap gap-1 mt-2">
+              {node.tokensMinted.map((symbol, i) => (
+                <Badge key={i} variant="secondary" className="text-xs bg-green-500/20 text-green-400 border-green-500/30">
+                  {symbol}
+                </Badge>
               ))}
             </div>
           )}
         </div>
-
-        {/* Children */}
-        {isExpanded && hasChildren && (
-          <div className="space-y-1">
-            {node.children.map(child => renderWalletNode(child))}
-          </div>
-        )}
       </div>
-    );
-  };
-
-  return (
-    <div className="space-y-6">
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Search className="h-5 w-5 text-primary" />
-            🐕 SNIFF - Offspring Mint Scanner
-          </CardTitle>
-          <CardDescription>
-            Trace wallet funding chains and discover all tokens minted by offspring wallets
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="flex flex-col sm:flex-row gap-3">
-            <Input
-              placeholder="Enter parent wallet address..."
-              value={parentWallet}
-              onChange={(e) => setParentWallet(e.target.value)}
-              className="flex-1 font-mono"
-            />
-            <div className="flex items-center gap-2">
-              <span className="text-sm text-muted-foreground whitespace-nowrap">Depth:</span>
-              <Input
-                type="number"
-                min={1}
-                max={5}
-                value={maxDepth}
-                onChange={(e) => setMaxDepth(Number(e.target.value))}
-                className="w-16"
-              />
-            </div>
-            <Button onClick={runScan} disabled={isScanning} className="gap-2">
-              {isScanning ? (
-                <>
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                  Scanning...
-                </>
-              ) : (
-                <>
-                  <Search className="h-4 w-4" />
-                  Sniff
-                </>
-              )}
-            </Button>
-          </div>
-
-          {isScanning && (
-            <div className="p-4 bg-muted/50 rounded-lg animate-pulse">
-              <div className="flex items-center gap-3">
-                <Loader2 className="h-5 w-5 animate-spin text-primary" />
-                <div>
-                  <p className="font-medium">Scanning wallet tree...</p>
-                  <p className="text-sm text-muted-foreground">This may take a minute for deep scans</p>
-                </div>
-              </div>
-            </div>
-          )}
-        </CardContent>
-      </Card>
-
-      {scanResult && (
-        <>
-          {/* Summary Stats */}
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-            <Card className="bg-gradient-to-br from-primary/10 to-primary/5">
-              <CardContent className="pt-6">
-                <div className="text-2xl font-bold">{scanResult.totalOffspring}</div>
-                <p className="text-sm text-muted-foreground">Offspring Wallets</p>
-              </CardContent>
-            </Card>
-            <Card className="bg-gradient-to-br from-green-500/10 to-green-500/5">
-              <CardContent className="pt-6">
-                <div className="text-2xl font-bold text-green-500">{scanResult.totalMinters}</div>
-                <p className="text-sm text-muted-foreground">Active Minters</p>
-              </CardContent>
-            </Card>
-            <Card className="bg-gradient-to-br from-orange-500/10 to-orange-500/5">
-              <CardContent className="pt-6">
-                <div className="text-2xl font-bold text-orange-500">{scanResult.totalTokensMinted}</div>
-                <p className="text-sm text-muted-foreground">Tokens Minted</p>
-              </CardContent>
-            </Card>
-            <Card className="bg-gradient-to-br from-blue-500/10 to-blue-500/5">
-              <CardContent className="pt-6">
-                <div className="text-2xl font-bold text-blue-500">{scanResult.scanDuration.toFixed(1)}s</div>
-                <p className="text-sm text-muted-foreground">Scan Duration</p>
-              </CardContent>
-            </Card>
-          </div>
-
-          {/* All Minted Tokens Table */}
-          {scanResult.allMintedTokens && scanResult.allMintedTokens.length > 0 && (
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <Rocket className="h-5 w-5 text-green-500" />
-                  All Minted Tokens ({scanResult.allMintedTokens.length})
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="overflow-x-auto">
-                  <table className="w-full">
-                    <thead>
-                      <tr className="border-b border-border">
-                        <th className="text-left py-2 px-3 text-sm font-medium text-muted-foreground">Token</th>
-                        <th className="text-left py-2 px-3 text-sm font-medium text-muted-foreground">Mint Address</th>
-                        <th className="text-left py-2 px-3 text-sm font-medium text-muted-foreground">Date</th>
-                        <th className="text-left py-2 px-3 text-sm font-medium text-muted-foreground">Market Cap</th>
-                        <th className="text-right py-2 px-3 text-sm font-medium text-muted-foreground">Actions</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {scanResult.allMintedTokens.map((token) => (
-                        <tr key={token.mint} className="border-b border-border/50 hover:bg-muted/30">
-                          <td className="py-3 px-3">
-                            <div className="flex items-center gap-2">
-                              {token.image ? (
-                                <img src={token.image} alt="" className="w-6 h-6 rounded-full" onError={(e) => e.currentTarget.style.display = 'none'} />
-                              ) : (
-                                <div className="w-6 h-6 rounded-full bg-muted flex items-center justify-center">
-                                  <Rocket className="h-3 w-3" />
-                                </div>
-                              )}
-                              <div>
-                                <span className="font-semibold">${token.symbol || '???'}</span>
-                                {token.name && <span className="text-xs text-muted-foreground ml-1">({token.name})</span>}
-                              </div>
-                            </div>
-                          </td>
-                          <td className="py-3 px-3">
-                            <div className="flex items-center gap-1">
-                              <code className="text-xs">{truncateAddress(token.mint)}</code>
-                              <button onClick={() => copyToClipboard(token.mint)} className="p-1 hover:bg-muted rounded">
-                                {copiedAddress === token.mint ? <Check className="h-3 w-3 text-green-500" /> : <Copy className="h-3 w-3 text-muted-foreground" />}
-                              </button>
-                            </div>
-                          </td>
-                          <td className="py-3 px-3 text-sm text-muted-foreground">
-                            {formatDate(token.createdAt)}
-                          </td>
-                          <td className="py-3 px-3">
-                            {token.marketCap ? (
-                              <Badge variant="outline">
-                                ${token.marketCap >= 1000000 
-                                  ? `${(token.marketCap / 1000000).toFixed(2)}M` 
-                                  : token.marketCap >= 1000 
-                                    ? `${(token.marketCap / 1000).toFixed(1)}K` 
-                                    : token.marketCap.toFixed(0)}
-                              </Badge>
-                            ) : (
-                              <span className="text-muted-foreground text-sm">-</span>
-                            )}
-                          </td>
-                          <td className="py-3 px-3 text-right">
-                            <a 
-                              href={`https://pump.fun/coin/${token.mint}`}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="inline-flex items-center gap-1 px-2 py-1 rounded bg-gradient-to-r from-green-500/20 to-emerald-500/20 border border-green-500/30 text-xs hover:from-green-500/30 hover:to-emerald-500/30 transition-colors"
-                            >
-                              <img src="/launchpad-logos/pumpfun.png" alt="pump.fun" className="w-4 h-4" />
-                              pump.fun
-                              <ExternalLink className="h-3 w-3" />
-                            </a>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              </CardContent>
-            </Card>
-          )}
-
-          {/* Family Tree */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <GitBranch className="h-5 w-5 text-primary" />
-                Wallet Family Tree
-              </CardTitle>
-              <CardDescription>
-                Click wallets to expand and see their offspring and minted tokens
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              {scanResult.offspringTree && renderWalletNode(scanResult.offspringTree, true)}
-            </CardContent>
-          </Card>
-
-          {/* Warning if no mints found */}
-          {scanResult.totalTokensMinted === 0 && (
-            <Card className="border-yellow-500/30 bg-yellow-500/5">
-              <CardContent className="pt-6">
-                <div className="flex items-center gap-3">
-                  <AlertTriangle className="h-5 w-5 text-yellow-500" />
-                  <div>
-                    <p className="font-medium">No tokens minted by offspring</p>
-                    <p className="text-sm text-muted-foreground">
-                      This wallet has {scanResult.totalOffspring} offspring but none have minted tokens.
-                      Try increasing the scan depth or checking a different parent wallet.
-                    </p>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-          )}
-        </>
+      
+      {expanded && hasChildren && (
+        <div className="ml-8 mt-2 space-y-2">
+          {node.children.map((child, i) => (
+            <FamilyTreeNode key={i} node={child as TreeNode} depth={depth + 1} />
+          ))}
+        </div>
       )}
     </div>
   );
+};
+
+export function SniffDashboard() {
+  return (
+    <div className="space-y-6">
+      {/* Report Header */}
+      <Card className="bg-gradient-to-r from-orange-500/10 via-amber-500/10 to-yellow-500/10 border-orange-500/30">
+        <CardHeader>
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <span className="text-4xl">🐕</span>
+              <div>
+                <CardTitle className="text-2xl">SNIFF Investigation Report</CardTitle>
+                <p className="text-muted-foreground">Wallet Offspring & Token Mint Analysis</p>
+              </div>
+            </div>
+            <Badge className="bg-green-500/20 text-green-400 border-green-500/30 text-sm px-3 py-1">
+              Scan Complete
+            </Badge>
+          </div>
+        </CardHeader>
+        <CardContent>
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <p className="text-sm text-muted-foreground">Parent Wallet</p>
+              <WalletAddress address={SCAN_REPORT.parentWallet} showFull />
+            </div>
+            <div>
+              <p className="text-sm text-muted-foreground">Scan Date</p>
+              <p className="font-medium">{SCAN_REPORT.scanDate}</p>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Funding Source Alert */}
+      <Card className="bg-gradient-to-r from-red-500/10 to-orange-500/10 border-red-500/30">
+        <CardContent className="pt-4">
+          <div className="flex items-center gap-3">
+            <AlertTriangle className="h-6 w-6 text-red-400" />
+            <div>
+              <p className="font-semibold text-red-400">Funding Source Traced</p>
+              <div className="flex items-center gap-2 mt-1 flex-wrap">
+                <WalletAddress address={SCAN_REPORT.fundingSource.wallet} />
+                <Badge variant="destructive">{SCAN_REPORT.fundingSource.label}</Badge>
+                <span className="text-sm text-muted-foreground">({SCAN_REPORT.fundingSource.amount})</span>
+              </div>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Summary Stats */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <Card className="bg-gradient-to-br from-blue-500/10 to-cyan-500/10 border-blue-500/30">
+          <CardContent className="pt-4">
+            <div className="flex items-center gap-3">
+              <Users className="h-8 w-8 text-blue-400" />
+              <div>
+                <p className="text-2xl font-bold">{SCAN_REPORT.summary.totalOffspring}</p>
+                <p className="text-sm text-muted-foreground">Total Offspring</p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+        
+        <Card className="bg-gradient-to-br from-amber-500/10 to-orange-500/10 border-amber-500/30">
+          <CardContent className="pt-4">
+            <div className="flex items-center gap-3">
+              <Target className="h-8 w-8 text-amber-400" />
+              <div>
+                <p className="text-2xl font-bold">{SCAN_REPORT.summary.totalMinters}</p>
+                <p className="text-sm text-muted-foreground">Active Minters</p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+        
+        <Card className="bg-gradient-to-br from-green-500/10 to-emerald-500/10 border-green-500/30">
+          <CardContent className="pt-4">
+            <div className="flex items-center gap-3">
+              <Coins className="h-8 w-8 text-green-400" />
+              <div>
+                <p className="text-2xl font-bold">{SCAN_REPORT.summary.totalTokensMinted}</p>
+                <p className="text-sm text-muted-foreground">Tokens Minted</p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+        
+        <Card className="bg-gradient-to-br from-purple-500/10 to-pink-500/10 border-purple-500/30">
+          <CardContent className="pt-4">
+            <div className="flex items-center gap-3">
+              <Calendar className="h-8 w-8 text-purple-400" />
+              <div>
+                <p className="text-2xl font-bold">Depth {SCAN_REPORT.scanDepth}</p>
+                <p className="text-sm text-muted-foreground">{SCAN_REPORT.summary.scanDuration}</p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Minters & Their Tokens */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Coins className="h-5 w-5 text-amber-400" />
+            Minting Wallets & Their Tokens
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-6">
+          {SCAN_REPORT.minters.map((minter, idx) => (
+            <div key={idx} className="p-4 rounded-lg border border-muted-foreground/20 bg-muted/20">
+              <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
+                <div className="flex items-center gap-3 flex-wrap">
+                  <WalletAddress address={minter.wallet} />
+                  <Badge variant="outline">{minter.label}</Badge>
+                  <Badge className="bg-amber-500/20 text-amber-400 border-amber-500/30">
+                    Depth {minter.depth}
+                  </Badge>
+                </div>
+                <Badge className="bg-green-500/20 text-green-400 border-green-500/30">
+                  {minter.tokenCount} tokens
+                </Badge>
+              </div>
+              
+              <div className="grid gap-2">
+                {minter.tokens.map((token, i) => (
+                  <TokenBadge key={i} token={token} />
+                ))}
+              </div>
+            </div>
+          ))}
+        </CardContent>
+      </Card>
+
+      {/* Family Tree */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Wallet className="h-5 w-5 text-blue-400" />
+            Wallet Family Tree
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="p-4 rounded-lg border border-muted-foreground/20 bg-muted/10">
+            {/* Funding Source */}
+            <div className="flex items-center gap-2 p-3 mb-4 rounded-lg bg-red-500/10 border border-red-500/30 flex-wrap">
+              <AlertTriangle className="h-4 w-4 text-red-400" />
+              <span className="text-sm text-red-400">Funded by:</span>
+              <WalletAddress address={SCAN_REPORT.fundingSource.wallet} />
+              <Badge variant="destructive" className="text-xs">{SCAN_REPORT.fundingSource.label}</Badge>
+            </div>
+            
+            {/* Tree */}
+            <div className="border-l-4 border-blue-500/50 pl-4">
+              <FamilyTreeNode node={SCAN_REPORT.familyTree} />
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+    </div>
+  );
 }
+
+export default SniffDashboard;
