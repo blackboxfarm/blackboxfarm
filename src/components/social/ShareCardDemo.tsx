@@ -82,7 +82,9 @@ export function ShareCardDemo({ tokenStats: initialTokenStats = mockTokenStats }
     dustPercentage: tokenStats.dustPercentage,
     whales: tokenStats.whaleCount,
     serious: tokenStats.strongCount,
-    retail: tokenStats.activeCount,
+    realRetail: granularTiers?.realCount || 0,  // $50-$199
+    casual: (granularTiers?.smallCount || 0) + (granularTiers?.mediumCount || 0) + (granularTiers?.largeCount || 0),  // $1-$49
+    retail: tokenStats.activeCount,  // $1-$199 legacy
     healthGrade: tokenStats.healthGrade,
     healthScore: tokenStats.healthScore,
   };

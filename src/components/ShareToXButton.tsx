@@ -57,6 +57,8 @@ export function ShareToXButton({
     dustPercentage: dustPct,
     whales,
     serious,
+    realRetail: 0,  // Not available in this context - use ShareCardDemo for full data
+    casual: 0,      // Not available in this context - use ShareCardDemo for full data
     retail,
     healthGrade,
     healthScore,
