@@ -228,7 +228,8 @@ serve(async (req) => {
             const isDustWallet = !isLiquidityPool && usdValue < 1;
             const isSmallWallet = !isLiquidityPool && usdValue >= 1 && usdValue < 12;
             const isMediumWallet = !isLiquidityPool && usdValue >= 12 && usdValue < 25;
-            const isLargeWallet = !isLiquidityPool && usdValue >= 25 && usdValue < 49;
+            const isLargeWallet = !isLiquidityPool && usdValue >= 25 && usdValue < 50;
+            const isRealWallet = !isLiquidityPool && usdValue >= 50 && usdValue < 200;  // NEW: $50-$199 tier
             const isBossWallet = !isLiquidityPool && usdValue >= 200 && usdValue < 500;
             const isKingpinWallet = !isLiquidityPool && usdValue >= 500 && usdValue < 1000;
             const isSuperBossWallet = !isLiquidityPool && usdValue >= 1000 && usdValue < 2000;
@@ -244,7 +245,7 @@ serve(async (req) => {
               lpConfidence: lpResult.confidence,
               detectedPlatform: lpResult.platform || '',
               lpSource: lpResult.source || 'heuristic',
-              isDustWallet, isSmallWallet, isMediumWallet, isLargeWallet,
+              isDustWallet, isSmallWallet, isMediumWallet, isLargeWallet, isRealWallet,
               isBossWallet, isKingpinWallet, isSuperBossWallet, isBabyWhaleWallet, isTrueWhaleWallet,
               tokenAccount: account.pubkey,
               accountOwnerProgram: accountOwner
@@ -280,12 +281,12 @@ serve(async (req) => {
     const smallWallets = rankedHolders.filter(h => h.isSmallWallet).length;
     const mediumWallets = rankedHolders.filter(h => h.isMediumWallet).length;
     const largeWallets = rankedHolders.filter(h => h.isLargeWallet).length;
+    const realWalletCount = rankedHolders.filter(h => h.isRealWallet).length;  // NEW: $50-$199 tier
     const bossWallets = rankedHolders.filter(h => h.isBossWallet).length;
     const kingpinWallets = rankedHolders.filter(h => h.isKingpinWallet).length;
     const superBossWallets = rankedHolders.filter(h => h.isSuperBossWallet).length;
     const babyWhaleWallets = rankedHolders.filter(h => h.isBabyWhaleWallet).length;
     const trueWhaleWallets = rankedHolders.filter(h => h.isTrueWhaleWallet).length;
-    const realWallets = rankedHolders.filter(h => !h.isDustWallet && !h.isSmallWallet && !h.isMediumWallet && !h.isLargeWallet && !h.isBossWallet && !h.isKingpinWallet && !h.isSuperBossWallet && !h.isBabyWhaleWallet && !h.isTrueWhaleWallet && !h.isLiquidityPool).length;
     
     // === SIMPLE WALLET TIERS (new) ===
     // Dust: < $1, Retail: $1-199, Serious: $200-1000, Whales: > $1000
@@ -432,7 +433,7 @@ serve(async (req) => {
       lpPercentageOfSupply: lpWallets.length > 0 ? (lpBalance / totalBalance * 100) : 0,
       nonLpHolders: nonLpHolders.length,
       nonLpBalance,
-      realWallets, bossWallets, kingpinWallets, superBossWallets, babyWhaleWallets,
+      realWalletCount, bossWallets, kingpinWallets, superBossWallets, babyWhaleWallets,
       launchpadInfo, trueWhaleWallets, largeWallets, mediumWallets, smallWallets, dustWallets,
       totalBalance, tokenPriceUSD, priceSource,
       rpcSource: usedRpc,
@@ -446,7 +447,7 @@ serve(async (req) => {
       insidersGraph: insidersResult.hasInsiders ? insidersResult : undefined,
 
       // Back-compat fields for UI widgets
-      realHolders: realWallets,
+      realHolders: realWalletCount,
       dustPercentage: simpleTiers.dust.percentage,
       tierBreakdown: {
         dust: simpleTiers.dust.count,
