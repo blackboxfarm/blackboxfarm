@@ -137,7 +137,14 @@ const TokenBadge = ({ token }: { token: { mint: string; name: string; symbol: st
   <div className={`flex items-center gap-2 p-3 rounded-lg border ${token.isNew ? 'bg-gradient-to-r from-yellow-500/20 to-orange-500/20 border-yellow-500/40 ring-2 ring-yellow-500/30' : 'bg-gradient-to-r from-green-500/10 to-emerald-500/10 border-green-500/20'}`}>
     <div className="flex-1">
       <div className="flex items-center gap-2">
-        <span className={`font-bold ${token.isNew ? 'text-yellow-400' : 'text-green-400'}`}>{token.symbol}</span>
+        <a 
+          href={`https://padre.gg/${token.mint}`}
+          target="_blank"
+          rel="noopener noreferrer"
+          className={`font-bold hover:underline ${token.isNew ? 'text-yellow-400 hover:text-yellow-300' : 'text-green-400 hover:text-green-300'}`}
+        >
+          {token.symbol}
+        </a>
         <span className="text-sm text-muted-foreground">{token.name}</span>
         {token.isNew && (
           <Badge className="bg-yellow-500/30 text-yellow-300 border-yellow-500/50 text-[10px] px-1.5 py-0 animate-pulse">
