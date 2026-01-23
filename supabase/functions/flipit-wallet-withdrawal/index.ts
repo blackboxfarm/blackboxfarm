@@ -85,7 +85,20 @@ serve(async (req) => {
     }
 
     // Check if user is super admin
-    const { data: isSuperAdmin } = await supabase.rpc("is_super_admin", { check_user_id: user.id });
+    // NOTE: RPC param name must match function signature: is_super_admin(_user_id uuid)
+    const { data: isSuperAdmin, error: isSuperAdminError } = await supabase.rpc(
+      "is_super_admin",
+      { _user_id: user.id }
+    );
+
+    if (isSuperAdminError) {
+      console.error('[flipit-withdrawal] is_super_admin RPC failed:', isSuperAdminError);
+      return new Response(
+        JSON.stringify({ error: "Authorization check failed" }),
+        { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
     if (!isSuperAdmin) {
       return new Response(
         JSON.stringify({ error: "Super admin access required" }),
