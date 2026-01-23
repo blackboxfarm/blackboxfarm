@@ -393,3 +393,9 @@ verify_jwt = false
 
 [functions.x-community-health-check]
 verify_jwt = false
+
+[functions.holders-intel-scheduler]
+verify_jwt = false
+
+[functions.holders-intel-poster]
+verify_jwt = false

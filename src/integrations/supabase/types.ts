@@ -3472,6 +3472,93 @@ export type Database = {
         }
         Relationships: []
       }
+      holders_intel_post_queue: {
+        Row: {
+          created_at: string
+          error_message: string | null
+          id: string
+          market_cap: number | null
+          name: string | null
+          posted_at: string | null
+          retry_count: number
+          scheduled_at: string
+          snapshot_slot: string | null
+          status: string
+          symbol: string | null
+          token_mint: string
+          tweet_id: string | null
+        }
+        Insert: {
+          created_at?: string
+          error_message?: string | null
+          id?: string
+          market_cap?: number | null
+          name?: string | null
+          posted_at?: string | null
+          retry_count?: number
+          scheduled_at: string
+          snapshot_slot?: string | null
+          status?: string
+          symbol?: string | null
+          token_mint: string
+          tweet_id?: string | null
+        }
+        Update: {
+          created_at?: string
+          error_message?: string | null
+          id?: string
+          market_cap?: number | null
+          name?: string | null
+          posted_at?: string | null
+          retry_count?: number
+          scheduled_at?: string
+          snapshot_slot?: string | null
+          status?: string
+          symbol?: string | null
+          token_mint?: string
+          tweet_id?: string | null
+        }
+        Relationships: []
+      }
+      holders_intel_seen_tokens: {
+        Row: {
+          first_seen_at: string
+          health_grade: string | null
+          last_seen_at: string
+          market_cap_at_discovery: number | null
+          name: string | null
+          snapshot_slot: string
+          symbol: string | null
+          times_seen: number
+          token_mint: string
+          was_posted: boolean
+        }
+        Insert: {
+          first_seen_at?: string
+          health_grade?: string | null
+          last_seen_at?: string
+          market_cap_at_discovery?: number | null
+          name?: string | null
+          snapshot_slot: string
+          symbol?: string | null
+          times_seen?: number
+          token_mint: string
+          was_posted?: boolean
+        }
+        Update: {
+          first_seen_at?: string
+          health_grade?: string | null
+          last_seen_at?: string
+          market_cap_at_discovery?: number | null
+          name?: string | null
+          snapshot_slot?: string
+          symbol?: string | null
+          times_seen?: number
+          token_mint?: string
+          was_posted?: boolean
+        }
+        Relationships: []
+      }
       invalid_scraped_tokens: {
         Row: {
           discovery_source: string
