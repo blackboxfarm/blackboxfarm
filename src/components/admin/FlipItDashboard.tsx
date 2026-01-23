@@ -201,6 +201,7 @@ export function FlipItDashboard() {
   
   // Withdraw amount state
   const [withdrawAmount, setWithdrawAmount] = useState<string>('');
+  const [withdrawDestination, setWithdrawDestination] = useState<string>('');
   
   // Private key modal state
   const [showKeysModal, setShowKeysModal] = useState(false);
@@ -1177,12 +1178,20 @@ export function FlipItDashboard() {
       return;
     }
 
+    // Validate destination address if provided
+    const destination = withdrawDestination.trim() || null;
+    if (destination && !/^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(destination)) {
+      toast.error('Invalid Solana wallet address');
+      return;
+    }
+
     setIsWithdrawing(true);
     try {
       const { data, error } = await supabase.functions.invoke('flipit-wallet-withdrawal', {
         body: { 
           walletId: selectedWallet,
-          amount: customAmount // null means withdraw all
+          amount: customAmount, // null means withdraw all
+          destinationAddress: destination // null means find funder
         }
       });
 
@@ -1191,8 +1200,9 @@ export function FlipItDashboard() {
       if (data?.error) {
         toast.error(data.error);
       } else {
-        toast.success(`Withdrawn ${data.amountSol.toFixed(4)} SOL! TX: ${data.signature.slice(0, 8)}...`);
-        setWithdrawAmount(''); // Clear input after success
+        toast.success(`Withdrawn ${data.amountSol.toFixed(4)} SOL to ${data.destination.slice(0, 6)}...! TX: ${data.signature.slice(0, 8)}...`);
+        setWithdrawAmount('');
+        setWithdrawDestination('');
         refreshWalletBalance();
       }
     } catch (err: any) {
@@ -2857,30 +2867,42 @@ export function FlipItDashboard() {
                               </Button>
                             </div>
 
-                            <div className="flex items-center gap-2">
-                              <Input
-                                type="number"
-                                step="0.001"
-                                min="0"
-                                placeholder="SOL amount (empty = all)"
-                                value={withdrawAmount}
-                                onChange={(e) => setWithdrawAmount(e.target.value)}
-                                className="w-40 h-8 text-sm"
-                                disabled={isWithdrawing}
-                              />
-                              <Button
-                                size="sm"
-                                variant="destructive"
-                                onClick={handleWithdraw}
-                                disabled={isWithdrawing || !walletBalance || walletBalance < 0.001}
-                              >
-                                {isWithdrawing ? (
-                                  <Loader2 className="h-4 w-4 mr-1 animate-spin" />
-                                ) : (
-                                  <ArrowUpRight className="h-4 w-4 mr-1" />
-                                )}
-                                {withdrawAmount.trim() ? 'Withdraw' : 'Withdraw All'}
-                              </Button>
+                            <div className="flex flex-col gap-2">
+                              <div className="flex items-center gap-2">
+                                <Input
+                                  type="text"
+                                  placeholder="Destination wallet (empty = funder)"
+                                  value={withdrawDestination}
+                                  onChange={(e) => setWithdrawDestination(e.target.value)}
+                                  className="flex-1 h-8 text-sm font-mono"
+                                  disabled={isWithdrawing}
+                                />
+                              </div>
+                              <div className="flex items-center gap-2">
+                                <Input
+                                  type="number"
+                                  step="0.001"
+                                  min="0"
+                                  placeholder="SOL (empty = all)"
+                                  value={withdrawAmount}
+                                  onChange={(e) => setWithdrawAmount(e.target.value)}
+                                  className="w-32 h-8 text-sm"
+                                  disabled={isWithdrawing}
+                                />
+                                <Button
+                                  size="sm"
+                                  variant="destructive"
+                                  onClick={handleWithdraw}
+                                  disabled={isWithdrawing || !walletBalance || walletBalance < 0.001}
+                                >
+                                  {isWithdrawing ? (
+                                    <Loader2 className="h-4 w-4 mr-1 animate-spin" />
+                                  ) : (
+                                    <ArrowUpRight className="h-4 w-4 mr-1" />
+                                  )}
+                                  {withdrawAmount.trim() ? 'Withdraw' : 'Withdraw All'}
+                                </Button>
+                              </div>
                             </div>
                           </div>
                         </div>
