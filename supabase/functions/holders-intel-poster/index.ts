@@ -212,6 +212,30 @@ Deno.serve(async (req) => {
       
       // Build tweet
       const tweetText = processTemplate(TWEET_TEMPLATE, stats);
+
+      // Safety: if an operator emergency-stopped this queue item while we were processing,
+      // do NOT post.
+      const { data: latestItem, error: latestItemError } = await supabase
+        .from('holders_intel_post_queue')
+        .select('status')
+        .eq('id', item.id)
+        .maybeSingle();
+
+      if (latestItemError) {
+        console.warn(`[poster] Could not re-check queue status before posting: ${latestItemError.message}`);
+      } else if (!latestItem || latestItem.status !== 'processing') {
+        console.log(`[poster] Aborting post: queue item status is '${latestItem?.status ?? 'missing'}'`);
+
+        return new Response(
+          JSON.stringify({
+            success: true,
+            aborted: true,
+            reason: 'Queue item was stopped before posting',
+            symbol: item.symbol,
+          }),
+          { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
       
       // Post tweet
       const tweetResult = await postTweet(tweetText, supabaseUrl, anonKey);

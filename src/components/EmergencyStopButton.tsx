@@ -10,23 +10,25 @@ export function EmergencyStopButton() {
   const handleEmergencyStop = async () => {
     setLoading(true);
     try {
-      // Cancel all pending posts directly
-      const { error } = await supabase
-        .from('holders_intel_post_queue')
-        .update({ status: 'cancelled', error_message: 'Emergency stop' })
-        .eq('status', 'pending');
+      // IMPORTANT: 'cancelled' is not a valid status for this queue (DB constraint).
+      // Use 'skipped' to immediately prevent posting.
+      const { data, error } = await supabase
+        .from("holders_intel_post_queue")
+        .update({
+          status: "skipped",
+          error_message: "Emergency stop (Intel XBot)",
+        })
+        .in("status", ["pending", "processing"])
+        .select("id");
 
       if (error) throw error;
 
-      // Also cancel processing ones
-      await supabase
-        .from('holders_intel_post_queue')
-        .update({ status: 'cancelled', error_message: 'Emergency stop' })
-        .eq('status', 'processing');
+      const clearedCount = data?.length ?? 0;
 
       setStopped(true);
-      toast.success("STOPPED! All pending posts cancelled.");
+      toast.success(`Intel XBot stopped. Cleared ${clearedCount} queued posts.`);
     } catch (err: any) {
+      console.error("[Intel XBot] Emergency stop failed", err);
       toast.error(`Error: ${err.message}`);
     } finally {
       setLoading(false);
@@ -35,8 +37,8 @@ export function EmergencyStopButton() {
 
   if (stopped) {
     return (
-      <div className="fixed top-4 right-4 z-50 bg-green-600 text-white p-4 rounded-lg shadow-xl">
-        ✅ Intel XBot STOPPED
+      <div className="fixed top-4 right-4 z-50 bg-primary text-primary-foreground p-4 rounded-lg shadow-xl">
+        Intel XBot STOPPED
       </div>
     );
   }
@@ -46,9 +48,11 @@ export function EmergencyStopButton() {
       <Button 
         onClick={handleEmergencyStop}
         disabled={loading}
-        className="bg-red-600 hover:bg-red-700 text-white text-xl px-8 py-6 shadow-xl"
+        variant="destructive"
+        size="lg"
+        className="h-14 px-6 text-base font-semibold shadow-xl"
       >
-        {loading ? "STOPPING..." : "🛑 EMERGENCY STOP INTEL XBOT"}
+        {loading ? "STOPPING..." : "EMERGENCY STOP INTEL XBOT"}
       </Button>
     </div>
   );
