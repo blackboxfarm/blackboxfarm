@@ -1,7 +1,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { Connection, Keypair, PublicKey, Transaction, SystemProgram, LAMPORTS_PER_SOL } from "https://esm.sh/@solana/web3.js@1.98.0";
-import { decode as bs58Decode } from "https://esm.sh/bs58@6.0.0";
+import bs58 from "https://esm.sh/bs58@5.0.0";
 import { SecureStorage } from "../_shared/encryption.ts";
 
 const corsHeaders = {
@@ -130,7 +130,7 @@ serve(async (req) => {
 
     // Decrypt the secret key
     const secretKeyBase58 = await SecureStorage.decryptWalletSecret(wallet.secret_key_encrypted);
-    const secretKeyBytes = bs58Decode(secretKeyBase58);
+    const secretKeyBytes = bs58.decode(secretKeyBase58);
     const keypair = Keypair.fromSecretKey(secretKeyBytes);
 
     console.log(`[flipit-withdrawal] Wallet pubkey: ${wallet.pubkey}`);
