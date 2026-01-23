@@ -63,87 +63,63 @@ function getPreviousSnapshotSlots(currentSlot: string): string[] {
 }
 
 async function fetchTrendingTokens(): Promise<TrendingToken[]> {
-  console.log('[scheduler] Fetching trending tokens from DexScreener...');
+  console.log('[scheduler] Fetching top 50 trending Solana tokens from DexScreener...');
+  
+  const browserHeaders = {
+    'Accept': 'application/json',
+    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+    'Accept-Language': 'en-US,en;q=0.9',
+    'Accept-Encoding': 'gzip, deflate, br',
+    'Referer': 'https://dexscreener.com/',
+    'Origin': 'https://dexscreener.com',
+  };
   
   try {
-    const response = await fetch(
-      'https://api.dexscreener.com/token-boosts/top/v1',
-      { headers: { 'Accept': 'application/json' } }
+    // Try the token-profiles endpoint first (known to work)
+    let response = await fetch(
+      'https://api.dexscreener.com/token-profiles/latest/v1',
+      { headers: browserHeaders }
     );
+    
+    if (!response.ok) {
+      console.log(`[scheduler] token-profiles failed with ${response.status}, trying search endpoint...`);
+      
+      // Fallback: search for popular Solana tokens
+      response = await fetch(
+        'https://api.dexscreener.com/latest/dex/search?q=solana',
+        { headers: browserHeaders }
+      );
+    }
     
     if (!response.ok) {
       throw new Error(`DexScreener API error: ${response.status}`);
     }
     
     const data = await response.json();
-    const tokens: TrendingToken[] = [];
     
-    // Filter for Solana tokens and get details
-    const solanaTokens = (data || [])
-      .filter((t: any) => t.chainId === 'solana')
+    console.log('[scheduler] Raw API response type:', Array.isArray(data) ? 'array' : typeof data);
+    console.log('[scheduler] First item sample:', JSON.stringify((data.pairs || data)?.[0], null, 2)?.slice(0, 500));
+    
+    // Handle different response formats
+    let allItems = data.pairs || data || [];
+    
+    // Filter for Solana tokens and take top 50
+    const solanaTokens = allItems
+      .filter((p: any) => (p.chainId === 'solana' || p.chain === 'solana'))
       .slice(0, 50);
     
-    console.log(`[scheduler] Found ${solanaTokens.length} Solana tokens in boosted list`);
+    console.log(`[scheduler] Found ${solanaTokens.length} Solana tokens`);
     
-    // Fetch details for each token
-    for (const token of solanaTokens) {
-      try {
-        const detailRes = await fetch(
-          `https://api.dexscreener.com/latest/dex/tokens/${token.tokenAddress}`
-        );
-        
-        if (detailRes.ok) {
-          const detailData = await detailRes.json();
-          const pair = detailData.pairs?.[0];
-          
-          if (pair) {
-            tokens.push({
-              mint: token.tokenAddress,
-              symbol: pair.baseToken?.symbol || 'UNKNOWN',
-              name: pair.baseToken?.name || 'Unknown Token',
-              marketCap: pair.marketCap || 0,
-              priceChange24h: pair.priceChange?.h24 || 0,
-            });
-          }
-        }
-        
-        // Small delay to avoid rate limiting
-        await new Promise(r => setTimeout(r, 100));
-      } catch (e) {
-        console.log(`[scheduler] Failed to fetch details for ${token.tokenAddress}`);
-      }
-    }
-    
-    // If we didn't get enough from boosted, try trending
-    if (tokens.length < 30) {
-      console.log('[scheduler] Supplementing with trending endpoint...');
-      
-      const trendingRes = await fetch(
-        'https://api.dexscreener.com/latest/dex/tokens/trending/solana?page=1&limit=50'
-      );
-      
-      if (trendingRes.ok) {
-        const trendingData = await trendingRes.json();
-        const existingMints = new Set(tokens.map(t => t.mint));
-        
-        for (const pair of (trendingData.pairs || [])) {
-          if (existingMints.has(pair.baseToken?.address)) continue;
-          
-          tokens.push({
-            mint: pair.baseToken?.address,
-            symbol: pair.baseToken?.symbol || 'UNKNOWN',
-            name: pair.baseToken?.name || 'Unknown Token',
-            marketCap: pair.marketCap || 0,
-            priceChange24h: pair.priceChange?.h24 || 0,
-          });
-          
-          if (tokens.length >= 50) break;
-        }
-      }
-    }
+    const tokens: TrendingToken[] = solanaTokens.map((pair: any) => ({
+      mint: pair.tokenAddress || pair.baseToken?.address,
+      symbol: pair.baseToken?.symbol || pair.symbol || 'UNKNOWN',
+      name: pair.baseToken?.name || pair.name || 'Unknown Token',
+      marketCap: pair.marketCap || 0,
+      priceChange24h: pair.priceChange?.h24 || 0,
+    }));
     
     console.log(`[scheduler] Total tokens collected: ${tokens.length}`);
-    return tokens.slice(0, 50);
+    return tokens;
     
   } catch (error) {
     console.error('[scheduler] Error fetching trending tokens:', error);
@@ -196,17 +172,11 @@ Deno.serve(async (req) => {
     const newTokens = trendingTokens.filter(t => !seenMints.has(t.mint));
     console.log(`[scheduler] New tokens to queue: ${newTokens.length}`);
     
-    // Apply quality filters
-    const qualifiedTokens = newTokens.filter(t => {
-      // Skip if market cap too low
-      if (t.marketCap < 50000) {
-        console.log(`[scheduler] Skipping ${t.symbol}: market cap too low ($${t.marketCap})`);
-        return false;
-      }
-      return true;
-    });
+    // No filtering here - we take all 50 trending tokens
+    // Quality checks happen in the poster (holders count, health grade)
+    const qualifiedTokens = newTokens;
     
-    console.log(`[scheduler] Qualified tokens after filters: ${qualifiedTokens.length}`);
+    console.log(`[scheduler] New tokens to queue: ${qualifiedTokens.length}`);
     
     // Insert seen tokens
     if (qualifiedTokens.length > 0) {
