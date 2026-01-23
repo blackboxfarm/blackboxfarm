@@ -256,21 +256,27 @@ Deno.serve(async (req) => {
       
       const errorMsg = postError.message || '';
       
-      // Check if Twitter rejected as duplicate or rate-limited - just skip and mark done
-      const isDuplicate = errorMsg.includes('duplicate') || 
-                          errorMsg.includes('already posted') ||
-                          errorMsg.includes('Status is a duplicate') ||
-                          errorMsg.includes('187') || // Twitter duplicate error code
-                          errorMsg.includes('You are not allowed to create');
+      // ANY Twitter API rejection = skip immediately, never retry
+      // We do NOT want to repeatedly hit their API and risk a ban
+      const isTwitterRejection = errorMsg.includes('Twitter API error') ||
+                                  errorMsg.includes('duplicate') ||
+                                  errorMsg.includes('already posted') ||
+                                  errorMsg.includes('Status is a duplicate') ||
+                                  errorMsg.includes('187') ||
+                                  errorMsg.includes('You are not allowed') ||
+                                  errorMsg.includes('403') ||
+                                  errorMsg.includes('401') ||
+                                  errorMsg.includes('429') || // rate limit
+                                  errorMsg.includes('Too Many Requests');
       
-      if (isDuplicate) {
-        console.log(`[poster] Twitter rejected as duplicate, marking as skipped: ${item.symbol}`);
+      if (isTwitterRejection) {
+        console.log(`[poster] Twitter rejected, skipping (no retry): ${item.symbol} - ${errorMsg.substring(0, 100)}`);
         
         await supabase
           .from('holders_intel_post_queue')
           .update({
             status: 'skipped',
-            error_message: `Twitter duplicate filter: ${errorMsg.substring(0, 200)}`,
+            error_message: `Twitter rejected: ${errorMsg.substring(0, 500)}`,
           })
           .eq('id', item.id);
         
@@ -278,19 +284,19 @@ Deno.serve(async (req) => {
           JSON.stringify({
             success: true,
             skipped: true,
-            reason: 'Twitter duplicate filter',
+            reason: 'Twitter rejected',
             symbol: item.symbol,
+            error: errorMsg.substring(0, 200),
           }),
           { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
         );
       }
       
-      // Actual failure - retry logic
+      // Non-Twitter errors (e.g., our holder report failed) - can retry once
       const newRetryCount = (item.retry_count || 0) + 1;
-      const finalStatus = newRetryCount >= 3 ? 'failed' : 'pending';
+      const finalStatus = newRetryCount >= 2 ? 'failed' : 'pending'; // Max 1 retry for internal errors
       
-      // If retrying, schedule for 5 minutes later
-      const retryAt = new Date(Date.now() + 5 * 60 * 1000).toISOString();
+      const retryAt = new Date(Date.now() + 10 * 60 * 1000).toISOString(); // 10 min delay
       
       await supabase
         .from('holders_intel_post_queue')
