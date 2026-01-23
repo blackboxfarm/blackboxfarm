@@ -91,7 +91,7 @@ export function processTemplate(template: string, data: TokenShareData): string 
     .replace(/\{ca\}/g, data.tokenAddress)
     .replace(/\{totalWallets\}/g, data.totalWallets.toLocaleString())
     .replace(/\{realHolders\}/g, data.realHolders.toLocaleString())
-    .replace(/\{dustPct\}/g, data.dustPercentage.toString())
+    .replace(/\{dustPct\}/g, Math.round(data.dustPercentage).toString())
     .replace(/\{whales\}/g, data.whales.toLocaleString())
     .replace(/\{serious\}/g, data.serious.toLocaleString())
     .replace(/\{realRetail\}/g, data.realRetail.toLocaleString())
