@@ -39,9 +39,11 @@ export const TEMPLATE_VARIABLES = [
   { var: '{totalWallets}', desc: 'Total wallet count' },
   { var: '{realHolders}', desc: 'Real holder count' },
   { var: '{dustPct}', desc: 'Dust percentage' },
-  { var: '{whales}', desc: 'Whale count (>$1K)' },
-  { var: '{serious}', desc: 'Serious holder count ($200-$1K)' },
-  { var: '{retail}', desc: 'Retail holder count ($1-$199)' },
+  { var: '{whales}', desc: 'Whale count (≥$1K)' },
+  { var: '{serious}', desc: 'Serious holder count ($200-$999)' },
+  { var: '{realRetail}', desc: 'Retail holder count ($50-$199)' },
+  { var: '{casual}', desc: 'Casual holder count ($1-$49)' },
+  { var: '{retail}', desc: 'Retail holder count ($1-$199) - legacy' },
   { var: '{dust}', desc: 'Dust holder count (<$1)' },
   { var: '{healthGrade}', desc: 'Grade (A+, B+, etc)' },
   { var: '{healthScore}', desc: 'Score (0-100)' },
@@ -58,7 +60,9 @@ export interface TokenShareData {
   dustPercentage: number;
   whales: number;
   serious: number;
-  retail: number;
+  realRetail: number;  // $50-$199
+  casual: number;      // $1-$49
+  retail: number;      // $1-$199 (legacy)
   healthGrade: string;
   healthScore: number;
 }
@@ -90,6 +94,8 @@ export function processTemplate(template: string, data: TokenShareData): string 
     .replace(/\{dustPct\}/g, data.dustPercentage.toString())
     .replace(/\{whales\}/g, data.whales.toLocaleString())
     .replace(/\{serious\}/g, data.serious.toLocaleString())
+    .replace(/\{realRetail\}/g, data.realRetail.toLocaleString())
+    .replace(/\{casual\}/g, data.casual.toLocaleString())
     .replace(/\{retail\}/g, data.retail.toLocaleString())
     .replace(/\{dust\}/g, data.dustCount.toLocaleString())
     .replace(/\{healthGrade\}/g, data.healthGrade)
