@@ -72,15 +72,24 @@ BlackBox.farm shows what actually grows — and what gets culled.`;
   <meta property="og:description" content="${description.replace(/\n/g, ' ')}" />
   <meta property="og:url" content="${canonical}" />
   <meta property="og:image" content="${ogImage}" />
+  <meta property="og:image:secure_url" content="${ogImage}" />
+  <meta property="og:image:type" content="image/png" />
   <meta property="og:image:width" content="1200" />
   <meta property="og:image:height" content="630" />
+  <meta property="og:image:alt" content="BlackBox Farm - You Don't Grow on Dust" />
   <meta property="og:site_name" content="BlackBox Farm" />
+  <meta property="og:locale" content="en_US" />
 
   <meta name="twitter:card" content="summary_large_image" />
   <meta name="twitter:title" content="${title}" />
   <meta name="twitter:description" content="${description.replace(/\n/g, ' ')}" />
   <meta name="twitter:image" content="${ogImage}" />
   <meta name="twitter:site" content="@blackboxfarm" />
+
+  <!-- WhatsApp / iMessage / General Messaging -->
+  <meta itemprop="name" content="${title}" />
+  <meta itemprop="description" content="${description.replace(/\n/g, ' ')}" />
+  <meta itemprop="image" content="${ogImage}" />
 
   <style>
     :root { color-scheme: dark; }

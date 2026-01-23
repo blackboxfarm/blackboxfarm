@@ -95,13 +95,24 @@ serve(async (req) => {
   <meta property="og:description" content="${escapeHtml(description)}" />
   <meta property="og:url" content="${escapeHtml(shareUrl)}" />
   <meta property="og:image" content="${escapeHtml(img)}" />
+  <meta property="og:image:secure_url" content="${escapeHtml(img)}" />
+  <meta property="og:image:type" content="image/png" />
   <meta property="og:image:width" content="1200" />
   <meta property="og:image:height" content="628" />
+  <meta property="og:image:alt" content="Holder Analysis for $${safeSymbol}" />
+  <meta property="og:site_name" content="BlackBox Farm" />
+  <meta property="og:locale" content="en_US" />
 
   <meta name="twitter:card" content="summary_large_image" />
   <meta name="twitter:title" content="${title}" />
   <meta name="twitter:description" content="${escapeHtml(description)}" />
   <meta name="twitter:image" content="${escapeHtml(img)}" />
+  <meta name="twitter:site" content="@blackboxfarm" />
+
+  <!-- WhatsApp / iMessage / General Messaging -->
+  <meta itemprop="name" content="${title}" />
+  <meta itemprop="description" content="${escapeHtml(description)}" />
+  <meta itemprop="image" content="${escapeHtml(img)}" />
 
   <style>
     :root { color-scheme: dark; }
