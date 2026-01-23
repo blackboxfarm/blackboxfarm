@@ -18,16 +18,17 @@ const SCAN_REPORT = {
   summary: {
     totalOffspring: 58,
     totalMinters: 3,
-    totalTokensMinted: 11,
+    totalTokensMinted: 12,
     scanDuration: '45 seconds'
   },
   minters: [
     {
       wallet: 'CebN5WGQ4jvEPvsVU4EoHEpgzq1VV7AbicfhtW4xC9iM',
       depth: 2,
-      tokenCount: 9,
+      tokenCount: 10,
       label: 'Primary Token Factory',
       tokens: [
+        { mint: 'ArhBNpJMURmkU5DbjDrcqUoPtDSXXM6vnnBiW4oppump', name: 'skipper', symbol: '$skipper', date: 'Jan 23, 2026', marketCap: '$13,469', isNew: true },
         { mint: 'DJgNBsutYzRF2cZ8J2HqxZ6CdbpbB2VBJHPR3Ntxpump', name: 'GOODSHIT', symbol: '$GOODSHIT', date: 'Jan 23, 2026', marketCap: '$4,234' },
         { mint: 'Dy9Lu6viKwvKnZCyxtBLdnHdBqncHprJzazLPdpppump', name: 'Coyote', symbol: '$Coyote', date: 'Jan 23, 2026', marketCap: '$2,891' },
         { mint: 'FpnRqosU8pWPt3xUZceNLpSxXmkfn9MYMrmFEDospump', name: 'Monocryl', symbol: '$Monocryl', date: 'Jan 23, 2026', marketCap: '$1,567' },
@@ -75,7 +76,7 @@ const SCAN_REPORT = {
         wallet: 'CebN5WGQ4jvEPvsVU4EoHEpgzq1VV7AbicfhtW4xC9iM',
         label: 'Token Factory',
         isMinter: true,
-        tokensMinted: ['$GOODSHIT', '$Coyote', '$Monocryl', '$polarbear', '$MOONDOG', '$ROCKET', '$DIAMOND', '$SOLKING', '$WHALE'],
+        tokensMinted: ['$skipper', '$GOODSHIT', '$Coyote', '$Monocryl', '$polarbear', '$MOONDOG', '$ROCKET', '$DIAMOND', '$SOLKING', '$WHALE'],
         children: []
       },
       {
@@ -132,12 +133,17 @@ const WalletAddress = ({ address, label, showFull = false }: { address: string; 
   </div>
 );
 
-const TokenBadge = ({ token }: { token: { mint: string; name: string; symbol: string; date: string; marketCap: string } }) => (
-  <div className="flex items-center gap-2 p-3 rounded-lg bg-gradient-to-r from-green-500/10 to-emerald-500/10 border border-green-500/20">
+const TokenBadge = ({ token }: { token: { mint: string; name: string; symbol: string; date: string; marketCap: string; isNew?: boolean } }) => (
+  <div className={`flex items-center gap-2 p-3 rounded-lg border ${token.isNew ? 'bg-gradient-to-r from-yellow-500/20 to-orange-500/20 border-yellow-500/40 ring-2 ring-yellow-500/30' : 'bg-gradient-to-r from-green-500/10 to-emerald-500/10 border-green-500/20'}`}>
     <div className="flex-1">
       <div className="flex items-center gap-2">
-        <span className="font-bold text-green-400">{token.symbol}</span>
+        <span className={`font-bold ${token.isNew ? 'text-yellow-400' : 'text-green-400'}`}>{token.symbol}</span>
         <span className="text-sm text-muted-foreground">{token.name}</span>
+        {token.isNew && (
+          <Badge className="bg-yellow-500/30 text-yellow-300 border-yellow-500/50 text-[10px] px-1.5 py-0 animate-pulse">
+            NEW
+          </Badge>
+        )}
       </div>
       <div className="flex items-center gap-3 mt-1 text-xs text-muted-foreground">
         <span className="flex items-center gap-1">
