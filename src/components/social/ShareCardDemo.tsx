@@ -18,6 +18,7 @@ import {
   getShareUrl,
   type TokenShareData,
 } from '@/lib/share-template';
+import { HolderBreakdownPanel, type GranularTierCounts } from './HolderBreakdownPanel';
 
 interface TokenStats {
   symbol: string;
@@ -60,6 +61,7 @@ export function ShareCardDemo({ tokenStats: initialTokenStats = mockTokenStats }
   const [isFetching, setIsFetching] = useState(false);
   const [isPosting, setIsPosting] = useState(false);
   const [fetchedStats, setFetchedStats] = useState<TokenStats | null>(null);
+  const [granularTiers, setGranularTiers] = useState<GranularTierCounts | null>(null);
 
   // Use fetched stats if available, otherwise use initial/mock
   const tokenStats = fetchedStats || initialTokenStats;
@@ -116,6 +118,24 @@ export function ShareCardDemo({ tokenStats: initialTokenStats = mockTokenStats }
         ? parseFloat(((dustCount / totalHolders) * 100).toFixed(2))
         : 0;
 
+      // Extract granular tier counts from the API response
+      const granular: GranularTierCounts = {
+        totalHolders,
+        dustCount,
+        realHolders: data.realHolders ?? data.realWallets ?? 0,
+        lpCount: data.liquidityPoolsDetected ?? 0,
+        // Granular tiers
+        smallCount: data.smallWallets ?? 0,
+        mediumCount: data.mediumWallets ?? 0,
+        largeCount: data.largeWallets ?? 0,
+        realCount: data.realWalletCount ?? data.tierBreakdown?.real ?? 0, // $50-$199
+        bossCount: data.bossWallets ?? 0,
+        kingpinCount: data.kingpinWallets ?? 0,
+        superBossCount: data.superBossWallets ?? 0,
+        babyWhaleCount: data.babyWhaleWallets ?? 0,
+        trueWhaleCount: data.trueWhaleWallets ?? 0,
+      };
+
       const stats: TokenStats = {
         symbol: data.tokenSymbol || data.symbol || 'UNKNOWN',
         name: data.tokenName || data.name || data.tokenSymbol || data.symbol || 'Unknown Token',
@@ -129,7 +149,7 @@ export function ShareCardDemo({ tokenStats: initialTokenStats = mockTokenStats }
         healthScore: data.stabilityScore ?? data.healthScore?.score ?? 0,
         healthGrade: data.stabilityGrade ?? data.healthScore?.grade ?? 'N/A',
         totalHolders,
-        realHolders: data.realHolders ?? data.realWallets ?? 0,
+        realHolders: granular.realHolders,
         whaleCount: data.tierBreakdown?.whale ?? data.simpleTiers?.whales?.count ?? 0,
         strongCount: data.tierBreakdown?.serious ?? data.simpleTiers?.serious?.count ?? 0,
         activeCount: data.tierBreakdown?.retail ?? data.simpleTiers?.retail?.count ?? 0,
@@ -138,6 +158,7 @@ export function ShareCardDemo({ tokenStats: initialTokenStats = mockTokenStats }
       };
 
       setFetchedStats(stats);
+      setGranularTiers(granular);
       toast.success(`Fetched data for $${stats.symbol}`);
     } catch (err: any) {
       console.error('Fetch error:', err);
@@ -317,6 +338,11 @@ export function ShareCardDemo({ tokenStats: initialTokenStats = mockTokenStats }
             )}
             Post to @HoldersIntel
           </Button>
+
+          {/* Holder Breakdown Panel - shown after fetch */}
+          {fetchedStats && granularTiers && (
+            <HolderBreakdownPanel stats={granularTiers} symbol={fetchedStats.symbol} />
+          )}
         </div>
       </CardContent>
     </Card>
