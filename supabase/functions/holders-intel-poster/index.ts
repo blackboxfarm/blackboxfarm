@@ -254,7 +254,38 @@ Deno.serve(async (req) => {
     } catch (postError: any) {
       console.error(`[poster] Error processing ${item.symbol}:`, postError);
       
-      // Update queue with failure
+      const errorMsg = postError.message || '';
+      
+      // Check if Twitter rejected as duplicate or rate-limited - just skip and mark done
+      const isDuplicate = errorMsg.includes('duplicate') || 
+                          errorMsg.includes('already posted') ||
+                          errorMsg.includes('Status is a duplicate') ||
+                          errorMsg.includes('187') || // Twitter duplicate error code
+                          errorMsg.includes('You are not allowed to create');
+      
+      if (isDuplicate) {
+        console.log(`[poster] Twitter rejected as duplicate, marking as skipped: ${item.symbol}`);
+        
+        await supabase
+          .from('holders_intel_post_queue')
+          .update({
+            status: 'skipped',
+            error_message: `Twitter duplicate filter: ${errorMsg.substring(0, 200)}`,
+          })
+          .eq('id', item.id);
+        
+        return new Response(
+          JSON.stringify({
+            success: true,
+            skipped: true,
+            reason: 'Twitter duplicate filter',
+            symbol: item.symbol,
+          }),
+          { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+      
+      // Actual failure - retry logic
       const newRetryCount = (item.retry_count || 0) + 1;
       const finalStatus = newRetryCount >= 3 ? 'failed' : 'pending';
       
