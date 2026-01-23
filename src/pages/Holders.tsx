@@ -2,7 +2,7 @@ import React, { useEffect, useState } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { BaglessHoldersReport } from "@/components/BaglessHoldersReport";
 import { AuthButton } from "@/components/auth/AuthButton";
-import { FarmBanner } from "@/components/FarmBanner";
+
 import { NotificationCenter } from "@/components/NotificationCenter";
 import { UserSettingsDropdown } from "@/components/settings/UserSettingsDropdown";
 import { useAuth } from "@/hooks/useAuth";
@@ -13,6 +13,7 @@ import { Shield } from "lucide-react";
 import { SolPriceDisplay } from "@/components/SolPriceDisplay";
 import { TelegramWebViewBanner } from "@/components/TelegramWebViewBanner";
 import holdersLogo from "@/assets/holders-logo.png";
+import holdersHero from "@/assets/holders-hero.png";
 
 export default function Holders() {
   const [tokenFromUrl, setTokenFromUrl] = useState<string>("");
@@ -33,8 +34,14 @@ export default function Holders() {
       {/* Telegram WebView Banner */}
       <TelegramWebViewBanner />
       
-      {/* Farm Banner Header */}
-      <FarmBanner />
+      {/* Holders Hero Header */}
+      <div className="w-full">
+        <img 
+          src={holdersHero} 
+          alt="Holders Intel - Crypto has hands, HOLDER$ shows them" 
+          className="w-full h-auto max-h-48 object-cover object-center"
+        />
+      </div>
       <div className="mx-auto py-6 space-y-4 px-2 md:px-4 max-w-6xl">
         {/* Header */}
         <div className="flex flex-col md:flex-row md:justify-between md:items-start space-y-4 md:space-y-0">
@@ -47,13 +54,13 @@ export default function Holders() {
                   className="w-8 h-8 md:w-12 md:h-12"
                 />
                 <h1 className="text-2xl md:text-4xl font-bold bg-gradient-to-r from-primary to-primary/70 bg-clip-text text-transparent">
-                  Holders Analysis
+                  Holders Intel
                 </h1>
               </div>
               <SolPriceDisplay size="lg" className="md:ml-4" />
             </div>
             <p className="text-lg md:text-xl text-muted-foreground max-w-2xl mx-auto md:mx-0">
-              Analyze token holder distribution and wallet categories
+              Token Holder Intel & Wallet Analysis
             </p>
             {/* Mobile header actions */}
             <div className="flex justify-center md:hidden items-center gap-2">
