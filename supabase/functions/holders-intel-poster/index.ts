@@ -33,15 +33,24 @@ function asCount(value: any): number {
   return 0;
 }
 
+function getPostComment(timesPosted: number): string {
+  if (timesPosted <= 1) return ' : First call out!';
+  if (timesPosted === 2) return ' : Still on the Chart!';
+  return ' : Steady & Strong!';
+}
+
 function processTemplate(template: string, data: any): string {
   const tickerUpper = (data.symbol || 'TOKEN').toUpperCase();
   const tokenName = data.name || data.tokenName || 'Unknown';
+  const comment1 = getPostComment(data.timesPosted || 1);
   
   return template
     .replace(/\{TICKER\}/g, `$${tickerUpper}`)
     .replace(/\{ticker\}/g, tickerUpper)
     .replace(/\{NAME\}/g, tokenName)
     .replace(/\{name\}/g, tokenName)
+    .replace(/\{comment1\}/g, comment1)
+    .replace(/\{COMMENT1\}/g, comment1)
     .replace(/\{TOTAL_WALLETS\}/g, (data.totalHolders || 0).toLocaleString())
     .replace(/\{totalWallets\}/g, (data.totalHolders || 0).toLocaleString())
     .replace(/\{REAL_HOLDERS\}/g, (data.realHolders || 0).toLocaleString())
@@ -203,6 +212,15 @@ Deno.serve(async (req) => {
         throw new Error(report?.error || 'Empty report returned');
       }
       
+      // Get current times_posted from seen_tokens to determine comment
+      const { data: seenToken } = await supabase
+        .from('holders_intel_seen_tokens')
+        .select('times_posted')
+        .eq('token_mint', item.token_mint)
+        .maybeSingle();
+      
+      const currentTimesPosted = (seenToken?.times_posted || 0) + 1; // +1 because this will be the next post
+      
       // Extract + normalize stats from report (match manual ShareCardDemo mapping)
       const totalHolders = asCount(report?.totalHolders);
       const dustCount = asCount(report?.tierBreakdown?.dust ?? report?.dustWallets ?? report?.simpleTiers?.dust);
@@ -213,6 +231,7 @@ Deno.serve(async (req) => {
         name: (report?.tokenName || report?.name || item.name || 'Unknown').toString(),
         tokenMint: item.token_mint,
         totalHolders,
+        timesPosted: currentTimesPosted,
         // bagless-holders-report sets realHolders = realWalletCount ($50-$199)
         realHolders: asCount(report?.realHolders ?? report?.realWalletCount),
         dustCount,
@@ -225,7 +244,7 @@ Deno.serve(async (req) => {
         healthScore: asCount(report?.stabilityScore ?? report?.healthScore?.score),
       };
       
-      console.log(`[poster] Stats: ${stats.totalHolders} holders, grade ${stats.healthGrade}`);
+      console.log(`[poster] Stats: ${stats.totalHolders} holders, grade ${stats.healthGrade}, post #${currentTimesPosted}`);
       
       // Quality checks
       if (stats.totalHolders < MIN_HOLDERS) {
@@ -300,12 +319,13 @@ Deno.serve(async (req) => {
         })
         .eq('id', item.id);
       
-      // Update seen tokens
+      // Update seen tokens with incremented post count
       await supabase
         .from('holders_intel_seen_tokens')
         .update({
           was_posted: true,
           health_grade: stats.healthGrade,
+          times_posted: stats.timesPosted,
         })
         .eq('token_mint', item.token_mint);
       
