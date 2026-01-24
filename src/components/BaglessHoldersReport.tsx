@@ -210,9 +210,10 @@ interface HoldersReport {
 }
 interface BaglessHoldersReportProps {
   initialToken?: string;
+  onReportGenerated?: (tokenMint: string) => void;
 }
 
-export function BaglessHoldersReport({ initialToken }: BaglessHoldersReportProps) {
+export function BaglessHoldersReport({ initialToken, onReportGenerated }: BaglessHoldersReportProps) {
   const [tokenMint, setTokenMint] = useState(initialToken || '');
   const [tokenPrice, setTokenPrice] = useState('');
   const [useAutoPricing, setUseAutoPricing] = useState(true);
@@ -546,6 +547,11 @@ export function BaglessHoldersReport({ initialToken }: BaglessHoldersReportProps
 
       console.log('⏱️ [PERF] Report data received, processing...');
       setReport(data);
+      
+      // Track report generation for analytics
+      if (onReportGenerated) {
+        onReportGenerated(tokenMint.trim());
+      }
       
       // Calculate token age from first buyer timestamp (if available)
       if (data.firstBuyers && data.firstBuyers.length > 0) {

@@ -53,6 +53,7 @@ const DevTeamsView = lazy(() => import("@/components/admin/DevTeamsView").then(m
 const SpiderRouteMap = lazy(() => import("@/components/admin/SpiderRouteMap").then(m => ({ default: m.SpiderRouteMap })));
 const SolPriceAnalytics = lazy(() => import("@/components/admin/SolPriceAnalytics").then(m => ({ default: m.SolPriceAnalytics })));
 const SniffDashboard = lazy(() => import("@/components/admin/SniffDashboard").then(m => ({ default: m.SniffDashboard })));
+const HoldersVisitorsDashboard = lazy(() => import("@/components/admin/HoldersVisitorsDashboard").then(m => ({ default: m.HoldersVisitorsDashboard })));
 
 export default function SuperAdmin() {
   const [activeTab, setActiveTab] = useState("fuckoff");
@@ -154,8 +155,9 @@ export default function SuperAdmin() {
             <TabsTrigger value="spider" className="flex-shrink-0 data-[state=active]:bg-gradient-to-r data-[state=active]:from-gray-500/30 data-[state=active]:to-slate-500/20">🕷️ Spider</TabsTrigger>
             <TabsTrigger value="sol-analytics" className="flex-shrink-0 data-[state=active]:bg-gradient-to-r data-[state=active]:from-emerald-500/30 data-[state=active]:to-green-500/20">📊 SOL Price</TabsTrigger>
             <TabsTrigger value="sniff" className="flex-shrink-0 data-[state=active]:bg-gradient-to-r data-[state=active]:from-amber-500/30 data-[state=active]:to-yellow-500/20">🐕 SNIFF</TabsTrigger>
+            <TabsTrigger value="holders-visitors" className="flex-shrink-0 data-[state=active]:bg-gradient-to-r data-[state=active]:from-cyan-500/30 data-[state=active]:to-blue-500/20">👁️ Visitors</TabsTrigger>
           </TabsList>
-          
+
           <TabsContent value="fuckoff">
             {/* Empty tab */}
           </TabsContent>
@@ -424,6 +426,12 @@ export default function SuperAdmin() {
           <TabsContent value="sniff">
             <ActiveTabOnly activeTab={activeTab} tabValue="sniff">
               <SniffDashboard />
+            </ActiveTabOnly>
+          </TabsContent>
+
+          <TabsContent value="holders-visitors">
+            <ActiveTabOnly activeTab={activeTab} tabValue="holders-visitors">
+              <HoldersVisitorsDashboard />
             </ActiveTabOnly>
           </TabsContent>
         </Tabs>

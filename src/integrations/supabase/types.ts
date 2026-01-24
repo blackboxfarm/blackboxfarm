@@ -3589,6 +3589,105 @@ export type Database = {
         }
         Relationships: []
       }
+      holders_page_visits: {
+        Row: {
+          browser: string | null
+          country_code: string | null
+          created_at: string
+          device_type: string | null
+          exit_type: string | null
+          exited_at: string | null
+          full_url: string | null
+          has_og_image: boolean | null
+          id: string
+          ip_address: string | null
+          os: string | null
+          page_load_time_ms: number | null
+          referrer: string | null
+          referrer_domain: string | null
+          reports_generated: number | null
+          screen_height: number | null
+          screen_width: number | null
+          session_id: string
+          time_on_page_seconds: number | null
+          token_preloaded: string | null
+          tokens_analyzed: string[] | null
+          user_agent: string | null
+          user_id: string | null
+          utm_campaign: string | null
+          utm_content: string | null
+          utm_medium: string | null
+          utm_source: string | null
+          utm_term: string | null
+          version_param: string | null
+          visitor_fingerprint: string | null
+        }
+        Insert: {
+          browser?: string | null
+          country_code?: string | null
+          created_at?: string
+          device_type?: string | null
+          exit_type?: string | null
+          exited_at?: string | null
+          full_url?: string | null
+          has_og_image?: boolean | null
+          id?: string
+          ip_address?: string | null
+          os?: string | null
+          page_load_time_ms?: number | null
+          referrer?: string | null
+          referrer_domain?: string | null
+          reports_generated?: number | null
+          screen_height?: number | null
+          screen_width?: number | null
+          session_id: string
+          time_on_page_seconds?: number | null
+          token_preloaded?: string | null
+          tokens_analyzed?: string[] | null
+          user_agent?: string | null
+          user_id?: string | null
+          utm_campaign?: string | null
+          utm_content?: string | null
+          utm_medium?: string | null
+          utm_source?: string | null
+          utm_term?: string | null
+          version_param?: string | null
+          visitor_fingerprint?: string | null
+        }
+        Update: {
+          browser?: string | null
+          country_code?: string | null
+          created_at?: string
+          device_type?: string | null
+          exit_type?: string | null
+          exited_at?: string | null
+          full_url?: string | null
+          has_og_image?: boolean | null
+          id?: string
+          ip_address?: string | null
+          os?: string | null
+          page_load_time_ms?: number | null
+          referrer?: string | null
+          referrer_domain?: string | null
+          reports_generated?: number | null
+          screen_height?: number | null
+          screen_width?: number | null
+          session_id?: string
+          time_on_page_seconds?: number | null
+          token_preloaded?: string | null
+          tokens_analyzed?: string[] | null
+          user_agent?: string | null
+          user_id?: string | null
+          utm_campaign?: string | null
+          utm_content?: string | null
+          utm_medium?: string | null
+          utm_source?: string | null
+          utm_term?: string | null
+          version_param?: string | null
+          visitor_fingerprint?: string | null
+        }
+        Relationships: []
+      }
       invalid_scraped_tokens: {
         Row: {
           discovery_source: string
