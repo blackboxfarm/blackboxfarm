@@ -96,6 +96,7 @@ interface ShareData {
   bossWallets?: number;
   largeWallets?: number;
   mediumWallets?: number;
+  smallWallets?: number;
   healthScore?: { grade: string; score: number };
   simpleTiers?: SimpleTiers;
 }
@@ -651,6 +652,8 @@ export function TokenMetadataDisplay({
             whales={shareData?.simpleTiers?.whales?.count || 0}
             serious={shareData?.simpleTiers?.serious?.count || 0}
             retail={shareData?.simpleTiers?.retail?.count || 0}
+            realRetail={shareData?.realWallets || 0}
+            casual={(shareData?.smallWallets || 0) + (shareData?.mediumWallets || 0) + (shareData?.largeWallets || 0)}
             healthGrade={shareData?.healthScore?.grade || 'C'}
             healthScore={shareData?.healthScore?.score || 50}
             shareCardPageUrl={shareCardPageUrl}

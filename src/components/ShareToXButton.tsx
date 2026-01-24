@@ -20,6 +20,8 @@ interface ShareToXButtonProps {
   whales: number;
   serious: number;
   retail: number;
+  realRetail?: number;
+  casual?: number;
   healthGrade: string;
   healthScore: number;
   shareCardPageUrl?: string;
@@ -37,6 +39,8 @@ export function ShareToXButton({
   whales,
   serious,
   retail,
+  realRetail = 0,
+  casual = 0,
   healthGrade,
   healthScore,
   shareCardPageUrl,
@@ -64,8 +68,8 @@ export function ShareToXButton({
     dustPercentage: dustPct,
     whales,
     serious,
-    realRetail: 0,  // Not available in this context - use ShareCardDemo for full data
-    casual: 0,      // Not available in this context - use ShareCardDemo for full data
+    realRetail,
+    casual,
     retail,
     healthGrade,
     healthScore,

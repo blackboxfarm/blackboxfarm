@@ -2341,6 +2341,8 @@ export function BaglessHoldersReport({ initialToken }: BaglessHoldersReportProps
                     whales={report?.simpleTiers?.whales?.count || 0}
                     serious={report?.simpleTiers?.serious?.count || 0}
                     retail={report?.simpleTiers?.retail?.count || 0}
+                    realRetail={report?.realWallets || 0}
+                    casual={(report?.smallWallets || 0) + (report?.mediumWallets || 0) + (report?.largeWallets || 0)}
                     healthGrade={report?.healthScore?.grade || 'C'}
                     healthScore={report?.healthScore?.score || 50}
                     shareCardPageUrl={shareCardPageUrl}
