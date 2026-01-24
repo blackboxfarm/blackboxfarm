@@ -11648,6 +11648,10 @@ export type Database = {
       process_active_blackbox_commands: { Args: never; Returns: undefined }
       reset_daily_auto_buy_counts: { Args: never; Returns: undefined }
       schedule_arb_scanner: { Args: never; Returns: undefined }
+      schedule_cron_job: {
+        Args: { job_command: string; job_name: string; job_schedule: string }
+        Returns: undefined
+      }
       track_referral_signup: {
         Args: { new_user_id: string; referral_code_param: string }
         Returns: Json
