@@ -146,7 +146,7 @@ interface HoldersReport {
   lpPercentageOfSupply: number;
   nonLpHolders: number;
   nonLpBalance: number;
-  realWallets: number;
+  realHolders: number;
   bossWallets: number;
   kingpinWallets: number;
   superBossWallets: number;
@@ -623,7 +623,7 @@ export function BaglessHoldersReport({ initialToken }: BaglessHoldersReportProps
         tokenAddress: tokenMint.trim(),
         tokenImage: tokenData.metadata.logoURI || tokenData.metadata.image || '',
         totalHolders: reportData.totalHolders,
-        realHolders: reportData.realWallets || 
+        realHolders: reportData.realHolders || 
           reportData.holders.filter(h => !h.isDustWallet && !h.isLiquidityPool).length,
         // Detailed holder breakdown
         trueWhaleCount: reportData.holders.filter(h => h.isTrueWhaleWallet).length,
@@ -1037,7 +1037,7 @@ export function BaglessHoldersReport({ initialToken }: BaglessHoldersReportProps
             creatorInfo={report?.creatorInfo}
             shareData={report ? {
               totalHolders: report.totalHolders,
-              realWallets: report.realWallets,
+              realWallets: report.realHolders,
               dustWallets: report.dustWallets,
               trueWhaleWallets: report.trueWhaleWallets,
               babyWhaleWallets: report.babyWhaleWallets,
@@ -1602,7 +1602,7 @@ export function BaglessHoldersReport({ initialToken }: BaglessHoldersReportProps
                       <div className="text-xs text-muted-foreground">Boss ($200-$500)</div>
                     </div>
                     <div className="text-center p-2 rounded-lg bg-muted/30">
-                      <div className="text-lg md:text-2xl font-bold text-green-500">{report.realWallets}</div>
+                      <div className="text-lg md:text-2xl font-bold text-green-500">{report.realHolders}</div>
                       <div className="text-xs text-muted-foreground">Real ($50-$199)</div>
                     </div>
                     <div className="text-center p-2 rounded-lg bg-muted/30">
@@ -1632,11 +1632,13 @@ export function BaglessHoldersReport({ initialToken }: BaglessHoldersReportProps
                   tokenName={tokenData?.metadata?.name || 'Unknown Token'}
                   tokenMint={tokenMint.trim()}
                   totalWallets={report?.totalHolders || 0}
-                  realHolders={report?.realWallets || 0}
+                  realHolders={report?.realHolders || 0}
                   dustWallets={report?.dustWallets || 0}
                   whales={report?.simpleTiers?.whales?.count || 0}
                   serious={report?.simpleTiers?.serious?.count || 0}
                   retail={report?.simpleTiers?.retail?.count || 0}
+                  realRetail={report?.realHolders || 0}
+                  casual={(report?.smallWallets || 0) + (report?.mediumWallets || 0) + (report?.largeWallets || 0)}
                   healthGrade={report?.healthScore?.grade || 'C'}
                   healthScore={report?.healthScore?.score || 50}
                   shareCardPageUrl={shareCardPageUrl}
@@ -2185,7 +2187,7 @@ export function BaglessHoldersReport({ initialToken }: BaglessHoldersReportProps
                           { name: 'Super Boss', count: report.superBossWallets || 0, balance: superBossBalance, color: 'bg-indigo-500', textColor: 'text-indigo-500' },
                           { name: 'Kingpin', count: report.kingpinWallets || 0, balance: kingpinBalance, color: 'bg-cyan-500', textColor: 'text-cyan-500' },
                           { name: 'Boss', count: report.bossWallets || 0, balance: bossBalance, color: 'bg-orange-500', textColor: 'text-orange-500' },
-                          { name: 'Real', count: report.realWallets || 0, balance: realBalance, color: 'bg-green-500', textColor: 'text-green-500' },
+                          { name: 'Real', count: report.realHolders || 0, balance: realBalance, color: 'bg-green-500', textColor: 'text-green-500' },
                           { name: 'Large', count: report.largeWallets || 0, balance: largeBalance, color: 'bg-emerald-500', textColor: 'text-emerald-500' },
                           { name: 'Medium', count: report.mediumWallets || 0, balance: mediumBalance, color: 'bg-blue-500', textColor: 'text-blue-500' },
                           { name: 'Small', count: report.smallWallets || 0, balance: smallBalance, color: 'bg-gray-500', textColor: 'text-gray-500' },
@@ -2292,7 +2294,7 @@ export function BaglessHoldersReport({ initialToken }: BaglessHoldersReportProps
                           Real + Large
                         </div>
                         <div className="text-xs">
-                          {((report.realWallets || 0) + (report.largeWallets || 0))} wallets
+                          {((report.realHolders || 0) + (report.largeWallets || 0))} wallets
                         </div>
                       </div>
                       
@@ -2336,12 +2338,12 @@ export function BaglessHoldersReport({ initialToken }: BaglessHoldersReportProps
                     tokenName={tokenData?.metadata?.name || 'Unknown Token'}
                     tokenMint={tokenMint.trim()}
                     totalWallets={report?.totalHolders || 0}
-                    realHolders={report?.realWallets || 0}
+                    realHolders={report?.realHolders || 0}
                     dustWallets={report?.dustWallets || 0}
                     whales={report?.simpleTiers?.whales?.count || 0}
                     serious={report?.simpleTiers?.serious?.count || 0}
                     retail={report?.simpleTiers?.retail?.count || 0}
-                    realRetail={report?.realWallets || 0}
+                    realRetail={report?.realHolders || 0}
                     casual={(report?.smallWallets || 0) + (report?.mediumWallets || 0) + (report?.largeWallets || 0)}
                     healthGrade={report?.healthScore?.grade || 'C'}
                     healthScore={report?.healthScore?.score || 50}
