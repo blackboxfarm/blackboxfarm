@@ -3529,6 +3529,7 @@ export type Database = {
           name: string | null
           snapshot_slot: string
           symbol: string | null
+          times_posted: number | null
           times_seen: number
           token_mint: string
           was_posted: boolean
@@ -3541,6 +3542,7 @@ export type Database = {
           name?: string | null
           snapshot_slot: string
           symbol?: string | null
+          times_posted?: number | null
           times_seen?: number
           token_mint: string
           was_posted?: boolean
@@ -3553,6 +3555,7 @@ export type Database = {
           name?: string | null
           snapshot_slot?: string
           symbol?: string | null
+          times_posted?: number | null
           times_seen?: number
           token_mint?: string
           was_posted?: boolean
