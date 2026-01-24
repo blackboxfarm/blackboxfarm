@@ -10,6 +10,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Copy, RotateCcw, Share2, Search, Send, Loader2, Save, Check, Play, Square, RefreshCw } from 'lucide-react';
 import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
+import { IntelXBotActivityLog } from './IntelXBotActivityLog';
 import {
   DEFAULT_TEMPLATES,
   TEMPLATE_VARIABLES,
@@ -475,6 +476,9 @@ export function ShareCardDemo({ tokenStats: initialTokenStats = mockTokenStats }
           </div>
         </CardContent>
       </Card>
+
+      {/* Activity Log */}
+      <IntelXBotActivityLog />
 
       {/* Tweet Templates Card */}
       <Card className="bg-card/50 border-border">
