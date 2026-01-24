@@ -3,17 +3,18 @@ import { Button } from "@/components/ui/button";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { usePreviewSuperAdmin } from "@/hooks/usePreviewSuperAdmin";
+import { Play, Square, Loader2 } from "lucide-react";
 
 export function EmergencyStopButton() {
-  const [loading, setLoading] = useState(false);
-  const [stopped, setStopped] = useState(false);
+  const [stopLoading, setStopLoading] = useState(false);
+  const [startLoading, setStartLoading] = useState(false);
+  const [status, setStatus] = useState<'idle' | 'stopped' | 'started'>('idle');
   const isPreview = usePreviewSuperAdmin();
 
   const handleEmergencyStop = async () => {
-    setLoading(true);
+    setStopLoading(true);
     try {
-      // IMPORTANT: 'cancelled' is not a valid status for this queue (DB constraint).
-      // Use 'skipped' to immediately prevent posting.
+      // Mark all pending/processing items as skipped
       const { data, error } = await supabase
         .from("holders_intel_post_queue")
         .update({
@@ -25,15 +26,44 @@ export function EmergencyStopButton() {
 
       if (error) throw error;
 
-      const clearedCount = data?.length ?? 0;
+      // Also call the kill function to unschedule crons
+      const { error: killError } = await supabase.functions.invoke('intel-xbot-kill');
+      if (killError) console.warn("Kill function error:", killError);
 
-      setStopped(true);
+      const clearedCount = data?.length ?? 0;
+      setStatus('stopped');
       toast.success(`Intel XBot stopped. Cleared ${clearedCount} queued posts.`);
     } catch (err: any) {
       console.error("[Intel XBot] Emergency stop failed", err);
       toast.error(`Error: ${err.message}`);
     } finally {
-      setLoading(false);
+      setStopLoading(false);
+    }
+  };
+
+  const handleStart = async () => {
+    setStartLoading(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('intel-xbot-start');
+      
+      if (error) throw error;
+      
+      setStatus('started');
+      toast.success(data?.message || 'Intel XBot crons started!');
+      
+      // Show detailed results
+      if (data?.results) {
+        const scheduled = data.results.filter((r: any) => r.status === 'scheduled').length;
+        const failed = data.results.filter((r: any) => r.status !== 'scheduled');
+        if (failed.length > 0) {
+          console.warn("Some crons failed to schedule:", failed);
+        }
+      }
+    } catch (err: any) {
+      console.error("[Intel XBot] Start failed", err);
+      toast.error(`Error: ${err.message}`);
+    } finally {
+      setStartLoading(false);
     }
   };
 
@@ -42,25 +72,57 @@ export function EmergencyStopButton() {
     return null;
   }
 
-  if (stopped) {
-    return (
-      <div className="fixed top-4 right-4 z-50 bg-primary text-primary-foreground p-4 rounded-lg shadow-xl">
-        Intel XBot STOPPED
-      </div>
-    );
-  }
-
   return (
-    <div className="fixed top-4 right-4 z-50">
+    <div className="fixed top-4 right-4 z-50 flex gap-2">
+      {/* START Button */}
+      <Button 
+        onClick={handleStart}
+        disabled={startLoading || stopLoading}
+        size="lg"
+        className="h-14 px-6 text-base font-semibold shadow-xl bg-green-600 hover:bg-green-700 text-white"
+      >
+        {startLoading ? (
+          <>
+            <Loader2 className="w-5 h-5 mr-2 animate-spin" />
+            STARTING...
+          </>
+        ) : (
+          <>
+            <Play className="w-5 h-5 mr-2" />
+            START INTEL XBOT
+          </>
+        )}
+      </Button>
+
+      {/* STOP Button */}
       <Button 
         onClick={handleEmergencyStop}
-        disabled={loading}
+        disabled={stopLoading || startLoading}
         variant="destructive"
         size="lg"
         className="h-14 px-6 text-base font-semibold shadow-xl"
       >
-        {loading ? "STOPPING..." : "EMERGENCY STOP INTEL XBOT"}
+        {stopLoading ? (
+          <>
+            <Loader2 className="w-5 h-5 mr-2 animate-spin" />
+            STOPPING...
+          </>
+        ) : (
+          <>
+            <Square className="w-5 h-5 mr-2" />
+            STOP
+          </>
+        )}
       </Button>
+
+      {/* Status indicator */}
+      {status !== 'idle' && (
+        <div className={`flex items-center px-4 rounded-lg shadow-xl ${
+          status === 'started' ? 'bg-green-600 text-white' : 'bg-primary text-primary-foreground'
+        }`}>
+          {status === 'started' ? '✓ RUNNING' : '⏹ STOPPED'}
+        </div>
+      )}
     </div>
   );
 }
