@@ -21,14 +21,28 @@ const TWEET_TEMPLATE = `🔍 ${'{TICKER}'} Holder Analysis
 
 {DUST_PERCENTAGE}% are dust wallets
 
-🐋 {WHALES} Whales ($5K+)
-💪 {SERIOUS} Strong ($50-$5K)
-🌱 {REAL_RETAIL} Active ($1-$50)
+🐋 {WHALES} Whales (>$1K)
+💼 {SERIOUS} Serious ($200-$1K)
+🌱 {REAL_RETAIL} Retail ($1-$199)
 💨 {DUST_COUNT} Dust (<$1)
 
 Health Grade: {HEALTH_GRADE} ({HEALTH_SCORE}/100)
 
 Free report 👉 blackbox.farm/holders?token={TOKEN_ADDRESS}`;
+
+function asCount(value: any): number {
+  if (typeof value === 'number' && Number.isFinite(value)) return value;
+  if (typeof value === 'string') {
+    const n = Number(value);
+    return Number.isFinite(n) ? n : 0;
+  }
+  // bagless-holders-report returns simpleTiers.* as objects: { count, percentage, ... }
+  if (value && typeof value === 'object' && typeof value.count !== 'undefined') {
+    const n = Number(value.count);
+    return Number.isFinite(n) ? n : 0;
+  }
+  return 0;
+}
 
 function processTemplate(template: string, data: any): string {
   return template
@@ -159,20 +173,25 @@ Deno.serve(async (req) => {
         throw new Error(report?.error || 'Empty report returned');
       }
       
-      // Extract stats from report
+      // Extract + normalize stats from report (match manual ShareCardDemo mapping)
+      const totalHolders = asCount(report?.totalHolders);
+      const dustCount = asCount(report?.tierBreakdown?.dust ?? report?.dustWallets ?? report?.simpleTiers?.dust);
+      const dustPercentage = totalHolders > 0 ? Math.round((dustCount / totalHolders) * 100) : 0;
+
       const stats = {
-        symbol: report.symbol || report.tokenSymbol || item.symbol,
+        symbol: (report?.tokenSymbol || report?.symbol || item.symbol || 'UNKNOWN').toString(),
         tokenMint: item.token_mint,
-        totalHolders: report.totalHolders || 0,
-        realHolders: report.realHolders || 0,
-        dustCount: report.dustCount || 0,
-        dustPercentage: report.dustPercentage || 
-          Math.round((report.dustCount / report.totalHolders) * 100) || 0,
-        whaleCount: report.whaleCount || report.simpleTiers?.whales || 0,
-        seriousCount: report.seriousCount || report.simpleTiers?.serious || 0,
-        activeCount: report.activeCount || report.simpleTiers?.retail || 0,
-        healthGrade: report.healthGrade || report.stabilityGrade || 'N/A',
-        healthScore: report.healthScore || report.stabilityScore || 0,
+        totalHolders,
+        // bagless-holders-report sets realHolders = realWalletCount ($50-$199)
+        realHolders: asCount(report?.realHolders ?? report?.realWalletCount),
+        dustCount,
+        dustPercentage,
+        // NOTE: simpleTiers.* are objects; always use .count
+        whaleCount: asCount(report?.tierBreakdown?.whale ?? report?.simpleTiers?.whales),
+        seriousCount: asCount(report?.tierBreakdown?.serious ?? report?.simpleTiers?.serious),
+        activeCount: asCount(report?.tierBreakdown?.retail ?? report?.simpleTiers?.retail),
+        healthGrade: (report?.stabilityGrade ?? report?.healthScore?.grade ?? 'N/A').toString(),
+        healthScore: asCount(report?.stabilityScore ?? report?.healthScore?.score),
       };
       
       console.log(`[poster] Stats: ${stats.totalHolders} holders, grade ${stats.healthGrade}`);
