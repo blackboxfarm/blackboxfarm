@@ -1632,12 +1632,12 @@ export function BaglessHoldersReport({ initialToken }: BaglessHoldersReportProps
                   tokenName={tokenData?.metadata?.name || 'Unknown Token'}
                   tokenMint={tokenMint.trim()}
                   totalWallets={report?.totalHolders || 0}
-                  realHolders={report?.realHolders || 0}
+                  realHolders={(report?.totalHolders || 0) - (report?.dustWallets || 0)}
                   dustWallets={report?.dustWallets || 0}
                   whales={report?.simpleTiers?.whales?.count || 0}
                   serious={report?.simpleTiers?.serious?.count || 0}
                   retail={report?.simpleTiers?.retail?.count || 0}
-                  realRetail={report?.realHolders || 0}
+                  realRetail={(report?.totalHolders || 0) - (report?.dustWallets || 0)}
                   casual={(report?.smallWallets || 0) + (report?.mediumWallets || 0) + (report?.largeWallets || 0)}
                   healthGrade={report?.healthScore?.grade || 'C'}
                   healthScore={report?.healthScore?.score || 50}
@@ -2333,22 +2333,22 @@ export function BaglessHoldersReport({ initialToken }: BaglessHoldersReportProps
 
                 {/* Share Report Button - After Sediment Layers */}
                 <div className="mt-4">
-                  <ShareToXButton
-                    ticker={tokenData?.metadata?.symbol || 'TOKEN'}
-                    tokenName={tokenData?.metadata?.name || 'Unknown Token'}
-                    tokenMint={tokenMint.trim()}
-                    totalWallets={report?.totalHolders || 0}
-                    realHolders={report?.realHolders || 0}
-                    dustWallets={report?.dustWallets || 0}
-                    whales={report?.simpleTiers?.whales?.count || 0}
-                    serious={report?.simpleTiers?.serious?.count || 0}
-                    retail={report?.simpleTiers?.retail?.count || 0}
-                    realRetail={report?.realHolders || 0}
-                    casual={(report?.smallWallets || 0) + (report?.mediumWallets || 0) + (report?.largeWallets || 0)}
-                    healthGrade={report?.healthScore?.grade || 'C'}
-                    healthScore={report?.healthScore?.score || 50}
-                    shareCardPageUrl={shareCardPageUrl}
-                    isGenerating={isGeneratingShareCard}
+              <ShareToXButton
+                ticker={tokenData?.metadata?.symbol || 'TOKEN'}
+                tokenName={tokenData?.metadata?.name || 'Unknown Token'}
+                tokenMint={tokenMint.trim()}
+                totalWallets={report?.totalHolders || 0}
+                realHolders={(report?.totalHolders || 0) - (report?.dustWallets || 0)}
+                dustWallets={report?.dustWallets || 0}
+                whales={report?.simpleTiers?.whales?.count || 0}
+                serious={report?.simpleTiers?.serious?.count || 0}
+                retail={report?.simpleTiers?.retail?.count || 0}
+                realRetail={(report?.totalHolders || 0) - (report?.dustWallets || 0)}
+                casual={(report?.smallWallets || 0) + (report?.mediumWallets || 0) + (report?.largeWallets || 0)}
+                healthGrade={report?.healthScore?.grade || 'C'}
+                healthScore={report?.healthScore?.score || 50}
+                shareCardPageUrl={shareCardPageUrl}
+                isGenerating={isGeneratingShareCard}
                   />
                 </div>
               </div>
