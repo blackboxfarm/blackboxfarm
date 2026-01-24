@@ -2640,9 +2640,19 @@ serve(async (req) => {
             // ============================================
             // FLIPIT AUTO-BUY (Separate from Scalp Mode)
             // ============================================
+            // DEBUG: Log all FlipIt-relevant config values for troubleshooting
+            console.log(`[telegram-channel-monitor] 🔍 FLIPIT PRE-CHECK for ${tokenMint}:`);
+            console.log(`[telegram-channel-monitor]    → flipit_enabled: ${config.flipit_enabled}`);
+            console.log(`[telegram-channel-monitor]    → scalp_mode_enabled: ${config.scalp_mode_enabled}`);
+            console.log(`[telegram-channel-monitor]    → fantasy_mode: ${config.fantasy_mode}`);
+            console.log(`[telegram-channel-monitor]    → flipit_wallet_id: ${config.flipit_wallet_id || 'NOT SET'}`);
+            console.log(`[telegram-channel-monitor]    → callId: ${callId || 'NULL'}`);
+            console.log(`[telegram-channel-monitor]    → staleAlphaCheckPassed: ${staleAlphaCheckPassed}`);
+            
             // Only run FlipIt if Scalp Mode is NOT enabled (they are mutually exclusive per channel)
             if (config.flipit_enabled && !config.scalp_mode_enabled) {
               console.log(`[telegram-channel-monitor] 🎯 FlipIt Mode ACTIVE: Processing ${tokenMint} for REAL buy`);
+              console.log(`[telegram-channel-monitor] 🎯 FlipIt: fantasy_mode=${config.fantasy_mode}, if false this SHOULD execute a real trade`);
               
               try {
                 // Priority: SOL amount (converted to USD) > USD amount > fallback $10
@@ -2817,6 +2827,9 @@ serve(async (req) => {
                   } catch {}
                 }
               }
+            } else {
+              // Log why FlipIt was NOT triggered
+              console.log(`[telegram-channel-monitor] ⏭️ FlipIt NOT triggered: flipit_enabled=${config.flipit_enabled}, scalp_mode_enabled=${config.scalp_mode_enabled}`);
             }
             
             // ============================================
