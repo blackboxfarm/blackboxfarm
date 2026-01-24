@@ -11460,6 +11460,14 @@ export type Database = {
           user_id: string
         }[]
       }
+      get_cron_job_status: {
+        Args: never
+        Returns: {
+          active: boolean
+          jobname: string
+          schedule: string
+        }[]
+      }
       get_dust_wallet_stats: {
         Args: { whale_id?: string }
         Returns: {
