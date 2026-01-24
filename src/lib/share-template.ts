@@ -1,6 +1,8 @@
 // Single source of truth for share templates
 // All sharing functionality across the app uses this
 
+import { supabase } from '@/integrations/supabase/client';
+
 export const HOLDERS_SHARE_VERSION = "20260122";
 
 export const HOLDERS_SHARE_URL = (() => {
@@ -9,28 +11,58 @@ export const HOLDERS_SHARE_URL = (() => {
   return url.toString();
 })();
 
+// Template names
+export type TemplateName = 'small' | 'large' | 'shares';
+
 // Bump this key to force reset of old templates in localStorage
 export const TEMPLATE_STORAGE_KEY = 'share-tweet-template-v3';
 
-export const DEFAULT_TWEET_TEMPLATE = `🔎 Holder Analysis: $\{ticker}
+// Fallback templates in case DB fetch fails
+export const DEFAULT_TEMPLATES: Record<TemplateName, string> = {
+  small: `🔍 $\{ticker} Holder Analysis
 
-CA:{ca}
+📊 {totalWallets} Total | ✅ {realHolders} Real
+{dustPct}% Dust | Health: {healthGrade}
+
+👉 blackbox.farm/holders?token={ca}`,
+
+  large: `🔎 Holder Analysis: $\{ticker}
+
+CA: {ca}
 
 Health: {healthGrade} ({healthScore}/100)
 
-✅ {realHolders} Real Holders ({dustPct}% Dust)
-
-🏛 {totalWallets} Total Wallets
+📊 {totalWallets} Total Wallets
+✅ {realHolders} Real Holders
+{dustPct}% are dust wallets
 
 🐋 {whales} Whales (>$1K)
+💼 {serious} Serious ($200-$1K)
+🌱 {retail} Retail ($1-$199)
+💨 {dust} Dust (<$1)
 
-😎 {serious} Serious ($200-$1K)
+Free report 👉 blackbox.farm/holders?token={ca}`,
 
-🏪 {retail} Retail ($1-$199)
+  shares: `🔎 Holder Analysis: $\{ticker}
 
-💨 {dust} Dust (<$1) = {dustPct}% Dust
+CA: {ca}
 
-More Holder Intel👉 ${HOLDERS_SHARE_URL}`;
+Health: {healthGrade} ({healthScore}/100)
+
+📊 {totalWallets} Total Wallets
+✅ {realHolders} Real Holders
+{dustPct}% are dust wallets
+
+🐋 {whales} Whales (>$1K)
+💼 {serious} Serious ($200-$1K)
+🌱 {retail} Retail ($1-$199)
+💨 {dust} Dust (<$1)
+
+Analyze any token 👉 blackbox.farm/holders`,
+};
+
+// Legacy default for backwards compatibility
+export const DEFAULT_TWEET_TEMPLATE = DEFAULT_TEMPLATES.shares;
 
 export const TEMPLATE_VARIABLES = [
   { var: '{ticker}', desc: 'Token symbol' },
@@ -67,14 +99,119 @@ export interface TokenShareData {
   healthScore: number;
 }
 
-// Get template from localStorage or fallback to default
+export interface TemplateRecord {
+  id: string;
+  template_name: TemplateName;
+  template_text: string;
+  is_active: boolean;
+  description: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+// Fetch all templates from database
+export async function fetchAllTemplates(): Promise<TemplateRecord[]> {
+  const { data, error } = await supabase
+    .from('holders_intel_templates')
+    .select('*')
+    .order('template_name');
+  
+  if (error) {
+    console.error('Failed to fetch templates:', error);
+    return [];
+  }
+  
+  return data as TemplateRecord[];
+}
+
+// Fetch a specific template by name
+export async function fetchTemplate(name: TemplateName): Promise<string> {
+  const { data, error } = await supabase
+    .from('holders_intel_templates')
+    .select('template_text')
+    .eq('template_name', name)
+    .single();
+  
+  if (error || !data) {
+    console.error(`Failed to fetch ${name} template:`, error);
+    return DEFAULT_TEMPLATES[name];
+  }
+  
+  return data.template_text;
+}
+
+// Fetch the active Intel XBot template (small or large)
+export async function fetchActiveIntelTemplate(): Promise<{ name: TemplateName; text: string }> {
+  const { data, error } = await supabase
+    .from('holders_intel_templates')
+    .select('template_name, template_text')
+    .in('template_name', ['small', 'large'])
+    .eq('is_active', true)
+    .single();
+  
+  if (error || !data) {
+    console.error('Failed to fetch active Intel template:', error);
+    return { name: 'small', text: DEFAULT_TEMPLATES.small };
+  }
+  
+  return { name: data.template_name as TemplateName, text: data.template_text };
+}
+
+// Update a template in the database
+export async function updateTemplate(name: TemplateName, text: string): Promise<boolean> {
+  const { error } = await supabase
+    .from('holders_intel_templates')
+    .update({ 
+      template_text: text,
+      updated_at: new Date().toISOString()
+    })
+    .eq('template_name', name);
+  
+  if (error) {
+    console.error(`Failed to update ${name} template:`, error);
+    return false;
+  }
+  
+  return true;
+}
+
+// Toggle which Intel template is active (small or large)
+export async function setActiveIntelTemplate(name: 'small' | 'large'): Promise<boolean> {
+  const otherName = name === 'small' ? 'large' : 'small';
+  
+  // Deactivate the other one
+  const { error: deactivateError } = await supabase
+    .from('holders_intel_templates')
+    .update({ is_active: false, updated_at: new Date().toISOString() })
+    .eq('template_name', otherName);
+  
+  if (deactivateError) {
+    console.error(`Failed to deactivate ${otherName} template:`, deactivateError);
+    return false;
+  }
+  
+  // Activate the selected one
+  const { error: activateError } = await supabase
+    .from('holders_intel_templates')
+    .update({ is_active: true, updated_at: new Date().toISOString() })
+    .eq('template_name', name);
+  
+  if (activateError) {
+    console.error(`Failed to activate ${name} template:`, activateError);
+    return false;
+  }
+  
+  return true;
+}
+
+// Legacy: Get template from localStorage or fallback to default (for backwards compat)
 export function getTemplate(): string {
   if (typeof window === 'undefined') return DEFAULT_TWEET_TEMPLATE;
   const saved = localStorage.getItem(TEMPLATE_STORAGE_KEY);
   return saved || DEFAULT_TWEET_TEMPLATE;
 }
 
-// Save template to localStorage
+// Legacy: Save template to localStorage
 export function saveTemplate(template: string): void {
   if (typeof window === 'undefined') return;
   localStorage.setItem(TEMPLATE_STORAGE_KEY, template);

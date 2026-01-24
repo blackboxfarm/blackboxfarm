@@ -9,26 +9,15 @@ const TWITTER_HANDLE = 'HoldersIntel';
 
 // Quality thresholds
 const MIN_HOLDERS = 50;
-const MIN_HEALTH_SCORE = 20;
 const SKIP_GRADES = ['F'];
 
-// Tweet template matching ShareCardDemo
-const TWEET_TEMPLATE = `🔍 ${'{TICKER}'} Holder Analysis
+// Fallback template if DB fetch fails
+const FALLBACK_TEMPLATE = `🔍 $\{TICKER} Holder Analysis
 
-📊 {TOTAL_WALLETS} Total Wallets
-↓
-✅ Only {REAL_HOLDERS} Real Holders!
+📊 {TOTAL_WALLETS} Total | ✅ {REAL_HOLDERS} Real
+{DUST_PERCENTAGE}% Dust | Health: {HEALTH_GRADE}
 
-{DUST_PERCENTAGE}% are dust wallets
-
-🐋 {WHALES} Whales (>$1K)
-💼 {SERIOUS} Serious ($200-$1K)
-🌱 {REAL_RETAIL} Retail ($1-$199)
-💨 {DUST_COUNT} Dust (<$1)
-
-Health Grade: {HEALTH_GRADE} ({HEALTH_SCORE}/100)
-
-Free report 👉 blackbox.farm/holders?token={TOKEN_ADDRESS}`;
+👉 blackbox.farm/holders?token={TOKEN_ADDRESS}`;
 
 function asCount(value: any): number {
   if (typeof value === 'number' && Number.isFinite(value)) return value;
@@ -46,17 +35,50 @@ function asCount(value: any): number {
 
 function processTemplate(template: string, data: any): string {
   return template
-    .replace('{TICKER}', `$${data.symbol || 'TOKEN'}`)
-    .replace('{TOTAL_WALLETS}', (data.totalHolders || 0).toLocaleString())
-    .replace('{REAL_HOLDERS}', (data.realHolders || 0).toLocaleString())
-    .replace('{DUST_PERCENTAGE}', String(data.dustPercentage || 0))
-    .replace('{WHALES}', (data.whaleCount || 0).toLocaleString())
-    .replace('{SERIOUS}', (data.seriousCount || 0).toLocaleString())
-    .replace('{REAL_RETAIL}', (data.activeCount || 0).toLocaleString())
-    .replace('{DUST_COUNT}', (data.dustCount || 0).toLocaleString())
-    .replace('{HEALTH_GRADE}', data.healthGrade || 'N/A')
-    .replace('{HEALTH_SCORE}', String(data.healthScore || 0))
-    .replace('{TOKEN_ADDRESS}', data.tokenMint || '');
+    .replace(/\{TICKER\}/g, `$${data.symbol || 'TOKEN'}`)
+    .replace(/\{ticker\}/g, data.symbol || 'TOKEN')
+    .replace(/\{TOTAL_WALLETS\}/g, (data.totalHolders || 0).toLocaleString())
+    .replace(/\{totalWallets\}/g, (data.totalHolders || 0).toLocaleString())
+    .replace(/\{REAL_HOLDERS\}/g, (data.realHolders || 0).toLocaleString())
+    .replace(/\{realHolders\}/g, (data.realHolders || 0).toLocaleString())
+    .replace(/\{DUST_PERCENTAGE\}/g, String(data.dustPercentage || 0))
+    .replace(/\{dustPct\}/g, String(data.dustPercentage || 0))
+    .replace(/\{WHALES\}/g, (data.whaleCount || 0).toLocaleString())
+    .replace(/\{whales\}/g, (data.whaleCount || 0).toLocaleString())
+    .replace(/\{SERIOUS\}/g, (data.seriousCount || 0).toLocaleString())
+    .replace(/\{serious\}/g, (data.seriousCount || 0).toLocaleString())
+    .replace(/\{REAL_RETAIL\}/g, (data.activeCount || 0).toLocaleString())
+    .replace(/\{retail\}/g, (data.activeCount || 0).toLocaleString())
+    .replace(/\{DUST_COUNT\}/g, (data.dustCount || 0).toLocaleString())
+    .replace(/\{dust\}/g, (data.dustCount || 0).toLocaleString())
+    .replace(/\{HEALTH_GRADE\}/g, data.healthGrade || 'N/A')
+    .replace(/\{healthGrade\}/g, data.healthGrade || 'N/A')
+    .replace(/\{HEALTH_SCORE\}/g, String(data.healthScore || 0))
+    .replace(/\{healthScore\}/g, String(data.healthScore || 0))
+    .replace(/\{TOKEN_ADDRESS\}/g, data.tokenMint || '')
+    .replace(/\{ca\}/g, data.tokenMint || '');
+}
+
+async function fetchActiveTemplate(supabase: any): Promise<string> {
+  try {
+    const { data, error } = await supabase
+      .from('holders_intel_templates')
+      .select('template_text')
+      .in('template_name', ['small', 'large'])
+      .eq('is_active', true)
+      .single();
+    
+    if (error || !data) {
+      console.log('[poster] Failed to fetch active template, using fallback:', error?.message);
+      return FALLBACK_TEMPLATE;
+    }
+    
+    console.log('[poster] Using active template from database');
+    return data.template_text;
+  } catch (err) {
+    console.error('[poster] Template fetch error:', err);
+    return FALLBACK_TEMPLATE;
+  }
 }
 
 async function fetchHolderReport(tokenMint: string, supabaseUrl: string, anonKey: string): Promise<any> {
@@ -123,6 +145,9 @@ Deno.serve(async (req) => {
       'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFweGF1YXB1dXNtZ3diYnpqZ2ZsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTQ1OTEzMDUsImV4cCI6MjA3MDE2NzMwNX0.w8IrKq4YVStF3TkdEcs5mCSeJsxjkaVq2NFkypYOXHU';
     
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
+    
+    // Fetch the active template from database
+    const tweetTemplate = await fetchActiveTemplate(supabase);
     
     // Check for any pending items that are due
     const now = new Date().toISOString();
@@ -229,8 +254,8 @@ Deno.serve(async (req) => {
         );
       }
       
-      // Build tweet
-      const tweetText = processTemplate(TWEET_TEMPLATE, stats);
+      // Build tweet using the active template from database
+      const tweetText = processTemplate(tweetTemplate, stats);
 
       // Safety: if an operator emergency-stopped this queue item while we were processing,
       // do NOT post.

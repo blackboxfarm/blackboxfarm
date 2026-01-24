@@ -7,7 +7,8 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { useToast } from "@/hooks/use-toast";
-import { getTemplate, processTemplate, HOLDERS_SHARE_URL, type TokenShareData } from "@/lib/share-template";
+import { useEffect, useState } from "react";
+import { fetchTemplate, processTemplate, HOLDERS_SHARE_URL, DEFAULT_TEMPLATES, type TokenShareData } from "@/lib/share-template";
 
 interface ShareToXButtonProps {
   ticker: string;
@@ -43,6 +44,12 @@ export function ShareToXButton({
   variant = "full",
 }: ShareToXButtonProps) {
   const { toast } = useToast();
+  const [template, setTemplate] = useState(DEFAULT_TEMPLATES.shares);
+  
+  // Fetch the shares template from database on mount
+  useEffect(() => {
+    fetchTemplate('shares').then(setTemplate);
+  }, []);
   
   const dustPct = totalWallets > 0 ? Math.round((dustWallets / totalWallets) * 100) : 0;
 
@@ -64,9 +71,8 @@ export function ShareToXButton({
     healthScore,
   };
 
-  // Get processed share text from the single template
+  // Get processed share text from the shares template
   const getShareText = () => {
-    const template = getTemplate();
     return processTemplate(template, tokenData);
   };
 

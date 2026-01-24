@@ -5,18 +5,21 @@ import { Badge } from '@/components/ui/badge';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Input } from '@/components/ui/input';
-import { Copy, RotateCcw, Share2, Search, Send, Loader2 } from 'lucide-react';
+import { Switch } from '@/components/ui/switch';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Copy, RotateCcw, Share2, Search, Send, Loader2, Save, Check } from 'lucide-react';
 import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
 import {
-  DEFAULT_TWEET_TEMPLATE,
-  TEMPLATE_STORAGE_KEY,
+  DEFAULT_TEMPLATES,
   TEMPLATE_VARIABLES,
-  getTemplate,
-  saveTemplate,
   processTemplate,
-  getShareUrl,
+  fetchAllTemplates,
+  updateTemplate,
+  setActiveIntelTemplate,
   type TokenShareData,
+  type TemplateName,
+  type TemplateRecord,
 } from '@/lib/share-template';
 import { HolderBreakdownPanel, type GranularTierCounts } from './HolderBreakdownPanel';
 
@@ -31,13 +34,12 @@ interface TokenStats {
   totalHolders: number;
   realHolders: number;
   whaleCount: number;
-  strongCount: number;  // Serious ($200-$1K)
-  activeCount: number;  // Retail ($1-$199)
-  dustCount: number;    // Dust (<$1)
+  strongCount: number;
+  activeCount: number;
+  dustCount: number;
   dustPercentage: number;
 }
 
-// Mock data for demo (used when no token is fetched)
 const mockTokenStats: TokenStats = {
   symbol: 'DEMO',
   name: 'Demo Token',
@@ -49,29 +51,103 @@ const mockTokenStats: TokenStats = {
   totalHolders: 2847,
   realHolders: 1423,
   whaleCount: 12,
-  strongCount: 284,   // Serious
-  activeCount: 1127,  // Retail
+  strongCount: 284,
+  activeCount: 1127,
   dustCount: 1424,
   dustPercentage: 50,
 };
 
 export function ShareCardDemo({ tokenStats: initialTokenStats = mockTokenStats }: { tokenStats?: TokenStats }) {
-  const [tweetTemplate, setTweetTemplate] = useState(() => getTemplate());
+  const [activeTab, setActiveTab] = useState<TemplateName>('small');
+  const [templates, setTemplates] = useState<Record<TemplateName, string>>(DEFAULT_TEMPLATES);
+  const [activeIntelTemplate, setActiveIntelTemplateState] = useState<'small' | 'large'>('small');
+  const [isLoading, setIsLoading] = useState(true);
+  const [isSaving, setIsSaving] = useState(false);
+  const [savedStatus, setSavedStatus] = useState<Record<TemplateName, boolean>>({
+    small: false,
+    large: false,
+    shares: false,
+  });
+  
   const [tokenMint, setTokenMint] = useState('');
   const [isFetching, setIsFetching] = useState(false);
   const [isPosting, setIsPosting] = useState(false);
   const [fetchedStats, setFetchedStats] = useState<TokenStats | null>(null);
   const [granularTiers, setGranularTiers] = useState<GranularTierCounts | null>(null);
 
-  // Use fetched stats if available, otherwise use initial/mock
   const tokenStats = fetchedStats || initialTokenStats;
 
-  // Persist template to localStorage whenever it changes
+  // Load templates from database on mount
   useEffect(() => {
-    saveTemplate(tweetTemplate);
-  }, [tweetTemplate]);
+    loadTemplates();
+  }, []);
 
-  // Convert TokenStats to TokenShareData format
+  const loadTemplates = async () => {
+    setIsLoading(true);
+    try {
+      const dbTemplates = await fetchAllTemplates();
+      
+      if (dbTemplates.length > 0) {
+        const templateMap: Record<TemplateName, string> = { ...DEFAULT_TEMPLATES };
+        let activeIntel: 'small' | 'large' = 'small';
+        
+        dbTemplates.forEach((t: TemplateRecord) => {
+          templateMap[t.template_name] = t.template_text;
+          if ((t.template_name === 'small' || t.template_name === 'large') && t.is_active) {
+            activeIntel = t.template_name;
+          }
+        });
+        
+        setTemplates(templateMap);
+        setActiveIntelTemplateState(activeIntel);
+      }
+    } catch (err) {
+      console.error('Failed to load templates:', err);
+      toast.error('Failed to load templates');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleSaveTemplate = async (name: TemplateName) => {
+    setIsSaving(true);
+    try {
+      const success = await updateTemplate(name, templates[name]);
+      if (success) {
+        setSavedStatus(prev => ({ ...prev, [name]: true }));
+        setTimeout(() => {
+          setSavedStatus(prev => ({ ...prev, [name]: false }));
+        }, 2000);
+        toast.success(`${name.charAt(0).toUpperCase() + name.slice(1)} template saved!`);
+      } else {
+        toast.error('Failed to save template');
+      }
+    } catch (err) {
+      toast.error('Failed to save template');
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const handleToggleActive = async (name: 'small' | 'large') => {
+    try {
+      const success = await setActiveIntelTemplate(name);
+      if (success) {
+        setActiveIntelTemplateState(name);
+        toast.success(`${name.charAt(0).toUpperCase() + name.slice(1)} template is now active for Intel XBot`);
+      } else {
+        toast.error('Failed to switch active template');
+      }
+    } catch (err) {
+      toast.error('Failed to switch active template');
+    }
+  };
+
+  const handleResetTemplate = (name: TemplateName) => {
+    setTemplates(prev => ({ ...prev, [name]: DEFAULT_TEMPLATES[name] }));
+    toast.info('Template reset to default (not saved yet)');
+  };
+
   const tokenData: TokenShareData = {
     ticker: tokenStats.symbol,
     name: tokenStats.name,
@@ -82,14 +158,13 @@ export function ShareCardDemo({ tokenStats: initialTokenStats = mockTokenStats }
     dustPercentage: tokenStats.dustPercentage,
     whales: tokenStats.whaleCount,
     serious: tokenStats.strongCount,
-    realRetail: granularTiers?.realCount || 0,  // $50-$199
-    casual: (granularTiers?.smallCount || 0) + (granularTiers?.mediumCount || 0) + (granularTiers?.largeCount || 0),  // $1-$49
-    retail: tokenStats.activeCount,  // $1-$199 legacy
+    realRetail: granularTiers?.realCount || 0,
+    casual: (granularTiers?.smallCount || 0) + (granularTiers?.mediumCount || 0) + (granularTiers?.largeCount || 0),
+    retail: tokenStats.activeCount,
     healthGrade: tokenStats.healthGrade,
     healthScore: tokenStats.healthScore,
   };
 
-  // Fetch holder data using the same edge function as /holders page
   const handleFetch = async () => {
     if (!tokenMint.trim()) {
       toast.error('Please enter a token address');
@@ -103,34 +178,23 @@ export function ShareCardDemo({ tokenStats: initialTokenStats = mockTokenStats }
       });
 
       if (error) throw error;
+      if (!data || !data.holders) throw new Error('No holder data returned');
 
-      if (!data || !data.holders) {
-        throw new Error('No holder data returned');
-      }
-
-      console.log('Holder report response:', data);
-
-      // Transform the response into TokenStats format
-      // NOTE: bagless-holders-report historically evolved; support both old/new keys.
       const totalHolders = data.totalHolders || 0;
       const dustCount = data.tierBreakdown?.dust ?? data.dustWallets ?? data.simpleTiers?.dust?.count ?? 0;
-      
-      // Calculate dust percentage as (dustCount / totalHolders) * 100
       const dustPercentage = totalHolders > 0 
         ? parseFloat(((dustCount / totalHolders) * 100).toFixed(2))
         : 0;
 
-      // Extract granular tier counts from the API response
       const granular: GranularTierCounts = {
         totalHolders,
         dustCount,
         realHolders: data.realHolders ?? data.realWallets ?? 0,
         lpCount: data.liquidityPoolsDetected ?? 0,
-        // Granular tiers
         smallCount: data.smallWallets ?? 0,
         mediumCount: data.mediumWallets ?? 0,
         largeCount: data.largeWallets ?? 0,
-        realCount: data.realWalletCount ?? data.tierBreakdown?.real ?? 0, // $50-$199
+        realCount: data.realWalletCount ?? data.tierBreakdown?.real ?? 0,
         bossCount: data.bossWallets ?? 0,
         kingpinCount: data.kingpinWallets ?? 0,
         superBossCount: data.superBossWallets ?? 0,
@@ -143,11 +207,8 @@ export function ShareCardDemo({ tokenStats: initialTokenStats = mockTokenStats }
         name: data.tokenName || data.name || data.tokenSymbol || data.symbol || 'Unknown Token',
         tokenAddress: tokenMint.trim(),
         price: data.tokenPriceUSD || 0,
-        marketCap:
-          data.marketCap ||
-          (typeof data.totalBalance === 'number' && typeof data.tokenPriceUSD === 'number'
-            ? data.totalBalance * data.tokenPriceUSD
-            : 0),
+        marketCap: data.marketCap || (typeof data.totalBalance === 'number' && typeof data.tokenPriceUSD === 'number'
+            ? data.totalBalance * data.tokenPriceUSD : 0),
         healthScore: data.stabilityScore ?? data.healthScore?.score ?? 0,
         healthGrade: data.stabilityGrade ?? data.healthScore?.grade ?? 'N/A',
         totalHolders,
@@ -170,7 +231,6 @@ export function ShareCardDemo({ tokenStats: initialTokenStats = mockTokenStats }
     }
   };
 
-  // Post to Twitter via edge function using @HoldersIntent credentials
   const handlePostToTwitter = async () => {
     if (!fetchedStats) {
       toast.error('Please fetch token data first');
@@ -179,15 +239,11 @@ export function ShareCardDemo({ tokenStats: initialTokenStats = mockTokenStats }
 
     setIsPosting(true);
     try {
-      // Get the processed tweet text from the template
-      const tweetText = processTemplate(tweetTemplate, tokenData);
+      // Use the active template for posting
+      const tweetText = processTemplate(templates[activeIntelTemplate], tokenData);
 
       const { data, error } = await supabase.functions.invoke('post-share-card-twitter', {
-        body: { 
-          tweetText,
-          // This must match a username in public.twitter_accounts (currently: HoldersIntel)
-          twitterHandle: 'HoldersIntel'
-        }
+        body: { tweetText, twitterHandle: 'HoldersIntel' }
       });
 
       if (error) throw error;
@@ -209,68 +265,145 @@ export function ShareCardDemo({ tokenStats: initialTokenStats = mockTokenStats }
     }
   };
 
-  // Open Twitter with custom text only (no appended URL)
   const shareToTwitter = () => {
-    const tweetText = processTemplate(tweetTemplate, tokenData);
+    const tweetText = processTemplate(templates.shares, tokenData);
     const twitterUrl = `https://twitter.com/intent/tweet?text=${encodeURIComponent(tweetText)}`;
     window.open(twitterUrl, '_blank', 'width=550,height=420');
   };
 
-  const copyTemplate = () => {
-    navigator.clipboard.writeText(processTemplate(tweetTemplate, tokenData));
+  const copyTemplate = (name: TemplateName) => {
+    navigator.clipboard.writeText(processTemplate(templates[name], tokenData));
     toast.success('Tweet text copied!');
   };
+
+  if (isLoading) {
+    return (
+      <Card className="bg-card/50 border-border">
+        <CardContent className="flex items-center justify-center py-12">
+          <Loader2 className="h-6 w-6 animate-spin mr-2" />
+          Loading templates...
+        </CardContent>
+      </Card>
+    );
+  }
 
   return (
     <Card className="bg-card/50 border-border">
       <CardHeader className="pb-3">
         <CardTitle className="text-lg flex items-center gap-2">
-          ✏️ Tweet Template
+          ✏️ Tweet Templates
         </CardTitle>
         <CardDescription>
-          Customize the text for sharing. Use variables like {'{ticker}'} to insert dynamic data.
+          Manage templates for Intel XBot automatic posts and public sharing
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
-        <div className="grid md:grid-cols-2 gap-4">
-          <div className="space-y-2">
-            <Label htmlFor="tweet-template">Template</Label>
-            <Textarea
-              id="tweet-template"
-              value={tweetTemplate}
-              onChange={(e) => setTweetTemplate(e.target.value)}
-              placeholder="Enter your tweet template..."
-              rows={14}
-              className="font-mono text-sm"
-            />
-            <div className="flex gap-2">
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setTweetTemplate(DEFAULT_TWEET_TEMPLATE)}
-                className="text-xs"
-              >
-                <RotateCcw className="h-3 w-3 mr-1" />
-                Reset
-              </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={copyTemplate}
-                className="text-xs"
-              >
-                <Copy className="h-3 w-3 mr-1" />
-                Copy Text
-              </Button>
-            </div>
-          </div>
-          <div className="space-y-2">
-            <Label>Preview {fetchedStats && <Badge variant="secondary" className="ml-2">${fetchedStats.symbol}</Badge>}</Label>
-            <div className="p-3 bg-muted/50 rounded-lg border text-sm whitespace-pre-wrap min-h-[300px]">
-              {processTemplate(tweetTemplate, tokenData)}
-            </div>
-          </div>
-        </div>
+        <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as TemplateName)}>
+          <TabsList className="grid w-full grid-cols-3">
+            <TabsTrigger value="small" className="relative">
+              Small
+              {activeIntelTemplate === 'small' && (
+                <Badge variant="default" className="absolute -top-2 -right-2 text-[10px] px-1 py-0">
+                  Active
+                </Badge>
+              )}
+            </TabsTrigger>
+            <TabsTrigger value="large" className="relative">
+              Large
+              {activeIntelTemplate === 'large' && (
+                <Badge variant="default" className="absolute -top-2 -right-2 text-[10px] px-1 py-0">
+                  Active
+                </Badge>
+              )}
+            </TabsTrigger>
+            <TabsTrigger value="shares">Shares</TabsTrigger>
+          </TabsList>
+
+          {(['small', 'large', 'shares'] as TemplateName[]).map((name) => (
+            <TabsContent key={name} value={name} className="space-y-4">
+              {/* Active toggle for small/large */}
+              {(name === 'small' || name === 'large') && (
+                <div className="flex items-center justify-between p-3 bg-muted/50 rounded-lg">
+                  <div>
+                    <Label className="font-medium">Active for Intel XBot</Label>
+                    <p className="text-xs text-muted-foreground">
+                      {activeIntelTemplate === name 
+                        ? 'This template is used for automatic posts' 
+                        : 'Toggle to use this template for automatic posts'}
+                    </p>
+                  </div>
+                  <Switch
+                    checked={activeIntelTemplate === name}
+                    onCheckedChange={() => handleToggleActive(name)}
+                  />
+                </div>
+              )}
+
+              {name === 'shares' && (
+                <div className="p-3 bg-muted/50 rounded-lg">
+                  <Label className="font-medium">Public Share Template</Label>
+                  <p className="text-xs text-muted-foreground">
+                    Used when users click the Share button on the holders page
+                  </p>
+                </div>
+              )}
+
+              <div className="grid md:grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label>Template</Label>
+                  <Textarea
+                    value={templates[name]}
+                    onChange={(e) => setTemplates(prev => ({ ...prev, [name]: e.target.value }))}
+                    rows={14}
+                    className="font-mono text-sm"
+                  />
+                  <div className="flex gap-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => handleResetTemplate(name)}
+                      className="text-xs"
+                    >
+                      <RotateCcw className="h-3 w-3 mr-1" />
+                      Reset
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => copyTemplate(name)}
+                      className="text-xs"
+                    >
+                      <Copy className="h-3 w-3 mr-1" />
+                      Copy
+                    </Button>
+                    <Button
+                      size="sm"
+                      onClick={() => handleSaveTemplate(name)}
+                      disabled={isSaving}
+                      className="text-xs"
+                    >
+                      {savedStatus[name] ? (
+                        <Check className="h-3 w-3 mr-1" />
+                      ) : (
+                        <Save className="h-3 w-3 mr-1" />
+                      )}
+                      {savedStatus[name] ? 'Saved!' : 'Save'}
+                    </Button>
+                  </div>
+                </div>
+                <div className="space-y-2">
+                  <Label>
+                    Preview 
+                    {fetchedStats && <Badge variant="secondary" className="ml-2">${fetchedStats.symbol}</Badge>}
+                  </Label>
+                  <div className="p-3 bg-muted/50 rounded-lg border text-sm whitespace-pre-wrap min-h-[300px]">
+                    {processTemplate(templates[name], tokenData)}
+                  </div>
+                </div>
+              </div>
+            </TabsContent>
+          ))}
+        </Tabs>
         
         {/* Variables reference */}
         <div className="pt-2 border-t border-border">
@@ -293,20 +426,22 @@ export function ShareCardDemo({ tokenStats: initialTokenStats = mockTokenStats }
           </div>
         </div>
 
-        {/* Share Button */}
+        {/* Test with Shares template */}
         <div className="pt-4 border-t border-border">
           <Button 
             className="w-full bg-sky-500 hover:bg-sky-600"
             onClick={shareToTwitter}
           >
             <Share2 className="h-4 w-4 mr-2" />
-            Share to X (Twitter)
+            Test Shares Template on X
           </Button>
         </div>
 
         {/* Token Fetch + API Post Section */}
         <div className="pt-4 border-t border-border space-y-3">
-          <Label className="text-sm font-medium">Manual API Post (@HoldersIntel)</Label>
+          <Label className="text-sm font-medium">
+            Manual API Post (@HoldersIntel) - Uses {activeIntelTemplate.charAt(0).toUpperCase() + activeIntelTemplate.slice(1)} Template
+          </Label>
           <div className="flex gap-2">
             <Input
               placeholder="Enter token address..."
@@ -338,10 +473,9 @@ export function ShareCardDemo({ tokenStats: initialTokenStats = mockTokenStats }
             ) : (
               <Send className="h-4 w-4 mr-2" />
             )}
-            Post to @HoldersIntel
+            Post to @HoldersIntel ({activeIntelTemplate})
           </Button>
 
-          {/* Holder Breakdown Panel - shown after fetch */}
           {fetchedStats && granularTiers && (
             <HolderBreakdownPanel stats={granularTiers} symbol={fetchedStats.symbol} />
           )}

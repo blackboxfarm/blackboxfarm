@@ -3559,6 +3559,36 @@ export type Database = {
         }
         Relationships: []
       }
+      holders_intel_templates: {
+        Row: {
+          created_at: string | null
+          description: string | null
+          id: string
+          is_active: boolean | null
+          template_name: string
+          template_text: string
+          updated_at: string | null
+        }
+        Insert: {
+          created_at?: string | null
+          description?: string | null
+          id?: string
+          is_active?: boolean | null
+          template_name: string
+          template_text: string
+          updated_at?: string | null
+        }
+        Update: {
+          created_at?: string | null
+          description?: string | null
+          id?: string
+          is_active?: boolean | null
+          template_name?: string
+          template_text?: string
+          updated_at?: string | null
+        }
+        Relationships: []
+      }
       invalid_scraped_tokens: {
         Row: {
           discovery_source: string
