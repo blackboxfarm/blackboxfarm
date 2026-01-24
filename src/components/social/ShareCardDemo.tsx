@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -7,7 +7,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Input } from '@/components/ui/input';
 import { Switch } from '@/components/ui/switch';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Copy, RotateCcw, Share2, Search, Send, Loader2, Save, Check } from 'lucide-react';
+import { Copy, RotateCcw, Share2, Search, Send, Loader2, Save, Check, Play, Square, RefreshCw } from 'lucide-react';
 import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
 import {
@@ -22,6 +22,13 @@ import {
   type TemplateRecord,
 } from '@/lib/share-template';
 import { HolderBreakdownPanel, type GranularTierCounts } from './HolderBreakdownPanel';
+
+interface CronStatus {
+  schedulersActive: number;
+  posterActive: boolean;
+  lastChecked: Date | null;
+  pendingQueue: number;
+}
 
 interface TokenStats {
   symbol: string;
@@ -75,12 +82,103 @@ export function ShareCardDemo({ tokenStats: initialTokenStats = mockTokenStats }
   const [fetchedStats, setFetchedStats] = useState<TokenStats | null>(null);
   const [granularTiers, setGranularTiers] = useState<GranularTierCounts | null>(null);
 
+  // Intel XBot status
+  const [cronStatus, setCronStatus] = useState<CronStatus>({
+    schedulersActive: 0,
+    posterActive: false,
+    lastChecked: null,
+    pendingQueue: 0,
+  });
+  const [isStartingXBot, setIsStartingXBot] = useState(false);
+  const [isStoppingXBot, setIsStoppingXBot] = useState(false);
+  const [isCheckingStatus, setIsCheckingStatus] = useState(false);
+
   const tokenStats = fetchedStats || initialTokenStats;
 
-  // Load templates from database on mount
+  // Check Intel XBot status from database
+  const checkXBotStatus = useCallback(async () => {
+    setIsCheckingStatus(true);
+    try {
+      // Query cron jobs status using RPC (cast to any since types may not be updated)
+      const { data: cronData, error: cronError } = await (supabase.rpc as any)('get_cron_job_status');
+      
+      // Query pending queue items
+      const { count: pendingCount } = await supabase
+        .from('holders_intel_post_queue')
+        .select('id', { count: 'exact', head: true })
+        .in('status', ['pending', 'processing']);
+
+      if (cronError) {
+        console.error('Failed to get cron status:', cronError);
+        // Fallback: just check queue
+        setCronStatus(prev => ({
+          ...prev,
+          pendingQueue: pendingCount || 0,
+          lastChecked: new Date(),
+        }));
+      } else if (cronData) {
+        const jobs = cronData as { jobname: string; active: boolean }[];
+        const schedulers = jobs.filter(j => j.jobname.includes('scheduler') && j.active).length;
+        const poster = jobs.some(j => j.jobname.includes('poster') && j.active);
+        
+        setCronStatus({
+          schedulersActive: schedulers,
+          posterActive: poster,
+          lastChecked: new Date(),
+          pendingQueue: pendingCount || 0,
+        });
+      }
+    } catch (err) {
+      console.error('Error checking XBot status:', err);
+    } finally {
+      setIsCheckingStatus(false);
+    }
+  }, []);
+
+  const handleStartXBot = async () => {
+    setIsStartingXBot(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('intel-xbot-start');
+      if (error) throw error;
+      toast.success(data?.message || 'Intel XBot started!');
+      await checkXBotStatus();
+    } catch (err: any) {
+      console.error('Start XBot failed:', err);
+      toast.error(`Failed to start: ${err.message}`);
+    } finally {
+      setIsStartingXBot(false);
+    }
+  };
+
+  const handleStopXBot = async () => {
+    setIsStoppingXBot(true);
+    try {
+      // Clear queue items
+      const { data: cleared } = await supabase
+        .from('holders_intel_post_queue')
+        .update({ status: 'skipped', error_message: 'Manual stop' })
+        .in('status', ['pending', 'processing'])
+        .select('id');
+      
+      // Kill crons
+      const { error } = await supabase.functions.invoke('intel-xbot-kill');
+      if (error) console.warn('Kill function error:', error);
+      
+      toast.success(`Intel XBot stopped. Cleared ${cleared?.length || 0} queued items.`);
+      await checkXBotStatus();
+    } catch (err: any) {
+      console.error('Stop XBot failed:', err);
+      toast.error(`Failed to stop: ${err.message}`);
+    } finally {
+      setIsStoppingXBot(false);
+    }
+  };
+
+  // Load templates and check XBot status on mount
   useEffect(() => {
     loadTemplates();
-  }, []);
+    checkXBotStatus();
+  }, [checkXBotStatus]);
 
   const loadTemplates = async () => {
     setIsLoading(true);
@@ -287,17 +385,108 @@ export function ShareCardDemo({ tokenStats: initialTokenStats = mockTokenStats }
     );
   }
 
+  const isXBotRunning = cronStatus.posterActive && cronStatus.schedulersActive >= 3;
+
   return (
-    <Card className="bg-card/50 border-border">
-      <CardHeader className="pb-3">
-        <CardTitle className="text-lg flex items-center gap-2">
-          ✏️ Tweet Templates
-        </CardTitle>
-        <CardDescription>
-          Manage templates for Intel XBot automatic posts and public sharing
-        </CardDescription>
-      </CardHeader>
-      <CardContent className="space-y-4">
+    <div className="space-y-6">
+      {/* Intel XBot Control Panel */}
+      <Card className="bg-card/50 border-border">
+        <CardHeader className="pb-3">
+          <div className="flex items-center justify-between">
+            <div>
+              <CardTitle className="text-lg flex items-center gap-2">
+                🤖 Intel XBot Controls
+              </CardTitle>
+              <CardDescription>
+                Manage automated posting to @HoldersIntel
+              </CardDescription>
+            </div>
+            <div className="flex items-center gap-2">
+              {/* Status Badge */}
+              <Badge 
+                variant={isXBotRunning ? "default" : "secondary"} 
+                className={`${isXBotRunning ? 'bg-green-600 hover:bg-green-600' : 'bg-muted'}`}
+              >
+                {isXBotRunning ? '✓ RUNNING' : '⏹ STOPPED'}
+              </Badge>
+            </div>
+          </div>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          {/* Status Details */}
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 p-4 bg-muted/30 rounded-lg">
+            <div className="text-center">
+              <p className="text-2xl font-bold">{cronStatus.schedulersActive}</p>
+              <p className="text-xs text-muted-foreground">Schedulers Active</p>
+            </div>
+            <div className="text-center">
+              <p className="text-2xl font-bold">{cronStatus.posterActive ? '✓' : '✗'}</p>
+              <p className="text-xs text-muted-foreground">Poster Job</p>
+            </div>
+            <div className="text-center">
+              <p className="text-2xl font-bold">{cronStatus.pendingQueue}</p>
+              <p className="text-xs text-muted-foreground">Queue Items</p>
+            </div>
+            <div className="text-center">
+              <p className="text-sm font-mono">
+                {cronStatus.lastChecked 
+                  ? cronStatus.lastChecked.toLocaleTimeString() 
+                  : '--:--:--'}
+              </p>
+              <p className="text-xs text-muted-foreground">Last Checked</p>
+            </div>
+          </div>
+
+          {/* Control Buttons */}
+          <div className="flex gap-3">
+            <Button
+              onClick={handleStartXBot}
+              disabled={isStartingXBot || isStoppingXBot}
+              className="flex-1 bg-green-600 hover:bg-green-700"
+            >
+              {isStartingXBot ? (
+                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+              ) : (
+                <Play className="h-4 w-4 mr-2" />
+              )}
+              {isStartingXBot ? 'Starting...' : 'START'}
+            </Button>
+            <Button
+              onClick={handleStopXBot}
+              disabled={isStartingXBot || isStoppingXBot}
+              variant="destructive"
+              className="flex-1"
+            >
+              {isStoppingXBot ? (
+                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+              ) : (
+                <Square className="h-4 w-4 mr-2" />
+              )}
+              {isStoppingXBot ? 'Stopping...' : 'STOP'}
+            </Button>
+            <Button
+              onClick={checkXBotStatus}
+              disabled={isCheckingStatus}
+              variant="outline"
+              size="icon"
+            >
+              <RefreshCw className={`h-4 w-4 ${isCheckingStatus ? 'animate-spin' : ''}`} />
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Tweet Templates Card */}
+      <Card className="bg-card/50 border-border">
+        <CardHeader className="pb-3">
+          <CardTitle className="text-lg flex items-center gap-2">
+            ✏️ Tweet Templates
+          </CardTitle>
+          <CardDescription>
+            Manage templates for Intel XBot automatic posts and public sharing
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
         <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as TemplateName)}>
           <TabsList className="grid w-full grid-cols-3">
             <TabsTrigger value="small" className="relative">
@@ -482,5 +671,6 @@ export function ShareCardDemo({ tokenStats: initialTokenStats = mockTokenStats }
         </div>
       </CardContent>
     </Card>
+    </div>
   );
 }
