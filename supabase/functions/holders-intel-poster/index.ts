@@ -34,9 +34,14 @@ function asCount(value: any): number {
 }
 
 function processTemplate(template: string, data: any): string {
+  const tickerUpper = (data.symbol || 'TOKEN').toUpperCase();
+  const tokenName = data.name || data.tokenName || 'Unknown';
+  
   return template
-    .replace(/\{TICKER\}/g, `$${data.symbol || 'TOKEN'}`)
-    .replace(/\{ticker\}/g, data.symbol || 'TOKEN')
+    .replace(/\{TICKER\}/g, `$${tickerUpper}`)
+    .replace(/\{ticker\}/g, tickerUpper)
+    .replace(/\{NAME\}/g, tokenName)
+    .replace(/\{name\}/g, tokenName)
     .replace(/\{TOTAL_WALLETS\}/g, (data.totalHolders || 0).toLocaleString())
     .replace(/\{totalWallets\}/g, (data.totalHolders || 0).toLocaleString())
     .replace(/\{REAL_HOLDERS\}/g, (data.realHolders || 0).toLocaleString())
@@ -205,6 +210,7 @@ Deno.serve(async (req) => {
 
       const stats = {
         symbol: (report?.tokenSymbol || report?.symbol || item.symbol || 'UNKNOWN').toString(),
+        name: (report?.tokenName || report?.name || item.name || 'Unknown').toString(),
         tokenMint: item.token_mint,
         totalHolders,
         // bagless-holders-report sets realHolders = realWalletCount ($50-$199)
