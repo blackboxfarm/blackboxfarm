@@ -7,6 +7,7 @@ import { NotificationCenter } from "@/components/NotificationCenter";
 import { UserSettingsDropdown } from "@/components/settings/UserSettingsDropdown";
 import { useAuth } from "@/hooks/useAuth";
 import { useUserRoles } from "@/hooks/useUserRoles";
+import { useHoldersPageTracking } from "@/hooks/useHoldersPageTracking";
 import { Button } from "@/components/ui/button";
 import { useNavigate } from "react-router-dom";
 import { Shield, ExternalLink } from "lucide-react";
@@ -18,15 +19,26 @@ import holdersHero from "@/assets/holders-hero.png";
 
 export default function Holders() {
   const [tokenFromUrl, setTokenFromUrl] = useState<string>("");
+  const [versionParam, setVersionParam] = useState<string>("");
   const { user } = useAuth();
   const { isSuperAdmin } = useUserRoles();
   const navigate = useNavigate();
+  
+  // Track page visits
+  const { trackReportGenerated } = useHoldersPageTracking({
+    tokenPreloaded: tokenFromUrl,
+    versionParam: versionParam,
+  });
 
   useEffect(() => {
     const urlParams = new URLSearchParams(window.location.search);
     const tokenParam = urlParams.get('token');
+    const vParam = urlParams.get('v');
     if (tokenParam) {
       setTokenFromUrl(tokenParam.trim());
+    }
+    if (vParam) {
+      setVersionParam(vParam);
     }
   }, []);
 
@@ -121,7 +133,7 @@ export default function Holders() {
 
         {/* Main Content */}
         <div className="w-full">
-          <BaglessHoldersReport initialToken={tokenFromUrl} />
+          <BaglessHoldersReport initialToken={tokenFromUrl} onReportGenerated={trackReportGenerated} />
         </div>
       </div>
     </div>
