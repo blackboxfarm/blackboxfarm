@@ -2,10 +2,12 @@ import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
+import { usePreviewSuperAdmin } from "@/hooks/usePreviewSuperAdmin";
 
 export function EmergencyStopButton() {
   const [loading, setLoading] = useState(false);
   const [stopped, setStopped] = useState(false);
+  const isPreview = usePreviewSuperAdmin();
 
   const handleEmergencyStop = async () => {
     setLoading(true);
@@ -34,6 +36,11 @@ export function EmergencyStopButton() {
       setLoading(false);
     }
   };
+
+  // Only show on preview/development environments
+  if (!isPreview) {
+    return null;
+  }
 
   if (stopped) {
     return (
