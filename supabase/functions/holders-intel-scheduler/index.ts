@@ -63,63 +63,84 @@ function getPreviousSnapshotSlots(currentSlot: string): string[] {
 }
 
 async function fetchTrendingTokens(): Promise<TrendingToken[]> {
-  console.log('[scheduler] Fetching top 50 trending Solana tokens from DexScreener...');
+  console.log('[scheduler] Fetching top trending Solana tokens from DexScreener...');
   
   const browserHeaders = {
     'Accept': 'application/json',
-    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-    'Accept-Language': 'en-US,en;q=0.9',
-    'Accept-Encoding': 'gzip, deflate, br',
-    'Referer': 'https://dexscreener.com/',
-    'Origin': 'https://dexscreener.com',
+    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
   };
   
+  const allTokens: TrendingToken[] = [];
+  const seenMints = new Set<string>();
+  
   try {
-    // Try the token-profiles endpoint first (known to work)
-    let response = await fetch(
-      'https://api.dexscreener.com/token-profiles/latest/v1',
+    // Strategy 1: Get top boosted tokens (officially promoted/trending)
+    console.log('[scheduler] Fetching boosted tokens...');
+    const boostResponse = await fetch(
+      'https://api.dexscreener.com/token-boosts/top/v1',
       { headers: browserHeaders }
     );
     
-    if (!response.ok) {
-      console.log(`[scheduler] token-profiles failed with ${response.status}, trying search endpoint...`);
+    if (boostResponse.ok) {
+      const boostData = await boostResponse.json();
+      console.log(`[scheduler] Boosted tokens response: ${boostData?.length || 0} items`);
       
-      // Fallback: search for popular Solana tokens
-      response = await fetch(
-        'https://api.dexscreener.com/latest/dex/search?q=solana',
-        { headers: browserHeaders }
-      );
+      for (const item of (boostData || [])) {
+        if (item.chainId === 'solana' && item.tokenAddress && !seenMints.has(item.tokenAddress)) {
+          seenMints.add(item.tokenAddress);
+          allTokens.push({
+            mint: item.tokenAddress,
+            symbol: item.symbol || 'UNKNOWN',
+            name: item.name || item.description || 'Unknown Token',
+            marketCap: 0,
+            priceChange24h: 0,
+          });
+        }
+      }
+      console.log(`[scheduler] After boosted: ${allTokens.length} Solana tokens`);
     }
     
-    if (!response.ok) {
-      throw new Error(`DexScreener API error: ${response.status}`);
+    // Strategy 2: Get top gainers from pairs search
+    console.log('[scheduler] Fetching top pairs...');
+    const searchResponse = await fetch(
+      'https://api.dexscreener.com/latest/dex/search?q=SOL',
+      { headers: browserHeaders }
+    );
+    
+    if (searchResponse.ok) {
+      const searchData = await searchResponse.json();
+      const pairs = searchData.pairs || [];
+      
+      // Sort by 24h volume to get most active
+      const solanaPairs = pairs
+        .filter((p: any) => p.chainId === 'solana')
+        .sort((a: any, b: any) => (b.volume?.h24 || 0) - (a.volume?.h24 || 0))
+        .slice(0, 100);
+      
+      console.log(`[scheduler] Found ${solanaPairs.length} active Solana pairs`);
+      
+      for (const pair of solanaPairs) {
+        const mint = pair.baseToken?.address;
+        if (mint && !seenMints.has(mint)) {
+          seenMints.add(mint);
+          allTokens.push({
+            mint,
+            symbol: pair.baseToken?.symbol || 'UNKNOWN',
+            name: pair.baseToken?.name || 'Unknown Token',
+            marketCap: pair.marketCap || pair.fdv || 0,
+            priceChange24h: pair.priceChange?.h24 || 0,
+          });
+        }
+      }
+      console.log(`[scheduler] After search: ${allTokens.length} total tokens`);
     }
     
-    const data = await response.json();
+    // Return top 50
+    const result = allTokens.slice(0, 50);
+    console.log(`[scheduler] Final result: ${result.length} tokens`);
+    console.log(`[scheduler] Sample: ${result.slice(0, 5).map(t => t.symbol).join(', ')}`);
     
-    console.log('[scheduler] Raw API response type:', Array.isArray(data) ? 'array' : typeof data);
-    console.log('[scheduler] First item sample:', JSON.stringify((data.pairs || data)?.[0], null, 2)?.slice(0, 500));
-    
-    // Handle different response formats
-    let allItems = data.pairs || data || [];
-    
-    // Filter for Solana tokens and take top 50
-    const solanaTokens = allItems
-      .filter((p: any) => (p.chainId === 'solana' || p.chain === 'solana'))
-      .slice(0, 50);
-    
-    console.log(`[scheduler] Found ${solanaTokens.length} Solana tokens`);
-    
-    const tokens: TrendingToken[] = solanaTokens.map((pair: any) => ({
-      mint: pair.tokenAddress || pair.baseToken?.address,
-      symbol: pair.baseToken?.symbol || pair.symbol || 'UNKNOWN',
-      name: pair.baseToken?.name || pair.name || 'Unknown Token',
-      marketCap: pair.marketCap || 0,
-      priceChange24h: pair.priceChange?.h24 || 0,
-    }));
-    
-    console.log(`[scheduler] Total tokens collected: ${tokens.length}`);
-    return tokens;
+    return result;
     
   } catch (error) {
     console.error('[scheduler] Error fetching trending tokens:', error);
