@@ -18,7 +18,10 @@ import {
   Share2,
   Search,
   FileText,
-  Eye
+  Eye,
+  UserCheck,
+  UserX,
+  BarChart3
 } from 'lucide-react';
 import { format, subDays, subHours, startOfDay, endOfDay } from 'date-fns';
 import {
@@ -62,6 +65,8 @@ interface VisitRecord {
   time_on_page_seconds: number | null;
   reports_generated: number;
   tokens_analyzed: string[] | null;
+  is_authenticated: boolean | null;
+  auth_method: string | null;
 }
 
 interface AggregatedStats {
@@ -78,6 +83,13 @@ interface AggregatedStats {
   referrerBreakdown: { domain: string; count: number }[];
   hourlyVisits: { hour: string; visits: number }[];
   topTokens: { token: string; count: number }[];
+  // New auth tracking
+  authenticatedVisits: number;
+  anonymousVisits: number;
+  authMethodBreakdown: { method: string; count: number }[];
+  // Tokens per session breakdown
+  tokensPerSession: { range: string; count: number }[];
+  avgTokensPerSession: number;
 }
 
 const COLORS = ['hsl(var(--primary))', 'hsl(var(--chart-2))', 'hsl(var(--chart-3))', 'hsl(var(--chart-4))', 'hsl(var(--chart-5))'];
@@ -142,6 +154,11 @@ export function HoldersVisitorsDashboard() {
         referrerBreakdown: [],
         hourlyVisits: [],
         topTokens: [],
+        authenticatedVisits: 0,
+        anonymousVisits: 0,
+        authMethodBreakdown: [],
+        tokensPerSession: [],
+        avgTokensPerSession: 0,
       };
     }
 
@@ -157,6 +174,44 @@ export function HoldersVisitorsDashboard() {
       : 0;
 
     const totalReports = visits.reduce((sum, v) => sum + (v.reports_generated || 0), 0);
+
+    // Auth status tracking
+    const authenticatedVisits = visits.filter(v => v.is_authenticated).length;
+    const anonymousVisits = visits.filter(v => !v.is_authenticated).length;
+
+    // Auth method breakdown
+    const authMethodCounts: Record<string, number> = {};
+    visits.forEach(v => {
+      const method = v.auth_method || 'anonymous';
+      authMethodCounts[method] = (authMethodCounts[method] || 0) + 1;
+    });
+    const authMethodBreakdown = Object.entries(authMethodCounts)
+      .map(([method, count]) => ({ method, count }))
+      .sort((a, b) => b.count - a.count);
+
+    // Tokens per session breakdown
+    const tokenCountsPerSession = visits.map(v => v.tokens_analyzed?.length || 0);
+    const avgTokensPerSession = tokenCountsPerSession.length > 0
+      ? Math.round((tokenCountsPerSession.reduce((a, b) => a + b, 0) / tokenCountsPerSession.length) * 100) / 100
+      : 0;
+    
+    // Group sessions by token count ranges
+    const tokensPerSessionRanges: Record<string, number> = {
+      '0': 0,
+      '1': 0,
+      '2-3': 0,
+      '4-5': 0,
+      '6+': 0,
+    };
+    tokenCountsPerSession.forEach(count => {
+      if (count === 0) tokensPerSessionRanges['0']++;
+      else if (count === 1) tokensPerSessionRanges['1']++;
+      else if (count <= 3) tokensPerSessionRanges['2-3']++;
+      else if (count <= 5) tokensPerSessionRanges['4-5']++;
+      else tokensPerSessionRanges['6+']++;
+    });
+    const tokensPerSession = Object.entries(tokensPerSessionRanges)
+      .map(([range, count]) => ({ range, count }));
 
     // Device breakdown
     const deviceCounts: Record<string, number> = {};
@@ -226,6 +281,11 @@ export function HoldersVisitorsDashboard() {
       referrerBreakdown,
       hourlyVisits,
       topTokens,
+      authenticatedVisits,
+      anonymousVisits,
+      authMethodBreakdown,
+      tokensPerSession,
+      avgTokensPerSession,
     };
   }, [visits]);
 
@@ -370,6 +430,58 @@ export function HoldersVisitorsDashboard() {
         </Card>
       </div>
 
+      {/* Auth & Engagement Metrics */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <Card>
+          <CardContent className="pt-4">
+            <div className="flex items-center gap-2 text-muted-foreground mb-1">
+              <UserCheck className="h-4 w-4 text-green-500" />
+              <span className="text-xs">Logged In</span>
+            </div>
+            <p className="text-2xl font-bold">{stats.authenticatedVisits.toLocaleString()}</p>
+            <p className="text-xs text-muted-foreground">
+              {stats.totalVisits > 0 ? Math.round((stats.authenticatedVisits / stats.totalVisits) * 100) : 0}% of visits
+            </p>
+          </CardContent>
+        </Card>
+        
+        <Card>
+          <CardContent className="pt-4">
+            <div className="flex items-center gap-2 text-muted-foreground mb-1">
+              <UserX className="h-4 w-4 text-orange-500" />
+              <span className="text-xs">Anonymous</span>
+            </div>
+            <p className="text-2xl font-bold">{stats.anonymousVisits.toLocaleString()}</p>
+            <p className="text-xs text-muted-foreground">
+              {stats.totalVisits > 0 ? Math.round((stats.anonymousVisits / stats.totalVisits) * 100) : 0}% of visits
+            </p>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardContent className="pt-4">
+            <div className="flex items-center gap-2 text-muted-foreground mb-1">
+              <BarChart3 className="h-4 w-4" />
+              <span className="text-xs">Avg Tokens/Session</span>
+            </div>
+            <p className="text-2xl font-bold">{stats.avgTokensPerSession}</p>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardContent className="pt-4">
+            <div className="flex items-center gap-2 text-muted-foreground mb-1">
+              <TrendingUp className="h-4 w-4" />
+              <span className="text-xs">Conversion Rate</span>
+            </div>
+            <p className="text-2xl font-bold">
+              {stats.totalVisits > 0 ? Math.round((stats.totalReportsGenerated / stats.totalVisits) * 100) : 0}%
+            </p>
+            <p className="text-xs text-muted-foreground">Reports / Visits</p>
+          </CardContent>
+        </Card>
+      </div>
+
       {/* Charts Row */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Hourly Traffic */}
@@ -435,9 +547,11 @@ export function HoldersVisitorsDashboard() {
       </div>
 
       <Tabs defaultValue="referrers" className="space-y-4">
-        <TabsList>
+        <TabsList className="flex-wrap h-auto gap-1">
           <TabsTrigger value="referrers">Top Referrers</TabsTrigger>
           <TabsTrigger value="tokens">Top Tokens</TabsTrigger>
+          <TabsTrigger value="session-tokens">Tokens/Session</TabsTrigger>
+          <TabsTrigger value="auth-methods">Auth Methods</TabsTrigger>
           <TabsTrigger value="browsers">Browsers</TabsTrigger>
           <TabsTrigger value="recent">Recent Visits</TabsTrigger>
         </TabsList>
@@ -497,6 +611,81 @@ export function HoldersVisitorsDashboard() {
           </Card>
         </TabsContent>
 
+        <TabsContent value="session-tokens">
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-sm font-medium">Tokens Analyzed Per Session</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="h-64">
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={stats.tokensPerSession}>
+                    <XAxis dataKey="range" />
+                    <YAxis />
+                    <Tooltip />
+                    <Bar dataKey="count" fill="hsl(var(--chart-3))" radius={[4, 4, 0, 0]} />
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+              <div className="mt-4 text-sm text-muted-foreground">
+                <p>Average: <span className="font-semibold text-foreground">{stats.avgTokensPerSession}</span> tokens per session</p>
+              </div>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="auth-methods">
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-sm font-medium">Authentication Methods</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                <div className="h-64">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <PieChart>
+                      <Pie
+                        data={stats.authMethodBreakdown.map(item => ({ name: item.method, value: item.count }))}
+                        dataKey="value"
+                        nameKey="name"
+                        cx="50%"
+                        cy="50%"
+                        outerRadius={80}
+                        label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
+                      >
+                        {stats.authMethodBreakdown.map((_, index) => (
+                          <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                        ))}
+                      </Pie>
+                      <Tooltip />
+                    </PieChart>
+                  </ResponsiveContainer>
+                </div>
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Method</TableHead>
+                      <TableHead className="text-right">Count</TableHead>
+                      <TableHead className="text-right">%</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {stats.authMethodBreakdown.map((item, i) => (
+                      <TableRow key={i}>
+                        <TableCell className="capitalize">{item.method}</TableCell>
+                        <TableCell className="text-right">{item.count}</TableCell>
+                        <TableCell className="text-right">
+                          {stats.totalVisits > 0 ? Math.round((item.count / stats.totalVisits) * 100) : 0}%
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
         <TabsContent value="browsers">
           <Card>
             <CardHeader>
@@ -528,8 +717,9 @@ export function HoldersVisitorsDashboard() {
                   <TableRow>
                     <TableHead>Time</TableHead>
                     <TableHead>Source</TableHead>
+                    <TableHead>Auth</TableHead>
                     <TableHead>Device</TableHead>
-                    <TableHead>Token</TableHead>
+                    <TableHead>Tokens</TableHead>
                     <TableHead className="text-right">Duration</TableHead>
                     <TableHead className="text-right">Reports</TableHead>
                   </TableRow>
@@ -542,16 +732,22 @@ export function HoldersVisitorsDashboard() {
                       </TableCell>
                       <TableCell>{getSourceBadge(visit)}</TableCell>
                       <TableCell>
+                        {visit.is_authenticated ? (
+                          <Badge variant="secondary" className="bg-green-500/20 text-green-400 text-xs">
+                            {visit.auth_method || 'logged in'}
+                          </Badge>
+                        ) : (
+                          <Badge variant="outline" className="text-muted-foreground text-xs">anon</Badge>
+                        )}
+                      </TableCell>
+                      <TableCell>
                         <div className="flex items-center gap-1">
                           {getDeviceIcon(visit.device_type)}
                           <span className="text-xs text-muted-foreground">{visit.browser}</span>
                         </div>
                       </TableCell>
-                      <TableCell className="font-mono text-xs">
-                        {visit.token_preloaded 
-                          ? `${visit.token_preloaded.slice(0, 6)}...` 
-                          : <span className="text-muted-foreground">—</span>
-                        }
+                      <TableCell className="text-sm">
+                        {visit.tokens_analyzed?.length || 0}
                       </TableCell>
                       <TableCell className="text-right text-sm">
                         {visit.time_on_page_seconds 

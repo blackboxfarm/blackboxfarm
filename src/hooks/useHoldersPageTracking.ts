@@ -148,6 +148,18 @@ export const useHoldersPageTracking = (trackingData: TrackingData = {}) => {
       // Check if this looks like it came from an OG share (has version param)
       const hasOgImage = !!versionParam;
 
+      // Determine auth method if authenticated
+      const getAuthMethod = (): string => {
+        if (!user) return 'anonymous';
+        // Check provider from user metadata if available
+        const provider = user.app_metadata?.provider;
+        if (provider === 'google') return 'google';
+        if (provider === 'github') return 'github';
+        if (provider === 'twitter') return 'twitter';
+        if (user.email) return 'email';
+        return 'unknown';
+      };
+
       const visitData = {
         session_id: sessionId,
         visitor_fingerprint: fingerprint,
@@ -171,6 +183,8 @@ export const useHoldersPageTracking = (trackingData: TrackingData = {}) => {
         screen_height: screen.height,
         reports_generated: 0,
         tokens_analyzed: [] as string[],
+        is_authenticated: !!user,
+        auth_method: getAuthMethod(),
       };
 
       const { data, error } = await supabase
