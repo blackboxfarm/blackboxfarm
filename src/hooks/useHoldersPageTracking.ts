@@ -210,9 +210,8 @@ export const useHoldersPageTracking = (trackingData: TrackingData = {}) => {
       if (visitIdRef.current) {
         const timeOnPage = Math.floor((Date.now() - startTimeRef.current) / 1000);
         
-        // Use sendBeacon for reliable unload tracking
+        // Use sendBeacon with proper headers for reliable unload tracking
         const updateData = {
-          id: visitIdRef.current,
           time_on_page_seconds: timeOnPage,
           exited_at: new Date().toISOString(),
           exit_type: 'close',
@@ -220,10 +219,22 @@ export const useHoldersPageTracking = (trackingData: TrackingData = {}) => {
           tokens_analyzed: Array.from(tokensAnalyzedRef.current),
         };
         
-        navigator.sendBeacon(
-          `${import.meta.env.VITE_SUPABASE_URL}/rest/v1/holders_page_visits?id=eq.${visitIdRef.current}`,
-          JSON.stringify(updateData)
-        );
+        // Create a blob with proper content type for sendBeacon PATCH workaround
+        const blob = new Blob([JSON.stringify(updateData)], {
+          type: 'application/json',
+        });
+        
+        // sendBeacon doesn't support custom headers, so we use fetch with keepalive instead
+        fetch(`https://apxauapuusmgwbbzjgfl.supabase.co/rest/v1/holders_page_visits?id=eq.${visitIdRef.current}`, {
+          method: 'PATCH',
+          headers: {
+            'Content-Type': 'application/json',
+            'apikey': 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFweGF1YXB1dXNtZ3diYnpqZ2ZsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTQ1OTEzMDUsImV4cCI6MjA3MDE2NzMwNX0.w8IrKq4YVStF3TkdEcs5mCSeJsxjkaVq2NFkypYOXHU',
+            'Prefer': 'return=minimal',
+          },
+          body: JSON.stringify(updateData),
+          keepalive: true, // Ensures the request completes even after page unload
+        }).catch(() => {}); // Silently fail
       }
     };
 
