@@ -757,11 +757,16 @@ export function FlipItDashboard() {
     };
   }, []);
 
+  // Refresh wallet balance when wallet selection changes AND wallets are loaded
   useEffect(() => {
-    if (selectedWallet) {
-      refreshWalletBalance();
+    if (selectedWallet && wallets.length > 0) {
+      const wallet = wallets.find(w => w.id === selectedWallet);
+      if (wallet) {
+        console.log('[FlipIt] Fetching balance for wallet:', wallet.pubkey.slice(0, 8));
+        refreshWalletBalance();
+      }
     }
-  }, [selectedWallet]);
+  }, [selectedWallet, wallets]);
 
   // Check blacklist/whitelist status for token, creator wallet, or twitter
   const checkBlacklistStatus = useCallback(async (tokenMint: string, creatorWallet: string | null, twitterUrl: string | null) => {
