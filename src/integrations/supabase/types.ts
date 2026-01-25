@@ -3594,6 +3594,7 @@ export type Database = {
       }
       holders_page_visits: {
         Row: {
+          auth_method: string | null
           browser: string | null
           country_code: string | null
           created_at: string
@@ -3604,6 +3605,7 @@ export type Database = {
           has_og_image: boolean | null
           id: string
           ip_address: string | null
+          is_authenticated: boolean | null
           os: string | null
           page_load_time_ms: number | null
           referrer: string | null
@@ -3626,6 +3628,7 @@ export type Database = {
           visitor_fingerprint: string | null
         }
         Insert: {
+          auth_method?: string | null
           browser?: string | null
           country_code?: string | null
           created_at?: string
@@ -3636,6 +3639,7 @@ export type Database = {
           has_og_image?: boolean | null
           id?: string
           ip_address?: string | null
+          is_authenticated?: boolean | null
           os?: string | null
           page_load_time_ms?: number | null
           referrer?: string | null
@@ -3658,6 +3662,7 @@ export type Database = {
           visitor_fingerprint?: string | null
         }
         Update: {
+          auth_method?: string | null
           browser?: string | null
           country_code?: string | null
           created_at?: string
@@ -3668,6 +3673,7 @@ export type Database = {
           has_og_image?: boolean | null
           id?: string
           ip_address?: string | null
+          is_authenticated?: boolean | null
           os?: string | null
           page_load_time_ms?: number | null
           referrer?: string | null
