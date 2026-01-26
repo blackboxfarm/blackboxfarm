@@ -65,6 +65,14 @@ function getSessionId(): string {
   return sessionId;
 }
 
+function safeUUID(prefix: string) {
+  try {
+    return crypto.randomUUID();
+  } catch {
+    return `${prefix}_${Date.now()}_${Math.random().toString(16).slice(2)}`;
+  }
+}
+
 // Get visitor fingerprint (simple version)
 async function getVisitorFingerprint(): Promise<string> {
   // Try to get existing fingerprint
@@ -137,6 +145,7 @@ export const useHoldersPageTracking = (trackingData: TrackingData = {}) => {
       console.log('[Holders Tracking] Starting tracking initialization...');
       
       let sessionId: string;
+      const visitId = safeUUID('visit');
       let fingerprint: string;
       
       try {
@@ -190,6 +199,7 @@ export const useHoldersPageTracking = (trackingData: TrackingData = {}) => {
         };
 
         const visitData = {
+          id: visitId,
           session_id: sessionId,
           visitor_fingerprint: fingerprint,
           user_agent: userAgent,
@@ -218,11 +228,13 @@ export const useHoldersPageTracking = (trackingData: TrackingData = {}) => {
 
         console.log('[Holders Tracking] Attempting insert with data:', JSON.stringify(visitData, null, 2));
         
-        const { data, error } = await supabase
+        // IMPORTANT:
+        // Do NOT request returned rows here. The table is intentionally not readable by anon users,
+        // and PostgREST RETURNING/representation can fail when SELECT is restricted.
+        // We generate the visit id client-side and use it for subsequent updates.
+        const { error } = await supabase
           .from('holders_page_visits')
-          .insert(visitData)
-          .select('id')
-          .single();
+          .insert(visitData);
 
         if (error) {
           console.error('[Holders Tracking] Insert error:', error.message, error.code, error.details, error.hint);
@@ -234,25 +246,23 @@ export const useHoldersPageTracking = (trackingData: TrackingData = {}) => {
             headers: {
               'Content-Type': 'application/json',
               'apikey': 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFweGF1YXB1dXNtZ3diYnpqZ2ZsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTQ1OTEzMDUsImV4cCI6MjA3MDE2NzMwNX0.w8IrKq4YVStF3TkdEcs5mCSeJsxjkaVq2NFkypYOXHU',
-              'Prefer': 'return=representation',
+              // Avoid requiring SELECT/representation
+              'Prefer': 'return=minimal',
             },
             body: JSON.stringify(visitData),
           });
           
           if (fallbackResponse.ok) {
-            const fallbackData = await fallbackResponse.json();
-            console.log('[Holders Tracking] Fallback insert succeeded:', fallbackData);
-            if (fallbackData && fallbackData[0]) {
-              visitIdRef.current = fallbackData[0].id;
-            }
+            console.log('[Holders Tracking] Fallback insert succeeded');
+            visitIdRef.current = visitId;
           } else {
             const errorText = await fallbackResponse.text();
             console.error('[Holders Tracking] Fallback insert failed:', fallbackResponse.status, errorText);
           }
-        } else if (data) {
-          console.log('[Holders Tracking] Visit recorded successfully:', data.id);
-          visitIdRef.current = data.id;
-          
+        } else {
+          console.log('[Holders Tracking] Visit recorded successfully:', visitId);
+          visitIdRef.current = visitId;
+
           if (tokenPreloaded) {
             tokensAnalyzedRef.current.add(tokenPreloaded);
           }
