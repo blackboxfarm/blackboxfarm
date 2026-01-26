@@ -134,9 +134,28 @@ export const useHoldersPageTracking = (trackingData: TrackingData = {}) => {
     isTrackingRef.current = true;
 
     const initTracking = async () => {
+      console.log('[Holders Tracking] Starting tracking initialization...');
+      
+      let sessionId: string;
+      let fingerprint: string;
+      
       try {
-        const sessionId = getSessionId();
-        const fingerprint = await getVisitorFingerprint();
+        sessionId = getSessionId();
+        console.log('[Holders Tracking] Session ID:', sessionId);
+      } catch (e) {
+        console.error('[Holders Tracking] Failed to get session ID:', e);
+        sessionId = 'fallback_' + Date.now();
+      }
+      
+      try {
+        fingerprint = await getVisitorFingerprint();
+        console.log('[Holders Tracking] Fingerprint generated');
+      } catch (e) {
+        console.error('[Holders Tracking] Failed to get fingerprint:', e);
+        fingerprint = 'fallback_fp_' + Date.now();
+      }
+      
+      try {
         const userAgent = navigator.userAgent;
         const { deviceType, browser, os } = parseUserAgent(userAgent);
         const referrer = document.referrer;
@@ -151,13 +170,17 @@ export const useHoldersPageTracking = (trackingData: TrackingData = {}) => {
         const hasOgImage = !!versionParam;
 
         // Get current auth state directly (don't rely on user from hook closure)
-        const { data: authData } = await supabase.auth.getUser();
-        const currentUser = authData?.user;
+        let currentUser = null;
+        try {
+          const { data: authData } = await supabase.auth.getUser();
+          currentUser = authData?.user;
+        } catch (authErr) {
+          console.log('[Holders Tracking] Auth check failed (expected for anon):', authErr);
+        }
 
         // Determine auth method if authenticated
         const getAuthMethod = (): string => {
           if (!currentUser) return 'anonymous';
-          // Check provider from user metadata if available
           const provider = currentUser.app_metadata?.provider;
           if (provider === 'google') return 'google';
           if (provider === 'github') return 'github';
@@ -193,7 +216,7 @@ export const useHoldersPageTracking = (trackingData: TrackingData = {}) => {
           auth_method: getAuthMethod(),
         };
 
-        console.log('[Holders Tracking] Inserting visit:', visitData.session_id);
+        console.log('[Holders Tracking] Attempting insert with data:', JSON.stringify(visitData, null, 2));
         
         const { data, error } = await supabase
           .from('holders_page_visits')
@@ -202,18 +225,40 @@ export const useHoldersPageTracking = (trackingData: TrackingData = {}) => {
           .single();
 
         if (error) {
-          console.error('[Holders Tracking] Insert error:', error.message, error.code);
+          console.error('[Holders Tracking] Insert error:', error.message, error.code, error.details, error.hint);
+          
+          // Try a direct fetch as fallback
+          console.log('[Holders Tracking] Attempting direct REST API fallback...');
+          const fallbackResponse = await fetch('https://apxauapuusmgwbbzjgfl.supabase.co/rest/v1/holders_page_visits', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'apikey': 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFweGF1YXB1dXNtZ3diYnpqZ2ZsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTQ1OTEzMDUsImV4cCI6MjA3MDE2NzMwNX0.w8IrKq4YVStF3TkdEcs5mCSeJsxjkaVq2NFkypYOXHU',
+              'Prefer': 'return=representation',
+            },
+            body: JSON.stringify(visitData),
+          });
+          
+          if (fallbackResponse.ok) {
+            const fallbackData = await fallbackResponse.json();
+            console.log('[Holders Tracking] Fallback insert succeeded:', fallbackData);
+            if (fallbackData && fallbackData[0]) {
+              visitIdRef.current = fallbackData[0].id;
+            }
+          } else {
+            const errorText = await fallbackResponse.text();
+            console.error('[Holders Tracking] Fallback insert failed:', fallbackResponse.status, errorText);
+          }
         } else if (data) {
-          console.log('[Holders Tracking] Visit recorded:', data.id);
+          console.log('[Holders Tracking] Visit recorded successfully:', data.id);
           visitIdRef.current = data.id;
           
-          // If token was preloaded, track it
           if (tokenPreloaded) {
             tokensAnalyzedRef.current.add(tokenPreloaded);
           }
         }
       } catch (err) {
-        console.error('[Holders Tracking] Unexpected error:', err);
+        console.error('[Holders Tracking] Unexpected error during tracking:', err);
       }
     };
 
