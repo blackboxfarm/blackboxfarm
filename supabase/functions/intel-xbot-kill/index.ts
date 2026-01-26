@@ -19,6 +19,7 @@ Deno.serve(async (req) => {
     // Kill all cron jobs
     const jobs = [
       'holdersintel-poster-3min',
+      'holdersintel-scheduler-2am',
       'holdersintel-scheduler-8am',
       'holdersintel-scheduler-2pm',
       'holdersintel-scheduler-6pm'
