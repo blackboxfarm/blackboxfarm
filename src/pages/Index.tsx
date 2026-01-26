@@ -1,5 +1,6 @@
 import React, { useEffect } from 'react';
 import { RoleBasedNavigation } from '@/components/navigation/RoleBasedNavigation';
+import { usePageTracking } from '@/hooks/usePageTracking';
 
 // Matrix code effect for background
 const matrixCode = `01000001 01001001 00100000 01000101 01110110 01101111 01101100 01110101 01110100 01101001 01101111 01101110
@@ -8,6 +9,8 @@ const matrixCode = `01000001 01001001 00100000 01000101 01110110 01101111 011011
 01000001 01110101 01110100 01101111 01101110 01101111 01101101 01101111 01110101 01110011 00100000 01010100 01110010 01100001 01100100 01100101`;
 
 export default function Index() {
+  usePageTracking('admin');
+  
   useEffect(() => {
     document.title = "BlackBox Farm - 24/7 Autonomous Trading Platform";
     

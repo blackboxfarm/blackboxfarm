@@ -4,8 +4,11 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { FarmBanner } from "@/components/FarmBanner";
 import { Zap, TrendingUp, Clock, Shield, ArrowRight, Mail } from "lucide-react";
+import { usePageTracking } from "@/hooks/usePageTracking";
 
 export default function BumpBotLanding() {
+  usePageTracking('bumpbot');
+  
   return (
     <div className="min-h-screen bg-background">
       <FarmBanner />

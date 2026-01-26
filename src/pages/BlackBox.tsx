@@ -12,6 +12,7 @@ import { Shield, Radar } from "lucide-react";
 import { SolPriceDisplay } from "@/components/SolPriceDisplay";
 import { NotificationCenter } from "@/components/NotificationCenter";
 import { ActiveTabOnly } from "@/components/ui/ActiveTabOnly";
+import { usePageTracking } from "@/hooks/usePageTracking";
 
 // Lazy load all tab components
 const OverviewTab = lazy(() => import("@/components/blackbox/OverviewTab").then(m => ({ default: m.OverviewTab })));
@@ -33,6 +34,8 @@ const SecurityDashboard = lazy(() => import("@/components/security/SecurityDashb
 const TokenCandidatesDashboard = lazy(() => import("@/components/admin/TokenCandidatesDashboard").then(m => ({ default: m.TokenCandidatesDashboard })));
 
 export default function BlackBox() {
+  usePageTracking('home'); // Track main page visits
+  
   const [activeTab, setActiveTab] = useState("overview");
   const [copyTradingSubTab, setCopyTradingSubTab] = useState("config");
   const { user } = useAuth();
