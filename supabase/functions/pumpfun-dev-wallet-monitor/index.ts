@@ -44,14 +44,15 @@ interface MonitorStats {
 
 const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
-// Fetch with exponential backoff
-async function fetchWithBackoff(url: string, maxRetries = 3): Promise<Response> {
+// Fetch with exponential backoff - supports both GET and POST
+async function fetchWithBackoff(url: string, maxRetries = 3, options?: RequestInit): Promise<Response> {
   let lastError: Error | null = null;
   
   for (let attempt = 0; attempt < maxRetries; attempt++) {
     try {
       const response = await fetch(url, {
-        headers: { 'Accept': 'application/json' }
+        headers: { 'Accept': 'application/json', 'Content-Type': 'application/json' },
+        ...options
       });
       
       if (response.status === 429) {
@@ -72,64 +73,135 @@ async function fetchWithBackoff(url: string, maxRetries = 3): Promise<Response> 
   throw lastError || new Error('Max retries exceeded');
 }
 
-// Check if dev wallet has sold tokens of a specific mint
-async function checkDevSold(devWallet: string, tokenMint: string): Promise<boolean> {
+// Enhanced dev wallet check - returns selling info and current holding
+interface DevWalletStatus {
+  hasSold: boolean;
+  hasBoughtBack: boolean;
+  holdingPct: number | null;  // null if unable to check, 0-100 otherwise
+  isFullExit: boolean;        // true if wallet is now empty (0% holding)
+  sellCount: number;          // number of sell transactions detected
+}
+
+async function getDevWalletStatus(devWallet: string, tokenMint: string): Promise<DevWalletStatus> {
+  const status: DevWalletStatus = {
+    hasSold: false,
+    hasBoughtBack: false,
+    holdingPct: null,
+    isFullExit: false,
+    sellCount: 0,
+  };
+
   try {
-    // Use Helius or Solscan to check for sell transactions
     const heliusKey = Deno.env.get('HELIUS_API_KEY');
     
-    if (heliusKey) {
-      // Use Helius to get transaction history
-      const response = await fetchWithBackoff(
-        `https://api.helius.xyz/v0/addresses/${devWallet}/transactions?api-key=${heliusKey}&type=SWAP&limit=50`
+    if (!heliusKey) {
+      console.log('⚠️ No Helius API key - skipping detailed dev check');
+      return status;
+    }
+
+    // 1. Check current token balance in dev wallet
+    try {
+      const balanceResponse = await fetchWithBackoff(
+        `https://mainnet.helius-rpc.com/?api-key=${heliusKey}`,
+        3,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            jsonrpc: '2.0',
+            id: 'dev-balance',
+            method: 'getTokenAccountsByOwner',
+            params: [
+              devWallet,
+              { mint: tokenMint },
+              { encoding: 'jsonParsed' }
+            ]
+          })
+        }
       );
-      
-      if (response.ok) {
-        const txs = await response.json();
+
+      if (balanceResponse.ok) {
+        const balanceData = await balanceResponse.json();
+        const accounts = balanceData.result?.value || [];
         
-        // Look for any swap where the dev is selling (token goes out, SOL comes in)
-        for (const tx of txs) {
-          const tokenTransfers = tx.tokenTransfers || [];
+        if (accounts.length > 0) {
+          const tokenAccount = accounts[0];
+          const balance = tokenAccount?.account?.data?.parsed?.info?.tokenAmount?.uiAmount || 0;
           
-          // Check if dev sent out this specific token
-          const soldToken = tokenTransfers.some((t: any) => 
-            t.mint === tokenMint && 
-            t.fromUserAccount === devWallet &&
-            t.tokenAmount > 0
-          );
+          // Pump.fun tokens have 1 billion total supply
+          const TOTAL_SUPPLY = 1_000_000_000;
+          status.holdingPct = (balance / TOTAL_SUPPLY) * 100;
           
-          if (soldToken) {
-            console.log(`🚨 Dev ${devWallet.slice(0, 8)} SOLD ${tokenMint.slice(0, 8)}`);
-            return true;
-          }
+          console.log(`💰 Dev ${devWallet.slice(0, 8)} holds ${status.holdingPct.toFixed(2)}% of ${tokenMint.slice(0, 8)}`);
+        } else {
+          // No token account = 0 balance
+          status.holdingPct = 0;
+          console.log(`💀 Dev ${devWallet.slice(0, 8)} has 0% of ${tokenMint.slice(0, 8)} (no token account)`);
         }
       }
+    } catch (balanceError) {
+      console.error(`Error checking dev balance:`, balanceError);
     }
-    
-    // Fallback: Check Solscan for recent transactions
-    const solscanResponse = await fetchWithBackoff(
-      `https://api.solscan.io/v2/account/transfer?address=${devWallet}&token=${tokenMint}&page=1&page_size=20`
+
+    // 2. Check transaction history for sells and buybacks
+    const response = await fetchWithBackoff(
+      `https://api.helius.xyz/v0/addresses/${devWallet}/transactions?api-key=${heliusKey}&type=SWAP&limit=100`
     );
     
-    if (solscanResponse.ok) {
-      const data = await solscanResponse.json();
-      const transfers = data.data || [];
+    if (response.ok) {
+      const txs = await response.json();
       
-      // Look for outgoing transfers of this token
-      for (const transfer of transfers) {
-        if (transfer.src === devWallet && transfer.token_address === tokenMint) {
-          // Dev sent tokens out - likely a sell
-          console.log(`🚨 Dev ${devWallet.slice(0, 8)} transferred out ${tokenMint.slice(0, 8)}`);
-          return true;
+      for (const tx of txs) {
+        const tokenTransfers = tx.tokenTransfers || [];
+        
+        // Check if dev sent out this specific token (SELL)
+        const soldToken = tokenTransfers.some((t: any) => 
+          t.mint === tokenMint && 
+          t.fromUserAccount === devWallet &&
+          t.tokenAmount > 0
+        );
+        
+        // Check if dev received this specific token (BUY/REBUY)
+        const boughtToken = tokenTransfers.some((t: any) => 
+          t.mint === tokenMint && 
+          t.toUserAccount === devWallet &&
+          t.tokenAmount > 0
+        );
+        
+        if (soldToken) {
+          status.hasSold = true;
+          status.sellCount++;
+        }
+        
+        if (boughtToken && status.hasSold) {
+          // Bought back AFTER selling = potential recovery
+          status.hasBoughtBack = true;
         }
       }
     }
-    
-    return false;
+
+    // 3. Determine if this is a full exit
+    // Full exit = sold tokens AND wallet is now empty (or nearly empty < 0.1%)
+    if (status.hasSold && status.holdingPct !== null && status.holdingPct < 0.1) {
+      status.isFullExit = true;
+      console.log(`🚨 DEV FULL EXIT: ${devWallet.slice(0, 8)} emptied ${tokenMint.slice(0, 8)}`);
+    }
+
+    if (status.hasSold) {
+      console.log(`🚨 Dev ${devWallet.slice(0, 8)} SOLD ${tokenMint.slice(0, 8)} (${status.sellCount} sells, holding: ${status.holdingPct?.toFixed(2) ?? 'unknown'}%, fullExit: ${status.isFullExit}, rebuy: ${status.hasBoughtBack})`);
+    }
+
+    return status;
   } catch (error) {
-    console.error(`Error checking dev sell for ${devWallet}:`, error);
-    return false;
+    console.error(`Error checking dev wallet status for ${devWallet}:`, error);
+    return status;
   }
+}
+
+// Wrapper for backward compatibility - still returns boolean for simple sold check
+async function checkDevSold(devWallet: string, tokenMint: string): Promise<boolean> {
+  const status = await getDevWalletStatus(devWallet, tokenMint);
+  return status.hasSold;
 }
 
 // Check if dev wallet has launched a new token after this one
@@ -234,29 +306,47 @@ async function monitorDevWallets(supabase: any): Promise<MonitorStats> {
         stats.walletsChecked++;
         const devWallet = token.creator_wallet;
 
-        // Check for dev sell
-        const hasSold = await checkDevSold(devWallet, token.token_mint);
+        // Get comprehensive dev wallet status
+        const devStatus = await getDevWalletStatus(devWallet, token.token_mint);
         
         // Check for new token launch (only if not already sold)
-        const hasLaunchedNew = !hasSold && await checkDevLaunchedNew(
+        const hasLaunchedNew = !devStatus.hasSold && await checkDevLaunchedNew(
           devWallet, 
           token.token_mint, 
           token.first_seen_at
         );
 
-        if (hasSold || hasLaunchedNew) {
+        // Calculate token age in minutes
+        const tokenAgeMinutes = (Date.now() - new Date(token.first_seen_at).getTime()) / 60000;
+
+        if (devStatus.hasSold || hasLaunchedNew || devStatus.holdingPct !== null) {
           const updates: any = {
             last_dev_check_at: new Date().toISOString(),
           };
 
-          if (hasSold) {
+          // Update dev holding percentage if we got it
+          if (devStatus.holdingPct !== null) {
+            updates.dev_holding_pct = devStatus.holdingPct;
+          }
+
+          if (devStatus.hasSold) {
             updates.dev_sold = true;
             stats.devSellsDetected++;
             stats.details.push({
               wallet: devWallet,
-              type: 'dev_sold',
+              type: devStatus.isFullExit ? 'dev_full_exit' : 'dev_sold',
               token: token.token_symbol || token.token_mint.slice(0, 8),
             });
+
+            // Track if dev bought back
+            if (devStatus.hasBoughtBack) {
+              updates.dev_bought_back = true;
+            }
+
+            // If full exit on young token (<30 min) without rebuy - this is a rug signal
+            if (devStatus.isFullExit && tokenAgeMinutes < 30 && !devStatus.hasBoughtBack) {
+              console.log(`💀 DEV EXITED & RAN: ${token.token_symbol} (${tokenAgeMinutes.toFixed(0)}m old, 0% holding, no rebuy)`);
+            }
           }
 
           if (hasLaunchedNew) {
@@ -276,7 +366,7 @@ async function monitorDevWallets(supabase: any): Promise<MonitorStats> {
             .eq('id', token.id);
 
           stats.tokensAffected++;
-          console.log(`⚠️ Updated ${token.token_symbol}: dev_sold=${hasSold}, dev_launched_new=${hasLaunchedNew}`);
+          console.log(`⚠️ Updated ${token.token_symbol}: dev_sold=${devStatus.hasSold}, holdingPct=${devStatus.holdingPct?.toFixed(2) ?? 'unknown'}%, fullExit=${devStatus.isFullExit}, rebuy=${devStatus.hasBoughtBack}`);
         }
 
         await delay(200); // Small delay between checks
