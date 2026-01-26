@@ -33,7 +33,11 @@ function asCount(value: any): number {
   return 0;
 }
 
-function getPostComment(timesPosted: number): string {
+function getPostComment(timesPosted: number, triggerComment?: string | null): string {
+  // If a trigger comment is provided (from DEX scanner), use it
+  if (triggerComment) return triggerComment;
+  
+  // Default milestone-based comments
   if (timesPosted <= 1) return ' : First call out!';
   if (timesPosted === 2) return ' : Still on the Chart!';
   return ' : Steady & Strong!';
@@ -42,7 +46,8 @@ function getPostComment(timesPosted: number): string {
 function processTemplate(template: string, data: any): string {
   const tickerUpper = (data.symbol || 'TOKEN').toUpperCase();
   const tokenName = data.name || data.tokenName || 'Unknown';
-  const comment1 = getPostComment(data.timesPosted || 1);
+  // Pass trigger_comment to allow DEX scanner overrides
+  const comment1 = getPostComment(data.timesPosted || 1, data.triggerComment);
   
   return template
     .replace(/\{TICKER\}/g, `$${tickerUpper}`)
@@ -232,6 +237,8 @@ Deno.serve(async (req) => {
         tokenMint: item.token_mint,
         totalHolders,
         timesPosted: currentTimesPosted,
+        // Pass trigger_comment from queue item (used by DEX scanner triggers)
+        triggerComment: item.trigger_comment || null,
         // bagless-holders-report sets realHolders = realWalletCount ($50-$199)
         realHolders: asCount(report?.realHolders ?? report?.realWalletCount),
         dustCount,

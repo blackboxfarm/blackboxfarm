@@ -34,6 +34,11 @@ const CRON_JOBS = [
     name: 'holdersintel-poster-3min',
     schedule: '*/3 * * * *',
     function: 'holders-intel-poster'
+  },
+  {
+    name: 'holdersintel-dex-scanner-5min',
+    schedule: '*/5 * * * *',
+    function: 'holders-intel-dex-scanner'
   }
 ];
 
