@@ -1,63 +1,91 @@
 
 
-# Plan: Add Helius API Usage Tab to Super Admin Dashboard
+# Plan: Automatic Redirect from Lovable Subdomain to Custom Domain
 
-## Current State
-- A full-featured Helius Usage dashboard exists at `/helius-usage`
-- It shows all API usage stats, rate limiting, charts, and recent logs
-- **Not linked** from the Super Admin page - you have to know the URL to access it
+## What This Does
 
-## Solution
-Embed the Helius Usage dashboard as a new tab within the Super Admin page for convenient access.
+When a public user lands on `blackboxfarm.lovable.app`, they will be automatically redirected to `https://blackbox.farm` - preserving their path and query parameters.
 
-## Changes Required
+## Key Logic
 
-### 1. Update `src/pages/SuperAdmin.tsx`
+The redirect will **NOT** trigger in these scenarios (to keep development working):
+- **Editor preview** (`id-preview--*.lovable.app`) - your live development environment
+- **Already on custom domain** (`blackbox.farm`)
+- **Localhost** for local development
 
-**Add lazy import** (around line 57):
+## Implementation
+
+### Create New Hook: `src/hooks/useDomainRedirect.ts`
+
 ```typescript
-const HeliusUsageDashboard = lazy(() => import("./HeliusUsage"));
+import { useEffect } from "react";
+
+export function useDomainRedirect() {
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    
+    const host = window.location.hostname;
+    
+    // Skip redirect for:
+    // 1. Editor preview (id-preview--*.lovable.app)
+    // 2. Already on custom domain
+    // 3. Localhost
+    const isEditorPreview = host.includes('id-preview--');
+    const isCustomDomain = host === 'blackbox.farm' || host === 'www.blackbox.farm';
+    const isLocalhost = host === 'localhost' || host === '127.0.0.1';
+    
+    if (isEditorPreview || isCustomDomain || isLocalhost) {
+      return; // Don't redirect
+    }
+    
+    // Redirect any lovable.app subdomain to custom domain
+    const isLovableSubdomain = host.endsWith('.lovable.app');
+    
+    if (isLovableSubdomain) {
+      const newUrl = `https://blackbox.farm${window.location.pathname}${window.location.search}${window.location.hash}`;
+      window.location.replace(newUrl);
+    }
+  }, []);
+}
 ```
 
-**Add new tab trigger** in the TabsList (around line 159):
+### Update `src/App.tsx`
+
+Add the hook call at the top of the App component:
+
 ```typescript
-<TabsTrigger value="helius-api" className="flex-shrink-0 data-[state=active]:bg-gradient-to-r data-[state=active]:from-orange-500/30 data-[state=active]:to-red-500/20">
-  ⚡ Helius API
-</TabsTrigger>
+import { useDomainRedirect } from "@/hooks/useDomainRedirect";
+
+const App = () => {
+  useDomainRedirect(); // Redirect lovable.app → blackbox.farm
+  
+  return (
+    <QueryClientProvider client={queryClient}>
+      // ... rest of app
+    </QueryClientProvider>
+  );
+};
 ```
 
-**Add new TabsContent** (at the end of tabs, around line 430):
-```typescript
-<TabsContent value="helius-api">
-  <ActiveTabOnly activeTab={activeTab} tabValue="helius-api">
-    <HeliusUsageDashboard />
-  </ActiveTabOnly>
-</TabsContent>
-```
+## Redirect Behavior
 
-### 2. Minor Update to `src/pages/HeliusUsage.tsx`
+| Current URL | Action |
+|-------------|--------|
+| `blackboxfarm.lovable.app/holders` | → Redirect to `https://blackbox.farm/holders` |
+| `blackboxfarm.lovable.app/?foo=bar` | → Redirect to `https://blackbox.farm/?foo=bar` |
+| `id-preview--*.lovable.app/*` | No redirect (editor preview) |
+| `blackbox.farm/*` | No redirect (already correct) |
+| `localhost:*` | No redirect (development) |
 
-Make the component work both as a standalone page AND as an embedded component:
-- Add an optional `embedded` prop to hide the outer container/padding when used inside Super Admin
-- Or simply keep as-is since it works fine either way
+## Files to Create/Modify
+
+1. **Create** `src/hooks/useDomainRedirect.ts` - Redirect logic
+2. **Modify** `src/App.tsx` - Import and call the hook
 
 ## Result
 
-After implementation:
-- Navigate to `/super-admin?tab=helius-api` to directly access Helius stats
-- Quick tab switch from other admin tools to monitor API usage
-- All existing functionality preserved at `/helius-usage` for direct access
-
-## What the Dashboard Shows
-
-| Section | Details |
-|---------|---------|
-| Rate Limit Status | Real-time calls remaining (50/min), circuit breaker status |
-| Summary Cards | Total calls, success rate, avg response time, monthly estimate |
-| Charts | Credits by function, daily trends, hourly patterns |
-| Recent Logs | Last 50 API calls with function, endpoint, status, timing |
-
-## Files to Modify
-
-1. `src/pages/SuperAdmin.tsx` - Add lazy import, tab trigger, and tab content
+- Public visitors who somehow land on the Lovable subdomain get seamlessly redirected to your branded domain
+- All paths, query params, and hash fragments are preserved
+- Development workflow remains unaffected
+- The redirect uses `window.location.replace()` so it doesn't create a browser history entry (clean back-button behavior)
 
