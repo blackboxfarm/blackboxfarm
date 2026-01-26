@@ -215,7 +215,9 @@ export default function BuyBanner() {
           title,
           email: user.email,
           twitter: twitter || null,
-          durationHours: duration,
+          // IMPORTANT: duration is the selected PRICING key (e.g., 0 for free test, 999 for Telegram).
+          // The edge function expects the actual duration in hours.
+          durationHours: PRICING[duration].hours,
           priceUsd: PRICING[duration].price,
           startTime: getScheduledStartTime().toISOString(),
         },
