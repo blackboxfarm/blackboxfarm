@@ -11,6 +11,7 @@ import { PageLoader } from "@/components/ui/lazy-loader";
 import { AuthProvider } from "@/contexts/AuthContext";
 import { UserRolesProvider } from "@/contexts/UserRolesContext";
 import { NotificationsProvider } from "@/contexts/NotificationsContext";
+import { useDomainRedirect } from "@/hooks/useDomainRedirect";
 
 // Lazy load all pages for code splitting
 const BlackBox = lazy(() => import("./pages/BlackBox"));
@@ -54,8 +55,11 @@ const ApiDocsLanding = lazy(() => import("./pages/ApiDocsLanding"));
 
 const queryClient = new QueryClient();
 
-const App = () => (
-  <QueryClientProvider client={queryClient}>
+const App = () => {
+  useDomainRedirect(); // Redirect lovable.app → blackbox.farm
+  
+  return (
+    <QueryClientProvider client={queryClient}>
     <AuthProvider>
       <UserRolesProvider>
         <NotificationsProvider>
@@ -121,6 +125,7 @@ const App = () => (
       </UserRolesProvider>
     </AuthProvider>
   </QueryClientProvider>
-);
+  );
+};
 
 export default App;
