@@ -43,6 +43,7 @@ const HeliusUsage = lazy(() => import("./pages/HeliusUsage"));
 const BuyBanner = lazy(() => import("./pages/BuyBanner"));
 const BannerCheckout = lazy(() => import("./pages/BannerCheckout"));
 const BannerPreview = lazy(() => import("./pages/BannerPreview"));
+const MyBanners = lazy(() => import("./pages/MyBanners"));
 const TokenAnalysisDownload = lazy(() => import("./pages/TokenAnalysisDownload"));
 const ShareCardDemoPage = lazy(() => import("./pages/ShareCardDemo"));
 const BumpBotLanding = lazy(() => import("./pages/BumpBotLanding"));
@@ -98,6 +99,7 @@ const App = () => {
                       <Route path="/holders-marketing" element={<HoldersMarketing />} />
                       <Route path="/adverts" element={<Adverts />} />
                       <Route path="/buy-banner" element={<BuyBanner />} />
+                      <Route path="/my-banners" element={<MyBanners />} />
                       <Route path="/banner-checkout/:orderId" element={<BannerCheckout />} />
                       <Route path="/banner-preview/:orderId" element={<BannerPreview />} />
                       <Route path="/copy-trading" element={<CopyTrading />} />
