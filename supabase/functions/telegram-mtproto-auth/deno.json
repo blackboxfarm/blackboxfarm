@@ -1,0 +1,6 @@
+{
+  "imports": {
+    "@mtcute/deno": "jsr:@mtcute/deno@0.20.0",
+    "@mtcute/convert": "jsr:@mtcute/convert@0.20.0"
+  }
+}

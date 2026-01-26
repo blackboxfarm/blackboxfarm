@@ -1,7 +1,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { TelegramClient, MemoryStorage } from "jsr:@mtcute/deno";
-import { convertFromTelethonSession } from "jsr:@mtcute/convert";
+import { TelegramClient, MemoryStorage } from "@mtcute/deno";
+import { convertFromTelethonSession } from "@mtcute/convert";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
