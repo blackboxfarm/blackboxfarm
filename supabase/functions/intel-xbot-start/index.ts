@@ -8,8 +8,13 @@ const corsHeaders = {
 const SUPABASE_URL = "https://apxauapuusmgwbbzjgfl.supabase.co";
 const ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFweGF1YXB1dXNtZ3diYnpqZ2ZsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTQ1OTEzMDUsImV4cCI6MjA3MDE2NzMwNX0.w8IrKq4YVStF3TkdEcs5mCSeJsxjkaVq2NFkypYOXHU";
 
-// Cron job definitions (Toronto time: UTC-5, so 8am=13:00, 2pm=19:00, 6pm=23:00 UTC)
+// Cron job definitions (Toronto time: UTC-5, so 2am=7:00, 8am=13:00, 2pm=19:00, 6pm=23:00 UTC)
 const CRON_JOBS = [
+  {
+    name: 'holdersintel-scheduler-2am',
+    schedule: '0 7 * * *',
+    function: 'holders-intel-scheduler'
+  },
   {
     name: 'holdersintel-scheduler-8am',
     schedule: '0 13 * * *',

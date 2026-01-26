@@ -26,10 +26,12 @@ function getSnapshotSlot(): string {
   const hour = toronto.getHours();
   const dateStr = toronto.toISOString().split('T')[0];
   
-  // Determine which slot based on hour
-  if (hour >= 6 && hour < 12) {
+  // Determine which slot based on hour (4 slots: 2am, 8am, 2pm, 6pm)
+  if (hour >= 0 && hour < 5) {
+    return `${dateStr}_02:00`;
+  } else if (hour >= 5 && hour < 11) {
     return `${dateStr}_08:00`;
-  } else if (hour >= 12 && hour < 17) {
+  } else if (hour >= 11 && hour < 17) {
     return `${dateStr}_14:00`;
   } else {
     return `${dateStr}_18:00`;
@@ -45,18 +47,24 @@ function getPreviousSnapshotSlots(currentSlot: string): string[] {
   
   const slots: string[] = [];
   
-  if (timeStr === '08:00') {
-    // 8 AM: Only compare against previous day's 6pm
+  if (timeStr === '02:00') {
+    // 2 AM: Compare against previous day's 6pm + 2pm
+    slots.push(`${prevDateStr}_18:00`);
+    slots.push(`${prevDateStr}_14:00`);
+  } else if (timeStr === '08:00') {
+    // 8 AM: Compare against today's 2am + previous day's 6pm
+    slots.push(`${dateStr}_02:00`);
     slots.push(`${prevDateStr}_18:00`);
   } else if (timeStr === '14:00') {
-    // 2 PM: Compare against today's 8am + previous day's 6pm
+    // 2 PM: Compare against today's 8am + 2am + previous day's 6pm
     slots.push(`${dateStr}_08:00`);
+    slots.push(`${dateStr}_02:00`);
     slots.push(`${prevDateStr}_18:00`);
   } else if (timeStr === '18:00') {
-    // 6 PM: Compare against today's 2pm + 8am + previous day's 6pm
+    // 6 PM: Compare against today's 2pm + 8am + 2am
     slots.push(`${dateStr}_14:00`);
     slots.push(`${dateStr}_08:00`);
-    slots.push(`${prevDateStr}_18:00`);
+    slots.push(`${dateStr}_02:00`);
   }
   
   return slots;
