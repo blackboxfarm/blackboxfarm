@@ -2727,6 +2727,7 @@ export type Database = {
           executed_position_id: string | null
           expires_at: string
           id: string
+          monitoring_mode: string
           notification_email: string | null
           priority_fee_mode: string
           slippage_bps: number
@@ -2737,6 +2738,8 @@ export type Database = {
           token_symbol: string | null
           updated_at: string
           user_id: string | null
+          volume_direction: string | null
+          volume_trigger_delta: number | null
           wallet_id: string | null
         }
         Insert: {
@@ -2749,6 +2752,7 @@ export type Database = {
           executed_position_id?: string | null
           expires_at: string
           id?: string
+          monitoring_mode?: string
           notification_email?: string | null
           priority_fee_mode?: string
           slippage_bps?: number
@@ -2759,6 +2763,8 @@ export type Database = {
           token_symbol?: string | null
           updated_at?: string
           user_id?: string | null
+          volume_direction?: string | null
+          volume_trigger_delta?: number | null
           wallet_id?: string | null
         }
         Update: {
@@ -2771,6 +2777,7 @@ export type Database = {
           executed_position_id?: string | null
           expires_at?: string
           id?: string
+          monitoring_mode?: string
           notification_email?: string | null
           priority_fee_mode?: string
           slippage_bps?: number
@@ -2781,6 +2788,8 @@ export type Database = {
           token_symbol?: string | null
           updated_at?: string
           user_id?: string | null
+          volume_direction?: string | null
+          volume_trigger_delta?: number | null
           wallet_id?: string | null
         }
         Relationships: [

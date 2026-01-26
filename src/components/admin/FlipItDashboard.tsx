@@ -27,6 +27,7 @@ import { WalletTokenManager } from '@/components/blackbox/WalletTokenManager';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import TweetTemplateEditor from './TweetTemplateEditor';
 import { FlipItNotificationSettings } from './FlipItNotificationSettings';
+import { EditLimitOrderDialog } from './flipit/EditLimitOrderDialog';
 import { usePreviewSuperAdmin } from '@/hooks/usePreviewSuperAdmin';
 import { useAuth } from '@/hooks/useAuth';
 import { useNavigate } from 'react-router-dom';
@@ -132,6 +133,10 @@ interface LimitOrder {
   cancelled_at: string | null;
   created_at: string;
   notification_email: string | null;
+  // New monitoring mode fields
+  monitoring_mode?: string;
+  volume_trigger_delta?: number | null;
+  volume_direction?: string | null;
 }
 
 interface InputTokenData {
@@ -341,6 +346,8 @@ export function FlipItDashboard() {
   const [isLimitOrderMonitoring, setIsLimitOrderMonitoring] = useState(false);
   const [isExecutingLimitOrder, setIsExecutingLimitOrder] = useState<string | null>(null);
   const [notificationEmail, setNotificationEmail] = useState('wilsondavid@live.ca');
+  const [editingLimitOrder, setEditingLimitOrder] = useState<LimitOrder | null>(null);
+  const [isEditLimitOrderOpen, setIsEditLimitOrderOpen] = useState(false);
 
   // Chain sync state
   const [isSyncingWithChain, setIsSyncingWithChain] = useState(false);
@@ -3522,9 +3529,11 @@ export function FlipItDashboard() {
               <TableHeader>
                 <TableRow>
                   <TableHead>Token</TableHead>
-                  <TableHead>Price Range</TableHead>
+                  <TableHead>Price Range / Trigger</TableHead>
                   <TableHead>Amount</TableHead>
                   <TableHead>Target</TableHead>
+                  <TableHead>Mode</TableHead>
+                  <TableHead>Settings</TableHead>
                   <TableHead>Expires</TableHead>
                   <TableHead>Actions</TableHead>
                 </TableRow>
@@ -3549,11 +3558,27 @@ export function FlipItDashboard() {
                       )}
                     </TableCell>
                     <TableCell>
-                      <div className="font-mono text-sm">
-                        <span className="text-green-500">${order.buy_price_min_usd.toFixed(10).replace(/\.?0+$/, '')}</span>
-                        <span className="text-muted-foreground mx-1">→</span>
-                        <span className="text-amber-500">${order.buy_price_max_usd.toFixed(10).replace(/\.?0+$/, '')}</span>
-                      </div>
+                      {order.monitoring_mode === 'deep' ? (
+                        <div className="text-sm">
+                          <div className="flex items-center gap-1">
+                            {order.volume_direction === 'rise' ? (
+                              <TrendingUp className="h-3 w-3 text-green-500" />
+                            ) : (
+                              <TrendingDown className="h-3 w-3 text-red-500" />
+                            )}
+                            <span className={order.volume_direction === 'rise' ? 'text-green-500' : 'text-red-500'}>
+                              {order.volume_trigger_delta || 50}% {order.volume_direction || 'rise'}
+                            </span>
+                          </div>
+                          <div className="text-xs text-muted-foreground">Volume trigger</div>
+                        </div>
+                      ) : (
+                        <div className="font-mono text-sm">
+                          <span className="text-green-500">${order.buy_price_min_usd.toFixed(10).replace(/\.?0+$/, '')}</span>
+                          <span className="text-muted-foreground mx-1">→</span>
+                          <span className="text-amber-500">${order.buy_price_max_usd.toFixed(10).replace(/\.?0+$/, '')}</span>
+                        </div>
+                      )}
                     </TableCell>
                     <TableCell>
                       <span className="font-mono">{order.buy_amount_sol.toFixed(4)} SOL</span>
@@ -3565,6 +3590,31 @@ export function FlipItDashboard() {
                     </TableCell>
                     <TableCell>
                       <Badge variant="outline">{order.target_multiplier}x</Badge>
+                    </TableCell>
+                    <TableCell>
+                      <Badge 
+                        variant="outline" 
+                        className={order.monitoring_mode === 'deep' 
+                          ? 'border-blue-500/50 text-blue-400 bg-blue-500/10' 
+                          : 'border-green-500/50 text-green-400 bg-green-500/10'
+                        }
+                      >
+                        {order.monitoring_mode === 'deep' ? (
+                          <><Clock className="h-3 w-3 mr-1" />Deep</>
+                        ) : (
+                          <><Zap className="h-3 w-3 mr-1" />Tight</>
+                        )}
+                      </Badge>
+                    </TableCell>
+                    <TableCell>
+                      <div className="flex flex-col gap-1">
+                        <Badge variant="secondary" className="text-xs w-fit">
+                          {order.slippage_bps / 100}% slip
+                        </Badge>
+                        <Badge variant="secondary" className="text-xs w-fit capitalize">
+                          {order.priority_fee_mode} fee
+                        </Badge>
+                      </div>
                     </TableCell>
                     <TableCell>
                       <div className="text-sm">
@@ -3588,28 +3638,39 @@ export function FlipItDashboard() {
                       </div>
                     </TableCell>
                     <TableCell>
-                      <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-1">
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => {
+                            setEditingLimitOrder(order);
+                            setIsEditLimitOrderOpen(true);
+                          }}
+                          disabled={isExecutingLimitOrder === order.id}
+                          className="h-8 px-2"
+                        >
+                          <Pencil className="h-3 w-3" />
+                        </Button>
                         <Button
                           size="sm"
                           onClick={() => handleBuyNowLimitOrder(order)}
                           disabled={isExecutingLimitOrder === order.id || !selectedWallet}
-                          className="bg-gradient-to-r from-green-500 to-emerald-500 hover:from-green-600 hover:to-emerald-600"
+                          className="bg-gradient-to-r from-green-500 to-emerald-500 hover:from-green-600 hover:to-emerald-600 h-8 px-2"
                         >
                           {isExecutingLimitOrder === order.id ? (
-                            <Loader2 className="h-4 w-4 mr-1 animate-spin" />
+                            <Loader2 className="h-3 w-3 animate-spin" />
                           ) : (
-                            <Rocket className="h-4 w-4 mr-1" />
+                            <Rocket className="h-3 w-3" />
                           )}
-                          BUY NOW
                         </Button>
                         <Button
                           size="sm"
                           variant="destructive"
                           onClick={() => handleCancelLimitOrder(order.id)}
                           disabled={isExecutingLimitOrder === order.id}
+                          className="h-8 px-2"
                         >
-                          <XCircle className="h-4 w-4 mr-1" />
-                          Cancel
+                          <XCircle className="h-3 w-3" />
                         </Button>
                       </div>
                     </TableCell>
@@ -5047,6 +5108,15 @@ export function FlipItDashboard() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Edit Limit Order Dialog */}
+      <EditLimitOrderDialog
+        order={editingLimitOrder}
+        open={isEditLimitOrderOpen}
+        onOpenChange={setIsEditLimitOrderOpen}
+        onUpdated={loadLimitOrders}
+        solPrice={solPrice}
+      />
     </div>
   );
 }
