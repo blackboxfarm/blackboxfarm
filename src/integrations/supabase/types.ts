@@ -3487,6 +3487,53 @@ export type Database = {
         }
         Relationships: []
       }
+      holders_intel_dex_triggers: {
+        Row: {
+          boost_count: number | null
+          created_at: string | null
+          detected_at: string | null
+          id: string
+          name: string | null
+          posted_at: string | null
+          queue_id: string | null
+          symbol: string | null
+          token_mint: string
+          trigger_type: string
+        }
+        Insert: {
+          boost_count?: number | null
+          created_at?: string | null
+          detected_at?: string | null
+          id?: string
+          name?: string | null
+          posted_at?: string | null
+          queue_id?: string | null
+          symbol?: string | null
+          token_mint: string
+          trigger_type: string
+        }
+        Update: {
+          boost_count?: number | null
+          created_at?: string | null
+          detected_at?: string | null
+          id?: string
+          name?: string | null
+          posted_at?: string | null
+          queue_id?: string | null
+          symbol?: string | null
+          token_mint?: string
+          trigger_type?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "holders_intel_dex_triggers_queue_id_fkey"
+            columns: ["queue_id"]
+            isOneToOne: false
+            referencedRelation: "holders_intel_post_queue"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       holders_intel_post_queue: {
         Row: {
           created_at: string
@@ -3501,6 +3548,8 @@ export type Database = {
           status: string
           symbol: string | null
           token_mint: string
+          trigger_comment: string | null
+          trigger_source: string | null
           tweet_id: string | null
         }
         Insert: {
@@ -3516,6 +3565,8 @@ export type Database = {
           status?: string
           symbol?: string | null
           token_mint: string
+          trigger_comment?: string | null
+          trigger_source?: string | null
           tweet_id?: string | null
         }
         Update: {
@@ -3531,6 +3582,8 @@ export type Database = {
           status?: string
           symbol?: string | null
           token_mint?: string
+          trigger_comment?: string | null
+          trigger_source?: string | null
           tweet_id?: string | null
         }
         Relationships: []
