@@ -9,9 +9,11 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { Switch } from '@/components/ui/switch';
-import { Settings, LogOut, Bell, Moon, Sun, Monitor } from 'lucide-react';
+import { Settings, LogOut, Bell, Moon, Sun, Monitor, Megaphone } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
 import { useTheme } from 'next-themes';
+import { useNavigate } from 'react-router-dom';
+import { supabase } from '@/integrations/supabase/client';
 
 interface UserSettings {
   stayLoggedIn: boolean;
@@ -28,7 +30,9 @@ const DEFAULT_SETTINGS: UserSettings = {
 export const UserSettingsDropdown = () => {
   const { signOut, user } = useAuth();
   const { theme, setTheme } = useTheme();
+  const navigate = useNavigate();
   const [settings, setSettings] = useState<UserSettings>(DEFAULT_SETTINGS);
+  const [hasAdvertiserAccount, setHasAdvertiserAccount] = useState(false);
 
   // Load settings from localStorage on mount
   useEffect(() => {
@@ -41,6 +45,31 @@ export const UserSettingsDropdown = () => {
       }
     }
   }, []);
+
+  // Check if user has any banner orders (even unpaid)
+  useEffect(() => {
+    if (!user) return;
+    
+    const checkAdvertiserAccount = async () => {
+      const { data: account } = await supabase
+        .from('advertiser_accounts')
+        .select('id')
+        .eq('user_id', user.id)
+        .maybeSingle();
+      
+      if (account) {
+        // Check if they have any orders at all
+        const { count } = await supabase
+          .from('banner_orders')
+          .select('id', { count: 'exact', head: true })
+          .eq('advertiser_id', account.id);
+        
+        setHasAdvertiserAccount((count || 0) > 0);
+      }
+    };
+    
+    checkAdvertiserAccount();
+  }, [user]);
 
   // Save settings to localStorage whenever they change
   const updateSetting = <K extends keyof UserSettings>(key: K, value: UserSettings[K]) => {
@@ -146,6 +175,20 @@ export const UserSettingsDropdown = () => {
         </div>
 
         <DropdownMenuSeparator />
+
+        {/* Advertisements - only show if user has banner orders */}
+        {hasAdvertiserAccount && (
+          <>
+            <DropdownMenuItem 
+              onClick={() => navigate('/my-banners')} 
+              className="cursor-pointer"
+            >
+              <Megaphone className="mr-2 h-4 w-4" />
+              My Advertisements
+            </DropdownMenuItem>
+            <DropdownMenuSeparator />
+          </>
+        )}
 
         {/* Sign Out */}
         <DropdownMenuItem onClick={handleSignOut} className="cursor-pointer text-destructive focus:text-destructive">
