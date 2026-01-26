@@ -133,10 +133,13 @@ interface LimitOrder {
   cancelled_at: string | null;
   created_at: string;
   notification_email: string | null;
-  // New monitoring mode fields
+  // Monitoring mode fields
   monitoring_mode?: string;
   volume_trigger_delta?: number | null;
   volume_direction?: string | null;
+  // Notification fields
+  notify_telegram_group?: boolean;
+  alert_only?: boolean;
 }
 
 interface InputTokenData {
@@ -3608,12 +3611,31 @@ export function FlipItDashboard() {
                     </TableCell>
                     <TableCell>
                       <div className="flex flex-col gap-1">
-                        <Badge variant="secondary" className="text-xs w-fit">
-                          {order.slippage_bps / 100}% slip
-                        </Badge>
-                        <Badge variant="secondary" className="text-xs w-fit capitalize">
-                          {order.priority_fee_mode} fee
-                        </Badge>
+                        <div className="flex gap-1 flex-wrap">
+                          <Badge variant="secondary" className="text-xs w-fit">
+                            {order.slippage_bps / 100}% slip
+                          </Badge>
+                          <Badge variant="secondary" className="text-xs w-fit capitalize">
+                            {order.priority_fee_mode} fee
+                          </Badge>
+                        </div>
+                        <div className="flex gap-1 flex-wrap">
+                          {order.alert_only && (
+                            <Badge variant="outline" className="text-xs w-fit border-amber-500/50 text-amber-400 bg-amber-500/10">
+                              🔔 Alert Only
+                            </Badge>
+                          )}
+                          {order.notification_email && (
+                            <Badge variant="outline" className="text-xs w-fit border-purple-500/50 text-purple-400 bg-purple-500/10">
+                              ✉️
+                            </Badge>
+                          )}
+                          {order.notify_telegram_group && (
+                            <Badge variant="outline" className="text-xs w-fit border-blue-500/50 text-blue-400 bg-blue-500/10">
+                              📢 TG
+                            </Badge>
+                          )}
+                        </div>
                       </div>
                     </TableCell>
                     <TableCell>
