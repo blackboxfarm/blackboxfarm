@@ -129,77 +129,91 @@ export const useHoldersPageTracking = (trackingData: TrackingData = {}) => {
   }, []);
 
   useEffect(() => {
+    // Only run tracking once per component mount, not on user changes
     if (isTrackingRef.current) return;
     isTrackingRef.current = true;
 
     const initTracking = async () => {
-      const sessionId = getSessionId();
-      const fingerprint = await getVisitorFingerprint();
-      const userAgent = navigator.userAgent;
-      const { deviceType, browser, os } = parseUserAgent(userAgent);
-      const referrer = document.referrer;
-      const referrerDomain = referrer ? extractDomain(referrer) : null;
-      const utmParams = parseUtmParams(window.location.search);
-      
-      const urlParams = new URLSearchParams(window.location.search);
-      const tokenPreloaded = trackingData.tokenPreloaded || urlParams.get('token');
-      const versionParam = trackingData.versionParam || urlParams.get('v');
-      
-      // Check if this looks like it came from an OG share (has version param)
-      const hasOgImage = !!versionParam;
-
-      // Determine auth method if authenticated
-      const getAuthMethod = (): string => {
-        if (!user) return 'anonymous';
-        // Check provider from user metadata if available
-        const provider = user.app_metadata?.provider;
-        if (provider === 'google') return 'google';
-        if (provider === 'github') return 'github';
-        if (provider === 'twitter') return 'twitter';
-        if (user.email) return 'email';
-        return 'unknown';
-      };
-
-      const visitData = {
-        session_id: sessionId,
-        visitor_fingerprint: fingerprint,
-        user_agent: userAgent,
-        user_id: user?.id || null,
-        referrer: referrer || null,
-        referrer_domain: referrerDomain,
-        utm_source: utmParams.utmSource,
-        utm_medium: utmParams.utmMedium,
-        utm_campaign: utmParams.utmCampaign,
-        utm_content: utmParams.utmContent,
-        utm_term: utmParams.utmTerm,
-        token_preloaded: tokenPreloaded || null,
-        version_param: versionParam || null,
-        has_og_image: hasOgImage,
-        full_url: window.location.href,
-        device_type: deviceType,
-        browser,
-        os,
-        screen_width: screen.width,
-        screen_height: screen.height,
-        reports_generated: 0,
-        tokens_analyzed: [] as string[],
-        is_authenticated: !!user,
-        auth_method: getAuthMethod(),
-      };
-
-      const { data, error } = await supabase
-        .from('holders_page_visits')
-        .insert(visitData)
-        .select('id')
-        .single();
-
-      if (!error && data) {
-        visitIdRef.current = data.id;
+      try {
+        const sessionId = getSessionId();
+        const fingerprint = await getVisitorFingerprint();
+        const userAgent = navigator.userAgent;
+        const { deviceType, browser, os } = parseUserAgent(userAgent);
+        const referrer = document.referrer;
+        const referrerDomain = referrer ? extractDomain(referrer) : null;
+        const utmParams = parseUtmParams(window.location.search);
         
-        // If token was preloaded, track it
-        if (tokenPreloaded) {
-          tokensAnalyzedRef.current.add(tokenPreloaded);
+        const urlParams = new URLSearchParams(window.location.search);
+        const tokenPreloaded = trackingData.tokenPreloaded || urlParams.get('token');
+        const versionParam = trackingData.versionParam || urlParams.get('v');
+        
+        // Check if this looks like it came from an OG share (has version param)
+        const hasOgImage = !!versionParam;
+
+        // Get current auth state directly (don't rely on user from hook closure)
+        const { data: authData } = await supabase.auth.getUser();
+        const currentUser = authData?.user;
+
+        // Determine auth method if authenticated
+        const getAuthMethod = (): string => {
+          if (!currentUser) return 'anonymous';
+          // Check provider from user metadata if available
+          const provider = currentUser.app_metadata?.provider;
+          if (provider === 'google') return 'google';
+          if (provider === 'github') return 'github';
+          if (provider === 'twitter') return 'twitter';
+          if (currentUser.email) return 'email';
+          return 'unknown';
+        };
+
+        const visitData = {
+          session_id: sessionId,
+          visitor_fingerprint: fingerprint,
+          user_agent: userAgent,
+          user_id: currentUser?.id || null,
+          referrer: referrer || null,
+          referrer_domain: referrerDomain,
+          utm_source: utmParams.utmSource,
+          utm_medium: utmParams.utmMedium,
+          utm_campaign: utmParams.utmCampaign,
+          utm_content: utmParams.utmContent,
+          utm_term: utmParams.utmTerm,
+          token_preloaded: tokenPreloaded || null,
+          version_param: versionParam || null,
+          has_og_image: hasOgImage,
+          full_url: window.location.href,
+          device_type: deviceType,
+          browser,
+          os,
+          screen_width: screen.width,
+          screen_height: screen.height,
+          reports_generated: 0,
+          tokens_analyzed: [] as string[],
+          is_authenticated: !!currentUser,
+          auth_method: getAuthMethod(),
+        };
+
+        console.log('[Holders Tracking] Inserting visit:', visitData.session_id);
+        
+        const { data, error } = await supabase
+          .from('holders_page_visits')
+          .insert(visitData)
+          .select('id')
+          .single();
+
+        if (error) {
+          console.error('[Holders Tracking] Insert error:', error.message, error.code);
+        } else if (data) {
+          console.log('[Holders Tracking] Visit recorded:', data.id);
+          visitIdRef.current = data.id;
+          
+          // If token was preloaded, track it
+          if (tokenPreloaded) {
+            tokensAnalyzedRef.current.add(tokenPreloaded);
+          }
         }
+      } catch (err) {
+        console.error('[Holders Tracking] Unexpected error:', err);
       }
     };
 
@@ -259,7 +273,7 @@ export const useHoldersPageTracking = (trackingData: TrackingData = {}) => {
           .then(() => {});
       }
     };
-  }, [user, trackingData.tokenPreloaded, trackingData.versionParam]);
+  }, [trackingData.tokenPreloaded, trackingData.versionParam]); // Removed user dependency - we fetch auth state directly
 
   return { trackReportGenerated };
 };
