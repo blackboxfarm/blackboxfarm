@@ -152,11 +152,12 @@ serve(async (req) => {
       console.log(`Expired ${expiredOrders.length} limit order(s)`);
     }
 
-    // Get all active watching limit orders
+    // Get all active watching limit orders (TIGHT mode only - fast 2s checks)
     const { data: orders, error: ordersErr } = await supabase
       .from("flip_limit_orders")
       .select("*")
       .eq("status", "watching")
+      .or("monitoring_mode.eq.tight,monitoring_mode.is.null") // Tight mode or legacy orders without mode
       .gt("expires_at", now);
 
     if (ordersErr) {
