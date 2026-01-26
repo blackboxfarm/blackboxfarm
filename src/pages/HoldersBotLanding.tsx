@@ -14,8 +14,11 @@ import {
   Coins,
   Crown
 } from "lucide-react";
+import { usePageTracking } from "@/hooks/usePageTracking";
 
 export default function HoldersBotLanding() {
+  usePageTracking('holders-bot');
+  
   return (
     <div className="min-h-screen bg-background">
       <FarmBanner />

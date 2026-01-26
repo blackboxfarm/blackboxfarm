@@ -17,8 +17,11 @@ import {
   Coins,
   PieChart
 } from "lucide-react";
+import { usePageTracking } from "@/hooks/usePageTracking";
 
 export default function HoldersLanding() {
+  usePageTracking('holders-info');
+  
   const features = [
     {
       icon: Search,

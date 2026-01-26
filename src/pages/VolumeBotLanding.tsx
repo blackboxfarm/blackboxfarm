@@ -4,8 +4,11 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { FarmBanner } from "@/components/FarmBanner";
 import { Activity, BarChart3, Wallet, Settings, ArrowRight, Mail } from "lucide-react";
+import { usePageTracking } from "@/hooks/usePageTracking";
 
 export default function VolumeBotLanding() {
+  usePageTracking('volumebot');
+  
   return (
     <div className="min-h-screen bg-background">
       <FarmBanner />

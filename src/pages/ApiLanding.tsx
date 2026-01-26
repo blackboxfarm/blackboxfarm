@@ -15,8 +15,11 @@ import {
   Clock,
   Mail
 } from "lucide-react";
+import { usePageTracking } from "@/hooks/usePageTracking";
 
 export default function ApiLanding() {
+  usePageTracking('api');
+  
   const apiServices = [
     {
       icon: <Database className="w-6 h-6" />,

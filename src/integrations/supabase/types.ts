@@ -3676,6 +3676,7 @@ export type Database = {
           is_authenticated: boolean | null
           os: string | null
           page_load_time_ms: number | null
+          page_name: string | null
           referrer: string | null
           referrer_domain: string | null
           reports_generated: number | null
@@ -3710,6 +3711,7 @@ export type Database = {
           is_authenticated?: boolean | null
           os?: string | null
           page_load_time_ms?: number | null
+          page_name?: string | null
           referrer?: string | null
           referrer_domain?: string | null
           reports_generated?: number | null
@@ -3744,6 +3746,7 @@ export type Database = {
           is_authenticated?: boolean | null
           os?: string | null
           page_load_time_ms?: number | null
+          page_name?: string | null
           referrer?: string | null
           referrer_domain?: string | null
           reports_generated?: number | null
