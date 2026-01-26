@@ -1,110 +1,136 @@
 
+# Plan: DEX Status Trigger System for Intel XBot
 
-# Plan: Replace DexScreener Fetching with Cloudflare KV Worker
+## Concept
+Create a parallel posting stream that monitors DexScreener for token milestone events (DEX paid, CTO, boosts, ads) and uses these as triggers to post wallet analysis with contextual comments. This augments the existing top 50 trending cycle.
 
-## Overview
-Replace the complex dual-fetching strategy (boosted + search endpoints) in the Intel XBot scheduler with a single call to your Cloudflare KV worker. This provides better reliability, caching, and bypasses DexScreener's Cloudflare protection.
+## How @dexsignals Works (Our Reference)
+They poll the **Top Boosted API** (`/token-boosts/top/v1`) which returns all recently boosted Solana tokens, then cross-reference with the **Orders API** (`/orders/v1/solana/{token}`) to detect specific paid statuses. We'll do the same but use the triggers for our wallet analysis posts.
 
-## Benefits
-- **No more 403 blocks** - Your worker handles DexScreener's anti-bot protection
-- **Faster & cached** - KV edge-cached globally, sub-50ms responses
-- **Simpler code** - Single fetch replaces 80+ lines of dual-fetch logic
-- **More reliable** - Your worker can handle retries/fallbacks internally
-
-## Changes Required
-
-### 1. Update `holders-intel-scheduler/index.ts`
-
-Replace the `fetchTrendingTokens()` function (lines 73-157):
-
-**Current:** 85 lines of code with:
-- Browser header spoofing
-- Two separate DexScreener API calls
-- Manual Solana chain filtering
-- Deduplication logic
-- Error handling for both endpoints
-
-**New:** ~25 lines:
-```text
-const CLOUDFLARE_WORKER_URL = 'https://dex-trending-solana.yayasanjembatanbali.workers.dev/api/trending/solana';
-
-async function fetchTrendingTokens(): Promise<TrendingToken[]> {
-  console.log('[scheduler] Fetching from Cloudflare KV worker...');
-  
-  const response = await fetch(CLOUDFLARE_WORKER_URL);
-  
-  if (!response.ok) {
-    console.error('[scheduler] Worker fetch failed:', response.status);
-    return [];
-  }
-  
-  const data = await response.json();
-  
-  if (data.stale) {
-    console.warn('[scheduler] Warning: Worker data is stale');
-  }
-  
-  console.log(`[scheduler] Got ${data.countPairsResolved}/${data.countPairsRequested} pairs`);
-  
-  // Map worker response to our TrendingToken format
-  return (data.pairs || [])
-    .filter((p: any) => p.ok && p.tokenMint)
-    .map((p: any) => ({
-      mint: p.tokenMint,
-      symbol: p.symbol || 'UNKNOWN',
-      name: p.name || 'Unknown Token',
-      marketCap: p.fdv || 0,
-      priceChange24h: 0, // Not provided by worker
-    }))
-    .slice(0, 50);
-}
-```
-
-### 2. Optional: Add Fallback Logic
-
-For extra reliability, keep the original DexScreener fetch as a fallback:
+## Architecture
 
 ```text
-async function fetchTrendingTokens(): Promise<TrendingToken[]> {
-  // Try Cloudflare worker first
-  try {
-    const tokens = await fetchFromCloudflareWorker();
-    if (tokens.length > 0) return tokens;
-  } catch (err) {
-    console.warn('[scheduler] Worker failed, falling back to DexScreener:', err);
-  }
-  
-  // Fallback to direct DexScreener
-  return fetchFromDexScreenerDirect();
-}
+┌─────────────────────────────────────────────────────────────────┐
+│                    EXISTING SYSTEM                               │
+│  ┌──────────────┐    ┌──────────────┐    ┌──────────────┐       │
+│  │ Cloudflare   │───▶│  Scheduler   │───▶│   Queue      │       │
+│  │ KV Worker    │    │ (4x daily)   │    │              │       │
+│  │ Top 50       │    │              │    │              │       │
+│  └──────────────┘    └──────────────┘    └──────────────┘       │
+│                                               │                  │
+│                                               ▼                  │
+│  ┌──────────────────────────────────────────────────────────┐   │
+│  │                    POSTER                                 │   │
+│  │  {comment1} = "First call out!" / "Still on Chart!" etc  │   │
+│  └──────────────────────────────────────────────────────────┘   │
+└─────────────────────────────────────────────────────────────────┘
+                              +
+┌─────────────────────────────────────────────────────────────────┐
+│                    NEW DEX TRIGGER SYSTEM                        │
+│  ┌──────────────┐    ┌──────────────┐    ┌──────────────┐       │
+│  │ DexScreener  │───▶│ DEX Scanner  │───▶│   Same       │       │
+│  │ Top Boosts + │    │ (every 5min) │    │   Queue      │       │
+│  │ Orders API   │    │              │    │              │       │
+│  └──────────────┘    └──────────────┘    └──────────────┘       │
+│         │                    │                                   │
+│         │                    ▼                                   │
+│         │           ┌──────────────────────┐                    │
+│         │           │ Trigger Tracking DB  │                    │
+│         └──────────▶│ (dedup announced)    │                    │
+│                     └──────────────────────┘                    │
+│                                                                  │
+│  {comment1} = "Just Paid Dex!" / "CTO Paid!" / "Boost 50x!" etc │
+└─────────────────────────────────────────────────────────────────┘
 ```
 
-## Data Mapping
+## Trigger Types & Comments
 
-| Worker Field | Scheduler Field | Notes |
-|--------------|-----------------|-------|
-| `tokenMint` | `mint` | Direct map |
-| `symbol` | `symbol` | Direct map |
-| `name` | `name` | Direct map |
-| `fdv` | `marketCap` | FDV used as market cap |
-| `volume24h` | - | Available for future sorting |
-| `liquidityUsd` | - | Available for future filtering |
+| Event Detected | {comment1} Value | Description |
+|----------------|------------------|-------------|
+| New tokenProfile | " : Just Paid Dex!" | Token profile was just approved |
+| New communityTakeover | " : CTO Paid!" | Community takeover approved |
+| Boosts ≥50 | " : Boost 50x!" | High boost count detected |
+| Boosts ≥100 | " : Boost 100x!" | Very high boost count |
+| New tokenAd/trendingBarAd | " : Ads Started!" | Marketing ads approved |
 
-## Technical Details
+## Database Changes
 
-- **No secrets required** - Public worker endpoint
-- **No new dependencies** - Standard fetch API
-- **Backward compatible** - Same output format, rest of scheduler unchanged
-- **Logging preserved** - Worker responses include count metadata
+### New Table: `holders_intel_dex_triggers`
+Tracks which tokens have been announced for each trigger type to prevent duplicates.
 
-## Files to Modify
+```sql
+CREATE TABLE holders_intel_dex_triggers (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  token_mint TEXT NOT NULL,
+  symbol TEXT,
+  name TEXT,
+  trigger_type TEXT NOT NULL, -- 'dex_paid', 'cto', 'boost_50', 'boost_100', 'ads'
+  detected_at TIMESTAMPTZ DEFAULT now(),
+  posted_at TIMESTAMPTZ,
+  queue_id UUID REFERENCES holders_intel_post_queue(id),
+  boost_count INTEGER,
+  UNIQUE(token_mint, trigger_type)
+);
+```
 
-1. `supabase/functions/holders-intel-scheduler/index.ts` - Replace `fetchTrendingTokens()` function
+## New Edge Function: `holders-intel-dex-scanner`
 
-## Testing
+Runs every 5 minutes via cron:
 
-After deployment:
-1. Manually trigger scheduler: Call the edge function directly
-2. Check logs for "Fetching from Cloudflare KV worker" message
-3. Verify tokens are queued in `holders_intel_post_queue` table
+1. **Fetch Top Boosted Tokens**
+   - Call `https://api.dexscreener.com/token-boosts/top/v1`
+   - Filter for Solana chain
 
+2. **For Each Token, Check Orders API**
+   - Call `https://api.dexscreener.com/orders/v1/solana/{tokenMint}`
+   - Detect approved orders: `tokenProfile`, `communityTakeover`, `tokenAd`, `trendingBarAd`
+   - Check boost count thresholds (50, 100)
+
+3. **Compare Against Tracking Table**
+   - For each detected trigger, check if `(token_mint, trigger_type)` already exists
+   - If new, it's a trigger event
+
+4. **Queue New Triggers**
+   - Insert into `holders_intel_post_queue` with custom `trigger_comment` column
+   - Insert into `holders_intel_dex_triggers` to mark as announced
+   - Random delays between posts (2-5 min apart)
+
+## Poster Modifications
+
+Update `holders-intel-poster` to:
+1. Check for `trigger_comment` field on queue item
+2. If present, use it for `{comment1}` instead of the milestone logic
+3. Fallback to existing milestone logic if not present
+
+## Cron Schedule
+
+Add new cron job: `holdersintel-dex-scanner` running every 5 minutes
+- Schedule: `*/5 * * * *`
+- Calls the new scanner function
+
+## Files to Create/Modify
+
+### New Files
+1. `supabase/functions/holders-intel-dex-scanner/index.ts` - Main scanner logic
+
+### Modified Files
+1. `supabase/functions/holders-intel-poster/index.ts` - Support custom trigger_comment
+2. `supabase/functions/intel-xbot-start/index.ts` - Add new cron job
+3. `supabase/functions/intel-xbot-kill/index.ts` - Include in kill switch
+
+### Database Migration
+1. Create `holders_intel_dex_triggers` table
+2. Add `trigger_comment` column to `holders_intel_post_queue`
+
+## Rate Limiting Considerations
+
+- DexScreener Top Boosts API: No auth needed, reasonable rate limits
+- Orders API: One call per token, batch with delays
+- Limit to processing top 20-30 boosted tokens per scan to stay within limits
+
+## Technical Notes
+
+- The Orders API returns `paymentTimestamp` which helps us detect truly new vs old orders
+- We filter for orders with `paymentTimestamp` within last 24 hours to ensure freshness
+- Boost thresholds (50, 100) can be tuned based on what's meaningful
+- The scanner will naturally catch tokens that are boosted AND trending, but posts will have different comments distinguishing the trigger
