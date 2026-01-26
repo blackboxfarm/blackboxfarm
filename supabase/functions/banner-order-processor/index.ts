@@ -43,8 +43,8 @@ serve(async (req) => {
 
     const { imageUrl, linkUrl, title, email, twitter, durationHours, priceUsd, startTime } = await req.json();
 
-    // Validate required fields
-    if (!imageUrl || !linkUrl || !title || !email || !durationHours || !priceUsd || !startTime) {
+    // Validate required fields (priceUsd can be 0 for free test, so check for undefined/null)
+    if (!imageUrl || !linkUrl || !title || !email || !durationHours || priceUsd === undefined || priceUsd === null || !startTime) {
       return new Response(
         JSON.stringify({ error: 'Missing required fields' }),
         { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
