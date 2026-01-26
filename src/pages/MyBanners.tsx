@@ -69,7 +69,7 @@ interface BannerOrder {
   activation_key: string | null;
 }
 
-type OrderStatus = "pending" | "paid" | "active" | "completed" | "expired" | "refunded";
+type OrderStatus = "pending" | "paid" | "active" | "completed" | "expired" | "refunded" | "paused";
 
 const getOrderStatus = (order: BannerOrder): OrderStatus => {
   if (order.payment_status === "refunded") return "refunded";
@@ -83,6 +83,8 @@ const getOrderStatus = (order: BannerOrder): OrderStatus => {
     if (now < startTime) return "paid"; // Paid but not started
     if (endTime && now > endTime) return "completed";
     if (order.is_active) return "active";
+    // If within time window but not active, it's paused (not expired)
+    if (!endTime || now <= endTime) return "paused";
     return "expired";
   }
   
@@ -94,6 +96,7 @@ const getStatusBadge = (status: OrderStatus) => {
     pending: { variant: "outline", label: "Awaiting Payment" },
     paid: { variant: "secondary", label: "Scheduled" },
     active: { variant: "default", label: "Live" },
+    paused: { variant: "outline", label: "Paused" },
     completed: { variant: "secondary", label: "Completed" },
     expired: { variant: "destructive", label: "Expired" },
     refunded: { variant: "outline", label: "Refunded" },
@@ -326,8 +329,8 @@ export default function MyBanners() {
                       const status = getOrderStatus(order);
                       const canEdit = status === "pending" || status === "paid";
                       const canPause = status === "active";
-                      const canResume = status === "paid" && !order.is_active;
-                      const canExtend = status === "active" || status === "completed";
+                      const canResume = status === "paused";
+                      const canExtend = status === "active" || status === "completed" || status === "paused";
                       
                       return (
                         <TableRow key={order.id}>
