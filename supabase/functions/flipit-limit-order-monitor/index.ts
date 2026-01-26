@@ -125,6 +125,73 @@ async function sendTweet(supabase: any, tweetData: {
   }
 }
 
+async function sendTelegramAlert(supabase: any, alertData: {
+  tokenSymbol: string;
+  tokenMint: string;
+  triggerPrice: number;
+  priceRange: { min: number; max: number };
+  amountSol: number;
+  amountUsd: number;
+  targetMultiplier: number;
+  alertOnly: boolean;
+}) {
+  const BLACKBOX_TG_GROUP_ID = -5274739643;
+  
+  const alertType = alertData.alertOnly ? '🔔 ALERT ONLY' : '🎯 LIMIT BUY EXECUTED';
+  const message = `${alertType}
+
+**Token:** ${alertData.tokenSymbol}
+**Mint:** \`${alertData.tokenMint.slice(0, 8)}...${alertData.tokenMint.slice(-4)}\`
+
+**Trigger Price:** $${alertData.triggerPrice.toFixed(8)}
+**Buy Range:** $${alertData.priceRange.min.toFixed(8)} - $${alertData.priceRange.max.toFixed(8)}
+**Amount:** ${alertData.amountSol.toFixed(4)} SOL (~$${alertData.amountUsd.toFixed(2)})
+**Target:** ${alertData.targetMultiplier}x
+
+📊 [DexScreener](https://dexscreener.com/solana/${alertData.tokenMint})`;
+
+  try {
+    // Try MTProto first
+    const { error: mtprotoError } = await supabase.functions.invoke('telegram-mtproto-auth', {
+      body: {
+        action: 'send_message',
+        chatId: BLACKBOX_TG_GROUP_ID,
+        message: message,
+      },
+    });
+
+    if (!mtprotoError) {
+      console.log('[Limit Order] Telegram alert sent via MTProto');
+      return true;
+    }
+    console.warn('[Limit Order] MTProto failed:', mtprotoError);
+  } catch (e) {
+    console.warn('[Limit Order] MTProto exception:', e);
+  }
+
+  // Fallback to bot webhook
+  try {
+    const { error: botError } = await supabase.functions.invoke('telegram-bot-webhook', {
+      body: {
+        action: 'send_message',
+        chat_id: BLACKBOX_TG_GROUP_ID,
+        text: message,
+        parse_mode: 'Markdown',
+      },
+    });
+
+    if (!botError) {
+      console.log('[Limit Order] Telegram alert sent via bot webhook');
+      return true;
+    }
+    console.warn('[Limit Order] Bot webhook failed:', botError);
+  } catch (e) {
+    console.warn('[Limit Order] Bot webhook exception:', e);
+  }
+
+  return false;
+}
+
 serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
@@ -180,6 +247,7 @@ serve(async (req) => {
     console.log("Fetched prices:", prices, "SOL:", solPrice);
 
     const executed: any[] = [];
+    const alertsOnly: any[] = [];
 
     // Check each order for trigger
     for (const order of orders) {
@@ -189,19 +257,94 @@ serve(async (req) => {
         continue;
       }
 
-      const { buy_price_min_usd, buy_price_max_usd, buy_amount_sol, target_multiplier, slippage_bps, priority_fee_mode } = order;
+      const { buy_price_min_usd, buy_price_max_usd, buy_amount_sol, target_multiplier, slippage_bps, priority_fee_mode, alert_only, notify_telegram_group, notification_email } = order;
 
-      console.log(`Order ${order.id}: current=${currentPrice}, range=[${buy_price_min_usd}, ${buy_price_max_usd}]`);
+      console.log(`Order ${order.id}: current=${currentPrice}, range=[${buy_price_min_usd}, ${buy_price_max_usd}], alert_only=${alert_only}`);
 
       // Check if price is within the buy range
       if (currentPrice >= buy_price_min_usd && currentPrice <= buy_price_max_usd) {
-        console.log(`LIMIT BUY TRIGGERED for ${order.token_mint}! Current: $${currentPrice} is within range [$${buy_price_min_usd}, $${buy_price_max_usd}]`);
+        console.log(`LIMIT ORDER TRIGGERED for ${order.token_mint}! Current: $${currentPrice} is within range [$${buy_price_min_usd}, $${buy_price_max_usd}]`);
 
+        const buyAmountUsd = buy_amount_sol * solPrice;
+        const newTargetPrice = currentPrice * target_multiplier;
+
+        // If alert_only is true, just send notifications without executing the buy
+        if (alert_only) {
+          console.log(`ALERT ONLY mode: Sending notifications without executing buy for ${order.token_mint}`);
+
+          // Update limit order status to 'alerted'
+          await supabase
+            .from("flip_limit_orders")
+            .update({
+              status: "alerted",
+              executed_at: new Date().toISOString(),
+            })
+            .eq("id", order.id);
+
+          alertsOnly.push({
+            orderId: order.id,
+            tokenMint: order.token_mint,
+            tokenSymbol: order.token_symbol,
+            triggerPrice: currentPrice,
+            buyAmountSol: buy_amount_sol,
+            buyAmountUsd: buyAmountUsd,
+            targetMultiplier: target_multiplier,
+            alertOnly: true,
+          });
+
+          // Send email notification for alert-only
+          if (notification_email) {
+            try {
+              await supabase.functions.invoke("send-email-notification", {
+                body: {
+                  to: notification_email,
+                  subject: `🔔 Limit Order Alert: ${order.token_symbol || order.token_mint.slice(0, 8)} @ $${currentPrice.toFixed(8)}`,
+                  title: "Limit Order Conditions Met!",
+                  message: `
+<strong>🔔 ALERT ONLY - No Buy Executed</strong>
+
+<strong>Token:</strong> ${order.token_name || order.token_symbol || "Unknown"} (${order.token_symbol || order.token_mint.slice(0, 8)})
+
+<strong>Trigger Details:</strong>
+• Current Price: <strong>$${currentPrice.toFixed(8)}</strong>
+• Buy Range: $${buy_price_min_usd.toFixed(8)} - $${buy_price_max_usd.toFixed(8)}
+• Configured Amount: <strong>${buy_amount_sol.toFixed(4)} SOL ($${buyAmountUsd.toFixed(2)} USD)</strong>
+• Target Would Be: <strong>$${newTargetPrice.toFixed(8)} (${target_multiplier}x)</strong>
+
+Your limit order conditions have been met. This is an alert-only notification - no buy was executed.
+                  `,
+                  type: "info",
+                  metadata: {
+                    tokenMint: order.token_mint,
+                    chartUrl: `https://dexscreener.com/solana/${order.token_mint}`,
+                  }
+                }
+              });
+              console.log("Alert-only notification email sent");
+            } catch (emailErr) {
+              console.error("Failed to send alert-only notification email:", emailErr);
+            }
+          }
+
+          // Send Telegram alert if enabled
+          if (notify_telegram_group) {
+            await sendTelegramAlert(supabase, {
+              tokenSymbol: order.token_symbol || order.token_mint.slice(0, 8),
+              tokenMint: order.token_mint,
+              triggerPrice: currentPrice,
+              priceRange: { min: buy_price_min_usd, max: buy_price_max_usd },
+              amountSol: buy_amount_sol,
+              amountUsd: buyAmountUsd,
+              targetMultiplier: target_multiplier,
+              alertOnly: true,
+            });
+          }
+
+          continue; // Skip to next order without executing buy
+        }
+
+        // Execute actual buy (existing logic)
         try {
-          // Convert SOL to USD for the buy
-          const buyAmountUsd = buy_amount_sol * solPrice;
-          const newTargetPrice = currentPrice * target_multiplier;
-
           console.log(`Executing limit buy: ${buy_amount_sol} SOL ($${buyAmountUsd.toFixed(2)}) at $${currentPrice}, target ${target_multiplier}x`);
 
           // Create new position via flipit-execute
@@ -255,11 +398,11 @@ serve(async (req) => {
           console.log(`Limit buy executed for ${order.token_mint}: position ${newPositionId}`);
 
           // Send email notification
-          if (order.notification_email) {
+          if (notification_email) {
             try {
               await supabase.functions.invoke("send-email-notification", {
                 body: {
-                  to: order.notification_email,
+                  to: notification_email,
                   subject: `🎯 Limit Buy Triggered: ${order.token_symbol || order.token_mint.slice(0, 8)} @ $${currentPrice.toFixed(8)}`,
                   title: "Limit Buy Order Executed!",
                   message: `
@@ -286,6 +429,20 @@ Your limit order has been successfully executed and a new position has been crea
             } catch (emailErr) {
               console.error("Failed to send limit buy notification email:", emailErr);
             }
+          }
+
+          // Send Telegram alert if enabled
+          if (notify_telegram_group) {
+            await sendTelegramAlert(supabase, {
+              tokenSymbol: order.token_symbol || order.token_mint.slice(0, 8),
+              tokenMint: order.token_mint,
+              triggerPrice: currentPrice,
+              priceRange: { min: buy_price_min_usd, max: buy_price_max_usd },
+              amountSol: buy_amount_sol,
+              amountUsd: buyAmountUsd,
+              targetMultiplier: target_multiplier,
+              alertOnly: false,
+            });
           }
 
           // Send tweet (fire and forget)
@@ -320,6 +477,7 @@ Your limit order has been successfully executed and a new position has been crea
       prices,
       solPrice,
       executed,
+      alertsOnly,
       expiredCount: expiredOrders?.length || 0,
       checkedAt: new Date().toISOString()
     });

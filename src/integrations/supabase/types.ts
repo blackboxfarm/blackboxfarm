@@ -2718,6 +2718,7 @@ export type Database = {
       }
       flip_limit_orders: {
         Row: {
+          alert_only: boolean
           buy_amount_sol: number
           buy_price_max_usd: number
           buy_price_min_usd: number
@@ -2729,6 +2730,7 @@ export type Database = {
           id: string
           monitoring_mode: string
           notification_email: string | null
+          notify_telegram_group: boolean
           priority_fee_mode: string
           slippage_bps: number
           status: string
@@ -2743,6 +2745,7 @@ export type Database = {
           wallet_id: string | null
         }
         Insert: {
+          alert_only?: boolean
           buy_amount_sol: number
           buy_price_max_usd: number
           buy_price_min_usd: number
@@ -2754,6 +2757,7 @@ export type Database = {
           id?: string
           monitoring_mode?: string
           notification_email?: string | null
+          notify_telegram_group?: boolean
           priority_fee_mode?: string
           slippage_bps?: number
           status?: string
@@ -2768,6 +2772,7 @@ export type Database = {
           wallet_id?: string | null
         }
         Update: {
+          alert_only?: boolean
           buy_amount_sol?: number
           buy_price_max_usd?: number
           buy_price_min_usd?: number
@@ -2779,6 +2784,7 @@ export type Database = {
           id?: string
           monitoring_mode?: string
           notification_email?: string | null
+          notify_telegram_group?: boolean
           priority_fee_mode?: string
           slippage_bps?: number
           status?: string
