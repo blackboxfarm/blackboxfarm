@@ -114,6 +114,35 @@ async function fetchWithBackoff(url: string, options: RequestInit, maxRetries = 
   throw lastError || new Error('Max retries exceeded');
 }
 
+// === MAYHEM MODE CHECK ===
+// Detect tokens with suspicious program ID or supply (hard reject)
+async function checkMayhemMode(tokenMint: string): Promise<boolean> {
+  try {
+    const response = await fetch(`https://frontend-api.pump.fun/coins/${tokenMint}`, {
+      headers: { 'Accept': 'application/json' }
+    });
+    if (!response.ok) return false;
+    
+    const data = await response.json();
+    const totalSupply = data.total_supply || 0;
+    const program = data.program || null;
+    
+    const MAYHEM_PROGRAM_ID = 'MAyhSmzXzV1pTf7LsNkrNwkWKTo4ougAJ1PPg47MD4e';
+    const MAYHEM_SUPPLY = 2000000000000000; // 2 quadrillion
+    
+    const isMayhem = program === MAYHEM_PROGRAM_ID || totalSupply >= MAYHEM_SUPPLY;
+    
+    if (isMayhem) {
+      console.log(`   🔥 MAYHEM DETECTED: program=${program?.slice(0,8) || 'unknown'}, supply=${totalSupply}`);
+    }
+    
+    return isMayhem;
+  } catch (error) {
+    console.error(`Error checking mayhem for ${tokenMint}:`, error);
+    return false;
+  }
+}
+
 // Fetch token metrics from HELIUS API (PRIMARY FALLBACK - most reliable)
 async function fetchHeliusMetrics(mint: string): Promise<TokenMetrics | null> {
   const heliusApiKey = Deno.env.get('HELIUS_API_KEY');
@@ -772,6 +801,28 @@ async function monitorWatchlistTokens(supabase: any): Promise<MonitorStats> {
         // Must pass all criteria including max_single_wallet_pct if we have the data
         const passesWalletConcentration = token.max_single_wallet_pct === null || 
           token.max_single_wallet_pct <= config.max_single_wallet_pct;
+        
+        // === MAYHEM CHECK (MANDATORY BEFORE QUALIFICATION) ===
+        // If mayhem_checked is false, check now before allowing qualification
+        let isMayhemToken = false;
+        if (!token.mayhem_checked) {
+          console.log(`   🔍 Checking MAYHEM for ${token.token_symbol}...`);
+          isMayhemToken = await checkMayhemMode(token.token_mint);
+          updates.mayhem_checked = true;
+          
+          if (isMayhemToken) {
+            console.log(`   ⛔ MAYHEM DETECTED: ${token.token_symbol} - REJECTING`);
+            updates.status = 'rejected';
+            updates.rejection_type = 'permanent';
+            updates.rejection_reason = 'mayhem_mode';
+            updates.rejection_reasons = ['mayhem_mode'];
+            updates.removed_at = now.toISOString();
+            updates.permanent_reject = true;
+            
+            stats.errors++; // Count as error for visibility
+            continue; // Skip to next token
+          }
+        }
         
         if (watchingMinutes >= config.min_watch_time_minutes && 
             metrics.holders >= config.qualification_holder_count && 
