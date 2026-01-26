@@ -661,28 +661,98 @@ async function monitorWatchlistTokens(supabase: any): Promise<MonitorStats> {
       try {
         stats.tokensChecked++;
 
-        // === DEV BEHAVIOR CHECK (HIGHEST PRIORITY) ===
-        // If dev has sold or launched a new token, PERMANENT reject immediately
+        // === ENHANCED DEV BEHAVIOR CHECK (HIGHEST PRIORITY) ===
+        // Use smarter logic: Only auto-reject on FULL EXIT for young tokens
+        // Allow partial sells if dev still holds and token is still active
         if (token.dev_sold === true) {
-          console.log(`🚨 DEV SOLD: ${token.token_symbol} - PERMANENT REJECT`);
+          const tokenAgeMinutes = (now.getTime() - new Date(token.first_seen_at).getTime()) / 60000;
+          const devHoldingPct = token.dev_holding_pct ?? null;
+          const devBoughtBack = token.dev_bought_back === true;
+          const isFullExit = devHoldingPct !== null && devHoldingPct < 0.1;
           
-          await supabase
-            .from('pumpfun_watchlist')
-            .update({
-              status: 'rejected',
-              rejection_type: 'permanent',
-              rejection_reason: 'dev_sold',
-              rejection_reasons: ['dev_sold'],
-              removed_at: now.toISOString(),
-              removal_reason: 'Developer sold tokens',
-              last_checked_at: now.toISOString(),
-              last_processor: 'watchlist-monitor',
-            })
-            .eq('id', token.id);
+          // Get current market cap to check if token is dead
+          const currentMcap = token.market_cap_usd ?? token.market_cap_sol ?? 0;
+          const isCrashedToken = currentMcap < 4000; // Under $4k = basically dead
+          
+          // FULL EXIT SCENARIO: Dev completely exited on young token = DEAD
+          // IF token_age < 30 minutes AND dev_sell = true AND dev_rebuy = false AND dev_wallet_empty
+          if (isFullExit && tokenAgeMinutes < 30 && !devBoughtBack) {
+            console.log(`💀 DEV EXITED & RAN: ${token.token_symbol} - age: ${tokenAgeMinutes.toFixed(0)}m, holding: ${devHoldingPct?.toFixed(2) ?? 0}%, mcap: $${currentMcap.toFixed(0)} - PERMANENT REJECT`);
             
-          stats.devSellRejected++;
-          stats.devSellTokens.push(`${token.token_symbol} (dev sold)`);
-          continue;
+            await supabase
+              .from('pumpfun_watchlist')
+              .update({
+                status: 'rejected',
+                rejection_type: 'permanent',
+                rejection_reason: 'dev_full_exit',
+                rejection_reasons: ['dev_full_exit', 'young_token_abandon'],
+                removed_at: now.toISOString(),
+                removal_reason: `Dev fully exited at ${tokenAgeMinutes.toFixed(0)}m (0% holding, no rebuy)`,
+                last_checked_at: now.toISOString(),
+                last_processor: 'watchlist-monitor',
+              })
+              .eq('id', token.id);
+              
+            stats.devSellRejected++;
+            stats.devSellTokens.push(`${token.token_symbol} (dev full exit @ ${tokenAgeMinutes.toFixed(0)}m)`);
+            continue;
+          }
+          
+          // CRASHED + DEV SOLD: Token crashed to near zero AND dev sold = dead test token
+          if (isCrashedToken && !devBoughtBack) {
+            console.log(`💀 DEV SOLD + CRASHED: ${token.token_symbol} - mcap: $${currentMcap.toFixed(0)}, holding: ${devHoldingPct?.toFixed(2) ?? 'unknown'}% - PERMANENT REJECT`);
+            
+            await supabase
+              .from('pumpfun_watchlist')
+              .update({
+                status: 'rejected',
+                rejection_type: 'permanent',
+                rejection_reason: 'dev_sold_crashed',
+                rejection_reasons: ['dev_sold', 'token_crashed'],
+                removed_at: now.toISOString(),
+                removal_reason: `Dev sold + token crashed to $${currentMcap.toFixed(0)} (dead)`,
+                last_checked_at: now.toISOString(),
+                last_processor: 'watchlist-monitor',
+              })
+              .eq('id', token.id);
+              
+            stats.devSellRejected++;
+            stats.devSellTokens.push(`${token.token_symbol} (dev sold + crashed $${currentMcap.toFixed(0)})`);
+            continue;
+          }
+          
+          // PARTIAL SELL WITH REBUY: Dev took some profit but bought back - allow to continue
+          if (devBoughtBack) {
+            console.log(`⚠️ DEV SOLD BUT REBOUGHT: ${token.token_symbol} - holding: ${devHoldingPct?.toFixed(2) ?? 'unknown'}% - continuing to watch`);
+            // Don't reject - dev showed commitment by rebuying
+          }
+          // PARTIAL SELL: Dev still holds significant portion - log but maybe continue
+          else if (devHoldingPct !== null && devHoldingPct >= 1) {
+            console.log(`⚠️ DEV PARTIAL SELL: ${token.token_symbol} - still holds ${devHoldingPct.toFixed(2)}% - watching cautiously`);
+            // Don't auto-reject partial sells where dev still holds >1%
+          }
+          // UNKNOWN/OLD TOKEN: Default to original behavior for old tokens or unknown holding
+          else if (tokenAgeMinutes >= 30) {
+            console.log(`🚨 DEV SOLD (mature token): ${token.token_symbol} - age: ${tokenAgeMinutes.toFixed(0)}m - PERMANENT REJECT`);
+            
+            await supabase
+              .from('pumpfun_watchlist')
+              .update({
+                status: 'rejected',
+                rejection_type: 'permanent',
+                rejection_reason: 'dev_sold',
+                rejection_reasons: ['dev_sold'],
+                removed_at: now.toISOString(),
+                removal_reason: 'Developer sold tokens',
+                last_checked_at: now.toISOString(),
+                last_processor: 'watchlist-monitor',
+              })
+              .eq('id', token.id);
+              
+            stats.devSellRejected++;
+            stats.devSellTokens.push(`${token.token_symbol} (dev sold @ ${tokenAgeMinutes.toFixed(0)}m)`);
+            continue;
+          }
         }
         
         if (token.dev_launched_new === true) {
