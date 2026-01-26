@@ -70,88 +70,48 @@ function getPreviousSnapshotSlots(currentSlot: string): string[] {
   return slots;
 }
 
+const CLOUDFLARE_WORKER_URL = 'https://dex-trending-solana.yayasanjembatanbali.workers.dev/api/trending/solana';
+
 async function fetchTrendingTokens(): Promise<TrendingToken[]> {
-  console.log('[scheduler] Fetching top trending Solana tokens from DexScreener...');
-  
-  const browserHeaders = {
-    'Accept': 'application/json',
-    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
-  };
-  
-  const allTokens: TrendingToken[] = [];
-  const seenMints = new Set<string>();
+  console.log('[scheduler] Fetching from Cloudflare KV worker...');
   
   try {
-    // Strategy 1: Get top boosted tokens (officially promoted/trending)
-    console.log('[scheduler] Fetching boosted tokens...');
-    const boostResponse = await fetch(
-      'https://api.dexscreener.com/token-boosts/top/v1',
-      { headers: browserHeaders }
-    );
+    const response = await fetch(CLOUDFLARE_WORKER_URL);
     
-    if (boostResponse.ok) {
-      const boostData = await boostResponse.json();
-      console.log(`[scheduler] Boosted tokens response: ${boostData?.length || 0} items`);
-      
-      for (const item of (boostData || [])) {
-        if (item.chainId === 'solana' && item.tokenAddress && !seenMints.has(item.tokenAddress)) {
-          seenMints.add(item.tokenAddress);
-          allTokens.push({
-            mint: item.tokenAddress,
-            symbol: item.symbol || 'UNKNOWN',
-            name: item.name || item.description || 'Unknown Token',
-            marketCap: 0,
-            priceChange24h: 0,
-          });
-        }
-      }
-      console.log(`[scheduler] After boosted: ${allTokens.length} Solana tokens`);
+    if (!response.ok) {
+      console.error('[scheduler] Worker fetch failed:', response.status);
+      return [];
     }
     
-    // Strategy 2: Get top gainers from pairs search
-    console.log('[scheduler] Fetching top pairs...');
-    const searchResponse = await fetch(
-      'https://api.dexscreener.com/latest/dex/search?q=SOL',
-      { headers: browserHeaders }
-    );
+    const data = await response.json();
     
-    if (searchResponse.ok) {
-      const searchData = await searchResponse.json();
-      const pairs = searchData.pairs || [];
-      
-      // Sort by 24h volume to get most active
-      const solanaPairs = pairs
-        .filter((p: any) => p.chainId === 'solana')
-        .sort((a: any, b: any) => (b.volume?.h24 || 0) - (a.volume?.h24 || 0))
-        .slice(0, 100);
-      
-      console.log(`[scheduler] Found ${solanaPairs.length} active Solana pairs`);
-      
-      for (const pair of solanaPairs) {
-        const mint = pair.baseToken?.address;
-        if (mint && !seenMints.has(mint)) {
-          seenMints.add(mint);
-          allTokens.push({
-            mint,
-            symbol: pair.baseToken?.symbol || 'UNKNOWN',
-            name: pair.baseToken?.name || 'Unknown Token',
-            marketCap: pair.marketCap || pair.fdv || 0,
-            priceChange24h: pair.priceChange?.h24 || 0,
-          });
-        }
-      }
-      console.log(`[scheduler] After search: ${allTokens.length} total tokens`);
+    if (data.stale) {
+      console.warn('[scheduler] Warning: Worker data is stale');
     }
     
-    // Return top 50
-    const result = allTokens.slice(0, 50);
-    console.log(`[scheduler] Final result: ${result.length} tokens`);
-    console.log(`[scheduler] Sample: ${result.slice(0, 5).map(t => t.symbol).join(', ')}`);
+    console.log(`[scheduler] Got ${data.countPairsResolved || 0}/${data.countPairsRequested || 0} pairs from worker`);
     
-    return result;
+    // Map worker response to our TrendingToken format
+    const tokens = (data.pairs || [])
+      .filter((p: any) => p.ok && p.tokenMint)
+      .map((p: any) => ({
+        mint: p.tokenMint,
+        symbol: p.symbol || 'UNKNOWN',
+        name: p.name || 'Unknown Token',
+        marketCap: p.fdv || 0,
+        priceChange24h: 0,
+      }))
+      .slice(0, 50);
+    
+    console.log(`[scheduler] Mapped ${tokens.length} tokens`);
+    if (tokens.length > 0) {
+      console.log(`[scheduler] Sample: ${tokens.slice(0, 5).map((t: TrendingToken) => t.symbol).join(', ')}`);
+    }
+    
+    return tokens;
     
   } catch (error) {
-    console.error('[scheduler] Error fetching trending tokens:', error);
+    console.error('[scheduler] Error fetching from Cloudflare worker:', error);
     return [];
   }
 }
