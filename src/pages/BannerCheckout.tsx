@@ -347,6 +347,9 @@ export default function BannerCheckout() {
                           {copied ? <Check className="h-4 w-4 text-green-500" /> : <Copy className="h-4 w-4" />}
                         </Button>
                       </div>
+                      <p className="text-xs text-muted-foreground mt-2 italic">
+                        This wallet was generated exclusively for your order and will only be used for this transaction.
+                      </p>
                     </div>
 
                     <div className="bg-primary/10 p-4 rounded-lg">
