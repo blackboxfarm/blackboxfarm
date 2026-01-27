@@ -405,3 +405,6 @@ verify_jwt = false
 
 [functions.dailies-backfill-socials]
 verify_jwt = false
+
+[functions.token-ai-interpreter]
+verify_jwt = false

@@ -26,6 +26,8 @@ import { useAuth } from '@/hooks/useAuth';
 import { useTokenDataCollection } from '@/hooks/useTokenDataCollection';
 import padreMemeCoins from '@/assets/padre-meme-coins.png';
 import { ExtendedAnalysisSection } from '@/components/holders/ExtendedAnalysisSection';
+import { AIInterpretationPanel } from '@/components/holders/AIInterpretationPanel';
+import { AIInterpretationLocked } from '@/components/holders/AIInterpretationLocked';
 
 interface TokenHolder {
   owner: string;
@@ -1225,6 +1227,16 @@ export function BaglessHoldersReport({ initialToken, onReportGenerated }: Bagles
 
           {/* Ad Banner #2 - Above Report Summary */}
           <AdBanner size="leaderboard" position={2} />
+
+          {/* AI Interpretation Panel - Logged in users only */}
+          {user ? (
+            <AIInterpretationPanel 
+              reportData={report as unknown as Record<string, unknown>}
+              tokenMint={report.tokenMint}
+            />
+          ) : (
+            <AIInterpretationLocked />
+          )}
 
           <Card>
             <CardHeader className="p-3 md:p-6 pb-2 md:pb-4">
