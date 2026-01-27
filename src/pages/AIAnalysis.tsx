@@ -141,6 +141,7 @@ export default function AIAnalysis() {
   const [showMetrics, setShowMetrics] = useState(false);
   const [eli5Mode, setEli5Mode] = useState(false);
   const [selectedMode, setSelectedMode] = useState<string>('auto');
+  const [selectedTone, setSelectedTone] = useState<'balanced' | 'constructive' | 'cautionary'>('balanced');
   const { user } = useAuth();
   const { toast } = useToast();
 
@@ -183,7 +184,13 @@ export default function AIAnalysis() {
     }
   }, [tokenMint, toast]);
 
-  const fetchAIInterpretation = useCallback(async (report: Record<string, unknown>, mint: string, forceRefresh = false, forceMode?: string) => {
+  const fetchAIInterpretation = useCallback(async (
+    report: Record<string, unknown>, 
+    mint: string, 
+    forceRefresh = false, 
+    forceMode?: string,
+    tone: 'balanced' | 'constructive' | 'cautionary' = 'balanced'
+  ) => {
     setIsLoadingAI(true);
     setError(null);
 
@@ -193,7 +200,8 @@ export default function AIAnalysis() {
           reportData: report, 
           tokenMint: mint, 
           forceRefresh,
-          forceMode: forceMode && forceMode !== 'auto' ? forceMode : undefined
+          forceMode: forceMode && forceMode !== 'auto' ? forceMode : undefined,
+          tone
         }
       });
 
@@ -214,7 +222,14 @@ export default function AIAnalysis() {
   const handleModeChange = (mode: string) => {
     setSelectedMode(mode);
     if (reportData && tokenMint) {
-      fetchAIInterpretation(reportData, tokenMint.trim(), true, mode);
+      fetchAIInterpretation(reportData, tokenMint.trim(), true, mode, selectedTone);
+    }
+  };
+
+  const handleToneChange = (tone: 'balanced' | 'constructive' | 'cautionary') => {
+    setSelectedTone(tone);
+    if (reportData && tokenMint) {
+      fetchAIInterpretation(reportData, tokenMint.trim(), true, selectedMode, tone);
     }
   };
 
@@ -275,7 +290,7 @@ export default function AIAnalysis() {
                 Beta
               </Badge>
             </div>
-            <div className="flex items-center gap-3">
+            <div className="flex items-center gap-4">
               <div className="flex items-center gap-2">
                 <Label htmlFor="eli5-mode" className="text-sm text-muted-foreground">ELI5 Mode</Label>
                 <Switch 
@@ -570,6 +585,68 @@ export default function AIAnalysis() {
                       <p className="text-muted-foreground mt-1">{desc.split(' - ')[1]}</p>
                     </button>
                   ))}
+                </CardContent>
+              </Card>
+
+              {/* Tone Selector */}
+              <Card>
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-lg flex items-center gap-2">
+                    <Sparkles className="h-4 w-4 text-purple-400" />
+                    Interpretation Tone
+                  </CardTitle>
+                  <CardDescription className="text-xs">
+                    Adjust how findings are framed
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-2">
+                  <button
+                    onClick={() => handleToneChange('balanced')}
+                    disabled={isLoadingAI}
+                    className={`w-full p-2 rounded text-xs text-left transition-colors ${
+                      selectedTone === 'balanced'
+                        ? 'bg-blue-500/20 border border-blue-500/30'
+                        : 'bg-muted/20 hover:bg-muted/40'
+                    } ${isLoadingAI ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
+                  >
+                    <div className="flex items-center gap-2">
+                      {selectedTone === 'balanced' && <CheckCircle className="h-3 w-3 text-blue-400" />}
+                      <span className="font-medium">⚖️ Balanced</span>
+                    </div>
+                    <p className="text-muted-foreground mt-1">Neutral, objective analysis</p>
+                  </button>
+
+                  <button
+                    onClick={() => handleToneChange('constructive')}
+                    disabled={isLoadingAI}
+                    className={`w-full p-2 rounded text-xs text-left transition-colors ${
+                      selectedTone === 'constructive'
+                        ? 'bg-green-500/20 border border-green-500/30'
+                        : 'bg-muted/20 hover:bg-muted/40'
+                    } ${isLoadingAI ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
+                  >
+                    <div className="flex items-center gap-2">
+                      {selectedTone === 'constructive' && <CheckCircle className="h-3 w-3 text-green-400" />}
+                      <span className="font-medium">✨ Constructive</span>
+                    </div>
+                    <p className="text-muted-foreground mt-1">Highlights strengths & opportunities</p>
+                  </button>
+
+                  <button
+                    onClick={() => handleToneChange('cautionary')}
+                    disabled={isLoadingAI}
+                    className={`w-full p-2 rounded text-xs text-left transition-colors ${
+                      selectedTone === 'cautionary'
+                        ? 'bg-orange-500/20 border border-orange-500/30'
+                        : 'bg-muted/20 hover:bg-muted/40'
+                    } ${isLoadingAI ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
+                  >
+                    <div className="flex items-center gap-2">
+                      {selectedTone === 'cautionary' && <CheckCircle className="h-3 w-3 text-orange-400" />}
+                      <span className="font-medium">⚠️ Cautionary</span>
+                    </div>
+                    <p className="text-muted-foreground mt-1">Prioritizes risks & warnings</p>
+                  </button>
                 </CardContent>
               </Card>
 
