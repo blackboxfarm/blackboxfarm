@@ -25,9 +25,12 @@ async function fetchPumpFunData(mint: string): Promise<TokenMetadata | null> {
     if (!res.ok) return null;
     
     const data = await res.json();
+    // Only return if we have at least symbol
+    if (!data.symbol) return null;
+    
     return {
       symbol: data.symbol || null,
-      name: data.name || null,
+      name: data.name || data.symbol || null,
       image: data.image_uri || data.uri || null,
       twitter: data.twitter || null,
       telegram: data.telegram || null,
@@ -48,6 +51,10 @@ async function fetchDexScreenerData(mint: string): Promise<TokenMetadata | null>
     const data = await res.json();
     const pair = data.pairs?.[0];
     if (!pair) return null;
+    
+    // Must have at least a symbol from DexScreener
+    const symbol = pair.baseToken?.symbol;
+    if (!symbol) return null;
     
     let twitter: string | null = null;
     let telegram: string | null = null;
@@ -75,8 +82,8 @@ async function fetchDexScreenerData(mint: string): Promise<TokenMetadata | null>
     }
     
     return {
-      symbol: pair.baseToken?.symbol || null,
-      name: pair.baseToken?.name || null,
+      symbol: symbol,
+      name: pair.baseToken?.name || symbol,
       image: pair.info?.imageUrl || null,
       twitter,
       telegram,
