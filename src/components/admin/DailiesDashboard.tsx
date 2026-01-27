@@ -9,6 +9,7 @@ import { Calendar } from '@/components/ui/calendar';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { cn } from '@/lib/utils';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { 
   ChevronLeft, 
   ChevronRight, 
@@ -22,7 +23,6 @@ import {
   Twitter,
   MessageCircle,
   Globe,
-  ChevronDown,
   ListOrdered,
   Megaphone,
   FileText,
@@ -30,7 +30,8 @@ import {
   Users,
   RefreshCw,
   Sparkles,
-  Hash
+  Hash,
+  Coins
 } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -38,6 +39,7 @@ interface DailyToken {
   token_mint: string;
   symbol: string | null;
   name: string | null;
+  image: string | null;
   wasSearched: boolean;
   searchCount: number;
   uniqueIps: number;
@@ -69,7 +71,6 @@ export function DailiesDashboard() {
   const [selectedDate, setSelectedDate] = useState<Date>(new Date());
   const [tokens, setTokens] = useState<DailyToken[]>([]);
   const [loading, setLoading] = useState(true);
-  const [expandedToken, setExpandedToken] = useState<string | null>(null);
   const [sortBy, setSortBy] = useState<SortBy>('time');
   const [calendarOpen, setCalendarOpen] = useState(false);
   const [backfilling, setBackfilling] = useState(false);
@@ -112,9 +113,10 @@ export function DailiesDashboard() {
           .order('captured_at', { ascending: false })
       ]);
 
+      // Fetch token metadata with image (image_uri column may not be in types yet)
       const { data: seenTokens } = await supabase
         .from('holders_intel_seen_tokens')
-        .select('token_mint, symbol, name, health_grade');
+        .select('token_mint, symbol, name, health_grade, image_uri') as { data: Array<{ token_mint: string; symbol: string | null; name: string | null; health_grade: string | null; image_uri: string | null }> | null };
 
       const seenTokensMap = new Map(
         (seenTokens || []).map(t => [t.token_mint, t])
@@ -194,6 +196,7 @@ export function DailiesDashboard() {
           token_mint: mint,
           symbol: seen?.symbol || surge?.symbol || posts?.symbol || null,
           name: seen?.name || surge?.name || null,
+          image: seen?.image_uri || null,
           wasSearched: !!searches,
           searchCount: searches?.count || 0,
           uniqueIps: searches?.uniqueIps.size || 0,
@@ -272,19 +275,20 @@ export function DailiesDashboard() {
     }
   };
 
-  const handleBackfillSocials = async () => {
-    const tokensNeedingSocials = tokens.filter(t => !t.twitter && !t.telegram && !t.website);
-    if (tokensNeedingSocials.length === 0) {
-      toast.info('All tokens already have socials');
+  const handleBackfillAll = async () => {
+    // Backfill tokens missing symbol, image, or socials
+    const tokensNeedingData = tokens.filter(t => !t.symbol || !t.image || (!t.twitter && !t.telegram && !t.website));
+    if (tokensNeedingData.length === 0) {
+      toast.info('All tokens already have complete data');
       return;
     }
 
     setBackfilling(true);
-    toast.info(`Backfilling socials for ${tokensNeedingSocials.length} tokens...`);
+    toast.info(`Backfilling data for ${tokensNeedingData.length} tokens...`);
 
     try {
       const { data, error } = await supabase.functions.invoke('dailies-backfill-socials', {
-        body: { tokenMints: tokensNeedingSocials.map(t => t.token_mint) }
+        body: { tokenMints: tokensNeedingData.map(t => t.token_mint) }
       });
 
       if (error) throw error;
@@ -293,7 +297,7 @@ export function DailiesDashboard() {
       fetchDailiesData();
     } catch (error) {
       console.error('Backfill error:', error);
-      toast.error('Failed to backfill socials');
+      toast.error('Failed to backfill data');
     } finally {
       setBackfilling(false);
     }
@@ -326,7 +330,7 @@ export function DailiesDashboard() {
     totalPosted: tokens.filter(t => t.postedTop50 || t.postedDexTrigger || t.postedSurge).length,
     totalSurges: tokens.filter(t => t.wasSurge).length,
     totalSearches: tokens.reduce((sum, t) => sum + t.searchCount, 0),
-    missingSocials: tokens.filter(t => !t.twitter && !t.telegram && !t.website).length
+    missingData: tokens.filter(t => !t.symbol || !t.image || (!t.twitter && !t.telegram && !t.website)).length
   }), [tokens]);
 
   const copyToClipboard = (text: string) => {
@@ -369,56 +373,16 @@ export function DailiesDashboard() {
       );
     }
     
-    if (token.postedTop50) {
+    if (token.postedTop50 || token.postedDexTrigger || token.postedSurge) {
       icons.push(
-        <Tooltip key="top50">
-          <TooltipTrigger asChild><span><ListOrdered className="h-3.5 w-3.5 text-primary" /></span></TooltipTrigger>
-          <TooltipContent>Top 50 Post</TooltipContent>
-        </Tooltip>
-      );
-    }
-    
-    if (token.postedDexTrigger) {
-      icons.push(
-        <Tooltip key="dex">
+        <Tooltip key="posted">
           <TooltipTrigger asChild><span><Megaphone className="h-3.5 w-3.5 text-primary" /></span></TooltipTrigger>
-          <TooltipContent>DEX Trigger Post</TooltipContent>
+          <TooltipContent>Posted to X</TooltipContent>
         </Tooltip>
       );
     }
     
     return icons.length > 0 ? icons : <span className="text-muted-foreground/40">—</span>;
-  };
-
-  const getPostedLinks = (token: DailyToken) => {
-    const links: React.ReactNode[] = [];
-    
-    if (token.top50TweetId) {
-      links.push(
-        <a key="top50" href={`https://x.com/HoldersIntel/status/${token.top50TweetId}`} target="_blank" rel="noopener noreferrer"
-           className="inline-flex items-center gap-0.5 text-primary hover:text-primary/80" title="Top50 post">
-          <ListOrdered className="h-3 w-3" />
-        </a>
-      );
-    }
-    if (token.dexTweetId) {
-      links.push(
-        <a key="dex" href={`https://x.com/HoldersIntel/status/${token.dexTweetId}`} target="_blank" rel="noopener noreferrer"
-           className="inline-flex items-center gap-0.5 text-primary hover:text-primary/80" title="DEX post">
-          <Megaphone className="h-3 w-3" />
-        </a>
-      );
-    }
-    if (token.surgeTweetId) {
-      links.push(
-        <a key="surge" href={`https://x.com/HoldersIntel/status/${token.surgeTweetId}`} target="_blank" rel="noopener noreferrer"
-           className="inline-flex items-center gap-0.5 text-primary hover:text-primary/80" title="Surge post">
-          <Zap className="h-3 w-3" />
-        </a>
-      );
-    }
-    
-    return links.length > 0 ? <div className="flex items-center gap-1.5">{links}</div> : <span className="text-muted-foreground/40">—</span>;
   };
 
   return (
@@ -461,7 +425,7 @@ export function DailiesDashboard() {
         <Card><CardContent className="pt-4"><div className="text-2xl font-bold text-primary">{stats.totalPosted}</div><p className="text-xs text-muted-foreground">Posted to X</p></CardContent></Card>
         <Card><CardContent className="pt-4"><div className="text-2xl font-bold text-primary">{stats.totalSurges}</div><p className="text-xs text-muted-foreground">Surge Alerts</p></CardContent></Card>
         <Card><CardContent className="pt-4"><div className="text-2xl font-bold text-primary">{stats.totalSearches}</div><p className="text-xs text-muted-foreground">Total Searches</p></CardContent></Card>
-        <Card><CardContent className="pt-4"><div className="text-2xl font-bold text-muted-foreground">{stats.missingSocials}</div><p className="text-xs text-muted-foreground">Missing Socials</p></CardContent></Card>
+        <Card><CardContent className="pt-4"><div className="text-2xl font-bold text-muted-foreground">{stats.missingData}</div><p className="text-xs text-muted-foreground">Missing Data</p></CardContent></Card>
       </div>
 
       <div className="flex items-center justify-between flex-wrap gap-2">
@@ -470,9 +434,9 @@ export function DailiesDashboard() {
           <Button variant={sortBy === 'searches' ? 'default' : 'outline'} size="sm" onClick={() => setSortBy('searches')}>By Searches</Button>
           <Button variant={sortBy === 'posted' ? 'default' : 'outline'} size="sm" onClick={() => setSortBy('posted')}>By Posted</Button>
         </div>
-        <Button variant="outline" size="sm" onClick={handleBackfillSocials} disabled={backfilling || stats.missingSocials === 0}>
+        <Button variant="outline" size="sm" onClick={handleBackfillAll} disabled={backfilling || stats.missingData === 0}>
           {backfilling ? <RefreshCw className="h-4 w-4 mr-2 animate-spin" /> : <Sparkles className="h-4 w-4 mr-2" />}
-          Backfill Socials ({stats.missingSocials})
+          Backfill Data ({stats.missingData})
         </Button>
       </div>
 
@@ -486,13 +450,14 @@ export function DailiesDashboard() {
           <Table>
             <TableHeader>
               <TableRow className="bg-muted/50">
-                <TableHead compact className="w-[140px]">Token</TableHead>
-                <TableHead compact className="w-[90px] text-center">Origin</TableHead>
-                <TableHead compact className="w-[70px] text-center">Posted</TableHead>
+                <TableHead compact className="w-[44px]"></TableHead>
+                <TableHead compact className="w-[120px]">Token</TableHead>
+                <TableHead compact className="w-[70px] text-center">Origin</TableHead>
                 <TableHead compact className="w-[50px] text-center"><Tooltip><TooltipTrigger><Twitter className="h-3.5 w-3.5 mx-auto" /></TooltipTrigger><TooltipContent>Twitter/X</TooltipContent></Tooltip></TableHead>
                 <TableHead compact className="w-[50px] text-center"><Tooltip><TooltipTrigger><MessageCircle className="h-3.5 w-3.5 mx-auto" /></TooltipTrigger><TooltipContent>Telegram</TooltipContent></Tooltip></TableHead>
                 <TableHead compact className="w-[50px] text-center"><Tooltip><TooltipTrigger><Globe className="h-3.5 w-3.5 mx-auto" /></TooltipTrigger><TooltipContent>Website</TooltipContent></Tooltip></TableHead>
-                <TableHead compact className="w-[80px] text-center"><Tooltip><TooltipTrigger><Hash className="h-3.5 w-3.5 mx-auto" /></TooltipTrigger><TooltipContent>Real Holders (grey = stale)</TooltipContent></Tooltip></TableHead>
+                <TableHead compact className="w-[80px] text-center border-l border-border/50"><Tooltip><TooltipTrigger><Hash className="h-3.5 w-3.5 mx-auto" /></TooltipTrigger><TooltipContent>Real Holders</TooltipContent></Tooltip></TableHead>
+                <TableHead compact className="w-[50px] text-center"><Tooltip><TooltipTrigger>Grade</TooltipTrigger><TooltipContent>Health Grade</TooltipContent></Tooltip></TableHead>
                 <TableHead compact className="w-[50px] text-center border-l border-border/50"><Tooltip><TooltipTrigger><FileText className="h-3.5 w-3.5 mx-auto" /></TooltipTrigger><TooltipContent>Raw Feed</TooltipContent></Tooltip></TableHead>
                 <TableHead compact className="w-[50px] text-center"><Tooltip><TooltipTrigger><Reply className="h-3.5 w-3.5 mx-auto" /></TooltipTrigger><TooltipContent>Reply</TooltipContent></Tooltip></TableHead>
                 <TableHead compact className="w-[50px] text-center"><Tooltip><TooltipTrigger><Users className="h-3.5 w-3.5 mx-auto" /></TooltipTrigger><TooltipContent>Community</TooltipContent></Tooltip></TableHead>
@@ -500,98 +465,89 @@ export function DailiesDashboard() {
             </TableHeader>
             <TableBody>
               {sortedTokens.map((token) => (
-                <React.Fragment key={token.token_mint}>
-                  <TableRow className="cursor-pointer hover:bg-muted/50" onClick={() => setExpandedToken((prev) => (prev === token.token_mint ? null : token.token_mint))}>
-                    <TableCell compact className="font-mono w-[140px]">
-                      <div className="flex items-center gap-1.5">
-                        <ChevronDown className={cn('h-3 w-3 transition-transform shrink-0', expandedToken === token.token_mint && 'rotate-180')} />
-                        <span className="font-semibold truncate max-w-[100px]" title={token.symbol || token.token_mint}>
+                <TableRow key={token.token_mint} className="hover:bg-muted/30">
+                  {/* Image Column */}
+                  <TableCell compact className="w-[44px] pr-0">
+                    <Avatar className="h-7 w-7">
+                      {token.image ? (
+                        <AvatarImage src={token.image} alt={token.symbol || 'Token'} />
+                      ) : null}
+                      <AvatarFallback className="bg-muted text-[10px]">
+                        <Coins className="h-3.5 w-3.5 text-muted-foreground" />
+                      </AvatarFallback>
+                    </Avatar>
+                  </TableCell>
+
+                  {/* Token Name/Symbol Column */}
+                  <TableCell compact className="w-[120px]">
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <a 
+                          href={`https://solscan.io/token/${token.token_mint}`} 
+                          target="_blank" 
+                          rel="noopener noreferrer"
+                          className="font-semibold truncate max-w-[100px] block hover:text-primary transition-colors"
+                          onClick={(e) => e.stopPropagation()}
+                        >
                           {token.symbol ? `$${token.symbol}` : `${token.token_mint.slice(0, 6)}...`}
-                        </span>
-                      </div>
-                    </TableCell>
-
-                    <TableCell compact className="w-[90px]"><div className="flex items-center justify-center gap-1">{getOriginIcons(token)}</div></TableCell>
-                    <TableCell compact className="w-[70px] text-center" onClick={(e) => e.stopPropagation()}>{getPostedLinks(token)}</TableCell>
-
-                    <TableCell compact className="w-[50px] text-center" onClick={(e) => e.stopPropagation()}>
-                      {token.twitter ? (
-                        <a href={token.twitter.startsWith('http') ? token.twitter : `https://x.com/${token.twitter}`} target="_blank" rel="noopener noreferrer" className="text-primary hover:text-primary/80"><ExternalLink className="h-3.5 w-3.5 mx-auto" /></a>
-                      ) : <span className="text-muted-foreground/40">—</span>}
-                    </TableCell>
-
-                    <TableCell compact className="w-[50px] text-center" onClick={(e) => e.stopPropagation()}>
-                      {token.telegram ? (
-                        <a href={token.telegram.startsWith('http') ? token.telegram : `https://t.me/${token.telegram}`} target="_blank" rel="noopener noreferrer" className="text-primary hover:text-primary/80"><ExternalLink className="h-3.5 w-3.5 mx-auto" /></a>
-                      ) : <span className="text-muted-foreground/40">—</span>}
-                    </TableCell>
-
-                    <TableCell compact className="w-[50px] text-center" onClick={(e) => e.stopPropagation()}>
-                      {token.website ? (
-                        <a href={token.website.startsWith('http') ? token.website : `https://${token.website}`} target="_blank" rel="noopener noreferrer" className="text-primary hover:text-primary/80"><ExternalLink className="h-3.5 w-3.5 mx-auto" /></a>
-                      ) : <span className="text-muted-foreground/40">—</span>}
-                    </TableCell>
-
-                    <TableCell compact className="w-[80px] text-center">
-                      {token.realHolders != null ? (
-                        <span className={cn("text-sm", token.holdersIsOld ? "text-muted-foreground" : "text-primary font-medium")}>{token.realHolders.toLocaleString()}</span>
-                      ) : <span className="text-muted-foreground/40">—</span>}
-                    </TableCell>
-
-                    <TableCell compact className="w-[50px] text-center border-l border-border/30" onClick={(e) => e.stopPropagation()}>
-                      <div className="flex justify-center"><Checkbox checked={token.rawFeedComment} onCheckedChange={(v) => handleCommentChange(token.token_mint, 'raw_feed_comment', !!v)} /></div>
-                    </TableCell>
-                    <TableCell compact className="w-[50px] text-center" onClick={(e) => e.stopPropagation()}>
-                      <div className="flex justify-center"><Checkbox checked={token.replyToPost} onCheckedChange={(v) => handleCommentChange(token.token_mint, 'reply_to_post', !!v)} /></div>
-                    </TableCell>
-                    <TableCell compact className="w-[50px] text-center" onClick={(e) => e.stopPropagation()}>
-                      <div className="flex justify-center"><Checkbox checked={token.communityComment} onCheckedChange={(v) => handleCommentChange(token.token_mint, 'community_comment', !!v)} /></div>
-                    </TableCell>
-                  </TableRow>
-
-                  {expandedToken === token.token_mint && (
-                    <TableRow className="bg-muted/30">
-                      <TableCell colSpan={10} className="p-4">
-                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
-                          <div className="min-w-0">
-                            <p className="text-muted-foreground mb-1">Mint Address</p>
-                            <div className="flex items-center gap-2 flex-wrap">
-                              <code className="text-xs bg-background px-2 py-1 rounded">{token.token_mint.slice(0, 8)}...{token.token_mint.slice(-8)}</code>
-                              <Button size="icon" variant="ghost" className="h-6 w-6" onClick={() => copyToClipboard(token.token_mint)}><Copy className="h-3 w-3" /></Button>
-                              <a href={`https://solscan.io/token/${token.token_mint}`} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">Solscan</a>
-                            </div>
-                            {token.name && <p className="mt-2 text-muted-foreground">{token.name}</p>}
-                          </div>
-
-                          <div>
-                            <p className="text-muted-foreground mb-1">Socials</p>
-                            <div className="flex items-center gap-3">
-                              {token.twitter ? (
-                                <a href={token.twitter.startsWith('http') ? token.twitter : `https://x.com/${token.twitter}`} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-primary hover:underline"><Twitter className="h-4 w-4" /> X</a>
-                              ) : <span className="text-muted-foreground/60">No X</span>}
-                              {token.telegram ? (
-                                <a href={token.telegram.startsWith('http') ? token.telegram : `https://t.me/${token.telegram}`} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-primary hover:underline"><MessageCircle className="h-4 w-4" /> TG</a>
-                              ) : <span className="text-muted-foreground/60">No TG</span>}
-                              {token.website ? (
-                                <a href={token.website.startsWith('http') ? token.website : `https://${token.website}`} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-primary hover:underline"><Globe className="h-4 w-4" /> Web</a>
-                              ) : <span className="text-muted-foreground/60">No Web</span>}
-                            </div>
-                          </div>
-
-                          <div>
-                            <p className="text-muted-foreground mb-1">Holder Stats {token.holdersIsOld && <span className="text-xs text-muted-foreground/60">(stale)</span>}</p>
-                            <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
-                              <div><span className="text-muted-foreground">Total:</span> <span className={cn("font-medium", token.holdersIsOld && "text-muted-foreground")}>{token.totalHolders?.toLocaleString() || '-'}</span></div>
-                              <div><span className="text-muted-foreground">Dust:</span> <span className={cn("font-medium", token.holdersIsOld && "text-muted-foreground")}>{token.dustHolders?.toLocaleString() || '-'}</span></div>
-                              <div><span className="text-muted-foreground">Real:</span> <span className={cn("font-medium", token.holdersIsOld ? "text-muted-foreground" : "text-primary")}>{token.realHolders?.toLocaleString() || '-'}</span></div>
-                              {token.healthGrade && <div><span className="text-muted-foreground">Grade:</span> <span className="font-semibold text-primary">{token.healthGrade}</span></div>}
-                            </div>
-                          </div>
+                        </a>
+                      </TooltipTrigger>
+                      <TooltipContent className="max-w-xs">
+                        <p className="font-mono text-xs break-all">{token.token_mint}</p>
+                        {token.name && <p className="text-muted-foreground">{token.name}</p>}
+                        <div className="flex gap-1 mt-1">
+                          <Button size="icon" variant="ghost" className="h-5 w-5" onClick={() => copyToClipboard(token.token_mint)}><Copy className="h-3 w-3" /></Button>
                         </div>
-                      </TableCell>
-                    </TableRow>
-                  )}
-                </React.Fragment>
+                      </TooltipContent>
+                    </Tooltip>
+                  </TableCell>
+
+                  {/* Origin Column */}
+                  <TableCell compact className="w-[70px]"><div className="flex items-center justify-center gap-1">{getOriginIcons(token)}</div></TableCell>
+
+                  {/* Socials Columns */}
+                  <TableCell compact className="w-[50px] text-center">
+                    {token.twitter ? (
+                      <a href={token.twitter.startsWith('http') ? token.twitter : `https://x.com/${token.twitter}`} target="_blank" rel="noopener noreferrer" className="text-primary hover:text-primary/80"><ExternalLink className="h-3.5 w-3.5 mx-auto" /></a>
+                    ) : <span className="text-muted-foreground/40">—</span>}
+                  </TableCell>
+
+                  <TableCell compact className="w-[50px] text-center">
+                    {token.telegram ? (
+                      <a href={token.telegram.startsWith('http') ? token.telegram : `https://t.me/${token.telegram}`} target="_blank" rel="noopener noreferrer" className="text-primary hover:text-primary/80"><ExternalLink className="h-3.5 w-3.5 mx-auto" /></a>
+                    ) : <span className="text-muted-foreground/40">—</span>}
+                  </TableCell>
+
+                  <TableCell compact className="w-[50px] text-center">
+                    {token.website ? (
+                      <a href={token.website.startsWith('http') ? token.website : `https://${token.website}`} target="_blank" rel="noopener noreferrer" className="text-primary hover:text-primary/80"><ExternalLink className="h-3.5 w-3.5 mx-auto" /></a>
+                    ) : <span className="text-muted-foreground/40">—</span>}
+                  </TableCell>
+
+                  {/* Holder Stats Columns */}
+                  <TableCell compact className="w-[80px] text-center border-l border-border/30">
+                    {token.realHolders != null ? (
+                      <span className={cn("text-sm", token.holdersIsOld ? "text-muted-foreground" : "text-primary font-medium")}>{token.realHolders.toLocaleString()}</span>
+                    ) : <span className="text-muted-foreground/40">—</span>}
+                  </TableCell>
+
+                  <TableCell compact className="w-[50px] text-center">
+                    {token.healthGrade ? (
+                      <span className={cn("font-semibold", token.holdersIsOld ? "text-muted-foreground" : "text-primary")}>{token.healthGrade}</span>
+                    ) : <span className="text-muted-foreground/40">—</span>}
+                  </TableCell>
+
+                  {/* Manual Comment Checkboxes */}
+                  <TableCell compact className="w-[50px] text-center border-l border-border/30">
+                    <div className="flex justify-center"><Checkbox checked={token.rawFeedComment} onCheckedChange={(v) => handleCommentChange(token.token_mint, 'raw_feed_comment', !!v)} /></div>
+                  </TableCell>
+                  <TableCell compact className="w-[50px] text-center">
+                    <div className="flex justify-center"><Checkbox checked={token.replyToPost} onCheckedChange={(v) => handleCommentChange(token.token_mint, 'reply_to_post', !!v)} /></div>
+                  </TableCell>
+                  <TableCell compact className="w-[50px] text-center">
+                    <div className="flex justify-center"><Checkbox checked={token.communityComment} onCheckedChange={(v) => handleCommentChange(token.token_mint, 'community_comment', !!v)} /></div>
+                  </TableCell>
+                </TableRow>
               ))}
             </TableBody>
           </Table>

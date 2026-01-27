@@ -7,6 +7,88 @@ const corsHeaders = {
 
 const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
+interface TokenMetadata {
+  symbol: string | null;
+  name: string | null;
+  image: string | null;
+  twitter: string | null;
+  telegram: string | null;
+  website: string | null;
+  source: string;
+}
+
+async function fetchPumpFunData(mint: string): Promise<TokenMetadata | null> {
+  try {
+    const res = await fetch(`https://frontend-api.pump.fun/coins/${mint}`, {
+      headers: { 'Accept': 'application/json' }
+    });
+    if (!res.ok) return null;
+    
+    const data = await res.json();
+    return {
+      symbol: data.symbol || null,
+      name: data.name || null,
+      image: data.image_uri || data.uri || null,
+      twitter: data.twitter || null,
+      telegram: data.telegram || null,
+      website: data.website || null,
+      source: 'pump.fun'
+    };
+  } catch (e) {
+    console.log(`[pump.fun] Failed for ${mint.slice(0, 8)}:`, e);
+    return null;
+  }
+}
+
+async function fetchDexScreenerData(mint: string): Promise<TokenMetadata | null> {
+  try {
+    const res = await fetch(`https://api.dexscreener.com/latest/dex/tokens/${mint}`);
+    if (!res.ok) return null;
+    
+    const data = await res.json();
+    const pair = data.pairs?.[0];
+    if (!pair) return null;
+    
+    let twitter: string | null = null;
+    let telegram: string | null = null;
+    let website: string | null = null;
+    
+    if (pair.info?.socials) {
+      for (const social of pair.info.socials) {
+        if (!twitter && (social.type === 'twitter' || social.url?.includes('twitter.com') || social.url?.includes('x.com'))) {
+          twitter = social.url;
+        }
+        if (!telegram && (social.type === 'telegram' || social.url?.includes('t.me'))) {
+          telegram = social.url;
+        }
+      }
+    }
+    
+    if (pair.info?.websites?.length > 0) {
+      for (const site of pair.info.websites) {
+        const url = site.url || site;
+        if (url && !url.includes('pump.fun') && !url.includes('bonk.fun') && !url.includes('bags.fm')) {
+          website = url;
+          break;
+        }
+      }
+    }
+    
+    return {
+      symbol: pair.baseToken?.symbol || null,
+      name: pair.baseToken?.name || null,
+      image: pair.info?.imageUrl || null,
+      twitter,
+      telegram,
+      website,
+      source: 'dexscreener'
+    };
+  } catch (e) {
+    console.log(`[DexScreener] Failed for ${mint.slice(0, 8)}:`, e);
+    return null;
+  }
+}
+
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
@@ -26,97 +108,85 @@ Deno.serve(async (req) => {
     const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
     const supabase = createClient(supabaseUrl, supabaseKey);
 
-    console.log(`Backfilling socials for ${tokenMints.length} tokens`);
+    console.log(`Backfilling metadata & socials for ${tokenMints.length} tokens`);
 
     let updated = 0;
-    const results: { mint: string; success: boolean; socials?: any }[] = [];
+    const results: { mint: string; success: boolean; metadata?: TokenMetadata }[] = [];
 
     for (const mint of tokenMints.slice(0, 50)) { // Limit to 50 per call
       try {
-        let twitter: string | null = null;
-        let telegram: string | null = null;
-        let website: string | null = null;
-        let source = 'unknown';
+        let metadata: TokenMetadata | null = null;
 
         // Try pump.fun first for pump tokens
         if (mint.endsWith('pump')) {
-          try {
-            const pumpRes = await fetch(`https://frontend-api.pump.fun/coins/${mint}`, {
-              headers: { 'Accept': 'application/json' }
-            });
-            if (pumpRes.ok) {
-              const pumpData = await pumpRes.json();
-              twitter = pumpData.twitter || null;
-              telegram = pumpData.telegram || null;
-              website = pumpData.website || null;
-              source = 'pump.fun';
-              console.log(`[pump.fun] ${mint.slice(0, 8)}: twitter=${!!twitter}, tg=${!!telegram}, web=${!!website}`);
-            }
-          } catch (e) {
-            console.log(`pump.fun API failed for ${mint.slice(0, 8)}:`, e);
+          metadata = await fetchPumpFunData(mint);
+          if (metadata) {
+            console.log(`[pump.fun] ${mint.slice(0, 8)}: ${metadata.symbol}, img=${!!metadata.image}`);
           }
         }
 
-        // Fallback to DexScreener for missing socials
-        if (!twitter || !telegram || !website) {
-          try {
-            await delay(100);
-            const dexRes = await fetch(`https://api.dexscreener.com/latest/dex/tokens/${mint}`);
-            if (dexRes.ok) {
-              const dexData = await dexRes.json();
-              const pair = dexData.pairs?.[0];
-              
-              if (pair?.info) {
-                if (pair.info.socials) {
-                  for (const social of pair.info.socials) {
-                    if (!twitter && (social.type === 'twitter' || social.url?.includes('twitter.com') || social.url?.includes('x.com'))) {
-                      twitter = social.url;
-                    }
-                    if (!telegram && (social.type === 'telegram' || social.url?.includes('t.me'))) {
-                      telegram = social.url;
-                    }
-                  }
-                }
-                
-                if (!website && pair.info.websites?.length > 0) {
-                  for (const site of pair.info.websites) {
-                    const url = site.url || site;
-                    if (url && !url.includes('pump.fun') && !url.includes('bonk.fun') && !url.includes('bags.fm')) {
-                      website = url;
-                      break;
-                    }
-                  }
-                }
-                
-                if (source === 'unknown') source = 'dexscreener';
-              }
+        // Fallback/supplement with DexScreener
+        if (!metadata || !metadata.symbol || !metadata.image) {
+          await delay(100);
+          const dexData = await fetchDexScreenerData(mint);
+          
+          if (dexData) {
+            if (!metadata) {
+              metadata = dexData;
+            } else {
+              // Fill in missing fields from DexScreener
+              metadata.symbol = metadata.symbol || dexData.symbol;
+              metadata.name = metadata.name || dexData.name;
+              metadata.image = metadata.image || dexData.image;
+              metadata.twitter = metadata.twitter || dexData.twitter;
+              metadata.telegram = metadata.telegram || dexData.telegram;
+              metadata.website = metadata.website || dexData.website;
+              if (dexData.source && !metadata.twitter) metadata.source = 'combined';
             }
-          } catch (e) {
-            console.log(`DexScreener API failed for ${mint.slice(0, 8)}:`, e);
+            console.log(`[DexScreener] ${mint.slice(0, 8)}: ${dexData.symbol}, img=${!!dexData.image}`);
           }
         }
 
-        // Only save if we found any socials
-        if (twitter || telegram || website) {
-          const { error } = await supabase
+        if (metadata) {
+          // Save to token_socials_history with all metadata
+          const { error: socialsError } = await supabase
             .from('token_socials_history')
-            .insert({
+            .upsert({
               token_mint: mint,
-              twitter,
-              telegram,
-              website,
-              source,
+              twitter: metadata.twitter,
+              telegram: metadata.telegram,
+              website: metadata.website,
+              source: metadata.source,
               captured_at: new Date().toISOString()
-            });
+            }, { onConflict: 'token_mint' });
 
-          if (!error) {
-            updated++;
-            results.push({ mint, success: true, socials: { twitter, telegram, website } });
-            console.log(`✓ Saved socials for ${mint.slice(0, 8)}`);
-          } else {
-            console.error(`Failed to save for ${mint.slice(0, 8)}:`, error);
-            results.push({ mint, success: false });
+          if (socialsError) {
+            console.error(`Failed to save socials for ${mint.slice(0, 8)}:`, socialsError);
           }
+
+          // Update holders_intel_seen_tokens with symbol/name/image
+          if (metadata.symbol || metadata.name || metadata.image) {
+            const updateData: Record<string, unknown> = {};
+            if (metadata.symbol) updateData.symbol = metadata.symbol;
+            if (metadata.name) updateData.name = metadata.name;
+            if (metadata.image) updateData.image_uri = metadata.image;
+
+            const { error: seenError } = await supabase
+              .from('holders_intel_seen_tokens')
+              .upsert({
+                token_mint: mint,
+                ...updateData,
+                last_seen_at: new Date().toISOString()
+              }, { onConflict: 'token_mint' });
+
+            if (seenError) {
+              console.error(`Failed to update seen_tokens for ${mint.slice(0, 8)}:`, seenError);
+            }
+          }
+
+          updated++;
+          results.push({ mint, success: true, metadata });
+          console.log(`✓ Saved metadata for ${mint.slice(0, 8)}: $${metadata.symbol}`);
         } else {
           results.push({ mint, success: false });
         }

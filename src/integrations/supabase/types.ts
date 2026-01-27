@@ -3688,6 +3688,7 @@ export type Database = {
         Row: {
           first_seen_at: string
           health_grade: string | null
+          image_uri: string | null
           last_seen_at: string
           market_cap_at_discovery: number | null
           name: string | null
@@ -3701,6 +3702,7 @@ export type Database = {
         Insert: {
           first_seen_at?: string
           health_grade?: string | null
+          image_uri?: string | null
           last_seen_at?: string
           market_cap_at_discovery?: number | null
           name?: string | null
@@ -3714,6 +3716,7 @@ export type Database = {
         Update: {
           first_seen_at?: string
           health_grade?: string | null
+          image_uri?: string | null
           last_seen_at?: string
           market_cap_at_discovery?: number | null
           name?: string | null
