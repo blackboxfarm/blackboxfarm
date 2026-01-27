@@ -3,6 +3,7 @@ import { X, Loader2, Send, Sparkles } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
+import { Checkbox } from '@/components/ui/checkbox';
 import {
   Select,
   SelectContent,
@@ -20,6 +21,7 @@ interface DailiesAIPanelProps {
 }
 
 type Tone = 'balanced' | 'constructive' | 'cautionary';
+type SelectedText = 'overview' | 'summary' | null;
 
 export function DailiesAIPanel({ tokenMint, tokenSymbol, onClose }: DailiesAIPanelProps) {
   const [tone, setTone] = useState<Tone>('constructive');
@@ -28,6 +30,7 @@ export function DailiesAIPanel({ tokenMint, tokenSymbol, onClose }: DailiesAIPan
   const [isLoading, setIsLoading] = useState(false);
   const [isPosting, setIsPosting] = useState(false);
   const [hasGenerated, setHasGenerated] = useState(false);
+  const [selectedText, setSelectedText] = useState<SelectedText>(null);
 
   // Auto-generate on mount and when tone changes
   useEffect(() => {
@@ -80,8 +83,12 @@ export function DailiesAIPanel({ tokenMint, tokenSymbol, onClose }: DailiesAIPan
   };
 
   const handlePost = async () => {
-    if (!socialSummary.trim()) {
-      toast.error('Social Summary is empty');
+    // Determine which text to post based on selection
+    const textToPost = selectedText === 'overview' ? statusOverview.trim() : 
+                       selectedText === 'summary' ? socialSummary.trim() : '';
+
+    if (!textToPost) {
+      toast.error('Please select a text to post');
       return;
     }
 
@@ -90,8 +97,8 @@ export function DailiesAIPanel({ tokenMint, tokenSymbol, onClose }: DailiesAIPan
     try {
       // Build tweet text with token symbol prefix
       const tweetText = tokenSymbol 
-        ? `$${tokenSymbol}\n\n${socialSummary.trim()}`
-        : socialSummary.trim();
+        ? `$${tokenSymbol}\n\n${textToPost}`
+        : textToPost;
 
       const { data, error } = await supabase.functions.invoke('post-share-card-twitter', {
         body: { 
@@ -123,7 +130,10 @@ export function DailiesAIPanel({ tokenMint, tokenSymbol, onClose }: DailiesAIPan
     }
   };
 
-  const charCount = socialSummary.length;
+  // Character count for selected text
+  const selectedContent = selectedText === 'overview' ? statusOverview : 
+                          selectedText === 'summary' ? socialSummary : '';
+  const charCount = selectedContent.length;
   const isOverLimit = charCount > 280;
 
   return (
@@ -159,7 +169,19 @@ export function DailiesAIPanel({ tokenMint, tokenSymbol, onClose }: DailiesAIPan
 
           {/* Status Overview */}
           <div className="space-y-2">
-            <Label htmlFor="status-overview">Status Overview</Label>
+            <div className="flex items-center gap-2">
+              <Checkbox
+                id="select-overview"
+                checked={selectedText === 'overview'}
+                onCheckedChange={(checked) => setSelectedText(checked ? 'overview' : null)}
+              />
+              <Label htmlFor="select-overview" className="cursor-pointer">Status Overview</Label>
+              {selectedText === 'overview' && (
+                <span className={`text-xs ml-auto ${isOverLimit ? 'text-destructive' : 'text-muted-foreground'}`}>
+                  {charCount}/280
+                </span>
+              )}
+            </div>
             <Textarea
               id="status-overview"
               value={statusOverview}
@@ -172,11 +194,18 @@ export function DailiesAIPanel({ tokenMint, tokenSymbol, onClose }: DailiesAIPan
 
           {/* Social Summary */}
           <div className="space-y-2">
-            <div className="flex items-center justify-between">
-              <Label htmlFor="social-summary">Social Summary (Twitter-ready)</Label>
-              <span className={`text-xs ${isOverLimit ? 'text-destructive' : 'text-muted-foreground'}`}>
-                {charCount}/280
-              </span>
+            <div className="flex items-center gap-2">
+              <Checkbox
+                id="select-summary"
+                checked={selectedText === 'summary'}
+                onCheckedChange={(checked) => setSelectedText(checked ? 'summary' : null)}
+              />
+              <Label htmlFor="select-summary" className="cursor-pointer">Social Summary (Twitter-ready)</Label>
+              {selectedText === 'summary' && (
+                <span className={`text-xs ml-auto ${isOverLimit ? 'text-destructive' : 'text-muted-foreground'}`}>
+                  {charCount}/280
+                </span>
+              )}
             </div>
             <Textarea
               id="social-summary"
@@ -202,7 +231,7 @@ export function DailiesAIPanel({ tokenMint, tokenSymbol, onClose }: DailiesAIPan
           </Button>
           <Button 
             onClick={handlePost}
-            disabled={isLoading || isPosting || !hasGenerated || isOverLimit}
+            disabled={isLoading || isPosting || !hasGenerated || !selectedText || isOverLimit}
             className="bg-purple-600 hover:bg-purple-700 text-white"
           >
             {isPosting ? (
