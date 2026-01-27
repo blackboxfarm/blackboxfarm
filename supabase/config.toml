@@ -399,3 +399,6 @@ verify_jwt = false
 
 [functions.holders-intel-poster]
 verify_jwt = false
+
+[functions.search-surge-scanner]
+verify_jwt = false

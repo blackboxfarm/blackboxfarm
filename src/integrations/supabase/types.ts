@@ -3690,6 +3690,62 @@ export type Database = {
         }
         Relationships: []
       }
+      holders_intel_surge_alerts: {
+        Row: {
+          alert_date: string | null
+          alert_type: string
+          created_at: string | null
+          detected_at: string | null
+          id: string
+          name: string | null
+          posted: boolean | null
+          queue_id: string | null
+          search_count: number
+          symbol: string | null
+          time_window_minutes: number
+          token_mint: string
+          unique_ips: number | null
+        }
+        Insert: {
+          alert_date?: string | null
+          alert_type: string
+          created_at?: string | null
+          detected_at?: string | null
+          id?: string
+          name?: string | null
+          posted?: boolean | null
+          queue_id?: string | null
+          search_count: number
+          symbol?: string | null
+          time_window_minutes: number
+          token_mint: string
+          unique_ips?: number | null
+        }
+        Update: {
+          alert_date?: string | null
+          alert_type?: string
+          created_at?: string | null
+          detected_at?: string | null
+          id?: string
+          name?: string | null
+          posted?: boolean | null
+          queue_id?: string | null
+          search_count?: number
+          symbol?: string | null
+          time_window_minutes?: number
+          token_mint?: string
+          unique_ips?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "holders_intel_surge_alerts_queue_id_fkey"
+            columns: ["queue_id"]
+            isOneToOne: false
+            referencedRelation: "holders_intel_post_queue"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       holders_intel_templates: {
         Row: {
           created_at: string | null
