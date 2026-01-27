@@ -4,6 +4,11 @@ import { fetchDexScreenerData } from "../_shared/dexscreener-api.ts"
 import { fetchCreatorInfo } from "../_shared/creator-api.ts"
 import { fetchSolscanMarkets } from "../_shared/solscan-markets.ts"
 import { fetchRugCheckInsiders, type InsidersGraphResult } from "../_shared/rugcheck-insiders.ts"
+import { 
+  startSearchLog, 
+  extractIpAddress, 
+  logCompleteSearch 
+} from "../_shared/token-search-logger.ts"
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -18,8 +23,14 @@ serve(async (req) => {
     return new Response(null, { headers: corsHeaders });
   }
 
+  // Extract tracking info from request
+  const ipAddress = extractIpAddress(req);
+  const userAgent = req.headers.get('user-agent') || undefined;
+  
+  let searchId: string | null = null;
+
   try {
-    const { tokenMint, manualPrice } = await req.json();
+    const { tokenMint, manualPrice, sessionId, visitorFingerprint } = await req.json();
     
     if (!tokenMint) {
       return new Response(
@@ -27,6 +38,15 @@ serve(async (req) => {
         { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
+
+    // Start search log (fire and forget - don't block)
+    searchId = await startSearchLog({
+      tokenMint,
+      sessionId,
+      visitorFingerprint,
+      ipAddress,
+      userAgent,
+    });
 
     const heliusApiKey = Deno.env.get('HELIUS_HOLDERS_KEY');
     console.log(`[HELIUS] HOLDERS_KEY ${heliusApiKey ? 'FOUND' : 'NOT FOUND'}`);
@@ -479,12 +499,24 @@ serve(async (req) => {
       executionTimeMs: totalTime
     };
 
+    // Log complete search data (fire and forget - don't block response)
+    logCompleteSearch(searchId, result, totalTime, rankedHolders.length).catch(e => 
+      console.warn('[TokenSearchLogger] Background logging error:', e)
+    );
+
     return new Response(JSON.stringify(result), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' }
     });
     
   } catch (error) {
     console.error('Edge function error:', error);
+    
+    // Log failed search if we have a searchId
+    if (searchId) {
+      const totalTime = Date.now() - requestStartTime;
+      logCompleteSearch(searchId, { tokenMint: 'unknown' }, totalTime, 0).catch(() => {});
+    }
+    
     return new Response(
       JSON.stringify({ error: error instanceof Error ? error.message : String(error) }),
       { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
