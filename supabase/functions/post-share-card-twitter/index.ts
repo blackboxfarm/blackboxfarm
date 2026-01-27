@@ -74,13 +74,23 @@ async function sendTweet(
   apiKey: string,
   apiSecret: string,
   accessToken: string,
-  accessTokenSecret: string
+  accessTokenSecret: string,
+  communityId?: string
 ): Promise<any> {
   const url = "https://api.x.com/2/tweets";
   const method = "POST";
   const oauthHeader = generateOAuthHeader(method, url, apiKey, apiSecret, accessToken, accessTokenSecret);
 
   console.log("Sending tweet:", tweetText.substring(0, 50) + "...");
+  if (communityId) {
+    console.log("Posting to X Community:", communityId);
+  }
+
+  // Build request body
+  const body: Record<string, any> = { text: tweetText };
+  if (communityId) {
+    body.community_id = communityId;
+  }
 
   const response = await fetch(url, {
     method: method,
@@ -88,7 +98,7 @@ async function sendTweet(
       Authorization: oauthHeader,
       "Content-Type": "application/json",
     },
-    body: JSON.stringify({ text: tweetText }),
+    body: JSON.stringify(body),
   });
 
   const responseText = await response.text();
@@ -125,7 +135,7 @@ Deno.serve(async (req) => {
 
   try {
     const body = await req.json();
-    const { tweetText, twitterHandle, tokenStats } = body;
+    const { tweetText, twitterHandle, tokenStats, communityId } = body;
 
     // Determine tweet content
     let finalTweetText: string;
@@ -200,8 +210,11 @@ Free report 👉 blackbox.farm/holders`;
     }
 
     console.log("Tweet length:", finalTweetText.length);
+    if (communityId) {
+      console.log("Target community:", communityId);
+    }
 
-    const result = await sendTweet(finalTweetText, apiKey, apiSecret, accessToken, accessTokenSecret);
+    const result = await sendTweet(finalTweetText, apiKey, apiSecret, accessToken, accessTokenSecret, communityId);
 
     console.log("Tweet posted successfully:", result.data?.id);
 
