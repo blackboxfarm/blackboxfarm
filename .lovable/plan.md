@@ -1,349 +1,348 @@
 
-# Dailies Tab - Daily Token Activity Dashboard
+# AI Token Interpretation & Explainer System
 
 ## Overview
 
-This feature creates a new "Dailies" tab in the Super Admin dashboard that provides a consolidated daily view of all token activity across searches, surge alerts, and Twitter posts. Each token appears only once with status indicators showing which activities apply to it.
+Build an intelligent interpretation layer that transforms raw holder metrics into human-readable, guardrailed analysis following your v1.0 specification. The system will provide four deliverables per token: Token Status Overview, Lifecycle Position, Key Drivers, and Reasoning Trace.
 
-## Data Sources
+---
 
-The dashboard will aggregate data from these existing tables:
-
-| Table | Purpose | Key Fields |
-|-------|---------|------------|
-| `token_search_log` | All public searches | token_mint, created_at, ip_address |
-| `token_search_results` | Search result data | symbol, name, tier_dust, tier_retail, tier_serious, tier_whale |
-| `holders_intel_surge_alerts` | Surge/spike detections | token_mint, alert_type, detected_at |
-| `holders_intel_post_queue` | All Twitter posts | token_mint, trigger_source, status, tweet_id |
-| `holders_intel_seen_tokens` | Seen tokens with metadata | symbol, name, health_grade |
-| `token_socials_history` | Social links (Twitter/TG/Website) | twitter, telegram, website |
-
-## UI Design
+## Architecture
 
 ```text
-+------------------------------------------------------------------+
-| DAILIES                                    [<] Jan 27, 2026 [>]  |
-|                                            [Today] [Calendar 📅] |
-+------------------------------------------------------------------+
-| Summary: 47 Tokens | 12 Posted | 3 Surges | 156 Searches         |
-+------------------------------------------------------------------+
-| [Token]     [Searched] [Surge] [Top50] [Dex] [Surge] [Actions]   |
-|             [   ✓   ]  [  ✓ ] [Posted][Post][Post]  [Comments]   |
-+------------------------------------------------------------------+
-| $BONK       ✓ (23x)    🔥      ✓ 🔗    -     -      [Raw][Reply] |
-| 4k7x...     ✓ (5x)     ⚡      -       ✓ 🔗  -      [_][_][_]    |
-| $WIF        ✓ (12x)    -       ✓ 🔗    -     -      [✓][_][_]    |
-| $PEPE       ✓ (8x)     📈      -       -     ✓ 🔗   [_][✓][_]    |
-+------------------------------------------------------------------+
-| Click token row to expand: Mint Link | Socials | Holder Counts   |
-+------------------------------------------------------------------+
+┌─────────────────────────────────────────────────────────────────────┐
+│                         FRONTEND                                      │
+├─────────────────────────────────────────────────────────────────────┤
+│  BaglessHoldersReport.tsx                                            │
+│    ├── Calls bagless-holders-report (existing)                       │
+│    └── Calls token-ai-interpreter (NEW) with report data             │
+│                                                                       │
+│  AI Interpretation Panel (NEW component)                             │
+│    ├── Token Status Overview (3-7 sentences)                         │
+│    ├── Lifecycle Stage Badge + Confidence                            │
+│    ├── Key Drivers (collapsible bullets)                             │
+│    └── "Why this interpretation?" accordion                          │
+├─────────────────────────────────────────────────────────────────────┤
+│                         BACKEND                                       │
+├─────────────────────────────────────────────────────────────────────┤
+│  token-ai-interpreter (NEW Edge Function)                            │
+│    ├── Pre-process metrics into buckets (deterministic)              │
+│    ├── Select commentary mode (A-H) based on signals                 │
+│    ├── Build prompt with guardrails + bucket context                 │
+│    ├── Call Lovable AI (Gemini) with tool-calling schema             │
+│    └── Return structured JSON interpretation                         │
+├─────────────────────────────────────────────────────────────────────┤
+│                         CACHING                                       │
+├─────────────────────────────────────────────────────────────────────┤
+│  token_ai_interpretations (NEW table)                                │
+│    ├── token_mint, interpretation_json, created_at                   │
+│    ├── 5-10 minute TTL via expires_at column                         │
+│    └── Prevents duplicate AI calls for same token                    │
+└─────────────────────────────────────────────────────────────────────┘
 ```
 
-## Database Changes
+---
 
-### New Table: `dailies_manual_comments`
+## Data Flow
 
-Tracks admin manual comment activity for each token per day:
+1. User searches for token on /holders page
+2. `bagless-holders-report` returns holder data (existing flow)
+3. **NEW**: Frontend calls `token-ai-interpreter` with the report data
+4. Edge function checks cache - if fresh interpretation exists, return it
+5. If not cached, pre-process metrics into buckets:
+   - Control Density: diffuse / coordinated-capable / centralized
+   - Liquidity Coverage: covered / thin / very thin
+   - Resilience Score: weak / moderate / strong
+   - Tier Divergence: low / medium / high (if whale movement data available)
+6. Select commentary mode based on which signals are most significant
+7. Build prompt with your guardrails baked into system message
+8. Call Lovable AI with tool-calling schema to force structured output
+9. Cache result (5-10 min TTL), return to frontend
+10. Frontend displays AI panel with toggle (logged-in users only)
 
-| Column | Type | Purpose |
-|--------|------|---------|
-| id | UUID | Primary key |
-| token_mint | TEXT | Token address |
-| comment_date | DATE | The day this applies to |
-| raw_feed_comment | BOOLEAN | Raw feed comment made |
-| reply_to_post | BOOLEAN | Reply to a post made |
-| community_comment | BOOLEAN | X Community comment made |
-| notes | TEXT | Optional admin notes |
-| updated_at | TIMESTAMPTZ | Last update time |
-| created_at | TIMESTAMPTZ | Creation time |
+---
 
-Unique constraint on (token_mint, comment_date) to ensure one record per token per day.
+## Input Variable Mapping
 
-## Component Structure
+Your spec defines variables; here's how they map to existing `bagless-holders-report` data:
 
-### Main Component: `DailiesDashboard.tsx`
+| Your Variable | Available Data |
+|--------------|----------------|
+| top5_hold_pct | `distributionStats.top5Percentage` |
+| top10_hold_pct | `distributionStats.top10Percentage` |
+| top20_hold_pct | `distributionStats.top20Percentage` |
+| top25_hold_pct | Can be computed from `holders` array |
+| circulating_ex_lp_pct | `circulatingSupply.percentage` |
+| lp_supply_pct | `lpPercentageOfSupply` |
+| unlocked_to_lp_ratio | Compute: `circulatingSupply.percentage / lpPercentageOfSupply` |
+| total_wallets | `totalHolders` |
+| dust_wallets | `simpleTiers.dust.count` |
+| retail_wallets | `simpleTiers.retail.count` |
+| serious_wallets | `simpleTiers.serious.count` |
+| whale_wallets_total | `simpleTiers.whales.count` |
+| liquidity_usd | `circulatingSupply.usdValue` or from DexScreener |
+| mcap_usd | `marketCap` |
+| structural_resilience_score | `healthScore.score` (0-100) |
+| bundled_insider_pct | `insidersGraph.bundledPercentage` |
 
-```typescript
-// Key state
-const [selectedDate, setSelectedDate] = useState<Date>(new Date());
-const [tokens, setTokens] = useState<DailyToken[]>([]);
-const [expandedToken, setExpandedToken] = useState<string | null>(null);
-const [sortBy, setSortBy] = useState<'time' | 'searches' | 'posted'>('time');
+**Gap Identified**: Real-time whale movement events (last 48h buy/sell) are not currently tracked by bagless-holders-report. This limits Mode C (Behavioral Shift) and Mode F (Pressure Analysis) initially. The system can still function with structural metrics.
 
-// DailyToken interface
-interface DailyToken {
-  token_mint: string;
-  symbol: string | null;
-  name: string | null;
-  
-  // Activity flags
-  wasSearched: boolean;
-  searchCount: number;
-  uniqueIps: number;
-  
-  wasSurge: boolean;
-  surgeType: 'surge_10min' | 'spike_1hr' | 'trending_24hr' | null;
-  
-  postedTop50: boolean;
-  top50TweetId: string | null;
-  
-  postedDexTrigger: boolean;
-  dexTweetId: string | null;
-  dexTriggerType: string | null;
-  
-  postedSurge: boolean;
-  surgeTweetId: string | null;
-  
-  // Holder data (from latest search result)
-  totalHolders: number | null;
-  dustHolders: number | null;
-  realHolders: number | null;
-  healthGrade: string | null;
-  
-  // Socials
-  twitter: string | null;
-  telegram: string | null;
-  website: string | null;
-  
-  // Manual comment tracking
-  rawFeedComment: boolean;
-  replyToPost: boolean;
-  communityComment: boolean;
-  
-  // Timestamps
-  firstActivityAt: Date;
-  lastActivityAt: Date;
+---
+
+## Lifecycle Stage Logic
+
+Pre-determine stage in Edge Function code (not AI) based on deterministic rules:
+
+| Stage | Trigger Conditions |
+|-------|-------------------|
+| **Genesis** | totalHolders < 100 AND healthScore > 50 |
+| **Discovery** | totalHolders 100-500 AND retailTier growing |
+| **Expansion** | totalHolders > 500 AND serious+whale tiers strong |
+| **Distribution** | whale % declining OR high tier divergence |
+| **Compression** | Low volume signals (if available) |
+| **Dormant** | Very low holder growth + stale metrics |
+| **Reactivation** | Previously dormant + sudden activity |
+
+Confidence is derived from how many signals align with the stage.
+
+---
+
+## Commentary Modes (All 8)
+
+The Edge Function selects the most appropriate mode:
+
+| Mode | When Selected |
+|------|---------------|
+| A - Snapshot | Default if no specific triggers |
+| B - Structural | Focus request OR high concentration |
+| C - Behavioral Shift | Whale movement delta exceeds threshold |
+| D - Lifecycle | First-time analysis OR significant stage change |
+| E - Risk Posture | High risk flags present |
+| F - Pressure Analysis | Whale exits + liquidity imbalance |
+| G - Capital Consensus | High tier divergence detected |
+| H - Retention | Historical snapshots > 2 available |
+
+For MVP, modes requiring whale movement history (C, F, G, H) will gracefully degrade with "insufficient behavioral data" messaging.
+
+---
+
+## AI Prompt Structure
+
+The Edge Function builds this system prompt:
+
+```text
+You are a TOKEN STRUCTURE INTERPRETER for Holders Intel.
+
+CRITICAL RULES:
+- You interpret STRUCTURE and BEHAVIOR, never price direction
+- FORBIDDEN: "bullish", "bearish", "buy", "sell", "pump", "dump", "guaranteed", "rug"
+- ALLOWED: "fragile", "resilient", "sensitive", "concentrated", "diffuse", "pressure"
+- If signals conflict, you MUST say "signals are mixed"
+- Use conditional language: "If X continues, sensitivity may increase"
+
+CURRENT TOKEN METRICS (pre-bucketed):
+{
+  "control_density": { "value": 42.5, "bucket": "coordinated-capable" },
+  "liquidity_coverage": { "value": 3.2, "bucket": "thin" },
+  "resilience_score": { "value": 68, "bucket": "moderate" },
+  "lifecycle_stage": "Discovery",
+  "lifecycle_confidence": "medium",
+  "tier_distribution": { ... },
+  "risk_flags": ["high_dust", "low_lp"]
+}
+
+COMMENTARY MODE: Snapshot (A)
+
+Generate your response using the structured output schema.
+```
+
+---
+
+## Structured Output Schema (Tool Calling)
+
+Force consistent JSON via tool-calling:
+
+```json
+{
+  "type": "function",
+  "function": {
+    "name": "token_interpretation",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "status_overview": {
+          "type": "string",
+          "description": "3-7 sentence summary focusing on structure, not price"
+        },
+        "lifecycle": {
+          "type": "object",
+          "properties": {
+            "stage": { "type": "string", "enum": ["Genesis","Discovery","Expansion","Distribution","Compression","Dormant","Reactivation"] },
+            "confidence": { "type": "string", "enum": ["high","medium","low"] },
+            "explanation": { "type": "string" }
+          }
+        },
+        "key_drivers": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "label": { "type": "string" },
+              "metric_value": { "type": "string" },
+              "bucket": { "type": "string" },
+              "implication": { "type": "string" }
+            }
+          }
+        },
+        "reasoning_trace": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "metric": { "type": "string" },
+              "value": { "type": "string" },
+              "threshold_category": { "type": "string" },
+              "phrase_selected": { "type": "string" }
+            }
+          }
+        },
+        "uncertainty_notes": {
+          "type": "array",
+          "items": { "type": "string" }
+        }
+      },
+      "required": ["status_overview","lifecycle","key_drivers","reasoning_trace"]
+    }
+  }
 }
 ```
 
-### Data Fetching Strategy
+---
 
-The component will use a single aggregating query (via RPC function) to fetch all token activity for a given date:
+## Database Schema
+
+**New Table: token_ai_interpretations**
 
 ```sql
--- get_dailies_for_date(p_date DATE)
-WITH searches AS (
-  SELECT 
-    token_mint,
-    COUNT(*) as search_count,
-    COUNT(DISTINCT ip_address) as unique_ips,
-    MIN(created_at) as first_search,
-    MAX(created_at) as last_search
-  FROM token_search_log
-  WHERE created_at::date = p_date
-  GROUP BY token_mint
-),
-surges AS (
-  SELECT token_mint, alert_type, queue_id
-  FROM holders_intel_surge_alerts
-  WHERE detected_at::date = p_date
-),
-posts_top50 AS (
-  SELECT token_mint, tweet_id, posted_at
-  FROM holders_intel_post_queue
-  WHERE created_at::date = p_date 
-    AND trigger_source = 'scheduler'
-    AND status = 'posted'
-),
-posts_dex AS (
-  SELECT pq.token_mint, pq.tweet_id, pq.posted_at, dt.trigger_type
-  FROM holders_intel_post_queue pq
-  JOIN holders_intel_dex_triggers dt ON dt.queue_id = pq.id
-  WHERE pq.created_at::date = p_date
-    AND pq.trigger_source = 'dex_scanner'
-    AND pq.status = 'posted'
-),
-posts_surge AS (
-  SELECT pq.token_mint, pq.tweet_id, pq.posted_at
-  FROM holders_intel_post_queue pq
-  JOIN holders_intel_surge_alerts sa ON sa.queue_id = pq.id
-  WHERE pq.created_at::date = p_date
-    AND pq.status = 'posted'
-),
-all_tokens AS (
-  SELECT DISTINCT token_mint FROM searches
-  UNION
-  SELECT DISTINCT token_mint FROM surges
-  UNION
-  SELECT DISTINCT token_mint FROM posts_top50
-  UNION
-  SELECT DISTINCT token_mint FROM posts_dex
-  UNION
-  SELECT DISTINCT token_mint FROM posts_surge
-)
-SELECT 
-  at.token_mint,
-  -- Join with seen_tokens for metadata
-  st.symbol,
-  st.name,
-  st.health_grade,
-  -- Search data
-  s.search_count,
-  s.unique_ips,
-  -- Surge data
-  su.alert_type,
-  -- Post data
-  p50.tweet_id as top50_tweet_id,
-  pd.tweet_id as dex_tweet_id,
-  pd.trigger_type as dex_trigger_type,
-  ps.tweet_id as surge_tweet_id,
-  -- Manual comments
-  mc.raw_feed_comment,
-  mc.reply_to_post,
-  mc.community_comment
-FROM all_tokens at
-LEFT JOIN holders_intel_seen_tokens st ON st.token_mint = at.token_mint
-LEFT JOIN searches s ON s.token_mint = at.token_mint
-LEFT JOIN surges su ON su.token_mint = at.token_mint
-LEFT JOIN posts_top50 p50 ON p50.token_mint = at.token_mint
-LEFT JOIN posts_dex pd ON pd.token_mint = at.token_mint
-LEFT JOIN posts_surge ps ON ps.token_mint = at.token_mint
-LEFT JOIN dailies_manual_comments mc ON mc.token_mint = at.token_mint AND mc.comment_date = p_date
-ORDER BY COALESCE(s.last_search, p50.posted_at, pd.posted_at, ps.posted_at) DESC;
+CREATE TABLE token_ai_interpretations (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  token_mint TEXT NOT NULL,
+  interpretation JSONB NOT NULL,
+  commentary_mode TEXT NOT NULL DEFAULT 'snapshot',
+  metrics_snapshot JSONB,
+  expires_at TIMESTAMPTZ NOT NULL DEFAULT (NOW() + INTERVAL '10 minutes'),
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE INDEX idx_tai_mint_expires ON token_ai_interpretations(token_mint, expires_at);
+
+-- RLS: Public read (interpretations are non-sensitive)
+ALTER TABLE token_ai_interpretations ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "Anyone can read interpretations" ON token_ai_interpretations
+  FOR SELECT USING (true);
+CREATE POLICY "Edge functions can insert" ON token_ai_interpretations
+  FOR INSERT WITH CHECK (true);
 ```
 
-## Features
+---
 
-### 1. Date Navigation
-- Left/Right arrows to navigate days
-- "Today" button to jump to current date
-- Calendar popover for date picker
-- Disabled future dates
+## Frontend Components
 
-### 2. Real-time Updates
-- When viewing today, subscribe to realtime changes on:
-  - `token_search_log`
-  - `holders_intel_surge_alerts`
-  - `holders_intel_post_queue`
-  - `dailies_manual_comments`
-- Automatic refresh when new activity detected
+**New Component: AIInterpretationPanel**
 
-### 3. Activity Indicators
+Location: `src/components/holders/AIInterpretationPanel.tsx`
 
-| Column | Icon When True | Meaning |
-|--------|----------------|---------|
-| Searched | ✓ (count) | Token was searched, shows count |
-| Surge | ⚡/🔥/📈 | Surge/Spike/Trending detected |
-| Top 50 | ✓ 🔗 | Posted via scheduler, link to tweet |
-| Dex | ✓ 🔗 | Posted via dex_scanner, link to tweet |
-| Surge Post | ✓ 🔗 | Posted via surge alert, link to tweet |
+Features:
+- Only renders for logged-in users
+- Toggle to enable/disable AI feedback
+- Collapsible sections for each output
+- Loading skeleton while fetching
+- "Why this interpretation?" expandable accordion
 
-### 4. Expandable Row Details
+**Locked State for Anonymous Users**
 
-Clicking a token row expands to show:
-- **Mint**: Full address with copy button and Solscan link
-- **Socials**: Twitter/Telegram/Website as clickable icons
-- **Holder Counts**: Total / Dust / Real / Health Grade
-- **Activity Timeline**: Chronological list of all activities
+A teaser div: "Sign up to unlock AI-powered holder analysis"
 
-### 5. Manual Comment Tracking
+---
 
-Three checkbox columns that persist to `dailies_manual_comments`:
-- **Raw**: Commented in raw X feed
-- **Reply**: Replied to a post
-- **Community**: Commented in X Community
+## XBot Integration (Abbreviated Version)
 
-Toggling any checkbox immediately upserts to database.
+For automated and manual X posts, generate a condensed 1-2 sentence version:
 
-### 6. Sorting Options
+Template variable: `{ai_summary}`
 
-- **Time**: Most recent activity first (default)
-- **Searches**: Most searched tokens first
-- **Posted**: Posted tokens first, then by post count
+Example output:
+"Structure is moderately resilient with thin liquidity coverage. Control is coordinated-capable among top holders. Lifecycle: Discovery (medium confidence)."
 
-### 7. Summary Stats Bar
+This gets appended to existing post templates when the toggle is enabled.
 
-Shows at top of table:
-- Total unique tokens for the day
-- Total posted to Twitter
-- Total surge/spike alerts
-- Total search count
+---
+
+## Implementation Phases
+
+### Phase 1: Core Infrastructure
+1. Create `token_ai_interpretations` table with caching
+2. Create `token-ai-interpreter` Edge Function with:
+   - Metric bucketing logic
+   - Mode selection
+   - Lovable AI integration with tool-calling
+   - Cache read/write
+3. Add config.toml entry
+
+### Phase 2: Frontend Integration
+1. Create `AIInterpretationPanel` component
+2. Create `useTokenAIInterpretation` hook with caching
+3. Integrate into `BaglessHoldersReport.tsx` (logged-in only)
+4. Add locked-state teaser for anonymous users
+
+### Phase 3: XBot Integration
+1. Add `ai_summary` field to `holders-intel-poster` data
+2. Update post templates with optional `{ai_summary}` variable
+3. Add toggle in /share-card-demo admin for AI in posts
+
+### Phase 4: Polish
+1. Add "Explain Like I'm 5" toggle option
+2. Add "Trader Mode" toggle for technical version
+3. Clickable drivers that highlight the relevant chart/metric
+
+---
 
 ## Files to Create/Modify
 
-| File | Action | Purpose |
-|------|--------|---------|
-| SQL Migration | CREATE | `dailies_manual_comments` table + RPC function |
-| `src/components/admin/DailiesDashboard.tsx` | CREATE | Main dashboard component |
-| `src/pages/SuperAdmin.tsx` | MODIFY | Add "Dailies" tab and lazy import |
+| File | Action |
+|------|--------|
+| `supabase/functions/token-ai-interpreter/index.ts` | **CREATE** - Core AI interpretation function |
+| `supabase/config.toml` | **MODIFY** - Add function config |
+| `src/components/holders/AIInterpretationPanel.tsx` | **CREATE** - UI component |
+| `src/components/holders/AIInterpretationLocked.tsx` | **CREATE** - Teaser for anon users |
+| `src/hooks/useTokenAIInterpretation.ts` | **CREATE** - Data fetching hook |
+| `src/components/BaglessHoldersReport.tsx` | **MODIFY** - Integrate AI panel |
+| `supabase/functions/holders-intel-poster/index.ts` | **MODIFY** - Add ai_summary support |
 
-## Implementation Details
+---
 
-### Component Layout
+## Limitations and Considerations
 
-```tsx
-<div className="space-y-4">
-  {/* Header with date navigation */}
-  <div className="flex items-center justify-between">
-    <h2>Dailies</h2>
-    <DateNavigation date={selectedDate} onDateChange={setSelectedDate} />
-  </div>
-  
-  {/* Summary stats */}
-  <SummaryStatsBar tokens={tokens} />
-  
-  {/* Sort controls */}
-  <div className="flex gap-2">
-    <Button onClick={() => setSortBy('time')}>By Time</Button>
-    <Button onClick={() => setSortBy('searches')}>By Searches</Button>
-    <Button onClick={() => setSortBy('posted')}>By Posted</Button>
-  </div>
-  
-  {/* Token table */}
-  <Table>
-    <TableHeader>...</TableHeader>
-    <TableBody>
-      {sortedTokens.map(token => (
-        <DailyTokenRow 
-          key={token.token_mint}
-          token={token}
-          isExpanded={expandedToken === token.token_mint}
-          onToggle={() => setExpandedToken(prev => prev === token.token_mint ? null : token.token_mint)}
-          onCommentChange={handleCommentChange}
-        />
-      ))}
-    </TableBody>
-  </Table>
-</div>
-```
+1. **Whale Movement Gap**: Real-time 48h buy/sell events are not currently tracked. Modes C, F, G will have limited functionality initially. Future enhancement: integrate `track-holder-movements` data.
 
-### Real-time Subscription (Today Only)
+2. **Rate Limits**: Lovable AI has rate limits. The 5-10 minute cache prevents excessive calls for popular tokens.
 
-```typescript
-useEffect(() => {
-  if (!isToday(selectedDate)) return;
-  
-  const channel = supabase
-    .channel('dailies-realtime')
-    .on('postgres_changes', 
-      { event: 'INSERT', schema: 'public', table: 'token_search_log' },
-      () => refetch()
-    )
-    .on('postgres_changes',
-      { event: '*', schema: 'public', table: 'holders_intel_post_queue' },
-      () => refetch()
-    )
-    .subscribe();
-    
-  return () => supabase.removeChannel(channel);
-}, [selectedDate]);
-```
+3. **Cost**: Each AI call uses credits. Caching is essential for cost control.
 
-## Technical Notes
+4. **Historical Depth**: Retention/diamond hands commentary (Mode H) requires 2+ snapshots. Will gracefully degrade for new tokens.
 
-1. **Performance**: The RPC function uses CTEs to minimize table scans
-2. **Deduplication**: `UNION` in `all_tokens` CTE ensures unique mints
-3. **Metadata Resolution**: Falls back to `holders_intel_seen_tokens` for symbol/name
-4. **Social Links**: Joins `token_socials_history` for latest social URLs
-5. **Comment Persistence**: Immediate upsert on checkbox toggle, optimistic UI update
+5. **No Price Storage**: AI interpretations are ephemeral (10 min TTL) per your request. No long-term storage of interpretations.
 
-## Expected Behavior
+---
 
-When you open the Dailies tab:
-1. Shows today's date by default
-2. Displays all tokens that had any activity today (searched, surged, or posted)
-3. Each row shows at-a-glance status indicators
-4. Click row to expand and see full details with links
-5. Toggle checkboxes to track manual X engagement
-6. Navigate to past days to review historical activity
-7. Real-time updates as new searches/posts occur (today only)
+## Guardrails Summary
+
+Baked into system prompt:
+- No price targets or direction predictions
+- No "buy/sell/hold" language
+- No "bullish/bearish" terminology
+- Conditional risk language only ("If X continues...")
+- Must flag uncertainty when signals conflict
+- Must cite metrics in reasoning trace
+
+This ensures compliance with your specification's "FORBIDDEN" and "ALLOWED" language rules.
