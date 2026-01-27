@@ -80,6 +80,8 @@ export const TEMPLATE_VARIABLES = [
   { var: '{healthGrade}', desc: 'Grade (A+, B+, etc)' },
   { var: '{healthScore}', desc: 'Score (0-100)' },
   { var: '{timestamp}', desc: 'Current UTC timestamp' },
+  { var: '{ai_summary}', desc: 'AI-generated 1-2 sentence interpretation (when enabled)' },
+  { var: '{lifecycle}', desc: 'Token lifecycle stage (Genesis, Discovery, etc.)' },
 ];
 
 export interface TokenShareData {

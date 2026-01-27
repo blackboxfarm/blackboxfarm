@@ -58,12 +58,59 @@ function formatTimestamp(): string {
   return `${formatted} EST`;
 }
 
+// Fetch AI interpretation summary for XBot posts (abbreviated version)
+async function fetchAISummary(
+  reportData: Record<string, unknown>,
+  tokenMint: string,
+  supabaseUrl: string,
+  anonKey: string
+): Promise<{ summary: string; lifecycle: string } | null> {
+  try {
+    console.log(`[poster] Fetching AI interpretation for ${tokenMint}`);
+    
+    const response = await fetch(
+      `${supabaseUrl}/functions/v1/token-ai-interpreter`,
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${anonKey}`,
+        },
+        body: JSON.stringify({ reportData, tokenMint }),
+      }
+    );
+    
+    if (!response.ok) {
+      console.warn(`[poster] AI interpreter returned ${response.status}`);
+      return null;
+    }
+    
+    const data = await response.json();
+    
+    if (data.interpretation?.abbreviated_summary && data.interpretation?.lifecycle?.stage) {
+      return {
+        summary: data.interpretation.abbreviated_summary,
+        lifecycle: data.interpretation.lifecycle.stage,
+      };
+    }
+    
+    return null;
+  } catch (err) {
+    console.warn('[poster] AI summary fetch failed:', err);
+    return null;
+  }
+}
+
 function processTemplate(template: string, data: any): string {
   const tickerUpper = (data.symbol || 'TOKEN').toUpperCase();
   const tokenName = data.name || data.tokenName || 'Unknown';
   // Pass trigger_comment to allow DEX scanner overrides
   const comment1 = getPostComment(data.timesPosted || 1, data.triggerComment);
   const timestamp = formatTimestamp();
+  
+  // AI summary defaults to empty if not provided or disabled
+  const aiSummary = data.aiSummary || '';
+  const lifecycle = data.lifecycle || '';
   
   return template
     .replace(/\{TICKER\}/g, `$${tickerUpper}`)
@@ -93,7 +140,11 @@ function processTemplate(template: string, data: any): string {
     .replace(/\{HEALTH_SCORE\}/g, String(data.healthScore || 0))
     .replace(/\{healthScore\}/g, String(data.healthScore || 0))
     .replace(/\{TOKEN_ADDRESS\}/g, data.tokenMint || '')
-    .replace(/\{ca\}/g, data.tokenMint || '');
+    .replace(/\{ca\}/g, data.tokenMint || '')
+    .replace(/\{ai_summary\}/g, aiSummary)
+    .replace(/\{AI_SUMMARY\}/g, aiSummary)
+    .replace(/\{lifecycle\}/g, lifecycle)
+    .replace(/\{LIFECYCLE\}/g, lifecycle);
 }
 
 async function fetchActiveTemplate(supabase: any): Promise<string> {
@@ -267,6 +318,9 @@ Deno.serve(async (req) => {
         activeCount: asCount(report?.tierBreakdown?.retail ?? report?.simpleTiers?.retail),
         healthGrade: (report?.stabilityGrade ?? report?.healthScore?.grade ?? 'N/A').toString(),
         healthScore: asCount(report?.stabilityScore ?? report?.healthScore?.score),
+        // AI summary fields (populated below if enabled)
+        aiSummary: '',
+        lifecycle: '',
       };
       
       console.log(`[poster] Stats: ${stats.totalHolders} holders, grade ${stats.healthGrade}, post #${currentTimesPosted}`);
@@ -302,6 +356,23 @@ Deno.serve(async (req) => {
           JSON.stringify({ success: true, skipped: true, reason: 'Low health grade' }),
           { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
         );
+      }
+      
+      // Check if AI summary is enabled (via queue item flag or template contains {ai_summary})
+      const templateUsesAI = tweetTemplate.includes('{ai_summary}') || tweetTemplate.includes('{AI_SUMMARY}') ||
+                             tweetTemplate.includes('{lifecycle}') || tweetTemplate.includes('{LIFECYCLE}');
+      const aiEnabledForItem = item.include_ai_summary === true;
+      
+      if (templateUsesAI || aiEnabledForItem) {
+        console.log('[poster] Template uses AI variables, fetching AI interpretation...');
+        const aiResult = await fetchAISummary(report, item.token_mint, supabaseUrl, anonKey);
+        if (aiResult) {
+          stats.aiSummary = aiResult.summary;
+          stats.lifecycle = aiResult.lifecycle;
+          console.log(`[poster] AI summary: ${stats.lifecycle} - ${stats.aiSummary.substring(0, 50)}...`);
+        } else {
+          console.log('[poster] AI summary not available, using empty string');
+        }
       }
       
       // Build tweet using the active template from database
