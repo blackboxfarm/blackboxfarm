@@ -15,15 +15,11 @@ import {
   ChevronRight, 
   CalendarIcon, 
   Search, 
-  Zap, 
-  TrendingUp, 
-  Flame,
-  ExternalLink,
   Copy,
   Twitter,
   MessageCircle,
   Globe,
-  ListOrdered,
+  List,
   Megaphone,
   FileText,
   Reply,
@@ -31,7 +27,9 @@ import {
   RefreshCw,
   Sparkles,
   Hash,
-  Coins
+  Coins,
+  AlertTriangle,
+  Clock
 } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -341,13 +339,13 @@ export function DailiesDashboard() {
   const getOriginIcons = (token: DailyToken) => {
     const icons: React.ReactNode[] = [];
     
+    // Search origin - magnifying glass
     if (token.wasSearched) {
       icons.push(
         <Tooltip key="search">
           <TooltipTrigger asChild>
             <span className="inline-flex items-center">
               <Search className="h-3.5 w-3.5 text-primary" />
-              {token.searchCount > 1 && <span className="text-[10px] ml-0.5 text-muted-foreground">{token.searchCount}</span>}
             </span>
           </TooltipTrigger>
           <TooltipContent>Searched {token.searchCount}x</TooltipContent>
@@ -355,29 +353,49 @@ export function DailiesDashboard() {
       );
     }
     
+    // Surge origin - alert triangle
     if (token.wasSurge) {
-      const surgeIcon = token.surgeType === 'surge_10min' 
-        ? <Flame className="h-3.5 w-3.5 text-destructive" />
-        : token.surgeType === 'spike_1hr'
-        ? <Zap className="h-3.5 w-3.5 text-primary" />
-        : <TrendingUp className="h-3.5 w-3.5 text-primary" />;
       icons.push(
         <Tooltip key="surge">
-          <TooltipTrigger asChild><span>{surgeIcon}</span></TooltipTrigger>
+          <TooltipTrigger asChild>
+            <span><AlertTriangle className="h-3.5 w-3.5 text-destructive" /></span>
+          </TooltipTrigger>
           <TooltipContent>
             {token.surgeType === 'surge_10min' && 'Surge 10min'}
             {token.surgeType === 'spike_1hr' && 'Spike 1hr'}
             {token.surgeType === 'trending_24hr' && 'Trending 24hr'}
+            {!token.surgeType && 'Search Surge'}
           </TooltipContent>
         </Tooltip>
       );
     }
     
-    if (token.postedTop50 || token.postedDexTrigger || token.postedSurge) {
+    // Top 50 list origin - list icon
+    if (token.postedTop50) {
       icons.push(
-        <Tooltip key="posted">
+        <Tooltip key="top50">
+          <TooltipTrigger asChild><span><List className="h-3.5 w-3.5 text-primary" /></span></TooltipTrigger>
+          <TooltipContent>Top 50 List</TooltipContent>
+        </Tooltip>
+      );
+    }
+    
+    // Dex trigger origin - megaphone
+    if (token.postedDexTrigger) {
+      icons.push(
+        <Tooltip key="dex">
           <TooltipTrigger asChild><span><Megaphone className="h-3.5 w-3.5 text-primary" /></span></TooltipTrigger>
-          <TooltipContent>Posted to X</TooltipContent>
+          <TooltipContent>Dex Paid / CTO / Boost</TooltipContent>
+        </Tooltip>
+      );
+    }
+    
+    // Surge post (if different from surge detection)
+    if (token.postedSurge && !token.wasSurge) {
+      icons.push(
+        <Tooltip key="surge-post">
+          <TooltipTrigger asChild><span><AlertTriangle className="h-3.5 w-3.5 text-primary" /></span></TooltipTrigger>
+          <TooltipContent>Surge Posted</TooltipContent>
         </Tooltip>
       );
     }
@@ -453,14 +471,15 @@ export function DailiesDashboard() {
                 <TableHead compact className="w-[44px]"></TableHead>
                 <TableHead compact className="w-[120px]">Token</TableHead>
                 <TableHead compact className="w-[70px] text-center">Origin</TableHead>
-                <TableHead compact className="w-[50px] text-center"><Tooltip><TooltipTrigger><Twitter className="h-3.5 w-3.5 mx-auto" /></TooltipTrigger><TooltipContent>Twitter/X</TooltipContent></Tooltip></TableHead>
-                <TableHead compact className="w-[50px] text-center"><Tooltip><TooltipTrigger><MessageCircle className="h-3.5 w-3.5 mx-auto" /></TooltipTrigger><TooltipContent>Telegram</TooltipContent></Tooltip></TableHead>
-                <TableHead compact className="w-[50px] text-center"><Tooltip><TooltipTrigger><Globe className="h-3.5 w-3.5 mx-auto" /></TooltipTrigger><TooltipContent>Website</TooltipContent></Tooltip></TableHead>
-                <TableHead compact className="w-[80px] text-center border-l border-border/50"><Tooltip><TooltipTrigger><Hash className="h-3.5 w-3.5 mx-auto" /></TooltipTrigger><TooltipContent>Real Holders</TooltipContent></Tooltip></TableHead>
-                <TableHead compact className="w-[50px] text-center"><Tooltip><TooltipTrigger>Grade</TooltipTrigger><TooltipContent>Health Grade</TooltipContent></Tooltip></TableHead>
-                <TableHead compact className="w-[50px] text-center border-l border-border/50"><Tooltip><TooltipTrigger><FileText className="h-3.5 w-3.5 mx-auto" /></TooltipTrigger><TooltipContent>Raw Feed</TooltipContent></Tooltip></TableHead>
-                <TableHead compact className="w-[50px] text-center"><Tooltip><TooltipTrigger><Reply className="h-3.5 w-3.5 mx-auto" /></TooltipTrigger><TooltipContent>Reply</TooltipContent></Tooltip></TableHead>
-                <TableHead compact className="w-[50px] text-center"><Tooltip><TooltipTrigger><Users className="h-3.5 w-3.5 mx-auto" /></TooltipTrigger><TooltipContent>Community</TooltipContent></Tooltip></TableHead>
+                <TableHead compact className="w-[40px] text-center"><Tooltip><TooltipTrigger><Twitter className="h-3.5 w-3.5 mx-auto" /></TooltipTrigger><TooltipContent>Twitter/X</TooltipContent></Tooltip></TableHead>
+                <TableHead compact className="w-[40px] text-center"><Tooltip><TooltipTrigger><MessageCircle className="h-3.5 w-3.5 mx-auto" /></TooltipTrigger><TooltipContent>Telegram</TooltipContent></Tooltip></TableHead>
+                <TableHead compact className="w-[40px] text-center"><Tooltip><TooltipTrigger><Globe className="h-3.5 w-3.5 mx-auto" /></TooltipTrigger><TooltipContent>Website</TooltipContent></Tooltip></TableHead>
+                <TableHead compact className="w-[70px] text-center border-l border-border/50"><Tooltip><TooltipTrigger><Hash className="h-3.5 w-3.5 mx-auto" /></TooltipTrigger><TooltipContent>Real Holders</TooltipContent></Tooltip></TableHead>
+                <TableHead compact className="w-[45px] text-center">Grade</TableHead>
+                <TableHead compact className="w-[45px] text-center"><Tooltip><TooltipTrigger><Clock className="h-3.5 w-3.5 mx-auto" /></TooltipTrigger><TooltipContent>Last Activity</TooltipContent></Tooltip></TableHead>
+                <TableHead compact className="w-[40px] text-center border-l border-border/50"><Tooltip><TooltipTrigger><FileText className="h-3.5 w-3.5 mx-auto" /></TooltipTrigger><TooltipContent>Raw Feed</TooltipContent></Tooltip></TableHead>
+                <TableHead compact className="w-[40px] text-center"><Tooltip><TooltipTrigger><Reply className="h-3.5 w-3.5 mx-auto" /></TooltipTrigger><TooltipContent>Reply</TooltipContent></Tooltip></TableHead>
+                <TableHead compact className="w-[40px] text-center"><Tooltip><TooltipTrigger><Users className="h-3.5 w-3.5 mx-auto" /></TooltipTrigger><TooltipContent>Community</TooltipContent></Tooltip></TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -505,46 +524,74 @@ export function DailiesDashboard() {
                   {/* Origin Column */}
                   <TableCell compact className="w-[70px]"><div className="flex items-center justify-center gap-1">{getOriginIcons(token)}</div></TableCell>
 
-                  {/* Socials Columns */}
-                  <TableCell compact className="w-[50px] text-center">
+                  {/* Socials Columns - Always show icon, grey if no link */}
+                  <TableCell compact className="w-[40px] text-center">
                     {token.twitter ? (
-                      <a href={token.twitter.startsWith('http') ? token.twitter : `https://x.com/${token.twitter}`} target="_blank" rel="noopener noreferrer" className="text-primary hover:text-primary/80"><ExternalLink className="h-3.5 w-3.5 mx-auto" /></a>
-                    ) : <span className="text-muted-foreground/40">—</span>}
+                      <a href={token.twitter.startsWith('http') ? token.twitter : `https://x.com/${token.twitter}`} target="_blank" rel="noopener noreferrer" className="text-primary hover:text-primary/80">
+                        <Twitter className="h-3.5 w-3.5 mx-auto" />
+                      </a>
+                    ) : (
+                      <Twitter className="h-3.5 w-3.5 mx-auto text-muted-foreground/30" />
+                    )}
                   </TableCell>
 
-                  <TableCell compact className="w-[50px] text-center">
+                  <TableCell compact className="w-[40px] text-center">
                     {token.telegram ? (
-                      <a href={token.telegram.startsWith('http') ? token.telegram : `https://t.me/${token.telegram}`} target="_blank" rel="noopener noreferrer" className="text-primary hover:text-primary/80"><ExternalLink className="h-3.5 w-3.5 mx-auto" /></a>
-                    ) : <span className="text-muted-foreground/40">—</span>}
+                      <a href={token.telegram.startsWith('http') ? token.telegram : `https://t.me/${token.telegram}`} target="_blank" rel="noopener noreferrer" className="text-primary hover:text-primary/80">
+                        <MessageCircle className="h-3.5 w-3.5 mx-auto" />
+                      </a>
+                    ) : (
+                      <MessageCircle className="h-3.5 w-3.5 mx-auto text-muted-foreground/30" />
+                    )}
                   </TableCell>
 
-                  <TableCell compact className="w-[50px] text-center">
+                  <TableCell compact className="w-[40px] text-center">
                     {token.website ? (
-                      <a href={token.website.startsWith('http') ? token.website : `https://${token.website}`} target="_blank" rel="noopener noreferrer" className="text-primary hover:text-primary/80"><ExternalLink className="h-3.5 w-3.5 mx-auto" /></a>
-                    ) : <span className="text-muted-foreground/40">—</span>}
+                      <a href={token.website.startsWith('http') ? token.website : `https://${token.website}`} target="_blank" rel="noopener noreferrer" className="text-primary hover:text-primary/80">
+                        <Globe className="h-3.5 w-3.5 mx-auto" />
+                      </a>
+                    ) : (
+                      <Globe className="h-3.5 w-3.5 mx-auto text-muted-foreground/30" />
+                    )}
                   </TableCell>
 
                   {/* Holder Stats Columns */}
-                  <TableCell compact className="w-[80px] text-center border-l border-border/30">
+                  <TableCell compact className="w-[70px] text-center border-l border-border/30">
                     {token.realHolders != null ? (
                       <span className={cn("text-sm", token.holdersIsOld ? "text-muted-foreground" : "text-primary font-medium")}>{token.realHolders.toLocaleString()}</span>
                     ) : <span className="text-muted-foreground/40">—</span>}
                   </TableCell>
 
-                  <TableCell compact className="w-[50px] text-center">
+                  <TableCell compact className="w-[45px] text-center">
                     {token.healthGrade ? (
                       <span className={cn("font-semibold", token.holdersIsOld ? "text-muted-foreground" : "text-primary")}>{token.healthGrade}</span>
                     ) : <span className="text-muted-foreground/40">—</span>}
                   </TableCell>
 
+                  {/* Timestamp Column */}
+                  <TableCell compact className="w-[45px] text-center">
+                    {token.lastActivityAt ? (
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <span className="text-muted-foreground cursor-help">
+                            <Clock className="h-3.5 w-3.5 mx-auto" />
+                          </span>
+                        </TooltipTrigger>
+                        <TooltipContent>
+                          {format(new Date(token.lastActivityAt), 'MMM d, yyyy h:mm a')}
+                        </TooltipContent>
+                      </Tooltip>
+                    ) : <span className="text-muted-foreground/40">—</span>}
+                  </TableCell>
+
                   {/* Manual Comment Checkboxes */}
-                  <TableCell compact className="w-[50px] text-center border-l border-border/30">
+                  <TableCell compact className="w-[40px] text-center border-l border-border/30">
                     <div className="flex justify-center"><Checkbox checked={token.rawFeedComment} onCheckedChange={(v) => handleCommentChange(token.token_mint, 'raw_feed_comment', !!v)} /></div>
                   </TableCell>
-                  <TableCell compact className="w-[50px] text-center">
+                  <TableCell compact className="w-[40px] text-center">
                     <div className="flex justify-center"><Checkbox checked={token.replyToPost} onCheckedChange={(v) => handleCommentChange(token.token_mint, 'reply_to_post', !!v)} /></div>
                   </TableCell>
-                  <TableCell compact className="w-[50px] text-center">
+                  <TableCell compact className="w-[40px] text-center">
                     <div className="flex justify-center"><Checkbox checked={token.communityComment} onCheckedChange={(v) => handleCommentChange(token.token_mint, 'community_comment', !!v)} /></div>
                   </TableCell>
                 </TableRow>
