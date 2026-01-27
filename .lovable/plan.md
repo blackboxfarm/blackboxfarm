@@ -1,282 +1,249 @@
 
-# Holders Dashboard: API Resource Tracking & Historical Data System
+# Granular Token Search Tracking System
 
-## Current State Analysis
+## Overview
 
-### Phase 1: Initial Page Load (`/holders` - blank state)
-**Resources Used:**
-| Resource | API/Endpoint | Credits/Cost | Frequency |
-|----------|-------------|--------------|-----------|
-| Page Visit Tracking | Supabase Insert | Free | 1x per visit |
-| Banner Ads Fetch | Supabase Query | Free | 1x per load |
-| KOL Wallets Cache | Supabase Query | Free | 1x per load |
-| SOL Price | sol-price edge function | Free | 1x per load |
+This plan creates a comprehensive historical database that captures every public token search, the complete results displayed to users, and enables time-series analysis for features like "Diamond Hands" and other metrics that require tracking changes over time.
 
-### Phase 2: Token Report Generation
-When a user enters a token address, the `bagless-holders-report` edge function orchestrates multiple parallel API calls:
+## Current State
 
-```text
-+------------------+     +-------------------+     +------------------+
-|   DexScreener    |     |     Solscan       |     |    RugCheck      |
-|   (2 calls)      |     |   (2-3 calls)     |     |   (1 call)       |
-+------------------+     +-------------------+     +------------------+
-         |                        |                        |
-         v                        v                        v
-+------------------------------------------------------------------------+
-|                    bagless-holders-report                               |
-|                    (orchestrator function)                              |
-+------------------------------------------------------------------------+
-         |                        |                        |
-         v                        v                        v
-+------------------+     +-------------------+     +------------------+
-|  Helius RPC      |     |   Pump.fun API    |     |  Jupiter/Gecko   |
-| (1-2 calls)      |     |   (0-1 calls)     |     | (0-2 fallback)   |
-+------------------+     +-------------------+     +------------------+
-```
+### What Exists Today
 
-**Detailed API Breakdown:**
+| Component | Status | Data Captured |
+|-----------|--------|---------------|
+| `holders_page_visits` | Active | Session, fingerprint, tokens_analyzed array, referrer, UTMs |
+| `holder_snapshots` | Active | 122K records - per-wallet balances, tiers, price |
+| `holder_movements` | Active | 3.4M records - wallet entries/exits between snapshots |
+| `api_usage_log` | New (empty) | Will track all external API calls with credits |
+| `token_analysis_costs` | New (empty) | Daily aggregate costs per token |
 
-| Service | Endpoint | Purpose | Est. Credits | Rate Limit |
-|---------|----------|---------|--------------|------------|
-| **DexScreener** | `/latest/dex/tokens/{mint}` | Pairs, price, socials | FREE | 300/min |
-| **DexScreener** | `/orders/v1/solana/{mint}` | Paid status, CTO, boosts | FREE | 300/min |
-| **Solscan Pro** | `/v2.0/token/markets` | Pool addresses | 1 credit | 100/min |
-| **Solscan Pro** | `/v2.0/token/holders` | LP verification | 1 credit | 100/min |
-| **RugCheck** | `/v1/tokens/{mint}/insiders/graph` | Bundled wallets | FREE | Unknown |
-| **Helius RPC** | `getProgramAccounts` | All token holders | 100 credits | 50/min |
-| **Pump.fun** | `/coins/{mint}` | Creator info, curve | FREE | Unknown |
-| **BonkFun/BagsFM** | Various | Creator info | FREE | Unknown |
-| **Jupiter** | `/v4/price` | Price fallback | FREE | 600/min |
-| **CoinGecko** | `/simple/token_price` | Price fallback | FREE | 50/min |
+### What's Missing
 
-**Post-Report Processing:**
-
-| Service | Endpoint | Purpose | Credits |
-|---------|----------|---------|---------|
-| **wallet-sns-lookup** | Helius + SNS Registry | Twitter handles | 1-200 Helius |
-| **capture-holder-snapshot** | Supabase Insert | Historical data | Free |
-| **track-holder-movements** | Supabase Query/Insert | Movement detection | Free |
-
-### Phase 3: Current Tracking Gaps
-
-**What IS Tracked:**
-- Helius API calls via `helius_api_usage` table
-- Page visits via `holders_page_visits` table
-- Holder snapshots via `holder_snapshots` table
-- Holder movements via `holder_movements` table
-
-**What is NOT Tracked:**
-- DexScreener API calls (no logging)
-- Solscan Pro API calls (no credit tracking)
-- RugCheck API calls (no logging)
-- Pump.fun/BonkFun/BagsFM API calls (no logging)
-- Jupiter/CoinGecko price API calls (no logging)
-- Aggregate token report costs per request
-- User-level vs system-level API consumption
+1. **Token Search Results Archive** - No storage of complete report data (socials, DEX status, health scores, tier breakdowns)
+2. **IP Address Tracking** - Not captured separately from user agent
+3. **DEX Status History** - No tracking of paid profile, CTO, boost changes over time
+4. **Price History** - No dedicated time-series for token prices
+5. **Socials Changes** - No tracking of when Twitter/Telegram/Website links change
 
 ---
 
-## Proposed Solution: Unified API Tracking System
+## Proposed Solution
 
-### 1. New Database Table: `api_usage_log`
+### New Database Tables
 
-```sql
-CREATE TABLE api_usage_log (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  timestamp TIMESTAMPTZ DEFAULT now(),
-  service_name TEXT NOT NULL, -- 'helius', 'dexscreener', 'solscan', 'rugcheck', 'pumpfun', 'jupiter', 'coingecko'
-  endpoint TEXT NOT NULL,
-  method TEXT,
-  token_mint TEXT, -- link to specific token analysis
-  function_name TEXT, -- which edge function made the call
-  request_type TEXT, -- 'holders_report', 'price_discovery', 'sns_lookup', etc.
-  response_status INTEGER,
-  response_time_ms INTEGER,
-  success BOOLEAN DEFAULT true,
-  error_message TEXT,
-  credits_used NUMERIC DEFAULT 0, -- for paid services
-  is_cached BOOLEAN DEFAULT false, -- was result served from cache?
-  user_id UUID, -- if authenticated
-  session_id TEXT, -- for anonymous tracking
-  metadata JSONB -- flexible storage for service-specific data
-);
-```
+#### 1. `token_search_log` - Master Search Record
 
-### 2. New Database Table: `token_analysis_costs`
+Captures every search request with session context:
 
-Track aggregate cost per token analysis:
+| Column | Type | Purpose |
+|--------|------|---------|
+| id | UUID | Primary key |
+| created_at | TIMESTAMPTZ | Search timestamp |
+| token_mint | TEXT | Token address searched |
+| session_id | TEXT | Link to visitor session |
+| visitor_fingerprint | TEXT | Device fingerprint |
+| ip_address | TEXT | Visitor IP (from edge function headers) |
+| response_time_ms | INTEGER | How long report took |
+| holder_count | INTEGER | Total holders at search time |
+| success | BOOLEAN | Whether search succeeded |
+| error_message | TEXT | Error details if failed |
 
-```sql
-CREATE TABLE token_analysis_costs (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  token_mint TEXT NOT NULL,
-  analysis_date DATE DEFAULT CURRENT_DATE,
-  total_api_calls INTEGER DEFAULT 0,
-  helius_credits INTEGER DEFAULT 0,
-  solscan_credits INTEGER DEFAULT 0,
-  dexscreener_calls INTEGER DEFAULT 0,
-  rugcheck_calls INTEGER DEFAULT 0,
-  pumpfun_calls INTEGER DEFAULT 0,
-  jupiter_calls INTEGER DEFAULT 0,
-  total_response_time_ms INTEGER DEFAULT 0,
-  holder_count INTEGER,
-  user_id UUID,
-  session_id TEXT,
-  created_at TIMESTAMPTZ DEFAULT now(),
-  UNIQUE(token_mint, analysis_date, session_id)
-);
-```
+#### 2. `token_search_results` - Complete Report Snapshot
 
-### 3. Shared API Logger Module
+Stores the full report data for each search:
 
-Create `supabase/functions/_shared/api-logger.ts`:
+| Column | Type | Purpose |
+|--------|------|---------|
+| id | UUID | Primary key |
+| search_id | UUID | FK to token_search_log |
+| token_mint | TEXT | Token address |
+| symbol | TEXT | Token symbol |
+| name | TEXT | Token name |
+| market_cap_usd | NUMERIC | Market cap at search time |
+| price_usd | NUMERIC | Price at search time |
+| price_source | TEXT | Where price came from |
+| total_supply | NUMERIC | Total token supply |
+| circulating_supply | NUMERIC | Circulating supply (excl. LP) |
+| health_score | INTEGER | Stability score (0-100) |
+| health_grade | TEXT | Grade (A-F) |
+| tier_dust | INTEGER | Dust wallet count |
+| tier_retail | INTEGER | Retail wallet count |
+| tier_serious | INTEGER | Serious wallet count |
+| tier_whale | INTEGER | Whale wallet count |
+| lp_count | INTEGER | Liquidity pool count |
+| lp_percentage | NUMERIC | LP percentage of supply |
+| top5_concentration | NUMERIC | Top 5 holder percentage |
+| top10_concentration | NUMERIC | Top 10 holder percentage |
+| risk_flags | JSONB | Array of detected risks |
+| bundled_percentage | NUMERIC | Insider/bundled wallet % |
+| launchpad | TEXT | Detected launchpad |
+| creator_wallet | TEXT | Token creator address |
+| created_at | TIMESTAMPTZ | Record timestamp |
 
-```typescript
-interface ApiLogParams {
-  serviceName: 'helius' | 'dexscreener' | 'solscan' | 'rugcheck' | 'pumpfun' | 'jupiter' | 'coingecko';
-  endpoint: string;
-  method?: string;
-  tokenMint?: string;
-  functionName: string;
-  requestType?: string;
-  credits?: number;
-  isCached?: boolean;
-  userId?: string;
-  sessionId?: string;
-  metadata?: Record<string, any>;
-}
+#### 3. `token_socials_history` - Social Links Over Time
 
-export async function logApiCall(params: ApiLogParams): Promise<ApiLogger> {
-  // Returns complete() function to finalize with status/timing
-}
-```
+| Column | Type | Purpose |
+|--------|------|---------|
+| id | UUID | Primary key |
+| token_mint | TEXT | Token address |
+| captured_at | TIMESTAMPTZ | When captured |
+| twitter | TEXT | Twitter URL |
+| telegram | TEXT | Telegram URL |
+| website | TEXT | Website URL |
+| discord | TEXT | Discord URL |
+| source | TEXT | Where socials came from |
 
-### 4. Holders Dashboard Components
+#### 4. `token_dex_status_history` - DEX Paid Status Over Time
 
-**New Dashboard Tab: "Resource Usage"**
+| Column | Type | Purpose |
+|--------|------|---------|
+| id | UUID | Primary key |
+| token_mint | TEXT | Token address |
+| captured_at | TIMESTAMPTZ | When captured |
+| has_paid_profile | BOOLEAN | DexScreener paid profile |
+| has_cto | BOOLEAN | Community takeover |
+| active_boosts | INTEGER | Number of active boosts |
+| boost_amount_total | INTEGER | Total boost amount |
+| has_active_ads | BOOLEAN | Running DexScreener ads |
+| orders | JSONB | Full orders response |
 
-```text
-+------------------------------------------------------------------+
-|  RESOURCE USAGE DASHBOARD                              [Refresh] |
-+------------------------------------------------------------------+
-|  Time Range: [Today] [7 Days] [30 Days] [Custom]                 |
-+------------------------------------------------------------------+
+#### 5. `token_price_history` - Price Time Series
 
-+------------------+  +------------------+  +------------------+
-| Total API Calls  |  | Est. Monthly Cost|  | Avg Response Time|
-|     12,847       |  |    $45.20        |  |     342ms        |
-+------------------+  +------------------+  +------------------+
+| Column | Type | Purpose |
+|--------|------|---------|
+| id | UUID | Primary key |
+| token_mint | TEXT | Token address |
+| captured_at | TIMESTAMPTZ | Timestamp |
+| price_usd | NUMERIC | Price in USD |
+| market_cap_usd | NUMERIC | Market cap |
+| source | TEXT | Price source |
 
-+------------------------------------------------------------------+
-|  API USAGE BY SERVICE                                             |
-+------------------------------------------------------------------+
-|  [Bar Chart: Helius | Solscan | DexScreener | RugCheck | Other]  |
-+------------------------------------------------------------------+
+---
 
-+------------------------------------------------------------------+
-|  CREDIT CONSUMPTION TREND                                         |
-+------------------------------------------------------------------+
-|  [Line Chart: Daily usage with service breakdown]                 |
-+------------------------------------------------------------------+
-
-+------------------------------------------------------------------+
-|  TOP TOKENS BY RESOURCE COST                                      |
-+------------------------------------------------------------------+
-|  1. $BONK - 847 API calls, 234 Helius credits                    |
-|  2. $WIF  - 623 API calls, 189 Helius credits                    |
-|  3. $PEPE - 412 API calls, 156 Helius credits                    |
-+------------------------------------------------------------------+
-
-+------------------------------------------------------------------+
-|  SERVICE HEALTH STATUS                                            |
-+------------------------------------------------------------------+
-|  Helius:      [====] 42/50 calls/min remaining                   |
-|  Solscan Pro: [==  ] 23/100 calls/min remaining                  |
-|  DexScreener: [====] 287/300 calls/min remaining                 |
-+------------------------------------------------------------------+
-```
-
-**New Dashboard Tab: "Historical Token Data"**
+## Implementation Architecture
 
 ```text
-+------------------------------------------------------------------+
-|  HISTORICAL TOKEN DATA                                  [Export] |
-+------------------------------------------------------------------+
-|  Search Token: [________________________] [Search]               |
-+------------------------------------------------------------------+
-
-+------------------------------------------------------------------+
-|  TOKENS WITH HISTORICAL DATA                                      |
-+------------------------------------------------------------------+
-|  Token          | Snapshots | Days Tracked | Last Update         |
-|  $BONK          | 156       | 32 days      | 2 hours ago         |
-|  $WIF           | 89        | 18 days      | 5 hours ago         |
-|  $PEPE          | 234       | 45 days      | 1 hour ago          |
-+------------------------------------------------------------------+
-
-+------------------------------------------------------------------+
-|  DIAMOND HANDS ANALYSIS AVAILABLE                                 |
-+------------------------------------------------------------------+
-|  Tokens with 7+ days of data: 47                                 |
-|  Tokens with 30+ days of data: 12                                |
-|  Total unique wallets tracked: 892,456                           |
-+------------------------------------------------------------------+
+User Searches Token on /holders
+         |
+         v
++---------------------+
+| bagless-holders-    |
+| report edge fn      |
++---------------------+
+         |
+         +---> Fetch data from APIs (DexScreener, Solscan, Helius, etc.)
+         |
+         +---> Log API calls to api_usage_log (ALREADY IMPLEMENTED)
+         |
+         +---> [NEW] Insert into token_search_log (with IP from headers)
+         |
+         +---> [NEW] Insert into token_search_results (complete report data)
+         |
+         +---> [NEW] Upsert into token_socials_history (if changed)
+         |
+         +---> [NEW] Upsert into token_dex_status_history (if changed)
+         |
+         +---> [NEW] Insert into token_price_history
+         |
+         v
+Return Response to User
+         |
+         v
++---------------------+
+| Client-side:        |
+| useTokenDataCollection |
++---------------------+
+         |
+         +---> capture-holder-snapshot (ALREADY WORKING - 122K records)
+         |
+         +---> track-holder-movements (ALREADY WORKING - 3.4M records)
 ```
+
+---
+
+## Dashboard Components
+
+### 1. Token Search Analytics Dashboard
+
+Display for super admins:
+
+- **Total Searches**: Daily/weekly/monthly counts
+- **Unique Tokens**: How many different tokens searched
+- **Search Volume by Token**: Most searched tokens
+- **Search by IP**: Identify heavy users
+- **Error Rate**: Failed searches
+- **Avg Response Time**: Performance monitoring
+
+### 2. Token History Viewer
+
+For any token with historical data:
+
+- **Price Chart**: Price over time from all searches
+- **Market Cap Chart**: Market cap over time
+- **Health Score Trend**: How stability changed
+- **Tier Distribution Over Time**: How holder composition shifted
+- **DEX Status Timeline**: When paid profile, CTO, boosts occurred
+- **Socials Timeline**: When links were added/changed
+
+### 3. Diamond Hands Analysis (Enhanced)
+
+Using the existing holder_snapshots data plus new tracking:
+
+- Wallets that held through price drops
+- Retention curves over time
+- Average hold duration by tier
+- Entry/exit patterns
+
+---
+
+## Data Retention Strategy
+
+| Table | Retention | Notes |
+|-------|-----------|-------|
+| token_search_log | 90 days | Session-level granularity |
+| token_search_results | 30 days | Full detail snapshots |
+| token_socials_history | 1 year | Only on changes |
+| token_dex_status_history | 1 year | Only on changes |
+| token_price_history | 1 year | Hourly granularity after 7 days |
+| holder_snapshots | Indefinite | Core historical data |
+| holder_movements | 6 months | High volume, can purge older |
 
 ---
 
 ## Implementation Steps
 
-### Step 1: Database Schema (Migration)
-1. Create `api_usage_log` table with indexes on timestamp, service_name, token_mint
-2. Create `token_analysis_costs` aggregate table
-3. Create RPC function `get_api_usage_stats()` for dashboard queries
-4. Add RLS policies for super_admin access
+### Phase 1: Database Schema
 
-### Step 2: Shared API Logger
-1. Create `supabase/functions/_shared/api-logger.ts`
-2. Update `bagless-holders-report` to use the logger
-3. Update `dexscreener-api.ts` to log calls
-4. Update `solscan-markets.ts` to log calls
-5. Update `rugcheck-insiders.ts` to log calls
-6. Update `creator-api.ts` to log calls
+Create the 5 new tables with:
+- Proper indexes for token_mint, captured_at queries
+- RLS policies (super_admin read, edge functions write)
+- Unique constraints to prevent duplicates on socials/dex_status
 
-### Step 3: Dashboard Components
-1. Create `src/components/admin/HoldersResourceDashboard.tsx`
-2. Create `src/components/admin/HistoricalTokenDataDashboard.tsx`
-3. Add new tabs to SuperAdmin page
-4. Implement charts using recharts (already installed)
+### Phase 2: Edge Function Updates
 
-### Step 4: Cost Estimation Logic
-1. Define credit costs per service:
-   - Helius: Variable by method (1-100 credits)
-   - Solscan Pro: 1 credit per call
-   - Others: Free (but track for rate limiting)
-2. Create monthly projection calculations
-3. Add alerting thresholds for budget limits
+Modify `bagless-holders-report` to:
+1. Extract IP address from request headers
+2. Insert search log record at start of request
+3. Insert complete results at end of request
+4. Conditionally upsert socials (only if changed from last record)
+5. Conditionally upsert dex_status (only if changed from last record)
+6. Insert price history record
 
----
+### Phase 3: Dashboard UI
 
-## Technical Considerations
+Create new components:
+- `TokenSearchAnalytics.tsx` - Search volume and patterns
+- `TokenHistoryViewer.tsx` - Per-token historical charts
+- `DiamondHandsEnhanced.tsx` - Advanced retention analysis
 
-### Rate Limiting Awareness
-The new logging system will help identify:
-- Which tokens are most expensive to analyze
-- Peak usage hours for rate limit planning
-- Which services are bottlenecks
+Add to SuperAdmin page as new tabs.
 
-### Caching Opportunities
-With visibility into API usage, you can:
-- Cache DexScreener pair data (changes slowly)
-- Cache RugCheck insiders data (15-30 min TTL)
-- Cache Solscan markets data (1 hour TTL)
-- Pre-warm popular tokens to reduce real-time load
+### Phase 4: Data Cleanup Jobs
 
-### Cost Optimization
-Projected savings from tracking:
-- Identify unnecessary repeated calls
-- Batch similar requests
-- Prioritize cached data for high-traffic tokens
+Create scheduled edge functions:
+- Daily: Aggregate old price_history to hourly
+- Weekly: Purge token_search_log older than 90 days
+- Monthly: Purge token_search_results older than 30 days
 
 ---
 
@@ -284,15 +251,34 @@ Projected savings from tracking:
 
 | File | Action | Purpose |
 |------|--------|---------|
-| `supabase/functions/_shared/api-logger.ts` | CREATE | Unified API logging |
-| `supabase/functions/bagless-holders-report/index.ts` | MODIFY | Add logging calls |
-| `supabase/functions/_shared/dexscreener-api.ts` | MODIFY | Add logging |
-| `supabase/functions/_shared/solscan-markets.ts` | MODIFY | Add logging |
-| `supabase/functions/_shared/rugcheck-insiders.ts` | MODIFY | Add logging |
-| `supabase/functions/_shared/creator-api.ts` | MODIFY | Add logging |
-| `src/components/admin/HoldersResourceDashboard.tsx` | CREATE | Usage dashboard |
-| `src/components/admin/HistoricalTokenDataDashboard.tsx` | CREATE | Token history view |
-| `src/pages/SuperAdmin.tsx` | MODIFY | Add new tabs |
+| SQL Migration | CREATE | 5 new tables with indexes and RLS |
+| `supabase/functions/bagless-holders-report/index.ts` | MODIFY | Add logging to new tables |
+| `src/components/admin/TokenSearchAnalytics.tsx` | CREATE | Search volume dashboard |
+| `src/components/admin/TokenHistoryViewer.tsx` | CREATE | Per-token history viewer |
+| `src/pages/SuperAdmin.tsx` | MODIFY | Add new dashboard tabs |
 
-### Database Migration Required
-A SQL migration will create the new tables and RPC functions.
+---
+
+## Estimated Storage Impact
+
+Based on current usage (110 unique tokens, ~1000 searches/day estimated):
+
+| Table | Est. Records/Month | Est. Size/Month |
+|-------|-------------------|-----------------|
+| token_search_log | 30,000 | ~5 MB |
+| token_search_results | 30,000 | ~15 MB |
+| token_socials_history | 500 | <1 MB |
+| token_dex_status_history | 2,000 | ~2 MB |
+| token_price_history | 50,000 | ~5 MB |
+
+**Total: ~30 MB/month** - very manageable
+
+---
+
+## API Cost Considerations
+
+This implementation adds **zero additional API calls** - it simply captures and stores data that's already being fetched. The only overhead is:
+- Database inserts (free with Supabase)
+- Slightly larger edge function response time (~10-20ms for inserts)
+
+This will actually help **reduce** future API costs by enabling caching and avoiding re-fetching data for recently-searched tokens.
