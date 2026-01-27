@@ -39,6 +39,11 @@ const CRON_JOBS = [
     name: 'holdersintel-dex-scanner-5min',
     schedule: '*/5 * * * *',
     function: 'holders-intel-dex-scanner'
+  },
+  {
+    name: 'holdersintel-surge-scanner-5min',
+    schedule: '*/5 * * * *',
+    function: 'search-surge-scanner'
   }
 ];
 

@@ -11,6 +11,7 @@ import { Copy, RotateCcw, Share2, Search, Send, Loader2, Save, Check, Play, Squa
 import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
 import { IntelXBotActivityLog } from './IntelXBotActivityLog';
+import { SurgeAlertsPanel } from '@/components/admin/SurgeAlertsPanel';
 import {
   DEFAULT_TEMPLATES,
   TEMPLATE_VARIABLES,
@@ -479,6 +480,9 @@ export function ShareCardDemo({ tokenStats: initialTokenStats = mockTokenStats }
 
       {/* Activity Log */}
       <IntelXBotActivityLog />
+
+      {/* Surge Alerts */}
+      <SurgeAlertsPanel />
 
       {/* Tweet Templates Card */}
       <Card className="bg-card/50 border-border">
