@@ -95,6 +95,22 @@ export function DailiesAIPanel({ tokenMint, tokenSymbol, onClose }: DailiesAIPan
     setIsPosting(true);
 
     try {
+      // Look up the X Community ID for this token
+      const { data: communityData } = await supabase
+        .from('x_communities')
+        .select('community_id, name')
+        .contains('linked_token_mints', [tokenMint])
+        .limit(1)
+        .single();
+
+      if (!communityData?.community_id) {
+        toast.error('No X Community found for this token. Please ensure the token is linked to a community.');
+        setIsPosting(false);
+        return;
+      }
+
+      console.log('Posting to X Community:', communityData.community_id, communityData.name);
+
       // Build tweet text with token symbol prefix
       const tweetText = tokenSymbol 
         ? `$${tokenSymbol}\n\n${textToPost}`
@@ -103,7 +119,8 @@ export function DailiesAIPanel({ tokenMint, tokenSymbol, onClose }: DailiesAIPan
       const { data, error } = await supabase.functions.invoke('post-share-card-twitter', {
         body: { 
           tweetText,
-          twitterHandle: 'HoldersIntel'
+          twitterHandle: 'HoldersIntel',
+          communityId: communityData.community_id
         }
       });
 
@@ -111,7 +128,7 @@ export function DailiesAIPanel({ tokenMint, tokenSymbol, onClose }: DailiesAIPan
       if (data?.error) throw new Error(data.error);
 
       if (data?.success) {
-        toast.success('Posted to @HoldersIntel!', {
+        toast.success(`Posted to ${communityData.name || 'X Community'}!`, {
           action: data.tweetUrl ? {
             label: 'View',
             onClick: () => window.open(data.tweetUrl, '_blank')
@@ -239,7 +256,7 @@ export function DailiesAIPanel({ tokenMint, tokenSymbol, onClose }: DailiesAIPan
             ) : (
               <Send className="h-4 w-4 mr-2" />
             )}
-            POST to @HoldersIntel
+            POST to Community
           </Button>
         </div>
       </div>
