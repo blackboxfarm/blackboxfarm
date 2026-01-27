@@ -29,9 +29,11 @@ import {
   Hash,
   Coins,
   AlertTriangle,
-  Clock
+  Clock,
+  Bot
 } from 'lucide-react';
 import { toast } from 'sonner';
+import { DailiesAIPanel } from './DailiesAIPanel';
 
 interface DailyToken {
   token_mint: string;
@@ -72,6 +74,7 @@ export function DailiesDashboard() {
   const [sortBy, setSortBy] = useState<SortBy>('time');
   const [calendarOpen, setCalendarOpen] = useState(false);
   const [backfilling, setBackfilling] = useState(false);
+  const [aiPanelToken, setAiPanelToken] = useState<{ mint: string; symbol: string | null } | null>(null);
 
   const fetchDailiesData = useCallback(async () => {
     setLoading(true);
@@ -466,7 +469,7 @@ export function DailiesDashboard() {
         <TooltipProvider delayDuration={300}>
         <div className="border rounded-lg overflow-x-auto">
           <Table>
-            <TableHeader>
+             <TableHeader>
               <TableRow className="bg-muted/50">
                 <TableHead compact className="w-[44px]"></TableHead>
                 <TableHead compact className="w-[120px]">Token</TableHead>
@@ -474,6 +477,7 @@ export function DailiesDashboard() {
                 <TableHead compact className="w-[40px] text-center"><Tooltip><TooltipTrigger><Twitter className="h-3.5 w-3.5 mx-auto" /></TooltipTrigger><TooltipContent>Twitter/X</TooltipContent></Tooltip></TableHead>
                 <TableHead compact className="w-[40px] text-center"><Tooltip><TooltipTrigger><MessageCircle className="h-3.5 w-3.5 mx-auto" /></TooltipTrigger><TooltipContent>Telegram</TooltipContent></Tooltip></TableHead>
                 <TableHead compact className="w-[40px] text-center"><Tooltip><TooltipTrigger><Globe className="h-3.5 w-3.5 mx-auto" /></TooltipTrigger><TooltipContent>Website</TooltipContent></Tooltip></TableHead>
+                <TableHead compact className="w-[50px] text-center"><Tooltip><TooltipTrigger><Bot className="h-3.5 w-3.5 mx-auto" /></TooltipTrigger><TooltipContent>AI Analysis</TooltipContent></Tooltip></TableHead>
                 <TableHead compact className="w-[70px] text-center border-l border-border/50"><Tooltip><TooltipTrigger><Hash className="h-3.5 w-3.5 mx-auto" /></TooltipTrigger><TooltipContent>Real Holders</TooltipContent></Tooltip></TableHead>
                 <TableHead compact className="w-[45px] text-center">Grade</TableHead>
                 <TableHead compact className="w-[45px] text-center"><Tooltip><TooltipTrigger><Clock className="h-3.5 w-3.5 mx-auto" /></TooltipTrigger><TooltipContent>Last Activity</TooltipContent></Tooltip></TableHead>
@@ -555,7 +559,16 @@ export function DailiesDashboard() {
                     )}
                   </TableCell>
 
-                  {/* Holder Stats Columns */}
+                  {/* AI Button Column */}
+                  <TableCell compact className="w-[50px] text-center">
+                    <Button
+                      size="sm"
+                      className="h-6 px-2 bg-purple-600 hover:bg-purple-700 text-white text-xs font-medium"
+                      onClick={() => setAiPanelToken({ mint: token.token_mint, symbol: token.symbol })}
+                    >
+                      AI
+                    </Button>
+                  </TableCell>
                   <TableCell compact className="w-[70px] text-center border-l border-border/30">
                     {token.realHolders != null ? (
                       <span className={cn("text-sm", token.holdersIsOld ? "text-muted-foreground" : "text-primary font-medium")}>{token.realHolders.toLocaleString()}</span>
@@ -600,6 +613,15 @@ export function DailiesDashboard() {
           </Table>
         </div>
         </TooltipProvider>
+      )}
+
+      {/* AI Panel Modal */}
+      {aiPanelToken && (
+        <DailiesAIPanel
+          tokenMint={aiPanelToken.mint}
+          tokenSymbol={aiPanelToken.symbol}
+          onClose={() => setAiPanelToken(null)}
+        />
       )}
     </div>
   );
