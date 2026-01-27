@@ -610,7 +610,11 @@ export function ShareCardDemo({ tokenStats: initialTokenStats = mockTokenStats }
               <Badge 
                 key={v.var} 
                 variant="outline" 
-                className="text-xs cursor-pointer hover:bg-muted"
+                className={`text-xs cursor-pointer hover:bg-muted ${
+                  v.var.includes('ai_summary') || v.var.includes('lifecycle') 
+                    ? 'border-purple-500/50 text-purple-300' 
+                    : ''
+                }`}
                 onClick={() => {
                   navigator.clipboard.writeText(v.var);
                   toast.success(`Copied ${v.var}`);
@@ -620,6 +624,15 @@ export function ShareCardDemo({ tokenStats: initialTokenStats = mockTokenStats }
                 {v.var}
               </Badge>
             ))}
+          </div>
+          
+          {/* AI Variables Explanation */}
+          <div className="mt-3 p-3 bg-purple-500/10 border border-purple-500/30 rounded-lg">
+            <p className="text-xs font-medium text-purple-300 mb-1">🧠 AI-Powered Variables</p>
+            <p className="text-xs text-muted-foreground">
+              Add <code className="bg-muted px-1 rounded">{'{ai_summary}'}</code> or <code className="bg-muted px-1 rounded">{'{lifecycle}'}</code> to your template to include AI-generated interpretation. 
+              The AI summary will only be fetched when these variables are present in the active template.
+            </p>
           </div>
         </div>
 
