@@ -3692,7 +3692,7 @@ export type Database = {
           last_seen_at: string
           market_cap_at_discovery: number | null
           name: string | null
-          snapshot_slot: string
+          snapshot_slot: string | null
           symbol: string | null
           times_posted: number | null
           times_seen: number
@@ -3706,7 +3706,7 @@ export type Database = {
           last_seen_at?: string
           market_cap_at_discovery?: number | null
           name?: string | null
-          snapshot_slot: string
+          snapshot_slot?: string | null
           symbol?: string | null
           times_posted?: number | null
           times_seen?: number
@@ -3720,7 +3720,7 @@ export type Database = {
           last_seen_at?: string
           market_cap_at_discovery?: number | null
           name?: string | null
-          snapshot_slot?: string
+          snapshot_slot?: string | null
           symbol?: string | null
           times_posted?: number | null
           times_seen?: number

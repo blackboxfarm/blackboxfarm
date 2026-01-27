@@ -402,3 +402,6 @@ verify_jwt = false
 
 [functions.search-surge-scanner]
 verify_jwt = false
+
+[functions.dailies-backfill-socials]
+verify_jwt = false
