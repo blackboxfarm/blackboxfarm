@@ -7,7 +7,6 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Checkbox } from '@/components/ui/checkbox';
 import { Calendar } from '@/components/ui/calendar';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { cn } from '@/lib/utils';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { 
@@ -319,9 +318,12 @@ export function DailiesDashboard() {
 
   const getSurgeIcon = (type: string | null) => {
     switch (type) {
-      case 'surge_10min': return <Flame className="h-4 w-4 text-orange-500" />;
-      case 'spike_1hr': return <Zap className="h-4 w-4 text-yellow-500" />;
-      case 'trending_24hr': return <TrendingUp className="h-4 w-4 text-green-500" />;
+      case 'surge_10min':
+        return <Flame className="h-4 w-4 text-destructive" />;
+      case 'spike_1hr':
+        return <Zap className="h-4 w-4 text-primary" />;
+      case 'trending_24hr':
+        return <TrendingUp className="h-4 w-4 text-primary" />;
       default: return null;
     }
   };
@@ -333,7 +335,8 @@ export function DailiesDashboard() {
         href={`https://x.com/HoldersIntel/status/${tweetId}`}
         target="_blank"
         rel="noopener noreferrer"
-        className="inline-flex items-center gap-1 text-green-400 hover:text-green-300 transition-colors"
+        className="inline-flex items-center gap-1 text-primary hover:text-primary/80 transition-colors"
+        title={label ? `Open ${label} X post` : 'Open X post'}
       >
         <Twitter className="h-3.5 w-3.5" />
         <ExternalLink className="h-3 w-3" />
@@ -410,19 +413,19 @@ export function DailiesDashboard() {
         </Card>
         <Card>
           <CardContent className="pt-4">
-            <div className="text-2xl font-bold text-green-500">{stats.totalPosted}</div>
+            <div className="text-2xl font-bold text-primary">{stats.totalPosted}</div>
             <p className="text-xs text-muted-foreground">Posted to X</p>
           </CardContent>
         </Card>
         <Card>
           <CardContent className="pt-4">
-            <div className="text-2xl font-bold text-orange-500">{stats.totalSurges}</div>
+            <div className="text-2xl font-bold text-primary">{stats.totalSurges}</div>
             <p className="text-xs text-muted-foreground">Surge Alerts</p>
           </CardContent>
         </Card>
         <Card>
           <CardContent className="pt-4">
-            <div className="text-2xl font-bold text-blue-500">{stats.totalSearches}</div>
+            <div className="text-2xl font-bold text-primary">{stats.totalSearches}</div>
             <p className="text-xs text-muted-foreground">Total Searches</p>
           </CardContent>
         </Card>
@@ -467,6 +470,9 @@ export function DailiesDashboard() {
       ) : (
         <TooltipProvider delayDuration={300}>
         <div className="border rounded-lg overflow-hidden">
+          <div className="px-3 py-2 text-xs text-muted-foreground border-b bg-muted/20">
+            Tip: <span className="font-medium">Raw / Reply / Comm</span> are manual X engagement checkboxes (click to toggle).
+          </div>
           <Table className="table-fixed w-full">
             <TableHeader>
               <TableRow className="bg-muted/50">
@@ -475,7 +481,7 @@ export function DailiesDashboard() {
                   <Tooltip>
                     <TooltipTrigger asChild>
                       <div className="flex items-center justify-center gap-1 cursor-help">
-                        <Search className="h-3.5 w-3.5 text-blue-400" />
+                        <Search className="h-3.5 w-3.5 text-primary" />
                         <span>Searched</span>
                       </div>
                     </TooltipTrigger>
@@ -486,7 +492,7 @@ export function DailiesDashboard() {
                   <Tooltip>
                     <TooltipTrigger asChild>
                       <div className="flex items-center justify-center gap-1 cursor-help">
-                        <AlertTriangle className="h-3.5 w-3.5 text-orange-400" />
+                        <AlertTriangle className="h-3.5 w-3.5 text-destructive" />
                         <span>Surge</span>
                       </div>
                     </TooltipTrigger>
@@ -497,7 +503,7 @@ export function DailiesDashboard() {
                   <Tooltip>
                     <TooltipTrigger asChild>
                       <div className="flex items-center justify-center gap-1 cursor-help">
-                        <ListOrdered className="h-3.5 w-3.5 text-green-400" />
+                        <ListOrdered className="h-3.5 w-3.5 text-primary" />
                         <span>Top50</span>
                       </div>
                     </TooltipTrigger>
@@ -508,7 +514,7 @@ export function DailiesDashboard() {
                   <Tooltip>
                     <TooltipTrigger asChild>
                       <div className="flex items-center justify-center gap-1 cursor-help">
-                        <Megaphone className="h-3.5 w-3.5 text-purple-400" />
+                        <Megaphone className="h-3.5 w-3.5 text-primary" />
                         <span>Dex</span>
                       </div>
                     </TooltipTrigger>
@@ -519,7 +525,7 @@ export function DailiesDashboard() {
                   <Tooltip>
                     <TooltipTrigger asChild>
                       <div className="flex items-center justify-center gap-1 cursor-help">
-                        <Zap className="h-3.5 w-3.5 text-yellow-400" />
+                        <Zap className="h-3.5 w-3.5 text-primary" />
                         <span>Surge X</span>
                       </div>
                     </TooltipTrigger>
@@ -530,7 +536,7 @@ export function DailiesDashboard() {
                   <Tooltip>
                     <TooltipTrigger asChild>
                       <div className="flex items-center justify-center gap-1 cursor-help">
-                        <FileText className="h-3.5 w-3.5 text-cyan-400" />
+                        <FileText className="h-3.5 w-3.5 text-primary" />
                         <span>Raw</span>
                       </div>
                     </TooltipTrigger>
@@ -541,7 +547,7 @@ export function DailiesDashboard() {
                   <Tooltip>
                     <TooltipTrigger asChild>
                       <div className="flex items-center justify-center gap-1 cursor-help">
-                        <Reply className="h-3.5 w-3.5 text-cyan-400" />
+                        <Reply className="h-3.5 w-3.5 text-primary" />
                         <span>Reply</span>
                       </div>
                     </TooltipTrigger>
@@ -552,7 +558,7 @@ export function DailiesDashboard() {
                   <Tooltip>
                     <TooltipTrigger asChild>
                       <div className="flex items-center justify-center gap-1 cursor-help">
-                        <Users className="h-3.5 w-3.5 text-cyan-400" />
+                        <Users className="h-3.5 w-3.5 text-primary" />
                         <span>Comm</span>
                       </div>
                     </TooltipTrigger>
@@ -562,103 +568,122 @@ export function DailiesDashboard() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {sortedTokens.map(token => (
-                <Collapsible key={token.token_mint} open={expandedToken === token.token_mint}>
-                  <CollapsibleTrigger asChild>
-                    <TableRow 
-                      className="cursor-pointer hover:bg-muted/50"
-                      onClick={() => setExpandedToken(prev => prev === token.token_mint ? null : token.token_mint)}
+              {sortedTokens.map((token) => (
+                <React.Fragment key={token.token_mint}>
+                  <TableRow
+                    className="cursor-pointer hover:bg-muted/50"
+                    onClick={() => setExpandedToken((prev) => (prev === token.token_mint ? null : token.token_mint))}
+                  >
+                    <TableCell compact className="font-mono w-[160px]">
+                      <div className="flex items-center gap-1.5">
+                        <ChevronDown
+                          className={cn(
+                            'h-3 w-3 transition-transform shrink-0',
+                            expandedToken === token.token_mint && 'rotate-180'
+                          )}
+                        />
+                        <span className="font-semibold truncate max-w-[120px]" title={token.symbol || token.token_mint}>
+                          {token.symbol ? `$${token.symbol}` : `${token.token_mint.slice(0, 6)}...`}
+                        </span>
+                      </div>
+                    </TableCell>
+
+                    <TableCell compact className="text-center w-[90px]">
+                      {token.wasSearched ? (
+                        <div className="flex items-center justify-center gap-1">
+                          <Search className="h-3.5 w-3.5 text-primary" />
+                          <span className="text-primary font-medium text-xs">({token.searchCount})</span>
+                        </div>
+                      ) : (
+                        <span className="text-muted-foreground/40">—</span>
+                      )}
+                    </TableCell>
+
+                    <TableCell compact className="text-center w-[70px]">
+                      {token.wasSurge ? (
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <span className="inline-flex items-center justify-center w-full">
+                              {getSurgeIcon(token.surgeType)}
+                            </span>
+                          </TooltipTrigger>
+                          <TooltipContent>
+                            {token.surgeType === 'surge_10min' && 'Search Surge (10min)'}
+                            {token.surgeType === 'spike_1hr' && 'Interest Spike (1hr)'}
+                            {token.surgeType === 'trending_24hr' && 'Trending (24hr)'}
+                          </TooltipContent>
+                        </Tooltip>
+                      ) : (
+                        <span className="text-muted-foreground/40">—</span>
+                      )}
+                    </TableCell>
+
+                    <TableCell compact className="text-center w-[80px]" onClick={(e) => e.stopPropagation()}>
+                      <TweetLink tweetId={token.top50TweetId} label="Top50" />
+                    </TableCell>
+                    <TableCell compact className="text-center w-[80px]" onClick={(e) => e.stopPropagation()}>
+                      <TweetLink tweetId={token.dexTweetId} label="Dex" />
+                    </TableCell>
+                    <TableCell compact className="text-center w-[90px]" onClick={(e) => e.stopPropagation()}>
+                      <TweetLink tweetId={token.surgeTweetId} label="Surge" />
+                    </TableCell>
+
+                    <TableCell
+                      compact
+                      className="text-center w-[70px] border-l border-border/30"
+                      onClick={(e) => e.stopPropagation()}
                     >
-                      <TableCell compact className="font-mono w-[160px]">
-                        <div className="flex items-center gap-1.5">
-                          <ChevronDown className={cn(
-                            "h-3 w-3 transition-transform shrink-0",
-                            expandedToken === token.token_mint && "rotate-180"
-                          )} />
-                          <span className="font-semibold truncate max-w-[120px]" title={token.symbol || token.token_mint}>
-                            {token.symbol ? `$${token.symbol}` : `${token.token_mint.slice(0, 6)}...`}
-                          </span>
-                        </div>
-                      </TableCell>
-                      <TableCell compact className="text-center w-[90px]">
-                        {token.wasSearched ? (
-                          <div className="flex items-center justify-center gap-1">
-                            <Search className="h-3.5 w-3.5 text-blue-400" />
-                            <span className="text-blue-400 font-medium text-xs">({token.searchCount})</span>
-                          </div>
-                        ) : <span className="text-muted-foreground/40">—</span>}
-                      </TableCell>
-                      <TableCell compact className="text-center w-[70px]">
-                        {token.wasSurge ? (
-                          <Tooltip>
-                            <TooltipTrigger className="flex items-center justify-center w-full">{getSurgeIcon(token.surgeType)}</TooltipTrigger>
-                            <TooltipContent>
-                              {token.surgeType === 'surge_10min' && 'Search Surge (10min)'}
-                              {token.surgeType === 'spike_1hr' && 'Interest Spike (1hr)'}
-                              {token.surgeType === 'trending_24hr' && 'Trending (24hr)'}
-                            </TooltipContent>
-                          </Tooltip>
-                        ) : <span className="text-muted-foreground/40">—</span>}
-                      </TableCell>
-                      <TableCell compact className="text-center w-[80px]">
-                        <TweetLink tweetId={token.top50TweetId} label="Top50" />
-                      </TableCell>
-                      <TableCell compact className="text-center w-[80px]">
-                        <TweetLink tweetId={token.dexTweetId} label="Dex" />
-                      </TableCell>
-                      <TableCell compact className="text-center w-[90px]">
-                        <TweetLink tweetId={token.surgeTweetId} label="Surge" />
-                      </TableCell>
-                      <TableCell compact className="text-center w-[70px] border-l border-border/30" onClick={e => e.stopPropagation()}>
-                        <div className="flex justify-center">
-                          <Checkbox 
-                            checked={token.rawFeedComment}
-                            onCheckedChange={(v) => handleCommentChange(token.token_mint, 'raw_feed_comment', !!v)}
-                            className="data-[state=checked]:bg-cyan-600 data-[state=checked]:border-cyan-600"
-                          />
-                        </div>
-                      </TableCell>
-                      <TableCell compact className="text-center w-[70px]" onClick={e => e.stopPropagation()}>
-                        <div className="flex justify-center">
-                          <Checkbox 
-                            checked={token.replyToPost}
-                            onCheckedChange={(v) => handleCommentChange(token.token_mint, 'reply_to_post', !!v)}
-                            className="data-[state=checked]:bg-cyan-600 data-[state=checked]:border-cyan-600"
-                          />
-                        </div>
-                      </TableCell>
-                      <TableCell compact className="text-center w-[90px]" onClick={e => e.stopPropagation()}>
-                        <div className="flex justify-center">
-                          <Checkbox 
-                            checked={token.communityComment}
-                            onCheckedChange={(v) => handleCommentChange(token.token_mint, 'community_comment', !!v)}
-                            className="data-[state=checked]:bg-cyan-600 data-[state=checked]:border-cyan-600"
-                          />
-                        </div>
-                      </TableCell>
-                    </TableRow>
-                  </CollapsibleTrigger>
-                  <CollapsibleContent asChild>
-                    <tr>
-                      <td colSpan={9} className="bg-muted/30 p-4">
+                      <div className="flex justify-center">
+                        <Checkbox
+                          checked={token.rawFeedComment}
+                          onCheckedChange={(v) => handleCommentChange(token.token_mint, 'raw_feed_comment', !!v)}
+                        />
+                      </div>
+                    </TableCell>
+                    <TableCell compact className="text-center w-[70px]" onClick={(e) => e.stopPropagation()}>
+                      <div className="flex justify-center">
+                        <Checkbox
+                          checked={token.replyToPost}
+                          onCheckedChange={(v) => handleCommentChange(token.token_mint, 'reply_to_post', !!v)}
+                        />
+                      </div>
+                    </TableCell>
+                    <TableCell compact className="text-center w-[90px]" onClick={(e) => e.stopPropagation()}>
+                      <div className="flex justify-center">
+                        <Checkbox
+                          checked={token.communityComment}
+                          onCheckedChange={(v) => handleCommentChange(token.token_mint, 'community_comment', !!v)}
+                        />
+                      </div>
+                    </TableCell>
+                  </TableRow>
+
+                  {expandedToken === token.token_mint && (
+                    <TableRow className="bg-muted/30">
+                      <TableCell colSpan={9} className="p-4">
                         <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
                           {/* Mint Info */}
-                          <div>
+                          <div className="min-w-0">
                             <p className="text-muted-foreground mb-1">Mint Address</p>
-                            <div className="flex items-center gap-2">
+                            <div className="flex items-center gap-2 flex-wrap">
                               <code className="text-xs bg-background px-2 py-1 rounded">
                                 {token.token_mint.slice(0, 8)}...{token.token_mint.slice(-8)}
                               </code>
-                              <Button size="icon" variant="ghost" className="h-6 w-6" onClick={() => copyToClipboard(token.token_mint)}>
+                              <Button
+                                size="icon"
+                                variant="ghost"
+                                className="h-6 w-6"
+                                onClick={() => copyToClipboard(token.token_mint)}
+                              >
                                 <Copy className="h-3 w-3" />
                               </Button>
-                              <a 
-                                href={`https://solscan.io/token/${token.token_mint}`} 
-                                target="_blank" 
+                              <a
+                                href={`https://solscan.io/token/${token.token_mint}`}
+                                target="_blank"
                                 rel="noopener noreferrer"
                                 className="text-primary hover:underline"
                               >
-                                <ExternalLink className="h-3 w-3" />
+                                Solscan
                               </a>
                             </div>
                             {token.name && <p className="mt-2 text-muted-foreground">{token.name}</p>}
@@ -669,27 +694,50 @@ export function DailiesDashboard() {
                             <p className="text-muted-foreground mb-1">Socials</p>
                             <div className="flex items-center gap-3">
                               {token.twitter ? (
-                                <a href={token.twitter.startsWith('http') ? token.twitter : `https://x.com/${token.twitter}`} target="_blank" rel="noopener noreferrer" className="text-primary hover:text-primary/80">
-                                  <Twitter className="h-5 w-5" />
+                                <a
+                                  href={token.twitter.startsWith('http') ? token.twitter : `https://x.com/${token.twitter}`}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="inline-flex items-center gap-1 text-primary hover:underline"
+                                >
+                                  <Twitter className="h-4 w-4" /> X
                                 </a>
-                              ) : <Twitter className="h-5 w-5 text-muted-foreground/30" />}
+                              ) : (
+                                <span className="text-muted-foreground/60">No X</span>
+                              )}
+
                               {token.telegram ? (
-                                <a href={token.telegram.startsWith('http') ? token.telegram : `https://t.me/${token.telegram}`} target="_blank" rel="noopener noreferrer" className="text-primary hover:text-primary/80">
-                                  <MessageCircle className="h-5 w-5" />
+                                <a
+                                  href={token.telegram.startsWith('http') ? token.telegram : `https://t.me/${token.telegram}`}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="inline-flex items-center gap-1 text-primary hover:underline"
+                                >
+                                  <MessageCircle className="h-4 w-4" /> TG
                                 </a>
-                              ) : <MessageCircle className="h-5 w-5 text-muted-foreground/30" />}
+                              ) : (
+                                <span className="text-muted-foreground/60">No TG</span>
+                              )}
+
                               {token.website ? (
-                                <a href={token.website.startsWith('http') ? token.website : `https://${token.website}`} target="_blank" rel="noopener noreferrer" className="text-primary hover:text-primary/80">
-                                  <Globe className="h-5 w-5" />
+                                <a
+                                  href={token.website.startsWith('http') ? token.website : `https://${token.website}`}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="inline-flex items-center gap-1 text-primary hover:underline"
+                                >
+                                  <Globe className="h-4 w-4" /> Web
                                 </a>
-                              ) : <Globe className="h-5 w-5 text-muted-foreground/30" />}
+                              ) : (
+                                <span className="text-muted-foreground/60">No Web</span>
+                              )}
                             </div>
                           </div>
 
                           {/* Holder Stats */}
                           <div>
                             <p className="text-muted-foreground mb-1">Holder Stats</p>
-                            <div className="flex items-center gap-4">
+                            <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
                               <div>
                                 <span className="text-muted-foreground">Total:</span>{' '}
                                 <span className="font-medium">{token.totalHolders?.toLocaleString() || '-'}</span>
@@ -700,28 +748,21 @@ export function DailiesDashboard() {
                               </div>
                               <div>
                                 <span className="text-muted-foreground">Real:</span>{' '}
-                                <span className="font-medium text-green-500">{token.realHolders?.toLocaleString() || '-'}</span>
+                                <span className="font-medium text-primary">{token.realHolders?.toLocaleString() || '-'}</span>
                               </div>
                               {token.healthGrade && (
                                 <div>
                                   <span className="text-muted-foreground">Grade:</span>{' '}
-                                  <span className={cn(
-                                    "font-bold",
-                                    token.healthGrade === 'A' && 'text-green-500',
-                                    token.healthGrade === 'B' && 'text-lime-500',
-                                    token.healthGrade === 'C' && 'text-yellow-500',
-                                    token.healthGrade === 'D' && 'text-orange-500',
-                                    token.healthGrade === 'F' && 'text-red-500'
-                                  )}>{token.healthGrade}</span>
+                                  <span className="font-semibold text-primary">{token.healthGrade}</span>
                                 </div>
                               )}
                             </div>
                           </div>
                         </div>
-                      </td>
-                    </tr>
-                  </CollapsibleContent>
-                </Collapsible>
+                      </TableCell>
+                    </TableRow>
+                  )}
+                </React.Fragment>
               ))}
             </TableBody>
           </Table>
