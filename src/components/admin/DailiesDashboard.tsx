@@ -9,6 +9,7 @@ import { Calendar } from '@/components/ui/calendar';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { cn } from '@/lib/utils';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { 
   ChevronLeft, 
   ChevronRight, 
@@ -22,7 +23,13 @@ import {
   Twitter,
   MessageCircle,
   Globe,
-  ChevronDown
+  ChevronDown,
+  ListOrdered,
+  Megaphone,
+  AlertTriangle,
+  FileText,
+  Reply,
+  Users
 } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -319,16 +326,17 @@ export function DailiesDashboard() {
     }
   };
 
-  const TweetLink = ({ tweetId }: { tweetId: string | null }) => {
-    if (!tweetId) return <span className="text-muted-foreground">-</span>;
+  const TweetLink = ({ tweetId, label }: { tweetId: string | null; label?: string }) => {
+    if (!tweetId) return <span className="text-muted-foreground/40">—</span>;
     return (
       <a 
         href={`https://x.com/HoldersIntel/status/${tweetId}`}
         target="_blank"
         rel="noopener noreferrer"
-        className="flex items-center gap-1 text-primary hover:underline"
+        className="inline-flex items-center gap-1 text-green-400 hover:text-green-300 transition-colors"
       >
-        ✓ <ExternalLink className="h-3 w-3" />
+        <Twitter className="h-3.5 w-3.5" />
+        <ExternalLink className="h-3 w-3" />
       </a>
     );
   };
@@ -457,19 +465,100 @@ export function DailiesDashboard() {
           </CardContent>
         </Card>
       ) : (
+        <TooltipProvider delayDuration={300}>
         <div className="border rounded-lg overflow-hidden">
           <Table>
             <TableHeader>
-              <TableRow>
-                <TableHead compact className="w-[140px]">Token</TableHead>
-                <TableHead compact className="text-center">Searched</TableHead>
-                <TableHead compact className="text-center">Surge</TableHead>
-                <TableHead compact className="text-center">Top50</TableHead>
-                <TableHead compact className="text-center">Dex</TableHead>
-                <TableHead compact className="text-center">Surge Post</TableHead>
-                <TableHead compact className="text-center">Raw</TableHead>
-                <TableHead compact className="text-center">Reply</TableHead>
-                <TableHead compact className="text-center">Community</TableHead>
+              <TableRow className="bg-muted/50">
+                <TableHead compact className="w-[160px]">Token</TableHead>
+                <TableHead compact className="text-center w-[90px]">
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <div className="flex items-center justify-center gap-1 cursor-help">
+                        <Search className="h-3.5 w-3.5 text-blue-400" />
+                        <span>Searched</span>
+                      </div>
+                    </TooltipTrigger>
+                    <TooltipContent>Public searches for this token</TooltipContent>
+                  </Tooltip>
+                </TableHead>
+                <TableHead compact className="text-center w-[70px]">
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <div className="flex items-center justify-center gap-1 cursor-help">
+                        <AlertTriangle className="h-3.5 w-3.5 text-orange-400" />
+                        <span>Surge</span>
+                      </div>
+                    </TooltipTrigger>
+                    <TooltipContent>Search surge/spike detected</TooltipContent>
+                  </Tooltip>
+                </TableHead>
+                <TableHead compact className="text-center w-[80px]">
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <div className="flex items-center justify-center gap-1 cursor-help">
+                        <ListOrdered className="h-3.5 w-3.5 text-green-400" />
+                        <span>Top50</span>
+                      </div>
+                    </TooltipTrigger>
+                    <TooltipContent>Posted via Top 50 scheduler</TooltipContent>
+                  </Tooltip>
+                </TableHead>
+                <TableHead compact className="text-center w-[80px]">
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <div className="flex items-center justify-center gap-1 cursor-help">
+                        <Megaphone className="h-3.5 w-3.5 text-purple-400" />
+                        <span>Dex</span>
+                      </div>
+                    </TooltipTrigger>
+                    <TooltipContent>Posted via DEX boosts/alerts</TooltipContent>
+                  </Tooltip>
+                </TableHead>
+                <TableHead compact className="text-center w-[90px]">
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <div className="flex items-center justify-center gap-1 cursor-help">
+                        <Zap className="h-3.5 w-3.5 text-yellow-400" />
+                        <span>Surge X</span>
+                      </div>
+                    </TooltipTrigger>
+                    <TooltipContent>Posted via surge detection</TooltipContent>
+                  </Tooltip>
+                </TableHead>
+                <TableHead compact className="text-center w-[70px] border-l border-border/50">
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <div className="flex items-center justify-center gap-1 cursor-help">
+                        <FileText className="h-3.5 w-3.5 text-cyan-400" />
+                        <span>Raw</span>
+                      </div>
+                    </TooltipTrigger>
+                    <TooltipContent>Manual comment in raw X feed</TooltipContent>
+                  </Tooltip>
+                </TableHead>
+                <TableHead compact className="text-center w-[70px]">
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <div className="flex items-center justify-center gap-1 cursor-help">
+                        <Reply className="h-3.5 w-3.5 text-cyan-400" />
+                        <span>Reply</span>
+                      </div>
+                    </TooltipTrigger>
+                    <TooltipContent>Reply to an X post</TooltipContent>
+                  </Tooltip>
+                </TableHead>
+                <TableHead compact className="text-center w-[90px]">
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <div className="flex items-center justify-center gap-1 cursor-help">
+                        <Users className="h-3.5 w-3.5 text-cyan-400" />
+                        <span>Comm</span>
+                      </div>
+                    </TooltipTrigger>
+                    <TooltipContent>Comment in X Community</TooltipContent>
+                  </Tooltip>
+                </TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -481,49 +570,64 @@ export function DailiesDashboard() {
                       onClick={() => setExpandedToken(prev => prev === token.token_mint ? null : token.token_mint)}
                     >
                       <TableCell compact className="font-mono">
-                        <div className="flex items-center gap-1">
+                        <div className="flex items-center gap-1.5">
                           <ChevronDown className={cn(
-                            "h-3 w-3 transition-transform",
+                            "h-3 w-3 transition-transform shrink-0",
                             expandedToken === token.token_mint && "rotate-180"
                           )} />
-                          <span className="font-medium">
-                            {token.symbol ? `$${token.symbol}` : `${token.token_mint.slice(0, 4)}...`}
+                          <span className="font-semibold truncate max-w-[120px]" title={token.symbol || token.token_mint}>
+                            {token.symbol ? `$${token.symbol}` : `${token.token_mint.slice(0, 6)}...`}
                           </span>
                         </div>
                       </TableCell>
                       <TableCell compact className="text-center">
                         {token.wasSearched ? (
-                          <span className="text-blue-500 font-medium">✓ ({token.searchCount})</span>
-                        ) : '-'}
+                          <div className="flex items-center justify-center gap-1">
+                            <Search className="h-3.5 w-3.5 text-blue-400" />
+                            <span className="text-blue-400 font-medium text-xs">({token.searchCount})</span>
+                          </div>
+                        ) : <span className="text-muted-foreground/40">—</span>}
                       </TableCell>
                       <TableCell compact className="text-center">
-                        {token.wasSurge ? getSurgeIcon(token.surgeType) : '-'}
+                        {token.wasSurge ? (
+                          <Tooltip>
+                            <TooltipTrigger>{getSurgeIcon(token.surgeType)}</TooltipTrigger>
+                            <TooltipContent>
+                              {token.surgeType === 'surge_10min' && 'Search Surge (10min)'}
+                              {token.surgeType === 'spike_1hr' && 'Interest Spike (1hr)'}
+                              {token.surgeType === 'trending_24hr' && 'Trending (24hr)'}
+                            </TooltipContent>
+                          </Tooltip>
+                        ) : <span className="text-muted-foreground/40">—</span>}
                       </TableCell>
                       <TableCell compact className="text-center">
-                        <TweetLink tweetId={token.top50TweetId} />
+                        <TweetLink tweetId={token.top50TweetId} label="Top50" />
                       </TableCell>
                       <TableCell compact className="text-center">
-                        <TweetLink tweetId={token.dexTweetId} />
+                        <TweetLink tweetId={token.dexTweetId} label="Dex" />
                       </TableCell>
                       <TableCell compact className="text-center">
-                        <TweetLink tweetId={token.surgeTweetId} />
+                        <TweetLink tweetId={token.surgeTweetId} label="Surge" />
                       </TableCell>
-                      <TableCell compact className="text-center" onClick={e => e.stopPropagation()}>
+                      <TableCell compact className="text-center border-l border-border/30" onClick={e => e.stopPropagation()}>
                         <Checkbox 
                           checked={token.rawFeedComment}
                           onCheckedChange={(v) => handleCommentChange(token.token_mint, 'raw_feed_comment', !!v)}
+                          className="data-[state=checked]:bg-cyan-600 data-[state=checked]:border-cyan-600"
                         />
                       </TableCell>
                       <TableCell compact className="text-center" onClick={e => e.stopPropagation()}>
                         <Checkbox 
                           checked={token.replyToPost}
                           onCheckedChange={(v) => handleCommentChange(token.token_mint, 'reply_to_post', !!v)}
+                          className="data-[state=checked]:bg-cyan-600 data-[state=checked]:border-cyan-600"
                         />
                       </TableCell>
                       <TableCell compact className="text-center" onClick={e => e.stopPropagation()}>
                         <Checkbox 
                           checked={token.communityComment}
                           onCheckedChange={(v) => handleCommentChange(token.token_mint, 'community_comment', !!v)}
+                          className="data-[state=checked]:bg-cyan-600 data-[state=checked]:border-cyan-600"
                         />
                       </TableCell>
                     </TableRow>
@@ -616,6 +720,7 @@ export function DailiesDashboard() {
             </TableBody>
           </Table>
         </div>
+        </TooltipProvider>
       )}
     </div>
   );
