@@ -5,14 +5,13 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Switch } from '@/components/ui/switch';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/hooks/useAuth';
 import { supabase } from '@/integrations/supabase/client';
+import ExportActions from '@/components/ai-analysis/ExportActions';
 import { 
   Brain, 
   Sparkles, 
@@ -291,6 +290,13 @@ export default function AIAnalysis() {
               </Badge>
             </div>
             <div className="flex items-center gap-4">
+              {interpretation && (
+                <ExportActions 
+                  interpretation={interpretation} 
+                  tokenMint={tokenMint.trim()} 
+                  tone={selectedTone} 
+                />
+              )}
               <div className="flex items-center gap-2">
                 <Label htmlFor="eli5-mode" className="text-sm text-muted-foreground">ELI5 Mode</Label>
                 <Switch 
