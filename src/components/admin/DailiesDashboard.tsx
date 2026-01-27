@@ -1,8 +1,8 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import { format, isToday, subDays, addDays, startOfDay } from 'date-fns';
+import { format, isToday, subDays, addDays } from 'date-fns';
 import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Calendar } from '@/components/ui/calendar';
@@ -25,10 +25,12 @@ import {
   ChevronDown,
   ListOrdered,
   Megaphone,
-  AlertTriangle,
   FileText,
   Reply,
-  Users
+  Users,
+  RefreshCw,
+  Sparkles,
+  Hash
 } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -58,6 +60,7 @@ interface DailyToken {
   replyToPost: boolean;
   communityComment: boolean;
   lastActivityAt: string | null;
+  holdersIsOld: boolean;
 }
 
 type SortBy = 'time' | 'searches' | 'posted';
@@ -69,6 +72,7 @@ export function DailiesDashboard() {
   const [expandedToken, setExpandedToken] = useState<string | null>(null);
   const [sortBy, setSortBy] = useState<SortBy>('time');
   const [calendarOpen, setCalendarOpen] = useState(false);
+  const [backfilling, setBackfilling] = useState(false);
 
   const fetchDailiesData = useCallback(async () => {
     setLoading(true);
@@ -77,23 +81,19 @@ export function DailiesDashboard() {
     const endOfDayStr = `${dateStr}T23:59:59.999Z`;
 
     try {
-      // Fetch all data sources in parallel
       const [searchesRes, surgesRes, postsRes, commentsRes, socialsRes] = await Promise.all([
-        // Token searches for this date
         supabase
           .from('token_search_log')
           .select('token_mint, ip_address, created_at')
           .gte('created_at', startOfDayStr)
           .lte('created_at', endOfDayStr),
         
-        // Surge alerts for this date
         supabase
           .from('holders_intel_surge_alerts')
           .select('token_mint, alert_type, detected_at, queue_id, symbol, name')
           .gte('detected_at', startOfDayStr)
           .lte('detected_at', endOfDayStr),
         
-        // Posts for this date
         supabase
           .from('holders_intel_post_queue')
           .select('token_mint, trigger_source, status, tweet_id, posted_at, created_at, symbol')
@@ -101,20 +101,17 @@ export function DailiesDashboard() {
           .lte('created_at', endOfDayStr)
           .eq('status', 'posted'),
         
-        // Manual comments for this date
         supabase
           .from('dailies_manual_comments')
           .select('*')
           .eq('comment_date', dateStr),
         
-        // Get socials for tokens (will filter later)
         supabase
           .from('token_socials_history')
           .select('token_mint, twitter, telegram, website')
-          .order('created_at', { ascending: false })
+          .order('captured_at', { ascending: false })
       ]);
 
-      // Fetch seen tokens for metadata
       const { data: seenTokens } = await supabase
         .from('holders_intel_seen_tokens')
         .select('token_mint, symbol, name, health_grade');
@@ -123,21 +120,22 @@ export function DailiesDashboard() {
         (seenTokens || []).map(t => [t.token_mint, t])
       );
 
-      // Fetch latest search results for holder counts
       const { data: searchResults } = await supabase
         .from('token_search_results')
-        .select('token_mint, symbol, name, tier_dust, tier_retail, tier_serious, tier_whale')
+        .select('token_mint, symbol, name, tier_dust, tier_retail, tier_serious, tier_whale, created_at')
         .order('created_at', { ascending: false });
 
-      const holderDataMap = new Map<string, { total: number; dust: number }>();
+      const holderDataMap = new Map<string, { total: number; dust: number; isOld: boolean }>();
+      const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
+      
       for (const r of searchResults || []) {
         if (!holderDataMap.has(r.token_mint)) {
           const total = (r.tier_dust || 0) + (r.tier_retail || 0) + (r.tier_serious || 0) + (r.tier_whale || 0);
-          holderDataMap.set(r.token_mint, { total, dust: r.tier_dust || 0 });
+          const isOld = r.created_at ? new Date(r.created_at) < oneDayAgo : true;
+          holderDataMap.set(r.token_mint, { total, dust: r.tier_dust || 0, isOld });
         }
       }
 
-      // Aggregate searches by token
       const searchesByToken = new Map<string, { count: number; uniqueIps: Set<string>; lastAt: string }>();
       for (const s of searchesRes.data || []) {
         const existing = searchesByToken.get(s.token_mint) || { count: 0, uniqueIps: new Set(), lastAt: s.created_at };
@@ -147,7 +145,6 @@ export function DailiesDashboard() {
         searchesByToken.set(s.token_mint, existing);
       }
 
-      // Map surges by token (take highest priority)
       const surgesByToken = new Map<string, { type: string; symbol: string | null; name: string | null }>();
       const surgePriority: Record<string, number> = { 'surge_10min': 1, 'spike_1hr': 2, 'trending_24hr': 3 };
       for (const s of surgesRes.data || []) {
@@ -157,7 +154,6 @@ export function DailiesDashboard() {
         }
       }
 
-      // Map posts by token and type
       const postsByToken = new Map<string, { top50?: string; dex?: string; surge?: string; symbol?: string; lastAt?: string }>();
       for (const p of postsRes.data || []) {
         const existing = postsByToken.get(p.token_mint) || {};
@@ -169,12 +165,10 @@ export function DailiesDashboard() {
         postsByToken.set(p.token_mint, existing);
       }
 
-      // Map comments by token
       const commentsByToken = new Map(
         (commentsRes.data || []).map(c => [c.token_mint, c])
       );
 
-      // Map socials by token (latest entry)
       const socialsByToken = new Map<string, { twitter: string | null; telegram: string | null; website: string | null }>();
       for (const s of socialsRes.data || []) {
         if (!socialsByToken.has(s.token_mint)) {
@@ -182,13 +176,11 @@ export function DailiesDashboard() {
         }
       }
 
-      // Collect all unique tokens
       const allTokenMints = new Set<string>();
       searchesByToken.forEach((_, k) => allTokenMints.add(k));
       surgesByToken.forEach((_, k) => allTokenMints.add(k));
       postsByToken.forEach((_, k) => allTokenMints.add(k));
 
-      // Build consolidated token list
       const consolidatedTokens: DailyToken[] = Array.from(allTokenMints).map(mint => {
         const searches = searchesByToken.get(mint);
         const surge = surgesByToken.get(mint);
@@ -223,7 +215,8 @@ export function DailiesDashboard() {
           rawFeedComment: comments?.raw_feed_comment || false,
           replyToPost: comments?.reply_to_post || false,
           communityComment: comments?.community_comment || false,
-          lastActivityAt: searches?.lastAt || posts?.lastAt || null
+          lastActivityAt: searches?.lastAt || posts?.lastAt || null,
+          holdersIsOld: holderData?.isOld ?? true
         };
       });
 
@@ -240,7 +233,6 @@ export function DailiesDashboard() {
     fetchDailiesData();
   }, [fetchDailiesData]);
 
-  // Real-time subscription for today
   useEffect(() => {
     if (!isToday(selectedDate)) return;
 
@@ -257,7 +249,6 @@ export function DailiesDashboard() {
   const handleCommentChange = async (tokenMint: string, field: 'raw_feed_comment' | 'reply_to_post' | 'community_comment', value: boolean) => {
     const dateStr = format(selectedDate, 'yyyy-MM-dd');
     
-    // Optimistic update
     setTokens(prev => prev.map(t => 
       t.token_mint === tokenMint 
         ? { ...t, [field === 'raw_feed_comment' ? 'rawFeedComment' : field === 'reply_to_post' ? 'replyToPost' : 'communityComment']: value }
@@ -277,7 +268,34 @@ export function DailiesDashboard() {
     } catch (error) {
       console.error('Error updating comment:', error);
       toast.error('Failed to update comment');
-      fetchDailiesData(); // Revert on error
+      fetchDailiesData();
+    }
+  };
+
+  const handleBackfillSocials = async () => {
+    const tokensNeedingSocials = tokens.filter(t => !t.twitter && !t.telegram && !t.website);
+    if (tokensNeedingSocials.length === 0) {
+      toast.info('All tokens already have socials');
+      return;
+    }
+
+    setBackfilling(true);
+    toast.info(`Backfilling socials for ${tokensNeedingSocials.length} tokens...`);
+
+    try {
+      const { data, error } = await supabase.functions.invoke('dailies-backfill-socials', {
+        body: { tokenMints: tokensNeedingSocials.map(t => t.token_mint) }
+      });
+
+      if (error) throw error;
+
+      toast.success(`Backfill complete: ${data?.updated || 0} updated`);
+      fetchDailiesData();
+    } catch (error) {
+      console.error('Backfill error:', error);
+      toast.error('Failed to backfill socials');
+    } finally {
+      setBackfilling(false);
     }
   };
 
@@ -303,12 +321,12 @@ export function DailiesDashboard() {
     }
   }, [tokens, sortBy]);
 
-  // Summary stats
   const stats = useMemo(() => ({
     totalTokens: tokens.length,
     totalPosted: tokens.filter(t => t.postedTop50 || t.postedDexTrigger || t.postedSurge).length,
     totalSurges: tokens.filter(t => t.wasSurge).length,
-    totalSearches: tokens.reduce((sum, t) => sum + t.searchCount, 0)
+    totalSearches: tokens.reduce((sum, t) => sum + t.searchCount, 0),
+    missingSocials: tokens.filter(t => !t.twitter && !t.telegram && !t.website).length
   }), [tokens]);
 
   const copyToClipboard = (text: string) => {
@@ -316,45 +334,99 @@ export function DailiesDashboard() {
     toast.success('Copied to clipboard');
   };
 
-  const getSurgeIcon = (type: string | null) => {
-    switch (type) {
-      case 'surge_10min':
-        return <Flame className="h-4 w-4 text-destructive" />;
-      case 'spike_1hr':
-        return <Zap className="h-4 w-4 text-primary" />;
-      case 'trending_24hr':
-        return <TrendingUp className="h-4 w-4 text-primary" />;
-      default: return null;
+  const getOriginIcons = (token: DailyToken) => {
+    const icons: React.ReactNode[] = [];
+    
+    if (token.wasSearched) {
+      icons.push(
+        <Tooltip key="search">
+          <TooltipTrigger asChild>
+            <span className="inline-flex items-center">
+              <Search className="h-3.5 w-3.5 text-primary" />
+              {token.searchCount > 1 && <span className="text-[10px] ml-0.5 text-muted-foreground">{token.searchCount}</span>}
+            </span>
+          </TooltipTrigger>
+          <TooltipContent>Searched {token.searchCount}x</TooltipContent>
+        </Tooltip>
+      );
     }
+    
+    if (token.wasSurge) {
+      const surgeIcon = token.surgeType === 'surge_10min' 
+        ? <Flame className="h-3.5 w-3.5 text-destructive" />
+        : token.surgeType === 'spike_1hr'
+        ? <Zap className="h-3.5 w-3.5 text-primary" />
+        : <TrendingUp className="h-3.5 w-3.5 text-primary" />;
+      icons.push(
+        <Tooltip key="surge">
+          <TooltipTrigger asChild><span>{surgeIcon}</span></TooltipTrigger>
+          <TooltipContent>
+            {token.surgeType === 'surge_10min' && 'Surge 10min'}
+            {token.surgeType === 'spike_1hr' && 'Spike 1hr'}
+            {token.surgeType === 'trending_24hr' && 'Trending 24hr'}
+          </TooltipContent>
+        </Tooltip>
+      );
+    }
+    
+    if (token.postedTop50) {
+      icons.push(
+        <Tooltip key="top50">
+          <TooltipTrigger asChild><span><ListOrdered className="h-3.5 w-3.5 text-primary" /></span></TooltipTrigger>
+          <TooltipContent>Top 50 Post</TooltipContent>
+        </Tooltip>
+      );
+    }
+    
+    if (token.postedDexTrigger) {
+      icons.push(
+        <Tooltip key="dex">
+          <TooltipTrigger asChild><span><Megaphone className="h-3.5 w-3.5 text-primary" /></span></TooltipTrigger>
+          <TooltipContent>DEX Trigger Post</TooltipContent>
+        </Tooltip>
+      );
+    }
+    
+    return icons.length > 0 ? icons : <span className="text-muted-foreground/40">—</span>;
   };
 
-  const TweetLink = ({ tweetId, label }: { tweetId: string | null; label?: string }) => {
-    if (!tweetId) return <span className="text-muted-foreground/40">—</span>;
-    return (
-      <a 
-        href={`https://x.com/HoldersIntel/status/${tweetId}`}
-        target="_blank"
-        rel="noopener noreferrer"
-        className="inline-flex items-center gap-1 text-primary hover:text-primary/80 transition-colors"
-        title={label ? `Open ${label} X post` : 'Open X post'}
-      >
-        <Twitter className="h-3.5 w-3.5" />
-        <ExternalLink className="h-3 w-3" />
-      </a>
-    );
+  const getPostedLinks = (token: DailyToken) => {
+    const links: React.ReactNode[] = [];
+    
+    if (token.top50TweetId) {
+      links.push(
+        <a key="top50" href={`https://x.com/HoldersIntel/status/${token.top50TweetId}`} target="_blank" rel="noopener noreferrer"
+           className="inline-flex items-center gap-0.5 text-primary hover:text-primary/80" title="Top50 post">
+          <ListOrdered className="h-3 w-3" />
+        </a>
+      );
+    }
+    if (token.dexTweetId) {
+      links.push(
+        <a key="dex" href={`https://x.com/HoldersIntel/status/${token.dexTweetId}`} target="_blank" rel="noopener noreferrer"
+           className="inline-flex items-center gap-0.5 text-primary hover:text-primary/80" title="DEX post">
+          <Megaphone className="h-3 w-3" />
+        </a>
+      );
+    }
+    if (token.surgeTweetId) {
+      links.push(
+        <a key="surge" href={`https://x.com/HoldersIntel/status/${token.surgeTweetId}`} target="_blank" rel="noopener noreferrer"
+           className="inline-flex items-center gap-0.5 text-primary hover:text-primary/80" title="Surge post">
+          <Zap className="h-3 w-3" />
+        </a>
+      );
+    }
+    
+    return links.length > 0 ? <div className="flex items-center gap-1.5">{links}</div> : <span className="text-muted-foreground/40">—</span>;
   };
 
   return (
     <div className="space-y-4">
-      {/* Header with date navigation */}
       <div className="flex items-center justify-between flex-wrap gap-4">
         <h2 className="text-2xl font-bold">Dailies</h2>
         <div className="flex items-center gap-2">
-          <Button 
-            variant="outline" 
-            size="icon"
-            onClick={() => setSelectedDate(prev => subDays(prev, 1))}
-          >
+          <Button variant="outline" size="icon" onClick={() => setSelectedDate(prev => subDays(prev, 1))}>
             <ChevronLeft className="h-4 w-4" />
           </Button>
           
@@ -369,393 +441,150 @@ export function DailiesDashboard() {
               <Calendar
                 mode="single"
                 selected={selectedDate}
-                onSelect={(date) => {
-                  if (date) {
-                    setSelectedDate(date);
-                    setCalendarOpen(false);
-                  }
-                }}
+                onSelect={(date) => { if (date) { setSelectedDate(date); setCalendarOpen(false); } }}
                 disabled={(date) => date > new Date()}
                 className="pointer-events-auto"
               />
             </PopoverContent>
           </Popover>
           
-          <Button 
-            variant="outline" 
-            size="icon"
-            onClick={() => setSelectedDate(prev => {
-              const next = addDays(prev, 1);
-              return next > new Date() ? new Date() : next;
-            })}
-            disabled={isToday(selectedDate)}
-          >
+          <Button variant="outline" size="icon" onClick={() => setSelectedDate(prev => { const next = addDays(prev, 1); return next > new Date() ? new Date() : next; })} disabled={isToday(selectedDate)}>
             <ChevronRight className="h-4 w-4" />
           </Button>
           
-          <Button 
-            variant="secondary"
-            onClick={() => setSelectedDate(new Date())}
-            disabled={isToday(selectedDate)}
-          >
-            Today
-          </Button>
+          <Button variant="secondary" onClick={() => setSelectedDate(new Date())} disabled={isToday(selectedDate)}>Today</Button>
         </div>
       </div>
 
-      {/* Summary stats */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <Card>
-          <CardContent className="pt-4">
-            <div className="text-2xl font-bold">{stats.totalTokens}</div>
-            <p className="text-xs text-muted-foreground">Unique Tokens</p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="pt-4">
-            <div className="text-2xl font-bold text-primary">{stats.totalPosted}</div>
-            <p className="text-xs text-muted-foreground">Posted to X</p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="pt-4">
-            <div className="text-2xl font-bold text-primary">{stats.totalSurges}</div>
-            <p className="text-xs text-muted-foreground">Surge Alerts</p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="pt-4">
-            <div className="text-2xl font-bold text-primary">{stats.totalSearches}</div>
-            <p className="text-xs text-muted-foreground">Total Searches</p>
-          </CardContent>
-        </Card>
+      <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+        <Card><CardContent className="pt-4"><div className="text-2xl font-bold">{stats.totalTokens}</div><p className="text-xs text-muted-foreground">Unique Tokens</p></CardContent></Card>
+        <Card><CardContent className="pt-4"><div className="text-2xl font-bold text-primary">{stats.totalPosted}</div><p className="text-xs text-muted-foreground">Posted to X</p></CardContent></Card>
+        <Card><CardContent className="pt-4"><div className="text-2xl font-bold text-primary">{stats.totalSurges}</div><p className="text-xs text-muted-foreground">Surge Alerts</p></CardContent></Card>
+        <Card><CardContent className="pt-4"><div className="text-2xl font-bold text-primary">{stats.totalSearches}</div><p className="text-xs text-muted-foreground">Total Searches</p></CardContent></Card>
+        <Card><CardContent className="pt-4"><div className="text-2xl font-bold text-muted-foreground">{stats.missingSocials}</div><p className="text-xs text-muted-foreground">Missing Socials</p></CardContent></Card>
       </div>
 
-      {/* Sort controls */}
-      <div className="flex gap-2">
-        <Button 
-          variant={sortBy === 'time' ? 'default' : 'outline'} 
-          size="sm"
-          onClick={() => setSortBy('time')}
-        >
-          By Time
-        </Button>
-        <Button 
-          variant={sortBy === 'searches' ? 'default' : 'outline'} 
-          size="sm"
-          onClick={() => setSortBy('searches')}
-        >
-          By Searches
-        </Button>
-        <Button 
-          variant={sortBy === 'posted' ? 'default' : 'outline'} 
-          size="sm"
-          onClick={() => setSortBy('posted')}
-        >
-          By Posted
+      <div className="flex items-center justify-between flex-wrap gap-2">
+        <div className="flex gap-2">
+          <Button variant={sortBy === 'time' ? 'default' : 'outline'} size="sm" onClick={() => setSortBy('time')}>By Time</Button>
+          <Button variant={sortBy === 'searches' ? 'default' : 'outline'} size="sm" onClick={() => setSortBy('searches')}>By Searches</Button>
+          <Button variant={sortBy === 'posted' ? 'default' : 'outline'} size="sm" onClick={() => setSortBy('posted')}>By Posted</Button>
+        </div>
+        <Button variant="outline" size="sm" onClick={handleBackfillSocials} disabled={backfilling || stats.missingSocials === 0}>
+          {backfilling ? <RefreshCw className="h-4 w-4 mr-2 animate-spin" /> : <Sparkles className="h-4 w-4 mr-2" />}
+          Backfill Socials ({stats.missingSocials})
         </Button>
       </div>
 
-      {/* Token table */}
       {loading ? (
-        <div className="flex items-center justify-center py-12">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
-        </div>
+        <div className="flex items-center justify-center py-12"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div></div>
       ) : sortedTokens.length === 0 ? (
-        <Card>
-          <CardContent className="py-12 text-center text-muted-foreground">
-            No token activity for {format(selectedDate, 'MMMM d, yyyy')}
-          </CardContent>
-        </Card>
+        <Card><CardContent className="py-12 text-center text-muted-foreground">No token activity for {format(selectedDate, 'MMMM d, yyyy')}</CardContent></Card>
       ) : (
         <TooltipProvider delayDuration={300}>
-        <div className="border rounded-lg overflow-hidden">
-          <div className="px-3 py-2 text-xs text-muted-foreground border-b bg-muted/20">
-            Tip: <span className="font-medium">Raw / Reply / Comm</span> are manual X engagement checkboxes (click to toggle).
-          </div>
-          <Table className="table-fixed w-full">
+        <div className="border rounded-lg overflow-x-auto">
+          <Table>
             <TableHeader>
               <TableRow className="bg-muted/50">
-                <TableHead compact className="w-[160px]">Token</TableHead>
-                <TableHead compact className="text-center w-[90px]">
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <div className="flex items-center justify-center gap-1 cursor-help">
-                        <Search className="h-3.5 w-3.5 text-primary" />
-                        <span>Searched</span>
-                      </div>
-                    </TooltipTrigger>
-                    <TooltipContent>Public searches for this token</TooltipContent>
-                  </Tooltip>
-                </TableHead>
-                <TableHead compact className="text-center w-[70px]">
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <div className="flex items-center justify-center gap-1 cursor-help">
-                        <AlertTriangle className="h-3.5 w-3.5 text-destructive" />
-                        <span>Surge</span>
-                      </div>
-                    </TooltipTrigger>
-                    <TooltipContent>Search surge/spike detected</TooltipContent>
-                  </Tooltip>
-                </TableHead>
-                <TableHead compact className="text-center w-[80px]">
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <div className="flex items-center justify-center gap-1 cursor-help">
-                        <ListOrdered className="h-3.5 w-3.5 text-primary" />
-                        <span>Top50</span>
-                      </div>
-                    </TooltipTrigger>
-                    <TooltipContent>Posted via Top 50 scheduler</TooltipContent>
-                  </Tooltip>
-                </TableHead>
-                <TableHead compact className="text-center w-[80px]">
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <div className="flex items-center justify-center gap-1 cursor-help">
-                        <Megaphone className="h-3.5 w-3.5 text-primary" />
-                        <span>Dex</span>
-                      </div>
-                    </TooltipTrigger>
-                    <TooltipContent>Posted via DEX boosts/alerts</TooltipContent>
-                  </Tooltip>
-                </TableHead>
-                <TableHead compact className="text-center w-[90px]">
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <div className="flex items-center justify-center gap-1 cursor-help">
-                        <Zap className="h-3.5 w-3.5 text-primary" />
-                        <span>Surge X</span>
-                      </div>
-                    </TooltipTrigger>
-                    <TooltipContent>Posted via surge detection</TooltipContent>
-                  </Tooltip>
-                </TableHead>
-                <TableHead compact className="text-center w-[70px] border-l border-border/50">
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <div className="flex items-center justify-center gap-1 cursor-help">
-                        <FileText className="h-3.5 w-3.5 text-primary" />
-                        <span>Raw</span>
-                      </div>
-                    </TooltipTrigger>
-                    <TooltipContent>Manual comment in raw X feed</TooltipContent>
-                  </Tooltip>
-                </TableHead>
-                <TableHead compact className="text-center w-[70px]">
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <div className="flex items-center justify-center gap-1 cursor-help">
-                        <Reply className="h-3.5 w-3.5 text-primary" />
-                        <span>Reply</span>
-                      </div>
-                    </TooltipTrigger>
-                    <TooltipContent>Reply to an X post</TooltipContent>
-                  </Tooltip>
-                </TableHead>
-                <TableHead compact className="text-center w-[90px]">
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <div className="flex items-center justify-center gap-1 cursor-help">
-                        <Users className="h-3.5 w-3.5 text-primary" />
-                        <span>Comm</span>
-                      </div>
-                    </TooltipTrigger>
-                    <TooltipContent>Comment in X Community</TooltipContent>
-                  </Tooltip>
-                </TableHead>
+                <TableHead compact className="w-[140px]">Token</TableHead>
+                <TableHead compact className="w-[90px] text-center">Origin</TableHead>
+                <TableHead compact className="w-[70px] text-center">Posted</TableHead>
+                <TableHead compact className="w-[50px] text-center"><Tooltip><TooltipTrigger><Twitter className="h-3.5 w-3.5 mx-auto" /></TooltipTrigger><TooltipContent>Twitter/X</TooltipContent></Tooltip></TableHead>
+                <TableHead compact className="w-[50px] text-center"><Tooltip><TooltipTrigger><MessageCircle className="h-3.5 w-3.5 mx-auto" /></TooltipTrigger><TooltipContent>Telegram</TooltipContent></Tooltip></TableHead>
+                <TableHead compact className="w-[50px] text-center"><Tooltip><TooltipTrigger><Globe className="h-3.5 w-3.5 mx-auto" /></TooltipTrigger><TooltipContent>Website</TooltipContent></Tooltip></TableHead>
+                <TableHead compact className="w-[80px] text-center"><Tooltip><TooltipTrigger><Hash className="h-3.5 w-3.5 mx-auto" /></TooltipTrigger><TooltipContent>Real Holders (grey = stale)</TooltipContent></Tooltip></TableHead>
+                <TableHead compact className="w-[50px] text-center border-l border-border/50"><Tooltip><TooltipTrigger><FileText className="h-3.5 w-3.5 mx-auto" /></TooltipTrigger><TooltipContent>Raw Feed</TooltipContent></Tooltip></TableHead>
+                <TableHead compact className="w-[50px] text-center"><Tooltip><TooltipTrigger><Reply className="h-3.5 w-3.5 mx-auto" /></TooltipTrigger><TooltipContent>Reply</TooltipContent></Tooltip></TableHead>
+                <TableHead compact className="w-[50px] text-center"><Tooltip><TooltipTrigger><Users className="h-3.5 w-3.5 mx-auto" /></TooltipTrigger><TooltipContent>Community</TooltipContent></Tooltip></TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {sortedTokens.map((token) => (
                 <React.Fragment key={token.token_mint}>
-                  <TableRow
-                    className="cursor-pointer hover:bg-muted/50"
-                    onClick={() => setExpandedToken((prev) => (prev === token.token_mint ? null : token.token_mint))}
-                  >
-                    <TableCell compact className="font-mono w-[160px]">
+                  <TableRow className="cursor-pointer hover:bg-muted/50" onClick={() => setExpandedToken((prev) => (prev === token.token_mint ? null : token.token_mint))}>
+                    <TableCell compact className="font-mono w-[140px]">
                       <div className="flex items-center gap-1.5">
-                        <ChevronDown
-                          className={cn(
-                            'h-3 w-3 transition-transform shrink-0',
-                            expandedToken === token.token_mint && 'rotate-180'
-                          )}
-                        />
-                        <span className="font-semibold truncate max-w-[120px]" title={token.symbol || token.token_mint}>
+                        <ChevronDown className={cn('h-3 w-3 transition-transform shrink-0', expandedToken === token.token_mint && 'rotate-180')} />
+                        <span className="font-semibold truncate max-w-[100px]" title={token.symbol || token.token_mint}>
                           {token.symbol ? `$${token.symbol}` : `${token.token_mint.slice(0, 6)}...`}
                         </span>
                       </div>
                     </TableCell>
 
-                    <TableCell compact className="text-center w-[90px]">
-                      {token.wasSearched ? (
-                        <div className="flex items-center justify-center gap-1">
-                          <Search className="h-3.5 w-3.5 text-primary" />
-                          <span className="text-primary font-medium text-xs">({token.searchCount})</span>
-                        </div>
-                      ) : (
-                        <span className="text-muted-foreground/40">—</span>
-                      )}
+                    <TableCell compact className="w-[90px]"><div className="flex items-center justify-center gap-1">{getOriginIcons(token)}</div></TableCell>
+                    <TableCell compact className="w-[70px] text-center" onClick={(e) => e.stopPropagation()}>{getPostedLinks(token)}</TableCell>
+
+                    <TableCell compact className="w-[50px] text-center" onClick={(e) => e.stopPropagation()}>
+                      {token.twitter ? (
+                        <a href={token.twitter.startsWith('http') ? token.twitter : `https://x.com/${token.twitter}`} target="_blank" rel="noopener noreferrer" className="text-primary hover:text-primary/80"><ExternalLink className="h-3.5 w-3.5 mx-auto" /></a>
+                      ) : <span className="text-muted-foreground/40">—</span>}
                     </TableCell>
 
-                    <TableCell compact className="text-center w-[70px]">
-                      {token.wasSurge ? (
-                        <Tooltip>
-                          <TooltipTrigger asChild>
-                            <span className="inline-flex items-center justify-center w-full">
-                              {getSurgeIcon(token.surgeType)}
-                            </span>
-                          </TooltipTrigger>
-                          <TooltipContent>
-                            {token.surgeType === 'surge_10min' && 'Search Surge (10min)'}
-                            {token.surgeType === 'spike_1hr' && 'Interest Spike (1hr)'}
-                            {token.surgeType === 'trending_24hr' && 'Trending (24hr)'}
-                          </TooltipContent>
-                        </Tooltip>
-                      ) : (
-                        <span className="text-muted-foreground/40">—</span>
-                      )}
+                    <TableCell compact className="w-[50px] text-center" onClick={(e) => e.stopPropagation()}>
+                      {token.telegram ? (
+                        <a href={token.telegram.startsWith('http') ? token.telegram : `https://t.me/${token.telegram}`} target="_blank" rel="noopener noreferrer" className="text-primary hover:text-primary/80"><ExternalLink className="h-3.5 w-3.5 mx-auto" /></a>
+                      ) : <span className="text-muted-foreground/40">—</span>}
                     </TableCell>
 
-                    <TableCell compact className="text-center w-[80px]" onClick={(e) => e.stopPropagation()}>
-                      <TweetLink tweetId={token.top50TweetId} label="Top50" />
-                    </TableCell>
-                    <TableCell compact className="text-center w-[80px]" onClick={(e) => e.stopPropagation()}>
-                      <TweetLink tweetId={token.dexTweetId} label="Dex" />
-                    </TableCell>
-                    <TableCell compact className="text-center w-[90px]" onClick={(e) => e.stopPropagation()}>
-                      <TweetLink tweetId={token.surgeTweetId} label="Surge" />
+                    <TableCell compact className="w-[50px] text-center" onClick={(e) => e.stopPropagation()}>
+                      {token.website ? (
+                        <a href={token.website.startsWith('http') ? token.website : `https://${token.website}`} target="_blank" rel="noopener noreferrer" className="text-primary hover:text-primary/80"><ExternalLink className="h-3.5 w-3.5 mx-auto" /></a>
+                      ) : <span className="text-muted-foreground/40">—</span>}
                     </TableCell>
 
-                    <TableCell
-                      compact
-                      className="text-center w-[70px] border-l border-border/30"
-                      onClick={(e) => e.stopPropagation()}
-                    >
-                      <div className="flex justify-center">
-                        <Checkbox
-                          checked={token.rawFeedComment}
-                          onCheckedChange={(v) => handleCommentChange(token.token_mint, 'raw_feed_comment', !!v)}
-                        />
-                      </div>
+                    <TableCell compact className="w-[80px] text-center">
+                      {token.realHolders != null ? (
+                        <span className={cn("text-sm", token.holdersIsOld ? "text-muted-foreground" : "text-primary font-medium")}>{token.realHolders.toLocaleString()}</span>
+                      ) : <span className="text-muted-foreground/40">—</span>}
                     </TableCell>
-                    <TableCell compact className="text-center w-[70px]" onClick={(e) => e.stopPropagation()}>
-                      <div className="flex justify-center">
-                        <Checkbox
-                          checked={token.replyToPost}
-                          onCheckedChange={(v) => handleCommentChange(token.token_mint, 'reply_to_post', !!v)}
-                        />
-                      </div>
+
+                    <TableCell compact className="w-[50px] text-center border-l border-border/30" onClick={(e) => e.stopPropagation()}>
+                      <div className="flex justify-center"><Checkbox checked={token.rawFeedComment} onCheckedChange={(v) => handleCommentChange(token.token_mint, 'raw_feed_comment', !!v)} /></div>
                     </TableCell>
-                    <TableCell compact className="text-center w-[90px]" onClick={(e) => e.stopPropagation()}>
-                      <div className="flex justify-center">
-                        <Checkbox
-                          checked={token.communityComment}
-                          onCheckedChange={(v) => handleCommentChange(token.token_mint, 'community_comment', !!v)}
-                        />
-                      </div>
+                    <TableCell compact className="w-[50px] text-center" onClick={(e) => e.stopPropagation()}>
+                      <div className="flex justify-center"><Checkbox checked={token.replyToPost} onCheckedChange={(v) => handleCommentChange(token.token_mint, 'reply_to_post', !!v)} /></div>
+                    </TableCell>
+                    <TableCell compact className="w-[50px] text-center" onClick={(e) => e.stopPropagation()}>
+                      <div className="flex justify-center"><Checkbox checked={token.communityComment} onCheckedChange={(v) => handleCommentChange(token.token_mint, 'community_comment', !!v)} /></div>
                     </TableCell>
                   </TableRow>
 
                   {expandedToken === token.token_mint && (
                     <TableRow className="bg-muted/30">
-                      <TableCell colSpan={9} className="p-4">
+                      <TableCell colSpan={10} className="p-4">
                         <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
-                          {/* Mint Info */}
                           <div className="min-w-0">
                             <p className="text-muted-foreground mb-1">Mint Address</p>
                             <div className="flex items-center gap-2 flex-wrap">
-                              <code className="text-xs bg-background px-2 py-1 rounded">
-                                {token.token_mint.slice(0, 8)}...{token.token_mint.slice(-8)}
-                              </code>
-                              <Button
-                                size="icon"
-                                variant="ghost"
-                                className="h-6 w-6"
-                                onClick={() => copyToClipboard(token.token_mint)}
-                              >
-                                <Copy className="h-3 w-3" />
-                              </Button>
-                              <a
-                                href={`https://solscan.io/token/${token.token_mint}`}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="text-primary hover:underline"
-                              >
-                                Solscan
-                              </a>
+                              <code className="text-xs bg-background px-2 py-1 rounded">{token.token_mint.slice(0, 8)}...{token.token_mint.slice(-8)}</code>
+                              <Button size="icon" variant="ghost" className="h-6 w-6" onClick={() => copyToClipboard(token.token_mint)}><Copy className="h-3 w-3" /></Button>
+                              <a href={`https://solscan.io/token/${token.token_mint}`} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">Solscan</a>
                             </div>
                             {token.name && <p className="mt-2 text-muted-foreground">{token.name}</p>}
                           </div>
 
-                          {/* Socials */}
                           <div>
                             <p className="text-muted-foreground mb-1">Socials</p>
                             <div className="flex items-center gap-3">
                               {token.twitter ? (
-                                <a
-                                  href={token.twitter.startsWith('http') ? token.twitter : `https://x.com/${token.twitter}`}
-                                  target="_blank"
-                                  rel="noopener noreferrer"
-                                  className="inline-flex items-center gap-1 text-primary hover:underline"
-                                >
-                                  <Twitter className="h-4 w-4" /> X
-                                </a>
-                              ) : (
-                                <span className="text-muted-foreground/60">No X</span>
-                              )}
-
+                                <a href={token.twitter.startsWith('http') ? token.twitter : `https://x.com/${token.twitter}`} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-primary hover:underline"><Twitter className="h-4 w-4" /> X</a>
+                              ) : <span className="text-muted-foreground/60">No X</span>}
                               {token.telegram ? (
-                                <a
-                                  href={token.telegram.startsWith('http') ? token.telegram : `https://t.me/${token.telegram}`}
-                                  target="_blank"
-                                  rel="noopener noreferrer"
-                                  className="inline-flex items-center gap-1 text-primary hover:underline"
-                                >
-                                  <MessageCircle className="h-4 w-4" /> TG
-                                </a>
-                              ) : (
-                                <span className="text-muted-foreground/60">No TG</span>
-                              )}
-
+                                <a href={token.telegram.startsWith('http') ? token.telegram : `https://t.me/${token.telegram}`} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-primary hover:underline"><MessageCircle className="h-4 w-4" /> TG</a>
+                              ) : <span className="text-muted-foreground/60">No TG</span>}
                               {token.website ? (
-                                <a
-                                  href={token.website.startsWith('http') ? token.website : `https://${token.website}`}
-                                  target="_blank"
-                                  rel="noopener noreferrer"
-                                  className="inline-flex items-center gap-1 text-primary hover:underline"
-                                >
-                                  <Globe className="h-4 w-4" /> Web
-                                </a>
-                              ) : (
-                                <span className="text-muted-foreground/60">No Web</span>
-                              )}
+                                <a href={token.website.startsWith('http') ? token.website : `https://${token.website}`} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-primary hover:underline"><Globe className="h-4 w-4" /> Web</a>
+                              ) : <span className="text-muted-foreground/60">No Web</span>}
                             </div>
                           </div>
 
-                          {/* Holder Stats */}
                           <div>
-                            <p className="text-muted-foreground mb-1">Holder Stats</p>
+                            <p className="text-muted-foreground mb-1">Holder Stats {token.holdersIsOld && <span className="text-xs text-muted-foreground/60">(stale)</span>}</p>
                             <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
-                              <div>
-                                <span className="text-muted-foreground">Total:</span>{' '}
-                                <span className="font-medium">{token.totalHolders?.toLocaleString() || '-'}</span>
-                              </div>
-                              <div>
-                                <span className="text-muted-foreground">Dust:</span>{' '}
-                                <span className="font-medium">{token.dustHolders?.toLocaleString() || '-'}</span>
-                              </div>
-                              <div>
-                                <span className="text-muted-foreground">Real:</span>{' '}
-                                <span className="font-medium text-primary">{token.realHolders?.toLocaleString() || '-'}</span>
-                              </div>
-                              {token.healthGrade && (
-                                <div>
-                                  <span className="text-muted-foreground">Grade:</span>{' '}
-                                  <span className="font-semibold text-primary">{token.healthGrade}</span>
-                                </div>
-                              )}
+                              <div><span className="text-muted-foreground">Total:</span> <span className={cn("font-medium", token.holdersIsOld && "text-muted-foreground")}>{token.totalHolders?.toLocaleString() || '-'}</span></div>
+                              <div><span className="text-muted-foreground">Dust:</span> <span className={cn("font-medium", token.holdersIsOld && "text-muted-foreground")}>{token.dustHolders?.toLocaleString() || '-'}</span></div>
+                              <div><span className="text-muted-foreground">Real:</span> <span className={cn("font-medium", token.holdersIsOld ? "text-muted-foreground" : "text-primary")}>{token.realHolders?.toLocaleString() || '-'}</span></div>
+                              {token.healthGrade && <div><span className="text-muted-foreground">Grade:</span> <span className="font-semibold text-primary">{token.healthGrade}</span></div>}
                             </div>
                           </div>
                         </div>
