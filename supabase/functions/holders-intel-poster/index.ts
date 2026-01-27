@@ -43,11 +43,27 @@ function getPostComment(timesPosted: number, triggerComment?: string | null): st
   return ' : Steady & Strong!';
 }
 
+function formatTimestamp(): string {
+  const now = new Date();
+  // Format: "Jan 27, 2:17 PM EST"
+  const options: Intl.DateTimeFormatOptions = {
+    month: 'short',
+    day: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+    hour12: true,
+    timeZone: 'America/Toronto',
+  };
+  const formatted = now.toLocaleString('en-US', options);
+  return `${formatted} EST`;
+}
+
 function processTemplate(template: string, data: any): string {
   const tickerUpper = (data.symbol || 'TOKEN').toUpperCase();
   const tokenName = data.name || data.tokenName || 'Unknown';
   // Pass trigger_comment to allow DEX scanner overrides
   const comment1 = getPostComment(data.timesPosted || 1, data.triggerComment);
+  const timestamp = formatTimestamp();
   
   return template
     .replace(/\{TICKER\}/g, `$${tickerUpper}`)
@@ -56,6 +72,8 @@ function processTemplate(template: string, data: any): string {
     .replace(/\{name\}/g, tokenName)
     .replace(/\{comment1\}/g, comment1)
     .replace(/\{COMMENT1\}/g, comment1)
+    .replace(/\{timestamp\}/g, timestamp)
+    .replace(/\{TIMESTAMP\}/g, timestamp)
     .replace(/\{TOTAL_WALLETS\}/g, (data.totalHolders || 0).toLocaleString())
     .replace(/\{totalWallets\}/g, (data.totalHolders || 0).toLocaleString())
     .replace(/\{REAL_HOLDERS\}/g, (data.realHolders || 0).toLocaleString())
