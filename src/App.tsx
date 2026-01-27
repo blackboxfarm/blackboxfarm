@@ -53,6 +53,7 @@ const HoldersBotLanding = lazy(() => import("./pages/HoldersBotLanding"));
 const Security = lazy(() => import("./pages/Security"));
 const ApiLanding = lazy(() => import("./pages/ApiLanding"));
 const ApiDocsLanding = lazy(() => import("./pages/ApiDocsLanding"));
+const AIAnalysis = lazy(() => import("./pages/AIAnalysis"));
 
 const queryClient = new QueryClient();
 
@@ -114,6 +115,7 @@ const App = () => {
                       <Route path="/security" element={<Security />} />
                       <Route path="/api" element={<ApiLanding />} />
                       <Route path="/api-docs" element={<ApiDocsLanding />} />
+                      <Route path="/ai-analysis" element={<AIAnalysis />} />
                       {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
                       <Route path="*" element={<NotFound />} />
                     </Routes>
