@@ -140,6 +140,7 @@ export default function AIAnalysis() {
   const [showReasoning, setShowReasoning] = useState(false);
   const [showMetrics, setShowMetrics] = useState(false);
   const [eli5Mode, setEli5Mode] = useState(false);
+  const [selectedMode, setSelectedMode] = useState<string>('auto');
   const { user } = useAuth();
   const { toast } = useToast();
 
@@ -182,13 +183,18 @@ export default function AIAnalysis() {
     }
   }, [tokenMint, toast]);
 
-  const fetchAIInterpretation = useCallback(async (report: Record<string, unknown>, mint: string, forceRefresh = false) => {
+  const fetchAIInterpretation = useCallback(async (report: Record<string, unknown>, mint: string, forceRefresh = false, forceMode?: string) => {
     setIsLoadingAI(true);
     setError(null);
 
     try {
       const { data, error: aiError } = await supabase.functions.invoke('token-ai-interpreter', {
-        body: { reportData: report, tokenMint: mint, forceRefresh }
+        body: { 
+          reportData: report, 
+          tokenMint: mint, 
+          forceRefresh,
+          forceMode: forceMode && forceMode !== 'auto' ? forceMode : undefined
+        }
       });
 
       if (aiError) throw new Error(aiError.message);
@@ -204,6 +210,13 @@ export default function AIAnalysis() {
       setIsLoadingAI(false);
     }
   }, [toast]);
+
+  const handleModeChange = (mode: string) => {
+    setSelectedMode(mode);
+    if (reportData && tokenMint) {
+      fetchAIInterpretation(reportData, tokenMint.trim(), true, mode);
+    }
+  };
 
   const handleRefresh = () => {
     if (reportData && tokenMint) {
@@ -499,32 +512,63 @@ export default function AIAnalysis() {
 
             {/* Sidebar */}
             <div className="space-y-6">
-              {/* Mode Info */}
+              {/* Mode Selector */}
               <Card>
                 <CardHeader>
                   <CardTitle className="text-lg flex items-center gap-2">
                     <Info className="h-5 w-5" />
                     Commentary Modes
                   </CardTitle>
+                  <CardDescription className="text-xs">
+                    Click any mode to regenerate with that focus
+                  </CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-2">
+                  {/* Auto mode option */}
+                  <button
+                    onClick={() => handleModeChange('auto')}
+                    disabled={isLoadingAI}
+                    className={`w-full p-2 rounded text-xs text-left transition-colors ${
+                      selectedMode === 'auto'
+                        ? 'bg-primary/20 border border-primary/30'
+                        : 'bg-muted/20 hover:bg-muted/40'
+                    } ${isLoadingAI ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
+                  >
+                    <div className="flex items-center gap-2">
+                      {selectedMode === 'auto' && (
+                        <CheckCircle className="h-3 w-3 text-primary" />
+                      )}
+                      <span className="font-medium">Auto-Select</span>
+                    </div>
+                    <p className="text-muted-foreground mt-1">Let AI choose the best mode based on metrics</p>
+                  </button>
+
                   {Object.entries(modeDescriptions).map(([mode, desc]) => (
-                    <div 
-                      key={mode} 
-                      className={`p-2 rounded text-xs ${
-                        interpretation.mode === mode 
-                          ? 'bg-purple-500/20 border border-purple-500/30' 
-                          : 'bg-muted/20'
-                      }`}
+                    <button
+                      key={mode}
+                      onClick={() => handleModeChange(mode)}
+                      disabled={isLoadingAI}
+                      className={`w-full p-2 rounded text-xs text-left transition-colors ${
+                        interpretation.mode === mode && selectedMode !== 'auto'
+                          ? 'bg-purple-500/20 border border-purple-500/30'
+                          : interpretation.mode === mode && selectedMode === 'auto'
+                          ? 'bg-green-500/20 border border-green-500/30'
+                          : 'bg-muted/20 hover:bg-muted/40'
+                      } ${isLoadingAI ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
                     >
                       <div className="flex items-center gap-2">
                         {interpretation.mode === mode && (
-                          <CheckCircle className="h-3 w-3 text-purple-400" />
+                          <CheckCircle className={`h-3 w-3 ${selectedMode === 'auto' ? 'text-green-400' : 'text-purple-400'}`} />
                         )}
                         <span className="font-medium">Mode {mode}</span>
+                        {interpretation.mode === mode && selectedMode === 'auto' && (
+                          <Badge variant="outline" className="text-[10px] py-0 px-1 ml-auto">
+                            auto-selected
+                          </Badge>
+                        )}
                       </div>
                       <p className="text-muted-foreground mt-1">{desc.split(' - ')[1]}</p>
-                    </div>
+                    </button>
                   ))}
                 </CardContent>
               </Card>

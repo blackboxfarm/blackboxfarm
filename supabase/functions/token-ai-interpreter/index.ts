@@ -301,7 +301,7 @@ serve(async (req) => {
   }
 
   try {
-    const { reportData, tokenMint, forceRefresh = false } = await req.json();
+    const { reportData, tokenMint, forceRefresh = false, forceMode } = await req.json();
 
     if (!reportData || !tokenMint) {
       return new Response(
@@ -383,15 +383,37 @@ serve(async (req) => {
       dustPercent
     });
 
-    // Select commentary mode
-    const mode = selectCommentaryMode({
-      controlDensity,
-      resilienceScore,
-      tierDivergence,
-      riskFlags,
-      hasHistoricalData: false, // Future enhancement
-      hasBehavioralData: false  // Future enhancement
-    });
+    // Select commentary mode (use forceMode if provided)
+    const modeLabels: Record<string, string> = {
+      A: "Snapshot",
+      B: "Structural", 
+      C: "Behavioral Shift",
+      D: "Lifecycle",
+      E: "Risk Posture",
+      F: "Pressure Analysis",
+      G: "Capital Consensus",
+      H: "Retention"
+    };
+
+    let mode: { mode: string; label: string; reason: string };
+    
+    if (forceMode && ["A", "B", "C", "D", "E", "F", "G", "H"].includes(forceMode)) {
+      mode = {
+        mode: forceMode,
+        label: modeLabels[forceMode],
+        reason: `user_forced:${forceMode}`
+      };
+      console.log(`[token-ai-interpreter] Using forced mode: ${forceMode}`);
+    } else {
+      mode = selectCommentaryMode({
+        controlDensity,
+        resilienceScore,
+        tierDivergence,
+        riskFlags,
+        hasHistoricalData: false,
+        hasBehavioralData: false
+      });
+    }
 
     // Build the prompt context
     const metricsContext = {
