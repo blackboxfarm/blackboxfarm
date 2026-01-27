@@ -9486,6 +9486,36 @@ export type Database = {
         }
         Relationships: []
       }
+      token_ai_interpretations: {
+        Row: {
+          commentary_mode: string
+          created_at: string | null
+          expires_at: string
+          id: string
+          interpretation: Json
+          metrics_snapshot: Json | null
+          token_mint: string
+        }
+        Insert: {
+          commentary_mode?: string
+          created_at?: string | null
+          expires_at?: string
+          id?: string
+          interpretation: Json
+          metrics_snapshot?: Json | null
+          token_mint: string
+        }
+        Update: {
+          commentary_mode?: string
+          created_at?: string | null
+          expires_at?: string
+          id?: string
+          interpretation?: Json
+          metrics_snapshot?: Json | null
+          token_mint?: string
+        }
+        Relationships: []
+      }
       token_analysis_costs: {
         Row: {
           analysis_date: string | null
