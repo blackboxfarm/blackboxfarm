@@ -67,6 +67,7 @@ interface VisitRecord {
   tokens_analyzed: string[] | null;
   is_authenticated: boolean | null;
   auth_method: string | null;
+  page_name: string | null;
 }
 
 interface AggregatedStats {
@@ -98,6 +99,7 @@ export function HoldersVisitorsDashboard() {
   const [visits, setVisits] = useState<VisitRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [timeRange, setTimeRange] = useState<'1h' | '24h' | '7d' | '30d'>('24h');
+  const [pageFilter, setPageFilter] = useState<'all' | 'home' | 'holders' | 'admin'>('all');
   const [refreshing, setRefreshing] = useState(false);
 
   const fetchVisits = async () => {
@@ -119,10 +121,17 @@ export function HoldersVisitorsDashboard() {
         break;
     }
 
-    const { data, error } = await supabase
+    let query = supabase
       .from('holders_page_visits')
       .select('*')
-      .gte('created_at', startDate.toISOString())
+      .gte('created_at', startDate.toISOString());
+    
+    // Apply page filter if not 'all'
+    if (pageFilter !== 'all') {
+      query = query.eq('page_name', pageFilter);
+    }
+    
+    const { data, error } = await query
       .order('created_at', { ascending: false })
       .limit(1000);
 
@@ -136,7 +145,7 @@ export function HoldersVisitorsDashboard() {
 
   useEffect(() => {
     fetchVisits();
-  }, [timeRange]);
+  }, [timeRange, pageFilter]);
 
   const stats = useMemo<AggregatedStats>(() => {
     if (visits.length === 0) {
@@ -324,12 +333,25 @@ export function HoldersVisitorsDashboard() {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between flex-wrap gap-4">
         <div>
-          <h2 className="text-2xl font-bold">Holders Page Visitors</h2>
-          <p className="text-muted-foreground">Track visitor sources, engagement, and behavior on /holders</p>
+          <h2 className="text-2xl font-bold">Page Visitors Analytics</h2>
+          <p className="text-muted-foreground">
+            Track visitor sources, engagement, and behavior across all pages
+          </p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
+          <Select value={pageFilter} onValueChange={(v: any) => setPageFilter(v)}>
+            <SelectTrigger className="w-32">
+              <SelectValue placeholder="Page" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Pages</SelectItem>
+              <SelectItem value="home">Home (/)</SelectItem>
+              <SelectItem value="holders">Holders</SelectItem>
+              <SelectItem value="admin">Admin</SelectItem>
+            </SelectContent>
+          </Select>
           <Select value={timeRange} onValueChange={(v: any) => setTimeRange(v)}>
             <SelectTrigger className="w-32">
               <SelectValue />
