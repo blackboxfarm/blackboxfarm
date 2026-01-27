@@ -1,276 +1,235 @@
 
-# Granular Token Search Tracking System
-
-## Status: ✅ IMPLEMENTED
-
-**Implemented on:** 2026-01-27
+# Search Surge Alert System
 
 ## Overview
 
-This system captures every public token search, the complete results displayed to users, and enables time-series analysis for features like "Diamond Hands" and other metrics that require tracking changes over time.
+This feature creates an automated alert system that monitors the `token_search_log` table for tokens experiencing unusual search activity (spikes/surges), then automatically triggers the Intel XBot to post about these popular tokens with special milestone comments like "Search Surge!" or "Interest Spike!"
 
-### What's Missing
-
-1. **Token Search Results Archive** - No storage of complete report data (socials, DEX status, health scores, tier breakdowns)
-2. **IP Address Tracking** - Not captured separately from user agent
-3. **DEX Status History** - No tracking of paid profile, CTO, boost changes over time
-4. **Price History** - No dedicated time-series for token prices
-5. **Socials Changes** - No tracking of when Twitter/Telegram/Website links change
-
----
-
-## Proposed Solution
-
-### New Database Tables
-
-#### 1. `token_search_log` - Master Search Record
-
-Captures every search request with session context:
-
-| Column | Type | Purpose |
-|--------|------|---------|
-| id | UUID | Primary key |
-| created_at | TIMESTAMPTZ | Search timestamp |
-| token_mint | TEXT | Token address searched |
-| session_id | TEXT | Link to visitor session |
-| visitor_fingerprint | TEXT | Device fingerprint |
-| ip_address | TEXT | Visitor IP (from edge function headers) |
-| response_time_ms | INTEGER | How long report took |
-| holder_count | INTEGER | Total holders at search time |
-| success | BOOLEAN | Whether search succeeded |
-| error_message | TEXT | Error details if failed |
-
-#### 2. `token_search_results` - Complete Report Snapshot
-
-Stores the full report data for each search:
-
-| Column | Type | Purpose |
-|--------|------|---------|
-| id | UUID | Primary key |
-| search_id | UUID | FK to token_search_log |
-| token_mint | TEXT | Token address |
-| symbol | TEXT | Token symbol |
-| name | TEXT | Token name |
-| market_cap_usd | NUMERIC | Market cap at search time |
-| price_usd | NUMERIC | Price at search time |
-| price_source | TEXT | Where price came from |
-| total_supply | NUMERIC | Total token supply |
-| circulating_supply | NUMERIC | Circulating supply (excl. LP) |
-| health_score | INTEGER | Stability score (0-100) |
-| health_grade | TEXT | Grade (A-F) |
-| tier_dust | INTEGER | Dust wallet count |
-| tier_retail | INTEGER | Retail wallet count |
-| tier_serious | INTEGER | Serious wallet count |
-| tier_whale | INTEGER | Whale wallet count |
-| lp_count | INTEGER | Liquidity pool count |
-| lp_percentage | NUMERIC | LP percentage of supply |
-| top5_concentration | NUMERIC | Top 5 holder percentage |
-| top10_concentration | NUMERIC | Top 10 holder percentage |
-| risk_flags | JSONB | Array of detected risks |
-| bundled_percentage | NUMERIC | Insider/bundled wallet % |
-| launchpad | TEXT | Detected launchpad |
-| creator_wallet | TEXT | Token creator address |
-| created_at | TIMESTAMPTZ | Record timestamp |
-
-#### 3. `token_socials_history` - Social Links Over Time
-
-| Column | Type | Purpose |
-|--------|------|---------|
-| id | UUID | Primary key |
-| token_mint | TEXT | Token address |
-| captured_at | TIMESTAMPTZ | When captured |
-| twitter | TEXT | Twitter URL |
-| telegram | TEXT | Telegram URL |
-| website | TEXT | Website URL |
-| discord | TEXT | Discord URL |
-| source | TEXT | Where socials came from |
-
-#### 4. `token_dex_status_history` - DEX Paid Status Over Time
-
-| Column | Type | Purpose |
-|--------|------|---------|
-| id | UUID | Primary key |
-| token_mint | TEXT | Token address |
-| captured_at | TIMESTAMPTZ | When captured |
-| has_paid_profile | BOOLEAN | DexScreener paid profile |
-| has_cto | BOOLEAN | Community takeover |
-| active_boosts | INTEGER | Number of active boosts |
-| boost_amount_total | INTEGER | Total boost amount |
-| has_active_ads | BOOLEAN | Running DexScreener ads |
-| orders | JSONB | Full orders response |
-
-#### 5. `token_price_history` - Price Time Series
-
-| Column | Type | Purpose |
-|--------|------|---------|
-| id | UUID | Primary key |
-| token_mint | TEXT | Token address |
-| captured_at | TIMESTAMPTZ | Timestamp |
-| price_usd | NUMERIC | Price in USD |
-| market_cap_usd | NUMERIC | Market cap |
-| source | TEXT | Price source |
-
----
-
-## Implementation Architecture
+## How It Works
 
 ```text
-User Searches Token on /holders
+token_search_log (already logging searches)
          |
          v
-+---------------------+
-| bagless-holders-    |
-| report edge fn      |
-+---------------------+
++------------------------------------+
+|  search-surge-scanner (NEW)        |
+|  - Runs every 5 minutes via cron   |
+|  - Queries for surge patterns      |
++------------------------------------+
          |
-         +---> Fetch data from APIs (DexScreener, Solscan, Helius, etc.)
-         |
-         +---> Log API calls to api_usage_log (ALREADY IMPLEMENTED)
-         |
-         +---> [NEW] Insert into token_search_log (with IP from headers)
-         |
-         +---> [NEW] Insert into token_search_results (complete report data)
-         |
-         +---> [NEW] Upsert into token_socials_history (if changed)
-         |
-         +---> [NEW] Upsert into token_dex_status_history (if changed)
-         |
-         +---> [NEW] Insert into token_price_history
+   Detected surge?
          |
          v
-Return Response to User
++------------------------------------+
+|  holders_intel_surge_alerts (NEW)  |
+|  - Tracks detected surges          |
+|  - Prevents duplicate posts        |
++------------------------------------+
          |
          v
-+---------------------+
-| Client-side:        |
-| useTokenDataCollection |
-+---------------------+
++------------------------------------+
+|  holders_intel_post_queue          |
+|  - trigger_comment = " : Search    |
+|    Surge!" or " : Interest Spike!" |
+|  - trigger_source = "surge_scanner"|
++------------------------------------+
          |
-         +---> capture-holder-snapshot (ALREADY WORKING - 122K records)
-         |
-         +---> track-holder-movements (ALREADY WORKING - 3.4M records)
+         v
++------------------------------------+
+|  holders-intel-poster              |
+|  - Already uses trigger_comment    |
+|    for {comment1} variable         |
+|  - Posts to @HoldersIntel          |
++------------------------------------+
 ```
 
----
+## Surge Detection Thresholds
 
-## Dashboard Components
+The scanner will look for these patterns in `token_search_log`:
 
-### 1. Token Search Analytics Dashboard
+| Alert Type | Threshold | Comment Text | Priority |
+|------------|-----------|--------------|----------|
+| **Search Surge** | 5+ searches in 10 minutes | " : Search Surge!" | 1 |
+| **Interest Spike** | 15+ searches in 1 hour | " : Interest Spike!" | 2 |
+| **Trending Search** | 30+ searches in 24 hours | " : Trending Token!" | 3 |
 
-Display for super admins:
+The scanner will use the **highest priority trigger** for each token (e.g., if 5 in 10min AND 30 in 24hr, use "Search Surge!").
 
-- **Total Searches**: Daily/weekly/monthly counts
-- **Unique Tokens**: How many different tokens searched
-- **Search Volume by Token**: Most searched tokens
-- **Search by IP**: Identify heavy users
-- **Error Rate**: Failed searches
-- **Avg Response Time**: Performance monitoring
+## Database Changes
 
-### 2. Token History Viewer
+### New Table: `holders_intel_surge_alerts`
 
-For any token with historical data:
+```sql
+CREATE TABLE holders_intel_surge_alerts (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  token_mint TEXT NOT NULL,
+  symbol TEXT,
+  name TEXT,
+  alert_type TEXT NOT NULL, -- 'surge_10min', 'spike_1hr', 'trending_24hr'
+  search_count INTEGER NOT NULL,
+  time_window_minutes INTEGER NOT NULL,
+  unique_ips INTEGER,
+  detected_at TIMESTAMPTZ DEFAULT now(),
+  queue_id UUID, -- FK to post_queue if queued
+  posted BOOLEAN DEFAULT false,
+  created_at TIMESTAMPTZ DEFAULT now()
+);
 
-- **Price Chart**: Price over time from all searches
-- **Market Cap Chart**: Market cap over time
-- **Health Score Trend**: How stability changed
-- **Tier Distribution Over Time**: How holder composition shifted
-- **DEX Status Timeline**: When paid profile, CTO, boosts occurred
-- **Socials Timeline**: When links were added/changed
+-- Index for fast lookups and prevent duplicates
+CREATE UNIQUE INDEX idx_surge_alerts_token_type_24hr 
+ON holders_intel_surge_alerts(token_mint, alert_type, (detected_at::date));
+```
 
-### 3. Diamond Hands Analysis (Enhanced)
+This table tracks:
+- Which tokens triggered surge alerts
+- The type and magnitude of the surge
+- Whether it was posted
+- One surge alert per token per type per day (prevent spam)
 
-Using the existing holder_snapshots data plus new tracking:
+## Edge Function: `search-surge-scanner`
 
-- Wallets that held through price drops
-- Retention curves over time
-- Average hold duration by tier
-- Entry/exit patterns
+### Logic Flow
 
----
+```typescript
+// 1. Query for surge patterns
+const surgePatterns = [
+  { type: 'surge_10min', minutes: 10, threshold: 5, comment: ' : Search Surge!' },
+  { type: 'spike_1hr', minutes: 60, threshold: 15, comment: ' : Interest Spike!' },
+  { type: 'trending_24hr', minutes: 1440, threshold: 30, comment: ' : Trending Token!' },
+];
 
-## Data Retention Strategy
+// 2. For each pattern, find tokens that exceed threshold
+for (const pattern of surgePatterns) {
+  const { data: surges } = await supabase
+    .from('token_search_log')
+    .select('token_mint, COUNT(*) as search_count')
+    .gte('created_at', new Date(Date.now() - pattern.minutes * 60 * 1000).toISOString())
+    .groupBy('token_mint')
+    .gte('search_count', pattern.threshold);
+  
+  // 3. For each surge, check if already alerted today
+  for (const surge of surges) {
+    const { data: existing } = await supabase
+      .from('holders_intel_surge_alerts')
+      .select('id')
+      .eq('token_mint', surge.token_mint)
+      .eq('alert_type', pattern.type)
+      .gte('detected_at', todayStart)
+      .maybeSingle();
+    
+    if (!existing) {
+      // 4. Queue for posting with special trigger_comment
+      await supabase.from('holders_intel_post_queue').insert({
+        token_mint: surge.token_mint,
+        symbol: await getSymbol(surge.token_mint),
+        status: 'pending',
+        scheduled_at: new Date(Date.now() + 60000).toISOString(), // 1 min from now
+        trigger_comment: pattern.comment,
+        trigger_source: 'surge_scanner',
+      });
+      
+      // 5. Record the alert
+      await supabase.from('holders_intel_surge_alerts').insert({
+        token_mint: surge.token_mint,
+        alert_type: pattern.type,
+        search_count: surge.search_count,
+        time_window_minutes: pattern.minutes,
+      });
+    }
+  }
+}
+```
 
-| Table | Retention | Notes |
-|-------|-----------|-------|
-| token_search_log | 90 days | Session-level granularity |
-| token_search_results | 30 days | Full detail snapshots |
-| token_socials_history | 1 year | Only on changes |
-| token_dex_status_history | 1 year | Only on changes |
-| token_price_history | 1 year | Hourly granularity after 7 days |
-| holder_snapshots | Indefinite | Core historical data |
-| holder_movements | 6 months | High volume, can purge older |
+### SQL Query for Surge Detection
 
----
+```sql
+-- Find tokens with 5+ searches in last 10 minutes
+SELECT 
+  token_mint,
+  COUNT(*) as search_count,
+  COUNT(DISTINCT ip_address) as unique_ips
+FROM token_search_log
+WHERE created_at > NOW() - INTERVAL '10 minutes'
+GROUP BY token_mint
+HAVING COUNT(*) >= 5;
+```
 
-## Implementation Steps
+## Cron Job Integration
 
-### Phase 1: Database Schema
+Add to `intel-xbot-start` jobs array:
 
-Create the 5 new tables with:
-- Proper indexes for token_mint, captured_at queries
-- RLS policies (super_admin read, edge functions write)
-- Unique constraints to prevent duplicates on socials/dex_status
+```typescript
+{
+  name: 'holdersintel-surge-scanner-5min',
+  schedule: '*/5 * * * *',  // Every 5 minutes
+  function: 'search-surge-scanner'
+}
+```
 
-### Phase 2: Edge Function Updates
+This will run alongside the existing `holders-intel-dex-scanner` and feed into the same post queue.
 
-Modify `bagless-holders-report` to:
-1. Extract IP address from request headers
-2. Insert search log record at start of request
-3. Insert complete results at end of request
-4. Conditionally upsert socials (only if changed from last record)
-5. Conditionally upsert dex_status (only if changed from last record)
-6. Insert price history record
+## Admin Dashboard Component
 
-### Phase 3: Dashboard UI
+New component showing surge alerts in the Activity Log:
 
-Create new components:
-- `TokenSearchAnalytics.tsx` - Search volume and patterns
-- `TokenHistoryViewer.tsx` - Per-token historical charts
-- `DiamondHandsEnhanced.tsx` - Advanced retention analysis
+```text
++------------------------------------------------------------------+
+|  SURGE ALERTS                                        [Last 24hr] |
++------------------------------------------------------------------+
+|  Token     | Type          | Searches | Unique IPs | Status      |
++------------------------------------------------------------------+
+|  $BONK     | Search Surge  | 12       | 8          | Posted ✓    |
+|  $WIF      | Interest Spike| 23       | 15         | Pending...  |
+|  $PEPE     | Trending      | 47       | 32         | Posted ✓    |
++------------------------------------------------------------------+
+```
 
-Add to SuperAdmin page as new tabs.
+## Safety Mechanisms
 
-### Phase 4: Data Cleanup Jobs
+1. **One alert per type per token per day** - Prevents spam if a token stays trending
+2. **Quality checks still apply** - The `holders-intel-poster` will still check:
+   - Minimum 50 holders
+   - Health grade not F
+3. **Cooldown integration** - Respects existing seen_tokens cooldown logic
+4. **IP diversity check** - Could optionally require 3+ unique IPs to trigger (prevent self-farming)
 
-Create scheduled edge functions:
-- Daily: Aggregate old price_history to hourly
-- Weekly: Purge token_search_log older than 90 days
-- Monthly: Purge token_search_results older than 30 days
+## Configuration Options (Future)
 
----
+Could add a config table for admin control:
+
+| Setting | Default | Description |
+|---------|---------|-------------|
+| surge_10min_threshold | 5 | Searches needed in 10 min |
+| spike_1hr_threshold | 15 | Searches needed in 1 hour |
+| trending_24hr_threshold | 30 | Searches needed in 24 hours |
+| require_unique_ips | 3 | Minimum unique IPs for alert |
+| enabled | true | Master on/off switch |
 
 ## Files to Create/Modify
 
 | File | Action | Purpose |
 |------|--------|---------|
-| SQL Migration | CREATE | 5 new tables with indexes and RLS |
-| `supabase/functions/bagless-holders-report/index.ts` | MODIFY | Add logging to new tables |
-| `src/components/admin/TokenSearchAnalytics.tsx` | CREATE | Search volume dashboard |
-| `src/components/admin/TokenHistoryViewer.tsx` | CREATE | Per-token history viewer |
-| `src/pages/SuperAdmin.tsx` | MODIFY | Add new dashboard tabs |
+| SQL Migration | CREATE | `holders_intel_surge_alerts` table |
+| `supabase/functions/search-surge-scanner/index.ts` | CREATE | Surge detection edge function |
+| `supabase/functions/intel-xbot-start/index.ts` | MODIFY | Add surge scanner cron job |
+| `src/components/admin/SurgeAlertsPanel.tsx` | CREATE | Admin view of surge alerts |
+| `src/pages/SuperAdmin.tsx` or ShareCardDemo | MODIFY | Add surge alerts panel |
 
----
+## Implementation Sequence
 
-## Estimated Storage Impact
+1. **Database Migration** - Create `holders_intel_surge_alerts` table
+2. **Edge Function** - Create `search-surge-scanner` with detection logic
+3. **Cron Integration** - Add to `intel-xbot-start` for 5-minute polling
+4. **Admin Panel** - Add visibility to surge alerts in Activity Log
+5. **Testing** - Manually insert test searches to verify detection
 
-Based on current usage (110 unique tokens, ~1000 searches/day estimated):
+## Expected Behavior
 
-| Table | Est. Records/Month | Est. Size/Month |
-|-------|-------------------|-----------------|
-| token_search_log | 30,000 | ~5 MB |
-| token_search_results | 30,000 | ~15 MB |
-| token_socials_history | 500 | <1 MB |
-| token_dex_status_history | 2,000 | ~2 MB |
-| token_price_history | 50,000 | ~5 MB |
+When a token gets searched 5+ times in 10 minutes:
+1. Surge scanner detects the pattern
+2. Creates alert record in `holders_intel_surge_alerts`
+3. Queues token in `holders_intel_post_queue` with `trigger_comment = " : Search Surge!"`
+4. Poster runs within 3 minutes, fetches fresh holder data
+5. Posts tweet like: `$TOKEN : Search Surge! 📊 1,234 Total | ✅ 456 Real...`
 
-**Total: ~30 MB/month** - very manageable
-
----
-
-## API Cost Considerations
-
-This implementation adds **zero additional API calls** - it simply captures and stores data that's already being fetched. The only overhead is:
-- Database inserts (free with Supabase)
-- Slightly larger edge function response time (~10-20ms for inserts)
-
-This will actually help **reduce** future API costs by enabling caching and avoiding re-fetching data for recently-searched tokens.
+This leverages the existing `{comment1}` template variable system already built into the poster!
