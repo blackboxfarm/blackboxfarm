@@ -9448,6 +9448,42 @@ export type Database = {
         }
         Relationships: []
       }
+      token_dex_status_history: {
+        Row: {
+          active_boosts: number | null
+          boost_amount_total: number | null
+          captured_at: string
+          has_active_ads: boolean | null
+          has_cto: boolean | null
+          has_paid_profile: boolean | null
+          id: string
+          orders: Json | null
+          token_mint: string
+        }
+        Insert: {
+          active_boosts?: number | null
+          boost_amount_total?: number | null
+          captured_at?: string
+          has_active_ads?: boolean | null
+          has_cto?: boolean | null
+          has_paid_profile?: boolean | null
+          id?: string
+          orders?: Json | null
+          token_mint: string
+        }
+        Update: {
+          active_boosts?: number | null
+          boost_amount_total?: number | null
+          captured_at?: string
+          has_active_ads?: boolean | null
+          has_cto?: boolean | null
+          has_paid_profile?: boolean | null
+          id?: string
+          orders?: Json | null
+          token_mint?: string
+        }
+        Relationships: []
+      }
       token_early_trades: {
         Row: {
           created_at: string
@@ -9838,6 +9874,33 @@ export type Database = {
           },
         ]
       }
+      token_price_history: {
+        Row: {
+          captured_at: string
+          id: string
+          market_cap_usd: number | null
+          price_usd: number | null
+          source: string | null
+          token_mint: string
+        }
+        Insert: {
+          captured_at?: string
+          id?: string
+          market_cap_usd?: number | null
+          price_usd?: number | null
+          source?: string | null
+          token_mint: string
+        }
+        Update: {
+          captured_at?: string
+          id?: string
+          market_cap_usd?: number | null
+          price_usd?: number | null
+          source?: string | null
+          token_mint?: string
+        }
+        Relationships: []
+      }
       token_projects: {
         Row: {
           community_admins: string[] | null
@@ -9973,6 +10036,176 @@ export type Database = {
           token_mint?: string
           trending_score?: number | null
           volume_24h?: number | null
+        }
+        Relationships: []
+      }
+      token_search_log: {
+        Row: {
+          created_at: string
+          error_message: string | null
+          holder_count: number | null
+          id: string
+          ip_address: string | null
+          response_time_ms: number | null
+          session_id: string | null
+          success: boolean | null
+          token_mint: string
+          user_agent: string | null
+          visitor_fingerprint: string | null
+        }
+        Insert: {
+          created_at?: string
+          error_message?: string | null
+          holder_count?: number | null
+          id?: string
+          ip_address?: string | null
+          response_time_ms?: number | null
+          session_id?: string | null
+          success?: boolean | null
+          token_mint: string
+          user_agent?: string | null
+          visitor_fingerprint?: string | null
+        }
+        Update: {
+          created_at?: string
+          error_message?: string | null
+          holder_count?: number | null
+          id?: string
+          ip_address?: string | null
+          response_time_ms?: number | null
+          session_id?: string | null
+          success?: boolean | null
+          token_mint?: string
+          user_agent?: string | null
+          visitor_fingerprint?: string | null
+        }
+        Relationships: []
+      }
+      token_search_results: {
+        Row: {
+          bundled_percentage: number | null
+          circulating_supply: number | null
+          created_at: string
+          creator_wallet: string | null
+          health_grade: string | null
+          health_score: number | null
+          id: string
+          launchpad: string | null
+          lp_count: number | null
+          lp_percentage: number | null
+          market_cap_usd: number | null
+          name: string | null
+          price_source: string | null
+          price_usd: number | null
+          risk_flags: Json | null
+          search_id: string | null
+          symbol: string | null
+          tier_dust: number | null
+          tier_retail: number | null
+          tier_serious: number | null
+          tier_whale: number | null
+          token_mint: string
+          top10_concentration: number | null
+          top20_concentration: number | null
+          top5_concentration: number | null
+          total_supply: number | null
+        }
+        Insert: {
+          bundled_percentage?: number | null
+          circulating_supply?: number | null
+          created_at?: string
+          creator_wallet?: string | null
+          health_grade?: string | null
+          health_score?: number | null
+          id?: string
+          launchpad?: string | null
+          lp_count?: number | null
+          lp_percentage?: number | null
+          market_cap_usd?: number | null
+          name?: string | null
+          price_source?: string | null
+          price_usd?: number | null
+          risk_flags?: Json | null
+          search_id?: string | null
+          symbol?: string | null
+          tier_dust?: number | null
+          tier_retail?: number | null
+          tier_serious?: number | null
+          tier_whale?: number | null
+          token_mint: string
+          top10_concentration?: number | null
+          top20_concentration?: number | null
+          top5_concentration?: number | null
+          total_supply?: number | null
+        }
+        Update: {
+          bundled_percentage?: number | null
+          circulating_supply?: number | null
+          created_at?: string
+          creator_wallet?: string | null
+          health_grade?: string | null
+          health_score?: number | null
+          id?: string
+          launchpad?: string | null
+          lp_count?: number | null
+          lp_percentage?: number | null
+          market_cap_usd?: number | null
+          name?: string | null
+          price_source?: string | null
+          price_usd?: number | null
+          risk_flags?: Json | null
+          search_id?: string | null
+          symbol?: string | null
+          tier_dust?: number | null
+          tier_retail?: number | null
+          tier_serious?: number | null
+          tier_whale?: number | null
+          token_mint?: string
+          top10_concentration?: number | null
+          top20_concentration?: number | null
+          top5_concentration?: number | null
+          total_supply?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "token_search_results_search_id_fkey"
+            columns: ["search_id"]
+            isOneToOne: false
+            referencedRelation: "token_search_log"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      token_socials_history: {
+        Row: {
+          captured_at: string
+          discord: string | null
+          id: string
+          source: string | null
+          telegram: string | null
+          token_mint: string
+          twitter: string | null
+          website: string | null
+        }
+        Insert: {
+          captured_at?: string
+          discord?: string | null
+          id?: string
+          source?: string | null
+          telegram?: string | null
+          token_mint: string
+          twitter?: string | null
+          website?: string | null
+        }
+        Update: {
+          captured_at?: string
+          discord?: string | null
+          id?: string
+          source?: string | null
+          telegram?: string | null
+          token_mint?: string
+          twitter?: string | null
+          website?: string | null
         }
         Relationships: []
       }
@@ -11730,6 +11963,20 @@ export type Database = {
         Args: never
         Returns: {
           user_id: string
+        }[]
+      }
+      get_token_search_analytics: {
+        Args: { p_end_date?: string; p_start_date?: string }
+        Returns: {
+          avg_response_time_ms: number
+          searches_by_day: Json
+          success_rate: number
+          top_ips: Json
+          top_tokens: Json
+          total_searches: number
+          unique_ips: number
+          unique_sessions: number
+          unique_tokens: number
         }[]
       }
       get_user_profile_safe: {

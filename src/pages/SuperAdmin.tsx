@@ -57,6 +57,8 @@ const HoldersVisitorsDashboard = lazy(() => import("@/components/admin/HoldersVi
 const HeliusUsageDashboard = lazy(() => import("./HeliusUsage"));
 const HoldersResourceDashboard = lazy(() => import("@/components/admin/HoldersResourceDashboard").then(m => ({ default: m.HoldersResourceDashboard })));
 const HistoricalTokenDataDashboard = lazy(() => import("@/components/admin/HistoricalTokenDataDashboard").then(m => ({ default: m.HistoricalTokenDataDashboard })));
+const TokenSearchAnalytics = lazy(() => import("@/components/admin/TokenSearchAnalytics").then(m => ({ default: m.TokenSearchAnalytics })));
+const TokenHistoryViewer = lazy(() => import("@/components/admin/TokenHistoryViewer").then(m => ({ default: m.TokenHistoryViewer })));
 
 export default function SuperAdmin() {
   const [activeTab, setActiveTab] = useState("fuckoff");
@@ -162,6 +164,8 @@ export default function SuperAdmin() {
             <TabsTrigger value="helius-api" className="flex-shrink-0 data-[state=active]:bg-gradient-to-r data-[state=active]:from-orange-500/30 data-[state=active]:to-red-500/20">⚡ Helius API</TabsTrigger>
             <TabsTrigger value="api-resources" className="flex-shrink-0 data-[state=active]:bg-gradient-to-r data-[state=active]:from-emerald-500/30 data-[state=active]:to-teal-500/20">📊 API Resources</TabsTrigger>
             <TabsTrigger value="token-history" className="flex-shrink-0 data-[state=active]:bg-gradient-to-r data-[state=active]:from-violet-500/30 data-[state=active]:to-purple-500/20">💎 Token History</TabsTrigger>
+            <TabsTrigger value="search-analytics" className="flex-shrink-0 data-[state=active]:bg-gradient-to-r data-[state=active]:from-blue-500/30 data-[state=active]:to-indigo-500/20">🔍 Search Analytics</TabsTrigger>
+            <TabsTrigger value="token-viewer" className="flex-shrink-0 data-[state=active]:bg-gradient-to-r data-[state=active]:from-amber-500/30 data-[state=active]:to-orange-500/20">📈 Token Viewer</TabsTrigger>
           </TabsList>
 
           <TabsContent value="fuckoff">
@@ -456,6 +460,18 @@ export default function SuperAdmin() {
           <TabsContent value="token-history">
             <ActiveTabOnly activeTab={activeTab} tabValue="token-history">
               <HistoricalTokenDataDashboard />
+            </ActiveTabOnly>
+          </TabsContent>
+
+          <TabsContent value="search-analytics">
+            <ActiveTabOnly activeTab={activeTab} tabValue="search-analytics">
+              <TokenSearchAnalytics />
+            </ActiveTabOnly>
+          </TabsContent>
+
+          <TabsContent value="token-viewer">
+            <ActiveTabOnly activeTab={activeTab} tabValue="token-viewer">
+              <TokenHistoryViewer />
             </ActiveTabOnly>
           </TabsContent>
         </Tabs>
